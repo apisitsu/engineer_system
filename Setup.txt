@@ -1,0 +1,156 @@
+npm config set proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
+npm config set https-proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
+
+npm init -y
+npm install axios bcryptjs body-parser cors exceljs express express-fileupload express-promise-router formidable fs-extra moment-timezone multer nodemon pdf-lib pdfjs pg pg-hstore pool qrcode read-excel-file sequelize tedious xlsx
+
+การนำโปรเจกต์ที่เป็น Monorepo (React + Node.js) ไปรันบน Ubuntu Server อย่างมืออาชีพ เราจะไม่รัน `npm start` เหมือนตอน Dev ครับ แต่เราจะทำ 3 ขั้นตอนหลักนี้:
+
+1. **Build Frontend:** แปลง React ให้เป็นไฟล์ Static (HTML/CSS/JS)
+2. **Process Management:** ใช้ **PM2** รัน Backend ให้ทำงานเบื้องหลังตลอดเวลา
+3. **Reverse Proxy:** ใช้ **Nginx** เป็นด่านหน้า เพื่อแจกงานว่า "อันไหนขอหน้าเว็บ ส่งไฟล์ React" หรือ "อันไหนขอข้อมูล ส่งไปหา Node.js"
+
+นี่คือขั้นตอน Step-by-Step ครับ:
+
+---
+
+### ขั้นตอนที่ 1: Build Frontend (ทำที่เครื่อง Windows ของคุณ)
+
+ที่เครื่องของคุณ ให้รันคำสั่งเพื่อแปลงโค้ด React เป็นไฟล์พร้อมใช้งาน:
+
+```bash
+# รันคำสั่งนี้ที่ Root ของโปรเจกต์
+npm run build --workspace=apps/ENG-Frontend
+
+```
+
+**ผลลัพธ์:**
+คุณจะได้โฟลเดอร์ชื่อ `build` โผล่ขึ้นมาใน `apps/ENG-Frontend/build` ข้างในจะมีไฟล์ `index.html` และโฟลเดอร์ `static` นี่คือสิ่งที่เราจะเอาไปวางบน Server ครับ
+
+---
+
+### ขั้นตอนที่ 2: เตรียมเครื่อง Ubuntu Server
+
+SSH เข้าไปที่ Ubuntu แล้วติดตั้งสิ่งที่จำเป็น:
+
+```bash
+# 1. อัปเดตเครื่อง
+sudo apt update
+
+# 2. ติดตั้ง Node.js (แนะนำใช้ Version LTS)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 3. ติดตั้ง Nginx (Web Server)
+sudo apt install nginx
+
+# 4. ติดตั้ง PM2 (ตัวคุม Backend ให้ทำงานตลอดเวลา)
+sudo npm install -g pm2
+
+```
+
+---
+
+### ขั้นตอนที่ 3: อัปโหลดไฟล์ขึ้น Server
+
+คุณต้องก๊อปปี้ไฟล์จากเครื่อง Windows ไปที่ Ubuntu (ผ่าน FileZilla หรือ SCP) โดยวางโครงสร้างประมาณนี้ (สมมติเก็บไว้ที่ `/var/www/my-app`):
+
+```text
+/var/www/my-app/
+├── backend/            <-- ก๊อปปี้โค้ดจาก apps/ENG-Backend มา (ยกเว้น node_modules)
+└── frontend-build/     <-- ก๊อปปี้โฟลเดอร์ "build" ที่ได้จากขั้นตอนที่ 1 มา
+
+```
+
+**ที่โฟลเดอร์ Backend บน Server:**
+
+```bash
+cd /var/www/my-app/backend
+npm install --production  # ลงเฉพาะ Library ที่จำเป็น
+
+```
+
+---
+
+### ขั้นตอนที่ 4: รัน Backend ด้วย PM2
+
+เราจะไม่ใช้ `node server.js` เพราะถ้าปิดจอโปรแกรมจะดับ เราจะใช้ PM2 แทน:
+
+```bash
+# เข้าไปที่โฟลเดอร์ backend
+cd /var/www/my-app/backend
+
+# สั่งรัน (สมมติไฟล์หลักชื่อ server.js)
+pm2 start server.js --name "eng-backend"
+
+# สั่งให้มันจำว่าถ้าเปิดเครื่องใหม่ ให้รันออโต้
+pm2 save
+pm2 startup
+
+```
+
+*ตอนนี้ Backend จะรันอยู่ที่ Port `2005` (ตามที่คุณตั้งไว้)*
+
+---
+
+### ขั้นตอนที่ 5: ตั้งค่า Nginx (พระเอกของงาน)
+
+เราจะตั้งค่าให้ Nginx เปิด Port 80 (HTTP ปกติ) แล้วจัดการ Routing ให้เรา
+
+1. สร้างไฟล์ Config:
+```bash
+sudo nano /etc/nginx/sites-available/eng-system
+
+```
+
+
+2. แปะโค้ดนี้ลงไป:
+```nginx
+server {
+    listen 80;
+    server_name your_server_ip_or_domain; # ใส่ IP Server หรือ Domain
+
+    # 1. ถ้าคนเข้าหน้าเว็บปกติ -> ให้ส่งไฟล์ React (Frontend)
+    location / {
+        root /var/www/my-app/frontend-build; # path ที่เก็บไฟล์ build
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html; # บรรทัดนี้สำคัญมากสำหรับ React Router!
+    }
+
+    # 2. ถ้าคนยิง API (เช่น /api/...) -> ให้ส่งไปหา Node.js (Backend)
+    location /api {
+        proxy_pass http://localhost:2005; # ส่งต่อให้ Port ของ Backend
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+```
+
+
+3. เปิดใช้งาน Config:
+```bash
+# สร้าง Link
+sudo ln -s /etc/nginx/sites-available/eng-system /etc/nginx/sites-enabled/
+
+# เช็กว่าเขียนถูกไหม
+sudo nginx -t
+
+# รีสตาร์ท Nginx
+sudo systemctl restart nginx
+
+```
+
+
+
+---
+
+### ✅ ผลลัพธ์ที่ได้
+
+1. ผู้ใช้เข้าเว็บผ่าน `http://IP-Server` -> เจอหน้าเว็บ React ทันที (ไม่ต้องมี :3000)
+2. เมื่อ React ยิง API ไปที่ `/api/login` -> Nginx จะส่งต่อให้ Backend ที่ Port 2005 ทำงานเบื้องหลัง
+
+วิธีนี้เป็นวิธีมาตรฐาน (Production Grade) ที่ปลอดภัย เร็ว และจัดการง่ายที่สุดครับ!
