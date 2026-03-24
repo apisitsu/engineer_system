@@ -38,12 +38,6 @@ function Tooling_Report() {
                   </h2>
 
                 </Divider>
-                  <Button type="primary">Summit</Button>
-                  <Card
-                  title='test'
-                  >
-
-                  </Card>
               </div>
             </div>
           </Content>
