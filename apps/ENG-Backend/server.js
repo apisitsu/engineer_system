@@ -132,8 +132,15 @@ app.route('/api/refresh-token').post(userController.RefreshToken)
 //------------------Process Engineer------------------//
 const engProcess = require('./api/engineer/process/eng_process_model');
 
-app.route('/api/ecr/getlist').get(engProcess.ecrGetList)
-app.route('/api/ecr/create').post(engProcess.ecrCreate)
+app.route('/api/ecr/getlist').get(verifyToken, engProcess.ecrGetList)
+app.route('/api/ecr/create').post(verifyToken, engProcess.ecrCreate)
+app.route('/api/ecr/:id').get(verifyToken, engProcess.ecrGetById)
+app.route('/api/ecr/:id/status').put(verifyToken, engProcess.ecrSubmitApproval)
+app.post('/api/ecr/:id/tasks', verifyToken, engProcess.ecrSetTasks);
+app.get('/api/ecr/:id/tasks', verifyToken, engProcess.ecrGetTasks);
+app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
+
+// --------- GENERIC UPLOAD API FOR ECR FILES ---------
 app.route('/api/tumble/getAllCondition').get(engProcess.tumbleGetAllCondition)
 app.route('/api/tumble/createCondition').post(engProcess.tumbleCreateCondition)
 app.route('/api/tumble/updateCondition/:id').put(engProcess.tumbleUpdateCondition)
@@ -142,6 +149,25 @@ app.route('/api/tumble/getAllModel').get(engProcess.tumbleGetAllModel)
 app.route('/api/tumble/createModel').post(engProcess.tumbleCreateModel)
 app.route('/api/tumble/updateModel/:id').put(engProcess.tumbleUpdateModel)
 app.route('/api/tumble/deleteModel/:id').delete(engProcess.tumbleDeleteModel)
+
+// File Upload API
+app.post('/api/upload', (req, res) => {
+  if (!req.files || Object.keys(req.files).length === 0) {
+    return res.status(400).json({ success: false, message: 'No files were uploaded.' });
+  }
+
+  const uploadedFile = req.files.file;
+  // Generate unique name
+  const ext = path.extname(uploadedFile.name);
+  const filename = `upload_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`;
+  const uploadPath = path.join(__dirname, 'files', 'uploads', filename);
+
+  uploadedFile.mv(uploadPath, function (err) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    // Return relative path accessible via static serving
+    res.json({ success: true, file_url: `/uploads/${filename}`, file_name: uploadedFile.name });
+  });
+});
 
 //------------------MTC Engineer------------------//
 const engMTC = require('./api/engineer/mtc/eng_mtc_model');

@@ -62,7 +62,16 @@ export const system = createMenu([
 
 export const process = createMenu([
     { label: "Home", path: "/eng/process_eng" },
-    { label: "ECNT", path: "/eng/process_eng/ecnt" },
+    {
+        label: "ECNT",
+        key: "ecnt",
+        children: [
+            { label: "Dashboard", path: "/eng/process_eng/ecnt/dashboard" },
+            { label: "My Tasks", path: "/eng/process_eng/ecnt/tasks" },
+            // { label: "Create ECR", path: "/eng/process_eng/ecnt/create" },
+            { label: "History", path: "/eng/process_eng/ecnt/history" },
+        ]
+    },
     { label: "Tumble", path: "/eng/process_eng/tumble" },
 ]);
 

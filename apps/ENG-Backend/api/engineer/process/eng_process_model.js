@@ -8,111 +8,231 @@ const activity_log = () => {
 
 const ecrCreate = async (req, res) => {
     const data = req.body;
-    // console.log("Received ECR Create Request:", data);
 
     const sql = `
-    INSERT INTO ecr_request (
-        request_no, req_date, requester, department, req_due_date, status, 
-        drawing_required, tooling_required, program_required, tool_usage_required,
+    INSERT INTO ecnt_document (
+        ecr_no, request_by, department, require_date, due_date, 
+        status_type, objective, objective_others,
         
-        -- Tooling / Program / Usage Section
-        setup_data_sheet_no, part_no_tooling, cn_tooling, process_tooling, 
-        program_no, machine_no, cycle_time, title_of_change, 
-        reason_of_tooling, tooling_before_change, tooling_after_change,
+        is_drawing, is_tooling, is_program, is_usage,
         
-        -- Tool Usage Only
-        current_tooling_no, current_tooling_usage, new_tooling_no, new_tooling_usage,
-        
-        -- Drawing Section
-        part_no_drawing, cn_drawing, rev_drawing, reason_of_drawing, 
+        part_no_drawing, cn_drawing, rev_drawing, 
         drawing_before_change, drawing_after_change,
+        upload_drawing_before, upload_drawing_after,
         
-        -- Upload Files
-        upload_tooling_before, upload_tooling_after,
-        upload_drawing_before, upload_drawing_after
+        setup_data_sheet_no, part_no_tooling, cn_tooling, cycle_time,
+        setup_desc_before, setup_desc_after, 
+        upload_setup_before, upload_setup_after,
+        
+        cutting_desc_before, cutting_desc_after, 
+        upload_cutting_before, upload_cutting_after,
+        
+        current_tooling_no, current_tooling_usage, 
+        new_tooling_no, new_tooling_usage,
+        
+        process_status
     ) VALUES (
-        $1, $2, $3, $4, $5, $6,  -- Header
-        $7, $8, $9, $10,        -- Flags
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, -- Tooling
-        $22, $23, $24, $25,        -- Usage
-        $26, $27, $28, $29, $30, $31,  -- Drawing
-        $32, $33, $34, $35         -- Files
+        $1, $2, $3, $4, $5, $6, $7, $8, 
+        $9, $10, $11, $12, 
+        $13, $14, $15, $16, $17, $18, $19, 
+        $20, $21, $22, $23, $24, $25, $26, $27, 
+        $28, $29, $30, $31, 
+        $32, $33, $34, $35, $36
     ) RETURNING id
 `;
 
-    // เตรียม Array ของค่าที่จะ Insert (เรียงลำดับให้ตรงกับ SQL ข้างบน)
     const params = [
-        data.ecr_no, // Maps to request_no
-        data.require_date ? moment(data.require_date).format('YYYY-MM-DD HH:mm:ss') : null, // req_date
-        data.request_by, // requester
+        data.ecr_no || `ECR-${moment().format('YYMMDD-HHmmss')}`,
+        data.request_by,
         data.department,
-        data.due_date ? moment(data.due_date).format('YYYY-MM-DD HH:mm:ss') : null, // req_due_date
-        data.status,
+        data.require_date || null,
+        data.due_date || null,
+        data.status || 'Permanent',
+        data.objective,
+        data.objective_others || null,
 
-        // Flags (0/1 -> map to boolean internally or keep smallint mapping depending on DB)
-        // Assume Postgres accepts boolean for flags if they were converted or integer
         data.is_drawing ? true : false,
         data.is_tooling ? true : false,
         data.is_program ? true : false,
         data.is_usage ? true : false,
 
-        // Tooling Section
-        data.setup_data_sheet_no || '',
-        data.part_no_tooling || '',   // ตรงกับ fieldsForToolProUsage
-        data.cn_tooling || '',
-        data.process || '', // process_tooling
-        data.program_no || '',
-        data.machine_no || '',
-        data.cycle_time || '',
-        data.title_of_change || '',
-        data.reason_of_tooling || '',
-        data.tooling_before_change || '',
-        data.tooling_after_change || '',
+        data.part_no_drawing || null,
+        data.cn_drawing || null,
+        data.rev_drawing || null,
+        data.drawing_before_change || null,
+        data.drawing_after_change || null,
+        data.upload_drawing_before || null,
+        data.upload_drawing_after || null,
 
-        // Tool Usage Section
-        data.current_tooling_no || '',
+        data.setup_data_sheet_no || null,
+        data.part_no_tooling || null,
+        data.cn_tooling || null,
+        data.cycle_time || null,
+        data.setup_desc_before || null,
+        data.setup_desc_after || null,
+        data.upload_setup_before || null,
+        data.upload_setup_after || null,
+
+        data.cutting_desc_before || null,
+        data.cutting_desc_after || null,
+        data.upload_cutting_before || null,
+        data.upload_cutting_after || null,
+
+        data.current_tooling_no || null,
         data.current_tooling_usage || null,
-        data.new_tooling_no || '',
+        data.new_tooling_no || null,
         data.new_tooling_usage || null,
 
-        // Drawing Section
-        data.part_no_drawing || '',   // ตรงกับ fieldsDrawingChange
-        data.cn_drawing || '',
-        data.rev_drawing || '',       // ฟิลด์ใหม่ที่เพิ่มเข้ามา
-        data.reason_of_drawing || '',
-        data.drawing_before_change || '',
-        data.drawing_after_change || '',
-
-        // Upload Files
-        data.upload_tooling_before || '', // รับค่าจากฟิลด์ upload
-        data.upload_tooling_after || '',
-        data.upload_drawing_before || '', // รับค่าจากฟิลด์ upload
-        data.upload_drawing_after || ''
+        data.process_status || 'Pending Dept Mgr'
     ];
 
     try {
         const result = await engPool.query(sql, params);
         res.json({
             message: "Success",
-            id: result.rows[0].id // ส่ง ID ที่เพิ่งสร้างกลับไป
+            id: result.rows[0].id
         });
     } catch (err) {
-        console.error("PG Error:", err.message);
+        console.error("ECR Create Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 };
 
 const ecrGetList = async (req, res) => {
     try {
-        const sql = `
-            SELECT * FROM ecr_request
-        `;
+        const sql = `SELECT * FROM ecnt_document ORDER BY created_at DESC`;
         const result = await engPool.query(sql);
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error("ECR Get List Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrGetById = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const sql = `SELECT * FROM ecnt_document WHERE id = $1`;
+        const result = await engPool.query(sql, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "ECR Not Found" });
+        }
+
+        const logSql = `SELECT * FROM ecnt_approval_log WHERE ecr_id = $1 ORDER BY action_date ASC`;
+        const logResult = await engPool.query(logSql, [id]);
+
         res.json({
-            data: result.rows
+            data: result.rows[0],
+            logs: logResult.rows
         });
     } catch (err) {
-        console.error(err.message);
+        console.error("ECR Get By ID Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrSubmitApproval = async (req, res) => {
+    const { id } = req.params;
+    const { step_number, action_by, action_role, action_status, comments, details } = req.body;
+
+    // Step → process_status mapping
+    const stepStatusMap = {
+        '3.1': 'Impact Assessment',
+        '3.2': 'Pending ECN Approval',
+        '3.3': 'Top Mgmt Approval',
+        '3.4': 'DWG Suspension',
+        '3.45': 'ECN Execution',
+        '3.5': 'FAI Process',
+        '3.6': 'Closed',
+        '4.0': 'Closed',
+    };
+
+    // If denied, set status to Denied
+    const nextStatus = action_status === 'Deny'
+        ? 'Denied'
+        : (stepStatusMap[step_number] || 'Pending Dept Mgr');
+
+    const sqlLog = `
+        INSERT INTO ecnt_approval_log (
+            ecr_id, step_number, action_by, action_role, action_status, comments, details
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+    `;
+
+    const sqlUpdateStatus = `
+        UPDATE ecnt_document SET process_status = $1, updated_at = NOW() WHERE id = $2
+    `;
+
+    const sqlNotification = `
+        INSERT INTO ecnt_notifications (ecr_id, step, action_by, message)
+        VALUES ($1, $2, $3, $4)
+    `;
+
+    try {
+        const result = await engPool.query(sqlLog, [
+            id, step_number, action_by, action_role, action_status, comments,
+            details ? JSON.stringify(details) : null
+        ]);
+
+        // Update the document's process_status
+        await engPool.query(sqlUpdateStatus, [nextStatus, id]);
+
+        // Add Notification
+        const message = `Step ${step_number} was ${action_status.toLowerCase()} by ${action_by} (${action_role}).`;
+        await engPool.query(sqlNotification, [id, step_number, action_by, message]);
+
+        res.json({ message: "Approval submitted successfully", log_id: result.rows[0].id, new_status: nextStatus });
+    } catch (err) {
+        console.error("ECR Approval Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrSetTasks = async (req, res) => {
+    const { id } = req.params;
+    const { tasks } = req.body; // Array of { dept_name, task_detail }
+
+    try {
+        // Delete old tasks to prevent duplicates if editing
+        await engPool.query(`DELETE FROM ecnt_tasks WHERE ecr_id = $1`, [id]);
+
+        if (tasks && tasks.length > 0) {
+            for (const t of tasks) {
+                await engPool.query(
+                    `INSERT INTO ecnt_tasks (ecr_id, dept_name, task_detail) VALUES ($1, $2, $3)`,
+                    [id, t.dept_name, t.task_detail]
+                );
+            }
+        }
+        res.json({ message: "Tasks assigned successfully" });
+    } catch (err) {
+        console.error("ECR Set Tasks Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrGetTasks = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await engPool.query(`SELECT * FROM ecnt_tasks WHERE ecr_id = $1 ORDER BY created_at ASC`, [id]);
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error("ECR Get Tasks Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrAckTask = async (req, res) => {
+    const { taskId } = req.params;
+    const { user_name } = req.body;
+    try {
+        await engPool.query(
+            `UPDATE ecnt_tasks SET is_checked = true, checked_by = $1, checked_at = NOW() WHERE id = $2`,
+            [user_name, taskId]
+        );
+        res.json({ message: "Task acknowledged successfully" });
+    } catch (err) {
+        console.error("ECR Ack Task Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 };
@@ -331,6 +451,11 @@ const tumbleDeleteModel = async (req, res) => {
 module.exports = {
     ecrCreate,
     ecrGetList,
+    ecrGetById,
+    ecrSubmitApproval,
+    ecrSetTasks,
+    ecrGetTasks,
+    ecrAckTask,
     tumbleGetAllCondition,
     tumbleUpdateCondition,
     tumbleCreateCondition,

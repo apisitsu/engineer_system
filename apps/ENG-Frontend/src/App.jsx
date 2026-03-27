@@ -31,7 +31,11 @@ import UserManagement from './components/engineer/system_eng/user_management/Use
 import KanbanMain from './components/engineer/kanban/KanbanMain';
 
 import HomeProcessEng from './components/engineer/process_eng/home_process';
-import Home_ecnt from './components/engineer/process_eng/ecnt/home_ecnt';
+import EcntLayout from './components/engineer/process_eng/ecnt/EcntLayout';
+import EcntDashboard from './components/engineer/process_eng/ecnt/Dashboard';
+import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
+import EcntHistory from './components/engineer/process_eng/ecnt/History';
+import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
 import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
@@ -182,7 +186,14 @@ const AppContent = () => {
 
                   {/* ------ Process Engineer ------ */}
                   <Route path="/eng/process_eng" element={<HomeProcessEng />} />
-                  <Route path="/eng/process_eng/ecnt" element={<Home_ecnt />} />
+                  <Route path="/eng/process_eng/ecnt" element={<EcntLayout />}>
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<EcntDashboard />} />
+                    <Route path="tasks" element={<EcntMyTasks />} />
+                    <Route path="create" element={<Navigate to="dashboard" replace />} />
+                    <Route path="history" element={<EcntHistory />} />
+                    <Route path="close/:id" element={<EcntClose />} />
+                  </Route>
                   <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
 
                   {/* ------ Materials Engineer ------ */}

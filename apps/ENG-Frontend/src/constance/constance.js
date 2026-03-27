@@ -33,8 +33,13 @@ export const server = {
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
 
   //--------------------ECNT--------------------//
+  UPLOAD_API: `${apiUrl}api/upload`,
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
   ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,
+  ECR_REQUIRE_GET_BY_ID: `${apiUrl}api/ecr/`, // append id
+  ECR_REQUIRE_STATUS: `${apiUrl}api/ecr/`, // append id/status
+  ECR_REQUIRE_TASKS: `${apiUrl}api/ecr/`, // append id/tasks
+  ECR_REQUIRE_ACK_TASK: `${apiUrl}api/ecr/tasks/`, // append taskId/ack
   ECR_REQUIRE_SEND_EMAIL: `${apiUrl}api/send-email`,
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

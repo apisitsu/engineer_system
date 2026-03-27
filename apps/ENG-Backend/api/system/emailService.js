@@ -106,4 +106,8 @@ const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
     }
 };
 
+const mailPermitRecord = async (u_code,) => {
+
+}
+
 module.exports = { sendEmail, sendEmailViaAS };
