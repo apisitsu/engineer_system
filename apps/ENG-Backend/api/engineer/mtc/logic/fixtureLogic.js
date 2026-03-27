@@ -22,6 +22,7 @@ const {
   searchKS400B6_WorkGuide, searchKS400B6_WorkPusher, searchKS400B6_StockerChute,
   searchKS400B6_FrontShoe, searchKS400B6_RearShoe, searchKS400B6_PilotPin,
 } = require('./searchFunctions');
+const { findDynamicFixtures } = require('./dynamicLogic');
 
 const TOP_N = 2;
 const MAX_JAW_DEPTH = 10.0;
@@ -247,10 +248,13 @@ async function findFixtures(cnNumber) {
       };
     }
 
+    const dynamicFixtures = await findDynamicFixtures(partData);
+
     return {
       success: true,
       cn: String(cnNumber).trim(),
       part: partData,
+      dynamicFixtures: dynamicFixtures,
       calc: {
         A: calc.jawA.toFixed(3),
         B: calc.jawB.toFixed(3),

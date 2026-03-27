@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Request - ROD END Request System</title>
+  <?!= include('Stylesheet'); ?>
+  <style>
+    /* Additional styles for autocomplete and file upload */
+    .autocomplete-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      max-width: 400px;
+    }
+    .autocomplete-wrapper input {
+      width: 100%;
+    }
+    .file-upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 6px;
+      padding: 20px;
+      text-align: center;
+      background: #fafafa;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .file-upload-area:hover {
+      border-color: #4a90a4;
+      background: #f0f7fa;
+    }
+    .file-upload-area.dragover {
+      border-color: #4a90a4;
+      background: #e6f2f7;
+    }
+    .file-upload-btn {
+      display: inline-block;
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #4a90a4 0%, #357a8c 100%);
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .file-upload-btn:hover {
+      background: linear-gradient(135deg, #5aa0b4 0%, #458a9c 100%);
+    }
+    .file-list {
+      margin-top: 10px;
+      text-align: left;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #f0f0f0;
+      border-radius: 4px;
+      margin-bottom: 5px;
+    }
+    .file-item .file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-item .file-size {
+      color: #888;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .file-item .remove-file {
+      color: #c17b7b;
+      cursor: pointer;
+      margin-left: 10px;
+      font-weight: bold;
+    }
+    .file-item .remove-file:hover {
+      color: #a55a5a;
+    }
+    .upload-status {
+      margin-top: 5px;
+      font-size: 12px;
+    }
+    .upload-status.success { color: #5a9a6a; }
+    .upload-status.error { color: #c17b7b; }
+    .upload-status.uploading { color: #4a90a4; }
+  </style>
+</head>
+<body>
+  <!-- Hidden element for JS compatibility -->
+  <span id="requesterDisplay" style="display:none;"></span>
+
+  <div class="container">
+    <!-- CONTENT AREA -->
+    <main class="content-area" style="margin-left:0; max-width:100%;">
+      <div class="page-header">
+        <h1 class="page-title">Input Form</h1>
+        <p class="page-subtitle">Please fill in a necessary matter.</p>
+      </div>
+
+      <form id="newRequestForm" onsubmit="submitForm(event)">
+        <!-- Main Form Card -->
+        <div class="form-card">
+          <div class="form-card-header">
+            <span>ROD</span>: ROD END General Drawing Request
+          </div>
+
+          <div class="status-row">
+            <span class="status-label">Status :</span>
+            <span class="status-value new">New document</span>
+          </div>
+
+          <table class="form-table">
+            <tr>
+              <th>Input by</th>
+              <td><span class="readonly-value" id="inputByDisplay">Loading...</span></td>
+            </tr>
+            <tr>
+              <th>Input date</th>
+              <td><span class="readonly-value" id="inputDateDisplay">-</span></td>
+            </tr>
+            <tr>
+              <th>Department <span class="required">*</span></th>
+              <td>
+                <select id="department" name="department" onchange="onDepartmentChange()" required>
+                  <option value="">(select Department)</option>
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <th>Work Center (WC) <span class="required">*</span></th>
+              <td>
+                <select id="wc" name="wc" onchange="onWCChange()" required>
+                  <option value="">(select WC)</option>
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <th>Work Center Name</th>
+              <td>
+                <input type="text" id="wcName" name="wcName" readonly class="readonly-value" placeholder="Auto-filled from WC">
+              </td>
+            </tr>
+            <tr>
+              <th>Type of Request <span class="required">*</span></th>
+              <td>
+                <select id="typeOfRequest" name="typeOfRequest" onchange="updateFormFields()" required>
+                  <option value="">(select group)</option>
+                  <option value="Regist Drawing">Regist Drawing (5 days)</option>
+                  <option value="Draft Drawing">Draft Drawing (7 days)</option>
+                  <option value="3D Print">3D Print (10 days)</option>
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <th>Category <span class="required">*</span></th>
+              <td>
+                <select id="category" name="category" required>
+                  <option value="">(select group)</option>
+                  <option value="Machine part">Machine part</option>
+                  <option value="Gauge">Gauge</option>
+                  <option value="Other">Other</option>
+                </select>
+              </td>
+            </tr>
+            <tr id="drawingRequiredRow" style="display: none;">
+              <th>Drawing Required</th>
+              <td>
+                <div class="radio-inline">
+                  <label>
+                    <input type="radio" name="drawingRequired" value="With Drawing" onchange="updateFormFields()">
+                    <span>With Drawing</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="drawingRequired" value="Without Drawing" onchange="updateFormFields()">
+                    <span>Without Drawing</span>
+                  </label>
+                </div>
+              </td>
+            </tr>
+            <tr id="typeOfDrawingRow" style="display: none;">
+              <th>Type of Drawing</th>
+              <td>
+                <select id="typeOfDrawing" name="typeOfDrawing">
+                  <option value="">(select group)</option>
+                  <option value="Copy Drawing">Copy Drawing</option>
+                  <option value="Remake Drawing">Remake Drawing</option>
+                  <option value="New Design">New Design</option>
+                  <option value="Modify Drawing">Modify Drawing</option>
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <th>Title <span class="required">*</span></th>
+              <td>
+                <input type="text" id="title" name="title" placeholder="Brief description of the request" required style="max-width: 100%;">
+              </td>
+            </tr>
+            <tr>
+              <th>Purpose / Detail <span class="required">*</span></th>
+              <td>
+                <textarea id="detail" name="detail" rows="4" placeholder="Detailed description of what you need..." required style="max-width: 100%; resize: none;"></textarea>
+              </td>
+            </tr>
+            <tr>
+              <th>Required Complete date</th>
+              <td>
+                <span class="readonly-value" id="dueDateDisplay">Please select Type of Request</span>
+              </td>
+            </tr>
+            <tr>
+              <th>Attachment</th>
+              <td>
+                <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('fileInput').click()">
+                  <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+                  <div class="file-upload-btn">Choose Files</div>
+                  <div>or drag and drop files here</div>
+                  <div style="font-size: 12px; color: #888; margin-top: 5px;">Max 10MB per file</div>
+                </div>
+                <div class="file-list" id="fileList"></div>
+                <input type="hidden" id="attachmentUrls" name="attachmentUrls">
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Machine Information Section -->
+        <div class="form-card">
+          <a class="section-link" onclick="toggleSection('machineSection')">Machine Information</a>
+          <div id="machineSection">
+            <table class="form-table">
+              <tr>
+                <th>Machine No. <span class="required">*</span></th>
+                <td>
+                  <div class="autocomplete-wrapper">
+                    <input type="text" id="noOfMachine" name="noOfMachine" list="machineList"
+                           placeholder="Select or type machine code" required
+                           onchange="onMachineCodeChange()" oninput="onMachineCodeInput()">
+                    <datalist id="machineList"></datalist>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <th>Machine Name <span class="required">*</span></th>
+                <td>
+                  <input type="text" id="machineName" name="machineName" placeholder="Auto-filled from Machine No." required>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Schedule Progress -->
+        <div class="form-card">
+          <a class="section-link">Schedule complete job</a>
+          <div class="progress-section">
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" style="width: 0%;">0%</div>
+              <div class="progress-bar-empty"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Requester Information (Hidden) -->
+        <input type="hidden" id="requester" name="requester">
+        <input type="hidden" id="requesterEmail" name="requesterEmail">
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+            Submit Request
+          </button>
+          <button type="button" class="btn btn-secondary btn-large" onclick="resetForm()">
+            Reset
+          </button>
+          <button type="button" class="btn btn-secondary btn-large" onclick="goToDashboard()">
+            Back to Dashboard
+          </button>
+        </div>
+      </form>
+
+      <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p id="loadingMessage">Submitting request...</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Base URL from server
+    var BASE_URL = '<?= baseUrl ?>';
+    var currentUser = null;
+    var wcDeptMapping = [];
+    var departmentList = [];
+    var machineList = [];
+    var uploadedFiles = [];
+    var pendingFiles = [];
+
+    // Initialize on load
+    window.onload = function() {
+      // Get current user info
+      google.script.run
+        .withSuccessHandler(function(user) {
+          currentUser = user;
+          document.getElementById('requester').value = user.name || user.email;
+          document.getElementById('requesterEmail').value = user.email;
+          document.getElementById('requesterDisplay').textContent = user.name || user.email;
+          document.getElementById('inputByDisplay').textContent = user.name || user.email;
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('requesterDisplay').textContent = 'Unknown User';
+          document.getElementById('inputByDisplay').textContent = 'Unknown User';
+        })
+        .getCurrentUser();
+
+      // Set current date
+      var today = new Date();
+      var dateStr = today.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit'
+      });
+      document.getElementById('inputDateDisplay').textContent = dateStr;
+
+      // Load Department list
+      google.script.run
+        .withSuccessHandler(function(departments) {
+          console.log('getDepartmentList returned:', departments);
+          departmentList = departments || [];
+          populateDepartmentDropdown();
+        })
+        .withFailureHandler(function(error) {
+          console.log('Error loading department list:', error);
+        })
+        .getDepartmentList();
+
+      // Load WC-Department mapping and populate WC dropdown
+      google.script.run
+        .withSuccessHandler(function(mapping) {
+          console.log('getWCDepartmentMapping returned:', mapping);
+          wcDeptMapping = mapping || [];
+          populateWCDropdown(); // Populate WC dropdown immediately
+        })
+        .withFailureHandler(function(error) {
+          console.log('Error loading WC mapping:', error);
+        })
+        .getWCDepartmentMapping();
+
+      // Load Machine list
+      google.script.run
+        .withSuccessHandler(function(machines) {
+          machineList = machines || [];
+          populateMachineDatalist();
+        })
+        .withFailureHandler(function(error) {
+          console.log('Error loading machine list:', error);
+        })
+        .getMachineList();
+
+      // Setup drag and drop
+      setupDragAndDrop();
+    };
+
+    // Populate Department dropdown
+    function populateDepartmentDropdown() {
+      var deptSelect = document.getElementById('department');
+      deptSelect.innerHTML = '<option value="">(select Department)</option>';
+
+      departmentList.forEach(function(dept) {
+        var option = document.createElement('option');
+        option.value = dept.name;
+        option.textContent = dept.name;
+        deptSelect.appendChild(option);
+      });
+    }
+
+    // Populate WC dropdown (independent from Department)
+    function populateWCDropdown() {
+      var wcSelect = document.getElementById('wc');
+      wcSelect.innerHTML = '<option value="">(select WC)</option>';
+
+      wcDeptMapping.forEach(function(item) {
+        var option = document.createElement('option');
+        option.value = item.wc;
+        option.textContent = item.wc;
+        wcSelect.appendChild(option);
+      });
+    }
+
+    // On Department change - no longer filters WC
+    function onDepartmentChange() {
+      // Department and WC are now independent
+      // No action needed
+    }
+
+    // On WC change - auto-fill WC Name
+    function onWCChange() {
+      var wc = document.getElementById('wc').value;
+      var wcNameInput = document.getElementById('wcName');
+
+      if (wc) {
+        for (var i = 0; i < wcDeptMapping.length; i++) {
+          if (wcDeptMapping[i].wc === wc) {
+            wcNameInput.value = wcDeptMapping[i].wcName || wcDeptMapping[i].wc;
+            return;
+          }
+        }
+      }
+      wcNameInput.value = '';
+    }
+
+    // Populate Machine datalist
+    function populateMachineDatalist() {
+      var datalist = document.getElementById('machineList');
+      datalist.innerHTML = '';
+
+      machineList.forEach(function(machine) {
+        var option = document.createElement('option');
+        option.value = machine.code;
+        option.textContent = machine.code + ' - ' + machine.name;
+        datalist.appendChild(option);
+      });
+    }
+
+    // On Machine Code change - auto-fill machine name
+    function onMachineCodeChange() {
+      var code = document.getElementById('noOfMachine').value;
+      var nameInput = document.getElementById('machineName');
+
+      if (code) {
+        for (var i = 0; i < machineList.length; i++) {
+          if (machineList[i].code === code) {
+            nameInput.value = machineList[i].name;
+            return;
+          }
+        }
+      }
+    }
+
+    // On Machine Code input - for real-time matching
+    function onMachineCodeInput() {
+      var code = document.getElementById('noOfMachine').value;
+      var nameInput = document.getElementById('machineName');
+
+      // Try exact match first
+      for (var i = 0; i < machineList.length; i++) {
+        if (machineList[i].code === code) {
+          nameInput.value = machineList[i].name;
+          return;
+        }
+      }
+    }
+
+    // Setup drag and drop for file upload
+    function setupDragAndDrop() {
+      var dropArea = document.getElementById('fileUploadArea');
+
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(eventName) {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+      });
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      ['dragenter', 'dragover'].forEach(function(eventName) {
+        dropArea.addEventListener(eventName, function() {
+          dropArea.classList.add('dragover');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(function(eventName) {
+        dropArea.addEventListener(eventName, function() {
+          dropArea.classList.remove('dragover');
+        }, false);
+      });
+
+      dropArea.addEventListener('drop', function(e) {
+        var dt = e.dataTransfer;
+        var files = dt.files;
+        handleFiles(files);
+      }, false);
+    }
+
+    // Handle file select from input
+    function handleFileSelect(event) {
+      var files = event.target.files;
+      handleFiles(files);
+    }
+
+    // Handle files
+    function handleFiles(files) {
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+
+        // Check file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert('File "' + file.name + '" is too large. Max size is 10MB.');
+          continue;
+        }
+
+        pendingFiles.push(file);
+        displayFile(file, pendingFiles.length - 1);
+      }
+
+      // Clear the input
+      document.getElementById('fileInput').value = '';
+    }
+
+    // Display file in list
+    function displayFile(file, index) {
+      var fileList = document.getElementById('fileList');
+      var fileItem = document.createElement('div');
+      fileItem.className = 'file-item';
+      fileItem.id = 'file-' + index;
+
+      var sizeStr = formatFileSize(file.size);
+
+      fileItem.innerHTML =
+        '<span class="file-name">' + file.name + '</span>' +
+        '<span class="file-size">' + sizeStr + '</span>' +
+        '<span class="remove-file" onclick="removeFile(' + index + ')">X</span>';
+
+      fileList.appendChild(fileItem);
+    }
+
+    // Format file size
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // Remove file from list
+    function removeFile(index) {
+      pendingFiles[index] = null;
+      var fileItem = document.getElementById('file-' + index);
+      if (fileItem) {
+        fileItem.remove();
+      }
+    }
+
+    // Upload files to Google Drive
+    function uploadFiles(callback) {
+      var filesToUpload = pendingFiles.filter(function(f) { return f !== null; });
+
+      if (filesToUpload.length === 0) {
+        callback([]);
+        return;
+      }
+
+      document.getElementById('loadingMessage').textContent = 'Uploading files...';
+
+      var uploadPromises = [];
+      var uploadedUrls = [];
+
+      var uploadNext = function(index) {
+        if (index >= filesToUpload.length) {
+          callback(uploadedUrls);
+          return;
+        }
+
+        var file = filesToUpload[index];
+        var reader = new FileReader();
+
+        reader.onload = function(e) {
+          var base64Data = e.target.result.split(',')[1];
+
+          var fileData = {
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            data: base64Data
+          };
+
+          google.script.run
+            .withSuccessHandler(function(result) {
+              if (result.success) {
+                // Store as filename|url format for display
+                uploadedUrls.push(result.fileName + '|' + result.url);
+              }
+              uploadNext(index + 1);
+            })
+            .withFailureHandler(function(error) {
+              console.log('Error uploading file:', error);
+              uploadNext(index + 1);
+            })
+            .uploadFile(fileData, '');
+        };
+
+        reader.readAsDataURL(file);
+      };
+
+      uploadNext(0);
+    }
+
+    // Toggle workflow sidebar
+    function toggleFlows() {
+      var sidebar = document.getElementById('workflowSidebar');
+      var btn = document.querySelector('.toggle-btn-text');
+      sidebar.classList.toggle('hidden');
+      btn.textContent = sidebar.classList.contains('hidden') ? 'Show Flows' : 'Hide Flows';
+    }
+
+    // Toggle section visibility
+    function toggleSection(sectionId) {
+      var section = document.getElementById(sectionId);
+      if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+
+    // Go to dashboard with multiple fallback methods
+    function goToDashboard() {
+      try {
+        // Method 1: Try window.top (works in most cases)
+        if (window.top && window.top.location) {
+          window.top.location.href = BASE_URL;
+          return;
+        }
+      } catch (e) {
+        console.log('Method 1 failed:', e);
+      }
+
+      try {
+        // Method 2: Try window.parent
+        if (window.parent && window.parent.location) {
+          window.parent.location.href = BASE_URL;
+          return;
+        }
+      } catch (e) {
+        console.log('Method 2 failed:', e);
+      }
+
+      try {
+        // Method 3: Try window.open with _top target
+        window.open(BASE_URL, '_top');
+        return;
+      } catch (e) {
+        console.log('Method 3 failed:', e);
+      }
+
+      // Method 4: Last resort - current window
+      window.location.href = BASE_URL;
+    }
+
+    // Update form fields based on selections
+    function updateFormFields() {
+      var typeOfRequest = document.getElementById('typeOfRequest').value;
+      var drawingRequiredRow = document.getElementById('drawingRequiredRow');
+      var typeOfDrawingRow = document.getElementById('typeOfDrawingRow');
+      var drawingRequired = document.querySelector('input[name="drawingRequired"]:checked');
+
+      // Show/hide Drawing Required field (only for 3D Print)
+      if (typeOfRequest === '3D Print') {
+        drawingRequiredRow.style.display = '';
+      } else {
+        drawingRequiredRow.style.display = 'none';
+      }
+
+      // Show/hide Type of Drawing field
+      if (typeOfRequest === 'Draft Drawing' ||
+         (typeOfRequest === '3D Print' && drawingRequired && drawingRequired.value === 'With Drawing')) {
+        typeOfDrawingRow.style.display = '';
+      } else {
+        typeOfDrawingRow.style.display = 'none';
+      }
+
+      // Update estimated due date
+      updateDueDate();
+    }
+
+    function updateDueDate() {
+      var typeOfRequest = document.getElementById('typeOfRequest').value;
+      var dueDateSpan = document.getElementById('dueDateDisplay');
+
+      if (typeOfRequest) {
+        var dueDays = {
+          'Regist Drawing': 5,
+          'Draft Drawing': 7,
+          '3D Print': 10
+        };
+
+        var days = dueDays[typeOfRequest];
+        var today = new Date();
+        var addedDays = 0;
+        var dueDate = new Date(today);
+
+        // Calculate working days
+        while (addedDays < days) {
+          dueDate.setDate(dueDate.getDate() + 1);
+          if (dueDate.getDay() !== 0 && dueDate.getDay() !== 6) {
+            addedDays++;
+          }
+        }
+
+        var formatted = dueDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit'
+        });
+
+        dueDateSpan.textContent = formatted + ' (' + days + ' working days)';
+        dueDateSpan.style.color = '#5a9a6a';
+        dueDateSpan.style.fontWeight = 'bold';
+      } else {
+        dueDateSpan.textContent = 'Please select Type of Request';
+        dueDateSpan.style.color = '#666';
+        dueDateSpan.style.fontWeight = 'normal';
+      }
+    }
+
+    function submitForm(event) {
+      event.preventDefault();
+
+      // Show loading overlay
+      document.getElementById('loadingOverlay').style.display = 'flex';
+      document.getElementById('loadingMessage').textContent = 'Processing...';
+      document.getElementById('submitBtn').disabled = true;
+
+      // First upload files, then submit form
+      uploadFiles(function(uploadedUrls) {
+        document.getElementById('loadingMessage').textContent = 'Submitting request...';
+
+        // Collect form data
+        var formData = {
+          department: document.getElementById('department').value,
+          wc: document.getElementById('wc').value,
+          requester: document.getElementById('requester').value,
+          requesterEmail: document.getElementById('requesterEmail').value,
+          typeOfRequest: document.getElementById('typeOfRequest').value,
+          category: document.getElementById('category').value,
+          drawingRequired: document.querySelector('input[name="drawingRequired"]:checked') ? document.querySelector('input[name="drawingRequired"]:checked').value : 'N/A',
+          typeOfDrawing: document.getElementById('typeOfDrawing').value || 'N/A',
+          importance: document.querySelector('input[name="importance"]:checked') ? document.querySelector('input[name="importance"]:checked').value : 'Mid',
+          noOfMachine: document.getElementById('noOfMachine').value,
+          machineName: document.getElementById('machineName').value,
+          title: document.getElementById('title').value,
+          detail: document.getElementById('detail').value,
+          attachmentUrls: uploadedUrls.join('\n')
+        };
+
+        // Submit to Google Apps Script
+        google.script.run
+          .withSuccessHandler(handleSuccess)
+          .withFailureHandler(handleError)
+          .submitNewRequest(formData);
+      });
+    }
+
+    function handleSuccess(result) {
+      document.getElementById('submitBtn').disabled = false;
+
+      if (result.success) {
+        if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+        // Show success message with button to go to Dashboard
+        // Note: Auto-redirect doesn't work in Apps Script sandboxed iframe without user gesture
+        document.getElementById('loadingMessage').innerHTML =
+          '<div style="text-align: center;">' +
+          '<div style="font-size: 64px; margin-bottom: 15px;">✅</div>' +
+          '<div style="font-size: 20px; font-weight: bold; color: #28a745;">Success!</div>' +
+          '<div style="margin-top: 10px; font-size: 16px;">Request No: <strong>' + result.requestNo + '</strong></div>' +
+          '<div style="margin-top: 20px;">' +
+          '<a href="' + BASE_URL + '" target="_top" ' +
+          'style="display: inline-block; padding: 12px 30px; background: #007bff; color: white; ' +
+          'text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">' +
+          '📋 Go to Dashboard</a>' +
+          '</div>' +
+          '<div style="margin-top: 15px; font-size: 12px; color: #888;">Click the button above to return to Dashboard</div>' +
+          '</div>';
+      } else {
+        document.getElementById('loadingOverlay').style.display = 'none';
+        alert('Error: ' + result.message);
+      }
+    }
+
+    function handleError(error) {
+      document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('submitBtn').disabled = false;
+      alert('Error submitting request: ' + error.message);
+    }
+
+    function resetForm() {
+      if (confirm('Are you sure you want to reset the form?')) {
+        document.getElementById('newRequestForm').reset();
+        document.getElementById('department').value = '';
+        document.getElementById('machineName').value = '';
+        document.getElementById('dueDateDisplay').textContent = 'Please select Type of Request';
+        document.getElementById('dueDateDisplay').style.color = '#666';
+        document.getElementById('drawingRequiredRow').style.display = 'none';
+        document.getElementById('typeOfDrawingRow').style.display = 'none';
+        document.getElementById('fileList').innerHTML = '';
+        pendingFiles = [];
+        uploadedFiles = [];
+      }
+    }
+  </script>
+</body>
+</html>

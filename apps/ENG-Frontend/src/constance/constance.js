@@ -34,9 +34,14 @@ export const server = {
 
   // Tooling Select & SDS
   MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,
+  MTC_TOOLING_SELECT_RULES: `${apiUrl}api/tooling-select/rules`,
+  MTC_TOOLING_SELECT_INIT_DB: `${apiUrl}api/tooling-select/init-db`,
+  MTC_TOOLING_INVENTORY: `${apiUrl}api/tooling-select/inventory`,
   MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
   MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
   MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
+  MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
+  MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
 
   //--------------------ECNT--------------------//
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,

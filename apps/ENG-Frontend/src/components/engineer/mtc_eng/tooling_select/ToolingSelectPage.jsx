@@ -20,6 +20,7 @@ import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import ScrollbarStyle from '../../../common/scrollbar';
+import RuleManagementModal from './RuleManagementModal';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -319,16 +320,24 @@ const ToolingSelectPage = () => {
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
         <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto' }}>
-          
-          <Title level={4} style={{ marginBottom: 16, color: colors.primary }}>
-            Tooling Selection System
-          </Title>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Title level={4} style={{ margin: 0, color: colors.primary }}>
+              Tooling Selection System
+            </Title>
+            <Button 
+              icon={<SettingOutlined />} 
+              onClick={() => setIsRuleModalOpen(true)}
+            >
+              Manage Rules
+            </Button>
+          </div>
 
           {/* Search Section */}
           <Card size="small" style={{ marginBottom: 16, borderRadius: '8px', boxShadow: shadows.sm }}>
             <Space.Compact style={{ width: '100%', maxWidth: 500 }}>
               <Input
-                placeholder="กรอก C/N Number เช่น 1234-56-7890"
+                placeholder="C/N Number"
                 value={cnInput}
                 onChange={e => setCnInput(e.target.value)}
                 onPressEnter={handleSearch}
@@ -393,19 +402,38 @@ const ToolingSelectPage = () => {
                 {renderMachineGroup('FACE GRIND', mData.filter(m => m.group === 'FACE'), <BgColorsOutlined style={{ fontSize: '20px', color: colors.primary }} />)}
                 {renderMachineGroup('OD SPH GRIND', mData.filter(m => m.group === 'OD'), <SettingOutlined style={{ fontSize: '20px', color: colors.primary }} />)}
                 {renderMachineGroup('ID GRIND', mData.filter(m => m.group === 'ID'), <ToolOutlined style={{ fontSize: '20px', color: colors.primary }} />)}
+
+                {/* Dynamic Rules Results */}
+                {result.dynamicFixtures && result.dynamicFixtures.map(m => (
+                  renderMachineGroup(m.name, m.dynamicContent.map(dc => ({
+                    hasData: true,
+                    name: dc.title,
+                    content: (
+                      <ToolingTable 
+                        title={dc.title} 
+                        dataSource={dc.dataSource} 
+                        columns={dc.columns} 
+                        headers={dc.headers} 
+                        targets={dc.targets} 
+                        icon={<SettingOutlined />} 
+                      />
+                    )
+                  })), <NodeIndexOutlined style={{ fontSize: '20px', color: colors.primary }} />)
+                ))}
               </>
             ) : (
               !loading && (
                 <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }}>
                   <ToolOutlined style={{ fontSize: 64, marginBottom: 16, display: 'block', margin: '0 auto', color: colors.primary }} />
                   <Title level={5} type="secondary">Tooling Selection System</Title>
-                  <Text type="secondary">กรุณากรอก C/N Number เพื่อเริ่มต้นการค้นหาเครื่องมือที่เหมาะสม</Text>
+                  <Text type="secondary">C/N Number</Text>
                 </div>
               )
             )}
           </Spin>
         </Content>
       </Layout>
+      <RuleManagementModal visible={isRuleModalOpen} onClose={() => setIsRuleModalOpen(false)} />
     </Layout>
   );
 };
