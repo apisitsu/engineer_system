@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import CacheBuster from 'react-cache-buster';
 import { ConfigProvider } from 'antd';
+import { App as AntdApp } from 'antd';
 import packageInfo from '../package.json';
 import { useAuthStore } from "./stores/authStore";
 import MainLayout from "./layout/MainLayout";
@@ -157,79 +158,81 @@ const AppContent = () => {
   });
 
   return (
-    <ConfigProvider theme={getAntdTheme(theme)}>  {/* Dynamic theme! */}
-      <Router>
-        <Routes>
+    <AntdApp>
+      <ConfigProvider theme={getAntdTheme(theme)}>  {/* Dynamic theme! */}
+        <Router>
+          <Routes>
 
-          <Route path="/sign_in" element={<SignIn />} />
-          <Route path="/" element={<Navigate replace to="/sign_in" />} />
+            <Route path="/sign_in" element={<SignIn />} />
+            <Route path="/" element={<Navigate replace to="/sign_in" />} />
 
-          <Route element={<ProtectedRoute />}>
+            <Route element={<ProtectedRoute />}>
 
-            <Route element={<MainLayout />}>
-              <Route path="/home" element={<Home />} />
-            </Route>
-
-            <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
               <Route element={<MainLayout />}>
-                {/* ------------ User Settings ------------ */}
-                <Route path="/user/settings" element={<UserSetting />} />
-
-                {/* ------------ Engineer Section ------------ */}
-                <Route path="/eng/home" element={<HomeEng />} />
-
-                {/* ------ Process Engineer ------ */}
-                <Route path="/eng/process_eng" element={<HomeProcessEng />} />
-                <Route path="/eng/process_eng/ecnt" element={<Home_ecnt />} />
-                <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
-
-                {/* ------ Materials Engineer ------ */}
-                <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
-
-                {/* ------ MTC Engineer ------ */}
-                <Route path="/eng/mtc_eng" element={<HomeMTCEng />} />
-                <Route path="/eng/mtc_eng/tooling" element={<ToolingInspect />} />
-                <Route path="/eng/mtc_eng/tool-request" element={<ToolRequest />} />
-
-                {/* ------ New Product Engineer ------ */}
-                <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
-
-                {/* ------ Overall Engineer ------ */}
-                <Route path="/eng/overall_eng" element={<OrganizationEng />} />
-
-                {/* ------ Kanban Module ------ */}
-                <Route path="/eng/kanban" element={<KanbanMain />} />
-                <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
-
+                <Route path="/home" element={<Home />} />
               </Route>
-            </Route>
 
-            {/* ------ (Standalone - Full Viewport) ------ */}
-            <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
-              <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
-            </Route>
+              <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route element={<MainLayout />}>
+                  {/* ------------ User Settings ------------ */}
+                  <Route path="/user/settings" element={<UserSetting />} />
 
+                  {/* ------------ Engineer Section ------------ */}
+                  <Route path="/eng/home" element={<HomeEng />} />
 
-            <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
-              <Route element={<MainLayout />}>
-                {/* ------ System Engineer ------ */}
-                <Route path="/eng/system_eng" element={<HomeSystemEng />} />
-                <Route path="/eng/system_eng/project_dashboard" element={<ProjectDashboard />} />
-                <Route path="/eng/system_eng/setting" element={<SystemEngSetting />} />
-                <Route path="/eng/system_eng/todo_project" element={<TodoPoroject />} />
-                <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
+                  {/* ------ Process Engineer ------ */}
+                  <Route path="/eng/process_eng" element={<HomeProcessEng />} />
+                  <Route path="/eng/process_eng/ecnt" element={<Home_ecnt />} />
+                  <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
 
-                {/* ------ For Test Only ------ */}
+                  {/* ------ Materials Engineer ------ */}
+                  <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
 
+                  {/* ------ MTC Engineer ------ */}
+                  <Route path="/eng/mtc_eng" element={<HomeMTCEng />} />
+                  <Route path="/eng/mtc_eng/tooling" element={<ToolingInspect />} />
+                  <Route path="/eng/mtc_eng/tool-request" element={<ToolRequest />} />
+
+                  {/* ------ New Product Engineer ------ */}
+                  <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
+
+                  {/* ------ Overall Engineer ------ */}
+                  <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+
+                  {/* ------ Kanban Module ------ */}
+                  <Route path="/eng/kanban" element={<KanbanMain />} />
+                  <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+
+                </Route>
               </Route>
-            </Route>
-          </Route> {/* End ProtectedRoute */}
 
-          <Route path="*" element={<Navigate replace to="/sign_in" />} />
+              {/* ------ (Standalone - Full Viewport) ------ */}
+              <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
+              </Route>
 
-        </Routes>
-      </Router>
-    </ConfigProvider>
+
+              <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
+                <Route element={<MainLayout />}>
+                  {/* ------ System Engineer ------ */}
+                  <Route path="/eng/system_eng" element={<HomeSystemEng />} />
+                  <Route path="/eng/system_eng/project_dashboard" element={<ProjectDashboard />} />
+                  <Route path="/eng/system_eng/setting" element={<SystemEngSetting />} />
+                  <Route path="/eng/system_eng/todo_project" element={<TodoPoroject />} />
+                  <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
+
+                  {/* ------ For Test Only ------ */}
+
+                </Route>
+              </Route>
+            </Route> {/* End ProtectedRoute */}
+
+            <Route path="*" element={<Navigate replace to="/sign_in" />} />
+
+          </Routes>
+        </Router>
+      </ConfigProvider>
+    </AntdApp>
   );
 };
 

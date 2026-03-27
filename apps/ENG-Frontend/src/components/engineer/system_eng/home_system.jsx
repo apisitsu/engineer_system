@@ -4,6 +4,7 @@ import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from '../../../theme';
 import { ProjectOutlined } from '@ant-design/icons';
 import ScrollbarStyle from '../../common/scrollbar';
+import { SendEmailButton } from '../../shared';
 
 const { Content } = Layout;
 
@@ -30,7 +31,6 @@ function Tooling_Report() {
           }}>
             {/* Tool Request System */}
             <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
-              {/* <h2 style={{ marginBottom: '16px' }}>System Engineer Report</h2> */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
                   <h2><ProjectOutlined style={{ color: theme.colors.primary }} />
@@ -39,6 +39,16 @@ function Tooling_Report() {
 
                 </Divider>
               </div>
+            </div>
+
+            {/* --- Email Notification Test --- */}
+            <div style={{ marginTop: 16 }}>
+              <SendEmailButton
+                cn="TEST-001"
+                process="Tumble"
+                rev="A"
+                onSuccess={(params) => console.log('📧 Notification sent!', params)}
+              />
             </div>
           </Content>
         </Spin>

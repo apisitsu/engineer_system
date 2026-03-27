@@ -7,6 +7,7 @@ import { MdAssessment } from "react-icons/md";
 import { BsFillClipboard2CheckFill } from "react-icons/bs";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from "../../../theme";
+import { SendEmailButton } from '../../shared';
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -68,6 +69,15 @@ const App = () => {
                   >
                     DWG Check Tool
                   </Button>
+                  {/* --- Email Notification Test --- */}
+                  <div style={{ marginTop: 16 }}>
+                    <SendEmailButton
+                      cn="TEST-001"
+                      process="Tumble"
+                      rev="A"
+                      onSuccess={(params) => console.log('📧 Notification sent!', params)}
+                    />
+                  </div>
                 </div>
               </Card>
             </div>

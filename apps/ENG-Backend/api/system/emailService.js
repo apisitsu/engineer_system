@@ -1,26 +1,87 @@
 const { google } = require('googleapis');
-// ดึงค่าจากไฟล์ config.js โดยตรง (ตรวจสอบ Path ให้ถูกต้องตามโครงสร้างไฟล์ของคุณ)
-const config = require('./config'); 
+const axios = require('axios');
+const tunnel = require('tunnel');
+const config = require('./config');
 
-const sendEmail = async (to, subject, htmlContent) => {
+require('dotenv').config();
+
+// --- GAS URL from environment ---
+const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwK3lA8rAOZvlGuvBRkIfNj7zrqBriIiREnhKnWaHyLXFV8lrfZwPNA_aaMP2hF_qZdBA/exec';
+
+// --- Corporate proxy agent (for HTTPS tunneling through McAfee Web Gateway) ---
+function getProxyAgent() {
+    if (process.env.PROXY_HOST) {
+        return tunnel.httpsOverHttp({
+            proxy: {
+                host: process.env.PROXY_HOST,
+                port: parseInt(process.env.PROXY_PORT) || 8080,
+                proxyAuth: `${process.env.PROXY_USER}:${process.env.PROXY_PASS}`
+            }
+        });
+    }
+    return undefined;
+}
+
+/**
+ * Send email via Google Apps Script Web App (Primary method)
+ * GAS handles Gmail authentication internally – no per-user OAuth needed.
+ */
+const sendEmailViaAS = async (to, subject, htmlContent) => {
+    try {
+        const agent = getProxyAgent();
+
+        const response = await axios.post(GAS_EMAIL_URL, {
+            to,
+            subject,
+            htmlContent
+        }, {
+            httpAgent: agent,
+            httpsAgent: agent,
+            proxy: false, // Disable axios built-in proxy (we use agent instead)
+            maxRedirects: 5,
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000
+        });
+
+        console.log('✅ GAS Email Response:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('❌ Apps Script Error:', error.response?.data || error.message);
+        throw error;
+    }
+};
+
+/**
+ * Send email via Gmail API directly (Legacy/Fallback method)
+ * Requires a per-user refresh_token stored in the database.
+ * 
+ * @param {string} userRefreshToken - User's Gmail refresh token
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} htmlContent - HTML body
+ * @returns {string} "Sent Success"
+ */
+const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
     const oAuth2Client = new google.auth.OAuth2(
         config.GMAIL_CLIENT_ID,
         config.GMAIL_CLIENT_SECRET,
         config.GMAIL_REDIRECT_URI
     );
 
-    oAuth2Client.setCredentials({ 
-        refresh_token: config.GMAIL_REFRESH_TOKEN 
+    oAuth2Client.setCredentials({
+        refresh_token: userRefreshToken
     });
 
     try {
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-        
+
+        const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
+
         const str = [
             `To: ${to}`,
             'Content-Type: text/html; charset=utf-8',
             'MIME-Version: 1.0',
-            `Subject: ${subject}`,
+            `Subject: ${utf8Subject}`,
             '',
             htmlContent
         ].join('\n');
@@ -28,7 +89,8 @@ const sendEmail = async (to, subject, htmlContent) => {
         const encodedMail = Buffer.from(str)
             .toString('base64')
             .replace(/\+/g, '-')
-            .replace(/\//g, '_');
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
 
         await gmail.users.messages.send({
             userId: 'me',
@@ -36,7 +98,7 @@ const sendEmail = async (to, subject, htmlContent) => {
                 raw: encodedMail,
             },
         });
-        
+
         return "Sent Success";
     } catch (error) {
         console.error('Gmail API Error:', error);
@@ -44,4 +106,4 @@ const sendEmail = async (to, subject, htmlContent) => {
     }
 };
 
-module.exports = { sendEmail };
+module.exports = { sendEmail, sendEmailViaAS };

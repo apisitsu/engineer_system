@@ -57,6 +57,7 @@
     "socket.io": "^4.8.3",
     "sqlite3": "^5.1.7",
     "tedious": "^18.6.1",
+    "tunnel": "^0.0.6",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -261,17 +261,10 @@ app.use('/api/kanban', kanbanRoutes);
 //     agent: proxyAgent
 // });
 
-const { sendEmail } = require('./api/system/emailService');
+const gmailCtrl = require('./api/system/gmail_controller');
 
-app.post('/api/send-email', async (req, res) => {
-  const { to, subject, htmlContent } = req.body;
-  try {
-    const result = await sendEmail(to, subject, htmlContent);
-    res.status(200).json({ message: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+app.route('/api/send-email').post(gmailCtrl.handleSendEmail);
+app.route('/api/gmail-status').get(gmailCtrl.getGmailStatus);
 
 //--------------------User Management (System Engineer)---------------------//
 const userManagement = require('./api/user/userManagementModel');

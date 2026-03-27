@@ -8,6 +8,7 @@ import { server } from '../../../../constance/constance';
 
 import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
+import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
 import { GoDiscussionClosed } from 'react-icons/go';
 import { IoCloseOutline, IoSearchOutline } from 'react-icons/io5';
@@ -762,7 +763,7 @@ const CardDetailDrawer = () => {
                                 {/* ─── Memo ─── */}
                                 {showMemoSection && (
                                     <div style={{ marginBottom: theme.spacing.xl }}>
-                                        <SectionHeader icon={<MdOutlineDescription />} title="Memo" theme={theme} />
+                                        <SectionHeader icon={<CiMemoPad />} title="Memo" theme={theme} />
                                         <div style={{ marginLeft: 28 }}>
                                             {isEditingMemo ? (
                                                 <div>

@@ -36,6 +36,8 @@ export const server = {
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
   ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,
   ECR_REQUIRE_SEND_EMAIL: `${apiUrl}api/send-email`,
+  GMAIL_CONNECT: `${apiUrl}auth/google`,
+  GMAIL_STATUS: `${apiUrl}api/gmail-status`,
 
   //--------------------ECNT--------------------//
   TUMBLE_GET_MRP: `http://plb018.lb.minebea.local:2005/pc/mrp/getAllDataByLotNo/`,
@@ -158,3 +160,6 @@ export const color = {
 export const mm_safety = {
   TOTAL_STOCK: "TOTAL_STOCK"
 }
+
+// Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
+export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';

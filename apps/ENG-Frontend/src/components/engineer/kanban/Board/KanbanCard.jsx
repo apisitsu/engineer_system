@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Typography, Avatar, Tooltip, Progress } from 'antd';
 import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles } from 'react-icons/md';
-import { FaCheckSquare } from 'react-icons/fa';
+import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useTheme } from '../../../../theme';
 
@@ -255,7 +255,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                         {/* Memo indicator */}
                         {hasMemo && (
                             <Tooltip title="Has Memo">
-                                <MdOutlineDescription size={15} color={theme.colors.textTertiary} />
+                                <CiMemoPad  size={15} color={theme.colors.textTertiary} />
                             </Tooltip>
                         )}
 

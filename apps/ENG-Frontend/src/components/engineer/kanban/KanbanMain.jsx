@@ -706,12 +706,12 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     ]}
                                 />
                                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                                    <Tooltip title="Grid view">
+                                    {/* <Tooltip title="Grid view">
                                         <Button type="primary" style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
                                             onClick={() => { setShowCreateModal(true); }}>
                                             Create Project
                                         </Button>
-                                    </Tooltip>
+                                    </Tooltip> */}
                                     <Tooltip title="Create Project">
                                         <Button
                                             type="text"
