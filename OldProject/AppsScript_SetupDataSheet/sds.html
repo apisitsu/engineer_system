@@ -1,0 +1,2173 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Data Sheet System 3.4.3 </title>
+    <?!= include('sds-css'); ?>
+    <?!= include('viewer-login'); ?>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Setup Data Sheet System</h1>
+            <h3>Version 3.4.3 - PDF Cache System for faster PDF export</h3>
+        </div>
+        
+        <div class="main-content">
+            <!-- Pending Notification Buttons -->
+            <div class="pending-actions">
+              <a href="<?= url ?>?page=add" class="add-new-button" target="_blank">+ Add New Setup Data</a>
+                <button id="btnWaitChecked" class="pending-btn" style="display: none;" onclick="showPendingItems('checked')">
+                    <span class="label">Wait Checked</span>
+                    <span class="badge" id="badgeChecked">0</span>
+                </button>
+
+                <button id="btnWaitApproved" class="pending-btn" style="display: none;" onclick="showPendingItems('approved')">
+                    <span class="label">Wait Approved</span>
+                    <span class="badge" id="badgeApproved">0</span>
+                </button>
+
+                <!-- PDF Cache Batch Generate (admin/workflow users only) -->
+                <div id="pdfBatchSection" style="display: none; align-items: center; gap: 8px; margin-left: auto;">
+                    <button id="btnGeneratePdfs" class="pending-btn" onclick="startBatchPdf()" title="Pre-generate all PDFs for faster access" style="background: linear-gradient(135deg, #3498db, #2980b9);">
+                        <span class="label">Generate All PDFs</span>
+                    </button>
+                    <button id="btnStopPdfs" class="pending-btn" style="display: none; background: linear-gradient(135deg, #e74c3c, #c0392b);" onclick="stopBatchPdf()">
+                        <span class="label">Stop</span>
+                    </button>
+                    <span id="pdfBatchProgress" style="display: none; font-size: 13px; font-weight: 600; color: #2980b9; margin-left: 4px;"></span>
+                </div>
+            </div>
+
+            <div class="search-section">
+                <div class="search-title">Search CN</div>
+                <div class="search-container">
+                    <input type="text" class="search-input" id="searchInput" 
+                           placeholder="Enter Control Number (CN)..." value="<?= searchTerm ?>">
+                    <button class="search-btn" id="searchBtn">Search</button>
+                </div>
+            </div>
+            
+            <!-- Bulk Actions Section -->
+            <div id="bulkActionsSection" class="bulk-actions">
+                <h4>🔄 Bulk Actions</h4>
+                
+                <!-- Prepared Bulk -->
+                <div id="preparedBulk" class="bulk-action-group">
+                    <label>Select Next Checked User:</label>
+                    <select id="bulkCheckedAssignee" class="form-control">
+                        <option value="">-- Select Checked User --</option>
+                    </select>
+                    <button onclick="bulkPrepared()" class="btn btn-primary btn-sm">
+                        ✅ Prepared All Selected
+                    </button>
+                </div>
+                
+                <!-- Checked Bulk -->
+                <div id="checkedBulk" class="bulk-action-group">
+                    <label>Select Next Approved User:</label>
+                    <select id="bulkApprovedAssignee" class="form-control">
+                        <option value="">-- Select Approved User --</option>
+                    </select>
+                    <button onclick="bulkChecked()" class="btn btn-warning btn-sm">
+                        🔍 Checked All Selected
+                    </button>
+                </div>
+                
+                <!-- Approved Bulk -->
+                <div id="approvedBulk" class="bulk-action-group">
+                    <button onclick="bulkApproved()" class="btn btn-success btn-sm">
+                        ✅ Approved All Selected
+                    </button>
+                </div>
+                
+                <!-- Reject Bulk -->
+                <div id="rejectBulk" class="bulk-action-group">
+                    <button onclick="showBulkRejectModal()" class="btn btn-danger btn-sm">
+                        ❌ Reject All Selected
+                    </button>
+                </div>
+            </div>
+
+            <div class="results-section" id="resultsSection">
+                <div class="results-title">Search Results</div>
+                <div id="resultsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Modal -->
+    <div id="rejectModal" class="modal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">❌ Reject Document</h5>
+                    <button type="button" class="close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label><strong>Document Details:</strong></label>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e74c3c;">
+                            <div style="margin-bottom: 8px;"><strong>CN:</strong> <span id="rejectCnDisplay" style="color: #2c3e50;">-</span></div>
+                            <div style="margin-bottom: 8px;"><strong>Process Code:</strong> <span id="rejectPcodeDisplay" style="color: #2c3e50;">-</span></div>
+                            <div><strong>Sheet:</strong> <span id="rejectSheetDisplay" style="color: #2c3e50;">-</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="rejectReason"><strong>Rejection Reason:</strong> <span style="color: #e74c3c;">*</span></label>
+                        <textarea id="rejectReason" class="form-control" rows="4" 
+                                placeholder="Please specify the reason for rejection in detail..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="rejectFile"><strong>Attach File (Optional):</strong></label>
+                        <input type="file" id="rejectFile" class="form-control-file" 
+                              accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx">
+                        <small class="form-text text-muted">
+                            Supported formats: Images (PNG, JPG), PDF, Word, Excel (Max 10MB)
+                        </small>
+                    </div>
+                    
+                    <div id="rejectFilePreview" class="file-preview" style="display: none;">
+                        <img id="rejectPreviewImage" style="max-width: 100%; max-height: 200px; border-radius: 6px;">
+                        <div style="margin-top: 10px; font-size: 12px; color: #7f8c8d;">File Preview</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeRejectModal()">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmReject()">
+                        ❌ Reject Document
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Reject Modal -->
+    <div id="bulkRejectModal" class="modal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">❌ Reject Multiple Documents</h5>
+                    <button type="button" class="close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <strong>⚠️ Warning:</strong> You are about to reject <span id="bulkRejectCount" style="font-weight: bold; color: #c0392b;">0</span> documents. This action cannot be undone.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bulkRejectReason"><strong>Rejection Reason (Applied to all selected):</strong> <span style="color: #e74c3c;">*</span></label>
+                        <textarea id="bulkRejectReason" class="form-control" rows="4"
+                                placeholder="Please specify the reason for rejection that applies to all selected documents..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bulkRejectFile"><strong>Attach File (Optional):</strong></label>
+                        <input type="file" id="bulkRejectFile" class="form-control-file"
+                                accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx">
+                        <small class="form-text text-muted">
+                            This file will be attached to all rejection notifications
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBulkRejectModal()">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmBulkReject()">
+                        ❌ Reject All Selected
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Items Modal -->
+    <div id="pendingModal" class="pending-modal">
+        <div class="pending-modal-content">
+            <div class="pending-modal-header">
+                <h2 id="pendingModalTitle">Pending Items</h2>
+                <span class="pending-modal-close" onclick="closePendingModal()">&times;</span>
+            </div>
+            <div class="pending-modal-body">
+                <div id="pendingTableContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== GLOBAL VARIABLES AND CONFIGURATION =====
+        const userInfo = JSON.parse('<?= userInfo ?>');
+        const baseUrl = '<?= url ?>';
+
+        // Check if user has workflow roles (Prepared/Checked/Approved)
+        // Note: Viewer and Guest roles are excluded from workflow roles
+        // Viewers and Guests won't see Add/Edit buttons, checkboxes, or bulk actions
+        const userHasRoles = (() => {
+            if (!userInfo.roles || userInfo.roles.length === 0) {
+                return false;
+            }
+            const workflowRoles = ['Prepared', 'Checked', 'Approved'];
+            return userInfo.roles.some(role => workflowRoles.includes(role));
+        })();
+
+        const autoload = '<?= autoload ?>' === 'true';
+        let currentRejectItem = null;
+        let currentSearchResults = [];
+
+        // ===== VIEWER AUTHENTICATION =====
+        // Note: For users with 'Viewer' role, secondary authentication is handled automatically
+        // by viewer-login.html via DOMContentLoaded event. The checkViewerAuthentication()
+        // function will check for valid session and show login modal if needed.
+        // Viewer session data is stored in window.viewerSession after successful login.
+
+        // DEBUG: Check if viewer-login.html is loaded
+        console.log('[DEBUG] User Info:', userInfo);
+        console.log('[DEBUG] User Roles:', userInfo.roles);
+        console.log('[DEBUG] Is Viewer?', userInfo.roles && userInfo.roles.includes('Viewer'));
+        console.log('[DEBUG] Viewer Login Modal Element:', document.getElementById('viewerLoginModal'));
+
+        // ===== UTILITY FUNCTIONS =====
+
+        /**
+         * Create safe ID for DOM elements
+         * @param {string} str - Input string
+         * @returns {string} Safe ID string
+         */
+        function makeSafeId(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[^a-zA-Z0-9\-_:.]/g, '_');
+        }
+
+        /**
+         * Check if user has at least one workflow role
+         * @returns {boolean} True if user has Prepared/Checked/Approved role
+         */
+        function userHasWorkflowRole() {
+            if (!userInfo.roles || userInfo.roles.length === 0) {
+                return false;
+            }
+
+            const workflowRoles = ['Prepared', 'Checked', 'Approved'];
+            return userInfo.roles.some(role => workflowRoles.includes(role));
+        }
+
+        /**
+         * Check if user has Guest role
+         * @returns {boolean} True if user has Guest role
+         */
+        function isGuestRole() {
+            if (!userInfo.roles || userInfo.roles.length === 0) {
+                return false;
+            }
+            return userInfo.roles.includes('Guest');
+        }
+
+        /**
+         * Global color map for CN|Process_Code combinations
+         * Built during renderSearchResults to ensure unique colors
+         */
+        let processColorMap = new Map();
+
+        /**
+         * Get color for machine highlighting (for workflow users)
+         * @param {string} rowKey - CN|Process_Code combination
+         * @returns {string} CSS color class name
+         */
+        function getMachineColorClass(rowKey) {
+            if (!rowKey) return '';
+
+            // Available colors
+            const machineColors = [
+                'machine-color-1', // Purple
+                'machine-color-2', // Blue
+                'machine-color-3', // Green
+                'machine-color-4', // Orange
+                'machine-color-5', // Teal
+                'machine-color-6', // Pink
+            ];
+
+            // Return pre-assigned color from the map
+            if (processColorMap.has(rowKey)) {
+                const colorIndex = processColorMap.get(rowKey);
+                return machineColors[colorIndex % machineColors.length];
+            }
+
+            // Fallback (shouldn't happen if map is built correctly)
+            return '';
+        }
+
+        // ===== INITIALIZATION FUNCTIONS =====
+
+        /**
+         * Initialize application when DOM is loaded
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            // Setup modal close handlers
+            setupModalCloseHandlers();
+            
+            // Hide add button for non-authorized users (including Viewer role)
+            // Viewer role users can only view approved documents, not add/edit
+            if (!userHasRoles) {
+                const addButton = document.querySelector('.add-new-button');
+                if (addButton) {
+                    addButton.style.display = 'none';
+                }
+            }
+
+            // Setup event listeners
+            document.getElementById('searchBtn').addEventListener('click', searchCN);
+            document.getElementById('searchInput').addEventListener('keypress', e => {
+                if (e.key === 'Enter') searchCN();
+            });
+
+            // Auto-check Viewer session expiry every 30 seconds
+            if (userInfo.roles && userInfo.roles.includes('Viewer')) {
+                let warningShown = false;
+
+                setInterval(() => {
+                    console.log('[Auto Session Check] Checking session expiry...');
+
+                    if (!window.viewerSession) {
+                        return; // No session to check
+                    }
+
+                    const expiresAt = new Date(window.viewerSession.expires_at);
+                    const now = new Date();
+                    const timeLeft = expiresAt - now;
+
+                    // Warning 1 minute before expiry
+                    if (timeLeft > 0 && timeLeft <= 60000 && !warningShown) {
+                        const seconds = Math.floor(timeLeft / 1000);
+                        alert(`⚠️ Your session will expire in ${seconds} seconds. Please save your work.`);
+                        warningShown = true;
+                        console.log(`[Auto Session Check] Warning shown (${seconds}s left)`);
+                    }
+
+                    // Session expired
+                    if (!isViewerSessionValid()) {
+                        console.log('[Auto Session Check] Session expired - showing login modal');
+                        sessionStorage.removeItem('viewer_session');
+                        window.viewerSession = null;
+                        warningShown = false;
+                        showViewerLoginModal();
+                    }
+                }, 30000); // Check every 30 seconds
+                console.log('[Session Monitor] Auto-check started (interval: 30 seconds)');
+            }
+
+            // Setup file preview for reject modal
+            document.getElementById('rejectFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                const preview = document.getElementById('rejectFilePreview');
+                const previewImage = document.getElementById('rejectPreviewImage');
+                
+                if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    preview.style.display = 'none';
+                }
+            });
+
+            // --- [ NEW AUTOLOAD LOGIC ] ---
+            // (Removed old checkAutoLoad() and getUrlParameter())
+
+            // 'autoload' is a boolean variable from '<?= autoload ?>' === 'true'
+            // 'searchInput' is the search field that receives value from 'value="<?= searchTerm ?>"'
+            
+            if (autoload) {
+                console.log("Autoload is TRUE. Checking for search term...");
+                const searchTerm = document.getElementById('searchInput').value;
+                
+                if (searchTerm && searchTerm.trim() !== '') {
+                    console.log("Found term:", searchTerm, "-> Triggering search.");
+                    // Delay slightly to let page ready
+                    setTimeout(() => {
+                        searchCN();
+                    }, 500); // 0.5 seconds
+                } else {
+                    console.log("Autoload was true, but search term input is empty.");
+                }
+            }
+            // --- [ END NEW AUTOLOAD LOGIC ] ---
+            
+        });
+
+        /**
+         * Reads a file and returns it as a Base64 encoded string.
+         * @param {File} file - The file to read.
+         * @returns {Promise<Object>} A promise that resolves with { data: base64String, name: fileName, type: mimeType }
+         */
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    // Extract only base64 data (remove "data:image/png;base64," part)
+                    const base64String = reader.result.split(',')[1]; 
+                    resolve({
+                        data: base64String,
+                        name: file.name,
+                        type: file.type
+                    });
+                };
+                reader.onerror = (error) => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        /**
+         * Setup modal close handlers
+         */
+        function setupModalCloseHandlers() {
+            // Close modals when clicking X
+            document.querySelectorAll('.close').forEach(closeBtn => {
+                closeBtn.addEventListener('click', function() {
+                    this.closest('.modal').classList.remove('show');
+                });
+            });
+            
+            // Close modals when clicking outside
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        this.classList.remove('show');
+                    }
+                });
+            });
+        }
+
+        // ===== SEARCH FUNCTIONS =====
+
+        /**
+         * Check if Viewer session is valid
+         * @returns {boolean} True if session is valid or user is not a Viewer
+         */
+        function isViewerSessionValid() {
+            // If not a Viewer, always return true
+            if (!userInfo.roles || !userInfo.roles.includes('Viewer')) {
+                return true;
+            }
+
+            // Check if session exists
+            if (!window.viewerSession) {
+                console.log('[Session Check] No viewer session found');
+                return false;
+            }
+
+            // Check if session expired
+            const expiresAt = new Date(window.viewerSession.expires_at);
+            const now = new Date();
+
+            if (expiresAt <= now) {
+                console.log('[Session Check] Session expired');
+                return false;
+            }
+
+            console.log('[Session Check] Session valid');
+            return true;
+        }
+
+        /**
+         * Search for Control Number
+         */
+        function searchCN() {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!searchTerm) {
+                alert('Please enter a search term.');
+                return;
+            }
+
+            // Check Viewer session before search
+            if (!isViewerSessionValid()) {
+                alert('⚠️ Your session has expired. Please login again.');
+                sessionStorage.removeItem('viewer_session');
+                window.viewerSession = null;
+                showViewerLoginModal();
+                return;
+            }
+
+            const btn = document.getElementById('searchBtn');
+            const resultsContent = document.getElementById('resultsContent');
+            btn.disabled = true;
+            btn.textContent = 'Searching...';
+            resultsContent.innerHTML = '<div class="loading">🔍 Searching for documents...</div>';
+            document.getElementById('resultsSection').classList.add('show');
+
+            // Clear any existing bulk actions
+            document.getElementById('bulkActionsSection').classList.remove('show');
+
+            google.script.run
+                .withSuccessHandler(response => {
+                    btn.disabled = false;
+                    btn.textContent = 'Search';
+                    if (response.success && response.data.length > 0) {
+                        currentSearchResults = response.data;
+                        displaySearchResults(response.data);
+                        
+                        // Scroll to results section after display
+                        setTimeout(() => {
+                            const resultsSection = document.getElementById('resultsSection');
+                            if (resultsSection) {
+                                resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }, 100);
+                    } else if (response.success) {
+                        resultsContent.innerHTML = `<div class="no-results">❌ No results found for "${searchTerm}". Please check the CN and try again.</div>`;
+                        currentSearchResults = [];
+                    } else {
+                        resultsContent.innerHTML = `<div class="error-message">⚠️ Error: ${response.error}</div>`;
+                        currentSearchResults = [];
+                    }
+                })
+                .withFailureHandler(error => {
+                    btn.disabled = false;
+                    btn.textContent = 'Search';
+                    resultsContent.innerHTML = `<div class="error-message">⚠️ An error occurred: ${error.message || error}</div>`;
+                    currentSearchResults = [];
+                })
+                .searchData(searchTerm, window.viewerSession || null);
+        }
+
+        /**
+         * Display search results in table format
+         * @param {Array} data - Search results data
+         * @param {string} selectedMachine - Optional: Pre-selected machine filter
+         * @param {string} selectedProcess - Optional: Pre-selected process filter
+         */
+        function displaySearchResults(data, selectedMachine = null, selectedProcess = null) {
+            // [NEW] For non-workflow users (excluding Guest): Check if machine selection is needed
+            // Guest role can see all machines with highlighting instead of selecting
+            if (!userHasWorkflowRole() && !isGuestRole() && !selectedMachine) {
+                const machineSelectionNeeded = checkIfMachineSelectionNeeded(data);
+                if (machineSelectionNeeded) {
+                    displayMachineSelection(data);
+                    return; // Stop here and wait for user to select machine
+                }
+            }
+
+            // [NEW] Filter data by selected machine if provided
+            let filteredData = data;
+            if (selectedMachine) {
+                filteredData = data.filter(item => item.Machine === selectedMachine);
+            }
+
+            // [NEW] Check if process selection is needed (for non-workflow users, excluding Guest)
+            // Guest role can see all processes with highlighting instead of selecting
+            if (!userHasWorkflowRole() && !isGuestRole() && !selectedProcess) {
+                const processSelectionNeeded = checkIfProcessSelectionNeeded(filteredData);
+                if (processSelectionNeeded) {
+                    displayProcessSelection(filteredData, selectedMachine);
+                    return; // Stop here and wait for user to select process
+                }
+            }
+
+            // [NEW] Filter data by selected process if provided
+            if (selectedProcess) {
+                filteredData = filteredData.filter(item => item.Process === selectedProcess);
+            }
+
+            // [NEW] Sort data to group same CN+ProcessCode together
+            // Sort order: Process_Code (custom) → Machine → REV (descending)
+            const PROCESS_CODE_ORDER = ['0081','0082','1021','1022','1011','1012','1041','1042','1061','1062','1161','1162','1321'];
+            filteredData.sort((a, b) => {
+                // 1. Sort by Process_Code (custom order)
+                const pcA = String(a.Process_Code || '');
+                const pcB = String(b.Process_Code || '');
+                if (pcA !== pcB) {
+                    const idxA = PROCESS_CODE_ORDER.indexOf(pcA);
+                    const idxB = PROCESS_CODE_ORDER.indexOf(pcB);
+                    // Known codes sort by defined order; unknown codes go to the end
+                    const orderA = idxA !== -1 ? idxA : PROCESS_CODE_ORDER.length;
+                    const orderB = idxB !== -1 ? idxB : PROCESS_CODE_ORDER.length;
+                    if (orderA !== orderB) return orderA - orderB;
+                    // Both unknown: fallback to alphabetical
+                    return pcA.localeCompare(pcB);
+                }
+
+                // 2. Sort by Machine
+                const machineA = String(a.Machine || '');
+                const machineB = String(b.Machine || '');
+                if (machineA !== machineB) return machineA.localeCompare(machineB);
+
+                // 3. Sort by REV (descending: NC first, then numbers high to low)
+                const revA = a.Setup_Data_Sheet_REV || 'NC';
+                const revB = b.Setup_Data_Sheet_REV || 'NC';
+                if (revA === 'NC' && revB !== 'NC') return -1;
+                if (revA !== 'NC' && revB === 'NC') return 1;
+                if (revA === 'NC' && revB === 'NC') return 0;
+                return parseInt(revB) - parseInt(revA); // Descending numbers
+            });
+
+            const firstItem = filteredData[0];
+            const commonCN = firstItem.CN || 'N/A';
+            const commonPN = firstItem.PN || 'N/A';
+
+            // Count latest and all revisions (use filteredData)
+            const latestCount = filteredData.filter(item => item.isLatestRevision).length;
+            const totalCount = filteredData.length;
+
+            // [NEW] Build map of CN+Process_Code combinations that have multiple machines
+            // Highlighting enabled for workflow users and Guest role
+            const machineHighlightMap = new Map();
+            if (userHasWorkflowRole() || isGuestRole()) {
+                // Group by CN + Process_Code
+                const groups = {};
+                filteredData.forEach(item => {
+                    const key = `${item.CN}|${item.Process_Code || ''}`;
+                    if (!groups[key]) {
+                        groups[key] = new Set();
+                    }
+                    if (item.Machine) {
+                        groups[key].add(item.Machine);
+                    }
+                });
+
+                // Mark keys that have multiple machines
+                for (const key in groups) {
+                    if (groups[key].size > 1) {
+                        machineHighlightMap.set(key, true);
+                    }
+                }
+
+                // [NEW] Build deterministic color map to avoid hash collisions
+                // Sort keys to ensure consistent color assignment
+                const keysToHighlight = Array.from(machineHighlightMap.keys()).sort();
+                processColorMap.clear();
+                keysToHighlight.forEach((key, index) => {
+                    processColorMap.set(key, index);
+                });
+                console.log('[Color Map] Assigned colors to', keysToHighlight.length, 'process combinations');
+            }
+
+            let headerInfoHTML = `
+                <div class="common-info-header">
+                    <div class="info-item"><strong>CN:</strong> ${commonCN}</div>
+                    <div class="info-item"><strong>Part No:</strong> ${commonPN}</div>
+                    <div class="info-item"><strong>Found:</strong> ${latestCount} process (${totalCount} total with all revisions)</div>
+                </div>
+            `;
+
+            // Add toggle buttons for showing all revisions and status filters (for workflow users only)
+            let revisionToggleHTML = '';
+            if (userHasWorkflowRole()) {
+                revisionToggleHTML = `
+                    <div style="margin: 10px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <!-- Status Filter Buttons (Single Selection) -->
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-weight: 600; align-self: center; margin-right: 5px;">Filter by Status:</span>
+                            <button id="filterPending" class="status-filter-btn" onclick="toggleStatusFilter('pending')" data-status="pending">
+                                ⏳ Pending
+                            </button>
+                            <button id="filterPrepared" class="status-filter-btn" onclick="toggleStatusFilter('prepared')" data-status="prepared">
+                                ✅ Prepared
+                            </button>
+                            <button id="filterChecked" class="status-filter-btn" onclick="toggleStatusFilter('checked')" data-status="checked">
+                                🔍 Checked
+                            </button>
+                            <button id="filterApproved" class="status-filter-btn" onclick="toggleStatusFilter('approved')" data-status="approved">
+                                ✅ Approved
+                            </button>
+                        </div>
+
+                        <!-- Revision Toggle Button -->
+                        <div>
+                            <button id="toggleRevButton" class="btn btn-secondary btn-sm" onclick="toggleAllRevisions()" style="padding: 8px 16px;">
+                                📋 Show All Revisions (${totalCount})
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // [NEW] Header checkbox - only show for workflow users (not Viewer)
+            const headerCheckboxCell = userHasRoles
+                ? '<th class="checkbox-cell"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>'
+                : '<th class="checkbox-cell"></th>';
+
+            let tableHTML = `
+                <div class="table-responsive">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                ${headerCheckboxCell}
+                                <th>REV</th>
+                                <th>Process Code</th>
+                                <th>Process</th>
+                                <th>Machine</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            filteredData.forEach(item => {
+                const revForId = item.Setup_Data_Sheet_REV || 'NC';
+                const machineForId = item.Machine || item.actual_table || '';
+                const rowId = makeSafeId(`row-${item.CN}-${item.Process_Code || ''}-${machineForId}-${revForId}`);
+                
+                // Determine status for filtering
+                let statusHTML = '';
+                let rowStatus = '';
+                if (item.Approved_By) {
+                    statusHTML = '<span class="status-approved">✓ Approved</span>';
+                    rowStatus = 'approved';
+                } else if (item.Checked_By) {
+                    statusHTML = '<span class="status-checked">✓ Checked</span>';
+                    rowStatus = 'checked';
+                } else if (item.Prepared_By) {
+                    statusHTML = '<span class="status-prepared">✓ Prepared</span>';
+                    rowStatus = 'prepared';
+                } else {
+                    statusHTML = '<span class="status-pending">⏳ Pending</span>';
+                    rowStatus = 'pending';
+                }
+
+                const userRoles = userInfo.roles || [];
+                const canReject = (userRoles.includes('Checked') || userRoles.includes('Approved'))
+                                  && !item.Approved_By
+                                  && (item.Prepared_By || item.Checked_By);
+
+                const progressBarHTML = `
+                    <div class="progress-container" id="progress-${rowId}" style="display: none;">
+                        <div class="progress-bar" id="bar-${rowId}"></div>
+                    </div>
+                `;
+                
+                let editButtonHTML = '';
+                let rejectButtonHTML = '';
+
+                // Edit button: Only show for workflow users AND latest revision
+                // Note: Viewer role users won't see this button (userHasRoles excludes Viewer)
+                if (userHasRoles && item.isLatestRevision) {
+                    const pcode = item.Process_Code || '';
+                    const rev = item.Setup_Data_Sheet_REV || 'NC';
+                    const machine = item.Machine || '';
+                    const editUrl = `${baseUrl}?page=edit&sheet=${item.actual_table}&cn=${item.CN}&pcode=${pcode}&rev=${rev}&machine=${machine}`;
+
+                    editButtonHTML = `
+                        <a href="${editUrl}" class="edit-btn" target="_blank">✏️ Edit</a>
+                    `;
+                }
+
+                if (canReject) {
+                    rejectButtonHTML = `
+                        <button class="btn btn-danger btn-sm" onclick="showRejectModal('${item.CN}', '${item.Process_Code || ''}', '${item.actual_table}', '${item.Setup_Data_Sheet_REV || 'NC'}')">
+                            ❌ Reject
+                        </button>
+                    `;
+                }
+
+                // Apply styling and class for old revisions
+                const rowClass = item.isLatestRevision ? 'latest-revision' : 'old-revision';
+                const rowStyle = item.isLatestRevision ? '' : 'style="color: red; text-decoration: line-through;"';
+                const revDisplay = item.Setup_Data_Sheet_REV || 'NC';
+
+                // [NEW] Check if this specific row needs highlighting
+                const rowKey = `${item.CN}|${item.Process_Code || ''}`;
+                const shouldHighlightThisRow = machineHighlightMap.has(rowKey);
+                // Use rowKey (CN + ProcessCode) for color assignment instead of Machine
+                // This ensures all machines with same CN+ProcessCode get the same color
+                const colorClass = shouldHighlightThisRow ? getMachineColorClass(rowKey) : '';
+
+                // Apply highlighting to Process Code, Process, and Machine columns (without bold)
+                const processCodeClass = colorClass ? `machine-highlight ${colorClass}` : '';
+                const processClass = colorClass ? `machine-highlight ${colorClass}` : '';
+                const machineCellClass = colorClass ? `machine-highlight ${colorClass}` : '';
+                const processCodeContent = item.Process_Code || '';
+                const processContent = item.Process || '';
+                const machineCellContent = item.Machine || '';
+
+                // [NEW] Checkbox cell - only show for workflow users (not Viewer/Guest)
+                const checkboxCell = userHasRoles
+                    ? '<td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateBulkActions()"></td>'
+                    : '<td class="checkbox-cell"></td>';
+
+                tableHTML += `
+                    <tr id="${rowId}" class="${rowClass}" ${rowStyle}
+                        data-sheet-name="${item.actual_table}"
+                        data-cn="${item.CN || ''}"
+                        data-process-code="${item.Process_Code || ''}"
+                        data-process="${item.Process || ''}"
+                        data-prepared-by="${!!item.Prepared_By}"
+                        data-checked-by="${!!item.Checked_By}"
+                        data-approved-by="${!!item.Approved_By}"
+                        data-rev="${revDisplay}"
+                        data-machine="${item.Machine || ''}"
+                        data-is-latest="${!!item.isLatestRevision}"
+                        data-status="${rowStatus}">
+                        ${checkboxCell}
+                        <td><strong>${revDisplay}</strong></td>
+                        <td class="${processCodeClass}">${processCodeContent}</td>
+                        <td class="${processClass}">${processContent}</td>
+                        <td class="${machineCellClass}">${machineCellContent}</td>
+                        <td>${statusHTML}</td>
+                        <td class="action-buttons">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-primary btn-sm pdf-btn" data-row-id="${rowId}">
+                                    📄 PDF
+                                </button>
+                                ${editButtonHTML}
+                                ${rejectButtonHTML}
+                            </div>
+                            ${progressBarHTML}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `</tbody></table></div>`;
+
+            document.getElementById('resultsContent').innerHTML = headerInfoHTML + revisionToggleHTML + tableHTML;
+
+            // Setup PDF button event listeners
+            document.querySelectorAll('.pdf-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const rowId = this.getAttribute('data-row-id');
+                    const row = document.getElementById(rowId);
+                    if (row) {
+                        const sheetName = row.getAttribute('data-sheet-name');
+                        const cn = row.getAttribute('data-cn');
+                        const processCode = row.getAttribute('data-process-code');
+                        const rev = row.getAttribute('data-rev');
+                        const machine = row.getAttribute('data-machine');
+
+                        // [DEBUG] Log parameters before sending
+                        console.log('[PDF Button] Parameters:');
+                        console.log('  sheetName:', sheetName);
+                        console.log('  cn:', cn);
+                        console.log('  processCode:', processCode);
+                        console.log('  rev:', rev);
+                        console.log('  machine:', machine);
+                        console.log('  Match:', sheetName === machine ? '✓ MATCH' : '✗ MISMATCH');
+
+                        viewAsPdf(sheetName, cn, processCode, rev, machine, rowId);
+                    }
+                });
+            });
+
+            // Update bulk actions after displaying results
+            setupBulkActions(filteredData);
+        }
+
+        /**
+         * Check if machine selection is needed for non-workflow users
+         * @param {Array} data - Search results data
+         * @returns {boolean} True if multiple machines exist for same CN+Process Code
+         */
+        function checkIfMachineSelectionNeeded(data) {
+            // Group by CN + Process Code
+            const groups = {};
+
+            data.forEach(item => {
+                const key = `${item.CN}|${item.Process_Code || ''}`;
+                if (!groups[key]) {
+                    groups[key] = new Set();
+                }
+                if (item.Machine) {
+                    groups[key].add(item.Machine);
+                }
+            });
+
+            // Check if any group has multiple machines
+            for (const key in groups) {
+                if (groups[key].size > 1) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /**
+         * Display machine selection UI for non-workflow users
+         * @param {Array} data - Search results data
+         */
+        function displayMachineSelection(data) {
+            const resultsContent = document.getElementById('resultsContent');
+
+            // Extract unique machines
+            const machinesSet = new Set();
+            data.forEach(item => {
+                if (item.Machine) {
+                    machinesSet.add(item.Machine);
+                }
+            });
+
+            const machines = Array.from(machinesSet).sort();
+
+            const firstItem = data[0];
+            const commonCN = firstItem.CN || 'N/A';
+            const commonPN = firstItem.PN || 'N/A';
+
+            let selectionHTML = `
+                <div class="machine-selection-container">
+                    <div class="common-info-header">
+                        <div class="info-item"><strong>CN:</strong> ${commonCN}</div>
+                        <div class="info-item"><strong>Part No:</strong> ${commonPN}</div>
+                        <div class="info-item"><strong>Found:</strong> ${machines.length} machine(s)</div>
+                    </div>
+
+                    <div class="machine-selection-notice">
+                        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                            <h3 style="margin-top: 0; color: #856404;">
+                                <span style="font-size: 24px;">⚙️</span> Multiple Machines Found
+                            </h3>
+                            <p style="margin: 10px 0; color: #856404;">
+                                This CN and Process Code combination exists for multiple machines.
+                                Please select the machine you want to view:
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="machine-selection-buttons">
+            `;
+
+            machines.forEach(machine => {
+                const machineCount = data.filter(item => item.Machine === machine).length;
+                selectionHTML += `
+                    <button class="machine-select-btn" onclick="selectMachine('${machine}')">
+                        <div class="machine-name">
+                            <span style="font-size: 20px;">⚙️</span> ${machine}
+                        </div>
+                        <div class="machine-count">
+                            ${machineCount} record(s)
+                        </div>
+                    </button>
+                `;
+            });
+
+            selectionHTML += `
+                    </div>
+                </div>
+            `;
+
+            resultsContent.innerHTML = selectionHTML;
+        }
+
+        /**
+         * Handle machine selection and display filtered results
+         * @param {string} machine - Selected machine name
+         */
+        function selectMachine(machine) {
+            if (currentSearchResults.length > 0) {
+                displaySearchResults(currentSearchResults, machine, null);
+            }
+        }
+
+        /**
+         * Check if process selection is needed (for non-workflow users only)
+         * @param {Array} data - Search results data
+         * @returns {boolean} True if multiple process variations exist (e.g., "Face Grind", "Face Grind(2)")
+         */
+        function checkIfProcessSelectionNeeded(data) {
+            // Extract unique processes
+            const processes = new Set();
+            data.forEach(item => {
+                if (item.Process) {
+                    processes.add(item.Process);
+                }
+            });
+
+            // If only one process or no processes, no selection needed
+            if (processes.size <= 1) {
+                return false;
+            }
+
+            // Check if there are process variations (with numbers in parentheses)
+            const processArray = Array.from(processes);
+            const baseProcesses = new Map(); // base name -> array of full names
+
+            processArray.forEach(process => {
+                // Extract base name (remove (2), (3), etc.)
+                const baseMatch = process.match(/^(.+?)(?:\s*\(\d+\))?$/);
+                const baseName = baseMatch ? baseMatch[1].trim() : process;
+
+                if (!baseProcesses.has(baseName)) {
+                    baseProcesses.set(baseName, []);
+                }
+                baseProcesses.get(baseName).push(process);
+            });
+
+            // Check if any base process has multiple variations
+            for (const [baseName, variations] of baseProcesses) {
+                if (variations.length > 1) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /**
+         * Display process selection UI (for non-workflow users only)
+         * @param {Array} data - Search results data
+         * @param {string} selectedMachine - Previously selected machine (if any)
+         */
+        function displayProcessSelection(data, selectedMachine = null) {
+            const resultsContent = document.getElementById('resultsContent');
+
+            // Extract unique processes
+            const processesSet = new Set();
+            data.forEach(item => {
+                if (item.Process) {
+                    processesSet.add(item.Process);
+                }
+            });
+
+            const processes = Array.from(processesSet).sort();
+
+            const firstItem = data[0];
+            const commonCN = firstItem.CN || 'N/A';
+            const commonPN = firstItem.PN || 'N/A';
+
+            let selectionHTML = `
+                <div class="machine-selection-container">
+                    <div class="common-info-header">
+                        <div class="info-item"><strong>CN:</strong> ${commonCN}</div>
+                        <div class="info-item"><strong>Part No:</strong> ${commonPN}</div>
+                        ${selectedMachine ? `<div class="info-item"><strong>Machine:</strong> ${selectedMachine}</div>` : ''}
+                        <div class="info-item"><strong>Found:</strong> ${processes.length} process(es)</div>
+                    </div>
+
+                    <div class="machine-selection-notice">
+                        <div style="background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                            <h3 style="margin-top: 0; color: #0c5460;">
+                                <span style="font-size: 24px;">🔧</span> Multiple Processes Found
+                            </h3>
+                            <p style="margin: 10px 0; color: #0c5460;">
+                                This CN has multiple process variations.
+                                Please select the process you want to view:
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="machine-selection-buttons">
+            `;
+
+            processes.forEach(process => {
+                const processCount = data.filter(item => item.Process === process).length;
+                selectionHTML += `
+                    <button class="machine-select-btn process-select-btn" onclick="selectProcess('${process.replace(/'/g, "\\'")}', '${selectedMachine || ''}')">
+                        <div class="machine-name">
+                            <span style="font-size: 20px;">🔧</span> ${process}
+                        </div>
+                        <div class="machine-count">
+                            ${processCount} record(s)
+                        </div>
+                    </button>
+                `;
+            });
+
+            selectionHTML += `
+                    </div>
+                </div>
+            `;
+
+            resultsContent.innerHTML = selectionHTML;
+        }
+
+        /**
+         * Handle process selection and display filtered results
+         * @param {string} process - Selected process name
+         * @param {string} machine - Previously selected machine (if any)
+         */
+        function selectProcess(process, machine = '') {
+            if (currentSearchResults.length > 0) {
+                displaySearchResults(
+                    currentSearchResults,
+                    machine || null,
+                    process
+                );
+            }
+        }
+
+        /**
+         * Toggle between showing only latest revisions and all revisions
+         */
+        function toggleAllRevisions() {
+            const table = document.querySelector('.results-table');
+            const button = document.getElementById('toggleRevButton');
+
+            if (!table || !button) return;
+
+            const isShowingAll = table.classList.contains('show-all-revisions');
+
+            if (isShowingAll) {
+                // Currently showing all, switch to latest only
+                table.classList.remove('show-all-revisions');
+
+                // Count visible rows (latest only)
+                const latestCount = document.querySelectorAll('.results-table tr.latest-revision').length;
+                const totalCount = document.querySelectorAll('.results-table tbody tr').length;
+
+                button.innerHTML = `📋 Show All Revisions (${totalCount})`;
+            } else {
+                // Currently showing latest only, switch to all
+                table.classList.add('show-all-revisions');
+
+                const latestCount = document.querySelectorAll('.results-table tr.latest-revision').length;
+
+                button.innerHTML = `📋 Show Latest Only (${latestCount})`;
+            }
+
+            // Reapply status filters to respect both revision and status filters
+            applyStatusFilters();
+
+            // Update bulk actions to reflect current visible rows
+            // Uncheck all checkboxes first
+            document.getElementById('selectAllCheckbox').checked = false;
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+            updateBulkActions();
+        }
+
+        /**
+         * Toggle status filter for table rows (Single Selection)
+         * @param {string} status - Status to filter (pending, prepared, checked, approved)
+         */
+        function toggleStatusFilter(status) {
+            // Remove active from all buttons (Single Selection)
+            document.querySelectorAll('.status-filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Add active to clicked button
+            const button = document.getElementById(`filter${status.charAt(0).toUpperCase() + status.slice(1)}`);
+            if (button) {
+                button.classList.add('active');
+            }
+
+            // Apply filter to table rows
+            applyStatusFilters();
+
+            // Reset checkboxes and update bulk actions
+            document.getElementById('selectAllCheckbox').checked = false;
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+            updateBulkActions();
+        }
+
+        /**
+         * Apply status filters to table rows based on active filter buttons
+         */
+        function applyStatusFilters() {
+            // Get all active status filters
+            const activeFilters = [];
+            document.querySelectorAll('.status-filter-btn.active').forEach(btn => {
+                activeFilters.push(btn.dataset.status);
+            });
+
+            // Get all table rows
+            const rows = document.querySelectorAll('.results-table tbody tr');
+
+            rows.forEach(row => {
+                const rowStatus = row.dataset.status;
+
+                // If no filters are active, show all rows (respect revision filter)
+                // If filters are active, show only matching rows
+                if (activeFilters.length === 0) {
+                    // No filters active - show all rows (check revision filter)
+                    const isOldRevision = row.classList.contains('old-revision');
+                    const showAllRevisions = document.querySelector('.results-table').classList.contains('show-all-revisions');
+
+                    if (isOldRevision && !showAllRevisions) {
+                        row.style.display = 'none';
+                    } else {
+                        row.style.display = '';
+                    }
+                } else if (activeFilters.includes(rowStatus)) {
+                    // Row matches active filter - check if it should be visible based on revision filter
+                    const isOldRevision = row.classList.contains('old-revision');
+                    const showAllRevisions = document.querySelector('.results-table').classList.contains('show-all-revisions');
+
+                    if (isOldRevision && !showAllRevisions) {
+                        row.style.display = 'none';
+                    } else {
+                        row.style.display = '';
+                    }
+                } else {
+                    // Row doesn't match any active filter
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // ===== BULK ACTIONS FUNCTIONS =====
+
+        /**
+         * Toggle select all checkboxes
+         * @param {HTMLInputElement} checkbox - Select all checkbox
+         */
+        function toggleSelectAll(checkbox) {
+            // Only select checkboxes in visible rows (considering both revision and status filters)
+            const allRows = document.querySelectorAll('.results-table tbody tr');
+            allRows.forEach(row => {
+                // Check if row is actually visible (not hidden by display: none or CSS)
+                const isVisible = row.offsetParent !== null || window.getComputedStyle(row).display !== 'none';
+
+                if (isVisible) {
+                    const rowCheckbox = row.querySelector('.row-checkbox');
+                    if (rowCheckbox) {
+                        rowCheckbox.checked = checkbox.checked;
+                    }
+                }
+            });
+            updateBulkActions();
+        }
+
+        /**
+         * Update bulk actions visibility based on selection
+         */
+        function updateBulkActions() {
+            const selectedCount = document.querySelectorAll('.row-checkbox:checked').length;
+            const bulkSection = document.getElementById('bulkActionsSection');
+
+            // [NEW] Hide bulk actions for Viewer role
+            // Viewers can only view and export PDF, not perform workflow actions
+            if (!userHasRoles) {
+                bulkSection.classList.remove('show');
+                document.querySelectorAll('.bulk-action-group').forEach(group => {
+                    group.classList.remove('show');
+                });
+                return;
+            }
+
+            if (selectedCount === 0) {
+                // Hide bulk section if no items selected
+                bulkSection.classList.remove('show');
+                document.querySelectorAll('.bulk-action-group').forEach(group => {
+                    group.classList.remove('show');
+                });
+                return;
+            }
+
+            // Show bulk section
+            bulkSection.classList.add('show');
+
+            const selectedItems = getSelectedItems();
+            const user = userInfo;
+
+            // Count how many items can be processed for each action
+            const preparedCount = selectedItems.filter(item => !item.Prepared_By && user.roles.includes('Prepared')).length;
+            const checkedCount = selectedItems.filter(item =>
+                item.Prepared_By &&
+                !item.Checked_By &&
+                (
+                    (user.roles.includes('Checked') || user.roles.includes('Approved')) ||
+                    (user.roles.includes('Prepared') && userInfo.canCheckWithNotification)
+                )
+            ).length;
+            const approvedCount = selectedItems.filter(item =>
+                item.Checked_By &&
+                !item.Approved_By &&
+                (user.roles.includes('Approved') || (user.roles.includes('Checked') && userInfo.canApproveWithNotification))
+            ).length;
+            const rejectCount = selectedItems.filter(item => !item.Approved_By && (user.roles.includes('Checked') || user.roles.includes('Approved'))).length;
+
+            // Get button elements
+            const preparedBulk = document.getElementById('preparedBulk');
+            const checkedBulk = document.getElementById('checkedBulk');
+            const approvedBulk = document.getElementById('approvedBulk');
+            const rejectBulk = document.getElementById('rejectBulk');
+
+            // Update Prepared button
+            if (preparedCount > 0) {
+                preparedBulk.classList.add('show');
+                const preparedBtn = preparedBulk.querySelector('button');
+                preparedBtn.innerHTML = `✅ Prepared (${preparedCount})`;
+            } else {
+                preparedBulk.classList.remove('show');
+            }
+
+            // Update Checked button
+            if (checkedCount > 0) {
+                checkedBulk.classList.add('show');
+                const checkedBtn = checkedBulk.querySelector('button');
+                checkedBtn.innerHTML = `🔍 Checked (${checkedCount})`;
+            } else {
+                checkedBulk.classList.remove('show');
+            }
+
+            // Update Approved button
+            if (approvedCount > 0) {
+                approvedBulk.classList.add('show');
+                const approvedBtn = approvedBulk.querySelector('button');
+                approvedBtn.innerHTML = `✅ Approved (${approvedCount})`;
+            } else {
+                approvedBulk.classList.remove('show');
+            }
+
+            // Update Reject button (count is displayed but button text remains the same)
+            if (rejectCount > 0) {
+                rejectBulk.classList.add('show');
+            } else {
+                rejectBulk.classList.remove('show');
+            }
+        }
+
+        /**
+         * Get selected items from table
+         * @returns {Array} Selected items
+         */
+        function getSelectedItems() {
+            const selectedItems = [];
+            document.querySelectorAll('.row-checkbox:checked').forEach(checkbox => {
+                const row = checkbox.closest('tr');
+                if (row) {
+                    const item = {
+                        actual_table: row.dataset.sheetName,
+                        CN: row.dataset.cn,
+                        Process_Code: row.dataset.processCode,
+                        Process: row.dataset.process,
+                        Setup_Data_Sheet_REV: row.dataset.rev || 'NC',
+                        Prepared_By: row.dataset.preparedBy === 'true',
+                        Checked_By: row.dataset.checkedBy === 'true',
+                        Approved_By: row.dataset.approvedBy === 'true'
+                    };
+                    console.log('[getSelectedItems] Item:', item);
+                    console.log('[getSelectedItems] row.dataset.rev:', row.dataset.rev);
+                    selectedItems.push(item);
+                }
+            });
+            console.log('[getSelectedItems] Total selected items:', selectedItems.length);
+            return selectedItems;
+        }
+
+        /**
+         * Setup bulk actions after displaying results
+         * @param {Array} data - Search results data
+         */
+        function setupBulkActions(data) {
+            // Load users for dropdowns
+            loadBulkCheckedUsers();
+            loadBulkApprovedUsers();
+            
+            // Initially hide all bulk action groups
+            document.querySelectorAll('.bulk-action-group').forEach(group => {
+                group.classList.remove('show');
+            });
+            
+            // Update bulk actions based on current selection (initially no selection)
+            updateBulkActions();
+        }
+
+        // ===== BULK OPERATION FUNCTIONS =====
+
+        /**
+         * Bulk Prepared action
+         */
+        function bulkPrepared() {
+            const selectedAssignee = document.getElementById('bulkCheckedAssignee').value;
+            if (!selectedAssignee) {
+                alert('Please select a Checked user');
+                return;
+            }
+
+            const selectedItems = getSelectedItems();
+            console.log('[bulkPrepared] Selected items:', selectedItems);
+
+            const itemsToProcess = selectedItems.filter(item => !item.Prepared_By);
+            console.log('[bulkPrepared] Items to process (not prepared):', itemsToProcess);
+
+            if (itemsToProcess.length === 0) {
+                alert('No documents available for Prepared action');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to mark ${itemsToProcess.length} document(s) as Prepared?`)) {
+                return;
+            }
+
+            showBulkLoading('prepared');
+
+            console.log('[bulkPrepared] Calling server bulkPrepared with items:', itemsToProcess);
+
+            google.script.run
+              .withSuccessHandler(handleBulkResult)
+              .withFailureHandler(handleBulkFailure)
+              .bulkPrepared(itemsToProcess, selectedAssignee);
+        }
+
+        /**
+         * Bulk Checked action
+         */
+        function bulkChecked() {
+            const selectedAssignee = document.getElementById('bulkApprovedAssignee').value;
+            if (!selectedAssignee) {
+                alert('Please select an Approved user');
+                return;
+            }
+            
+            const selectedItems = getSelectedItems();
+            const itemsToProcess = selectedItems.filter(item => item.Prepared_By && !item.Checked_By);
+            
+            if (itemsToProcess.length === 0) {
+                alert('No documents available for Checked action');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to mark ${itemsToProcess.length} document(s) as Checked?`)) {
+                return;
+            }
+            
+            showBulkLoading('checked');
+            
+            google.script.run
+              .withSuccessHandler(handleBulkResult)
+              .withFailureHandler(handleBulkFailure)
+              .bulkChecked(itemsToProcess, selectedAssignee);
+        }
+
+        /**
+         * Bulk Approved action
+         */
+        function bulkApproved() {
+            const selectedItems = getSelectedItems();
+            const itemsToProcess = selectedItems.filter(item => item.Checked_By && !item.Approved_By);
+            
+            if (itemsToProcess.length === 0) {
+                alert('No documents available for Approved action');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to mark ${itemsToProcess.length} document(s) as Approved?`)) {
+                return;
+            }
+            
+            showBulkLoading('approved');
+            
+            google.script.run
+              .withSuccessHandler(handleBulkResult)
+              .withFailureHandler(handleBulkFailure)
+              .bulkApproved(itemsToProcess);
+        }
+
+        /**
+         * Show loading state for bulk operations
+         * @param {string} actionType - Type of bulk action
+         */
+        function showBulkLoading(actionType) {
+            const buttons = document.querySelectorAll('#bulkActionsSection .btn');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                const originalText = btn.textContent;
+                btn.textContent = '⏳ Processing...';
+                btn.dataset.originalText = originalText;
+            });
+        }
+
+        /**
+         * Hide bulk loading state
+         */
+        function hideBulkLoading() {
+            const buttons = document.querySelectorAll('#bulkActionsSection .btn');
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                if (btn.dataset.originalText) {
+                    btn.textContent = btn.dataset.originalText;
+                }
+            });
+        }
+
+        /**
+         * Handle bulk operation result
+         * @param {Object} result - Operation result
+         */
+        function handleBulkResult(result) {
+            hideBulkLoading();
+            
+            if (result.success) {
+                let message = `✅ Operation completed successfully!`;
+                if (result.processed !== undefined) {
+                    message += `\nProcessed: ${result.processed} documents`;
+                }
+                if (result.failed !== undefined && result.failed > 0) {
+                    message += `\nFailed: ${result.failed} documents`;
+                }
+                alert(message);
+                searchCN();
+            } else {
+                alert('❌ Error: ' + (result.error || 'Unknown error occurred'));
+            }
+        }
+
+        // ===== USER MANAGEMENT FUNCTIONS =====
+        /**
+         * Load Checked users for bulk dropdown
+         */
+        function loadBulkCheckedUsers() {
+            google.script.run
+                .withSuccessHandler(users => {
+                    const select = document.getElementById('bulkCheckedAssignee');
+                    select.innerHTML = '<option value="">-- Select Checked User --</option>';
+                    
+                    if (users && users.length > 0) {
+                        users.forEach(user => {
+                            const option = document.createElement('option');
+                            option.value = user.email;
+                            
+                            // Add priority symbols
+                            const prioritySymbol = user.priority === 'Primary' ? ' ★' : ' 🔄';
+                            const notifyStatus = user.notifyOnAssign ? '' : ' (No notification)';
+                            option.textContent = `${user.displayName} (${user.department})${prioritySymbol}${notifyStatus}`;
+                            
+                            // Store additional data in dataset
+                            option.dataset.priority = user.priority;
+                            option.dataset.notifyOnAssign = user.notifyOnAssign;
+                            option.dataset.department = user.department;
+                            
+                            select.appendChild(option);
+                        });
+                        
+                        console.log(`Loaded ${users.length} Checked users`);
+                    } else {
+                        console.warn('No Checked users found');
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = '-- No users available --';
+                        option.disabled = true;
+                        select.appendChild(option);
+                    }
+                })
+                .withFailureHandler(error => {
+                    console.error('Error loading Checked users:', error);
+                    const select = document.getElementById('bulkCheckedAssignee');
+                    select.innerHTML = '<option value="">-- Error loading users --</option>';
+                })
+                .getUsersByRoleWithPriority('Checked', 'ROD ENG', true);
+        }
+
+        /**
+         * Load Approved users for bulk dropdown
+         */
+        function loadBulkApprovedUsers() {
+            google.script.run
+                .withSuccessHandler(users => {
+                    const select = document.getElementById('bulkApprovedAssignee');
+                    select.innerHTML = '<option value="">-- Select Approved User --</option>';
+                    
+                    if (users && users.length > 0) {
+                        users.forEach(user => {
+                            const option = document.createElement('option');
+                            option.value = user.email;
+                            
+                            // Add priority symbols
+                            const prioritySymbol = user.priority === 'Primary' ? ' ★' : ' 🔄';
+                            const notifyStatus = user.notifyOnAssign ? '' : ' (No notification)';
+                            option.textContent = `${user.displayName} (${user.department})${prioritySymbol}${notifyStatus}`;
+                            
+                            // Store additional data in dataset
+                            option.dataset.priority = user.priority;
+                            option.dataset.notifyOnAssign = user.notifyOnAssign;
+                            option.dataset.department = user.department;
+                            
+                            select.appendChild(option);
+                        });
+                        
+                        console.log(`Loaded ${users.length} Approved users`);
+                    } else {
+                        console.warn('No Approved users found');
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = '-- No users available --';
+                        option.disabled = true;
+                        select.appendChild(option);
+                    }
+                })
+                .withFailureHandler(error => {
+                    console.error('Error loading Approved users:', error);
+                    const select = document.getElementById('bulkApprovedAssignee');
+                    select.innerHTML = '<option value="">-- Error loading users --</option>';
+                })
+                .getUsersByRoleWithPriority('Approved', 'ROD ENG', true);
+        }
+
+        // ===== REJECTION FUNCTIONS =====
+
+        /**
+         * Show reject modal for single document
+         * @param {string} cn - Control Number
+         * @param {string} processCode - Process Code
+         * @param {string} sheetName - Sheet Name
+         * @param {string} rev - Revision number
+         */
+        function showRejectModal(cn, processCode, sheetName, rev) {
+            currentRejectItem = { cn, processCode, sheetName, rev: rev || 'NC' };
+
+            // Display document details
+            document.getElementById('rejectCnDisplay').textContent = cn;
+            document.getElementById('rejectPcodeDisplay').textContent = processCode || 'N/A';
+            document.getElementById('rejectSheetDisplay').textContent = sheetName;
+            
+            // Reset form
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('rejectFile').value = '';
+            document.getElementById('rejectFilePreview').style.display = 'none';
+            
+            // Show modal
+            document.getElementById('rejectModal').classList.add('show');
+        }
+
+        /**
+         * Show bulk reject modal
+         */
+        function showBulkRejectModal() {
+            const selectedItems = getSelectedItems();
+            if (selectedItems.length === 0) {
+                alert('Please select documents to reject');
+                return;
+            }
+            
+            document.getElementById('bulkRejectCount').textContent = selectedItems.length;
+            
+            // Reset form
+            document.getElementById('bulkRejectReason').value = '';
+            document.getElementById('bulkRejectFile').value = '';
+            
+            // Show modal
+            document.getElementById('bulkRejectModal').classList.add('show');
+        }
+
+        /**
+         * Close reject modal
+         */
+        function closeRejectModal() {
+            document.getElementById('rejectModal').classList.remove('show');
+        }
+
+        /**
+         * Close bulk reject modal
+         */
+        function closeBulkRejectModal() {
+            document.getElementById('bulkRejectModal').classList.remove('show');
+        }
+
+        /**
+         * Confirm single document rejection
+         */
+        async function confirmReject() {
+            const reason = document.getElementById('rejectReason').value.trim();
+            const fileInput = document.getElementById('rejectFile');
+            
+            if (!reason) {
+                alert('Please specify rejection reason');
+                document.getElementById('rejectReason').focus();
+                return;
+            }
+            
+            const formData = {
+                cn: currentRejectItem.cn,
+                processCode: currentRejectItem.processCode,
+                sheetName: currentRejectItem.sheetName,
+                rev: currentRejectItem.rev || 'NC',
+                reason: reason
+            };
+
+            // DEBUG: Log formData
+            console.log('[confirmReject] currentRejectItem:', currentRejectItem);
+            console.log('[confirmReject] formData:', formData);
+            console.log('[confirmReject] formData.rev:', formData.rev);
+
+            // DEBUG: Alert to show revision being rejected
+            if (!confirm(`กำลัง reject:\nCN: ${formData.cn}\nProcess Code: ${formData.processCode}\nRevision: ${formData.rev}\n\nถูกต้องหรือไม่?`)) {
+                return;
+            }
+
+            // Show loading state
+            const rejectBtn = document.querySelector('#rejectModal .btn-danger');
+            const originalText = rejectBtn.textContent;
+            rejectBtn.textContent = '⏳ Rejecting...';
+            rejectBtn.disabled = true;
+
+            // --- MODIFIED FILE HANDLING ---
+            try {
+                if (fileInput.files[0]) {
+                    if (fileInput.files[0].size > 5 * 1024 * 1024) {
+                        alert('File size must be less than 5MB for faster processing');
+                        rejectBtn.disabled = false;
+                        rejectBtn.textContent = originalText;
+                        return;
+                    }
+                    // Await the async file reading
+                    const fileData = await readFileAsBase64(fileInput.files[0]);
+                    formData.file = fileData; // This is now a simple {data, name, type} object
+                } else {
+                    formData.file = null; // No file selected
+                }
+            } catch (error) {
+                alert('Error reading file: ' + error.message);
+                rejectBtn.disabled = false;
+                rejectBtn.textContent = originalText;
+                return;
+            }
+            // --- END MODIFIED FILE HANDLING ---
+            
+            // Now, call the server
+            google.script.run
+                .withSuccessHandler(result => {
+                    rejectBtn.textContent = originalText;
+                    rejectBtn.disabled = false;
+                    
+                    if (result.success) {
+                        alert('✅ Document rejected successfully!');
+                        closeRejectModal();
+                        searchCN();
+                    } else {
+                        alert('❌ Rejection failed: ' + result.error);
+                    }
+                })
+                .withFailureHandler(error => {
+                    rejectBtn.textContent = originalText;
+                    rejectBtn.disabled = false;
+                    alert('❌ Rejection failed: ' + error.message);
+                })
+                .rejectDocument(formData);
+        }
+
+        /**
+         * Confirm bulk document rejection
+         */
+        async function confirmBulkReject() { // <-- Added async
+            const reason = document.getElementById('bulkRejectReason').value.trim();
+            const fileInput = document.getElementById('bulkRejectFile');
+            const selectedItems = getSelectedItems();
+            
+            if (!reason) {
+                alert('Please specify rejection reason');
+                document.getElementById('bulkRejectReason').focus();
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to reject ${selectedItems.length} document(s)? This action cannot be undone.`)) {
+                return;
+            }
+            
+            const formData = {
+                items: JSON.stringify(selectedItems),
+                reason: reason
+            };
+            
+            // Show loading state
+            const rejectBtn = document.querySelector('#bulkRejectModal .btn-danger');
+            const originalText = rejectBtn.textContent;
+            rejectBtn.textContent = '⏳ Rejecting...';
+            rejectBtn.disabled = true;
+
+            // --- MODIFIED FILE HANDLING ---
+            try {
+                if (fileInput.files[0]) {
+                    if (fileInput.files[0].size > 5 * 1024 * 1024) {
+                        alert('File size must be less than 5MB');
+                        rejectBtn.disabled = false;
+                        rejectBtn.textContent = originalText;
+                        return;
+                    }
+                    // Await the async file reading
+                    const fileData = await readFileAsBase64(fileInput.files[0]);
+                    formData.file = fileData; // This is now a simple {data, name, type} object
+                } else {
+                    formData.file = null; // No file selected
+                }
+            } catch (error) {
+                alert('Error reading file: ' + error.message);
+                rejectBtn.disabled = false;
+                rejectBtn.textContent = originalText;
+                return;
+            }
+            // --- END MODIFIED FILE HANDLING ---
+            
+            // Now, call the server
+            google.script.run
+                .withSuccessHandler(result => {
+                    rejectBtn.textContent = originalText;
+                    rejectBtn.disabled = false;
+                    
+                    if (result.success) {
+                        alert(`✅ Rejected ${result.processed} documents successfully! Failed: ${result.failed}`);
+                        closeBulkRejectModal();
+                        searchCN();
+                    } else {
+                        alert('❌ Bulk rejection failed: ' + result.error);
+                    }
+                })
+                .withFailureHandler(error => {
+                    rejectBtn.textContent = originalText;
+                    rejectBtn.disabled = false;
+                    alert('❌ Bulk rejection failed: ' + error.message);
+                })
+                .bulkRejectDocuments(formData);
+        }
+
+        // ===== PDF EXPORT FUNCTION =====
+
+        /**
+         * View document as PDF
+         * @param {string} sheetName - Sheet name
+         * @param {string} cn - Control Number
+         * @param {string} processCode - Process Code
+         * @param {string} rev - Revision
+         * @param {string} machine - Machine name
+         * @param {string} rowId - Row ID for progress tracking
+         */
+        function viewAsPdf(sheetName, cn, processCode, rev, machine, rowId) {
+            const viewButton = document.querySelector(`#${rowId} .btn-primary`);
+            const progressContainer = document.getElementById(`progress-${rowId}`);
+            const bar = document.getElementById(`bar-${rowId}`);
+            
+            viewButton.style.display = 'none';
+            progressContainer.style.display = 'block';
+
+            let width = 0;
+            let interval;
+
+            const animateProgressBar = () => {
+                interval = setInterval(() => {
+                    if (width < 40) {
+                        width += 0.6;
+                    } 
+                    else if (width < 90) {
+                        width += 0.8; 
+                    } 
+                    else if (width < 99) {
+                        width += 0.2;
+                    }
+                    else {
+                        clearInterval(interval);
+                        return;
+                    }
+                    const displayWidth = Math.floor(width);
+                    bar.style.width = displayWidth + '%';
+                    bar.textContent = displayWidth + '%';
+                }, 100);
+            };
+            
+            animateProgressBar();
+
+            const params = { sheetName, cn, process_code: processCode, rev, machine };
+            
+            const onComplete = (success, message) => {
+                clearInterval(interval);
+                bar.style.width = '100%';
+                bar.textContent = '100%';
+                
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    viewButton.style.display = 'inline-block';
+                    bar.style.width = '0%';
+                    bar.textContent = '';
+                    
+                    if (success) {
+                        const link = document.createElement('a');
+                        link.href = 'data:application/pdf;base64,' + message.pdfData;
+                        link.download = message.fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } else {
+                        alert('❌ Error generating PDF: ' + message);
+                    }
+                }, 500);
+            };
+
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.success) {
+                        onComplete(true, response);
+                    } else {
+                        onComplete(false, response.error);
+                    }
+                })
+                .withFailureHandler(err => {
+                    onComplete(false, err.message || err);
+                })
+                .exportSheetAsPdf(params);
+        }
+
+        // ===== BATCH PDF GENERATION =====
+
+        let pdfBatchInterval = null;
+
+        /**
+         * Start batch PDF generation
+         */
+        function startBatchPdf() {
+            document.getElementById('btnGeneratePdfs').style.display = 'none';
+            document.getElementById('btnStopPdfs').style.display = 'inline-flex';
+            document.getElementById('pdfBatchProgress').style.display = 'inline';
+            document.getElementById('pdfBatchProgress').textContent = 'Starting...';
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        pollBatchPdfStatus();
+                    } else {
+                        alert('Failed to start: ' + result.error);
+                        resetBatchPdfUI();
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    alert('Error: ' + err.message);
+                    resetBatchPdfUI();
+                })
+                .startBatchPdfGeneration();
+        }
+
+        /**
+         * Stop batch PDF generation
+         */
+        function stopBatchPdf() {
+            if (pdfBatchInterval) {
+                clearInterval(pdfBatchInterval);
+                pdfBatchInterval = null;
+            }
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    resetBatchPdfUI();
+                    document.getElementById('pdfBatchProgress').style.display = 'inline';
+                    document.getElementById('pdfBatchProgress').textContent = 'Stopped';
+                })
+                .withFailureHandler(function(err) {
+                    resetBatchPdfUI();
+                })
+                .stopBatchPdfGeneration();
+        }
+
+        /**
+         * Poll batch PDF generation status every 5 seconds
+         */
+        function pollBatchPdfStatus() {
+            if (pdfBatchInterval) clearInterval(pdfBatchInterval);
+
+            pdfBatchInterval = setInterval(function() {
+                google.script.run
+                    .withSuccessHandler(function(status) {
+                        if (!status.success) return;
+
+                        document.getElementById('pdfBatchProgress').textContent =
+                            status.message;
+
+                        if (!status.isRunning || status.percentage >= 100) {
+                            clearInterval(pdfBatchInterval);
+                            pdfBatchInterval = null;
+                            resetBatchPdfUI();
+                            document.getElementById('pdfBatchProgress').style.display = 'inline';
+                            document.getElementById('pdfBatchProgress').textContent =
+                                'Complete: ' + status.total + '/' + status.total;
+                        }
+                    })
+                    .getBatchPdfStatus();
+            }, 5000);
+        }
+
+        /**
+         * Reset batch PDF UI to default state
+         */
+        function resetBatchPdfUI() {
+            document.getElementById('btnGeneratePdfs').style.display = 'inline-flex';
+            document.getElementById('btnStopPdfs').style.display = 'none';
+        }
+
+        function handleBulkFailure(error) {
+            hideBulkLoading(); // Unlock buttons
+            alert('❌ Fatal server error: ' + error.message);
+        }
+
+        // ===== PENDING ITEMS NOTIFICATION SYSTEM =====
+
+        /**
+         * Initialize pending buttons based on user roles
+         */
+        function initPendingButtons() {
+            // Show buttons based on user roles
+            if (userInfo.roles.includes('Checked')) {
+                document.getElementById('btnWaitChecked').style.display = 'inline-flex';
+                loadPendingCount('checked');
+            }
+
+            if (userInfo.roles.includes('Approved')) {
+                document.getElementById('btnWaitApproved').style.display = 'inline-flex';
+                loadPendingCount('approved');
+            }
+
+            // Show batch PDF generation button for workflow users
+            if (userHasRoles) {
+                document.getElementById('pdfBatchSection').style.display = 'flex';
+                // Check if batch is currently running
+                google.script.run
+                    .withSuccessHandler(function(status) {
+                        if (status.success && status.isRunning) {
+                            document.getElementById('btnGeneratePdfs').style.display = 'none';
+                            document.getElementById('btnStopPdfs').style.display = 'inline-flex';
+                            document.getElementById('pdfBatchProgress').style.display = 'inline';
+                            document.getElementById('pdfBatchProgress').textContent = status.message;
+                            pollBatchPdfStatus();
+                        }
+                    })
+                    .getBatchPdfStatus();
+            }
+
+            // Auto-refresh every 5 minutes
+            setInterval(() => {
+                if (userInfo.roles.includes('Checked')) {
+                    loadPendingCount('checked');
+                }
+                if (userInfo.roles.includes('Approved')) {
+                    loadPendingCount('approved');
+                }
+            }, 300000); // 5 minutes
+        }
+
+        /**
+         * Load pending count for a specific status
+         */
+        function loadPendingCount(status) {
+            google.script.run
+                .withSuccessHandler((result) => {
+                    if (result.success) {
+                        const badgeId = status === 'checked' ? 'badgeChecked' : 'badgeApproved';
+                        const badge = document.getElementById(badgeId);
+                        if (badge) {
+                            badge.textContent = result.count;
+                            badge.classList.toggle('zero', result.count === 0);
+                        }
+                    }
+                })
+                .withFailureHandler((error) => {
+                    console.error('Error loading pending count:', error);
+                })
+                .getPendingItems(status);
+        }
+
+        /**
+         * Show pending items modal
+         */
+        function showPendingItems(status) {
+            const modal = document.getElementById('pendingModal');
+            const title = document.getElementById('pendingModalTitle');
+            const container = document.getElementById('pendingTableContainer');
+
+            // Show loading
+            title.textContent = status === 'checked'
+                ? 'Waiting for Checked...'
+                : 'Waiting for Approved...';
+            container.innerHTML = '<div style="text-align: center; padding: 40px;"><p style="font-size: 18px; color: #95a5a6;">⏳ Loading...</p></div>';
+            modal.classList.add('show');
+
+            // Fetch pending items
+            google.script.run
+                .withSuccessHandler((result) => {
+                    if (result.success) {
+                        displayPendingItems(result, status);
+                    } else {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="icon">⚠️</div>
+                                <h3>Error</h3>
+                                <p>${result.error}</p>
+                            </div>
+                        `;
+                    }
+                })
+                .withFailureHandler((error) => {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">❌</div>
+                            <h3>Server Error</h3>
+                            <p>${error.message || error}</p>
+                        </div>
+                    `;
+                })
+                .getPendingItems(status);
+        }
+
+        /**
+         * Display pending items in table
+         */
+        function displayPendingItems(result, status) {
+            const title = document.getElementById('pendingModalTitle');
+            const container = document.getElementById('pendingTableContainer');
+
+            title.textContent = status === 'checked'
+                ? `⏳ Waiting for Checked (${result.count} items)`
+                : `⏳ Waiting for Approved (${result.count} items)`;
+
+            if (result.count === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">✅</div>
+                        <h3>All Clear!</h3>
+                        <p>No pending items at the moment.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Build table
+            let tableHTML = `
+                <table class="pending-table">
+                    <thead>
+                        <tr>
+                            <th>CN</th>
+                            <th>Items</th>
+                            <th>By</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            result.items.forEach(item => {
+                tableHTML += `
+                    <tr>
+                        <td><strong>${item.cn}</strong></td>
+                        <td><span class="badge-count">${item.count}</span></td>
+                        <td>${item.by || '-'}</td>
+                        <td>${item.date || '-'}</td>
+                        <td>
+                            <a href="${item.link}" target="_blank" class="link-btn">
+                                🔗 View
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = tableHTML;
+        }
+
+        /**
+         * Close pending modal
+         */
+        function closePendingModal() {
+            const modal = document.getElementById('pendingModal');
+            modal.classList.remove('show');
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            const modal = document.getElementById('pendingModal');
+            if (event.target === modal) {
+                closePendingModal();
+            }
+        });
+
+        // Initialize pending buttons on page load
+        window.addEventListener('load', () => {
+            initPendingButtons();
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+.form-up-container {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	transition: all 0.6s ease-in-out;
+}
+
+.form-up-container h1 {
+    font-size: 35px;
+	font-weight: bold;
+	margin: 0;
+    color: #AAA6A3;
+}
+
+.form-up-container p {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 20px;
+	letter-spacing: 0.5px;
+	margin: 20px 0 30px;
+}
+
+.form-up-container a {
+	font-size: 14px;
+	text-decoration: none;
+	margin: 15px 0;
+}
+
+.form-up-container button {
+	border-radius: 20px;
+	border: 2px solid #A38182;
+	background-color: #EBC8B4;
+	color: #FFFFFF;
+	font-size: 12px;
+	font-weight: bold;
+	padding: 12px 45px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.form-up-container form {
+	background-color: #DFDAD4;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	padding: 0 50px;
+	height: 100%;
+	text-align: center;
+}
+
+.form-up-container input {
+	background-color: #eee;
+	padding: 12px 15px;
+	margin: 8px 0;
+	width: 100%;
+}
+
+.sign-up-container {
+	left: 0;
+	width: 100%;
+	z-index: 2;
+}
+
+.icon-style-area {
+    margin: 8px 0;
+    height: 79%;
+	width: 44px;
+}
+
+.icon-style {
+    font-size: 18px;
+    color: gray;
+}
+
+.swal-signup{
+    width:350px !important;
+    height: 300px !important;
+    font-size: 14px !important;
+}

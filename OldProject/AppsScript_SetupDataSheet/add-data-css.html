@@ -1,0 +1,341 @@
+<style>
+/* CSS for add-data.html */
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f2f5;
+  padding: 20px;
+  margin: 0;
+}
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+.header {
+  background: #007bff;
+  color: white;
+  padding: 20px;
+  text-align: center;
+  position: relative;
+}
+.header h1 {
+  margin: 0;
+}
+.back-link {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  color: white;
+  text-decoration: none;
+  font-size: 0.9em;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.2);
+}
+.back-link:hover {
+  background: rgba(255,255,255,0.4);
+}
+.main-content {
+  padding: 30px;
+}
+.selection-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 5px;
+  margin-bottom: 20px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+.form-group label {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #333;
+}
+.form-select {
+  padding: 10px;
+  font-size: 1em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+}
+.dynamic-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+.form-group-dynamic {
+  display: flex;
+  flex-direction: column;
+}
+.form-group-dynamic label {
+  font-size: 0.9em;
+  color: #555;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.form-input {
+  padding: 10px;
+  font-size: 1em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.loader {
+  text-align: center;
+  padding: 40px;
+  color: #6c757d;
+  font-size: 1.2em;
+}
+.save-container {
+  text-align: center;
+  padding-top: 30px;
+  border-top: 1px solid #eee;
+  margin-top: 30px;
+}
+.save-btn {
+  background: #28a745;
+  color: white;
+  padding: 12px 30px;
+  font-size: 1.1em;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.save-btn:hover {
+  background: #218838;
+}
+.save-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+.status-message {
+  text-align: center;
+  padding: 15px;
+  margin-top: 20px;
+  border-radius: 5px;
+  font-weight: bold;
+}
+.status-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+.status-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* === TOOLING SECTION === */
+.tooling-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 5px;
+  border: 2px dashed #dee2e6;
+}
+
+.tooling-section h3 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 1.2em;
+}
+
+.tooling-list {
+  margin-bottom: 20px;
+  min-height: 60px;
+}
+
+.tooling-list .empty-state {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  padding: 20px;
+}
+
+.tool-item {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  padding: 15px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: box-shadow 0.2s;
+}
+
+.tool-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.tool-info {
+  flex: 1;
+}
+
+.tool-info strong {
+  display: block;
+  color: #007bff;
+  margin-bottom: 5px;
+  font-size: 1.05em;
+}
+
+.tool-info span {
+  display: block;
+  color: #6c757d;
+  font-size: 0.9em;
+  margin-bottom: 2px;
+}
+
+.tool-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-edit, .btn-remove {
+  padding: 6px 12px;
+  font-size: 0.85em;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-edit {
+  background: #ffc107;
+  color: #000;
+}
+
+.btn-edit:hover {
+  background: #e0a800;
+}
+
+.btn-remove {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-remove:hover {
+  background: #c82333;
+}
+
+.add-tooling-btn {
+  background: #007bff;
+  color: white;
+  padding: 10px 20px;
+  font-size: 1em;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.add-tooling-btn:hover {
+  background: #0056b3;
+}
+
+/* === TOOLING MODAL === */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.modal-content {
+  background: white;
+  margin: 5% auto;
+  padding: 30px;
+  border-radius: 8px;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  animation: modalFadeIn 0.3s;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-content h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 1.4em;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 10px;
+}
+
+.modal-fields-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+.btn-confirm {
+  background: #28a745;
+  color: white;
+  padding: 10px 25px;
+  font-size: 1em;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-confirm:hover {
+  background: #218838;
+}
+
+.btn-cancel {
+  background: #6c757d;
+  color: white;
+  padding: 10px 25px;
+  font-size: 1em;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-cancel:hover {
+  background: #5a6268;
+}
+
+.required {
+  color: red;
+  font-weight: bold;
+}
+</style>

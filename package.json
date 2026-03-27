@@ -1,0 +1,21 @@
+{
+  "name": "Engineering_System",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=apps/ENG-Backend",
+    "dev:frontend": "npm run dev --workspace=apps/ENG-Frontend",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "react-icons": "^5.5.0",
+    "uuid": "^13.0.0"
+  }
+}

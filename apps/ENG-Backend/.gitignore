@@ -1,0 +1,5 @@
+node_modules
+api/system/config.js
+*.db
+apps/ENG-Backend/instance/*.db
+.env

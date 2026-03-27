@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  postgres_eng:
+    image: postgres:15-alpine
+    container_name: postgres_eng
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eng_system
+      POSTGRES_USER: eng_admin
+      POSTGRES_PASSWORD: eng_secret_2026
+      TZ: Asia/Bangkok
+      PGTZ: Asia/Bangkok
+    ports:
+      - "6543:5432"
+    volumes:
+      - postgres_eng_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eng_admin -d eng_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_eng_data:
+    name: postgres_eng_data
