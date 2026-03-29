@@ -29,20 +29,20 @@ function searchKSB22G_Jaws(fixData, h, sheetName, calc, maxDepth) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('JAW')) return false;
-    const fixA = parseFloat(row[h('JawID_1_A')]);
-    const fixD = parseFloat(row[h('JawDepth_Max_D')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixD = parseFloat(row[h('Dim_D')]);
     const clearance = Math.round((fixA - calc.jawA) * 1000) / 1000;
     if (clearance < -0.015 || clearance > 0.05) return false;
     if (!isNaN(fixD) && fixD > maxDepth) return false;
     if (!isNaN(fixD) && fixD < MIN_JAW_DEPTH) return false;
-    const fixC = parseFloat(row[h('JawWidth_Max_C')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
     if (!isNaN(fixC) && fixC > reqC + JAW_WIDTH_MAX_MARGIN) return false;
     return true;
   }).map(row => ({
     no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-    val1: row[h('JawID_1_A')], val2: row[h('JawID_2_B')], val3: row[h('JawWidth_Max_C')],
-    valD: row[h('JawDepth_Max_D')] || '-', valE: '-',
-    _diff: Math.abs(parseFloat(row[h('JawID_1_A')]) - calc.jawA)
+    val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
+    valD: row[h('Dim_D')] || '-', valE: '-',
+    _diff: Math.abs(parseFloat(row[h('Dim_A')]) - calc.jawA)
   })).sort((a, b) => {
     const diffC_A = Math.abs(parseFloat(a.val3) - reqC);
     const diffC_B = Math.abs(parseFloat(b.val3) - reqC);
@@ -56,15 +56,15 @@ function searchKSB22G_BackPlates(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('BACK PLATE')) return false;
-    const sheetID = parseFloat(row[h('BackPlateID_A')]);
-    const sheetPCD = parseFloat(row[h('BackPlatePCD_B')]);
+    const sheetID = parseFloat(row[h('Dim_A')]);
+    const sheetPCD = parseFloat(row[h('Dim_B')]);
     if (sheetID < reqAA || sheetID > reqAA + 2.5) return false;
     if (isNaN(sheetPCD) || sheetPCD < minPCD) return false;
     return true;
   }).map(row => ({
     no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-    val1: row[h('BackPlateID_A')], val2: row[h('BackPlatePCD_B')],
-    _diff: Math.abs(parseFloat(row[h('BackPlateID_A')]) - reqAA)
+    val1: row[h('Dim_A')], val2: row[h('Dim_B')],
+    _diff: Math.abs(parseFloat(row[h('Dim_A')]) - reqAA)
   })).sort((a, b) => a._diff - b._diff);
 }
 
@@ -81,24 +81,24 @@ function searchKSB80_Jaws(fixData, h, sheetName, calc, maxDepth) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('JAW')) return false;
-    const fixA = parseFloat(row[h('JawID_1_A')]);
-    const fixD = parseFloat(row[h('JawDepth_Max_D')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixD = parseFloat(row[h('Dim_D')]);
     const clearance = Math.round((fixA - calc.jawA) * 1000) / 1000;
     if (clearance < -0.015 || clearance > 0.05) return false;
     if (!isNaN(fixD) && fixD > maxDepth) return false;
     if (!isNaN(fixD) && fixD < MIN_JAW_DEPTH) return false;
-    const fixC = parseFloat(row[h('JawWidth_Max_C')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
     if (!isNaN(fixC) && fixC > reqC + JAW_WIDTH_MAX_MARGIN) return false;
     if (reqE !== null) {
-      const fixE = parseFloat(row[h('Jaw_E')]);
+      const fixE = parseFloat(row[h('Dim_E')]);
       if (isNaN(fixE) || fixE < reqE) return false;
     }
     return true;
   }).map(row => ({
     no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-    val1: row[h('JawID_1_A')], val2: row[h('JawID_2_B')], val3: row[h('JawWidth_Max_C')],
-    valD: row[h('JawDepth_Max_D')] || '-', valE: row[h('Jaw_E')] || '-',
-    _diff: Math.abs(parseFloat(row[h('JawID_1_A')]) - calc.jawA)
+    val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
+    valD: row[h('Dim_D')] || '-', valE: row[h('Dim_E')] || '-',
+    _diff: Math.abs(parseFloat(row[h('Dim_A')]) - calc.jawA)
   })).sort((a, b) => {
     const diffC_A = Math.abs(parseFloat(a.val3) - reqC);
     const diffC_B = Math.abs(parseFloat(b.val3) - reqC);
@@ -118,15 +118,15 @@ function searchKSB80_BackPlates(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('BACK PLATE')) return false;
-    const sheetID = parseFloat(row[h('BackPlateID_A')]);
-    const sheetPCD = parseFloat(row[h('BackPlatePCD_B')]);
+    const sheetID = parseFloat(row[h('Dim_A')]);
+    const sheetPCD = parseFloat(row[h('Dim_B')]);
     if (sheetID < reqAA || sheetID > reqAA + 2.5) return false;
     if (checkPCD && (isNaN(sheetPCD) || sheetPCD < minPCD || sheetPCD > maxPCD)) return false;
     return true;
   }).map(row => ({
     no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-    val1: row[h('BackPlateID_A')], val2: row[h('BackPlatePCD_B')],
-    _diff: Math.abs(parseFloat(row[h('BackPlateID_A')]) - reqAA)
+    val1: row[h('Dim_A')], val2: row[h('Dim_B')],
+    _diff: Math.abs(parseFloat(row[h('Dim_A')]) - reqAA)
   })).sort((a, b) => a._diff - b._diff);
 }
 
@@ -137,20 +137,20 @@ function searchTSG_Chutes(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('CHUTE')) return false;
-    const sA = parseFloat(row[h('Face_Chute_A')]);
-    const sB = parseFloat(row[h('Face_Chute_B')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sB = parseFloat(row[h('Dim_B')]);
     if (isNaN(sA) || isNaN(sB)) return false;
     if (sA < calc.chuteCalcA || sA > (calc.chuteCalcA + 1.0)) return false;
     if (sB < calc.chuteCalcB) return false;
     if (sB > calc.chuteCalcB + CHUTE_B_MAX_EXCESS) return false;
     return true;
   }).map(row => {
-    const sA = parseFloat(row[h('Face_Chute_A')]);
-    const sB = parseFloat(row[h('Face_Chute_B')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sB = parseFloat(row[h('Dim_B')]);
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-      valA: row[h('Face_Chute_A')], valB: row[h('Face_Chute_B')],
-      valC: row[h('Face_Chute_C')], valD: row[h('Face_Chute_D')],
+      valA: row[h('Dim_A')], valB: row[h('Dim_B')],
+      valC: row[h('Dim_C')], valD: row[h('Dim_D')],
       _diff: Math.abs(sA - calc.chuteCalcA) + Math.abs(sB - calc.chuteCalcB)
     };
   });
@@ -161,9 +161,9 @@ function searchTSG300_Carriers(fixData, h, sheetName, calc) {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG300W');
     if (!toolType.includes('CARRIER') || isW_Machine) return false;
-    const sDepth = parseFloat(row[h('Face_Carrier_D')]);
-    const sA = parseFloat(row[h('Face_Carrier_A')]);
-    const sLength = parseFloat(row[h('Face_Carrier_C')]);
+    const sDepth = parseFloat(row[h('Dim_D')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sLength = parseFloat(row[h('Dim_C')]);
     const CARRIER_A_MAX_EXCESS = 1.0;
     if (isNaN(sDepth) || sDepth > calc.maxCarrierD) return false;
     if (isNaN(sA) || sA < calc.carrierCalcA) return false;
@@ -171,12 +171,12 @@ function searchTSG300_Carriers(fixData, h, sheetName, calc) {
     if (isNaN(sLength) || sLength < calc.carrierCalcC) return false;
     return true;
   }).map(row => {
-    const sA = parseFloat(row[h('Face_Carrier_A')]);
-    const sDepth = parseFloat(row[h('Face_Carrier_D')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sDepth = parseFloat(row[h('Dim_D')]);
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-      valA: row[h('Face_Carrier_A')], valB: row[h('Face_Carrier_B')],
-      valC: row[h('Face_Carrier_C')], valD: row[h('Face_Carrier_D')],
+      valA: row[h('Dim_A')], valB: row[h('Dim_B')],
+      valC: row[h('Dim_C')], valD: row[h('Dim_D')],
       _diff: (Math.abs(sA - calc.carrierCalcA) * 10000) - sDepth
     };
   });
@@ -187,18 +187,18 @@ function searchTSG300W_Carriers(fixData, h, sheetName, calc) {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG300W');
     if (!toolType.includes('CARRIER') || !isW_Machine) return false;
-    const sA = parseFloat(row[h('Face_Carrier_A')]);
-    const sE = parseFloat(row[h('Face_Carrier_E')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sE = parseFloat(row[h('Dim_E')]);
     if (isNaN(sA) || isNaN(sE)) return false;
     if (sA < calc.tsgW_Amin || sA > calc.tsgW_Amax) return false;
     if (sE < calc.tsgW_Emin || sE > calc.tsgW_Emax) return false;
     return true;
   }).map(row => {
-    const sA = parseFloat(row[h('Face_Carrier_A')]);
-    const sE = parseFloat(row[h('Face_Carrier_E')]);
+    const sA = parseFloat(row[h('Dim_A')]);
+    const sE = parseFloat(row[h('Dim_E')]);
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')],
-      valA: row[h('Face_Carrier_A')], valB: row[h('Face_Carrier_E')],
+      valA: row[h('Dim_A')], valB: row[h('Dim_E')],
       valC: '-', valD: '-',
       _diff: (Math.abs(sA - calc.tsgW_Amin) * 10000) - sE
     };
@@ -214,9 +214,9 @@ function searchKS400B_WorkDriver(fixData, h, sheetName, calc) {
   if (calc.od_turning > KS400B_OD_MAX || calc.w_aft > KS400B_W_MAX) return [];
   return fixData.filter(row => String(row[h('Tooling_name')]).toUpperCase().includes('WORK DRIVER'))
     .map(row => {
-      const fixA = parseFloat(row[h('OD_A')]);
-      const fixB = parseFloat(row[h('ID_B')]);
-      const fixE = parseFloat(row[h('Width_E')]);
+      const fixA = parseFloat(row[h('Dim_A')]);
+      const fixB = parseFloat(row[h('Dim_B')]);
+      const fixE = parseFloat(row[h('Dim_E')]);
       if (isNaN(fixA) || isNaN(fixB)) return { _diff: 99999, _diffA: 99999, _diffB: 99999, _diffE: 99999 };
       const diffA = Math.abs(fixA - calc.wd_A);
       const diffB = Math.abs(fixB - calc.wd_B);
@@ -226,8 +226,8 @@ function searchKS400B_WorkDriver(fixData, h, sheetName, calc) {
       if (diffB > 1.01) penalty += 10000;
       return {
         no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-        val1: row[h('OD_A')], val2: row[h('ID_B')], val3: row[h('OD_C')],
-        val4: row[h('OD_D')], val5: row[h('Width_E')],
+        val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
+        val4: row[h('Dim_D')], val5: row[h('Dim_E')],
         _diffA: diffA + penalty, _diffB: diffB, _diffE: diffE, _diff: diffA + penalty
       };
     }).sort((a, b) => {
@@ -243,9 +243,9 @@ function searchKS400B_LoadingChute(fixData, h, sheetName, calc) {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     return toolType.includes('LOADING CHUTE') || toolType.includes('CHUTE');
   }).map(row => {
-    const fixA = parseFloat(row[h('LOADING_CHUTE_A')]);
-    const fixC = parseFloat(row[h('LOADING_CHUTE_C')]);
-    const fixD = parseFloat(row[h('LOADING_CHUTE_D')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
+    const fixD = parseFloat(row[h('Dim_D')]);
     let penalty = 0, diffA = 999, diffC = 999, diffD = 999;
     if (!isNaN(fixC) && calc.lc_C !== undefined) {
       if (fixC < calc.lc_C - 0.01) penalty += 10000;
@@ -258,9 +258,9 @@ function searchKS400B_LoadingChute(fixData, h, sheetName, calc) {
     if (!isNaN(fixA) && calc.lc_A !== undefined) diffA = Math.abs(fixA - calc.lc_A);
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-      val1: row[h('LOADING_CHUTE_A')], val2: row[h('LOADING_CHUTE_B')],
-      val3: row[h('LOADING_CHUTE_C')], val4: row[h('LOADING_CHUTE_D')],
-      val5: row[h('LOADING_CHUTE_E')], val6: row[h('LOADING_CHUTE_F')],
+      val1: row[h('Dim_A')], val2: row[h('Dim_B')],
+      val3: row[h('Dim_C')], val4: row[h('Dim_D')],
+      val5: row[h('Dim_E')], val6: row[h('Dim_F')],
       _diff: penalty + diffD + (diffC / 100) + (diffA / 10000)
     };
   }).sort((a, b) => a._diff - b._diff);
@@ -270,11 +270,11 @@ function searchKS400B_SupportBlock(fixData, h, sheetName, calc) {
   if (calc.od_turning > KS400B_OD_MAX || calc.w_aft > KS400B_W_MAX) return [];
   return fixData.filter(row => String(row[h('Tooling_name')]).toUpperCase().includes('SUPPORT BLOCK'))
     .map(row => {
-      const fixA = parseFloat(row[h('SUPPORT_BLOCK_A')]);
-      const fixB = parseFloat(row[h('SUPPORT_BLOCK_B')]);
-      const fixC = parseFloat(row[h('SUPPORT_BLOCK_C')]);
-      const fixD = parseFloat(row[h('SUPPORT_BLOCK_D')]);
-      const fixE = parseFloat(row[h('SUPPORT_BLOCK_E')]);
+      const fixA = parseFloat(row[h('Dim_A')]);
+      const fixB = parseFloat(row[h('Dim_B')]);
+      const fixC = parseFloat(row[h('Dim_C')]);
+      const fixD = parseFloat(row[h('Dim_D')]);
+      const fixE = parseFloat(row[h('Dim_E')]);
       if (isNaN(fixA) || isNaN(fixB) || isNaN(fixC) || isNaN(fixD) || isNaN(fixE)) {
         return { _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999 };
       }
@@ -290,8 +290,8 @@ function searchKS400B_SupportBlock(fixData, h, sheetName, calc) {
       if (diffB_abs > 0.51) penalty += 10000;
       return {
         no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
-        val1: row[h('SUPPORT_BLOCK_A')], val2: row[h('SUPPORT_BLOCK_B')],
-        val3: row[h('SUPPORT_BLOCK_C')], val4: row[h('SUPPORT_BLOCK_D')], val5: row[h('SUPPORT_BLOCK_E')],
+        val1: row[h('Dim_A')], val2: row[h('Dim_B')],
+        val3: row[h('Dim_C')], val4: row[h('Dim_D')], val5: row[h('Dim_E')],
         _diffB: penalty + diffB_abs, _diffA: Math.abs(diffA_real), _diffC: Math.abs(diffC_real),
         _diff: penalty + diffB_abs
       };
@@ -306,27 +306,27 @@ function searchKS400B_PlugA(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     if (!toolType.includes('PLUG(A)')) return false;
-    const fixA = parseFloat(row[h('PLUG_A_OD_A')]);
-    const fixB = parseFloat(row[h('PLUG_A_OD_B')]);
-    const fixC = parseFloat(row[h('PLUG_A_DEPTH_C')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixB = parseFloat(row[h('Dim_B')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
     if (isNaN(fixA)) return false;
     if (Math.abs(fixA - calc.pa_A) > 0.5) return false;
     if (!isNaN(fixB) && calc.pa_B !== undefined && Math.abs(fixB - calc.pa_B) > 2.0) return false;
     if (!isNaN(fixC) && calc.pa_C !== undefined && Math.abs(fixC - calc.pa_C) > 5.0) return false;
     return true;
   }).map(row => {
-    const fixA = parseFloat(row[h('PLUG_A_OD_A')]);
-    const fixB = parseFloat(row[h('PLUG_A_OD_B')]);
-    const fixC = parseFloat(row[h('PLUG_A_DEPTH_C')]);
-    const fixE = parseFloat(row[h('PLUG_A_DIST_E')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixB = parseFloat(row[h('Dim_B')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
+    const fixE = parseFloat(row[h('Dim_E')]);
     const diffA = isNaN(fixA) ? 100 : Math.abs(fixA - calc.pa_A);
     const diffB = isNaN(fixB) ? 100 : Math.abs(fixB - calc.pa_B);
     const diffC = isNaN(fixC) ? 100 : Math.abs(fixC - calc.pa_C);
     const diffE = isNaN(fixE) ? 100 : Math.abs(fixE - calc.pa_E);
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pa_type,
-      val1: row[h('PLUG_A_OD_A')], val2: row[h('PLUG_A_OD_B')], val3: row[h('PLUG_A_DEPTH_C')],
-      val4: row[h('PLUG_A_CHAM_D')], val5: row[h('PLUG_A_DIST_E')], valF: 48,
+      val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
+      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: 48,
       _diff: diffA + diffB + diffC + diffE
     };
   }).sort((a, b) => a._diff - b._diff);
@@ -337,9 +337,9 @@ function searchKS400B_PlugB(fixData, h, sheetName, calc) {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
     return toolType.includes('PLUG(B)') || toolType.includes('PLUG (B)');
   }).map(row => {
-    const fixA = parseFloat(row[h('PLUG_B_OD_A')]);
-    const fixB = parseFloat(row[h('PLUG_B_OD_B')]);
-    const fixC = parseFloat(row[h('PLUG_B_DEPTH_C')]);
+    const fixA = parseFloat(row[h('Dim_A')]);
+    const fixB = parseFloat(row[h('Dim_B')]);
+    const fixC = parseFloat(row[h('Dim_C')]);
     if (isNaN(fixA) || isNaN(fixB)) return { _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999 };
     const diffB = calc.pb_B !== undefined ? Math.abs(fixB - calc.pb_B) : 0;
     const diffA = calc.pb_A !== undefined ? Math.abs(fixA - calc.pb_A) : 0;
@@ -349,8 +349,8 @@ function searchKS400B_PlugB(fixData, h, sheetName, calc) {
     if (diffA > 1.01) penalty += 10000;
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pb_type,
-      val1: row[h('PLUG_B_OD_A')], val2: row[h('PLUG_B_OD_B')], val3: row[h('PLUG_B_DEPTH_C')],
-      val4: row[h('PLUG_B_CHAM_D')], val5: row[h('PLUG_B_DIST_E')], valF: 70,
+      val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
+      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: 70,
       _diffB: penalty + diffB, _diffA: diffA, _diffC: diffC, _diff: penalty + diffB
     };
   }).sort((a, b) => {

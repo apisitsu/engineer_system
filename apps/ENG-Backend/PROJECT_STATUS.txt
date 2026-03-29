@@ -1,0 +1,148 @@
+================================================================================
+  ENG SYSTEM — PROJECT STATUS
+  Date    : 2026-03-29
+  Backend : localhost:2005
+  DB      : PostgreSQL eng_system @ localhost:5432
+================================================================================
+
+================================================================================
+  MTC ENG — FEATURES
+================================================================================
+
+  Feature                  | Status           | Frontend Path
+  -------------------------|------------------|------------------------------
+  Tooling Inspect          | OK (stable)      | /eng/mtc_eng/tooling
+  General DWG Request      | READY TO DEPLOY  | /eng/mtc_eng/tool-request
+  Tooling Select           | OK (stable)      | /eng/mtc_eng/tooling-select
+  Setup Data Sheet (SDS)   | OK (stable)      | /eng/mtc_eng/sds
+
+================================================================================
+  GENERAL DWG REQUEST — WORKFLOW
+================================================================================
+
+  Stage         | Responsible   | Action           | Email to
+  --------------|---------------|------------------|------------------
+  Eng Check     | Engineer      | Approve / Deny   | Draft Man team
+  Draft Man     | Drafter       | Submit Drawing   | DWG Check team
+  DWG Check     | DWG Reviewer  | Approve / Deny   | Eng Review
+  Eng Review    | Engineer      | Approve+classify | Eng Approve
+  Eng Approve   | Supervisor    | Approve / Deny   | Requester
+  Eng Inform    | Engineer      | Inform + cost    | Requester (email)
+
+  DB Tables:
+    tr_request   — main request record (1 row per request)
+    tr_workflow  — workflow action history
+
+  Backend:
+    api/engineer/mtc/tool_req.js
+    api/system/emailService.js
+    server.js (lines 165–171)
+
+  Frontend:
+    src/components/engineer/mtc_eng/Tool_req/ToolRequest.jsx
+    src/components/engineer/mtc_eng/Tool_req/components/RequestDetailsModal.jsx
+    src/components/menu_sidebar/menu_sidebar.jsx
+    src/components/engineer/mtc_eng/home_mtc.jsx
+
+  API Endpoints:
+    GET    /api/engineer/mtc/tool-requests
+    GET    /api/engineer/mtc/tool-requests/dashboard
+    GET    /api/engineer/mtc/tool-requests/:id
+    POST   /api/engineer/mtc/tool-requests
+    POST   /api/engineer/mtc/tool-requests/:id/action
+    PUT    /api/engineer/mtc/tool-requests/:id
+    DELETE /api/engineer/mtc/tool-requests/:id
+
+================================================================================
+  EMAIL SYSTEM
+================================================================================
+
+  Method     | Status              | Note
+  -----------|---------------------|-------------------------------------------
+  GAS        | 401 (dev machine)   | ต้องอยู่บน Minebea network
+  Gmail API  | OK (fallback)       | ใช้ GMAIL_REFRESH_TOKEN ใน .env
+
+  Function: sendEmailWithFallback(to, subject, html)
+    → ลอง GAS ก่อน ถ้า fail → Gmail API อัตโนมัติ
+
+  GAS URL:
+    https://script.google.com/a/macros/minebea.co.th/s/
+    AKfycbw61g0vS9-1vt84GDNrtx_wf9T49pSoKg2VzxIHM0lzCktHKhNSTx46L2IcgPaTnL85/exec
+
+  Secret Key: ENG_DWG_2026
+
+================================================================================
+  BUGS FIXED (2026-03-29)
+================================================================================
+
+  #  | Problem                                     | File Fixed
+  ---|---------------------------------------------|-----------------------------
+  1  | .env quotes/semicolons → Gmail invalid_client | .env
+  2  | GAS 401 — no fallback                       | emailService.js
+  3  | groupByYearMonth crash on null created_at   | ToolRequest.jsx
+  4  | request_item null → blank in table          | ToolRequest.jsx
+  5  | Modal title shows "null"                    | RequestDetailsModal.jsx
+  6  | isDone ignores legacy status 'Complete'     | RequestDetailsModal.jsx
+  7  | Complete filter misses legacy status        | ToolRequest.jsx
+  8  | ORDER BY created_at failed before migration | tool_req.js
+  9  | Double-click no modal (missing Auth header) | ToolRequest.jsx + Modal
+
+================================================================================
+  DB MIGRATION — DONE
+================================================================================
+
+  File: C:\Users\apisi\eng_nmb\db\migrations\tool_request_workflow.sql
+  Executed as: postgres user (password: 1023-a10) on port 5432
+
+  tr_request — columns added:
+    request_item, requester, requester_email, work_center, work_center_name,
+    type_of_request, category, drawing_required, type_of_drawing,
+    machine_no, machine_name, req_due_date, current_stage
+
+  tr_workflow — columns added:
+    req_id, step_no, action_by, action_date, action_type,
+    comment, status, stage_name, extra_data, created_at
+
+================================================================================
+  DEPLOY CHECKLIST (DEV → plbmp129 factory)
+================================================================================
+
+  [ ] constance.js: uncomment  export const apiUrl = "http://plbmp129:2005/";
+  [ ] npm run build  (frontend)
+  [ ] Copy build to server plbmp129
+  [ ] Restart backend server
+  [ ] Test: create 1 new request
+  [ ] Walk-through: all 6 workflow stages
+  [ ] Verify: email notification at each stage
+
+================================================================================
+  DB TABLES — PENDING REVIEW
+================================================================================
+
+  Table                | Issue
+  ---------------------|-------------------------------------------------------
+  tool_dwg_request     | ระบบ DWG request เก่า — อาจ deprecate ได้
+  eng_check            | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  draft_man            | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  dwg_check            | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  eng_review           | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  eng_approve          | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  eng_inform           | Table ว่าง — อาจเป็น draft schema เก่า → DROP?
+  tooling              | Generic tooling vs tooling_* specific — overlap?
+
+  ดูรายละเอียดเต็มที่: mtc_db_tables.txt
+
+================================================================================
+  ENVIRONMENT
+================================================================================
+
+  Backend port   : 2005
+  DB host (dev)  : localhost:5432
+  DB name        : eng_system
+  DB owner       : postgres  (password: 1023-a10)
+  DB user (app)  : eng_admin (password: eng_secret_2026)
+  Frontend DEV   : http://localhost:2005
+  Frontend PROD  : http://plbmp129:2005
+  GAS Secret Key : ENG_DWG_2026
+
+================================================================================

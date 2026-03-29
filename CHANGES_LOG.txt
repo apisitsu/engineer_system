@@ -1,0 +1,61 @@
+===========================================================
+ สรุปไฟล์ที่แก้ไข (eng_nmb) - วันที่ 28 มีนาคม 2026
+===========================================================
+
+-----------------------------------------------------------
+ไฟล์ที่อยู่ใน Git (push ขึ้น GitHub แล้ว) — branch: dev
+-----------------------------------------------------------
+
+[แก้ไข] apps/ENG-Frontend/src/components/menu_sidebar/menu_sidebar.jsx
+  - เพิ่มเมนู "Tooling Inventory" ใน mtc menu
+  - path: /eng/mtc_eng/tooling-inventory
+
+[เพิ่มไฟล์] apps/ENG-Frontend/public/plugins/
+  - AdminLTE plugins (copy จาก mtc_eng)
+  - หมายเหตุ: ไม่ได้อยู่ใน .gitignore จึงถูก commit ไปด้วย
+
+-----------------------------------------------------------
+ไฟล์ที่ไม่อยู่ใน Git (.gitignore) — ต้องจัดการแต่ละเครื่องเอง
+-----------------------------------------------------------
+
+[แก้ไข] apps/ENG-Backend/.env
+  - PG_NEW_HOST: plbmp129 → localhost
+  - PG_NEW_PORT: 6543 → 5432
+  - PG_NEW_URL: เปลี่ยน host และ port
+  - PG_RODPC_HOST: plb018 → localhost (fallback eng_system)
+  - PG_RODPC_DB: rodpc → eng_system
+  - PG_RODPC_USER: rodpc → eng_admin
+  - PG_RODPC_PASSWORD: RODPC → eng_secret_2026
+
+[แก้ไข] .env (root)
+  - PG_NEW_PORT: 6543 → 5432
+
+[สร้างใหม่] apps/ENG-Backend/api/system/config.js
+  - export GMAIL credentials จาก env vars
+
+[เพิ่มไฟล์] apps/ENG-Frontend/public/dist/
+  - AdminLTE dist files (copy จาก mtc_eng)
+  - อยู่ใน .gitignore (dist/) ต้อง copy ในแต่ละเครื่อง
+
+-----------------------------------------------------------
+หมายเหตุ
+-----------------------------------------------------------
+
+ไฟล์ที่ได้รับจาก Git (มีอยู่แล้ว ไม่ต้องแก้):
+  - ToolingInventoryPage.jsx        ✅
+  - App.jsx (route + import)        ✅
+  - constance.js (API endpoint)     ✅
+  - tooling_select.js (backend API) ✅
+
+User สำหรับทดสอบ:
+  u_code   : apisit.su
+  password : password
+  role     : AD (Admin)
+
+วิธีรัน:
+  cd C:/Users/apisi/eng_nmb
+  npm run dev
+  Backend  → http://localhost:2005
+  Frontend → http://localhost:3009
+
+===========================================================

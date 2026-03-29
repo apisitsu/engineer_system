@@ -166,6 +166,7 @@ app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
+app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
 app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
 app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
 

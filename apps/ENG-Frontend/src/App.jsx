@@ -39,7 +39,6 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/Tool_req/ToolRequest';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
@@ -194,7 +193,6 @@ const AppContent = () => {
                 <Route path="/eng/mtc_eng/tooling" element={<ToolingInspect />} />
                 <Route path="/eng/mtc_eng/tool-request" element={<ToolRequest />} />
                 <Route path="/eng/mtc_eng/tooling-select" element={<ToolingSelectPage />} />
-                <Route path="/eng/mtc_eng/tooling-inventory" element={<ToolingInventoryPage />} />
                 <Route path="/eng/mtc_eng/sds" element={<SdsPage />} />
 
                 {/* ------ New Product Engineer ------ */}

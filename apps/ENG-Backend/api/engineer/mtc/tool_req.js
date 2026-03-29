@@ -1,5 +1,77 @@
 const { engPool } = require('../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
+const { sendEmailWithFallback } = require('../../system/emailService');
+
+// ── Email recipient config (mirrors AppsScript defaults) ─────────────────────
+const EMAIL_CONFIG = {
+  ENG_CHECK:  ['CHAIRAT.SRIPRATUENG@minebea.com', 'APISIT.SUWANNAKATE@minebea.com', 'PATTANAPONG.PROMYAI@minebea.com'],
+  DRAFTMAN:   ['SURANAT.NAKA@minebea.com'],
+  DWG_CHECK:  ['CHAIRAT.SRIPRATUENG@minebea.com', 'APISIT.SUWANNAKATE@minebea.com'],
+  ENG_REVIEW: ['TEERAPOL.KANTAPOOM@minebea.com'],
+  ENG_APPROVE:['CHAIRAT.SRIPRATUENG@minebea.com', 'APISIT.SUWANNAKATE@minebea.com'],
+  ENG_INFORM: ['CHAIRAT.SRIPRATUENG@minebea.com', 'APISIT.SUWANNAKATE@minebea.com'],
+};
+
+// ── Due date by request type ──────────────────────────────────────────────────
+const DUE_DAYS = { 'Regist Drawing': 5, 'Draft Drawing': 7, '3D Print': 10 };
+
+function calcDueDate(typeOfRequest) {
+  const days = DUE_DAYS[typeOfRequest] || 7;
+  let due = moment();
+  let added = 0;
+  while (added < days) {
+    due.add(1, 'days');
+    if (due.day() !== 0 && due.day() !== 6) added++;
+  }
+  return due.format('YYYY-MM-DD HH:mm:ss');
+}
+
+// ── Workflow stage map ────────────────────────────────────────────────────────
+const STAGE_MAP = {
+  eng_check:  { stepNo: 1, approveStatus: 'Pending Draft Man',   approveStage: 'Draft Man',   denyStatus: 'Denied',             denyStage: 'Denied',   emailApprove: 'DRAFTMAN',    emailDeny: null },
+  draft_man:  { stepNo: 2, approveStatus: 'Pending DWG Check',   approveStage: 'DWG Check',                                                             emailApprove: 'DWG_CHECK' },
+  dwg_check:  { stepNo: 3, approveStatus: 'Pending Eng Review',  approveStage: 'Eng Review',  denyStatus: 'Pending Draft Man',  denyStage: 'Draft Man',  emailApprove: 'ENG_REVIEW',  emailDeny: 'DRAFTMAN' },
+  eng_review: { stepNo: 4, approveStatus: 'Pending Eng Approve', approveStage: 'Eng Approve',                                                            emailApprove: 'ENG_APPROVE' },
+  eng_approve:{ stepNo: 5, approveStatus: 'Pending Eng Inform',  approveStage: 'Eng Inform',  denyStatus: 'Denied by Approve',  denyStage: 'Denied',    emailApprove: 'ENG_INFORM',  emailDeny: null },
+  eng_inform: { stepNo: 6, approveStatus: 'Completed & Informed',approveStage: 'Completed',                                                              emailApprove: null },
+};
+
+function buildEmailHtml(stage, decision, req, extra, actionBy) {
+  const stageLabels = {
+    eng_check: 'Eng Check', draft_man: 'Draft Man', dwg_check: 'DWG Check',
+    eng_review: 'Eng Review', eng_approve: 'Eng Approve', eng_inform: 'Eng Inform',
+  };
+  const stageLabel = stageLabels[stage] || stage;
+  const isApprove = decision === 'approve' || decision === 'submit';
+  const color = isApprove ? '#4CAF50' : '#F44336';
+  const title = isApprove
+    ? `[${stageLabel} ✅] ${req.request_item} — ${req.title}`
+    : `[${stageLabel} ❌ Denied] ${req.request_item} — ${req.title}`;
+
+  let extraHtml = '';
+  if (stage === 'eng_check' && extra?.request_no)
+    extraHtml = `<p><strong>Request No. Assigned:</strong> ${extra.request_no}</p>`;
+  if (stage === 'draft_man' && extra?.dwg_files)
+    extraHtml = `<p><strong>Drawing Files:</strong> ${extra.dwg_files}</p>`;
+  if (stage === 'eng_review')
+    extraHtml = `<p><strong>Drawing No:</strong> ${extra?.drawing_no || '-'}</p><p><strong>No. of Dwg:</strong> ${extra?.no_of_dwg || '-'}</p>`;
+
+  return `
+    <div style="border-left:5px solid ${color};padding:16px;background:#f9f9f9;margin-bottom:16px;">
+      <h2 style="color:${color};margin:0 0 8px">${title}</h2>
+    </div>
+    <p><strong>Request Item:</strong> ${req.request_item}</p>
+    <p><strong>Requester:</strong> ${req.requester}</p>
+    <p><strong>Department:</strong> ${req.department}</p>
+    <p><strong>Type:</strong> ${req.type_of_request}</p>
+    <p><strong>Title:</strong> ${req.title}</p>
+    ${extraHtml}
+    ${extra?.comment ? `<p><strong>Comment:</strong> ${extra.comment}</p>` : ''}
+    <p><strong>Action by:</strong> ${actionBy}</p>
+    <hr style="border:none;border-top:1px solid #ddd;margin:16px 0">
+    <p style="color:#888;font-size:12px">Tool Drawing Request System — ENG</p>
+  `;
+}
 
 /**
  * GET /api/engineer/mtc/tool-requests
@@ -60,7 +132,7 @@ const getToolRequestById = async (req, res) => {
         }
 
         // Then get workflow history
-        const workflowRes = await engPool.query('SELECT * FROM tr_workflow WHERE req_id = $1 ORDER BY created_at ASC', [id]);
+        const workflowRes = await engPool.query('SELECT * FROM tr_workflow WHERE req_id = $1 ORDER BY COALESCE(created_at, action_date) ASC', [id]);
 
         res.json({
             data: {
@@ -115,24 +187,25 @@ const createToolRequest = async (req, res) => {
         const seq = String((count || 0) + 1).padStart(3, '0');
         const request_item = `ITEM-${dateStr}-${seq}`;
 
-        // Calculate due date (default 14 days)
-        const req_due_date = now.add(14, 'days').format('YYYY-MM-DD HH:mm:ss');
+        // Calculate due date based on request type
+        const req_due_date = calcDueDate(type_of_request);
 
         const sql = `
             INSERT INTO tr_request (
                 request_item, department, work_center, work_center_name,
                 requester, requester_email, type_of_request, category,
                 drawing_required, type_of_drawing, title, detail,
-                machine_no, machine_name, req_due_date, req_no
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
+                machine_no, machine_name, req_due_date, req_no,
+                status, current_stage
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id
         `;
 
-        // Setting req_no = request_item mapping from older codebase since req_no replaces request_no
         const params = [
             request_item, department, work_center, work_center_name,
             requester, requester_email, type_of_request, category,
             drawing_required, type_of_drawing, title, detail,
-            machine_no, machine_name, req_due_date, request_item
+            machine_no, machine_name, req_due_date, request_item,
+            'Pending Eng Check', 'Eng Check'
         ];
 
         const insertRes = await engPool.query(sql, params);
@@ -323,11 +396,111 @@ const getToolRequestDashboard = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/engineer/mtc/tool-requests/:id/action
+ * Submit a workflow stage action (approve/deny/submit)
+ */
+const submitAction = async (req, res) => {
+    const { id } = req.params;
+    const { stage, decision, comment, extra, action_by } = req.body;
+
+    if (!stage || !decision) {
+        return res.status(400).json({ error: 'stage and decision are required' });
+    }
+
+    const stageConfig = STAGE_MAP[stage];
+    if (!stageConfig) {
+        return res.status(400).json({ error: `Unknown stage: ${stage}` });
+    }
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Get current request
+        const reqRes = await client.query('SELECT * FROM tr_request WHERE id = $1', [id]);
+        const request = reqRes.rows[0];
+        if (!request) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Request not found' });
+        }
+
+        const isApprove = decision === 'approve' || decision === 'submit';
+        const nextStatus = isApprove ? stageConfig.approveStatus : stageConfig.denyStatus;
+        const nextStage  = isApprove ? stageConfig.approveStage  : stageConfig.denyStage;
+
+        if (!nextStatus) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Stage "${stage}" does not support decision "${decision}"` });
+        }
+
+        // Update request status + stage
+        const newReqNo = (stage === 'eng_check' && isApprove && extra?.request_no)
+            ? extra.request_no : null;
+
+        await client.query(
+            `UPDATE tr_request SET
+                status = $1,
+                current_stage = $2,
+                req_no = COALESCE($3, req_no),
+                updated_at = NOW()
+             WHERE id = $4`,
+            [nextStatus, nextStage, newReqNo, id]
+        );
+
+        // Insert workflow record
+        await client.query(
+            `INSERT INTO tr_workflow (req_id, step_no, action_by, action_type, comment, status, stage_name, extra_data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [id, stageConfig.stepNo, action_by || 'system', decision,
+             comment || '', nextStatus, stage, JSON.stringify(extra || {})]
+        );
+
+        await client.query('COMMIT');
+
+        // Send email (fire-and-forget — don't block response)
+        try {
+            const emailKey = isApprove ? stageConfig.emailApprove : stageConfig.emailDeny;
+            let recipients = emailKey ? EMAIL_CONFIG[emailKey] : [];
+
+            // For deny, also CC the requester
+            if (!isApprove && request.requester_email) {
+                recipients = [request.requester_email, ...recipients];
+            }
+            // For eng_inform completed, notify requester
+            if (stage === 'eng_inform' && request.requester_email) {
+                recipients = [request.requester_email, ...recipients];
+            }
+
+            if (recipients.length > 0) {
+                const subject = `[Tool Request] ${isApprove ? '✅' : '❌'} ${nextStatus} — ${request.request_item}`;
+                const html = buildEmailHtml(stage, decision, request, { ...extra, comment }, action_by);
+                sendEmailWithFallback(recipients.join(','), subject, html).catch(() => {});
+            }
+        } catch (_) { /* email failure should not affect response */ }
+
+        res.json({
+            success: true,
+            request_item: request.request_item,
+            status: nextStatus,
+            current_stage: nextStage,
+            message: `${stage} ${decision} submitted successfully`
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error submitting action:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     getToolRequests,
     getToolRequestById,
     createToolRequest,
     updateToolRequest,
     deleteToolRequest,
-    getToolRequestDashboard
+    getToolRequestDashboard,
+    submitAction,
 };

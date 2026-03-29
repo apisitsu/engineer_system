@@ -5,8 +5,9 @@ const config = require('./config');
 
 require('dotenv').config();
 
-// --- GAS URL from environment ---
-const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwK3lA8rAOZvlGuvBRkIfNj7zrqBriIiREnhKnWaHyLXFV8lrfZwPNA_aaMP2hF_qZdBA/exec';
+// --- GAS URL + Secret Key from environment ---
+const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL;
+const GAS_SECRET    = process.env.GAS_SECRET_KEY || 'ENG_DWG_2026';
 
 // --- Corporate proxy agent (for HTTPS tunneling through McAfee Web Gateway) ---
 function getProxyAgent() {
@@ -31,6 +32,7 @@ const sendEmailViaAS = async (to, subject, htmlContent) => {
         const agent = getProxyAgent();
 
         const response = await axios.post(GAS_EMAIL_URL, {
+            secret: GAS_SECRET,
             to,
             subject,
             htmlContent
@@ -106,4 +108,20 @@ const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
     }
 };
 
-module.exports = { sendEmail, sendEmailViaAS };
+/**
+ * Send email with automatic fallback:
+ *   1st: Google Apps Script (GAS) relay
+ *   2nd: Gmail API using GMAIL_REFRESH_TOKEN from .env
+ */
+const sendEmailWithFallback = async (to, subject, htmlContent) => {
+    try {
+        return await sendEmailViaAS(to, subject, htmlContent);
+    } catch (gasErr) {
+        console.warn('⚠️  GAS email failed, falling back to Gmail API:', gasErr.response?.status || gasErr.message);
+        const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+        if (!refreshToken) throw new Error('No GMAIL_REFRESH_TOKEN in env; cannot fall back.');
+        return await sendEmail(refreshToken, to, subject, htmlContent);
+    }
+};
+
+module.exports = { sendEmail, sendEmailViaAS, sendEmailWithFallback };

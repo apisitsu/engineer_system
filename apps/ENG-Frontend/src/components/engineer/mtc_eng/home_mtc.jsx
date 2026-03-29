@@ -100,11 +100,11 @@ const ToolingInspect = () => {
                 </Row>
               </div>
 
-              {/* Tool Request System */}
+              {/* General DWG Request */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
                   <h2><AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
-                    <a href="/eng/mtc_eng/tool-request" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tool Drawing Request System</a>
+                    <a href="/eng/mtc_eng/tool-request" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
                   </h2>
                 </Divider>
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>

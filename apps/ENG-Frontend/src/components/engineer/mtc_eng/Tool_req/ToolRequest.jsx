@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, Form
+    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, message, Collapse
 } from 'antd';
 import {
-    PlusOutlined, SearchOutlined, ReloadOutlined, EyeOutlined, EditOutlined, DeleteOutlined,
-    SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CalendarOutlined, CheckCircleOutlined
+    PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
+    StopOutlined
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
-import axios from 'axios';
+import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
+import RequestDetailsModal from './components/RequestDetailsModal';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
-const { Option } = Select;
-const { TextArea } = Input;
 
 const ToolRequest = () => {
     const { theme } = useTheme();
@@ -34,7 +33,6 @@ const ToolRequest = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [form] = Form.useForm();
 
     useEffect(() => {
         fetchRequests();
@@ -53,9 +51,9 @@ const ToolRequest = () => {
     };
 
     const handleCreateNew = () => {
-        const newRequestData = {
+        setSelectedRequest({
             requester: userName,
-            requester_email: userName ? `${userName}@company.com` : '',
+            requester_email: '',
             department: userDepartment || '',
             work_center: '',
             work_center_name: '',
@@ -67,20 +65,15 @@ const ToolRequest = () => {
             detail: '',
             machine_no: '',
             machine_name: ''
-        };
-
-        setSelectedRequest(newRequestData);
-        form.resetFields();
-        form.setFieldsValue(newRequestData);
+        });
         setIsEditing(true);
         setModalVisible(true);
     };
 
     const handleViewRequest = async (record) => {
         try {
-            const { data } = await axios.get(`${server.MTC_TOOL_REQUEST_DETAIL}/${record.id}`);
+            const { data } = await axios.get(`${server.MTC_TOOL_REQUESTS}/${record.id}`);
             setSelectedRequest(data.data);
-            form.setFieldsValue(data.data);
             setIsEditing(false);
             setModalVisible(true);
         } catch (error) {
@@ -92,24 +85,20 @@ const ToolRequest = () => {
         setModalVisible(false);
         setSelectedRequest(null);
         setIsEditing(false);
-        form.resetFields();
     };
 
-    const handleSave = async () => {
+    const handleSave = async (values) => {
         try {
-            const values = await form.validateFields();
-
             if (selectedRequest?.id) {
-                // Update existing
-                await axios.put(`${server.MTC_TOOL_REQUEST_DETAIL}/${selectedRequest.id}`, values);
+                await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, values);
             } else {
-                // Create new
                 await axios.post(server.MTC_TOOL_REQUESTS, values);
             }
-
+            message.success(selectedRequest?.id ? 'Request updated' : 'Request created');
             handleModalClose();
             fetchRequests();
         } catch (error) {
+            message.error('Failed to save request');
             console.error('Error saving request:', error);
         }
     };
@@ -122,7 +111,7 @@ const ToolRequest = () => {
             okType: 'danger',
             onOk: async () => {
                 try {
-                    await axios.delete(`${server.MTC_TOOL_REQUEST_DETAIL}/${id}`);
+                    await axios.delete(`${server.MTC_TOOL_REQUESTS}/${id}`);
                     handleModalClose();
                     fetchRequests();
                 } catch (error) {
@@ -136,40 +125,71 @@ const ToolRequest = () => {
         setFilterType(type);
     };
 
+    // Group requests by Year → Month (year ascending, month ascending within year)
+    const groupByYearMonth = (items) => {
+        const yearMap = {};
+        items.forEach(item => {
+            const date = item.created_at ? moment(item.created_at) : moment();
+            const year = date.format('YYYY');
+            const monthKey = date.format('YYYY-MM');
+            if (!yearMap[year]) yearMap[year] = {};
+            if (!yearMap[year][monthKey]) yearMap[year][monthKey] = [];
+            yearMap[year][monthKey].push(item);
+        });
+        return Object.entries(yearMap)
+            .sort(([a], [b]) => a.localeCompare(b)) // year ascending (oldest on top)
+            .map(([year, monthMap]) => ({
+                year,
+                totalCount: Object.values(monthMap).reduce((s, r) => s + r.length, 0),
+                months: Object.entries(monthMap)
+                    .sort(([a], [b]) => a.localeCompare(b)) // month ascending Jan→Dec
+                    .map(([monthKey, rows]) => ({
+                        key: monthKey,
+                        label: moment(monthKey, 'YYYY-MM').format('MMMM'),
+                        rows
+                    }))
+            }));
+    };
+
     // Filter data based on search and filter type
     const filteredRequests = requests.filter(item => {
-        // Search filter
         if (searchText) {
             const lowerSearch = searchText.toLowerCase();
             const matchesSearch =
                 item.request_item?.toLowerCase().includes(lowerSearch) ||
+                item.req_no?.toLowerCase().includes(lowerSearch) ||
                 item.title?.toLowerCase().includes(lowerSearch) ||
                 item.requester?.toLowerCase().includes(lowerSearch) ||
                 item.department?.toLowerCase().includes(lowerSearch);
             if (!matchesSearch) return false;
         }
 
-        // Status filter
         if (filterType === 'pending') {
-            return item.status === 'Pending';
+            return item.status === 'Pending Eng Check';
         } else if (filterType === 'inProgress') {
-            return item.status === 'In Progress';
+            return item.status?.startsWith('Pending') && item.status !== 'Pending Eng Check';
         } else if (filterType === 'complete') {
-            return item.status === 'Complete';
+            return item.status === 'Completed & Informed' || item.status === 'Complete';
+        } else if (filterType === 'denied') {
+            return item.status?.includes('Denied');
         }
 
         return true; // 'all'
     });
 
-    const getStatusColor = (status) => {
-        const colors = {
-            'Pending': theme.colors.warning,
-            'In Progress': theme.colors.info,
-            'Complete': theme.colors.success,
-            'Denied': theme.colors.error
-        };
-        return colors[status] || theme.colors.textTertiary;
+    const STAGE_COLOR = {
+        'Pending Eng Check':   'orange',
+        'Pending Draft Man':   'blue',
+        'Pending DWG Check':   'blue',
+        'Pending Eng Review':  'purple',
+        'Pending Eng Approve': 'gold',
+        'Pending Eng Inform':  'cyan',
+        'Completed & Informed':'green',
+        'Denied':              'red',
+        'Denied by Approve':   'red',
     };
+
+    const getStatusColor = (status) => STAGE_COLOR[status] || 'default';
 
     const columns = [
         {
@@ -178,14 +198,17 @@ const ToolRequest = () => {
             key: 'request_item',
             width: 160,
             fixed: 'left',
-            render: (text) => <strong style={{ color: theme.colors.primary }}>{text}</strong>
+            render: (text, record) => <strong style={{ color: theme.colors.primary }}>{text || record.req_no || '-'}</strong>
         },
         {
             title: 'Request No.',
-            dataIndex: 'request_no',
-            key: 'request_no',
-            width: 120,
-            render: (text) => text || '-'
+            dataIndex: 'req_no',
+            key: 'req_no',
+            width: 130,
+            render: (text, record) => {
+                const display = text && text !== record.request_item ? text : null;
+                return display ? <Text style={{ color: '#1890ff', fontWeight: 600 }}>{display}</Text> : '-';
+            }
         },
         {
             title: 'Created',
@@ -226,10 +249,26 @@ const ToolRequest = () => {
             width: 250
         },
         {
+            title: 'Due Date',
+            dataIndex: 'req_due_date',
+            key: 'req_due_date',
+            width: 110,
+            render: (date, record) => {
+                if (!date) return '-';
+                const isOverdue = moment(date).isBefore(moment(), 'day') &&
+                    !['Completed & Informed', 'Denied', 'Denied by Approve'].includes(record.status);
+                return (
+                    <Text type={isOverdue ? 'danger' : undefined} style={isOverdue ? { fontWeight: 600 } : {}}>
+                        {moment(date).format('DD-MMM-YY')}
+                    </Text>
+                );
+            }
+        },
+        {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
-            width: 110,
+            width: 150,
             render: (status) => (
                 <Tag color={getStatusColor(status)}>{status}</Tag>
             )
@@ -239,7 +278,7 @@ const ToolRequest = () => {
             dataIndex: 'current_stage',
             key: 'current_stage',
             width: 120,
-            render: (stage) => <Tag color={theme.colors.info}>{stage}</Tag>
+            render: (stage) => stage ? <Tag color="blue">{stage}</Tag> : '-'
         },
         {
             title: 'Actions',
@@ -276,7 +315,7 @@ const ToolRequest = () => {
                                     <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 60 }} />
                                     <div style={{ padding: '16px 16px' }}>
                                         <Title level={2} style={{ marginBottom: 0 }}>
-                                            Tool Drawing Request System
+                                            General DWG Request
                                         </Title>
                                         <Text type="secondary">Manage and track tool & drawing requests</Text>
                                     </div>
@@ -317,13 +356,16 @@ const ToolRequest = () => {
                                                 onChange={(e) => handleFilterChange(e.target.value)}
                                             >
                                                 <Radio.Button value="pending">
-                                                    <ClockCircleOutlined /> Pending
+                                                    <ClockCircleOutlined /> Eng Check
                                                 </Radio.Button>
                                                 <Radio.Button value="inProgress">
                                                     <SyncOutlined spin /> In Progress
                                                 </Radio.Button>
                                                 <Radio.Button value="complete">
                                                     <CheckCircleOutlined /> Complete
+                                                </Radio.Button>
+                                                <Radio.Button value="denied">
+                                                    <StopOutlined /> Denied
                                                 </Radio.Button>
                                                 <Radio.Button value="all">
                                                     <UnorderedListOutlined /> All
@@ -334,194 +376,64 @@ const ToolRequest = () => {
                                 </Row>
                             </Card>
 
-                            {/* Table Section */}
-                            <Card
-                                title={
-                                    <div style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}>
-                                        <Space wrap>
-                                            <Text style={{ fontSize: 16 }}>Request List</Text>
-                                            <Text style={{ color: theme.colors.textTertiary }}>
-                                                ({filterType === 'pending' ? 'Pending' :
-                                                    filterType === 'inProgress' ? 'In Progress' :
-                                                        filterType === 'complete' ? 'Complete' : 'All'})
-                                            </Text>
-                                        </Space>
-                                        <Text style={{ color: theme.colors.textTertiary, paddingRight: 8 }}>
-                                            {filteredRequests.length} Requests
-                                        </Text>
-                                    </div>
-                                }
-                                style={{ marginTop: 16 }}
-                            >
-                                <Table
-                                    dataSource={filteredRequests}
-                                    columns={columns}
-                                    rowKey="id"
-                                    loading={loading}
-                                    pagination={{ pageSize: 5 }}
-                                    scroll={{ x: 'max-content' }}
+                            {/* Table Section — grouped by Year → Month (collapsed by default) */}
+                            <div style={{ marginTop: 16 }}>
+                                <Collapse
+                                    ghost
+                                    items={groupByYearMonth(filteredRequests).map(yearGroup => ({
+                                        key: yearGroup.year,
+                                        label: (
+                                            <Space>
+                                                <Text strong style={{ fontSize: 15 }}>{yearGroup.year}</Text>
+                                                <Tag color="geekblue">{yearGroup.totalCount} requests</Tag>
+                                            </Space>
+                                        ),
+                                        children: (
+                                            <Collapse
+                                                ghost
+                                                items={yearGroup.months.map(monthGroup => ({
+                                                    key: monthGroup.key,
+                                                    label: (
+                                                        <Space>
+                                                            <Text style={{ fontSize: 13 }}>{monthGroup.label}</Text>
+                                                            <Tag color="blue">{monthGroup.rows.length} request{monthGroup.rows.length !== 1 ? 's' : ''}</Tag>
+                                                        </Space>
+                                                    ),
+                                                    children: (
+                                                        <Table
+                                                            dataSource={monthGroup.rows}
+                                                            columns={columns}
+                                                            rowKey="id"
+                                                            pagination={false}
+                                                            scroll={{ x: 'max-content' }}
+                                                            size="small"
+                                                            onRow={(record) => ({
+                                                                onDoubleClick: () => handleViewRequest(record),
+                                                                style: { cursor: 'pointer' }
+                                                            })}
+                                                        />
+                                                    )
+                                                }))}
+                                                style={{ marginLeft: 8 }}
+                                            />
+                                        )
+                                    }))}
+                                    style={{ background: theme.colors.surface, borderRadius: 8 }}
                                 />
-                            </Card>
+                            </div>
                         </div>
 
                         {/* Request Details Modal */}
-                        <Modal
-                            title={
-                                selectedRequest?.id
-                                    ? `Request Details: ${selectedRequest.request_item}`
-                                    : 'Create New Request'
-                            }
-                            open={modalVisible}
-                            onCancel={handleModalClose}
-                            width={900}
-                            footer={
-                                isEditing ? (
-                                    <Space>
-                                        <Button onClick={handleModalClose}>Cancel</Button>
-                                        <Button type="primary" onClick={handleSave}>Save</Button>
-                                    </Space>
-                                ) : (
-                                    <Space>
-                                        <Button onClick={() => setIsEditing(true)} icon={<EditOutlined />}>
-                                            Edit
-                                        </Button>
-                                        {selectedRequest?.id && (
-                                            <Button
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                onClick={() => handleDelete(selectedRequest.id)}
-                                            >
-                                                Delete
-                                            </Button>
-                                        )}
-                                        <Button onClick={handleModalClose}>Close</Button>
-                                    </Space>
-                                )
-                            }
-                        >
-                            <Form
-                                form={form}
-                                layout="vertical"
-                                initialValues={selectedRequest}
-                                disabled={!isEditing}
-                            >
-                                <Title level={5}>Requester Information</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Requester"
-                                            name="requester"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Email" name="requester_email">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Department"
-                                            name="department"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Work Center"
-                                            name="work_center"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                <Title level={5} style={{ marginTop: 16 }}>Request Details</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Type of Request"
-                                            name="type_of_request"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Select>
-                                                <Option value="Regist Drawing">Regist Drawing</Option>
-                                                <Option value="Draft Drawing">Draft Drawing</Option>
-                                                <Option value="3D Print">3D Print</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Category"
-                                            name="category"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Select>
-                                                <Option value="Machine part">Machine part</Option>
-                                                <Option value="Gauge">Gauge</Option>
-                                                <Option value="Other">Other</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item label="Drawing Required" name="drawing_required">
-                                            <Select>
-                                                <Option value="With Drawing">With Drawing</Option>
-                                                <Option value="Without Drawing">Without Drawing</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Type of Drawing" name="type_of_drawing">
-                                            <Select>
-                                                <Option value="Copy">Copy</Option>
-                                                <Option value="Remake">Remake</Option>
-                                                <Option value="New Design">New Design</Option>
-                                                <Option value="Modify">Modify</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Form.Item
-                                    label="Title"
-                                    name="title"
-                                    rules={[{ required: true }]}
-                                >
-                                    <Input />
-                                </Form.Item>
-                                <Form.Item
-                                    label="Detail"
-                                    name="detail"
-                                    rules={[{ required: true }]}
-                                >
-                                    <TextArea rows={4} />
-                                </Form.Item>
-
-                                <Title level={5} style={{ marginTop: 16 }}>Machine Information (Optional)</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item label="Machine No." name="machine_no">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Machine Name" name="machine_name">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                            </Form>
-                        </Modal>
+                        <RequestDetailsModal
+                            visible={modalVisible}
+                            onClose={handleModalClose}
+                            request={selectedRequest}
+                            isEditing={isEditing}
+                            onSave={handleSave}
+                            onDelete={handleDelete}
+                            onEdit={() => setIsEditing(true)}
+                            onActionDone={() => { fetchRequests(); handleModalClose(); }}
+                        />
                     </Content>
                 </Spin>
             </Layout>

@@ -80,7 +80,7 @@ const ToolingInventoryPage = () => {
         const dynamicCols = Object.keys(firstRow)
             .filter(key => !['id', 'created_at', 'updated_at'].includes(key))
             .map(key => ({
-                title: key.replace(/_/g, ' ').toUpperCase(),
+                title: key.startsWith('dim_') ? key.slice(4).toUpperCase() : key.replace(/_/g, ' ').toUpperCase(),
                 dataIndex: key,
                 key: key,
                 editable: true,
