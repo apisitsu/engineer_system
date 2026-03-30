@@ -27,6 +27,7 @@ import SystemEngSetting from './components/engineer/system_eng/setting/setting';
 import TodoPoroject from './components/engineer/system_eng/todo/todo_project';
 import ProjectDashboard from './components/engineer/system_eng/todo/ProjectDashboard';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
+import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
 
 import KanbanMain from './components/engineer/kanban/KanbanMain';
 
@@ -192,6 +193,7 @@ const AppContent = () => {
           <Routes>
 
             <Route path="/sign_in" element={<SignIn />} />
+            <Route path="/job_check_tracker" element={<JobCheckTracker />} />
             <Route path="/" element={<Navigate replace to="/sign_in" />} />
 
             <Route element={<ProtectedRoute />}>

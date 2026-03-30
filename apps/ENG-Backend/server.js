@@ -118,6 +118,14 @@ app.use('/api', (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
+
+
+//--------------------User----------------------//
+const newProducts = require('./api/engineer/new_prod/tool');
+
+app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
+
+
 //--------------------User----------------------//
 const userController = require('./api/user/userModel');
 
