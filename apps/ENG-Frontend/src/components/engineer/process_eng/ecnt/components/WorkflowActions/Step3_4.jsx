@@ -3,13 +3,14 @@ import { Card, Button, Input, Form, Row, Col } from 'antd';
 import { useTheme } from '../../../../../../theme';
 import Swal from 'sweetalert2';
 
-export default function Step3_4({ onNext }) {
+export default function Step3_4({ onNext, ecrData }) {
     const { theme } = useTheme();
 
     const handleApprove = (role) => {
+        const nextStepNum = (ecrData?.is_drawing || ecrData?.is_tooling) ? 3.45 : 3.5;
         Swal.fire('Approved', `${role} approved!`, 'success')
             .then(() => {
-                onNext(3.45, 'Approve', '', { manager_role: role });
+                onNext(nextStepNum, 'Approve', '', { manager_role: role });
             });
     };
 

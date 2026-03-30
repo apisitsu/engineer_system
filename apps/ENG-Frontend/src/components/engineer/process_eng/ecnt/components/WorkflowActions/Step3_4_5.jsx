@@ -3,7 +3,7 @@ import { Card, Button, Input, Form, Checkbox, Space } from 'antd';
 import { useTheme } from '../../../../../../theme';
 import Swal from 'sweetalert2';
 
-export default function Step3_4_5({ onNext }) {
+export default function Step3_4_5({ onNext, ecrData }) {
     const { theme } = useTheme();
     const [form] = Form.useForm();
 
@@ -24,6 +24,20 @@ export default function Step3_4_5({ onNext }) {
     return (
         <Card title="Step 3.4.5: Drawing Suspension Confirmation (Engineer Assigned)"
             style={{ borderColor: theme.colors.error, marginTop: 20 }}>
+            <div style={{ background: '#fff1f0', padding: 16, marginBottom: 16, border: '1px solid #ffa39e', borderRadius: 4 }}>
+                <div style={{ color: theme.colors.error, fontWeight: 'bold', marginBottom: 8 }}>Items Requiring Suspension:</div>
+                {ecrData?.is_drawing && (
+                    <div style={{ marginBottom: 4 }}>
+                        • <b>Drawing:</b> Part No. {ecrData?.part_no_drawing || '-'}, Rev {ecrData?.rev_drawing || '-'}
+                    </div>
+                )}
+                {ecrData?.is_tooling && (
+                    <div>
+                        • <b>Tooling:</b> Part No. {ecrData?.part_no_tooling || '-'}, Current Tool No. {ecrData?.current_tooling_no || '-'}
+                    </div>
+                )}
+            </div>
+
             <Form form={form} layout="vertical">
                 <Form.Item
                     name="confirm_suspend"

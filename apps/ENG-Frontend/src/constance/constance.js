@@ -40,6 +40,8 @@ export const server = {
   ECR_REQUIRE_STATUS: `${apiUrl}api/ecr/`, // append id/status
   ECR_REQUIRE_TASKS: `${apiUrl}api/ecr/`, // append id/tasks
   ECR_REQUIRE_ACK_TASK: `${apiUrl}api/ecr/tasks/`, // append taskId/ack
+  ECR_USERS_BY_DEPT: `${apiUrl}api/ecr/users-by-dept/`, // append dept
+  ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
   ECR_REQUIRE_SEND_EMAIL: `${apiUrl}api/send-email`,
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

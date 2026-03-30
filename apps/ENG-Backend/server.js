@@ -136,6 +136,8 @@ app.route('/api/ecr/getlist').get(verifyToken, engProcess.ecrGetList)
 app.route('/api/ecr/create').post(verifyToken, engProcess.ecrCreate)
 app.route('/api/ecr/:id').get(verifyToken, engProcess.ecrGetById)
 app.route('/api/ecr/:id/status').put(verifyToken, engProcess.ecrSubmitApproval)
+app.get('/api/ecr/users-by-dept/:dept', verifyToken, engProcess.ecrGetUsersByDept);
+app.put('/api/ecr/:id/resubmit', verifyToken, engProcess.ecrResubmit);
 app.post('/api/ecr/:id/tasks', verifyToken, engProcess.ecrSetTasks);
 app.get('/api/ecr/:id/tasks', verifyToken, engProcess.ecrGetTasks);
 app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
@@ -318,4 +320,19 @@ app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUse
 // Schema Modifying endpoints requiring super admin access
 app.post('/api/system/user-management/schema/add-column', requireSuperAdminOrEmergency, userManagement.addColumn);
 app.post('/api/system/user-management/schema/drop-column', requireSuperAdminOrEmergency, userManagement.dropColumn);
+
+// System Settings
+const requireSystemEngineer = (req, res, next) => {
+  const dept = req.user?.department || req.user?.u_department;
+  const role = req.user?.role || req.user?.u_role;
+  if (dept === 'AD' || role === 'AD') {
+    next();
+  } else {
+    return res.status(403).json({ result: 'false', message: 'Unauthorized setting permission. System Engineer only.' });
+  }
+};
+
+const settingsModel = require('./api/system/settingsModel');
+app.get('/api/system/settings', settingsModel.getSettings);
+app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSettings);
 

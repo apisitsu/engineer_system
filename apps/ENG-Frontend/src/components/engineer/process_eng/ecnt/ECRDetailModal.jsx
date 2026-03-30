@@ -10,15 +10,22 @@ import ActionCard from './components/WorkflowActions/ActionCard';
 import StatusBadge from './components/StatusBadge';
 import { Image } from 'antd';
 
-// Deterministic step progression map
-const STEP_ORDER = ['3.1', '3.2', '3.3', '3.4', '3.45', '3.5', '3.6', '4.0'];
-
-function getNextStep(latestStepStr) {
-    const idx = STEP_ORDER.indexOf(latestStepStr);
-    if (idx === -1) return 3.1;
-    if (idx + 1 >= STEP_ORDER.length) return 4.0;
-    return parseFloat(STEP_ORDER[idx + 1]);
-}
+// Deterministic status-to-step map for UI
+const getStepFromStatus = (status) => {
+    switch (status) {
+        case 'Pending Dept Mgr': return 3.1;
+        case 'Impact Assessment': return 3.2;
+        case 'Pending ECN Approval': return 3.3;
+        case 'Top Mgmt Approval': return 3.4;
+        case 'DWG Suspension': return 3.45;
+        case 'ECN Execution': return 3.5;
+        case 'FAI Process': return 3.6;
+        case 'Closed': return 4.0;
+        case 'Denied': return 'denied';
+        case 'Require More Detail': return 'rmd';
+        default: return 3.1;
+    }
+};
 
 export default function ECRDetailModal({ open, ecrId, onClose, onActionComplete }) {
     const { theme } = useTheme();
@@ -53,14 +60,11 @@ export default function ECRDetailModal({ open, ecrId, onClose, onActionComplete 
             setEcrData(data);
             setActionLogs(logs);
 
-            // Determine workflow step
-            if (data.process_status === 'Closed') {
-                setCurrentStep(4.0);
-            } else if (logs.length > 0) {
-                const latestStepStr = logs[logs.length - 1].step_number;
-                setCurrentStep(getNextStep(latestStepStr));
+            // Phase 8: Determine workflow step purely from current status
+            if (logs.length > 0 && logs[logs.length - 1].action_status === 'Resubmit') {
+                setCurrentStep(3.1); // Force back to 3.1 if just resubmitted
             } else {
-                setCurrentStep(3.1);
+                setCurrentStep(getStepFromStatus(data.process_status));
             }
         } catch (err) {
             console.error("Fetch detail err:", err);
@@ -151,93 +155,96 @@ export default function ECRDetailModal({ open, ecrId, onClose, onActionComplete 
                 <div style={{ padding: 24, textAlign: 'center', color: '#999' }}>ECR Not found.</div>
             ) : (
                 <>
-                    {/* ECR Information */}
-                    <Card title="ECR Information" size="small" style={{ marginBottom: 16 }}>
-                        <Row gutter={[16, 12]}>
-                            <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>General Information</Divider></Col>
-                            <Col xs={12} md={6}><b>Request By:</b><br />{ecrData.request_by}</Col>
-                            <Col xs={12} md={6}><b>Department:</b><br />{ecrData.department}</Col>
-                            <Col xs={12} md={6}><b>Require Date:</b><br />{ecrData.require_date ? moment(ecrData.require_date).format('DD-MMM-YYYY') : '-'}</Col>
-                            <Col xs={12} md={6}><b>Due Date:</b><br />{ecrData.due_date ? moment(ecrData.due_date).format('DD-MMM-YYYY') : '-'}</Col>
+                    <div ref={componentRef} style={{ padding: '10px' }}>
+                        {/* ECR Information */}
+                        <Card title={"ECR Information: " + ecrData.ecr_no} size="small" style={{ marginBottom: 16 }}>
+                            <Row gutter={[16, 12]}>
+                                <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>General Information</Divider></Col>
+                                <Col xs={12} md={6}><b>Request By:</b><br />{ecrData.request_by}</Col>
+                                <Col xs={12} md={6}><b>Department:</b><br />{ecrData.department}</Col>
+                                <Col xs={12} md={6}><b>Require Date:</b><br />{ecrData.require_date ? moment(ecrData.require_date).format('DD-MMM-YYYY') : '-'}</Col>
+                                <Col xs={12} md={6}><b>Due Date:</b><br />{ecrData.due_date ? moment(ecrData.due_date).format('DD-MMM-YYYY') : '-'}</Col>
+                                {ecrData.assigned_to && (
+                                    <Col xs={12} md={6}><b>Assigned To (ENG):</b><br /><Tag color="geekblue">{ecrData.assigned_to}</Tag></Col>
+                                )}
 
-                            <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Objective & Change Type</Divider></Col>
-                            <Col xs={12} md={6}><b>Status Type:</b><br />{ecrData.status_type || ecrData.status}</Col>
-                            <Col xs={12} md={6}><b>Objective:</b><br />{ecrData.objective}</Col>
-                            <Col xs={24} md={12}>
-                                <b>Change Required:</b><br />
-                                {ecrData.changeList?.map(c => (
-                                    <Tag key={c} color={changeTypeColor[c] || 'default'}>{c}</Tag>
-                                ))}
-                            </Col>
+                                <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Objective & Change Type</Divider></Col>
+                                <Col xs={12} md={6}><b>Status Type:</b><br />{ecrData.status_type || ecrData.status}</Col>
+                                <Col xs={12} md={6}><b>Objective:</b><br />{ecrData.objective}</Col>
+                                <Col xs={24} md={12}>
+                                    <b>Change Required:</b><br />
+                                    {ecrData.changeList?.map(c => (
+                                        <Tag key={c} color={changeTypeColor[c] || 'default'}>{c}</Tag>
+                                    ))}
+                                </Col>
 
-                            {ecrData.changeList?.includes("Drawing") && (
-                                <>
-                                    <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Drawing Details</Divider></Col>
-                                    <Col xs={8}><b>Part No:</b><br />{ecrData.part_no_drawing || '-'}</Col>
-                                    <Col xs={8}><b>C/N:</b><br />{ecrData.cn_drawing || '-'}</Col>
-                                    <Col xs={8}><b>Revision:</b><br />{ecrData.rev_drawing || '-'}</Col>
-                                    <Col xs={12}>
-                                        <b>Before Change:</b><br />{ecrData.drawing_before_change || '-'}
-                                        {renderAttachedFile(ecrData.upload_drawing_before, "Attached Image (Before)")}
-                                    </Col>
-                                    <Col xs={12}>
-                                        <b>After Change:</b><br />{ecrData.drawing_after_change || '-'}
-                                        {renderAttachedFile(ecrData.upload_drawing_after, "Attached Image (After)")}
-                                    </Col>
-                                </>
-                            )}
+                                {ecrData.changeList?.includes("Drawing") && (
+                                    <>
+                                        <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Drawing Details</Divider></Col>
+                                        <Col xs={8}><b>Part No:</b><br />{ecrData.part_no_drawing || '-'}</Col>
+                                        <Col xs={8}><b>C/N:</b><br />{ecrData.cn_drawing || '-'}</Col>
+                                        <Col xs={8}><b>Revision:</b><br />{ecrData.rev_drawing || '-'}</Col>
+                                        <Col xs={12}>
+                                            <b>Before Change:</b><br />{ecrData.drawing_before_change || '-'}
+                                            {renderAttachedFile(ecrData.upload_drawing_before, "Attached Image (Before)")}
+                                        </Col>
+                                        <Col xs={12}>
+                                            <b>After Change:</b><br />{ecrData.drawing_after_change || '-'}
+                                            {renderAttachedFile(ecrData.upload_drawing_after, "Attached Image (After)")}
+                                        </Col>
+                                    </>
+                                )}
 
-                            {(ecrData.changeList?.includes("Tooling") || ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Usage")) && (
-                                <>
-                                    <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>General Details</Divider></Col>
-                                    <Col xs={6}><b>Setup Data Sheet No:</b><br />{ecrData.setup_data_sheet_no || '-'}</Col>
-                                    <Col xs={6}><b>Part No:</b><br />{ecrData.part_no_tooling || '-'}</Col>
-                                    <Col xs={6}><b>C/N:</b><br />{ecrData.cn_tooling || '-'}</Col>
-                                    <Col xs={6}><b>Cycle Time:</b><br />{ecrData.cycle_time || '-'}</Col>
-                                </>
-                            )}
+                                {(ecrData.changeList?.includes("Tooling") || ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Usage")) && (
+                                    <>
+                                        <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>General Details</Divider></Col>
+                                        <Col xs={6}><b>Setup Data Sheet No:</b><br />{ecrData.setup_data_sheet_no || '-'}</Col>
+                                        <Col xs={6}><b>Part No:</b><br />{ecrData.part_no_tooling || '-'}</Col>
+                                        <Col xs={6}><b>C/N:</b><br />{ecrData.cn_tooling || '-'}</Col>
+                                        <Col xs={6}><b>Cycle Time:</b><br />{ecrData.cycle_time || '-'}</Col>
+                                    </>
+                                )}
 
-                            {(ecrData.changeList?.includes("Tooling") || ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Usage")) && (
-                                <>
-                                    <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Setup Data Sheet</Divider></Col>
-                                    <Col xs={12}>
-                                        <b>Before Change:</b><br />{ecrData.setup_desc_before || '-'}
-                                        {renderAttachedFile(ecrData.upload_setup_before, "Attached Image (Before)")}
-                                    </Col>
-                                    <Col xs={12}>
-                                        <b>After Change:</b><br />{ecrData.setup_desc_after || '-'}
-                                        {renderAttachedFile(ecrData.upload_setup_after, "Attached Image (After)")}
-                                    </Col>
-                                </>
-                            )}
+                                {(ecrData.changeList?.includes("Tooling") || ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Usage")) && (
+                                    <>
+                                        <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Setup Data Sheet</Divider></Col>
+                                        <Col xs={12}>
+                                            <b>Before Change:</b><br />{ecrData.setup_desc_before || '-'}
+                                            {renderAttachedFile(ecrData.upload_setup_before, "Attached Image (Before)")}
+                                        </Col>
+                                        <Col xs={12}>
+                                            <b>After Change:</b><br />{ecrData.setup_desc_after || '-'}
+                                            {renderAttachedFile(ecrData.upload_setup_after, "Attached Image (After)")}
+                                        </Col>
+                                    </>
+                                )}
 
-                            {(ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Tooling")) && (
-                                <>
-                                    <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Cutting Program</Divider></Col>
-                                    <Col xs={12}>
-                                        <b>Before Change:</b><br />{ecrData.cutting_desc_before || '-'}
-                                        {renderAttachedFile(ecrData.upload_cutting_before, "Attached Image (Before)")}
-                                    </Col>
-                                    <Col xs={12}>
-                                        <b>After Change:</b><br />{ecrData.cutting_desc_after || '-'}
-                                        {renderAttachedFile(ecrData.upload_cutting_after, "Attached Image (After)")}
-                                    </Col>
-                                </>
-                            )}
+                                {(ecrData.changeList?.includes("Program") || ecrData.changeList?.includes("Tooling")) && (
+                                    <>
+                                        <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Cutting Program</Divider></Col>
+                                        <Col xs={12}>
+                                            <b>Before Change:</b><br />{ecrData.cutting_desc_before || '-'}
+                                            {renderAttachedFile(ecrData.upload_cutting_before, "Attached Image (Before)")}
+                                        </Col>
+                                        <Col xs={12}>
+                                            <b>After Change:</b><br />{ecrData.cutting_desc_after || '-'}
+                                            {renderAttachedFile(ecrData.upload_cutting_after, "Attached Image (After)")}
+                                        </Col>
+                                    </>
+                                )}
 
-                            {(ecrData.changeList?.includes("Usage") || ecrData.changeList?.includes("Tooling")) && (
-                                <>
-                                    <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Tooling / Usage</Divider></Col>
-                                    <Col xs={12}><b>Current Tooling No:</b><br />{ecrData.current_tooling_no || '-'}</Col>
-                                    <Col xs={12}><b>Current Usage:</b><br />{ecrData.current_tooling_usage || '-'}</Col>
-                                    <Col xs={12}><b>New Tooling No:</b><br />{ecrData.new_tooling_no || '-'}</Col>
-                                    <Col xs={12}><b>New Usage:</b><br />{ecrData.new_tooling_usage || '-'}</Col>
-                                </>
-                            )}
-                        </Row>
-                    </Card>
+                                {(ecrData.changeList?.includes("Usage") || ecrData.changeList?.includes("Tooling")) && (
+                                    <>
+                                        <Col span={24}><Divider orientation="left" style={{ margin: 0, fontSize: 13 }}>Tooling / Usage</Divider></Col>
+                                        <Col xs={12}><b>Current Tooling No:</b><br />{ecrData.current_tooling_no || '-'}</Col>
+                                        <Col xs={12}><b>Current Usage:</b><br />{ecrData.current_tooling_usage || '-'}</Col>
+                                        <Col xs={12}><b>New Tooling No:</b><br />{ecrData.new_tooling_no || '-'}</Col>
+                                        <Col xs={12}><b>New Usage:</b><br />{ecrData.new_tooling_usage || '-'}</Col>
+                                    </>
+                                )}
+                            </Row>
+                        </Card>
 
-                    <div ref={componentRef} style={{ padding: '0 5px' }}>
                         {/* Print Header (Only visible when printing) */}
                         <style type="text/css" media="print">
                             {`
@@ -308,6 +315,6 @@ export default function ECRDetailModal({ open, ecrId, onClose, onActionComplete 
                     </div>
                 </>
             )}
-        </Modal>
+        </Modal >
     );
 }

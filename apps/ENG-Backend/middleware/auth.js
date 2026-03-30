@@ -17,10 +17,10 @@ const generateToken = (user) => {
     const now = moment().tz('Asia/Bangkok');
     const midnight = moment().tz('Asia/Bangkok').endOf('day');
 
-    // Add 2 hours to now
-    let expiresAt = moment(now).add(2, 'hours');
+    // Add 4 hours to now
+    let expiresAt = moment(now).add(4, 'hours');
 
-    // If 2 hours from now is past midnight, cap it at midnight
+    // If 4 hours from now is past midnight, cap it at midnight
     if (expiresAt.isAfter(midnight)) {
         expiresAt = midnight;
     }

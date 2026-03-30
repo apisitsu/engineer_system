@@ -31,7 +31,7 @@ const LoginUser = async (req, res) => {
 
     try {
         let pgResult = null;
-        if (empno === "admin") {
+        if (empno === "admin" || empno.slice(-5) === "admin" || empno.slice(-3) === "mgr" || empno.slice(-4) === "user") {
             console.log("Admin login");
             pgResult = await engPool.query('SELECT * FROM m_user_profile WHERE u_code = $1', [empno]);
         } else {

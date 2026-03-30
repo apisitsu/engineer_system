@@ -22,6 +22,7 @@ const statusConfig = {
     'Effective': { color: 'green', icon: <CheckCircleOutlined /> },
     'Rejected': { color: 'red', icon: <CloseCircleOutlined /> },
     'Denied': { color: 'red', icon: <CloseCircleOutlined /> },
+    'Require More Detail': { color: 'magenta', icon: <ExclamationCircleOutlined /> },
 };
 
 export default function StatusBadge({ status }) {

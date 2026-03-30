@@ -12,6 +12,19 @@ export const useAuthStore = create((set) => ({
   userInfo: JSON.parse(localStorage.getItem(key_constance.USER_INFO) || "{}"),
   empNo: localStorage.getItem(key_constance.USER_EMPNO) || "",
 
+  getData: () => {
+    return {
+      isLogin: localStorage.getItem(key_constance.LOGIN_PASSED),
+      role: localStorage.getItem(key_constance.ROLE),
+      department: localStorage.getItem(key_constance.USER_DEPARTMENT),
+      section: localStorage.getItem(key_constance.USER_SECTION),
+      auth: localStorage.getItem(key_constance.USER_AUTH),
+      name: localStorage.getItem(key_constance.USER_NAME),
+      empNo: localStorage.getItem(key_constance.USER_EMPNO),
+      info: localStorage.getItem(key_constance.USER_INFO),
+    };
+  },
+
   // 2. ฟังก์ชัน Login (รับ object ข้อมูล user จาก API มาเซ็ตทีเดียว)
   login: (userData) => {
     // บันทึกลง LocalStorage

@@ -136,7 +136,22 @@ const ecrSubmitApproval = async (req, res) => {
     const { id } = req.params;
     const { step_number, action_by, action_role, action_status, comments, details } = req.body;
 
-    // Step → process_status mapping
+    // Helper to map robust UI steps to backend status strings
+    const getStatusForStep = (step) => {
+        switch (step?.toString()) {
+            case '3.1': return 'Pending Dept Mgr';
+            case '3.2': return 'Impact Assessment';
+            case '3.3': return 'Pending ECN Approval';
+            case '3.4': return 'Top Mgmt Approval';
+            case '3.45': return 'DWG Suspension';
+            case '3.5': return 'ECN Execution';
+            case '3.6': return 'FAI Process';
+            case '4.0': return 'Closed';
+            default: return null;
+        }
+    };
+
+    // Fallback step status map for backwards compatibility if next_step isn't passed
     const stepStatusMap = {
         '3.1': 'Impact Assessment',
         '3.2': 'Pending ECN Approval',
@@ -148,10 +163,14 @@ const ecrSubmitApproval = async (req, res) => {
         '4.0': 'Closed',
     };
 
-    // If denied, set status to Denied
-    const nextStatus = action_status === 'Deny'
-        ? 'Denied'
-        : (stepStatusMap[step_number] || 'Pending Dept Mgr');
+    let nextStatus;
+    if (action_status === 'Deny') {
+        nextStatus = 'Denied';
+    } else if (action_status === 'Request More Detail') {
+        nextStatus = 'Require More Detail';
+    } else {
+        nextStatus = stepStatusMap[step_number] || 'Pending Dept Mgr';
+    }
 
     const sqlLog = `
         INSERT INTO ecnt_approval_log (
@@ -177,13 +196,83 @@ const ecrSubmitApproval = async (req, res) => {
         // Update the document's process_status
         await engPool.query(sqlUpdateStatus, [nextStatus, id]);
 
+        // If Approve at step 3.1 and assigned_to is provided, save it
+        if (step_number === '3.1' && action_status === 'Approve' && details?.assigned_to) {
+            await engPool.query(
+                `UPDATE ecnt_document SET assigned_to = $1 WHERE id = $2`,
+                [details.assigned_to, id]
+            );
+        }
+
         // Add Notification
         const message = `Step ${step_number} was ${action_status.toLowerCase()} by ${action_by} (${action_role}).`;
         await engPool.query(sqlNotification, [id, step_number, action_by, message]);
 
+        // Phase 8: If Step 3.5 provides a target_ecn_close_date, update the document's due_date
+        if (details?.target_ecn_close_date) {
+            await engPool.query(
+                `UPDATE ecnt_document SET due_date = $1 WHERE id = $2`,
+                [details.target_ecn_close_date, id]
+            );
+        }
+
         res.json({ message: "Approval submitted successfully", log_id: result.rows[0].id, new_status: nextStatus });
     } catch (err) {
         console.error("ECR Approval Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrGetUsersByDept = async (req, res) => {
+    const { dept } = req.params;
+    try {
+        const result = await engPool.query(
+            `SELECT u_code, u_name, u_nickname, u_department, role, position
+             FROM m_user_profile
+             WHERE UPPER(u_department) = UPPER($1)
+             ORDER BY u_name NULLS LAST`,
+            [dept]
+        );
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error("ECR Get Users By Dept Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const ecrResubmit = async (req, res) => {
+    const { id } = req.params;
+    const { action_by, action_role, comments, details } = req.body;
+
+    const sqlLog = `
+        INSERT INTO ecnt_approval_log (
+            ecr_id, step_number, action_by, action_role, action_status, comments, details
+        ) VALUES ($1, 'resubmit', $2, $3, 'Resubmit', $4, $5) RETURNING id
+    `;
+
+    const sqlUpdateStatus = `
+        UPDATE ecnt_document SET process_status = 'Pending Dept Mgr', updated_at = NOW() WHERE id = $1
+    `;
+
+    const sqlNotification = `
+        INSERT INTO ecnt_notifications (ecr_id, step, action_by, message)
+        VALUES ($1, 'resubmit', $2, $3)
+    `;
+
+    try {
+        const result = await engPool.query(sqlLog, [
+            id, action_by, action_role, comments,
+            details ? JSON.stringify(details) : null
+        ]);
+
+        await engPool.query(sqlUpdateStatus, [id]);
+
+        const message = `ECR was resubmitted with additional details by ${action_by} (${action_role}).`;
+        await engPool.query(sqlNotification, [id, action_by, message]);
+
+        res.json({ message: "ECR resubmitted successfully", log_id: result.rows[0].id, new_status: 'Pending Dept Mgr' });
+    } catch (err) {
+        console.error("ECR Resubmit Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 };
@@ -453,6 +542,8 @@ module.exports = {
     ecrGetList,
     ecrGetById,
     ecrSubmitApproval,
+    ecrGetUsersByDept,
+    ecrResubmit,
     ecrSetTasks,
     ecrGetTasks,
     ecrAckTask,

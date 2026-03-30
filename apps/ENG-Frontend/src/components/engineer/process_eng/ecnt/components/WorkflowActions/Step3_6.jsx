@@ -124,11 +124,7 @@ export default function Step3_6({ onNext, ecrData }) {
                             </Upload>
                         </Form.Item>
                     </Col>
-                    <Col span={12}>
-                        <Form.Item label="Target ECN Close Date" name="ecn_close_date" rules={[{ required: true }]}>
-                            <Input type="date" />
-                        </Form.Item>
-                    </Col>
+
 
                     {/* Department Task Acknowledgement Section */}
                     {tasks.length > 0 && (

@@ -81,23 +81,77 @@ const AppContent = () => {
 
 
 
-  // --- Auto Renewal (Sliding Session) ---
+  // --- Auto Renewal & Expiration System ---
+  const { getRemainingTime, getLastActiveTime } = useIdleTimer({
+    timeout: 30 * 60 * 1000, // 30 minutes
+    throttle: 500,
+    events: [
+      'mousemove', 'keydown', 'wheel', 'DOMMouseScroll', 'mouseWheel',
+      'mousedown', 'touchstart', 'touchmove', 'MSPointerDown', 'MSPointerMove', 'visibilitychange'
+    ]
+  });
+
   React.useEffect(() => {
     let intervalId;
     if (isAuthenticated) {
 
-      const doRefresh = async () => {
+      const doCheckToken = async () => {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Proactive check: only refresh if token expires within 35 minutes
-        const expiresAt = localStorage.getItem("tokenExpiresAt");
-        if (expiresAt) {
-          const remaining = new Date(expiresAt).getTime() - Date.now();
-          // If more than 35 minutes remaining, skip this cycle
-          if (remaining > 35 * 60 * 1000) return;
-        }
+        try {
+          // 1. Check system setting
+          const settingsRes = await axios.get(`${server.API_URL}api/system/settings`);
+          const isExpirationEnabled = settingsRes.data?.data?.tokenExpirationEnabled !== false;
 
+          const expiresAt = localStorage.getItem("tokenExpiresAt");
+          let remaining = 0;
+          if (expiresAt) {
+            remaining = new Date(expiresAt).getTime() - Date.now();
+          }
+
+          // Force logout if token already expired frontend-side (safety net)
+          if (remaining < 0) {
+            logout();
+            localStorage.removeItem("token");
+            localStorage.removeItem("tokenExpiresAt");
+            window.location.href = "/sign_in";
+            return;
+          }
+
+          if (!isExpirationEnabled) {
+            // Token expiration disabled: Keep alive indefinitely if less than 60 mins left
+            if (remaining <= 60 * 60 * 1000) {
+              await keepTokenAlive(token);
+            }
+            return;
+          }
+
+          // Token expiration enabled:
+          // Check if token expires within 30 minutes
+          if (remaining > 30 * 60 * 1000) {
+            // More than 30 mins remaining, do nothing
+            return;
+          }
+
+          // Less than or equal to 30 mins remaining. Check user activity.
+          const lastActive = getLastActiveTime();
+          const inactiveDuration = Date.now() - (lastActive || Date.now());
+
+          if (inactiveDuration <= 30 * 60 * 1000) {
+            // User was active in the last 30 minutes -> Auto renew
+            await keepTokenAlive(token);
+          } else {
+            // No activity in the last 30 mins -> Do not renew (let it expire naturally)
+            console.log("No activity in the last 30 minutes. Letting token expire naturally.");
+          }
+
+        } catch (error) {
+          console.error("Error during token check", error);
+        }
+      };
+
+      const keepTokenAlive = async (token) => {
         try {
           const res = await axios.post(
             `${server.API_URL}api/refresh-token`,
@@ -110,8 +164,6 @@ const AppContent = () => {
             // console.log("Token auto-refreshed successfully");
           }
         } catch (error) {
-          console.error("Failed to auto-refresh token", error);
-          // If token is truly expired (401), force logout
           if (error.response && error.response.status === 401) {
             logout();
             localStorage.removeItem("token");
@@ -121,45 +173,17 @@ const AppContent = () => {
         }
       };
 
-      // Run once immediately on mount to catch near-expiry tokens
-      doRefresh();
+      // Run once
+      doCheckToken();
 
-      // Then refresh every 30 minutes (30 * 60 * 1000 = 1800000 ms)
-      intervalId = setInterval(doRefresh, 1800000);
+      // Check every 5 minutes (300000 ms) instead of 30 minutes, 
+      // so we don't miss the 30-minute remaining window
+      intervalId = setInterval(doCheckToken, 300000);
     }
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isAuthenticated, logout]);
-
-  // --- Idle Timeout Logic ---
-  const onIdle = () => {
-    if (isAuthenticated) {
-      console.warn("User idle for 30 minutes. Auto-logging out.");
-      Swal.fire({
-        icon: 'warning',
-        title: 'หมดเวลาการเชื่อมต่อ',
-        text: 'ไม่มีการใช้งานเกิน 30 นาที ระบบได้ทำการออกจากระบบอัตโนมัติ',
-        confirmButtonText: 'ตกลง',
-      }).then(() => {
-        // Clear all storage
-        logout();
-        localStorage.removeItem("token");
-        localStorage.removeItem("tokenExpiresAt");
-        window.location.href = "/sign_in";
-      });
-    }
-  };
-
-  const { getRemainingTime } = useIdleTimer({
-    onIdle,
-    timeout: 30 * 60 * 1000, // 30 minutes
-    throttle: 500,
-    events: [
-      'mousemove', 'keydown', 'wheel', 'DOMMouseScroll', 'mouseWheel',
-      'mousedown', 'touchstart', 'touchmove', 'MSPointerDown', 'MSPointerMove', 'visibilitychange'
-    ]
-  });
+  }, [isAuthenticated, logout, getLastActiveTime]);
 
   return (
     <AntdApp>
@@ -176,7 +200,7 @@ const AppContent = () => {
                 <Route path="/home" element={<Home />} />
               </Route>
 
-              <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+              <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG', 'QA']} />}>
                 <Route element={<MainLayout />}>
                   {/* ------------ User Settings ------------ */}
                   <Route path="/user/settings" element={<UserSetting />} />

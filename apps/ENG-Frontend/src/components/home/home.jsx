@@ -19,8 +19,7 @@ const HomeEng = () => {
   const { theme } = useTheme();
   const { userDepartment, userRole } = useAuthStore();
 
-  const hasRestrictedAccess =
-    userDepartment === 'AD'
+  const hasRestrictedAccess = userDepartment === 'AD'
   // (userDepartment === 'ENG' && ['MGR', 'COORD'].includes(userRole));
 
   const styles = {

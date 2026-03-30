@@ -1,16 +1,21 @@
-import { Card, Button, Input, Form, Row, Col, Radio, Divider, Upload, Select, Space } from 'antd';
-import { UploadOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { Card, Button, Input, Form, Row, Col, Radio, Divider, Upload, Checkbox } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
 
 const { TextArea } = Input;
-const { Option } = Select;
+const DEPARTMENTS = ['PC', 'QA', 'QC', 'PD1', 'PD2', 'MC', 'MM', 'PU'];
 
 export default function Step3_5({ onNext, ecrData }) {
     const { theme } = useTheme();
     const [form] = Form.useForm();
+    const [selectedDepts, setSelectedDepts] = useState([]);
+
+    // Watchers for conditional rendering
+    const needHold = Form.useWatch('need_hold', form);
 
     const normFile = (e) => {
         if (Array.isArray(e)) return e;
@@ -35,23 +40,50 @@ export default function Step3_5({ onNext, ecrData }) {
         return null;
     };
 
+    const handleDeptToggle = (dept, checked) => {
+        if (checked) {
+            setSelectedDepts([...selectedDepts, dept]);
+        } else {
+            setSelectedDepts(selectedDepts.filter(d => d !== dept));
+            form.setFieldValue(`task_detail_${dept}`, undefined); // Clear input
+        }
+    };
+
     const handleSubmit = async () => {
         try {
             const values = await form.validateFields();
+
+            Swal.fire({
+                title: 'Saving execution plan...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            // Upload files concurrently
             const upload_disposition_sheet = await uploadFileToServer(values.upload_disposition_sheet);
+            const upload_exec_before = await uploadFileToServer(values.upload_exec_before);
+            const upload_exec_after = await uploadFileToServer(values.upload_exec_after);
+
+            // Construct tasks array from checkboxes
+            const assigned_tasks = selectedDepts.map(dept => ({
+                dept_name: dept,
+                task_detail: values[`task_detail_${dept}`]
+            }));
 
             // Save Dynamic Tasks to ecnt_tasks
-            if (values.assigned_tasks && values.assigned_tasks.length > 0) {
+            if (assigned_tasks.length > 0) {
                 await axios.post(`${server.ECR_REQUIRE_TASKS}${ecrData.id}/tasks`, {
-                    tasks: values.assigned_tasks
+                    tasks: assigned_tasks
                 });
             }
 
-            // Remove assigned_tasks from values to prevent polluting ECR details json
-            const { assigned_tasks, ...restValues } = values;
+            // Clean up details payload
+            const detailsPayload = { ...values, upload_disposition_sheet, upload_exec_before, upload_exec_after };
+            // Remove prefixed task values from the main details JSON
+            DEPARTMENTS.forEach(dept => delete detailsPayload[`task_detail_${dept}`]);
 
             Swal.fire('Complete', 'Execution & Plan details saved.', 'success')
-                .then(() => onNext(3.5, 'ECN Execution', 'Execution Plan Saved', { ...restValues, upload_disposition_sheet }));
+                .then(() => onNext(3.6, 'Approve', 'Execution Plan Saved', detailsPayload));
         } catch (err) {
             console.error("Validation Failed:", err);
             if (err.errorFields) {
@@ -69,32 +101,61 @@ export default function Step3_5({ onNext, ecrData }) {
             style={{ borderColor: theme.colors.info, marginTop: 20 }}>
             <Form form={form} layout="vertical">
                 <Row gutter={24}>
+                    {/* Schedule */}
+                    <Col span={24}>
+                        <Divider orientation="left">Target Schedule</Divider>
+                    </Col>
+                    <Col span={12}>
+                        <Form.Item label="Target ECN Close Date" name="target_ecn_close_date" rules={[{ required: true }]}>
+                            <Input type="date" />
+                        </Form.Item>
+                    </Col>
+
+                    {/* Engineer Scope */}
                     <Col span={24}>
                         <Divider orientation="left">Engineer Assigned Scope</Divider>
                     </Col>
-                    <Col span={8}>
+                    <Col span={24} md={8}>
                         <Form.Item label="Scope of Implementation" name="scope_implementation" rules={[{ required: true }]}>
                             <TextArea rows={3} placeholder="Describe the scope" />
                         </Form.Item>
                     </Col>
-                    <Col span={8}>
+                    <Col span={24} md={8}>
                         <Form.Item label="Before Change" name="exec_before_change" rules={[{ required: true }]}>
                             <TextArea rows={3} placeholder="Current State" />
                         </Form.Item>
+                        <Form.Item name="upload_exec_before" valuePropName="fileList" getValueFromEvent={normFile}>
+                            <Upload beforeUpload={() => false} maxCount={1} accept=".pdf,.png,.jpg,.jpeg">
+                                <Button icon={<UploadOutlined />}>Attach Reference</Button>
+                            </Upload>
+                        </Form.Item>
                     </Col>
-                    <Col span={8}>
+                    <Col span={24} md={8}>
                         <Form.Item label="After Change" name="exec_after_change" rules={[{ required: true }]}>
                             <TextArea rows={3} placeholder="Future State" />
                         </Form.Item>
+                        <Form.Item name="upload_exec_after" valuePropName="fileList" getValueFromEvent={normFile}>
+                            <Upload beforeUpload={() => false} maxCount={1} accept=".pdf,.png,.jpg,.jpeg">
+                                <Button icon={<UploadOutlined />}>Attach Reference</Button>
+                            </Upload>
+                        </Form.Item>
                     </Col>
 
+                    {/* Production Control (PC) Scope */}
                     <Col span={24}>
                         <Divider orientation="left">Production Control (PC) Scope</Divider>
                     </Col>
-                    <Col span={24}>
-                        <Form.Item label="Target Lots to Hold (If Needed)" name="target_lots">
-                            <Input placeholder="E.g., Lot #12345, #12346" />
+                    <Col span={12}>
+                        <Form.Item name="need_hold" valuePropName="checked">
+                            <Checkbox>Require Target Lots to Hold</Checkbox>
                         </Form.Item>
+                        {needHold && (
+                            <Form.Item label="Target Lots" name="target_lots" rules={[{ required: true, message: 'Please specify the target lots' }]}>
+                                <Input placeholder="E.g., Lot #12345, #12346" />
+                            </Form.Item>
+                        )}
+                    </Col>
+                    <Col span={12}>
                         <Form.Item label="Upload Disposition Sheet" name="upload_disposition_sheet" valuePropName="fileList" getValueFromEvent={normFile}>
                             <Upload beforeUpload={() => false} maxCount={1} accept=".pdf,.png,.jpg,.jpeg">
                                 <Button icon={<UploadOutlined />}>Upload File</Button>
@@ -102,6 +163,7 @@ export default function Step3_5({ onNext, ecrData }) {
                         </Form.Item>
                     </Col>
 
+                    {/* Quality Control (QC) Scope */}
                     <Col span={24}>
                         <Divider orientation="left">Quality Control (QC) Scope</Divider>
                     </Col>
@@ -122,51 +184,44 @@ export default function Step3_5({ onNext, ecrData }) {
                             </Radio.Group>
                         </Form.Item>
                     </Col>
+
+                    {/* Department Task Acknowledgement */}
                     <Col span={24}>
-                        <Divider orientation="left">Department Acknowledgement Tasks</Divider>
+                        <Divider orientation="left">Department Tasks Acknowledgement (Optional)</Divider>
+                        <div style={{ marginBottom: 16 }}>
+                            <span style={{ color: '#888' }}>Check the departments that need to perform actions and specify the details.</span>
+                        </div>
                     </Col>
                     <Col span={24}>
-                        <Form.List name="assigned_tasks">
-                            {(fields, { add, remove }) => (
-                                <>
-                                    {fields.map(({ key, name, ...restField }) => (
-                                        <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                        {DEPARTMENTS.map(dept => {
+                            const isSelected = selectedDepts.includes(dept);
+                            return (
+                                <Row key={dept} align="middle" style={{ marginBottom: 8 }}>
+                                    <Col span={4}>
+                                        <Checkbox
+                                            onChange={(e) => handleDeptToggle(dept, e.target.checked)}
+                                        >
+                                            {dept}
+                                        </Checkbox>
+                                    </Col>
+                                    <Col span={20}>
+                                        {isSelected && (
                                             <Form.Item
-                                                {...restField}
-                                                name={[name, 'dept_name']}
-                                                rules={[{ required: true, message: 'Missing dept' }]}
+                                                style={{ marginBottom: 0 }}
+                                                name={`task_detail_${dept}`}
+                                                rules={[{ required: true, message: `Please describe the task for ${dept}` }]}
                                             >
-                                                <Select placeholder="Department" style={{ width: 130 }}>
-                                                    <Option value="PC">PC</Option>
-                                                    <Option value="QA">QA</Option>
-                                                    <Option value="QC">QC</Option>
-                                                    <Option value="PD1">PD1</Option>
-                                                    <Option value="PD2">PD2</Option>
-                                                    <Option value="MC">MC</Option>
-                                                    <Option value="MM">MM</Option>
-                                                </Select>
+                                                <Input placeholder={`Task description for ${dept} Mgr`} />
                                             </Form.Item>
-                                            <Form.Item
-                                                {...restField}
-                                                name={[name, 'task_detail']}
-                                                rules={[{ required: true, message: 'Missing task detail' }]}
-                                            >
-                                                <Input placeholder="Task Description" style={{ width: 500 }} />
-                                            </Form.Item>
-                                            <MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red' }} />
-                                        </Space>
-                                    ))}
-                                    <Form.Item>
-                                        <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                                            Assign Department Task
-                                        </Button>
-                                    </Form.Item>
-                                </>
-                            )}
-                        </Form.List>
+                                        )}
+                                    </Col>
+                                </Row>
+                            );
+                        })}
                     </Col>
                 </Row>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 30 }}>
                     <Button type="primary" onClick={handleSubmit}>Save Execution Plan</Button>
                 </div>
             </Form>
