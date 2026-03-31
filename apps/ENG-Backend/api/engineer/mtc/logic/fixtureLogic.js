@@ -121,17 +121,20 @@ async function findFixtures(cnNumber) {
                dim_i AS "Dim_I", dim_j AS "Dim_J", dim_k AS "Dim_K", dim_l AS "Dim_L",
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
-               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM tooling_ks03a`) : Promise.resolve({ rows: [] }),
+               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM tooling_ks03a
+        WHERE tooling_name ILIKE ANY(ARRAY['%ROLLER SHOE%', '%CPX SHOE%', '%CHUTE COVER%', '%FRONT PLATE%', '%SETTING GAUGE%', '%MASTER RING%', '%PLUG GAUGE%', '%LOADER%', '%ROTOR%'])`) : Promise.resolve({ rows: [] }),
       ks400bOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C",
                dim_d AS "Dim_D", dim_e AS "Dim_E", dim_f AS "Dim_F",
-               machine AS "Machine" FROM tooling_ks400b`) : Promise.resolve({ rows: [] }),
+               machine AS "Machine" FROM tooling_ks400b
+        WHERE tooling_name ILIKE ANY(ARRAY['%WORK DRIVER%', '%SUPPORT BLOCK%', '%CHUTE%', '%PLUG%'])`) : Promise.resolve({ rows: [] }),
       ks500rdOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
-               machine AS "Machine" FROM tooling_ks500rd`) : Promise.resolve({ rows: [] }),
+               machine AS "Machine" FROM tooling_ks500rd
+        WHERE tooling_name ILIKE ANY(ARRAY['%LOADING PINTLE%', '%WORK DRIVER%', '%FRONT SHOE%'])`) : Promise.resolve({ rows: [] }),
       ks400b5OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
@@ -140,7 +143,8 @@ async function findFixtures(cnNumber) {
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
                dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b5`) : Promise.resolve({ rows: [] }),
+               FROM tooling_ks400b5
+        WHERE tooling_name ILIKE ANY(ARRAY['%WORK CLAMP%', '%SHAFT%', '%WORK CHUTE%', '%WORK LOADER%', '%WORK CHUCK%', '%WORK HOLDER%', '%CHUCK JAW%', '%CHUTE GUIDE%', '%STOPPER%', '%MASTER RING%'])`) : Promise.resolve({ rows: [] }),
       ks400b6OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
@@ -149,7 +153,8 @@ async function findFixtures(cnNumber) {
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
                dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b6`) : Promise.resolve({ rows: [] }),
+               FROM tooling_ks400b6
+        WHERE tooling_name ILIKE ANY(ARRAY['%WORK DRIVER%', '%CHUTE%', '%PLUG%', '%WORK GUIDE%', '%WORK PUSHER%', '%FRONT SHOE%', '%REAR SHOE%', '%PILOT PIN%'])`) : Promise.resolve({ rows: [] }),
     ]);
 
     const ksb22gRows  = ksb22g.rows;
@@ -248,7 +253,17 @@ async function findFixtures(cnNumber) {
       };
     }
 
-    const dynamicFixtures = await findDynamicFixtures(partData);
+    const allCalcs = {
+      ks400b: ks400b_calc,
+      ks03a:  ks03a_calc,
+      ks500rd: ks500rd_calc,
+      ks400b5: ks400b5_calc,
+      ks400b6: ks400b6_calc,
+      tsg: calc,
+    };
+    const okFlags = { ks400bOK, ks03aOK, ks500rdOK, ks400b5OK, ks400b6OK, ksb22gOK, ksb80OK };
+
+    const dynamicFixtures = await findDynamicFixtures(partData, allCalcs, okFlags);
 
     return {
       success: true,

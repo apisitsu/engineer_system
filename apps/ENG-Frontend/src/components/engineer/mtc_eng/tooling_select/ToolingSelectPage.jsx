@@ -23,6 +23,7 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import RuleManagementModal from './RuleManagementModal';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
@@ -140,6 +141,7 @@ const ToolingSelectPage = () => {
   const [newMachineForm] = Form.useForm();
   const [addToolLoading, setAddToolLoading] = useState(false);
   const [createTableLoading, setCreateTableLoading] = useState(false);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
 
   const toolingTables = [
     { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W') },
@@ -504,12 +506,20 @@ const ToolingSelectPage = () => {
             <Title level={4} style={{ margin: 0, color: colors.primary }}>
               Tooling Selection System
             </Title>
-            <Button
-              icon={<DatabaseOutlined />}
-              onClick={() => { setIsToolListOpen(true); fetchToolList(invKey); }}
-            >
-              Tool List
-            </Button>
+            <Space>
+              <Button
+                icon={<SettingOutlined />}
+                onClick={() => setIsRuleModalOpen(true)}
+              >
+                Rule Manager
+              </Button>
+              <Button
+                icon={<DatabaseOutlined />}
+                onClick={() => { setIsToolListOpen(true); fetchToolList(invKey); }}
+              >
+                Tool List
+              </Button>
+            </Space>
           </div>
 
           {/* Search Section */}
@@ -795,6 +805,11 @@ const ToolingSelectPage = () => {
           </Form>
         )}
       </Modal>
+      {/* Rule Management Modal */}
+      <RuleManagementModal
+        visible={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+      />
     </Layout>
   );
 };
