@@ -96,7 +96,7 @@ router.get('/tables', async (req, res) => {
   try {
     const r = await engPool.query(`
       SELECT t.table_name,
-        array_agg(c.column_name ORDER BY c.ordinal_position)
+        array_agg(c.column_name::TEXT ORDER BY c.ordinal_position)
           FILTER (WHERE c.column_name NOT IN ('id','tooling_name','tooling_no','machine','created_at','updated_at')) AS data_cols
       FROM information_schema.tables t
       JOIN information_schema.columns c
@@ -143,7 +143,7 @@ router.post('/create-table', async (req, res) => {
     return res.status(400).json({ success: false, error: `Table ${tableName} already exists` });
 
   const count = Math.min(Math.max(parseInt(dimCount) || 6, 1), 26);
-  const dimCols = Array.from({ length: count }, (_, i) => `dim_${ALPHA[i]} TEXT`).join(', ');
+  const dimCols = Array.from({ length: count }, (_, i) => `dim_${ALPHA[i]} NUMERIC`).join(', ');
 
   try {
     await engPool.query(`

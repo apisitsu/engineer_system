@@ -217,7 +217,13 @@ function searchKS400B_WorkDriver(fixData, h, sheetName, calc) {
       const fixA = parseFloat(row[h('Dim_A')]);
       const fixB = parseFloat(row[h('Dim_B')]);
       const fixE = parseFloat(row[h('Dim_E')]);
-      if (isNaN(fixA) || isNaN(fixB)) return { _diff: 99999, _diffA: 99999, _diffB: 99999, _diffE: 99999 };
+      if (isNaN(fixA) || isNaN(fixB)) {
+        return {
+          no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
+          val1: '-', val2: '-', val3: '-', val4: '-', val5: '-',
+          _diff: 99999, _diffA: 99999, _diffB: 99999, _diffE: 99999
+        };
+      }
       const diffA = Math.abs(fixA - calc.wd_A);
       const diffB = Math.abs(fixB - calc.wd_B);
       const diffE = (calc.wd_E && !isNaN(fixE)) ? Math.abs(fixE - calc.wd_E) : 0;
@@ -276,7 +282,11 @@ function searchKS400B_SupportBlock(fixData, h, sheetName, calc) {
       const fixD = parseFloat(row[h('Dim_D')]);
       const fixE = parseFloat(row[h('Dim_E')]);
       if (isNaN(fixA) || isNaN(fixB) || isNaN(fixC) || isNaN(fixD) || isNaN(fixE)) {
-        return { _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999 };
+        return {
+          no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
+          val1: '-', val2: '-', val3: '-', val4: '-', val5: '-',
+          _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999
+        };
       }
       let penalty = 0;
       const diffA_real = fixA - calc.sb_A;
@@ -340,7 +350,13 @@ function searchKS400B_PlugB(fixData, h, sheetName, calc) {
     const fixA = parseFloat(row[h('Dim_A')]);
     const fixB = parseFloat(row[h('Dim_B')]);
     const fixC = parseFloat(row[h('Dim_C')]);
-    if (isNaN(fixA) || isNaN(fixB)) return { _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999 };
+    if (isNaN(fixA) || isNaN(fixB)) {
+      return {
+        no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pb_type,
+        val1: '-', val2: '-', val3: '-', val4: '-', val5: '-', valF: 70,
+        _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999
+      };
+    }
     const diffB = calc.pb_B !== undefined ? Math.abs(fixB - calc.pb_B) : 0;
     const diffA = calc.pb_A !== undefined ? Math.abs(fixA - calc.pb_A) : 0;
     const diffC = (calc.pb_C !== undefined && !isNaN(fixC)) ? Math.abs(fixC - calc.pb_C) : 0;
