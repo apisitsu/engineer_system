@@ -6,8 +6,9 @@ const config = require('./config');
 require('dotenv').config();
 
 // --- GAS URL + Secret Key from environment ---
-const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL;
-const GAS_SECRET    = process.env.GAS_SECRET_KEY || 'ENG_DWG_2026';
+const GAS_EMAIL_URL     = process.env.GAS_EMAIL_URL;
+const GAS_EMAIL_URL_NEW = process.env.GAS_EMAIL_URL_NEW;
+const GAS_SECRET        = process.env.GAS_SECRET_KEY || 'ENG_DWG_2026';
 
 // --- Corporate proxy agent (for HTTPS tunneling through McAfee Web Gateway) ---
 function getProxyAgent() {
@@ -27,11 +28,11 @@ function getProxyAgent() {
  * Send email via Google Apps Script Web App (Primary method)
  * GAS handles Gmail authentication internally – no per-user OAuth needed.
  */
-const sendEmailViaAS = async (to, subject, htmlContent) => {
+const sendEmailViaAS = async (to, subject, htmlContent, url = GAS_EMAIL_URL) => {
     try {
         const agent = getProxyAgent();
 
-        const response = await axios.post(GAS_EMAIL_URL, {
+        const response = await axios.post(url, {
             secret: GAS_SECRET,
             to,
             subject,
@@ -114,10 +115,19 @@ const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
  *   2nd: Gmail API using GMAIL_REFRESH_TOKEN from .env
  */
 const sendEmailWithFallback = async (to, subject, htmlContent) => {
+    // ลอง GAS URL ใหม่ก่อน (ถ้ามี)
+    if (GAS_EMAIL_URL_NEW) {
+        try {
+            return await sendEmailViaAS(to, subject, htmlContent, GAS_EMAIL_URL_NEW);
+        } catch (err) {
+            console.warn('⚠️  GAS (new URL) failed:', err.response?.status || err.message);
+        }
+    }
+    // Fallback → GAS URL เก่า
     try {
-        return await sendEmailViaAS(to, subject, htmlContent);
+        return await sendEmailViaAS(to, subject, htmlContent, GAS_EMAIL_URL);
     } catch (gasErr) {
-        console.warn('⚠️  GAS email failed, falling back to Gmail API:', gasErr.response?.status || gasErr.message);
+        console.warn('⚠️  GAS (old URL) failed, falling back to Gmail API:', gasErr.response?.status || gasErr.message);
         const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
         if (!refreshToken) throw new Error('No GMAIL_REFRESH_TOKEN in env; cannot fall back.');
         return await sendEmail(refreshToken, to, subject, htmlContent);

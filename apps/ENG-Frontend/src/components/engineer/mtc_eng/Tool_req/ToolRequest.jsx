@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, message, Collapse
+    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
 } from 'antd';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
@@ -18,11 +18,13 @@ import RequestDetailsModal from './components/RequestDetailsModal';
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
-const ToolRequest = () => {
+const ToolRequestContent = () => {
+    const { message, modal } = App.useApp();
     const { theme } = useTheme();
     const userName = useAuthStore(state => state.userName);
     const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
+    const userInfo = useAuthStore(state => state.userInfo);
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
@@ -41,7 +43,7 @@ const ToolRequest = () => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const { data } = await axios.get(server.MTC_TOOL_REQUESTS);
+            const { data } = await axios.get(server.MTC_TOOL_REQUESTS, { params: { limit: 200 } });
             setRequests(data.data || []);
         } catch (error) {
             console.error('Error fetching tool requests:', error);
@@ -53,7 +55,7 @@ const ToolRequest = () => {
     const handleCreateNew = () => {
         setSelectedRequest({
             requester: userName,
-            requester_email: '',
+            requester_email: userInfo?.gmail_email || '',
             department: userDepartment || '',
             work_center: '',
             work_center_name: '',
@@ -78,6 +80,7 @@ const ToolRequest = () => {
             setModalVisible(true);
         } catch (error) {
             console.error('Error fetching request details:', error);
+            message.error('Failed to fetch request details');
         }
     };
 
@@ -89,22 +92,40 @@ const ToolRequest = () => {
 
     const handleSave = async (values) => {
         try {
+            // Use FormData for file upload support
+            const formData = new FormData();
+            Object.keys(values).forEach(key => {
+                if (key === 'attachment') {
+                    const fileObj = values[key]?.[0]?.originFileObj;
+                    if (fileObj) {
+                        formData.append('attachment', fileObj);
+                    }
+                } else if (values[key] !== undefined && values[key] !== null) {
+                    formData.append(key, values[key]);
+                }
+            });
+
+            const config = {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            };
+
             if (selectedRequest?.id) {
-                await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, values);
+                await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, formData, config);
             } else {
-                await axios.post(server.MTC_TOOL_REQUESTS, values);
+                await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
             }
             message.success(selectedRequest?.id ? 'Request updated' : 'Request created');
             handleModalClose();
             fetchRequests();
         } catch (error) {
-            message.error('Failed to save request');
+            const errorMsg = error.response?.data?.message || error.message || 'Failed to save request';
+            message.error(errorMsg);
             console.error('Error saving request:', error);
         }
     };
 
     const handleDelete = async (id) => {
-        Modal.confirm({
+        modal.confirm({
             title: 'Confirm deletion',
             content: 'Are you sure you want to delete this request?',
             okText: 'Delete',
@@ -114,8 +135,10 @@ const ToolRequest = () => {
                     await axios.delete(`${server.MTC_TOOL_REQUESTS}/${id}`);
                     handleModalClose();
                     fetchRequests();
+                    message.success('Request deleted');
                 } catch (error) {
                     console.error('Error deleting request:', error);
+                    message.error('Failed to delete request');
                 }
             }
         });
@@ -440,5 +463,11 @@ const ToolRequest = () => {
         </Layout>
     );
 };
+
+const ToolRequest = () => (
+    <App>
+        <ToolRequestContent />
+    </App>
+);
 
 export default ToolRequest;

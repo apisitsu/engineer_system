@@ -154,6 +154,7 @@ app.route('/api/tooling_inspect/dwg_require_add').post(engMTC.ToolDWGRequestAdd)
 app.route('/api/tooling_inspect/dashboard_stats').get(engMTC.ToolingDashboadtGetlist)
 app.route('/api/tooling_inspect/return_add').post(engMTC.ToolingReturnAdd)
 app.route('/api/tooling_inspect/inspect_update').post(engMTC.ToolingInspectUpdate)
+app.route('/api/master/wc').get(engMTC.GetWCCodes)
 
 app.use('/api/tooling-select', toolingSelect);
 app.use('/api/sds', sds);
@@ -164,6 +165,7 @@ const toolReq = require('./api/engineer/mtc/tool_req');
 
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
+app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
 app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);

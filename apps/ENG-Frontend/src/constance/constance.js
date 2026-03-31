@@ -26,11 +26,13 @@ export const server = {
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
+  MASTER_WC: `${apiUrl}api/master/wc`,
 
   // Tool Request System
   MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,  // with /:id
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
+  MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
 
   // Tooling Select & SDS
   MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,

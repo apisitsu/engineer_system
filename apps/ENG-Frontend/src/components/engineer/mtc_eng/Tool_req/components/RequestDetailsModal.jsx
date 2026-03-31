@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, Form, Input, Select, Button, Row, Col, Descriptions,
-  Tag, Divider, Space, Steps, Timeline, Typography, Alert, message, Radio
+  Tag, Divider, Space, Steps, Timeline, Typography, Alert, message, Radio, Upload
 } from 'antd';
 import {
   EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
   CheckCircleOutlined, CloseCircleOutlined, SendOutlined,
-  FileTextOutlined, AuditOutlined, UserOutlined
+  FileTextOutlined, AuditOutlined, UserOutlined, UploadOutlined
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../../utils/HttpClient';
 import moment from 'moment';
@@ -45,11 +45,50 @@ const WORKFLOW_LABELS = {
 };
 
 // ── Stage Action Panel ────────────────────────────────────────────────────────
-const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
+const stripFilePrefix = (p) => {
+  const raw = p.split('/').pop(); // e.g. "37_1717000000000_drawing.pdf"
+  const parts = raw.split('_');
+  // format: {id}_{timestamp}_{originalname} — ตัด 2 ส่วนแรกออก
+  return parts.length > 2 ? parts.slice(2).join('_') : raw;
+};
+
+const FileLinks = ({ paths, names, label }) => {
+  if (!paths?.length) return null;
+  const baseUrl = 'http://localhost:2005';
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <Text strong>{label}: </Text>
+      <Space wrap>
+        {paths.map((p, i) => (
+          <a key={i} href={`${baseUrl}${p}`} target="_blank" rel="noreferrer">
+            {names?.[i] || stripFilePrefix(p)}
+          </a>
+        ))}
+      </Space>
+    </div>
+  );
+};
+
+const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
   const [form] = Form.useForm();
   const [selectedDecision, setSelectedDecision] = useState(null);
 
   const isRegistDrawing = request?.type_of_request === 'Regist Drawing';
+
+  const findLastStep = (stageName) => {
+    const list = workflow || [];
+    return list.findLast?.(w => w.stage_name === stageName) || [...list].reverse().find(w => w.stage_name === stageName);
+  };
+
+  // ไฟล์จาก Draft Man (สำหรับ DWG Check, Eng Review)
+  const draftManStep    = findLastStep('draft_man');
+  const draftManFiles      = draftManStep?.extra_data?.dwg_file_paths || [];
+  const draftManFileNames  = draftManStep?.extra_data?.dwg_file_names || [];
+
+  // ไฟล์จาก Eng Review (สำหรับ Eng Approve)
+  const engReviewStep      = findLastStep('eng_review');
+  const reviewFiles        = engReviewStep?.extra_data?.review_file_paths || [];
+  const reviewFileNames    = engReviewStep?.extra_data?.review_file_names || [];
 
   const handleDecisionSubmit = async () => {
     try {
@@ -138,7 +177,17 @@ const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
       {/* Draft Man */}
       {stage === 'Draft Man' && (
         <>
-          <Form.Item label="Drawing File(s) URL / Path" name="dwg_files">
+          <Form.Item
+            label="แนบไฟล์ Drawing"
+            name="dwg_file"
+            valuePropName="fileList"
+            getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
+          >
+            <Upload beforeUpload={() => false} multiple maxCount={10} accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg">
+              <Button icon={<UploadOutlined />}>เลือกไฟล์ (PDF / DWG / DXF / Image)</Button>
+            </Upload>
+          </Form.Item>
+          <Form.Item label="Drawing File Path (optional)" name="dwg_files">
             <Input placeholder="\\server\drawings\DWG-001.pdf" />
           </Form.Item>
           <Form.Item label="Comment" name="comment">
@@ -152,14 +201,18 @@ const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
 
       {/* DWG Check */}
       {stage === 'DWG Check' && (
-        <ApproveDenyForm
-          approveDenyLabels={['Approve — Drawing is correct', 'Deny — Need revision']}
-        />
+        <>
+          <FileLinks paths={draftManFiles} names={draftManFileNames} label="ไฟล์จาก Draft Man" />
+          <ApproveDenyForm
+            approveDenyLabels={['Approve — Drawing is correct', 'Deny — Need revision']}
+          />
+        </>
       )}
 
       {/* Eng Review */}
       {stage === 'Eng Review' && (
         <>
+          <FileLinks paths={draftManFiles} names={draftManFileNames} label="ไฟล์จาก Draft Man" />
           <Form.Item label="Section" name="section" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="Section name" />
           </Form.Item>
@@ -208,8 +261,15 @@ const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item label="Attach Files (URL / Path)" name="attach_files">
-            <Input placeholder="File path or URL" />
+          <Form.Item
+            label="แนบไฟล์"
+            name="review_file"
+            valuePropName="fileList"
+            getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
+          >
+            <Upload beforeUpload={() => false} multiple maxCount={10} accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg">
+              <Button icon={<UploadOutlined />}>เลือกไฟล์ (PDF / DWG / DXF / Image)</Button>
+            </Upload>
           </Form.Item>
           <Form.Item label="Comment" name="comment">
             <TextArea rows={2} />
@@ -222,9 +282,12 @@ const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
 
       {/* Eng Approve */}
       {stage === 'Eng Approve' && (
-        <ApproveDenyForm
-          approveDenyLabels={['Approve — Request is completed', 'Deny — Need more work']}
-        />
+        <>
+          <FileLinks paths={reviewFiles} names={reviewFileNames} label="ไฟล์จาก Eng Review" />
+          <ApproveDenyForm
+            approveDenyLabels={['Approve — Request is completed', 'Deny — Need more work']}
+          />
+        </>
       )}
 
       {/* Eng Inform */}
@@ -238,6 +301,7 @@ const StageActionPanel = ({ stage, request, onSubmit, loading }) => {
               message={<Text><strong>Email will be sent to:</strong> {request.requester_email}</Text>}
             />
           )}
+          <FileLinks paths={reviewFiles} names={reviewFileNames} label="ไฟล์ที่จะส่งให้ Requestor (Eng Review)" />
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item label="Cost (if applicable)" name="cost">
@@ -268,9 +332,40 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const [form] = Form.useForm();
   const [localIsEditing, setLocalIsEditing] = useState(isEditing);
   const [actionLoading, setActionLoading] = useState(false);
+  const [wcCodes, setWCCodes] = useState([]);
+  const [wcLoading, setWCLoading] = useState(false);
+  const [permissions, setPermissions] = useState({});
   const userName = useAuthStore(state => state.userName);
+  const userInfo = useAuthStore(state => state.userInfo);
+  const userRole = useAuthStore(state => state.userRole);
+  const userDepartment = useAuthStore(state => state.userDepartment);
+  const userCode = userInfo?.u_code || '';        // e.g. "apisit.su" หรือ "LE485"
+  const userEmail = userInfo?.gmail_email || userInfo?.email || '';
 
   useEffect(() => { setLocalIsEditing(isEditing); }, [isEditing]);
+
+  useEffect(() => {
+    if (visible) {
+      fetchWCCodes();
+      axios.get(server.MTC_TOOL_REQUEST_PERMISSIONS)
+        .then(({ data }) => setPermissions(data.data || {}))
+        .catch(() => {});
+    }
+  }, [visible]);
+
+  const fetchWCCodes = async () => {
+    setWCLoading(true);
+    try {
+      console.log('🔄 Fetching Work Centers from:', server.MASTER_WC);
+      const { data } = await axios.get(server.MASTER_WC);
+      console.log('✅ Work Centers received:', data.data);
+      setWCCodes(data.data || []);
+    } catch (error) {
+      console.error('❌ Error fetching WC codes:', error);
+    } finally {
+      setWCLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (request && visible) {
@@ -297,28 +392,70 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
     }
   };
 
+  const onWCChange = (value) => {
+    const selectedWC = wcCodes.find(wc => wc.code === value);
+    if (selectedWC) {
+      form.setFieldsValue({ work_center_name: selectedWC.department || '' });
+    }
+  };
+
   const handleAction = async ({ decision, ...extra }) => {
     const stageConfig = STAGES.find(s => s.key === request?.current_stage);
     if (!stageConfig) return;
 
     const {
-      comment, request_no, dwg_files, drawing_no, no_of_dwg, section, attach_files, inform_note,
-      cost, evidence, review_general, review_machine_part, review_gauge_type
+      comment, request_no, dwg_files, dwg_file, review_file, drawing_no, no_of_dwg, section,
+      inform_note, cost, evidence, review_general, review_machine_part, review_gauge_type
     } = extra;
     const extraData = {
-      request_no, dwg_files, drawing_no, no_of_dwg, section, attach_files,
-      inform_note, cost, evidence, review_general, review_machine_part, review_gauge_type, comment
+      request_no, dwg_files, drawing_no, no_of_dwg, section,
+      inform_note, cost, evidence, review_general, review_machine_part, review_gauge_type, comment,
+      // แนบ review files ไปกับ eng_inform เพื่อส่งใน email
+      ...(stageConfig.stage === 'eng_inform' && (() => {
+        const wf = request.workflow || [];
+        const reviewStep = wf.findLast?.(w => w.stage_name === 'eng_review')
+          || [...wf].reverse().find(w => w.stage_name === 'eng_review');
+        const paths = reviewStep?.extra_data?.review_file_paths || [];
+        const names = reviewStep?.extra_data?.review_file_names || [];
+        return paths.length > 0 ? { attached_file_paths: paths, attached_file_names: names } : {};
+      })()),
     };
+
+    // รวมไฟล์จากทุก stage ที่มี upload
+    const draftFiles  = dwg_file?.filter(f => f.originFileObj) || [];
+    const reviewFiles = review_file?.filter(f => f.originFileObj) || [];
+    const allFiles    = [...draftFiles, ...reviewFiles];
+    const fileKey     = reviewFiles.length > 0 ? 'review_files' : 'dwg_files';
+    const useFormData = allFiles.length > 0;
 
     setActionLoading(true);
     try {
-      await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, {
-        stage: stageConfig.stage,
-        decision,
-        comment,
-        extra: extraData,
-        action_by: userName,
-      });
+      if (useFormData) {
+        const formData = new FormData();
+        formData.append('stage', stageConfig.stage);
+        formData.append('decision', decision);
+        formData.append('comment', comment || '');
+        formData.append('extra', JSON.stringify(extraData));
+        formData.append('action_by', userName);
+        formData.append('action_by_email', userEmail);
+        formData.append('user_department', userDepartment);
+        formData.append('user_code', userCode);
+        allFiles.forEach(f => formData.append(fileKey, f.originFileObj));
+        await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, {
+          stage: stageConfig.stage,
+          decision,
+          comment,
+          extra: extraData,
+          action_by: userName,
+          action_by_email: userEmail,
+          user_department: userDepartment,
+          user_code: userCode,
+        });
+      }
       message.success(`${stageConfig.label} ${decision} submitted`);
       onActionDone?.();
       onClose();
@@ -334,6 +471,14 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const isNewRequest = !request.id;
   const isDone = ['Completed & Informed', 'Denied', 'Denied by Approve', 'Complete'].includes(request.status);
   const currentStageConfig = STAGES.find(s => s.key === request.current_stage);
+
+  // ตรวจสิทธิ์ — AD department bypass ทุก stage
+  const allowedForStage = permissions[currentStageConfig?.stage] || [];
+  const allowedCodes = allowedForStage.map(e => e.split('@')[0].toLowerCase());
+  const canAct = userDepartment === 'AD'
+    || allowedForStage.length === 0
+    || allowedCodes.includes(userCode?.toLowerCase())
+    || (userEmail && allowedForStage.map(e => e.toLowerCase()).includes(userEmail.toLowerCase()));
   const workflow = request.workflow || [];
 
   // Steps progress
@@ -378,14 +523,13 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
         </Space>
       }
     >
-      {localIsEditing || isNewRequest ? (
-        // ── Edit / Create Form ─────────────────────────────────────────────
-        <Form form={form} layout="vertical" initialValues={request}>
+      <Form form={form} layout="vertical" initialValues={request}
+        style={{ display: localIsEditing || isNewRequest ? 'block' : 'none' }}>
           <Divider orientation="left">Requester Information</Divider>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="Requester" name="requester" rules={[{ required: true }]}>
-                <Input />
+                <Input readOnly />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -397,17 +541,26 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item label="Department" name="department" rules={[{ required: true }]}>
-                <Input />
+                <Input readOnly />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item label="Work Center" name="work_center" rules={[{ required: true }]}>
-                <Input />
+                <Select 
+                  placeholder="Select Work Center" 
+                  showSearch 
+                  onChange={onWCChange}
+                  loading={wcLoading}
+                >
+                  {wcCodes.map(wc => (
+                    <Option key={wc.code} value={wc.code}>{wc.description}</Option>
+                  ))}
+                </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item label="Work Center Name" name="work_center_name">
-                <Input />
+                <Input readOnly placeholder="Auto-filled" />
               </Form.Item>
             </Col>
           </Row>
@@ -460,19 +613,30 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
             <TextArea rows={4} />
           </Form.Item>
 
-          <Divider orientation="left">Machine Information (Optional)</Divider>
+          <Divider orientation="left">Attachments & Machines</Divider>
           <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Attach File (Image / PDF)" name="attachment" valuePropName="fileList" getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}>
+                <Upload
+                  beforeUpload={() => false}
+                  maxCount={1}
+                >
+                  <Button icon={<UploadOutlined />}>Click to Upload</Button>
+                </Upload>
+              </Form.Item>
+            </Col>
             <Col span={12}>
               <Form.Item label="Machine No." name="machine_no"><Input /></Form.Item>
             </Col>
-            <Col span={12}>
+          </Row>
+          <Row gutter={16}>
+            <Col span={24}>
               <Form.Item label="Machine Name" name="machine_name"><Input /></Form.Item>
             </Col>
           </Row>
         </Form>
-      ) : (
-        // ── View Mode ──────────────────────────────────────────────────────
-        <div>
+        {/* ── View Mode ──────────────────────────────────────────────────────── */}
+        <div style={{ display: localIsEditing || isNewRequest ? 'none' : 'block' }}>
           {/* Progress Steps */}
           <Steps
             size="small"
@@ -508,6 +672,13 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
             <Descriptions.Item label="Detail" span={2}>
               <div style={{ whiteSpace: 'pre-wrap' }}>{request.detail}</div>
             </Descriptions.Item>
+            {request.file_path && (
+              <Descriptions.Item label="ไฟล์แนบ (Requestor)" span={2}>
+                <a href={`http://localhost:2005${request.file_path}`} target="_blank" rel="noreferrer">
+                  {request.file_path.split('/').pop()}
+                </a>
+              </Descriptions.Item>
+            )}
           </Descriptions>
 
           {/* Workflow History */}
@@ -527,7 +698,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
                           <Text strong>{WORKFLOW_LABELS[w.stage_name] || w.stage_name}</Text>
                           <Tag color={isApprove ? 'green' : 'red'}>{w.action_type?.toUpperCase()}</Tag>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            {moment(w.action_date).format('DD/MM/YYYY HH:mm')}
+                            {moment(w.action_date || w.created_at).format('DD/MM/YYYY HH:mm')}
                           </Text>
                           <Text type="secondary">by {w.action_by}</Text>
                         </Space>
@@ -535,6 +706,30 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
                         {extra.request_no && <div><Text type="secondary">Request No: {extra.request_no}</Text></div>}
                         {extra.drawing_no && <div><Text type="secondary">Drawing No: {extra.drawing_no}</Text></div>}
                         {extra.dwg_files && <div><Text type="secondary">Files: {extra.dwg_files}</Text></div>}
+                        {extra.dwg_file_paths?.length > 0 && (
+                          <div>
+                            <Text type="secondary">ไฟล์แนบ: </Text>
+                            <Space wrap>
+                              {extra.dwg_file_paths.map((p, i) => (
+                                <a key={i} href={`http://localhost:2005${p}`} target="_blank" rel="noreferrer">
+                                  {extra.dwg_file_names?.[i] || stripFilePrefix(p)}
+                                </a>
+                              ))}
+                            </Space>
+                          </div>
+                        )}
+                        {extra.review_file_paths?.length > 0 && (
+                          <div>
+                            <Text type="secondary">ไฟล์ Review: </Text>
+                            <Space wrap>
+                              {extra.review_file_paths.map((p, i) => (
+                                <a key={i} href={`http://localhost:2005${p}`} target="_blank" rel="noreferrer">
+                                  {extra.review_file_names?.[i] || stripFilePrefix(p)}
+                                </a>
+                              ))}
+                            </Space>
+                          </div>
+                        )}
                       </div>
                     )
                   };
@@ -552,18 +747,30 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
                   <Tag color="blue">Pending</Tag>
                 </Space>
               </Divider>
-              <Alert
-                type="info"
-                showIcon
-                message={`This request is waiting for ${currentStageConfig.label} action.`}
-                style={{ marginBottom: 16 }}
-              />
-              <StageActionPanel
-                stage={request.current_stage}
-                request={request}
-                onSubmit={handleAction}
-                loading={actionLoading}
-              />
+              {canAct ? (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={`This request is waiting for ${currentStageConfig.label} action.`}
+                    style={{ marginBottom: 16 }}
+                  />
+                  <StageActionPanel
+                    stage={request.current_stage}
+                    request={request}
+                    workflow={workflow}
+                    onSubmit={handleAction}
+                    loading={actionLoading}
+                  />
+                </>
+              ) : (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${currentStageConfig.label}`}
+                  description={`กรุณาติดต่อผู้รับผิดชอบในขั้นตอนนี้`}
+                />
+              )}
             </>
           )}
 
@@ -576,7 +783,6 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
             />
           )}
         </div>
-      )}
     </Modal>
   );
 };

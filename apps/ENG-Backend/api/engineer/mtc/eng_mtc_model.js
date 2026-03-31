@@ -2,10 +2,19 @@ const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
 
 const ToolingInspectGetlist = async (req, res) => {
+    const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+    const offset   = (pageNum - 1) * limitNum;
     try {
-        const sql = `SELECT * FROM tooling_inspect`;
-        const result = await engPool.query(sql);
-        res.json({ data: result.rows });
+        const [dataRes, countRes] = await Promise.all([
+            engPool.query(`SELECT * FROM tooling_inspect ORDER BY receive_date DESC LIMIT $1 OFFSET $2`, [limitNum, offset]),
+            engPool.query(`SELECT COUNT(*) as total FROM tooling_inspect`),
+        ]);
+        const total = parseInt(countRes.rows[0].total);
+        res.json({
+            data: dataRes.rows,
+            pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ error: err.message });
@@ -13,12 +22,38 @@ const ToolingInspectGetlist = async (req, res) => {
 };
 
 const ToolDWGRequestGetList = async (req, res) => {
+    const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+    const offset   = (pageNum - 1) * limitNum;
     try {
-        const sql = `SELECT * FROM tool_dwg_request`;
-        const result = await engPool.query(sql);
-        res.json({ data: result.rows });
+        const [dataRes, countRes] = await Promise.all([
+            engPool.query(`SELECT * FROM tool_dwg_request ORDER BY req_date DESC LIMIT $1 OFFSET $2`, [limitNum, offset]),
+            engPool.query(`SELECT COUNT(*) as total FROM tool_dwg_request`),
+        ]);
+        const total = parseInt(countRes.rows[0].total);
+        res.json({
+            data: dataRes.rows,
+            pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+        });
     } catch (err) {
         console.error(err.message);
+        res.status(500).json({ error: err.message });
+    }
+}
+
+const GetWCCodes = async (req, res) => {
+    try {
+        // Try to fetch with multiple possible column names and format code to 2 digits
+        const sql = `
+            SELECT code, name AS description, department
+            FROM work_centers
+            ORDER BY code ASC
+        `;
+        const result = await engPool.query(sql);
+        console.log(`📦 Fetched ${result.rows.length} Work Centers`);
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error('Error in GetWCCodes:', err.message);
         res.status(500).json({ error: err.message });
     }
 }
@@ -79,7 +114,7 @@ const getPreviousWorkingDay = async (fromDate) => {
         do {
             day.subtract(1, 'days');
         } while (
-            day.isoWeekday() > 6 || // > 6 คือหยุดแค่อาทิตย์, >= 6 คือหยุดเสาร์-อาทิตย์
+            day.isoWeekday() >= 6 || // >= 6: ข้ามเสาร์ (6) และอาทิตย์ (7) — ตรงกับ calcDueDate ใน tool_req.js
             holidays.includes(day.format('YYYY-MM-DD'))
         );
 
@@ -276,6 +311,7 @@ module.exports = {
     ToolingInspectGetlist,
     ToolDWGRequestGetList,
     ToolDWGRequestAdd,
+    GetWCCodes,
     ToolingDashboadtGetlist,
     ToolingReturnAdd,
     ToolingInspectUpdate,

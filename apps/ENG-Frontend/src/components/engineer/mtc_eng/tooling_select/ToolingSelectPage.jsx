@@ -33,8 +33,15 @@ const { Title, Text } = Typography;
 const { Panel } = Collapse;
 
 // Generic Table Component
+const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
+
 const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) => {
   if (!dataSource || dataSource.length === 0) return null;
+
+  // กรองเฉพาะ column ที่มีข้อมูลอย่างน้อย 1 row
+  const visibleIndices = columns
+    .map((colKey, i) => ({ colKey, i }))
+    .filter(({ colKey }) => dataSource.some(row => !isEmpty(row[colKey])));
 
   const tableColumns = [
     {
@@ -59,7 +66,7 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
       width: 120,
       render: (text) => <Text strong>{text}</Text>
     },
-    ...columns.map((colKey, i) => ({
+    ...visibleIndices.map(({ colKey, i }) => ({
       title: (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '12px', fontWeight: '600' }}>{headers[i]}</div>
@@ -91,7 +98,7 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
       title={<Space>{icon} <Text strong>{title}</Text></Space>}
       extra={<Badge count={dataSource.length} showZero color="#8c8c8c" />}
       style={{ marginBottom: 16, borderRadius: '8px', overflow: 'hidden' }}
-      bodyStyle={{ padding: 0 }}
+      styles={{ body: { padding: 0 } }}
     >
       <Table
         dataSource={dataSource.map((item, idx) => ({ ...item, key: idx }))}
@@ -428,6 +435,33 @@ const ToolingSelectPage = () => {
       ]});
     }
 
+    // Dynamic Fixtures (Flexible Rules)
+    if (res.dynamicFixtures && Array.isArray(res.dynamicFixtures)) {
+      res.dynamicFixtures.forEach(df => {
+        if (df.hasData) {
+          mData.push({
+            name: df.name,
+            group: df.group || 'DYNAMIC',
+            found: df.foundCount,
+            required: df.requiredCount,
+            tools: df.dynamicContent.map(dc => ({
+              title: dc.title,
+              content: (
+                <ToolingTable
+                  title={dc.title}
+                  dataSource={dc.dataSource}
+                  columns={dc.columns}
+                  headers={dc.headers}
+                  targets={dc.targets}
+                  icon={dc.iconType === 'dynamic' ? <RocketOutlined /> : <ToolOutlined />}
+                />
+              )
+            }))
+          });
+        }
+      });
+    }
+
     return mData;
   };
 
@@ -578,7 +612,7 @@ const ToolingSelectPage = () => {
         width="85%"
         open={isToolListOpen}
         onClose={() => { setIsToolListOpen(false); setInvEditingKey(''); }}
-        bodyStyle={{ padding: '16px' }}
+        styles={{ body: { padding: '16px' } }}
       >
         <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Space wrap>
@@ -631,7 +665,7 @@ const ToolingSelectPage = () => {
         onCancel={() => setIsAddToolOpen(false)}
         footer={null}
         width={560}
-        destroyOnClose
+        destroyOnHidden
       >
         <Radio.Group
           value={addMode}

@@ -221,3 +221,21 @@ CREATE TABLE IF NOT EXISTS ecr_request (
     create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     due_date TIMESTAMP -- Added because it's used in Frontend for sorting/filtering
 );
+
+-- 5. MTC Dynamic Selection Rules
+CREATE TABLE IF NOT EXISTS mtc_selection_rules (
+    id SERIAL PRIMARY KEY,
+    machine_name VARCHAR(100) NOT NULL,
+    tool_category VARCHAR(100) NOT NULL,
+    rule_name VARCHAR(255),
+    source_field VARCHAR(50),
+    operator VARCHAR(10),
+    offset_value DECIMAL DEFAULT 0,
+    target_tool_table VARCHAR(100),
+    target_tool_field VARCHAR(100),
+    tolerance_plus DECIMAL DEFAULT 0,
+    tolerance_minus DECIMAL DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

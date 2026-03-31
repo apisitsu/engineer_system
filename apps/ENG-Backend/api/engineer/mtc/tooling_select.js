@@ -7,24 +7,47 @@ const { engPool } = require('../../../instance/eng_db');
 
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
 
-// ── ตรวจสอบว่า table มีอยู่จริงใน schema ──────────────────────────────────
+// ── Cache: tableExists + validColumns (cleared on create-table) ────────────
+const _tableCache = new Map();   // tableName → true
+const _colCache   = new Map();   // tableName → Set<string>
+
 async function tableExists(tableName) {
   if (!/^tooling_[a-z0-9_]+$/.test(tableName)) return false;
+  if (_tableCache.has(tableName)) return _tableCache.get(tableName);
   const r = await engPool.query(
     `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1`,
     [tableName]
   );
-  return r.rows.length > 0;
+  const exists = r.rows.length > 0;
+  _tableCache.set(tableName, exists);
+  return exists;
+}
+
+// ── ดึง valid columns สำหรับตาราง เพื่อป้องกัน SQL injection ผ่าน field names
+async function getValidColumns(tableName) {
+  if (_colCache.has(tableName)) return _colCache.get(tableName);
+  const r = await engPool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
+    [tableName]
+  );
+  const cols = new Set(r.rows.map(row => row.column_name));
+  _colCache.set(tableName, cols);
+  return cols;
 }
 
 // POST /api/tooling-select/search
 router.post('/search', async (req, res) => {
-  const { cnNumber } = req.body;
-  if (!cnNumber || !String(cnNumber).trim())
-    return res.status(400).json({ success: false, error: 'cnNumber is required' });
-  const result = await findFixtures(cnNumber);
-  if (!result.success) return res.status(404).json(result);
-  res.json(result);
+  try {
+    const { cnNumber } = req.body;
+    if (!cnNumber || !String(cnNumber).trim())
+      return res.status(400).json({ success: false, error: 'cnNumber is required' });
+    const result = await findFixtures(cnNumber);
+    if (!result.success) return res.status(404).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error('Tooling search error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ── DYNAMIC RULES ──────────────────────────────────────────────────────────
@@ -74,7 +97,7 @@ router.get('/tables', async (req, res) => {
     const r = await engPool.query(`
       SELECT t.table_name,
         array_agg(c.column_name ORDER BY c.ordinal_position)
-          FILTER (WHERE c.column_name LIKE 'dim_%') AS dim_cols
+          FILTER (WHERE c.column_name NOT IN ('id','tooling_name','tooling_no','machine','created_at','updated_at')) AS data_cols
       FROM information_schema.tables t
       JOIN information_schema.columns c
         ON c.table_name = t.table_name AND c.table_schema = 'public'
@@ -132,6 +155,8 @@ router.post('/create-table', async (req, res) => {
         machine TEXT
       )
     `);
+    _tableCache.set(tableName, true);
+    _colCache.delete(tableName);
     res.json({
       success: true,
       tableName,
@@ -161,14 +186,16 @@ router.post('/inventory/:tableName', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid table' });
 
   const data = req.body;
-  const fields = Object.keys(data).filter(
-    f => f !== 'id' && f !== 'created_at' && f !== 'updated_at'
-       && data[f] !== null && data[f] !== ''
-  );
-  if (fields.length === 0)
-    return res.status(400).json({ success: false, error: 'No data provided' });
-
   try {
+    const validCols = await getValidColumns(tableName);
+    const fields = Object.keys(data).filter(
+      f => f !== 'id' && f !== 'created_at' && f !== 'updated_at'
+         && data[f] !== null && data[f] !== ''
+         && validCols.has(f)
+    );
+    if (fields.length === 0)
+      return res.status(400).json({ success: false, error: 'No valid data provided' });
+
     const cols = fields.join(', ');
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
     const r = await engPool.query(
@@ -186,16 +213,38 @@ router.put('/inventory/:tableName/:id', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid table' });
 
   const data = req.body;
-  const fields = Object.keys(data).filter(f => f !== 'id' && f !== 'created_at' && f !== 'updated_at');
-  const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
-  const values = [...fields.map(f => data[f]), id];
-
   try {
+    const validCols = await getValidColumns(tableName);
+    const fields = Object.keys(data).filter(
+      f => f !== 'id' && f !== 'created_at' && f !== 'updated_at' && validCols.has(f)
+    );
+    if (fields.length === 0)
+      return res.status(400).json({ success: false, error: 'No valid fields to update' });
+
+    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
+    const values = [...fields.map(f => data[f]), id];
+
     const r = await engPool.query(
       `UPDATE ${tableName} SET ${setClause} WHERE id = $${values.length} RETURNING *`,
       values
     );
     res.json({ success: true, data: r.rows[0] });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// DELETE /api/tooling-select/inventory/:tableName/:id
+router.delete('/inventory/:tableName/:id', async (req, res) => {
+  const { tableName, id } = req.params;
+  if (!await tableExists(tableName))
+    return res.status(400).json({ success: false, error: 'Invalid table' });
+  try {
+    const r = await engPool.query(
+      `DELETE FROM ${tableName} WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    if (r.rowCount === 0)
+      return res.status(404).json({ success: false, error: 'Record not found' });
+    res.json({ success: true, deletedId: r.rows[0].id });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find C:Userslble485Eng_Sys -type f -name *general*)",
+      "Bash(find C:Userslble485Eng_SysappsENG-Backend -type f -name *dwg* -o -name *drawing*)",
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(find C:Userslble485Eng_SysappsENG-Frontendsrc -type f -path *Settings* -o -path *settings*)"
+    ]
+  }
+}

@@ -65,50 +65,74 @@ async function findFixtures(cnNumber) {
 
     const calc        = calculateToolingParams(partData);
     const ks400b_calc = calculateKS400B_Params(partData);
+    const ks03a_calc  = calculateKS03A_Params(partData);
+    const ks500rd_calc= calculateKS500RD_Params(partData);
+    const ks400b5_calc= calculateKS400B5_Params(partData);
+    const ks400b6_calc= calculateKS400B6_Params(partData);
+
+    // Flags for conditional querying
+    const ksb22gOK = calc.jawA <= 38 && partData.idAft >= 4.8 && partData.idAft < 16 && partData.wAft >= 14;
+    const ksb80OK  = calc.jawA > 15 && calc.jawA <= 70 && partData.idAft >= 7.9 && partData.wAft >= 14;
+    const ks03aOK  = partData.odAft <= 33 && !ks03a_calc.error;
+    const ks400bOK = !ks400b_calc.error;
+    const ks500rdOK= !ks500rd_calc.error;
+    const ks400b5OK= !ks400b5_calc.error;
+    const ks400b6OK= !ks400b6_calc.error;
 
     const [ksb22g, ksb80, tsg300, ks03a, ks400b, ks500rd, ks400b5, ks400b6] = await Promise.all([
-      engPool.query(`
+      ksb22gOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
-               machine AS "Machine" FROM tooling_ksb22g`),
-      engPool.query(`
+               machine AS "Machine"
+        FROM tooling_ksb22g
+        WHERE (tooling_name ILIKE '%JAW%' AND dim_a BETWEEN $1 AND $2)
+           OR (tooling_name ILIKE '%BACK PLATE%' AND dim_a BETWEEN $3 AND $4)`,
+        [calc.jawA - 0.015, calc.jawA + 0.05, calc.bpAA, calc.bpAA + 2.5]
+      ) : Promise.resolve({ rows: [] }),
+      ksb80OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C",
                dim_d AS "Dim_D", dim_e AS "Dim_E",
-               machine AS "Machine" FROM tooling_ksb80`),
+               machine AS "Machine"
+        FROM tooling_ksb80
+        WHERE (tooling_name ILIKE '%JAW%' AND dim_a BETWEEN $1 AND $2)
+           OR (tooling_name ILIKE '%BACK PLATE%' AND dim_a BETWEEN $3 AND $4)`,
+        [calc.jawA - 0.015, calc.jawA + 0.05, calc.bpAA - 0.4, calc.bpAA + 3.1]
+      ) : Promise.resolve({ rows: [] }),
       engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G",
-               machine AS "Machine" FROM tooling_tsg300`),
-      engPool.query(`
+               machine AS "Machine"
+        FROM tooling_tsg300
+        WHERE (tooling_name ILIKE '%CHUTE%' AND dim_a BETWEEN $1 AND $2 AND dim_b BETWEEN $3 AND $4)
+           OR (tooling_name ILIKE '%CARRIER%' AND dim_a BETWEEN $5 AND $6)`,
+        [
+          calc.chuteCalcA, calc.chuteCalcA + 1.0,
+          calc.chuteCalcB - 0.1, calc.chuteCalcB + 3.0,
+          Math.min(calc.carrierCalcA, calc.tsgW_Amin) - 0.1,
+          Math.max(calc.carrierCalcA + 1.0, calc.tsgW_Amax) + 0.1,
+        ]
+      ),
+      ks03aOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
                dim_i AS "Dim_I", dim_j AS "Dim_J", dim_k AS "Dim_K", dim_l AS "Dim_L",
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
-               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM tooling_ks03a`),
-      engPool.query(`
+               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM tooling_ks03a`) : Promise.resolve({ rows: [] }),
+      ks400bOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C",
                dim_d AS "Dim_D", dim_e AS "Dim_E", dim_f AS "Dim_F",
-               machine AS "Machine" FROM tooling_ks400b`),
-      engPool.query(`
+               machine AS "Machine" FROM tooling_ks400b`) : Promise.resolve({ rows: [] }),
+      ks500rdOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
-               machine AS "Machine" FROM tooling_ks500rd`),
-      engPool.query(`
-        SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
-               dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
-               dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
-               dim_i AS "Dim_I", dim_j AS "Dim_J", dim_k AS "Dim_K", dim_l AS "Dim_L",
-               dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
-               dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
-               dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b5`),
-      engPool.query(`
+               machine AS "Machine" FROM tooling_ks500rd`) : Promise.resolve({ rows: [] }),
+      ks400b5OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
@@ -116,7 +140,16 @@ async function findFixtures(cnNumber) {
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
                dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b6`),
+               FROM tooling_ks400b5`) : Promise.resolve({ rows: [] }),
+      ks400b6OK ? engPool.query(`
+        SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
+               dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
+               dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
+               dim_i AS "Dim_I", dim_j AS "Dim_J", dim_k AS "Dim_K", dim_l AS "Dim_L",
+               dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
+               dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
+               dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
+               FROM tooling_ks400b6`) : Promise.resolve({ rows: [] }),
     ]);
 
     const ksb22gRows  = ksb22g.rows;
@@ -129,13 +162,11 @@ async function findFixtures(cnNumber) {
     const ks400b6Rows = ks400b6.rows;
 
     let allJawMatches = [], allBpMatches = [];
-    const ksb22gOK = calc.jawA <= 38 && partData.idAft >= 4.8 && partData.idAft < 16 && partData.wAft >= 14;
     if (ksb22gOK) {
       allJawMatches.push(...searchKSB22G_Jaws(ksb22gRows, h, 'KS-B22G', calc, MAX_JAW_DEPTH));
       allBpMatches.push(...searchKSB22G_BackPlates(ksb22gRows, h, 'KS-B22G', calc));
     }
 
-    const ksb80OK = calc.jawA > 15 && calc.jawA <= 70 && partData.idAft >= 7.9 && partData.wAft >= 14;
     if (ksb80OK) {
       allJawMatches.push(...searchKSB80_Jaws(ksb80Rows, h, 'KS-B80', calc, MAX_JAW_DEPTH));
       allBpMatches.push(...searchKSB80_BackPlates(ksb80Rows, h, 'KS-B80', calc));
@@ -146,28 +177,24 @@ async function findFixtures(cnNumber) {
     const allCarrierWMatches   = searchTSG300W_Carriers(tsg300Rows, h, 'TSG-300', calc);
 
     let ks03a_results = {};
-    const ks03aOK = partData.odAft <= 33;
     if (ks03aOK) {
       const targetMachine = partData.idAft >= 12.0 ? 'KS-B22RD' : 'KS-03A';
-      const ks03a_calc = calculateKS03A_Params(partData);
-      if (!ks03a_calc.error) {
-        ks03a_results = {
-          calc: ks03a_calc,
-          rollerShoes:    topNPerMachine(searchKS03A_RollerShoe(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          cpxShoes:       topNPerMachine(searchKS03A_CPXShoe(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          chuteCovers:    topNPerMachine(searchKS03A_ChuteCover(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          frontPlates:    topNPerMachine(searchKS03A_FrontPlate(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          settingGauges:  topNPerMachine(searchKS03A_SettingGauge(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          masterRings:    topNPerMachine(searchKS03A_MasterRing(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          plugGauges:     topNPerMachine(searchKS03A_PlugGauge(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          loader:         topNPerMachine(searchKS03A_Loader(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-          pressureRotors: topNPerMachine(searchKS03A_PressureRotor(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
-        };
-      }
+      ks03a_results = {
+        calc: ks03a_calc,
+        rollerShoes:    topNPerMachine(searchKS03A_RollerShoe(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        cpxShoes:       topNPerMachine(searchKS03A_CPXShoe(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        chuteCovers:    topNPerMachine(searchKS03A_ChuteCover(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        frontPlates:    topNPerMachine(searchKS03A_FrontPlate(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        settingGauges:  topNPerMachine(searchKS03A_SettingGauge(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        masterRings:    topNPerMachine(searchKS03A_MasterRing(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        plugGauges:     topNPerMachine(searchKS03A_PlugGauge(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        loader:         topNPerMachine(searchKS03A_Loader(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+        pressureRotors: topNPerMachine(searchKS03A_PressureRotor(ks03aRows, h, targetMachine, ks03a_calc), TOP_N),
+      };
     }
 
     let ks400b_results = { calc: ks400b_calc };
-    if (!ks400b_calc.error) {
+    if (ks400bOK) {
       ks400b_results = {
         calc: ks400b_calc,
         workDrivers:   topNPerMachine(searchKS400B_WorkDriver(ks400bRows, h, 'KS400B', ks400b_calc), TOP_N),
@@ -179,24 +206,17 @@ async function findFixtures(cnNumber) {
     }
 
     let ks500rd_results = {};
-    const ks500rdOK = partData.idAft >= 14 && partData.idAft <= 38.125 &&
-                      partData.odAft >= 26 && partData.odAft <= 59.531 &&
-                      partData.wAft >= 23.5 && partData.wAft <= 51.15;
     if (ks500rdOK) {
-      const ks500rd_calc = calculateKS500RD_Params(partData);
-      if (!ks500rd_calc.error) {
-        ks500rd_results = {
-          calc: ks500rd_calc,
-          loadingPintles: topNPerMachine(searchKS500RD_LoadingPintle(ks500rdRows, h, 'KS500RD', ks500rd_calc), TOP_N),
-          workDrivers:    topNPerMachine(searchKS500RD_WorkDriver(ks500rdRows, h, 'KS500RD', ks500rd_calc), TOP_N),
-          frontShoes: !ks500rd_calc.error ? [{ no: ks500rd_calc.fs.No, machine: 'KS500RD', val1: '-', val2: '-', val3: '-' }] : [],
-        };
-      }
+      ks500rd_results = {
+        calc: ks500rd_calc,
+        loadingPintles: topNPerMachine(searchKS500RD_LoadingPintle(ks500rdRows, h, 'KS500RD', ks500rd_calc), TOP_N),
+        workDrivers:    topNPerMachine(searchKS500RD_WorkDriver(ks500rdRows, h, 'KS500RD', ks500rd_calc), TOP_N),
+        frontShoes: [{ no: ks500rd_calc.fs.No, machine: 'KS500RD', val1: '-', val2: '-', val3: '-' }],
+      };
     }
 
     let ks400b5_results = {};
-    const ks400b5_calc = calculateKS400B5_Params(partData);
-    if (!ks400b5_calc.error) {
+    if (ks400b5OK) {
       ks400b5_results = {
         calc: ks400b5_calc,
         workClamps:      topNPerMachine(searchKS400B5_Tool(ks400b5Rows, h, 'KS400B5', 'WORK CLAMP',   ks400b5_calc.workClamp), TOP_N),
@@ -213,8 +233,7 @@ async function findFixtures(cnNumber) {
     }
 
     let ks400b6_results = {};
-    const ks400b6_calc = calculateKS400B6_Params(partData);
-    if (!ks400b6_calc.error) {
+    if (ks400b6OK) {
       ks400b6_results = {
         calc: ks400b6_calc,
         workDrivers:   topNPerMachine(searchKS400B6_WorkDriver(ks400b6Rows, h, 'KS400B6', ks400b6_calc), TOP_N),

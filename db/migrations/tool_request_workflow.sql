@@ -1,7 +1,7 @@
 -- Tool Request Workflow Migration
 -- Aligns tr_request + tr_workflow with new workflow system
 
--- ── tr_request: add new columns ──────────────────────────────────────────────
+-- ── 1. tr_request: Add columns ──────────────────────────────────────────────
 ALTER TABLE tr_request
   ADD COLUMN IF NOT EXISTS request_item   VARCHAR(50),
   ADD COLUMN IF NOT EXISTS requester      VARCHAR(100),
@@ -17,14 +17,27 @@ ALTER TABLE tr_request
   ADD COLUMN IF NOT EXISTS req_due_date   TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS current_stage  VARCHAR(50) DEFAULT 'Eng Check';
 
--- backfill current_stage for existing rows
-UPDATE tr_request SET current_stage = 'Eng Check' WHERE current_stage IS NULL;
+-- Backfill current_stage using dynamic SQL to avoid parse-time errors
+DO $$ 
+BEGIN 
+    EXECUTE 'UPDATE tr_request SET current_stage = ''Eng Check'' WHERE current_stage IS NULL';
+END $$;
 
--- ── tr_workflow: add new columns ──────────────────────────────────────────────
+-- ── 2. tr_workflow: Add columns ──────────────────────────────────────────────
 ALTER TABLE tr_workflow
   ADD COLUMN IF NOT EXISTS stage_name VARCHAR(50),
   ADD COLUMN IF NOT EXISTS extra_data JSONB DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
--- backfill created_at from action_date for existing rows
-UPDATE tr_workflow SET created_at = action_date WHERE created_at IS NULL;
+-- Backfill created_at from action_date safely using dynamic SQL
+DO $$ 
+BEGIN 
+    -- Check if both source and destination columns exist
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tr_workflow' AND column_name='action_date') 
+       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tr_workflow' AND column_name='created_at') THEN
+        
+        -- Use EXECUTE to bypass compile-time column validation
+        EXECUTE 'UPDATE tr_workflow SET created_at = action_date WHERE created_at IS NULL AND action_date IS NOT NULL';
+        
+    END IF;
+END $$;
