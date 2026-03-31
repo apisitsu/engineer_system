@@ -77,7 +77,8 @@ export const useKanbanStore = create((set, get) => ({
             set({ projects: prjs });
             const currentActive = get().activeProject;
             if (prjs.length > 0) {
-                if (!currentActive || !prjs.find(p => p.id === currentActive.id)) {
+                // Only auto-switch if currently active project is no longer in the list
+                if (currentActive && !prjs.find(p => p.id === currentActive.id)) {
                     get().setActiveProject(prjs[0]);
                 }
             } else {
@@ -103,6 +104,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(server.KANBAN_PROJECTS, data);
             if (res.data?.data) {
                 set(state => ({ projects: [...state.projects, res.data.data] }));
+                get().checkAndAutoJoin('project', res.data.data.id);
                 return res.data.data;
             }
         } catch (err) {
@@ -123,6 +125,7 @@ export const useKanbanStore = create((set, get) => ({
                         ? { ...state.activeProject, ...res.data.data }
                         : state.activeProject
                 }));
+                get().checkAndAutoJoin('project', projectId);
                 return res.data.data;
             }
         } catch (err) {
@@ -176,7 +179,8 @@ export const useKanbanStore = create((set, get) => ({
     fetchProjectManagers: async (projectId) => {
         try {
             const res = await axios.get(`${server.KANBAN_PROJECTS}/${projectId}/managers`);
-            set({ projectManagers: res.data?.data || [] });
+            const managers = res.data?.data || [];
+            set({ projectManagers: managers });
         } catch (err) {
             console.error('Failed to fetch project managers', err);
         }
@@ -279,7 +283,8 @@ export const useKanbanStore = create((set, get) => ({
     fetchBoardMembers: async (boardId) => {
         try {
             const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/members`);
-            set({ activeBoardMembers: res.data?.data || [] });
+            const members = res.data?.data || [];
+            set({ activeBoardMembers: members });
         } catch (err) {
             console.error('Failed to fetch board members', err);
             set({ activeBoardMembers: [] });
@@ -296,6 +301,7 @@ export const useKanbanStore = create((set, get) => ({
                         ? { ...state.activeBoard, ...res.data.data }
                         : state.activeBoard
                 }));
+                get().checkAndAutoJoin('board', boardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -311,6 +317,7 @@ export const useKanbanStore = create((set, get) => ({
             const projectId = get().activeProject?.id;
             if (projectId) {
                 get().fetchBoards(projectId);
+                get().checkAndAutoJoin('project', projectId);
             }
             return true;
         } catch (err) {
@@ -352,19 +359,11 @@ export const useKanbanStore = create((set, get) => ({
     //  BOARD MEMBERSHIPS
     // ====================================================================
 
-    fetchBoardMembers: async (boardId) => {
-        try {
-            const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/members`);
-            set({ activeBoardMembers: res.data?.data || [] });
-        } catch (err) {
-            console.error('Failed to fetch board members', err);
-        }
-    },
-
     addBoardMember: async (boardId, uCode) => {
         try {
             await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, { target_u_code: uCode });
             get().fetchBoardMembers(boardId);
+            get().checkAndAutoJoin('board', boardId);
         } catch (err) {
             console.error('Failed to add board member', err);
             Swal.fire('Error', err.response?.data?.error || 'Cannot add board member', 'error');
@@ -402,6 +401,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_BOARDS}/${boardId}/lists`, { name });
             if (res.data?.data) {
                 get().fetchBoardDetails(boardId);
+                get().checkAndAutoJoin('board', boardId);
             }
             return res.data?.data;
         } catch (err) {
@@ -418,6 +418,7 @@ export const useKanbanStore = create((set, get) => ({
                 set(state => ({
                     lists: state.lists.map(l => l.id === listId ? { ...l, ...res.data.data } : l)
                 }));
+                get().checkAndAutoJoin('list', listId);
                 return res.data.data;
             }
         } catch (err) {
@@ -450,7 +451,9 @@ export const useKanbanStore = create((set, get) => ({
         try {
             const res = await axios.post(`${server.KANBAN_LISTS}/${listId}/cards`, { name, is_private: isPrivate });
             if (res.data?.data) {
+                const newCard = res.data.data;
                 get().fetchCardsForList(listId);
+                get().checkAndAutoJoin('list', listId);
             }
             return res.data?.data;
         } catch (err) {
@@ -465,6 +468,15 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.get(`${server.KANBAN_CARDS}/${cardId}`);
             if (res.data?.data) {
                 const refreshedCard = res.data.data;
+
+                // Sync fields that board view expects (assignees, label_ids)
+                if (refreshedCard.memberships) {
+                    refreshedCard.assignees = refreshedCard.memberships.map(m => m.u_code);
+                }
+                if (refreshedCard.labels) {
+                    refreshedCard.label_ids = refreshedCard.labels.map(l => l.id);
+                }
+
                 set(state => {
                     const newCards = { ...state.cards };
                     // Apply update to board's card list too to keep progress/badges in sync
@@ -509,6 +521,7 @@ export const useKanbanStore = create((set, get) => ({
                             : state.activeCardDetail
                     };
                 });
+                get().checkAndAutoJoin('card', cardId);
                 return updatedCard;
             }
         } catch (err) {
@@ -541,6 +554,7 @@ export const useKanbanStore = create((set, get) => ({
                     }
                     return { cards: newCards };
                 });
+                get().checkAndAutoJoin('card', cardId);
                 return true;
             }
         } catch (err) {
@@ -561,6 +575,7 @@ export const useKanbanStore = create((set, get) => ({
                 } else if (get().activeBoard) {
                     get().fetchBoardDetails(get().activeBoard.id); // fallback
                 }
+                get().checkAndAutoJoin('card', res.data.data.id);
                 return res.data.data;
             }
         } catch (err) {
@@ -664,6 +679,7 @@ export const useKanbanStore = create((set, get) => ({
                 }
                 return { cards: newCards };
             });
+            get().checkAndAutoJoin('card', cardId);
             return true;
         } catch (err) {
             console.error('Failed to add card label', err);
@@ -710,6 +726,7 @@ export const useKanbanStore = create((set, get) => ({
             if (res.data?.data) {
                 // Refresh card detail to get updated comments
                 get().fetchCardDetail(cardId);
+                get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -727,6 +744,7 @@ export const useKanbanStore = create((set, get) => ({
         try {
             await axios.post(`${server.KANBAN_CARDS}/${cardId}/memberships`, { target_u_code: uCode, owner_u_code: ownerUCode });
             get().fetchCardDetail(cardId);
+            get().checkAndAutoJoin('card', cardId);
             return true;
         } catch (err) {
             console.error('Failed to add card member', err);
@@ -765,6 +783,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/task-lists`, { name });
             if (res.data?.data) {
                 get().fetchCardDetail(cardId);
+                get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -791,6 +810,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_TASK_LISTS}/${taskListId}/tasks`, { name });
             if (res.data?.data) {
                 if (cardId) get().fetchCardDetail(cardId);
+                get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -832,6 +852,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/issues`, data);
             if (res.data?.data) {
                 get().fetchCardDetail(cardId);
+                get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -900,6 +921,7 @@ export const useKanbanStore = create((set, get) => ({
                 if (sourceListId && String(sourceListId) !== String(targetListId)) {
                     get().fetchCardsForList(sourceListId);
                 }
+                get().checkAndAutoJoin('card', cardId);
             }
         } catch (err) {
             console.error('Failed to reorder card', err);
@@ -1461,4 +1483,56 @@ export const useKanbanStore = create((set, get) => ({
     openBoardSettings: () => set({ isBoardSettingsOpen: true }),
     closeBoardSettings: () => set({ isBoardSettingsOpen: false }),
 
+    // ====================================================================
+    //  AUTO-MEMBERSHIP FOR ADMINS (Elevated tracking)
+    // ====================================================================
+
+    checkAndAutoJoin: async (type, targetId) => {
+        const auth = useAuthStore.getState();
+        const uCode = auth.empNo;
+        if (!uCode) return;
+
+        const role = (auth.userRole || '').toUpperCase();
+        const dept = (auth.userDepartment || '').toUpperCase();
+        const isAD = role === 'AD' || dept === 'AD';
+        const isMgr = ['MGR', 'COORD'].includes(role);
+
+        // Only for AD, MGR, and COORD roles
+        if (!isAD && !isMgr) return;
+
+        const { activeProject, projectManagers, activeBoard, activeBoardMembers, activeCardDetail } = get();
+
+        // MGR/COORD only auto-joins Public projects. AD joins everything.
+        if (isMgr && activeProject?.is_private) return;
+
+        try {
+            // Level 1: Hierarchy -> Ensure Project Membership
+            if (activeProject && !projectManagers.some(m => m.u_code === uCode)) {
+                await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/managers`, { target_u_code: uCode, role: 'editor' });
+                get().fetchProjectManagers(activeProject.id);
+            }
+
+            // Level 2: Hierarchy -> Ensure Board Membership (if doing board/list/card actions)
+            if (['board', 'list', 'card'].includes(type) && activeBoard) {
+                if (!activeBoardMembers.some(m => m.u_code === uCode)) {
+                    await axios.post(`${server.KANBAN_BOARDS}/${activeBoard.id}/members`, { target_u_code: uCode, role: 'editor' });
+                    get().fetchBoardMembers(activeBoard.id);
+                }
+            }
+
+            // Level 3: Hierarchy -> Ensure Card Membership (only for card actions)
+            if (type === 'card' && targetId) {
+                const members = activeCardDetail?.id === targetId ? (activeCardDetail.memberships || []) : [];
+                const isMember = members.some(m => (m.u_code || m) === uCode);
+                if (!isMember) {
+                    await axios.post(`${server.KANBAN_CARDS}/${targetId}/memberships`, { target_u_code: uCode, owner_u_code: uCode });
+                    // No need to re-fetch detail here immediately as it might loop, 
+                    // but we ensure they are added in DB for tracking.
+                }
+            }
+        } catch (err) {
+            console.warn(`[AutoJoin] Failed for ${type}:`, err.response?.data?.error || err.message);
+        }
+    },
 }));
+

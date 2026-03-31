@@ -1247,9 +1247,12 @@ const KanbanMain = () => {
     }, [fetchProjects]);
 
     useEffect(() => {
-        if (projectIdParam && projects.length > 0 && !activeProject) {
-            const p = projects.find(pr => String(pr.id) === String(projectIdParam));
-            if (p) setActiveProject(p);
+        if (projectIdParam && projects.length > 0) {
+            const currentId = activeProject?.id ? String(activeProject.id) : null;
+            if (currentId !== String(projectIdParam)) {
+                const p = projects.find(pr => String(pr.id) === String(projectIdParam));
+                if (p) setActiveProject(p);
+            }
         }
     }, [projectIdParam, projects, activeProject, setActiveProject]);
 
@@ -1264,7 +1267,6 @@ const KanbanMain = () => {
     }, [disconnectWebSocket]);
 
     const handleSelectProject = (project) => {
-        setActiveProject(project);
         navigate(`/eng/kanban/${project.id}`);
     };
 
@@ -1326,10 +1328,8 @@ const KanbanMain = () => {
                                 <Select
                                     value={activeProject?.id}
                                     onChange={(val) => {
-                                        const p = projects.find(pr => pr.id === val);
-                                        if (p) {
-                                            setActiveProject(p);
-                                            navigate(`/eng/kanban/${p.id}`);
+                                        if (val) {
+                                            navigate(`/eng/kanban/${val}`);
                                         }
                                     }}
                                     style={{ minWidth: 220 }}

@@ -44,7 +44,7 @@ const KanbanCard = ({ card, isOverlay }) => {
     const hasDescription = !!card.description;
     const commentCount = card.comments?.length || card.comment_count || 0;
     const attachmentCount = card.attachments?.length || card.attachment_count || 0;
-    const assignees = card.assignees || card.members || [];
+    const assignees = card.assignees || card.memberships || card.members || [];
     const hasCoverImage = !!card.cover_image;
 
     const hasProblemOrSolution = !!card.problem_detail || !!card.solution_detail || Number(card.issue_count) > 0 || (card.issues && card.issues.length > 0);
@@ -255,7 +255,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                         {/* Memo indicator */}
                         {hasMemo && (
                             <Tooltip title="Has Memo">
-                                <CiMemoPad  size={15} color={theme.colors.textTertiary} />
+                                <CiMemoPad size={15} color={theme.colors.textTertiary} />
                             </Tooltip>
                         )}
 
