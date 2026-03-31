@@ -14,6 +14,14 @@ import { useTheme } from '../../../../theme';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
 import RequestDetailsModal from './components/RequestDetailsModal';
+import { 
+    WORKFLOW_STATUS, 
+    STATUS_COLORS, 
+    FILTER_TYPES, 
+    FILTER_TYPE_LABELS,
+    isDoneStatus,
+    isDeniedStatus,
+} from '../../../../constants/workflowConstants';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -187,32 +195,20 @@ const ToolRequestContent = () => {
             if (!matchesSearch) return false;
         }
 
-        if (filterType === 'pending') {
-            return item.status === 'Pending Eng Check';
-        } else if (filterType === 'inProgress') {
-            return item.status?.startsWith('Pending') && item.status !== 'Pending Eng Check';
-        } else if (filterType === 'complete') {
-            return item.status === 'Completed & Informed' || item.status === 'Complete';
-        } else if (filterType === 'denied') {
-            return item.status?.includes('Denied');
+        if (filterType === FILTER_TYPES.PENDING) {
+            return item.status === WORKFLOW_STATUS.PENDING_ENG_CHECK;
+        } else if (filterType === FILTER_TYPES.IN_PROGRESS) {
+            return item.status?.startsWith('Pending') && item.status !== WORKFLOW_STATUS.PENDING_ENG_CHECK;
+        } else if (filterType === FILTER_TYPES.COMPLETE) {
+            return isDoneStatus(item.status) && !isDeniedStatus(item.status);
+        } else if (filterType === FILTER_TYPES.DENIED) {
+            return isDeniedStatus(item.status);
         }
 
         return true; // 'all'
     });
 
-    const STAGE_COLOR = {
-        'Pending Eng Check':   'orange',
-        'Pending Draft Man':   'blue',
-        'Pending DWG Check':   'blue',
-        'Pending Eng Review':  'purple',
-        'Pending Eng Approve': 'gold',
-        'Pending Eng Inform':  'cyan',
-        'Completed & Informed':'green',
-        'Denied':              'red',
-        'Denied by Approve':   'red',
-    };
-
-    const getStatusColor = (status) => STAGE_COLOR[status] || 'default';
+    const getStatusColor = (status) => STATUS_COLORS[status] || 'default';
 
     const columns = [
         {
@@ -378,19 +374,19 @@ const ToolRequestContent = () => {
                                                 buttonStyle="solid"
                                                 onChange={(e) => handleFilterChange(e.target.value)}
                                             >
-                                                <Radio.Button value="pending">
+                                                <Radio.Button value={FILTER_TYPES.PENDING}>
                                                     <ClockCircleOutlined /> Eng Check
                                                 </Radio.Button>
-                                                <Radio.Button value="inProgress">
+                                                <Radio.Button value={FILTER_TYPES.IN_PROGRESS}>
                                                     <SyncOutlined spin /> In Progress
                                                 </Radio.Button>
-                                                <Radio.Button value="complete">
+                                                <Radio.Button value={FILTER_TYPES.COMPLETE}>
                                                     <CheckCircleOutlined /> Complete
                                                 </Radio.Button>
-                                                <Radio.Button value="denied">
+                                                <Radio.Button value={FILTER_TYPES.DENIED}>
                                                     <StopOutlined /> Denied
                                                 </Radio.Button>
-                                                <Radio.Button value="all">
+                                                <Radio.Button value={FILTER_TYPES.ALL}>
                                                     <UnorderedListOutlined /> All
                                                 </Radio.Button>
                                             </Radio.Group>

@@ -1,25 +1,46 @@
 const { engPool } = require('../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
 const { sendEmailWithFallback } = require('../../system/emailService');
+const path = require('path');
+
+// Load email renderer from templates folder (at ENG-Backend root)
+const emailRendererPath = path.join(__dirname, '../../../templates/email/emailRenderer');
+const { renderEmail, generateSubject } = require(emailRendererPath);
+
+const {
+  WORKFLOW_STAGES,
+  WORKFLOW_STATUS,
+  STAGE_LABELS,
+  DUE_DATE_CONFIG,
+  REQUEST_TYPES,
+} = require('./constants/workflow');
+const { verifyToken, optionalAuth, checkStagePermission } = require('./middleware/toolRequestAuth');
+const { validateFileUpload, sanitizeFilename } = require('./middleware/fileUpload');
+const fs = require('fs');
+
+// ── Logger utility ───────────────────────────────────────────────────────────
+const logger = {
+  info: (msg, data = {}) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+  warn: (msg, data = {}) => console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+  error: (msg, data = {}) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+};
 
 // ── Email recipient config — อ่านจาก environment variables ──────────────────
 const splitEmails = (key) =>
   (process.env[key] || '').split(',').map(e => e.trim()).filter(Boolean);
 
 const EMAIL_CONFIG = {
-  ENG_CHECK:  splitEmails('EMAIL_MTC_ENG_CHECK'),
-  DRAFTMAN:   splitEmails('EMAIL_MTC_DRAFTMAN'),
-  DWG_CHECK:  splitEmails('EMAIL_MTC_DWG_CHECK'),
-  ENG_REVIEW: splitEmails('EMAIL_MTC_ENG_REVIEW'),
-  ENG_APPROVE:splitEmails('EMAIL_MTC_ENG_APPROVE'),
-  ENG_INFORM: splitEmails('EMAIL_MTC_ENG_INFORM'),
+  [WORKFLOW_STAGES.ENG_CHECK]: splitEmails('EMAIL_MTC_ENG_CHECK'),
+  [WORKFLOW_STAGES.DRAFT_MAN]: splitEmails('EMAIL_MTC_DRAFTMAN'),
+  [WORKFLOW_STAGES.DWG_CHECK]: splitEmails('EMAIL_MTC_DWG_CHECK'),
+  [WORKFLOW_STAGES.ENG_REVIEW]: splitEmails('EMAIL_MTC_ENG_REVIEW'),
+  [WORKFLOW_STAGES.ENG_APPROVE]: splitEmails('EMAIL_MTC_ENG_APPROVE'),
+  [WORKFLOW_STAGES.ENG_INFORM]: splitEmails('EMAIL_MTC_ENG_INFORM'),
 };
 
 // ── Due date by request type ──────────────────────────────────────────────────
-const DUE_DAYS = { 'Regist Drawing': 5, 'Draft Drawing': 7, '3D Print': 10 };
-
 function calcDueDate(typeOfRequest) {
-  const days = DUE_DAYS[typeOfRequest] || 7;
+  const days = DUE_DATE_CONFIG[typeOfRequest] || DUE_DATE_CONFIG.DEFAULT;
   let due = moment();
   let added = 0;
   while (added < days) {
@@ -30,14 +51,7 @@ function calcDueDate(typeOfRequest) {
 }
 
 // ── Stage → allowed emails (ใช้ EMAIL_CONFIG เดิม) ───────────────────────────
-const STAGE_ALLOWED = {
-  eng_check:   EMAIL_CONFIG.ENG_CHECK,
-  draft_man:   EMAIL_CONFIG.DRAFTMAN,
-  dwg_check:   EMAIL_CONFIG.DWG_CHECK,
-  eng_review:  EMAIL_CONFIG.ENG_REVIEW,
-  eng_approve: EMAIL_CONFIG.ENG_APPROVE,
-  eng_inform:  EMAIL_CONFIG.ENG_INFORM,
-};
+const STAGE_ALLOWED = EMAIL_CONFIG;
 
 /**
  * GET /api/engineer/mtc/tool-requests/permissions
@@ -49,57 +63,13 @@ const getStagePermissions = (req, res) => {
 
 // ── Workflow stage map ────────────────────────────────────────────────────────
 const STAGE_MAP = {
-  eng_check:  { stepNo: 1, approveStatus: 'Pending Draft Man',   approveStage: 'Draft Man',   denyStatus: 'Denied',             denyStage: 'Denied',   emailApprove: 'DRAFTMAN',    emailDeny: null },
-  draft_man:  { stepNo: 2, approveStatus: 'Pending DWG Check',   approveStage: 'DWG Check',                                                             emailApprove: 'DWG_CHECK' },
-  dwg_check:  { stepNo: 3, approveStatus: 'Pending Eng Review',  approveStage: 'Eng Review',  denyStatus: 'Pending Draft Man',  denyStage: 'Draft Man',  emailApprove: 'ENG_REVIEW',  emailDeny: 'DRAFTMAN' },
-  eng_review: { stepNo: 4, approveStatus: 'Pending Eng Approve', approveStage: 'Eng Approve',                                                            emailApprove: 'ENG_APPROVE' },
-  eng_approve:{ stepNo: 5, approveStatus: 'Pending Eng Inform',  approveStage: 'Eng Inform',  denyStatus: 'Denied by Approve',  denyStage: 'Denied',    emailApprove: 'ENG_INFORM',  emailDeny: null },
-  eng_inform: { stepNo: 6, approveStatus: 'Completed & Informed',approveStage: 'Completed',                                                              emailApprove: null },
+  [WORKFLOW_STAGES.ENG_CHECK]:  { stepNo: 1, approveStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN,   approveStage: 'Draft Man',   denyStatus: WORKFLOW_STATUS.DENIED,             denyStage: 'Denied',   emailApprove: WORKFLOW_STAGES.DRAFT_MAN,    emailDeny: null },
+  [WORKFLOW_STAGES.DRAFT_MAN]:  { stepNo: 2, approveStatus: WORKFLOW_STATUS.PENDING_DWG_CHECK,   approveStage: 'DWG Check',                                                             emailApprove: WORKFLOW_STAGES.DWG_CHECK },
+  [WORKFLOW_STAGES.DWG_CHECK]:  { stepNo: 3, approveStatus: WORKFLOW_STATUS.PENDING_ENG_REVIEW,  approveStage: 'Eng Review',  denyStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN,  denyStage: 'Draft Man',  emailApprove: WORKFLOW_STAGES.ENG_REVIEW,  emailDeny: WORKFLOW_STAGES.DRAFT_MAN },
+  [WORKFLOW_STAGES.ENG_REVIEW]: { stepNo: 4, approveStatus: WORKFLOW_STATUS.PENDING_ENG_APPROVE, approveStage: 'Eng Approve',                                                            emailApprove: WORKFLOW_STAGES.ENG_APPROVE },
+  [WORKFLOW_STAGES.ENG_APPROVE]:{ stepNo: 5, approveStatus: WORKFLOW_STATUS.PENDING_ENG_INFORM,  approveStage: 'Eng Inform',  denyStatus: WORKFLOW_STATUS.DENIED_BY_APPROVE,  denyStage: 'Denied',    emailApprove: WORKFLOW_STAGES.ENG_INFORM,  emailDeny: null },
+  [WORKFLOW_STAGES.ENG_INFORM]: { stepNo: 6, approveStatus: WORKFLOW_STATUS.COMPLETED_INFORMED,  approveStage: 'Completed',                                                              emailApprove: null },
 };
-
-function buildEmailHtml(stage, decision, req, extra, actionBy) {
-  const stageLabels = {
-    eng_check: 'Eng Check', draft_man: 'Draft Man', dwg_check: 'DWG Check',
-    eng_review: 'Eng Review', eng_approve: 'Eng Approve', eng_inform: 'Eng Inform',
-  };
-  const stageLabel = stageLabels[stage] || stage;
-  const isApprove = decision === 'approve' || decision === 'submit';
-  const color = isApprove ? '#4CAF50' : '#F44336';
-  const title = isApprove
-    ? `[${stageLabel} ✅] ${req.request_item} — ${req.title}`
-    : `[${stageLabel} ❌ Denied] ${req.request_item} — ${req.title}`;
-
-  let extraHtml = '';
-  if (stage === 'eng_check' && extra?.request_no)
-    extraHtml = `<p><strong>Request No. Assigned:</strong> ${extra.request_no}</p>`;
-  if (stage === 'draft_man' && extra?.dwg_files)
-    extraHtml = `<p><strong>Drawing Files:</strong> ${extra.dwg_files}</p>`;
-  if (stage === 'eng_review')
-    extraHtml = `<p><strong>Drawing No:</strong> ${extra?.drawing_no || '-'}</p><p><strong>No. of Dwg:</strong> ${extra?.no_of_dwg || '-'}</p>`;
-  if (stage === 'eng_inform' && extra?.attached_file_paths?.length > 0) {
-    const baseUrl = process.env.SERVER_URL || 'http://plbmp129:2005';
-    const links = extra.attached_file_paths.map((p, i) =>
-      `<a href="${baseUrl}${p}">${extra.attached_file_names?.[i] || p.split('/').pop()}</a>`
-    ).join('<br>');
-    extraHtml = `<p><strong>ไฟล์แนบ Drawing:</strong><br>${links}</p>`;
-  }
-
-  return `
-    <div style="border-left:5px solid ${color};padding:16px;background:#f9f9f9;margin-bottom:16px;">
-      <h2 style="color:${color};margin:0 0 8px">${title}</h2>
-    </div>
-    <p><strong>Request Item:</strong> ${req.request_item}</p>
-    <p><strong>Requester:</strong> ${req.requester}</p>
-    <p><strong>Department:</strong> ${req.department}</p>
-    <p><strong>Type:</strong> ${req.type_of_request}</p>
-    <p><strong>Title:</strong> ${req.title}</p>
-    ${extraHtml}
-    ${extra?.comment ? `<p><strong>Comment:</strong> ${extra.comment}</p>` : ''}
-    <p><strong>Action by:</strong> ${actionBy}</p>
-    <hr style="border:none;border-top:1px solid #ddd;margin:16px 0">
-    <p style="color:#888;font-size:12px">Tool Drawing Request System — ENG</p>
-  `;
-}
 
 /**
  * GET /api/engineer/mtc/tool-requests
@@ -214,17 +184,24 @@ const createToolRequest = async (req, res) => {
             });
         }
 
-        // Handle File Upload
+        // Handle File Upload with sanitized filename
         let file_path = null;
         if (req.files && req.files.attachment) {
             const file = req.files.attachment;
-            const fileName = `${Date.now()}_${file.name}`;
-            const path = require('path');
-            const uploadPath = path.join(__dirname, '../../../files/tool_requests', fileName);
+            const sanitizedFileName = sanitizeFilename(file.name, 'attachment');
+            const uploadDir = path.join(__dirname, '../../../files/tool_requests');
             
+            // Ensure directory exists
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            
+            const uploadPath = path.join(uploadDir, sanitizedFileName);
+
             // Move file to directory
             await file.mv(uploadPath);
-            file_path = `/tool_requests/${fileName}`;
+            file_path = `/tool_requests/${sanitizedFileName}`;
+            logger.info('File uploaded successfully', { originalName: file.name, savedPath: file_path });
         }
 
         // Generate request_item: ITEM-YYYYMMDD-XXX
@@ -253,18 +230,19 @@ const createToolRequest = async (req, res) => {
             requester, requester_email, type_of_request, category,
             drawing_required, type_of_drawing, title, detail,
             machine_no, machine_name, req_due_date, request_item,
-            'Pending Eng Check', 'Eng Check', file_path
+            WORKFLOW_STATUS.PENDING_ENG_CHECK, 'Eng Check', file_path
         ];
 
         try {
             const insertRes = await engPool.query(sql, params);
+            logger.info('Tool request created successfully', { id: insertRes.rows[0].id, request_item });
             res.json({ result: 'true', message: 'บันทึกคำขอเรียบร้อยแล้ว', id: insertRes.rows[0].id });
         } catch (dbErr) {
-            console.error('❌ Database Insert Error:', dbErr.message);
+            logger.error('Database Insert Error', { error: dbErr.message });
             res.status(500).json({ result: 'false', message: dbErr.message });
         }
     } catch (error) {
-        console.error('Server Error:', error);
+        logger.error('Server Error', { error: error.message });
         res.status(500).json({ result: 'false', message: 'Server Error' });
     }
 };
@@ -442,21 +420,26 @@ const submitAction = async (req, res) => {
     extra = extra || {};
 
     // จัดการไฟล์แนบ (Draft Man → dwg_files, Eng Review → review_files)
-    const path = require('path');
     const uploadDir = path.join(__dirname, '../../../files/tool_requests');
+    
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
 
     const saveFiles = async (fieldName, pathKey, nameKey) => {
         if (!req.files?.[fieldName]) return;
         const fileList = Array.isArray(req.files[fieldName]) ? req.files[fieldName] : [req.files[fieldName]];
         const savedPaths = [], savedNames = [];
         for (const file of fileList) {
-            const fileName = `${id}_${Date.now()}_${file.name}`;
-            await file.mv(path.join(uploadDir, fileName));
-            savedPaths.push(`/tool_requests/${fileName}`);
+            const sanitizedFileName = sanitizeFilename(file.name, `${id}_${fieldName}`);
+            await file.mv(path.join(uploadDir, sanitizedFileName));
+            savedPaths.push(`/tool_requests/${sanitizedFileName}`);
             savedNames.push(file.name);
         }
         extra[pathKey] = savedPaths;
         extra[nameKey] = savedNames;
+        logger.info('Files saved for workflow action', { fieldName, count: savedPaths.length });
     };
 
     await saveFiles('dwg_files',    'dwg_file_paths',    'dwg_file_names');
@@ -476,6 +459,7 @@ const submitAction = async (req, res) => {
         const isAllowed = allowedCodes.includes(userCode)
             || allowedEmails.map(e => e.toLowerCase()).includes(userEmailVal);
         if (!isAllowed) {
+            logger.warn('Permission denied', { stage, userDept, userCode });
             return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
         }
     }
@@ -488,13 +472,13 @@ const submitAction = async (req, res) => {
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
-        console.log(`🚀 Starting action submit for Request ID: ${id}, Stage: ${stage}, Decision: ${decision}`);
+        logger.info('Starting action submit', { id, stage, decision });
 
         // Get current request
         const reqRes = await client.query('SELECT * FROM tr_request WHERE id = $1 AND deleted_at IS NULL', [id]);
         const request = reqRes.rows[0];
         if (!request) {
-            console.error(`❌ Request ID ${id} not found`);
+            logger.error('Request not found', { id });
             await client.query('ROLLBACK');
             return res.status(404).json({ error: 'Request not found' });
         }
@@ -504,16 +488,16 @@ const submitAction = async (req, res) => {
         const nextStage  = isApprove ? stageConfig.approveStage  : stageConfig.denyStage;
 
         if (!nextStatus) {
-            console.error(`❌ Stage "${stage}" does not support decision "${decision}"`);
+            logger.error('Stage does not support decision', { stage, decision });
             await client.query('ROLLBACK');
             return res.status(400).json({ error: `Stage "${stage}" does not support decision "${decision}"` });
         }
 
         // Update request status + stage
-        const newReqNo = (stage === 'eng_check' && isApprove && extra?.request_no)
+        const newReqNo = (stage === WORKFLOW_STAGES.ENG_CHECK && isApprove && extra?.request_no)
             ? extra.request_no : null;
 
-        console.log(`📝 Updating tr_request: Status -> ${nextStatus}, Stage -> ${nextStage}, ReqNo -> ${newReqNo}`);
+        logger.info('Updating tr_request', { nextStatus, nextStage, newReqNo });
         await client.query(
             `UPDATE tr_request SET
                 status = $1,
@@ -525,7 +509,7 @@ const submitAction = async (req, res) => {
         );
 
         // Insert workflow record
-        console.log(`📝 Inserting tr_workflow record for step ${stageConfig.stepNo}`);
+        logger.info('Inserting tr_workflow record', { stepNo: stageConfig.stepNo });
         await client.query(
             `INSERT INTO tr_workflow (req_id, step_no, action_by, action_type, comment, status, stage_name, extra_data)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -534,7 +518,7 @@ const submitAction = async (req, res) => {
         );
 
         await client.query('COMMIT');
-        console.log(`✅ Action submitted and committed successfully`);
+        logger.info('Action submitted and committed successfully', { id, nextStatus });
 
         // Send email (fire-and-forget — don't block response)
         try {
@@ -546,16 +530,28 @@ const submitAction = async (req, res) => {
                 recipients = [request.requester_email, ...recipients];
             }
             // For eng_inform completed, notify requester
-            if (stage === 'eng_inform' && request.requester_email) {
+            if (stage === WORKFLOW_STAGES.ENG_INFORM && request.requester_email) {
                 recipients = [request.requester_email, ...recipients];
             }
 
             if (recipients.length > 0) {
-                const subject = `[Tool Request] ${isApprove ? '✅' : '❌'} ${nextStatus} — ${request.request_item}`;
-                const html = buildEmailHtml(stage, decision, request, { ...extra, comment }, action_by);
-                sendEmailWithFallback(recipients.join(','), subject, html).catch(() => {});
+                const subject = generateSubject(stage, decision, request);
+                const html = renderEmail({
+                    stage,
+                    decision,
+                    request,
+                    extra: { ...extra, comment },
+                    actionBy: action_by || 'System',
+                });
+                logger.info('Sending email notification', { recipients, subject });
+                sendEmailWithFallback(recipients.join(','), subject, html).catch((err) => {
+                    logger.error('Email sending failed', { error: err.message });
+                });
             }
-        } catch (_) { /* email failure should not affect response */ }
+        } catch (emailErr) {
+            logger.warn('Email notification failed', { error: emailErr.message });
+            // Email failure should not affect response
+        }
 
         res.json({
             success: true,
@@ -566,7 +562,7 @@ const submitAction = async (req, res) => {
         });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error submitting action:', err.message);
+        logger.error('Error submitting action', { error: err.message });
         res.status(500).json({ error: err.message });
     } finally {
         client.release();

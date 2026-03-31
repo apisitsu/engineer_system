@@ -160,17 +160,38 @@ app.use('/api/tooling-select', toolingSelect);
 app.use('/api/sds', sds);
 
 
-// Tool Request System
+// ============================================================================
+// Tool Request System (General DWG Request)
+// ============================================================================
 const toolReq = require('./api/engineer/mtc/tool_req');
 
+// Optional: Import middleware for enhanced security (uncomment to enable)
+// const { verifyToken, optionalAuth } = require('./api/engineer/mtc/middleware/toolRequestAuth');
+// const { validateFileUpload } = require('./api/engineer/mtc/middleware/fileUpload');
+
+// Public endpoints (no authentication required)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
 app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
+
+// To enable authentication and file validation, uncomment the middleware:
+// app.post('/api/engineer/mtc/tool-requests',
+//   verifyToken,
+//   validateFileUpload({ fieldName: 'attachment', required: false }),
+//   toolReq.createToolRequest
+// );
+
 app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
 app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
 app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
 app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
+
+// Note: For production deployment, enable authentication by:
+// 1. Uncomment the middleware imports above
+// 2. Add verifyToken middleware to protected endpoints
+// 3. Set JWT_SECRET in .env file
+// 4. See API_DOCUMENTATION.md for authentication details
 
 
 //--------------------System Engineer (TODO/Project Management v2)---------------------//

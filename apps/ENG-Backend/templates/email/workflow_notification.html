@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            border-left: 5px solid {{COLOR}};
+            padding: 16px;
+            background: #f9f9f9;
+            margin-bottom: 20px;
+        }
+        .header h2 {
+            color: {{COLOR}};
+            margin: 0 0 8px 0;
+            font-size: 18px;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        .info-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .info-table td:first-child {
+            font-weight: 600;
+            width: 140px;
+            color: #555;
+        }
+        .action-section {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 16px 0;
+        }
+        .comment {
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            padding: 10px;
+            margin: 12px 0;
+            font-style: italic;
+        }
+        .comment.deny {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        .footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #ddd;
+            color: #888;
+            font-size: 12px;
+            text-align: center;
+        }
+        .file-links {
+            margin: 12px 0;
+        }
+        .file-links a {
+            display: inline-block;
+            background: #1890ff;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-right: 8px;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        .file-links a:hover {
+            background: #40a9ff;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: {{COLOR}};
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header">
+        <h2>{{TITLE}}</h2>
+        <span class="status-badge">{{STATUS}}</span>
+    </div>
+
+    <!-- Request Information -->
+    <table class="info-table">
+        <tr>
+            <td><strong>Request Item:</strong></td>
+            <td>{{REQUEST_ITEM}}</td>
+        </tr>
+        <tr>
+            <td><strong>Request No:</strong></td>
+            <td>{{REQUEST_NO}}</td>
+        </tr>
+        <tr>
+            <td><strong>Requester:</strong></td>
+            <td>{{REQUESTER}}</td>
+        </tr>
+        <tr>
+            <td><strong>Department:</strong></td>
+            <td>{{DEPARTMENT}}</td>
+        </tr>
+        <tr>
+            <td><strong>Type of Request:</strong></td>
+            <td>{{TYPE_OF_REQUEST}}</td>
+        </tr>
+        <tr>
+            <td><strong>Title:</strong></td>
+            <td>{{TITLE}}</td>
+        </tr>
+        {{#DUE_DATE}}
+        <tr>
+            <td><strong>Due Date:</strong></td>
+            <td>{{DUE_DATE}}</td>
+        </tr>
+        {{/DUE_DATE}}
+    </table>
+
+    <!-- Stage-Specific Content -->
+    {{#EXTRA_CONTENT}}
+    <div class="action-section">
+        {{EXTRA_CONTENT}}
+    </div>
+    {{/EXTRA_CONTENT}}
+
+    <!-- Comment Section -->
+    {{#COMMENT}}
+    <div class="comment {{#IS_DENY}}deny{{/IS_DENY}}">
+        <strong>Comment:</strong><br>
+        {{COMMENT}}
+    </div>
+    {{/COMMENT}}
+
+    <!-- Action By -->
+    <p><strong>Action by:</strong> {{ACTION_BY}}</p>
+    <p><strong>Action Date:</strong> {{ACTION_DATE}}</p>
+
+    <!-- Next Step -->
+    {{#NEXT_STAGE}}
+    <div class="action-section">
+        <strong>Next Stage:</strong> {{NEXT_STAGE}}<br>
+        <em>This request will be forwarded to the {{NEXT_TEAM}} team for further processing.</em>
+    </div>
+    {{/NEXT_STAGE}}
+
+    <!-- Footer -->
+    <div class="footer">
+        <p><strong>General DWG Request System — MTC Engineering</strong></p>
+        <p>This is an automated notification from the ENG System.</p>
+        <p>For questions or support, contact the ENG team.</p>
+    </div>
+</body>
+</html>

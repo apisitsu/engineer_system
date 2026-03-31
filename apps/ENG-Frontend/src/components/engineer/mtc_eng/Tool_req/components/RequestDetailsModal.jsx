@@ -12,6 +12,20 @@ import { httpClient as axios } from '../../../../../utils/HttpClient';
 import moment from 'moment';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
+import { 
+    WORKFLOW_STAGES, 
+    STAGE_LABELS, 
+    WORKFLOW_STATUS, 
+    STATUS_COLORS,
+    REQUEST_TYPES,
+    CATEGORIES,
+    DRAWING_REQUIRED,
+    DRAWING_TYPES,
+    ACTION_TYPES,
+    isDoneStatus,
+    isDeniedStatus,
+    getDefaultRequestTemplate,
+} from '../../../../../constants/workflowConstants';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -19,29 +33,23 @@ const { Text, Title } = Typography;
 
 // ── Stage config ──────────────────────────────────────────────────────────────
 const STAGES = [
-  { key: 'Eng Check',   label: 'Eng Check',   stage: 'eng_check',   icon: <AuditOutlined /> },
-  { key: 'Draft Man',   label: 'Draft Man',   stage: 'draft_man',   icon: <FileTextOutlined /> },
-  { key: 'DWG Check',   label: 'DWG Check',   stage: 'dwg_check',   icon: <AuditOutlined /> },
-  { key: 'Eng Review',  label: 'Eng Review',  stage: 'eng_review',  icon: <UserOutlined /> },
-  { key: 'Eng Approve', label: 'Eng Approve', stage: 'eng_approve', icon: <CheckCircleOutlined /> },
-  { key: 'Eng Inform',  label: 'Eng Inform',  stage: 'eng_inform',  icon: <SendOutlined /> },
+  { key: 'Eng Check',   label: 'Eng Check',   stage: WORKFLOW_STAGES.ENG_CHECK,   icon: <AuditOutlined /> },
+  { key: 'Draft Man',   label: 'Draft Man',   stage: WORKFLOW_STAGES.DRAFT_MAN,   icon: <FileTextOutlined /> },
+  { key: 'DWG Check',   label: 'DWG Check',   stage: WORKFLOW_STAGES.DWG_CHECK,   icon: <AuditOutlined /> },
+  { key: 'Eng Review',  label: 'Eng Review',  stage: WORKFLOW_STAGES.ENG_REVIEW,  icon: <UserOutlined /> },
+  { key: 'Eng Approve', label: 'Eng Approve', stage: WORKFLOW_STAGES.ENG_APPROVE, icon: <CheckCircleOutlined /> },
+  { key: 'Eng Inform',  label: 'Eng Inform',  stage: WORKFLOW_STAGES.ENG_INFORM,  icon: <SendOutlined /> },
 ];
 
-const STAGE_COLOR = {
-  'Pending Eng Check':   'orange',
-  'Pending Draft Man':   'blue',
-  'Pending DWG Check':   'blue',
-  'Pending Eng Review':  'purple',
-  'Pending Eng Approve': 'gold',
-  'Pending Eng Inform':  'cyan',
-  'Completed & Informed':'green',
-  'Denied':              'red',
-  'Denied by Approve':   'red',
-};
+const STAGE_COLOR = STATUS_COLORS;
 
 const WORKFLOW_LABELS = {
-  eng_check: 'Eng Check', draft_man: 'Draft Man', dwg_check: 'DWG Check',
-  eng_review: 'Eng Review', eng_approve: 'Eng Approve', eng_inform: 'Eng Inform',
+  [WORKFLOW_STAGES.ENG_CHECK]: 'Eng Check', 
+  [WORKFLOW_STAGES.DRAFT_MAN]: 'Draft Man', 
+  [WORKFLOW_STAGES.DWG_CHECK]: 'DWG Check',
+  [WORKFLOW_STAGES.ENG_REVIEW]: 'Eng Review', 
+  [WORKFLOW_STAGES.ENG_APPROVE]: 'Eng Approve', 
+  [WORKFLOW_STAGES.ENG_INFORM]: 'Eng Inform',
 };
 
 // ── Stage Action Panel ────────────────────────────────────────────────────────
@@ -54,7 +62,8 @@ const stripFilePrefix = (p) => {
 
 const FileLinks = ({ paths, names, label }) => {
   if (!paths?.length) return null;
-  const baseUrl = 'http://localhost:2005';
+  // Use server API URL from config instead of hardcoded localhost
+  const baseUrl = server.API_URL || 'http://localhost:2005';
   return (
     <div style={{ marginBottom: 12 }}>
       <Text strong>{label}: </Text>
@@ -411,10 +420,10 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
       request_no, dwg_files, drawing_no, no_of_dwg, section,
       inform_note, cost, evidence, review_general, review_machine_part, review_gauge_type, comment,
       // แนบ review files ไปกับ eng_inform เพื่อส่งใน email
-      ...(stageConfig.stage === 'eng_inform' && (() => {
+      ...(stageConfig.stage === WORKFLOW_STAGES.ENG_INFORM && (() => {
         const wf = request.workflow || [];
-        const reviewStep = wf.findLast?.(w => w.stage_name === 'eng_review')
-          || [...wf].reverse().find(w => w.stage_name === 'eng_review');
+        const reviewStep = wf.findLast?.(w => w.stage_name === WORKFLOW_STAGES.ENG_REVIEW)
+          || [...wf].reverse().find(w => w.stage_name === WORKFLOW_STAGES.ENG_REVIEW);
         const paths = reviewStep?.extra_data?.review_file_paths || [];
         const names = reviewStep?.extra_data?.review_file_names || [];
         return paths.length > 0 ? { attached_file_paths: paths, attached_file_names: names } : {};
@@ -469,7 +478,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   if (!request) return null;
 
   const isNewRequest = !request.id;
-  const isDone = ['Completed & Informed', 'Denied', 'Denied by Approve', 'Complete'].includes(request.status);
+  const isDone = isDoneStatus(request.status);
   const currentStageConfig = STAGES.find(s => s.key === request.current_stage);
 
   // ตรวจสิทธิ์ — AD department bypass ทุก stage

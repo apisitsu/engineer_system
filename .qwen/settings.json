@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql *)",
+      "Bash(copy *)"
+    ]
+  },
+  "$version": 3
+}
