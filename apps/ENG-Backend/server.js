@@ -111,7 +111,7 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path.startsWith('/public')) {
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')) {
     return next();
   }
 

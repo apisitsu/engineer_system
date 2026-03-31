@@ -90,14 +90,14 @@ const App = () => {
                     3D PDF Generate Tracker
                   </Button>
                   {/* --- Email Notification Test --- */}
-                  <div style={{ marginTop: 16 }}>
+                  {/* <div style={{ marginTop: 16 }}>
                     <SendEmailButton
                       cn="TEST-001"
                       process="Tumble"
                       rev="A"
                       onSuccess={(params) => console.log('📧 Notification sent!', params)}
                     />
-                  </div>
+                  </div> */}
                 </div>
               </Card>
             </div>

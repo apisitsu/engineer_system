@@ -55,7 +55,11 @@ const ProtectedRoute = ({ allowedRoles }) => {
   const { isAuthenticated, userDepartment } = useAuthStore();
 
   if (!isAuthenticated) {
-    return <Navigate to="/sign_in" replace />;
+    if (window.location.pathname === '/job_check_tracker') {
+      return <Navigate to="/job_check_tracker" replace />;
+    } else {
+      return <Navigate to="/sign_in" replace />;
+    }
   }
 
   if (allowedRoles && !allowedRoles.includes(userDepartment)) {
@@ -80,7 +84,7 @@ const AppContent = () => {
   const { theme } = useTheme();  // Access current theme
   const { isAuthenticated, logout } = useAuthStore();
 
-
+  const publicPaths = ['/sign_in', '/job_check_tracker'];
 
   // --- Auto Renewal & Expiration System ---
   const { getRemainingTime, getLastActiveTime } = useIdleTimer({
@@ -97,6 +101,10 @@ const AppContent = () => {
     if (isAuthenticated) {
 
       const doCheckToken = async () => {
+        const currentPath = window.location.pathname;
+        console.log("Checking token for path:", currentPath)
+        const isPublicPath = publicPaths.includes(currentPath);
+
         const token = localStorage.getItem("token");
         if (!token) return;
 
@@ -116,7 +124,10 @@ const AppContent = () => {
             logout();
             localStorage.removeItem("token");
             localStorage.removeItem("tokenExpiresAt");
-            window.location.href = "/sign_in";
+
+            if (!isPublicPath) {
+              // window.location.href = "/sign_in";
+            }
             return;
           }
 
@@ -169,7 +180,10 @@ const AppContent = () => {
             logout();
             localStorage.removeItem("token");
             localStorage.removeItem("tokenExpiresAt");
-            window.location.href = "/sign_in";
+            const isPublicPath = publicPaths.includes(window.location.pathname);
+            if (!isPublicPath) {
+              // window.location.href = "/sign_in";
+            }
           }
         }
       };
@@ -192,8 +206,8 @@ const AppContent = () => {
         <Router>
           <Routes>
 
-            <Route path="/sign_in" element={<SignIn />} />
             <Route path="/job_check_tracker" element={<JobCheckTracker />} />
+            <Route path="/sign_in" element={<SignIn />} />
             <Route path="/" element={<Navigate replace to="/sign_in" />} />
 
             <Route element={<ProtectedRoute />}>

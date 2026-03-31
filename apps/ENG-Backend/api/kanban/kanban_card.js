@@ -4,6 +4,7 @@
  * Route prefix: /api/kanban/cards, /api/kanban/lists/:id/cards
  */
 const { engPool } = require('../../instance/eng_db');
+const fs = require('fs');
 const path = require('path');
 const {
     canAccessProject, canManageProject,
@@ -911,8 +912,10 @@ const DeleteAttachment = async (req, res) => {
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
     await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
-    const fullPath = path.join(__dirname, '../../', att.file_path);
-    if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+    if (att.attachment_type === 'file') {
+        const fullPath = path.join(__dirname, '../../', att.file_path);
+        if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+    }
     res.json({ message: 'Attachment deleted' });
 };
 

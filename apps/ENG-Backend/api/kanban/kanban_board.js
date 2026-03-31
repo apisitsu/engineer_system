@@ -99,7 +99,8 @@ const CreateBoard = async (req, res) => {
         const defaultLists = [
             { name: 'To Do', type: 'active', pos: 65536 },
             { name: 'In Progress', type: 'active', pos: 131072 },
-            { name: 'Done', type: 'closed', pos: 196608 },
+            { name: 'Check', type: 'active', pos: 196608 },
+            { name: 'Done', type: 'closed', pos: 262144 },
             { name: null, type: 'archive', pos: null },
             { name: null, type: 'trash', pos: null },
         ];
