@@ -12,19 +12,19 @@ import { httpClient as axios } from '../../../../../utils/HttpClient';
 import moment from 'moment';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
-import { 
-    WORKFLOW_STAGES, 
-    STAGE_LABELS, 
-    WORKFLOW_STATUS, 
-    STATUS_COLORS,
-    REQUEST_TYPES,
-    CATEGORIES,
-    DRAWING_REQUIRED,
-    DRAWING_TYPES,
-    ACTION_TYPES,
-    isDoneStatus,
-    isDeniedStatus,
-    getDefaultRequestTemplate,
+import {
+  WORKFLOW_STAGES,
+  STAGE_LABELS,
+  WORKFLOW_STATUS,
+  STATUS_COLORS,
+  REQUEST_TYPES,
+  CATEGORIES,
+  DRAWING_REQUIRED,
+  DRAWING_TYPES,
+  ACTION_TYPES,
+  isDoneStatus,
+  isDeniedStatus,
+  getDefaultRequestTemplate,
 } from '../../../../../constants/workflowConstants';
 
 const { Option } = Select;
@@ -33,22 +33,22 @@ const { Text, Title } = Typography;
 
 // ── Stage config ──────────────────────────────────────────────────────────────
 const STAGES = [
-  { key: 'Eng Check',   label: 'Eng Check',   stage: WORKFLOW_STAGES.ENG_CHECK,   icon: <AuditOutlined /> },
-  { key: 'Draft Man',   label: 'Draft Man',   stage: WORKFLOW_STAGES.DRAFT_MAN,   icon: <FileTextOutlined /> },
-  { key: 'DWG Check',   label: 'DWG Check',   stage: WORKFLOW_STAGES.DWG_CHECK,   icon: <AuditOutlined /> },
-  { key: 'Eng Review',  label: 'Eng Review',  stage: WORKFLOW_STAGES.ENG_REVIEW,  icon: <UserOutlined /> },
+  { key: 'Eng Check', label: 'Eng Check', stage: WORKFLOW_STAGES.ENG_CHECK, icon: <AuditOutlined /> },
+  { key: 'Draft Man', label: 'Draft Man', stage: WORKFLOW_STAGES.DRAFT_MAN, icon: <FileTextOutlined /> },
+  { key: 'DWG Check', label: 'DWG Check', stage: WORKFLOW_STAGES.DWG_CHECK, icon: <AuditOutlined /> },
+  { key: 'Eng Review', label: 'Eng Review', stage: WORKFLOW_STAGES.ENG_REVIEW, icon: <UserOutlined /> },
   { key: 'Eng Approve', label: 'Eng Approve', stage: WORKFLOW_STAGES.ENG_APPROVE, icon: <CheckCircleOutlined /> },
-  { key: 'Eng Inform',  label: 'Eng Inform',  stage: WORKFLOW_STAGES.ENG_INFORM,  icon: <SendOutlined /> },
+  { key: 'Eng Inform', label: 'Eng Inform', stage: WORKFLOW_STAGES.ENG_INFORM, icon: <SendOutlined /> },
 ];
 
 const STAGE_COLOR = STATUS_COLORS;
 
 const WORKFLOW_LABELS = {
-  [WORKFLOW_STAGES.ENG_CHECK]: 'Eng Check', 
-  [WORKFLOW_STAGES.DRAFT_MAN]: 'Draft Man', 
+  [WORKFLOW_STAGES.ENG_CHECK]: 'Eng Check',
+  [WORKFLOW_STAGES.DRAFT_MAN]: 'Draft Man',
   [WORKFLOW_STAGES.DWG_CHECK]: 'DWG Check',
-  [WORKFLOW_STAGES.ENG_REVIEW]: 'Eng Review', 
-  [WORKFLOW_STAGES.ENG_APPROVE]: 'Eng Approve', 
+  [WORKFLOW_STAGES.ENG_REVIEW]: 'Eng Review',
+  [WORKFLOW_STAGES.ENG_APPROVE]: 'Eng Approve',
   [WORKFLOW_STAGES.ENG_INFORM]: 'Eng Inform',
 };
 
@@ -69,7 +69,7 @@ const FileLinks = ({ paths, names, label }) => {
       <Text strong>{label}: </Text>
       <Space wrap>
         {paths.map((p, i) => (
-          <a key={i} href={`${baseUrl}${p}`} target="_blank" rel="noreferrer">
+          <a key={i} href={`${server.API_URL}${p}`} target="_blank" rel="noreferrer">
             {names?.[i] || stripFilePrefix(p)}
           </a>
         ))}
@@ -90,27 +90,27 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
   };
 
   // ไฟล์จาก Draft Man (สำหรับ DWG Check, Eng Review)
-  const draftManStep    = findLastStep('draft_man');
-  const draftManFiles      = draftManStep?.extra_data?.dwg_file_paths || [];
-  const draftManFileNames  = draftManStep?.extra_data?.dwg_file_names || [];
+  const draftManStep = findLastStep('draft_man');
+  const draftManFiles = draftManStep?.extra_data?.dwg_file_paths || [];
+  const draftManFileNames = draftManStep?.extra_data?.dwg_file_names || [];
 
   // ไฟล์จาก Eng Review (สำหรับ Eng Approve)
-  const engReviewStep      = findLastStep('eng_review');
-  const reviewFiles        = engReviewStep?.extra_data?.review_file_paths || [];
-  const reviewFileNames    = engReviewStep?.extra_data?.review_file_names || [];
+  const engReviewStep = findLastStep('eng_review');
+  const reviewFiles = engReviewStep?.extra_data?.review_file_paths || [];
+  const reviewFileNames = engReviewStep?.extra_data?.review_file_names || [];
 
   const handleDecisionSubmit = async () => {
     try {
       const vals = await form.validateFields();
       onSubmit({ decision: vals.decision, ...vals });
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const handleSubmit = async () => {
     try {
       const vals = await form.validateFields();
       onSubmit({ decision: 'submit', ...vals });
-    } catch (_) {}
+    } catch (_) { }
   };
 
   if (!stage) return null;
@@ -358,7 +358,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
       fetchWCCodes();
       axios.get(server.MTC_TOOL_REQUEST_PERMISSIONS)
         .then(({ data }) => setPermissions(data.data || {}))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [visible]);
 
@@ -389,7 +389,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
     try {
       const values = await form.validateFields();
       onSave(values);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const handleCancel = () => {
@@ -431,10 +431,10 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
     };
 
     // รวมไฟล์จากทุก stage ที่มี upload
-    const draftFiles  = dwg_file?.filter(f => f.originFileObj) || [];
+    const draftFiles = dwg_file?.filter(f => f.originFileObj) || [];
     const reviewFiles = review_file?.filter(f => f.originFileObj) || [];
-    const allFiles    = [...draftFiles, ...reviewFiles];
-    const fileKey     = reviewFiles.length > 0 ? 'review_files' : 'dwg_files';
+    const allFiles = [...draftFiles, ...reviewFiles];
+    const fileKey = reviewFiles.length > 0 ? 'review_files' : 'dwg_files';
     const useFormData = allFiles.length > 0;
 
     setActionLoading(true);
@@ -534,264 +534,264 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
     >
       <Form form={form} layout="vertical" initialValues={request}
         style={{ display: localIsEditing || isNewRequest ? 'block' : 'none' }}>
-          <Divider orientation="left">Requester Information</Divider>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Requester" name="requester" rules={[{ required: true }]}>
-                <Input readOnly />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Email" name="requester_email">
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="Department" name="department" rules={[{ required: true }]}>
-                <Input readOnly />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Work Center" name="work_center" rules={[{ required: true }]}>
-                <Select 
-                  placeholder="Select Work Center" 
-                  showSearch 
-                  onChange={onWCChange}
-                  loading={wcLoading}
-                >
-                  {wcCodes.map(wc => (
-                    <Option key={wc.code} value={wc.code}>{wc.description}</Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Work Center Name" name="work_center_name">
-                <Input readOnly placeholder="Auto-filled" />
-              </Form.Item>
-            </Col>
-          </Row>
+        <Divider orientation="left">Requester Information</Divider>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Requester" name="requester" rules={[{ required: true }]}>
+              <Input readOnly />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Email" name="requester_email">
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item label="Department" name="department" rules={[{ required: true }]}>
+              <Input readOnly />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item label="Work Center" name="work_center" rules={[{ required: true }]}>
+              <Select
+                placeholder="Select Work Center"
+                showSearch
+                onChange={onWCChange}
+                loading={wcLoading}
+              >
+                {wcCodes.map(wc => (
+                  <Option key={wc.code} value={wc.code}>{wc.description}</Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item label="Work Center Name" name="work_center_name">
+              <Input readOnly placeholder="Auto-filled" />
+            </Form.Item>
+          </Col>
+        </Row>
 
-          <Divider orientation="left">Request Details</Divider>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Type of Request" name="type_of_request" rules={[{ required: true }]}>
-                <Select>
-                  <Option value="Regist Drawing">Regist Drawing</Option>
-                  <Option value="Draft Drawing">Draft Drawing</Option>
-                  <Option value="3D Print">3D Print</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Category" name="category" rules={[{ required: true }]}>
-                <Select>
-                  <Option value="Machine part">Machine part</Option>
-                  <Option value="Gauge">Gauge</Option>
-                  <Option value="Other">Other</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Drawing Required" name="drawing_required">
-                <Select>
-                  <Option value="With Drawing">With Drawing</Option>
-                  <Option value="Without Drawing">Without Drawing</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Type of Drawing" name="type_of_drawing">
-                <Select>
-                  <Option value="Copy Drawing">Copy Drawing</Option>
-                  <Option value="Remake Drawing">Remake Drawing</Option>
-                  <Option value="New Design">New Design</Option>
-                  <Option value="Modify Drawing">Modify Drawing</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="Title" name="title" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="Detail" name="detail" rules={[{ required: true }]}>
-            <TextArea rows={4} />
-          </Form.Item>
+        <Divider orientation="left">Request Details</Divider>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Type of Request" name="type_of_request" rules={[{ required: true }]}>
+              <Select>
+                <Option value="Regist Drawing">Regist Drawing</Option>
+                <Option value="Draft Drawing">Draft Drawing</Option>
+                <Option value="3D Print">3D Print</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Category" name="category" rules={[{ required: true }]}>
+              <Select>
+                <Option value="Machine part">Machine part</Option>
+                <Option value="Gauge">Gauge</Option>
+                <Option value="Other">Other</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Drawing Required" name="drawing_required">
+              <Select>
+                <Option value="With Drawing">With Drawing</Option>
+                <Option value="Without Drawing">Without Drawing</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Type of Drawing" name="type_of_drawing">
+              <Select>
+                <Option value="Copy Drawing">Copy Drawing</Option>
+                <Option value="Remake Drawing">Remake Drawing</Option>
+                <Option value="New Design">New Design</Option>
+                <Option value="Modify Drawing">Modify Drawing</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item label="Title" name="title" rules={[{ required: true }]}>
+          <Input />
+        </Form.Item>
+        <Form.Item label="Detail" name="detail" rules={[{ required: true }]}>
+          <TextArea rows={4} />
+        </Form.Item>
 
-          <Divider orientation="left">Attachments & Machines</Divider>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Attach File (Image / PDF)" name="attachment" valuePropName="fileList" getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}>
-                <Upload
-                  beforeUpload={() => false}
-                  maxCount={1}
-                >
-                  <Button icon={<UploadOutlined />}>Click to Upload</Button>
-                </Upload>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Machine No." name="machine_no"><Input /></Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={24}>
-              <Form.Item label="Machine Name" name="machine_name"><Input /></Form.Item>
-            </Col>
-          </Row>
-        </Form>
-        {/* ── View Mode ──────────────────────────────────────────────────────── */}
-        <div style={{ display: localIsEditing || isNewRequest ? 'none' : 'block' }}>
-          {/* Progress Steps */}
-          <Steps
-            size="small"
-            current={isDone && request.status?.includes('Denied') ? currentStepIdx : (isDone ? STAGES.length : currentStepIdx)}
-            status={stepStatus}
-            items={STAGES.map(s => ({ title: s.label, icon: s.icon }))}
-            style={{ marginBottom: 20 }}
-          />
+        <Divider orientation="left">Attachments & Machines</Divider>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Attach File (Image / PDF)" name="attachment" valuePropName="fileList" getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}>
+              <Upload
+                beforeUpload={() => false}
+                maxCount={1}
+              >
+                <Button icon={<UploadOutlined />}>Click to Upload</Button>
+              </Upload>
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Machine No." name="machine_no"><Input /></Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={24}>
+            <Form.Item label="Machine Name" name="machine_name"><Input /></Form.Item>
+          </Col>
+        </Row>
+      </Form>
+      {/* ── View Mode ──────────────────────────────────────────────────────── */}
+      <div style={{ display: localIsEditing || isNewRequest ? 'none' : 'block' }}>
+        {/* Progress Steps */}
+        <Steps
+          size="small"
+          current={isDone && request.status?.includes('Denied') ? currentStepIdx : (isDone ? STAGES.length : currentStepIdx)}
+          status={stepStatus}
+          items={STAGES.map(s => ({ title: s.label, icon: s.icon }))}
+          style={{ marginBottom: 20 }}
+        />
 
-          {/* Request Info */}
-          <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="Request Item">
-              <Text strong>{request.request_item}</Text>
+        {/* Request Info */}
+        <Descriptions bordered column={2} size="small">
+          <Descriptions.Item label="Request Item">
+            <Text strong>{request.request_item}</Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Request No.">
+            {request.req_no !== request.request_item ? <Text strong style={{ color: '#1890ff' }}>{request.req_no}</Text> : '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Requester">{request.requester}</Descriptions.Item>
+          <Descriptions.Item label="Department">{request.department}</Descriptions.Item>
+          <Descriptions.Item label="Work Center">{request.work_center} {request.work_center_name ? `(${request.work_center_name})` : ''}</Descriptions.Item>
+          <Descriptions.Item label="Due Date">
+            <Text type={moment(request.req_due_date).isBefore(moment()) && !isDone ? 'danger' : undefined}>
+              {request.req_due_date ? moment(request.req_due_date).format('DD/MM/YYYY') : '-'}
+            </Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Type">{request.type_of_request}</Descriptions.Item>
+          <Descriptions.Item label="Category">{request.category}</Descriptions.Item>
+          <Descriptions.Item label="Drawing Required">{request.drawing_required || '-'}</Descriptions.Item>
+          <Descriptions.Item label="Type of Drawing">{request.type_of_drawing || '-'}</Descriptions.Item>
+          <Descriptions.Item label="Machine">{request.machine_no ? `${request.machine_no} ${request.machine_name || ''}` : '-'}</Descriptions.Item>
+          <Descriptions.Item label="Created">{moment(request.created_at).format('DD/MM/YYYY HH:mm')}</Descriptions.Item>
+          <Descriptions.Item label="Title" span={2}><Text strong>{request.title}</Text></Descriptions.Item>
+          <Descriptions.Item label="Detail" span={2}>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{request.detail}</div>
+          </Descriptions.Item>
+          {request.file_path && (
+            <Descriptions.Item label="ไฟล์แนบ (Requestor)" span={2}>
+              <a href={`${server.API_URL}${request.file_path}`} target="_blank" rel="noreferrer">
+                {request.file_path.split('/').pop()}
+              </a>
             </Descriptions.Item>
-            <Descriptions.Item label="Request No.">
-              {request.req_no !== request.request_item ? <Text strong style={{ color: '#1890ff' }}>{request.req_no}</Text> : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Requester">{request.requester}</Descriptions.Item>
-            <Descriptions.Item label="Department">{request.department}</Descriptions.Item>
-            <Descriptions.Item label="Work Center">{request.work_center} {request.work_center_name ? `(${request.work_center_name})` : ''}</Descriptions.Item>
-            <Descriptions.Item label="Due Date">
-              <Text type={moment(request.req_due_date).isBefore(moment()) && !isDone ? 'danger' : undefined}>
-                {request.req_due_date ? moment(request.req_due_date).format('DD/MM/YYYY') : '-'}
-              </Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Type">{request.type_of_request}</Descriptions.Item>
-            <Descriptions.Item label="Category">{request.category}</Descriptions.Item>
-            <Descriptions.Item label="Drawing Required">{request.drawing_required || '-'}</Descriptions.Item>
-            <Descriptions.Item label="Type of Drawing">{request.type_of_drawing || '-'}</Descriptions.Item>
-            <Descriptions.Item label="Machine">{request.machine_no ? `${request.machine_no} ${request.machine_name || ''}` : '-'}</Descriptions.Item>
-            <Descriptions.Item label="Created">{moment(request.created_at).format('DD/MM/YYYY HH:mm')}</Descriptions.Item>
-            <Descriptions.Item label="Title" span={2}><Text strong>{request.title}</Text></Descriptions.Item>
-            <Descriptions.Item label="Detail" span={2}>
-              <div style={{ whiteSpace: 'pre-wrap' }}>{request.detail}</div>
-            </Descriptions.Item>
-            {request.file_path && (
-              <Descriptions.Item label="ไฟล์แนบ (Requestor)" span={2}>
-                <a href={`http://localhost:2005${request.file_path}`} target="_blank" rel="noreferrer">
-                  {request.file_path.split('/').pop()}
-                </a>
-              </Descriptions.Item>
-            )}
-          </Descriptions>
-
-          {/* Workflow History */}
-          {workflow.length > 0 && (
-            <>
-              <Divider orientation="left">Workflow History</Divider>
-              <Timeline
-                items={workflow.map(w => {
-                  const isApprove = w.action_type === 'approve' || w.action_type === 'submit';
-                  const extra = w.extra_data || {};
-                  return {
-                    color: isApprove ? 'green' : w.action_type === 'deny' ? 'red' : 'blue',
-                    dot: isApprove ? <CheckCircleOutlined style={{ color: 'green' }} /> : undefined,
-                    children: (
-                      <div>
-                        <Space wrap>
-                          <Text strong>{WORKFLOW_LABELS[w.stage_name] || w.stage_name}</Text>
-                          <Tag color={isApprove ? 'green' : 'red'}>{w.action_type?.toUpperCase()}</Tag>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {moment(w.action_date || w.created_at).format('DD/MM/YYYY HH:mm')}
-                          </Text>
-                          <Text type="secondary">by {w.action_by}</Text>
-                        </Space>
-                        {w.comment && <div><Text type="secondary">Comment: {w.comment}</Text></div>}
-                        {extra.request_no && <div><Text type="secondary">Request No: {extra.request_no}</Text></div>}
-                        {extra.drawing_no && <div><Text type="secondary">Drawing No: {extra.drawing_no}</Text></div>}
-                        {extra.dwg_files && <div><Text type="secondary">Files: {extra.dwg_files}</Text></div>}
-                        {extra.dwg_file_paths?.length > 0 && (
-                          <div>
-                            <Text type="secondary">ไฟล์แนบ: </Text>
-                            <Space wrap>
-                              {extra.dwg_file_paths.map((p, i) => (
-                                <a key={i} href={`http://localhost:2005${p}`} target="_blank" rel="noreferrer">
-                                  {extra.dwg_file_names?.[i] || stripFilePrefix(p)}
-                                </a>
-                              ))}
-                            </Space>
-                          </div>
-                        )}
-                        {extra.review_file_paths?.length > 0 && (
-                          <div>
-                            <Text type="secondary">ไฟล์ Review: </Text>
-                            <Space wrap>
-                              {extra.review_file_paths.map((p, i) => (
-                                <a key={i} href={`http://localhost:2005${p}`} target="_blank" rel="noreferrer">
-                                  {extra.review_file_names?.[i] || stripFilePrefix(p)}
-                                </a>
-                              ))}
-                            </Space>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  };
-                })}
-              />
-            </>
           )}
+        </Descriptions>
 
-          {/* Action Panel for current stage */}
-          {!isDone && currentStageConfig && (
-            <>
-              <Divider orientation="left">
-                <Space>
-                  <Text strong>Action: {currentStageConfig.label}</Text>
-                  <Tag color="blue">Pending</Tag>
-                </Space>
-              </Divider>
-              {canAct ? (
-                <>
-                  <Alert
-                    type="info"
-                    showIcon
-                    message={`This request is waiting for ${currentStageConfig.label} action.`}
-                    style={{ marginBottom: 16 }}
-                  />
-                  <StageActionPanel
-                    stage={request.current_stage}
-                    request={request}
-                    workflow={workflow}
-                    onSubmit={handleAction}
-                    loading={actionLoading}
-                  />
-                </>
-              ) : (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={`คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${currentStageConfig.label}`}
-                  description={`กรุณาติดต่อผู้รับผิดชอบในขั้นตอนนี้`}
-                />
-              )}
-            </>
-          )}
-
-          {isDone && (
-            <Alert
-              type={request.status?.includes('Denied') ? 'error' : 'success'}
-              showIcon
-              message={request.status}
-              style={{ marginTop: 16 }}
+        {/* Workflow History */}
+        {workflow.length > 0 && (
+          <>
+            <Divider orientation="left">Workflow History</Divider>
+            <Timeline
+              items={workflow.map(w => {
+                const isApprove = w.action_type === 'approve' || w.action_type === 'submit';
+                const extra = w.extra_data || {};
+                return {
+                  color: isApprove ? 'green' : w.action_type === 'deny' ? 'red' : 'blue',
+                  dot: isApprove ? <CheckCircleOutlined style={{ color: 'green' }} /> : undefined,
+                  children: (
+                    <div>
+                      <Space wrap>
+                        <Text strong>{WORKFLOW_LABELS[w.stage_name] || w.stage_name}</Text>
+                        <Tag color={isApprove ? 'green' : 'red'}>{w.action_type?.toUpperCase()}</Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {moment(w.action_date || w.created_at).format('DD/MM/YYYY HH:mm')}
+                        </Text>
+                        <Text type="secondary">by {w.action_by}</Text>
+                      </Space>
+                      {w.comment && <div><Text type="secondary">Comment: {w.comment}</Text></div>}
+                      {extra.request_no && <div><Text type="secondary">Request No: {extra.request_no}</Text></div>}
+                      {extra.drawing_no && <div><Text type="secondary">Drawing No: {extra.drawing_no}</Text></div>}
+                      {extra.dwg_files && <div><Text type="secondary">Files: {extra.dwg_files}</Text></div>}
+                      {extra.dwg_file_paths?.length > 0 && (
+                        <div>
+                          <Text type="secondary">ไฟล์แนบ: </Text>
+                          <Space wrap>
+                            {extra.dwg_file_paths.map((p, i) => (
+                              <a key={i} href={`${server.API_URL}${p}`} target="_blank" rel="noreferrer">
+                                {extra.dwg_file_names?.[i] || stripFilePrefix(p)}
+                              </a>
+                            ))}
+                          </Space>
+                        </div>
+                      )}
+                      {extra.review_file_paths?.length > 0 && (
+                        <div>
+                          <Text type="secondary">ไฟล์ Review: </Text>
+                          <Space wrap>
+                            {extra.review_file_paths.map((p, i) => (
+                              <a key={i} href={`${server.API_URL}${p}`} target="_blank" rel="noreferrer">
+                                {extra.review_file_names?.[i] || stripFilePrefix(p)}
+                              </a>
+                            ))}
+                          </Space>
+                        </div>
+                      )}
+                    </div>
+                  )
+                };
+              })}
             />
-          )}
-        </div>
+          </>
+        )}
+
+        {/* Action Panel for current stage */}
+        {!isDone && currentStageConfig && (
+          <>
+            <Divider orientation="left">
+              <Space>
+                <Text strong>Action: {currentStageConfig.label}</Text>
+                <Tag color="blue">Pending</Tag>
+              </Space>
+            </Divider>
+            {canAct ? (
+              <>
+                <Alert
+                  type="info"
+                  showIcon
+                  message={`This request is waiting for ${currentStageConfig.label} action.`}
+                  style={{ marginBottom: 16 }}
+                />
+                <StageActionPanel
+                  stage={request.current_stage}
+                  request={request}
+                  workflow={workflow}
+                  onSubmit={handleAction}
+                  loading={actionLoading}
+                />
+              </>
+            ) : (
+              <Alert
+                type="warning"
+                showIcon
+                message={`คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${currentStageConfig.label}`}
+                description={`กรุณาติดต่อผู้รับผิดชอบในขั้นตอนนี้`}
+              />
+            )}
+          </>
+        )}
+
+        {isDone && (
+          <Alert
+            type={request.status?.includes('Denied') ? 'error' : 'success'}
+            showIcon
+            message={request.status}
+            style={{ marginTop: 16 }}
+          />
+        )}
+      </div>
     </Modal>
   );
 };
