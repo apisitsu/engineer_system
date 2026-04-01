@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(psql *)",
-      "Bash(copy *)"
+      "Bash(copy *)",
+      "Read(C:\\Users\\lble485\\Engineering_system/**)",
+      "Bash(robocopy *)",
+      "Bash(dir *)",
+      "Bash(powershell *)",
+      "Bash(del *)",
+      "Bash(netstat *)",
+      "Bash(findstr *)",
+      "Bash(netsh *)",
+      "Bash(ipconfig)"
     ]
   },
   "$version": 3

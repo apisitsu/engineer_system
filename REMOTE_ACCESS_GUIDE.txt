@@ -1,0 +1,61 @@
+# การเข้าใช้งาน Eng_Sys จากเครื่องอื่น
+# ================================================================
+
+## IP Address ของเครื่องนี้
+IPv4: 10.121.34.176
+
+## สถานะ Service ปัจจุบัน
+| Service  | Port | Status          | เข้าได้หรือไม่ |
+|----------|------|-----------------|----------------|
+| Backend  | 2005 | ✅ Running      | ได้            |
+| Frontend | 3000 | ❌ Not running  | ไม่ได้         |
+
+## วิธีทำให้เข้าจากเครื่องอื่นได้
+
+### 1. เปิด Firewall Port (ต้องทำครั้งเดียว)
+เปิด PowerShell หรือ Command Prompt แบบ Administrator:
+
+```powershell
+# เปิด port 3000 สำหรับ Frontend
+netsh advfirewall firewall add rule name="Eng_Sys Frontend" dir=in action=allow protocol=TCP localport=3000
+
+# เปิด port 2005 สำหรับ Backend (ถ้ายังไม่มี)
+netsh advfirewall firewall add rule name="Eng_Sys Backend" dir=in action=allow protocol=TCP localport=2005
+```
+
+### 2. รัน Frontend โดย bind ที่ 0.0.0.0
+
+**วิธีที่ 1:** ใช้ไฟล์ start_for_remote.bat (แนะนำ)
+```
+double-click: start_for_remote.bat
+```
+
+**วิธีที่ 2:** รันด้วยคำสั่ง
+```bash
+# Windows PowerShell
+$env:HOST="0.0.0.0"; $env:PORT="3000"; npm run dev:frontend
+
+# Windows CMD
+set HOST=0.0.0.0&& set PORT=3000&& npm run dev:frontend
+```
+
+### 3. URL สำหรับเข้าจากเครื่องอื่น
+
+หลังจาก Frontend เริ่มทำงานแล้ว ใช้ URL เหล่านี้:
+
+```
+Frontend:  http://10.121.34.176:3000
+Backend:   http://10.121.34.176:2005
+```
+
+## หมายเหตุ
+- เครื่องที่เข้าต้องอยู่ในวง LAN เดียวกัน (10.121.x.x)
+- ถ้าเข้าไม่ได้ ตรวจสอบ Firewall และ Network Profile
+- Backend รันอยู่แล้วที่ port 2005
+
+## ตรวจสอบว่า Server รันหรือไม่
+```bash
+# ตรวจสอบ port ที่ listening
+netstat -ano | findstr ":3000"
+netstat -ano | findstr ":2005"
+```
