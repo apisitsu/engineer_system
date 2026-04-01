@@ -11,16 +11,21 @@ import ScrollbarStyle from '../../common/scrollbar';
 
 const { Content } = Layout;
 
-const ToolingInspect = () => {
+const HomeMTCEng = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
-  const [dataSource, setDataSource] = useState([]);
+  const [toolingData, setToolingData] = useState([]);
+  const [dwgData, setDwgData] = useState([]);
 
-  const fetchECRData = async () => {
+  const fetchMTCData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${server.ECR_REQUIRE_GETLIST}`);
-      setDataSource(response.data.data);
+      const [toolingRes, dwgRes] = await Promise.all([
+        axios.get(`${server.TOOLING_INSPECT_GETLIST}`),
+        axios.get(`${server.TOOLING_DWG_REQUEST_GETLIST}`)
+      ]);
+      setToolingData(toolingRes.data.data || []);
+      setDwgData(dwgRes.data.data || []);
     } catch (error) {
       console.error("Fetch Error:", error);
     } finally {
@@ -29,33 +34,38 @@ const ToolingInspect = () => {
   };
 
   const dashboardStats = useMemo(() => {
-    const totalJobs = dataSource.length;
-
-    const onTimeCount = dataSource.filter(item => {
+    // Tooling Inspection Stats
+    const totalToolingJobs = toolingData.length;
+    const toolingPending = toolingData.filter(item => !item.issue_date).length;
+    const toolingOnTime = toolingData.filter(item => {
       if (!item.due_date) return false;
-      return moment().isSameOrBefore(moment(item.due_date), 'day') && item.process_status?.toLowerCase() !== 'pending';
+      return moment().isSameOrBefore(moment(item.due_date), 'day');
     }).length;
+    const toolingDelay = totalToolingJobs - toolingOnTime - toolingPending;
 
-    const delayCount = dataSource.filter(item => {
-      if (!item.due_date) return false;
-      return moment().isAfter(moment(item.due_date), 'day') && item.process_status?.toLowerCase() !== 'pending';
-    }).length;
-
-    const pendingCount = dataSource.filter(item => item.process_status?.toLowerCase() === 'pending').length;
+    // DWG Request Stats
+    const totalDwgJobs = dwgData.length;
+    const dwgPending = dwgData.filter(item => item.status?.toLowerCase() === 'pending').length;
+    const dwgComplete = dwgData.filter(item => item.status?.toLowerCase() === 'complete').length;
+    const dwgInProgress = totalDwgJobs - dwgPending - dwgComplete;
 
     return {
-      totalJobs,
-      onTimeCount,
-      delayCount,
-      pendingCount,
-      onTimePercent: totalJobs > 0 ? Number(((onTimeCount / totalJobs) * 100).toFixed(1)) : 0,
-      delayPercent: totalJobs > 0 ? Number(((delayCount / totalJobs) * 100).toFixed(1)) : 0,
-      pendingPercent: totalJobs > 0 ? Number(((pendingCount / totalJobs) * 100).toFixed(1)) : 0,
+      totalToolingJobs,
+      toolingPending,
+      toolingOnTime,
+      toolingDelay,
+      totalDwgJobs,
+      dwgPending,
+      dwgComplete,
+      dwgInProgress,
+      toolingOnTimePercent: totalToolingJobs > 0 ? Number(((toolingOnTime / totalToolingJobs) * 100).toFixed(1)) : 0,
+      toolingPendingPercent: totalToolingJobs > 0 ? Number(((toolingPending / totalToolingJobs) * 100).toFixed(1)) : 0,
+      toolingDelayPercent: totalToolingJobs > 0 ? Number(((toolingDelay / totalToolingJobs) * 100).toFixed(1)) : 0,
     };
-  }, [dataSource]);
+  }, [toolingData, dwgData]);
 
   useEffect(() => {
-    fetchECRData();
+    fetchMTCData();
   }, []);
 
   return (
@@ -70,31 +80,42 @@ const ToolingInspect = () => {
             padding: '15px'
           }}>
             <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
+              {/* Tooling Inspection Report */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
                   <h2><AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
                     <a href="/eng/mtc_eng/tooling" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
                   </h2>
                 </Divider>
-                {/* ส่วนที่ 1: Row ของ Stats Cards (Total Jobs, On Time, etc.) */}
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
                   <Col span={16}>
                     <Row padding={8} gutter={[16, 16]}>
+                      <Col span={8}>
+                        <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalToolingJobs}</h2></Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.toolingOnTime}</h2></Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error }}>{dashboardStats.toolingDelay}</h2></Card>
+                      </Col>
+                    </Row>
+                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
                       <Col span={12}>
-                        <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalJobs}</h2></Card>
-                        <Card size="small" title="Delay" style={{ marginTop: 10 }}><h2 style={{ color: theme.colors.error }}>{dashboardStats.delayCount}</h2></Card>
+                        <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.toolingPending}</h2></Card>
                       </Col>
                       <Col span={12}>
-                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.onTimeCount}</h2></Card>
-                        <Card size="small" title="Pending" style={{ marginTop: 10 }}><h2 style={{ color: theme.colors.warning }}>{dashboardStats.pendingCount}</h2></Card>
+                        <Card size="small" title="Performance">
+                          <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                        </Card>
                       </Col>
                     </Row>
                   </Col>
                   <Col span={8}>
-                    <Card size="small" title="Performance Overview">
-                      On Time <Progress percent={dashboardStats.onTimePercent} strokeColor={theme.colors.success} size="small" />
-                      Pending <Progress percent={dashboardStats.pendingPercent} strokeColor={theme.colors.warning} size="small" />
-                      Delay <Progress percent={dashboardStats.delayPercent} strokeColor={theme.colors.error} size="small" />
+                    <Card size="small" title="Status Overview">
+                      On Time <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                      Pending <Progress percent={dashboardStats.toolingPendingPercent} strokeColor={theme.colors.warning} size="small" />
+                      Delay <Progress percent={dashboardStats.toolingDelayPercent} strokeColor={theme.colors.error} size="small" />
                     </Card>
                   </Col>
                 </Row>
@@ -108,9 +129,27 @@ const ToolingInspect = () => {
                   </h2>
                 </Divider>
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={24}>
+                  <Col span={16}>
+                    <Row padding={8} gutter={[16, 16]}>
+                      <Col span={8}>
+                        <Card size="small" title="Total Requests"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalDwgJobs}</h2></Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card size="small" title="Complete"><h2 style={{ color: theme.colors.success }}>{dashboardStats.dwgComplete}</h2></Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card size="small" title="In Progress"><h2 style={{ color: theme.colors.primary }}>{dashboardStats.dwgInProgress}</h2></Card>
+                      </Col>
+                    </Row>
+                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
+                      <Col span={24}>
+                        <Card size="small" title="Pending Approval"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.dwgPending}</h2></Card>
+                      </Col>
+                    </Row>
+                  </Col>
+                  <Col span={8}>
                     <Card size="small" title="📝 Manage Tool & Drawing Requests">
-                      <p style={{ margin: 0 }}>
+                      <p style={{ margin: 0, fontSize: '12px' }}>
                         Submit and track requests for tool drawings, fixtures, gauges, and 3D printing.
                         Monitor workflow progress from engineering check to completion.
                       </p>
@@ -126,4 +165,4 @@ const ToolingInspect = () => {
   );
 }
 
-export default ToolingInspect;
+export default HomeMTCEng;
