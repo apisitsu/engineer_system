@@ -13,9 +13,7 @@ import {
   SwapOutlined,
   NodeIndexOutlined,
   BgColorsOutlined,
-  RocketOutlined,
   AuditOutlined,
-  ExclamationCircleOutlined,
   DatabaseOutlined,
   SaveOutlined,
   CloseOutlined,
@@ -23,7 +21,6 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
-import RuleManagementModal from './RuleManagementModal';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
@@ -31,7 +28,6 @@ import ScrollbarStyle from '../../../common/scrollbar';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
-const { Panel } = Collapse;
 
 // Generic Table Component
 const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
@@ -141,7 +137,6 @@ const ToolingSelectPage = () => {
   const [newMachineForm] = Form.useForm();
   const [addToolLoading, setAddToolLoading] = useState(false);
   const [createTableLoading, setCreateTableLoading] = useState(false);
-  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
 
   const toolingTables = [
     { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W') },
@@ -411,7 +406,7 @@ const ToolingSelectPage = () => {
           { title: '2. LOADING CHUTE', content: <ToolingTable title="2. LOADING CHUTE" dataSource={res.ks400b6.loadingChutes} columns={['val1', 'val2', 'val3', 'val4', 'val6']} headers={['A', 'B', 'C', 'D', 'F']} targets={[b6.loadingChute?.A, b6.loadingChute?.B, b6.loadingChute?.C, b6.loadingChute?.D, b6.loadingChute?.F]} icon={<SwapOutlined />} /> },
           { title: '3. PLUG', content: <ToolingTable title="3. PLUG" dataSource={res.ks400b6.plugs} columns={['val1', 'val2', 'val3', 'val4']} headers={['A', 'B', 'C', 'D']} targets={[b6.plug?.A, b6.plug?.B, b6.plug?.C, b6.plug?.D]} icon={<NodeIndexOutlined />} /> },
           { title: '4. WORK GUIDE', content: <ToolingTable title="4. WORK GUIDE" dataSource={res.ks400b6.workGuides} columns={['val1', 'val2', 'val3', 'val4', 'val5']} headers={['A', 'B', 'C', 'D', 'E']} targets={[b6.workGuide?.A, b6.workGuide?.B, b6.workGuide?.C, b6.workGuide?.D, b6.workGuide?.E]} icon={<SettingOutlined />} /> },
-          { title: '5. WORK PUSHER', content: <ToolingTable title="5. WORK PUSHER" dataSource={res.ks400b6.workPushers} columns={['val1', 'val2', 'val3']} headers={['A', 'B', 'C']} targets={[b6.workPusher?.A, b6.workPusher?.B, b6.workPusher?.C]} icon={<RocketOutlined />} /> },
+          { title: '5. WORK PUSHER', content: <ToolingTable title="5. WORK PUSHER" dataSource={res.ks400b6.workPushers} columns={['val1', 'val2', 'val3']} headers={['A', 'B', 'C']} targets={[b6.workPusher?.A, b6.workPusher?.B, b6.workPusher?.C]} icon={<ToolOutlined />} /> },
           { title: '6. STOCKER CHUTE', content: <ToolingTable title="6. STOCKER CHUTE" dataSource={res.ks400b6.stockerChutes} columns={['val1', 'val2', 'val3', 'val4', 'val5']} headers={['A', 'B', 'C', 'D', 'E']} targets={[b6.stockerChute?.A, b6.stockerChute?.B, b6.stockerChute?.C, b6.stockerChute?.D, b6.stockerChute?.E]} icon={<BlockOutlined />} /> },
           { title: '7. FRONT SHOE', content: <ToolingTable title="7. FRONT SHOE" dataSource={res.ks400b6.frontShoes} columns={['val1', 'val2', 'val3', 'val4']} headers={['A', 'B', 'C', 'D']} targets={[b6.frontShoe?.A, b6.frontShoe?.B, b6.frontShoe?.C, b6.frontShoe?.D]} icon={<ToolOutlined />} /> },
           { title: '8. REAR SHOE', content: <ToolingTable title="8. REAR SHOE" dataSource={res.ks400b6.rearShoes} columns={['val1', 'val2', 'val3', 'val4']} headers={['A', 'B', 'C', 'D']} targets={[b6.rearShoe?.A, b6.rearShoe?.B, b6.rearShoe?.C, b6.rearShoe?.D]} icon={<ToolOutlined />} /> },
@@ -463,33 +458,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // Dynamic Fixtures (Flexible Rules)
-    if (res.dynamicFixtures && Array.isArray(res.dynamicFixtures)) {
-      res.dynamicFixtures.forEach(df => {
-        if (df.hasData) {
-          mData.push({
-            name: df.name,
-            group: df.group || 'DYNAMIC',
-            found: df.foundCount,
-            required: df.requiredCount,
-            tools: df.dynamicContent.map(dc => ({
-              title: dc.title,
-              content: (
-                <ToolingTable
-                  title={dc.title}
-                  dataSource={dc.dataSource}
-                  columns={dc.columns}
-                  headers={dc.headers}
-                  targets={dc.targets}
-                  icon={dc.iconType === 'dynamic' ? <RocketOutlined /> : <ToolOutlined />}
-                />
-              )
-            }))
-          });
-        }
-      });
-    }
-
     return mData;
   };
 
@@ -507,12 +475,6 @@ const ToolingSelectPage = () => {
               Tooling Selection System
             </Title>
             <Space>
-              <Button
-                icon={<SettingOutlined />}
-                onClick={() => setIsRuleModalOpen(true)}
-              >
-                Rule Manager
-              </Button>
               <Button
                 icon={<DatabaseOutlined />}
                 onClick={() => { setIsToolListOpen(true); fetchToolList(invKey); }}
@@ -599,26 +561,28 @@ const ToolingSelectPage = () => {
                   </Row>
                 </Card>
 
-                <Collapse style={{ marginBottom: 16 }}>
-                  {mData.map(m => (
-                    <Panel
-                      key={m.name}
-                      header={
-                        <Space>
-                          <Text strong>{m.name}</Text>
-                          <Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>
-                          {m.found < m.required && (
-                            <Tag color="orange">{m.found}/{m.required} found</Tag>
-                          )}
-                        </Space>
-                      }
-                    >
-                      {m.tools.map(t => (
-                        <div key={t.title}>{t.content}</div>
-                      ))}
-                    </Panel>
-                  ))}
-                </Collapse>
+                <Collapse
+                  items={mData.map(m => ({
+                    key: m.name,
+                    label: (
+                      <Space>
+                        <Text strong>{m.name}</Text>
+                        <Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>
+                        {m.found < m.required && (
+                          <Tag color="orange">{m.found}/{m.required} found</Tag>
+                        )}
+                      </Space>
+                    ),
+                    children: (
+                      <div>
+                        {m.tools.map(t => (
+                          <div key={t.title}>{t.content}</div>
+                        ))}
+                      </div>
+                    )
+                  }))}
+                  style={{ marginBottom: 16 }}
+                />
               </>
             ) : (
               !loading && (
@@ -805,11 +769,6 @@ const ToolingSelectPage = () => {
           </Form>
         )}
       </Modal>
-      {/* Rule Management Modal */}
-      <RuleManagementModal
-        visible={isRuleModalOpen}
-        onClose={() => setIsRuleModalOpen(false)}
-      />
     </Layout>
   );
 };

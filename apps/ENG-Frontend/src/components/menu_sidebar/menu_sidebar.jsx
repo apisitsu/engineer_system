@@ -75,7 +75,6 @@ export const mtc = createMenu([
     { label: "Tooling Inspect", path: "/eng/mtc_eng/tooling" },
     { label: "General DWG Request", path: "/eng/mtc_eng/tool-request" },
     { label: "Tooling Select", path: "/eng/mtc_eng/tooling-select" },
-    { label: "Tooling Inventory", path: "/eng/mtc_eng/tooling-inventory" },
     { label: "Setup Data Sheet", path: "/eng/mtc_eng/sds" },
 
 ]);

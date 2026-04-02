@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Input, Button, Table, Typography, Card, Row, Col,
   Statistic, Space, Spin, Layout, Modal, Form, Tag,
-  Empty, Divider, Tooltip, message, Popconfirm
+  Empty, Divider, Tooltip, App, Popconfirm
 } from 'antd';
 import {
   SearchOutlined,
@@ -11,11 +11,8 @@ import {
   SettingOutlined,
   PlusOutlined,
   DeleteOutlined,
-  EditOutlined,
-  SaveOutlined,
   FileExcelOutlined,
   ReloadOutlined,
-  CheckCircleOutlined,
   AuditOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
@@ -28,6 +25,7 @@ const { Content } = Layout;
 const { Title, Text } = Typography;
 
 const SdsPage = () => {
+  const { message } = App.useApp();
   const { theme } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState([]);
@@ -42,7 +40,6 @@ const SdsPage = () => {
   const [templates, setTemplates] = useState([]);
   const [mappings, setMappings] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [editingTemplateId, setEditingTemplateId] = useState(null);
 
   const [templateForm] = Form.useForm();
   const [mappingForm] = Form.useForm();
@@ -59,7 +56,7 @@ const SdsPage = () => {
       })
       .catch(err => message.error("Failed to fetch dashboard data"))
       .finally(() => setCountsLoading(false));
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     fetchCounts();
@@ -266,8 +263,7 @@ const SdsPage = () => {
             ) : (
               !loading && (
                 <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.4 }}>
-                  <FileExcelOutlined style={{ fontSize: 64, marginBottom: 16, display: 'block', margin: '0 auto' }} />
-                  <Text>ป้อนคำค้นหาเพื่อเริ่มดึงข้อมูลเอกสาร Setup Data Sheet</Text>
+
                 </div>
               )
             )}
@@ -280,7 +276,7 @@ const SdsPage = () => {
             onCancel={() => setIsModalOpen(false)}
             width={1100}
             footer={null}
-            bodyStyle={{ padding: '20px' }}
+            styles={{ body: { padding: '20px' } }}
           >
             <Row gutter={24}>
               <Col span={10}>

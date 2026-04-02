@@ -21,24 +21,23 @@ export const server = {
   //--------------------MAQ--------------------//
 
   //--------------------Tooling--------------------//
+  // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
+  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
+  TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
+  
+  // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
-  TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
-  TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
-  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
-  MASTER_WC: `${apiUrl}api/master/wc`,
-
-  // Tool Request System
+  
+  // General DWG Request (New System - tr_request)
   MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
-  MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,  // with /:id
+  MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
 
   // Tooling Select & SDS
   MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,
-  MTC_TOOLING_SELECT_RULES: `${apiUrl}api/tooling-select/rules`,
-  MTC_TOOLING_SELECT_INIT_DB: `${apiUrl}api/tooling-select/init-db`,
   MTC_TOOLING_INVENTORY: `${apiUrl}api/tooling-select/inventory`,
   MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,

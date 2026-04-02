@@ -46,7 +46,7 @@ Write-Host "✓ Found migration file: $migrationPath" -ForegroundColor Green
 Write-Host ""
 Write-Host "Connecting to database: $dbName" -ForegroundColor Cyan
 Write-Host "User: $dbUser" -ForegroundColor Cyan
-Write-Host "Host: $dbHost:$dbPort" -ForegroundColor Cyan
+Write-Host "Host: ${dbHost}:${dbPort}" -ForegroundColor Cyan
 Write-Host ""
 
 # Prompt for password

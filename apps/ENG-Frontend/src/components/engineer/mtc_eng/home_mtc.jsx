@@ -16,16 +16,19 @@ const HomeMTCEng = () => {
   const [loading, setLoading] = useState(false);
   const [toolingData, setToolingData] = useState([]);
   const [dwgData, setDwgData] = useState([]);
+  const [dwgStats, setDwgStats] = useState(null);
 
   const fetchMTCData = async () => {
     setLoading(true);
     try {
-      const [toolingRes, dwgRes] = await Promise.all([
+      const [toolingRes, dwgRes, dwgStatsRes] = await Promise.all([
         axios.get(`${server.TOOLING_INSPECT_GETLIST}`),
-        axios.get(`${server.TOOLING_DWG_REQUEST_GETLIST}`)
+        axios.get(`${server.MTC_TOOL_REQUESTS}?limit=500`),  // Get more records
+        axios.get(`${server.MTC_TOOL_REQUEST_DASHBOARD}`)  // Get dashboard stats
       ]);
       setToolingData(toolingRes.data.data || []);
       setDwgData(dwgRes.data.data || []);
+      setDwgStats(dwgStatsRes.data.data || null);
     } catch (error) {
       console.error("Fetch Error:", error);
     } finally {
@@ -43,11 +46,14 @@ const HomeMTCEng = () => {
     }).length;
     const toolingDelay = totalToolingJobs - toolingOnTime - toolingPending;
 
-    // DWG Request Stats
-    const totalDwgJobs = dwgData.length;
-    const dwgPending = dwgData.filter(item => item.status?.toLowerCase() === 'pending').length;
-    const dwgComplete = dwgData.filter(item => item.status?.toLowerCase() === 'complete').length;
-    const dwgInProgress = totalDwgJobs - dwgPending - dwgComplete;
+    // DWG Request Stats (from General DWG Request - tr_request)
+    // Use dashboard stats from API if available, otherwise calculate from dwgData
+    const totalDwgJobs = dwgStats ? dwgStats.total : dwgData.length;
+    const dwgPending = dwgStats ? (dwgStats.byStatus['Pending'] || 0) + (dwgStats.byStatus['Draft'] || 0) : 
+      dwgData.filter(item => item.status?.toLowerCase() === 'pending' || item.status?.toLowerCase() === 'draft').length;
+    const dwgComplete = dwgStats ? (dwgStats.byStatus['Completed & Informed'] || 0) : 
+      dwgData.filter(item => item.status?.toLowerCase() === 'completed & informed' || item.status?.toLowerCase() === 'completed').length;
+    const dwgInProgress = dwgStats ? (dwgStats.total - dwgPending - dwgComplete) : totalDwgJobs - dwgPending - dwgComplete;
 
     return {
       totalToolingJobs,
@@ -62,7 +68,7 @@ const HomeMTCEng = () => {
       toolingPendingPercent: totalToolingJobs > 0 ? Number(((toolingPending / totalToolingJobs) * 100).toFixed(1)) : 0,
       toolingDelayPercent: totalToolingJobs > 0 ? Number(((toolingDelay / totalToolingJobs) * 100).toFixed(1)) : 0,
     };
-  }, [toolingData, dwgData]);
+  }, [toolingData, dwgData, dwgStats]);
 
   useEffect(() => {
     fetchMTCData();
