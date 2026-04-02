@@ -15,6 +15,7 @@ import { useKanbanStore } from '../store/kanbanStore';
 import { useTheme } from '../../../../theme';
 import KanbanCard from './KanbanCard';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
+import { useAuthStore } from '../../../../stores/authStore';
 
 const { Text } = Typography;
 
@@ -46,9 +47,11 @@ const SortableCard = ({ card }) => {
 const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const {
         cards, createCard, updateList, deleteList, sortListCards,
-        searchQuery, filterMembers, filterLabels
+        searchQuery, filterMembers, filterLabels,
+        activeProject, activeBoardMembers
     } = useKanbanStore();
     const { theme } = useTheme();
+    const { empNo } = useAuthStore();
 
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [newCardName, setNewCardName] = useState('');
@@ -57,7 +60,12 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const [editName, setEditName] = useState(list.name);
 
     // Permission Hook
-    const { canEditBoard, isReadOnly } = useKanbanPermissions();
+    const currentUserRole = activeBoardMembers.find(m => m.u_code === empNo)?.role;
+    const { canEditBoard, isReadOnly } = useKanbanPermissions({
+        isPrivateProject: activeProject?.is_private,
+        projectRole: activeProject?.role,
+        boardRole: currentUserRole
+    });
 
     // Get and filter cards
     const filteredCards = useMemo(() => {

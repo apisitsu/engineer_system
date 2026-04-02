@@ -119,11 +119,12 @@ const IconPicker = ({ value, onChange, theme }) => (
 const ProjectSettingsDrawer = () => {
     const { theme } = useTheme();
 
+    const activeProject = useKanbanStore(state => state.activeProject);
+    const projects = useKanbanStore(state => state.projects);
     const {
         isProjectSettingsOpen,
         closeProjectSettings,
         projectSettingsTargetId,
-        projects,
         fetchProjects,
         setActiveProject,
         updateProject,
@@ -145,11 +146,16 @@ const ProjectSettingsDrawer = () => {
     const [editingPrivate, setEditingPrivate] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
 
-    const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions();
+    const targetId = projectSettingsTargetId || activeProject?.id;
+    const activeProjectForPermissions = projects.find(p => String(p.id) === String(targetId));
+    const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions({
+        isPrivateProject: activeProjectForPermissions?.is_private,
+        projectRole: activeProjectForPermissions?.role,
+    });
 
     useEffect(() => {
         if (isProjectSettingsOpen) fetchUserPreferences();
-    }, [isProjectSettingsOpen]);
+    }, [isProjectSettingsOpen, fetchUserPreferences]);
 
     // Single-project mode: auto-open editing when drawer opens with a target
     const isSingleProjectMode = !!projectSettingsTargetId;

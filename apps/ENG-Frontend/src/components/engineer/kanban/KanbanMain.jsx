@@ -462,10 +462,12 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const stats = useMemo(() => ({
         total: projects.length,
         totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-        owned: projects.filter(p => p.is_owner).length,
+        owned: projects.filter(p => p.role === 'owner').length,
         favorites: projects.filter(p => p.is_favorite).length,
         recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
     }), [projects]);
+    // console.log('projects', projects)
+    // console.log('stats', stats)
 
     // Filtered & sorted projects for tab 2
     const filteredProjects = useMemo(() => {
@@ -474,7 +476,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
+        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -858,6 +860,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
     const [showAddMember, setShowAddMember] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const [memberFilterSearch, setMemberFilterSearch] = useState('');
+    const [showAllNotifs, setShowAllNotifs] = useState(false);
 
     useEffect(() => {
         if (activeProject?.id) { fetchProjectManagers(activeProject.id); }
@@ -876,6 +879,16 @@ const BoardToolbar = ({ theme, activeProject }) => {
     }, []);
 
     const hasFilters = searchQuery || filterMembers.length > 0 || filterLabels.length > 0;
+
+    const filteredNotifications = useMemo(() => {
+        if (showAllNotifs) return notifications || [];
+        return (notifications || []).filter(n => {
+            if (!n.is_read) return true;
+            return dayjs().diff(dayjs(n.created_at), 'hour') < 48;
+        });
+    }, [notifications, showAllNotifs]);
+
+    const hasHiddenNotifs = (notifications?.length || 0) > filteredNotifications.length;
 
     return (
         <div style={{
@@ -1167,42 +1180,60 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     </Button>
                                 )}
                             </div>
-                            {(!notifications || notifications.length === 0) ? (
+                            {(!filteredNotifications || filteredNotifications.length === 0) ? (
                                 <div style={{ padding: theme.spacing.xl, textAlign: 'center' }}>
                                     <Text type="secondary" style={{ fontSize: 13 }}>No notifications yet</Text>
                                 </div>
                             ) : (
-                                notifications.slice(0, 20).map(n => {
-                                    let textStr = 'Notification';
-                                    if (n.notif_type === 'mentionInComment') textStr = `${n.actor_u_code} mentioned you in a comment`;
-                                    else if (n.notif_type === 'commentCard') textStr = `${n.actor_u_code} commented on a card you follow`;
-                                    else if (n.notif_type === 'addMemberToCard') textStr = `${n.actor_u_code} added you to a card`;
-                                    else textStr = n.content || n.action || textStr;
+                                <>
+                                    {filteredNotifications.map(n => {
+                                        let textStr = 'Notification';
+                                        if (n.notif_type === 'mentionInComment') textStr = `${n.actor_u_code} mentioned you in a comment`;
+                                        else if (n.notif_type === 'commentCard') textStr = `${n.actor_u_code} commented on a card you follow`;
+                                        else if (n.notif_type === 'addMemberToCard') textStr = `${n.actor_u_code} added you to a card`;
+                                        else textStr = n.content || n.action || textStr;
 
-                                    return (
-                                        <div key={n.id}
-                                            onClick={() => {
-                                                if (!n.is_read) markNotificationRead(n.id);
-                                                if (n.card_id) openCardDetail(n.card_id);
-                                                setNotifOpen(false);
-                                            }}
-                                            style={{
-                                                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                                                borderBottom: `1px solid ${theme.colors.border}`,
-                                                background: n.is_read ? 'transparent' : `${theme.colors.primary}08`,
-                                                cursor: 'pointer',
-                                                transition: `background ${theme.transitions.fast}`,
-                                            }}>
-                                            <Text style={{ fontSize: 13, display: 'block', fontWeight: n.is_read ? 'normal' : '500' }}>{textStr}</Text>
-                                            <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(n.created_at).fromNow()}</Text>
-                                            {n.notif_data?.text && (
-                                                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    "{n.notif_data.text}"
-                                                </Text>
-                                            )}
+                                        return (
+                                            <div key={n.id}
+                                                onClick={() => {
+                                                    if (!n.is_read) markNotificationRead(n.id);
+                                                    if (n.card_id) openCardDetail(n.card_id);
+                                                    setNotifOpen(false);
+                                                }}
+                                                style={{
+                                                    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                                                    borderBottom: `1px solid ${theme.colors.border}`,
+                                                    background: n.is_read ? 'transparent' : `${theme.colors.primary}08`,
+                                                    cursor: 'pointer',
+                                                    transition: `background ${theme.transitions.fast}`,
+                                                }}>
+                                                <Text style={{ fontSize: 13, display: 'block', fontWeight: n.is_read ? 'normal' : '500' }}>{textStr}</Text>
+                                                <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(n.created_at).fromNow()}</Text>
+                                                {n.notif_data?.text && (
+                                                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        "{n.notif_data.text}"
+                                                    </Text>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+
+                                    {(hasHiddenNotifs || showAllNotifs) && (
+                                        <div style={{ padding: '8px 12px', textAlign: 'center', borderTop: `1px solid ${theme.colors.border}` }}>
+                                            <Button
+                                                type="link"
+                                                size="small"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setShowAllNotifs(!showAllNotifs);
+                                                }}
+                                                style={{ fontSize: 12 }}
+                                            >
+                                                {showAllNotifs ? 'Hide older read notifications' : `See all notifications (${notifications.length})`}
+                                            </Button>
                                         </div>
-                                    );
-                                })
+                                    )}
+                                </>
                             )}
                         </div>
                     )}

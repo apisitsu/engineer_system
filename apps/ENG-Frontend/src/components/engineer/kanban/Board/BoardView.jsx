@@ -24,6 +24,7 @@ import KanbanList from './KanbanList';
 import KanbanCard from './KanbanCard';
 import { useTheme } from '../../../../theme';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
+import { useAuthStore } from '../../../../stores/authStore';
 
 const { Text } = Typography;
 
@@ -304,10 +305,18 @@ const BoardView = () => {
     const {
         activeBoard, lists, cards, moveCard,
         searchQuery, filterMembers, filterLabels,
-        viewMode, createList, reorderList, reorderCard
+        viewMode, createList, reorderList, reorderCard,
+        activeProject, activeBoardMembers
     } = useKanbanStore();
     const { theme } = useTheme();
-    const { canEditBoard, canEditCard } = useKanbanPermissions();
+    const { empNo } = useAuthStore();
+
+    const currentUserRole = activeBoardMembers.find(m => m.u_code === empNo)?.role;
+    const { canEditBoard, canEditCard } = useKanbanPermissions({
+        isPrivateProject: activeProject?.is_private,
+        projectRole: activeProject?.role,
+        boardRole: currentUserRole
+    });
 
     const [isAddingList, setIsAddingList] = useState(false);
     const [newListName, setNewListName] = useState('');

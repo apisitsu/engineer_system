@@ -53,7 +53,7 @@ export const useKanbanPermissions = ({
         const isCardMember = !!cardRole;
 
         const canManageCard = canManageBoardStructure || isCardOwner;
-        const canEditCard = canManageCard || isCardEditor;
+        const canEditCard = canManageCard || isCardEditor || canEditBoard;
         const canViewCard = canEditCard || isCardViewer || canViewBoard;
 
         // ── 5. Convenience ──
