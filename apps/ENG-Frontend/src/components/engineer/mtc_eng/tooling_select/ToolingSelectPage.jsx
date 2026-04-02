@@ -645,7 +645,7 @@ const ToolingSelectPage = () => {
             allowClear
           />
         </Space>
-        <Form form={invForm} component={false}>
+        <Form form={invForm}>
           <Table
             components={{ body: { cell: InvEditableCell } }}
             bordered
