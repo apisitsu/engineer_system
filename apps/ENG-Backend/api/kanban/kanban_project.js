@@ -347,6 +347,119 @@ const RemoveManager = async (req, res) => {
     }
 };
 
+// ─── GET /api/kanban/projects/:id/report-data ─────────────────────
+// Aggregates all boards, lists, cards, issues, actions, labels, members for report generation
+const GetReportData = async (req, res) => {
+    const { id } = req.params;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        // Verify access
+        const canAccess = await canAccessProject(req, id);
+        if (!canAccess) return res.status(403).json({ error: 'Access denied' });
+
+        // 1. Get project info
+        const { rows: [project] } = await engPool.query('SELECT * FROM kb_project WHERE id = $1', [id]);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+
+        // 2. Get all boards for project
+        const { rows: boards } = await engPool.query(
+            'SELECT * FROM kb_board WHERE project_id = $1 ORDER BY created_at', [id]
+        );
+
+        // 3. For each board, get lists, cards (with metadata), labels, and actions
+        const enrichedBoards = [];
+
+        for (const board of boards) {
+            // Lists
+            const { rows: lists } = await engPool.query(
+                "SELECT * FROM kb_list WHERE board_id = $1 AND list_type IN ('active','closed') ORDER BY position", [board.id]
+            );
+
+            // Cards per list with aggregated data
+            const enrichedLists = [];
+            for (const list of lists) {
+                const { rows: cards } = await engPool.query(`
+                    SELECT c.*,
+                        ARRAY(SELECT u_code FROM kb_card_membership WHERE card_id=c.id) AS assignees,
+                        ARRAY(SELECT label_id FROM kb_card_label WHERE card_id=c.id) AS label_ids,
+                        (SELECT COUNT(*) FROM kb_task_list tl
+                         JOIN kb_task t ON t.task_list_id=tl.id
+                         WHERE tl.card_id=c.id AND t.is_completed=TRUE) AS completed_tasks,
+                        (SELECT COUNT(*) FROM kb_task_list tl
+                         JOIN kb_task t ON t.task_list_id=tl.id
+                         WHERE tl.card_id=c.id) AS total_tasks,
+                        (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count,
+                        (
+                            SELECT a.created_at
+                            FROM kb_action a
+                            JOIN kb_list l ON l.id = (NULLIF(a.action_data->>'to_list_id', ''))::integer
+                            WHERE a.card_id = c.id AND a.action_type = 'card_moved'
+                              AND (lower(l.name) LIKE '%in progress%' OR lower(l.name) LIKE '%working%' OR lower(l.name) LIKE '%กำลังทำ%')
+                            ORDER BY a.created_at ASC LIMIT 1
+                        ) AS action_in_progress_at,
+                        (
+                            SELECT a.created_at
+                            FROM kb_action a
+                            JOIN kb_list l ON l.id = (NULLIF(a.action_data->>'to_list_id', ''))::integer
+                            WHERE a.card_id = c.id AND a.action_type = 'card_moved'
+                              AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
+                            ORDER BY a.created_at DESC LIMIT 1
+                        ) AS action_done_at
+                    FROM kb_card c
+                    WHERE c.list_id = $1
+                    ORDER BY c.position ASC
+                `, [list.id]);
+
+                // Fetch issues for each card
+                for (const card of cards) {
+                    const { rows: issues } = await engPool.query(
+                        'SELECT * FROM kb_card_issue WHERE card_id = $1 ORDER BY created_at ASC', [card.id]
+                    );
+                    card.issues = issues;
+                }
+
+                enrichedLists.push({ ...list, cards });
+            }
+
+            // Labels for this board
+            const { rows: labels } = await engPool.query(
+                'SELECT * FROM kb_label WHERE board_id = $1 ORDER BY position', [board.id]
+            );
+
+            // Activity actions for this board (last 500 for performance)
+            const { rows: actions } = await engPool.query(
+                'SELECT * FROM kb_action WHERE board_id = $1 ORDER BY created_at DESC LIMIT 500', [board.id]
+            );
+
+            enrichedBoards.push({
+                ...board,
+                lists: enrichedLists,
+                labels,
+                actions,
+            });
+        }
+
+        // 4. Get project members
+        const { rows: members } = await engPool.query(
+            'SELECT pm.*, u.u_name, u.u_nickname, u.profile_img_b64 FROM kb_project_membership pm LEFT JOIN m_user_profile u ON u.u_code = pm.u_code WHERE pm.project_id = $1',
+            [id]
+        );
+
+        res.json({
+            data: {
+                project,
+                boards: enrichedBoards,
+                members,
+            }
+        });
+    } catch (err) {
+        console.error('GetReportData error:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     GetProjects,
     GetProjectById,
@@ -358,4 +471,5 @@ module.exports = {
     AddManager,
     RemoveManager,
     GetUsers,
+    GetReportData,
 };

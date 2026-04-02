@@ -188,6 +188,112 @@ const CardDetailDrawer = () => {
         cardRole: tempCardMembers.find(m => m.u_code === currentUserCode)?.role,
     });
 
+    const timeTrackingData = useMemo(() => {
+        if (!card || !activityLog) return null;
+        let createdItem = activityLog.find(a => a.action_type === 'card_created');
+        let creationTime = dayjs(createdItem ? createdItem.created_at : (card.created_at || card.list_changed_at || new Date()));
+
+        let movements = activityLog
+            .filter(a => a.action_type === 'card_moved')
+            .sort((a, b) => dayjs(a.created_at).valueOf() - dayjs(b.created_at).valueOf());
+
+        let segments = [];
+        let currentListId = createdItem?.action_data?.list_id
+            || (movements.length > 0 ? movements[0].action_data?.from_list_id : card.list_id);
+        let currentStartTime = creationTime;
+
+        movements.forEach(m => {
+            let enterTime = dayjs(m.created_at);
+            segments.push({
+                listId: currentListId,
+                enteredAt: currentStartTime,
+                leftAt: enterTime,
+                durationMs: enterTime.diff(currentStartTime)
+            });
+            currentListId = m.action_data?.to_list_id;
+            currentStartTime = enterTime;
+        });
+
+        // Add current segment
+        let now = card.is_closed ? dayjs(card.updated_at || card.list_changed_at || new Date()) : dayjs();
+        segments.push({
+            listId: currentListId || card.list_id,
+            enteredAt: currentStartTime,
+            leftAt: now,
+            durationMs: Math.max(0, now.diff(currentStartTime)),
+            isCurrent: !card.is_closed
+        });
+        // Merge adjacent identical lists
+        let merged = [];
+        segments.forEach(s => {
+            if (merged.length > 0 && String(merged[merged.length - 1].listId) === String(s.listId)) {
+                merged[merged.length - 1].leftAt = s.leftAt;
+                merged[merged.length - 1].durationMs += s.durationMs;
+                merged[merged.length - 1].isCurrent = s.isCurrent;
+            } else {
+                merged.push({ ...s });
+            }
+        });
+
+        const formatDuration = (ms) => {
+            if (ms < 0) ms = 0;
+            const totalMins = Math.floor(ms / 60000);
+            const totalHours = Math.floor(totalMins / 60);
+            const days = Math.floor(totalHours / 24);
+            const hours = totalHours % 24;
+            const mins = totalMins % 60;
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
+        };
+
+        merged.forEach(s => {
+            s.formattedDuration = formatDuration(s.durationMs);
+            const matchingList = lists.find(l => String(l.id) === String(s.listId));
+            s.listName = matchingList ? matchingList.name : 'Unknown';
+        });
+
+        let inProgressAt = null;
+        let doneAt = null;
+        let checkAt = null;
+
+        for (const s of merged) {
+            const lName = (s.listName || '').toLowerCase();
+            if (!inProgressAt && (lName.includes('in progress') || lName.includes('working') || lName.includes('กำลังทำ'))) {
+                inProgressAt = dayjs(s.enteredAt);
+            }
+            if (!checkAt && (lName.includes('check') || lName.includes('review') || lName.includes('ตรวจ'))) {
+                checkAt = dayjs(s.enteredAt);
+            }
+            if (!doneAt && (lName.includes('done') || lName.includes('completed') || lName.includes('เสร็จ'))) {
+                doneAt = dayjs(s.enteredAt);
+            }
+        }
+
+        let leadTimeStart = inProgressAt;
+        let leadTimeEnd = doneAt ? doneAt : dayjs();
+        let computedLeadTimeMs = 0;
+
+        if (leadTimeStart) {
+            computedLeadTimeMs = Math.max(0, leadTimeEnd.diff(leadTimeStart));
+        }
+
+        return {
+            creationTime,
+            segments: merged,
+            totalLeadTime: leadTimeStart ? formatDuration(computedLeadTimeMs) : 'Not Started',
+            totalLeadTimeMs: computedLeadTimeMs,
+
+            // Explicit tracking from segments
+            inProgressAt: inProgressAt,
+            checkAt: checkAt,
+            checkBy: null, // Optional tracking
+            doneAt: doneAt,
+            doneBy: null,
+            done_at: doneAt ? doneAt.toISOString() : null, // To satisfy UI conditions
+        };
+    }, [card, activityLog, lists, users]);
+
     useEffect(() => {
         if (card) {
             setEditName(card.name || '');
@@ -589,6 +695,34 @@ const CardDetailDrawer = () => {
                                         )}
                                     </div>
 
+                                    {/* ─── Current State Time ─── */}
+                                    {timeTrackingData && (
+                                        <div style={{ marginBottom: theme.spacing.xl, marginLeft: 28 }}>
+                                            <Row gutter={[16, 16]}>
+                                                {!timeTrackingData.done_at && (
+                                                    <Col span={12}>
+                                                        <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                            Time in Current State
+                                                        </Text>
+                                                        <Text strong style={{ fontSize: 14, color: theme.colors.primary }}>
+                                                            {timeTrackingData.segments.length > 0
+                                                                ? timeTrackingData.segments[timeTrackingData.segments.length - 1].formattedDuration
+                                                                : '0m'}
+                                                        </Text>
+                                                    </Col>
+                                                )}
+                                                <Col span={timeTrackingData.done_at ? 24 : 12}>
+                                                    <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                        Total Lead Time
+                                                    </Text>
+                                                    <Text strong={!!timeTrackingData.done_at} style={{ fontSize: 14, color: timeTrackingData.done_at ? theme.colors.primary : theme.colors.textPrimary }}>
+                                                        {timeTrackingData.totalLeadTime}
+                                                    </Text>
+                                                </Col>
+                                            </Row>
+                                        </div>
+                                    )}
+
                                     {/* ─── Description ─── */}
                                     <div style={{ marginBottom: theme.spacing.xl }}>
                                         <SectionHeader icon={<MdOutlineDescription />} title="Description" theme={theme} />
@@ -596,6 +730,7 @@ const CardDetailDrawer = () => {
                                             {isEditingDesc ? (
                                                 <div>
                                                     <TextArea
+                                                        // variant="borderless"
                                                         value={editDesc}
                                                         onChange={(e) => setEditDesc(e.target.value)}
                                                         autoSize={{ minRows: 3, maxRows: 10 }}
@@ -616,9 +751,9 @@ const CardDetailDrawer = () => {
                                                 <div
                                                     style={{
                                                         // background: theme.colors.surfaceHover,
-                                                        padding: theme.spacing.md,
+                                                        padding: theme.spacing.sm,
                                                         borderRadius: theme.borderRadius.md,
-                                                        border: `1px solid ${theme.colors.border}`,
+                                                        // border: `1px solid ${theme.colors.border}`,
                                                         cursor: isReadOnly ? 'default' : 'pointer',
                                                         minHeight: 50,
                                                         transition: `background ${theme.transitions.fast}`,
@@ -627,8 +762,19 @@ const CardDetailDrawer = () => {
                                                     onMouseOver={(e) => e.currentTarget.style.background = `${theme.colors.surfaceHover}CC`}
                                                     onMouseOut={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}
                                                 >
-                                                    <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: theme.colors.textPrimary, cursor: isReadOnly ? 'default' : 'pointer', minHeight: 40 }} onClick={() => !isReadOnly && setIsEditingDesc(true)}>
-                                                        {card.description || <span style={{ color: theme.colors.textTertiary }}>Add a more detailed description...</span>}
+                                                    <Paragraph
+                                                        style={{
+                                                            margin: 0,
+                                                            whiteSpace: 'pre-wrap',
+                                                            color: theme.colors.textPrimary,
+                                                            cursor: isReadOnly ? 'default' : 'pointer', minHeight: 40
+                                                        }}
+                                                        onClick={() => !isReadOnly && setIsEditingDesc(true)}>
+                                                        {card.description || <span style={{
+                                                            color: theme.colors.textTertiary
+                                                        }}>
+                                                            Add a more detailed description...
+                                                        </span>}
                                                     </Paragraph>
                                                 </div>
                                             )}
@@ -1262,6 +1408,81 @@ const CardDetailDrawer = () => {
                                                                 />
                                                             ) : (
                                                                 <Text type="secondary" style={{ fontSize: 13 }}>No activity recorded yet.</Text>
+                                                            )}
+                                                        </div>
+                                                    ),
+                                                },
+                                                {
+                                                    key: 'time_tracking',
+                                                    label: 'Time Tracking',
+                                                    children: (
+                                                        <div>
+                                                            {timeTrackingData ? (
+                                                                <div style={{ padding: theme.spacing.sm }}>
+                                                                    <Row gutter={[16, 16]}>
+                                                                        <Col span={12}>
+                                                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                                                Created At
+                                                                            </Text>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textPrimary }}>
+                                                                                {timeTrackingData.creationTime.format('MMM D, YYYY HH:mm')}
+                                                                            </Text>
+                                                                        </Col>
+                                                                        <Col span={12}>
+                                                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                                                In Progress
+                                                                            </Text>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textPrimary }}>
+                                                                                {timeTrackingData.inProgressAt ? timeTrackingData.inProgressAt.format('MMM D, YYYY HH:mm') : '-'}
+                                                                            </Text>
+                                                                        </Col>
+                                                                        <Col span={12}>
+                                                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                                                Checked By
+                                                                            </Text>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textPrimary }}>
+                                                                                {timeTrackingData.checkBy ? `${timeTrackingData.checkBy} (${timeTrackingData.checkAt.format('MMM D HH:mm')})` : '-'}
+                                                                            </Text>
+                                                                        </Col>
+                                                                        <Col span={12}>
+                                                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block' }}>
+                                                                                Done By
+                                                                            </Text>
+                                                                            <Text style={{ fontSize: 13, color: theme.colors.textPrimary }}>
+                                                                                {timeTrackingData.doneBy ? `${timeTrackingData.doneBy} (${timeTrackingData.doneAt.format('MMM D HH:mm')})` : '-'}
+                                                                            </Text>
+                                                                        </Col>
+                                                                    </Row>
+
+                                                                    <Divider style={{ margin: '16px 0' }} />
+
+                                                                    <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block', marginBottom: 12 }}>
+                                                                        State Transition History
+                                                                    </Text>
+                                                                    <Timeline
+                                                                        items={timeTrackingData.segments.map((seg, i) => ({
+                                                                            color: seg.isCurrent ? theme.colors.primary : 'gray',
+                                                                            children: (
+                                                                                <div>
+                                                                                    <Text strong style={{ fontSize: 13, color: theme.colors.textPrimary }}>
+                                                                                        {seg.listName}
+                                                                                    </Text>
+                                                                                    <br />
+                                                                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                                                                        Entered: {seg.enteredAt.format('MMM D, HH:mm')}
+                                                                                        {' • '}
+                                                                                        <span style={{ color: seg.isCurrent ? theme.colors.primary : theme.colors.textTertiary, fontWeight: 500 }}>
+                                                                                            Spent: {seg.formattedDuration} {seg.isCurrent && '(Current)'}
+                                                                                        </span>
+                                                                                    </Text>
+                                                                                </div>
+                                                                            )
+                                                                        }))}
+                                                                        style={{ margin: 0, paddingLeft: 4, marginTop: 8 }}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <Text type="secondary" style={{ fontSize: 13 }}>No tracking data available.</Text>
                                                             )}
                                                         </div>
                                                     ),

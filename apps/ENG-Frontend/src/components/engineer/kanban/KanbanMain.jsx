@@ -18,7 +18,7 @@ import {
     IoFitnessOutline, IoHomeOutline, IoLockClosedOutline
 } from 'react-icons/io5';
 import { useKanbanPermissions } from './hooks/useKanbanPermissions';
-import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1 } from 'react-icons/md';
+import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1, MdOutlineAssessment } from 'react-icons/md';
 import { BsKanban, BsThreeDots, BsGrid3X3Gap, BsList } from 'react-icons/bs';
 import { FiPlus, FiEdit2 } from 'react-icons/fi';
 import { AiOutlineCheck, AiOutlineClose, AiOutlineEdit, AiOutlineStar, AiFillStar } from 'react-icons/ai';
@@ -30,6 +30,7 @@ import CardDetailDrawer from './CardDetail/CardDetailDrawer';
 import ProjectSettingsDrawer from './Settings/ProjectSettingsDrawer';
 import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
+import ReportDashboard from './Reports/ReportDashboard';
 
 dayjs.extend(relativeTime);
 
@@ -573,6 +574,17 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </span>
                                 ),
                             },
+                            {
+                                key: 'reports',
+                                label: (
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        gap: 6, minWidth: 140,
+                                    }}>
+                                        <MdOutlineAssessment size={15} /> Reports
+                                    </span>
+                                ),
+                            },
                         ]}
                     />
                 </div>
@@ -664,6 +676,13 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     )}
                                 </>
                             )}
+                        </div>
+                    )}
+
+                    {/* ═══ REPORTS TAB ═══ */}
+                    {activeTab === 'reports' && (
+                        <div style={{ height: '100%' }}>
+                            <ReportDashboard theme={theme} />
                         </div>
                     )}
 

@@ -22,6 +22,7 @@ router.post('/projects/:id/favorite', Project.ToggleFavorite);
 router.get('/projects/:id/managers', Project.GetManagers);
 router.post('/projects/:id/managers', Project.AddManager);
 router.delete('/projects/:id/managers', Project.RemoveManager);
+router.get('/projects/:id/report-data', Project.GetReportData);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);

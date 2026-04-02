@@ -68,6 +68,39 @@ const KanbanCard = ({ card, isOverlay }) => {
         return { bgColor, textColor, dateStr, fullDate: due.toLocaleString() };
     }, [card.due_date]);
 
+    // Current State Time (If Done: shows total time from InProgress to Done. Otherwise: time spent in current list)
+    const currentStateTimeInfo = useMemo(() => {
+        let startMs, endMs, tooltipStr;
+
+        if (card.action_done_at) {
+            // It is in Done state
+            startMs = card.action_in_progress_at ? new Date(card.action_in_progress_at).getTime() : new Date(card.created_at).getTime();
+            endMs = new Date(card.action_done_at).getTime();
+            tooltipStr = 'Total Lead Time (In Progress -> Done)';
+        } else {
+            // Still active
+            startMs = new Date(card.list_changed_at || card.created_at).getTime();
+            endMs = new Date().getTime();
+            tooltipStr = 'Time spent in current state';
+        }
+
+        let ms = endMs - startMs;
+        if (ms < 0) ms = 0;
+        
+        const totalMins = Math.floor(ms / 60000);
+        const totalHours = Math.floor(totalMins / 60);
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+        const mins = totalMins % 60;
+        
+        let displayStr = '';
+        if (days > 0) displayStr = `${days}d ${hours}h`;
+        else if (hours > 0) displayStr = `${hours}h ${mins}m`;
+        else displayStr = `${mins}m`;
+        
+        return { displayStr, tooltip: tooltipStr };
+    }, [card.list_changed_at, card.created_at, card.action_in_progress_at, card.action_done_at]);
+
     return (
         <div
             onClick={() => openCardDetail(card.id)}
@@ -237,6 +270,27 @@ const KanbanCard = ({ card, isOverlay }) => {
                                 </div>
                             </Tooltip>
                         )}
+
+                        {/* Current State Time Badge */}
+                        {currentStateTimeInfo && (
+                            <Tooltip title={currentStateTimeInfo.tooltip}>
+                                <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    padding: '1px 6px',
+                                    borderRadius: 4,
+                                    background: `${theme.colors.primary}15`,
+                                    color: theme.colors.primary,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                }}>
+                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="12" width="12" xmlns="http://www.w3.org/2000/svg"><path fill="none" d="M0 0h24v24H0V0z"></path><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.962 8.962 0 0012 4c-4.97 0-9 4.03-9 9s4.02 9 9 9a8.994 8.994 0 007.53-14.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"></path></svg>
+                                    {currentStateTimeInfo.displayStr}
+                                </div>
+                            </Tooltip>
+                        )}
+
 
                         {/* Description indicator */}
                         {hasDescription && (

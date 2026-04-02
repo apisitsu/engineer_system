@@ -946,6 +946,20 @@ export const useKanbanStore = create((set, get) => ({
     },
 
     // ====================================================================
+    //  REPORT DATA
+    // ====================================================================
+
+    fetchProjectReportData: async (projectId) => {
+        try {
+            const res = await axios.get(`${server.KANBAN_PROJECTS}/${projectId}/report-data`);
+            return res.data?.data || null;
+        } catch (err) {
+            console.error('Failed to fetch report data', err);
+            return null;
+        }
+    },
+
+    // ====================================================================
     //  WEBSOCKET
     // ====================================================================
 

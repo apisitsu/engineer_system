@@ -64,7 +64,23 @@ const GetCards = async (req, res) => {
                    ) AS tasks,
                    (SELECT COUNT(*) FROM kb_comment WHERE card_id=c.id) AS comment_count,
                    (SELECT COUNT(*) FROM kb_attachment WHERE card_id=c.id) AS attachment_count,
-                   (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count
+                   (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count,
+                   (
+                       SELECT a.created_at
+                       FROM kb_action a
+                       JOIN kb_list l ON l.id = (NULLIF(a.action_data->>'to_list_id', ''))::integer
+                       WHERE a.card_id = c.id AND a.action_type = 'card_moved'
+                         AND (lower(l.name) LIKE '%in progress%' OR lower(l.name) LIKE '%working%' OR lower(l.name) LIKE '%กำลังทำ%')
+                       ORDER BY a.created_at ASC LIMIT 1
+                   ) AS action_in_progress_at,
+                   (
+                       SELECT a.created_at
+                       FROM kb_action a
+                       JOIN kb_list l ON l.id = (NULLIF(a.action_data->>'to_list_id', ''))::integer
+                       WHERE a.card_id = c.id AND a.action_type = 'card_moved'
+                         AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
+                       ORDER BY a.created_at DESC LIMIT 1
+                   ) AS action_done_at
             FROM kb_card c
             WHERE c.list_id=$1
               AND (
