@@ -5,8 +5,15 @@ const config = require('./config');
 
 require('dotenv').config();
 
+<<<<<<< HEAD
 // --- GAS URL from environment ---
 const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwK3lA8rAOZvlGuvBRkIfNj7zrqBriIiREnhKnWaHyLXFV8lrfZwPNA_aaMP2hF_qZdBA/exec';
+=======
+// --- GAS URL + Secret Key from environment ---
+const GAS_EMAIL_URL     = process.env.GAS_EMAIL_URL;
+const GAS_EMAIL_URL_NEW = process.env.GAS_EMAIL_URL_NEW;
+const GAS_SECRET        = process.env.GAS_SECRET_KEY || 'ENG_DWG_2026';
+>>>>>>> old-work-backup
 
 // --- Corporate proxy agent (for HTTPS tunneling through McAfee Web Gateway) ---
 function getProxyAgent() {
@@ -26,11 +33,20 @@ function getProxyAgent() {
  * Send email via Google Apps Script Web App (Primary method)
  * GAS handles Gmail authentication internally – no per-user OAuth needed.
  */
+<<<<<<< HEAD
 const sendEmailViaAS = async (to, subject, htmlContent) => {
     try {
         const agent = getProxyAgent();
 
         const response = await axios.post(GAS_EMAIL_URL, {
+=======
+const sendEmailViaAS = async (to, subject, htmlContent, url = GAS_EMAIL_URL) => {
+    try {
+        const agent = getProxyAgent();
+
+        const response = await axios.post(url, {
+            secret: GAS_SECRET,
+>>>>>>> old-work-backup
             to,
             subject,
             htmlContent
@@ -106,8 +122,37 @@ const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
     }
 };
 
+<<<<<<< HEAD
 const mailPermitRecord = async (u_code,) => {
 
 }
 
 module.exports = { sendEmail, sendEmailViaAS };
+=======
+/**
+ * Send email with automatic fallback:
+ *   1st: Google Apps Script (GAS) relay
+ *   2nd: Gmail API using GMAIL_REFRESH_TOKEN from .env
+ */
+const sendEmailWithFallback = async (to, subject, htmlContent) => {
+    // ลอง GAS URL ใหม่ก่อน (ถ้ามี)
+    if (GAS_EMAIL_URL_NEW) {
+        try {
+            return await sendEmailViaAS(to, subject, htmlContent, GAS_EMAIL_URL_NEW);
+        } catch (err) {
+            console.warn('⚠️  GAS (new URL) failed:', err.response?.status || err.message);
+        }
+    }
+    // Fallback → GAS URL เก่า
+    try {
+        return await sendEmailViaAS(to, subject, htmlContent, GAS_EMAIL_URL);
+    } catch (gasErr) {
+        console.warn('⚠️  GAS (old URL) failed, falling back to Gmail API:', gasErr.response?.status || gasErr.message);
+        const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+        if (!refreshToken) throw new Error('No GMAIL_REFRESH_TOKEN in env; cannot fall back.');
+        return await sendEmail(refreshToken, to, subject, htmlContent);
+    }
+};
+
+module.exports = { sendEmail, sendEmailViaAS, sendEmailWithFallback };
+>>>>>>> old-work-backup

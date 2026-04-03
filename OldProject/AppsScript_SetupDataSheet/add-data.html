@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add New Setup Data</title>
+    <?!= include('add-data-css'); ?>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <a href="<?= url ?>" class="back-link" target="_top">← Back to Search</a>
+            <h1>Add New Setup Data</h1>
+        </div>
+
+        <div class="main-content">
+            <div class="selection-box">
+                <div class="form-group">
+                    <label for="template-category">Select Category:</label>
+                    <select id="template-category" class="form-select">
+                        <option value="">-- Please Select --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="template-sheet">Select Template:</label>
+                    <select id="template-sheet" class="form-select" disabled>
+                        <option value="">-- Select Category First --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="dynamic-form-container" class="dynamic-form">
+                </div>
+
+            <!-- Tooling Section (Interactive Add Tooling) -->
+            <div id="tooling-section" class="tooling-section" style="display: none;">
+                <h3>Tooling</h3>
+
+                <!-- Tooling List -->
+                <div id="tooling-list" class="tooling-list">
+                    <p class="empty-state">No tools added yet. Click "Add Tooling" to add tools.</p>
+                </div>
+
+                <!-- Add Tooling Button -->
+                <button id="add-tooling-btn" class="add-tooling-btn" type="button">+ Add Tooling</button>
+            </div>
+
+            <div id="loader" class="loader" style="display: none;">Loading form fields...</div>
+
+            <div class="save-container">
+                <button id="save-button" class="save-btn" style="display: none;">Save New Data</button>
+            </div>
+            <div id="status-message" class="status-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Tooling Modal -->
+    <div id="tooling-modal" class="modal">
+        <div class="modal-content">
+            <h3>Add Tooling</h3>
+
+            <div class="form-group">
+                <label>Tool Number <span class="required">*</span></label>
+                <select id="modal-tool-number" class="form-select">
+                    <option value="">-- Select Tool Number --</option>
+                </select>
+            </div>
+
+            <div id="modal-tooling-fields" class="modal-fields-container">
+                <!-- Will be populated by JavaScript based on machine type -->
+            </div>
+
+            <div class="modal-actions">
+                <button id="modal-confirm" class="btn-confirm" type="button">Confirm</button>
+                <button id="modal-cancel" class="btn-cancel" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- CLIENT-SIDE SCRIPT for add-data.html (WITH INTERACTIVE TOOLING) ---
+
+    // Configuration
+    let templateConfig = {};
+
+    // Tooling management
+    let toolingArray = []; // Stores tools added by user
+    let toolingMetadata = null; // Field definitions from backend
+    let usedToolNumbers = new Set(); // Track which tool numbers are used
+    let editingToolIndex = -1; // Index of tool being edited (-1 = not editing)
+
+    // DOM elements
+    const categorySelect = document.getElementById('template-category');
+    const sheetSelect = document.getElementById('template-sheet');
+    const formContainer = document.getElementById('dynamic-form-container');
+    const toolingSection = document.getElementById('tooling-section');
+    const toolingList = document.getElementById('tooling-list');
+    const addToolingBtn = document.getElementById('add-tooling-btn');
+    const saveButton = document.getElementById('save-button');
+    const loader = document.getElementById('loader');
+    const statusMessage = document.getElementById('status-message');
+
+    // Modal elements
+    const modal = document.getElementById('tooling-modal');
+    const modalToolNumber = document.getElementById('modal-tool-number');
+    const modalFields = document.getElementById('modal-tooling-fields');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+
+    // === INITIALIZATION ===
+    document.addEventListener('DOMContentLoaded', () => {
+        loader.style.display = 'block';
+        loader.textContent = 'Loading configuration...';
+
+        google.script.run
+            .withSuccessHandler(config => {
+                templateConfig = config;
+                for (const category in config) {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category.replace(/_/g, ' ').toUpperCase();
+                    categorySelect.appendChild(option);
+                }
+                loader.style.display = 'none';
+            })
+            .withFailureHandler(showError)
+            .getTemplateConfig();
+    });
+
+    // === CATEGORY SELECTION ===
+    categorySelect.addEventListener('change', () => {
+        const selectedCategory = categorySelect.value;
+
+        sheetSelect.innerHTML = '<option value="">-- Please Select --</option>';
+        sheetSelect.disabled = true;
+        formContainer.innerHTML = '';
+        toolingSection.style.display = 'none';
+        saveButton.style.display = 'none';
+        resetTooling();
+
+        if (selectedCategory && templateConfig[selectedCategory]) {
+            templateConfig[selectedCategory].forEach(sheetName => {
+                const option = document.createElement('option');
+                option.value = sheetName;
+                option.textContent = sheetName;
+                sheetSelect.appendChild(option);
+            });
+            sheetSelect.disabled = false;
+        }
+    });
+
+    // === SHEET SELECTION ===
+    sheetSelect.addEventListener('change', () => {
+        const selectedSheet = sheetSelect.value;
+
+        formContainer.innerHTML = '';
+        toolingSection.style.display = 'none';
+        saveButton.style.display = 'none';
+        resetTooling();
+
+        if (!selectedSheet) return;
+
+        loader.style.display = 'block';
+        loader.textContent = `Loading fields for ${selectedSheet}...`;
+
+        // Load main fields (no tooling fields)
+        google.script.run
+            .withSuccessHandler(response => {
+                loader.style.display = 'none';
+                if (response.success) {
+                    buildDynamicForm(response.headers);
+                    saveButton.style.display = 'block';
+
+                    // Load tooling metadata if sheet has tooling
+                    loadToolingMetadata(selectedSheet);
+                } else {
+                    showError(response.error);
+                }
+            })
+            .withFailureHandler(showError)
+            .getTemplateHeadersForAdd(selectedSheet);
+    });
+
+    // === BUILD FORM (Main Fields Only) ===
+    function buildDynamicForm(headers) {
+        let html = '';
+        headers.forEach(header => {
+            html += `
+                <div class="form-group-dynamic">
+                    <label for="field-${header}">${header}:</label>
+                    <input type="text" id="field-${header}" name="${header}" class="form-input">
+                </div>
+            `;
+        });
+        formContainer.innerHTML = html;
+    }
+
+    // === LOAD TOOLING METADATA ===
+    function loadToolingMetadata(sheetName) {
+        google.script.run
+            .withSuccessHandler(metadata => {
+                if (metadata.success && metadata.hasTooling) {
+                    toolingMetadata = metadata;
+                    toolingSection.style.display = 'block';
+                    setupToolingModal(metadata);
+                }
+                // If no tooling, section stays hidden
+            })
+            .withFailureHandler(err => {
+                console.error('Failed to load tooling metadata:', err);
+            })
+            .getToolingFieldsMetadata(sheetName);
+    }
+
+    // === SETUP TOOLING MODAL ===
+    function setupToolingModal(metadata) {
+        // Populate tool number dropdown
+        modalToolNumber.innerHTML = '<option value="">-- Select Tool Number --</option>';
+        metadata.toolNumbers.forEach(num => {
+            const option = document.createElement('option');
+            option.value = num;
+            option.textContent = `T${num}`;
+            modalToolNumber.appendChild(option);
+        });
+
+        // Build fields based on machine type
+        modalFields.innerHTML = '';
+        metadata.fields.forEach(field => {
+            const requiredMark = field.required ? '<span class="required">*</span>' : '';
+            const html = `
+                <div class="form-group">
+                    <label for="modal-${field.name}">
+                        ${field.label} ${requiredMark}
+                    </label>
+                    <input
+                        type="${field.type}"
+                        id="modal-${field.name}"
+                        class="form-input"
+                        placeholder="${field.placeholder || ''}"
+                        ${field.required ? 'required' : ''}
+                    >
+                </div>
+            `;
+            modalFields.innerHTML += html;
+        });
+    }
+
+    // === OPEN MODAL ===
+    addToolingBtn.addEventListener('click', () => {
+        editingToolIndex = -1; // New tool, not editing
+        clearModalFields();
+        updateToolNumberDropdown();
+        modal.style.display = 'block';
+    });
+
+    // === CLOSE MODAL ===
+    modalCancel.addEventListener('click', closeToolingModal);
+
+    // Close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeToolingModal();
+        }
+    });
+
+    function closeToolingModal() {
+        modal.style.display = 'none';
+        clearModalFields();
+        editingToolIndex = -1;
+    }
+
+    // === CLEAR MODAL FIELDS ===
+    function clearModalFields() {
+        modalToolNumber.value = '';
+        if (toolingMetadata) {
+            toolingMetadata.fields.forEach(field => {
+                const input = document.getElementById(`modal-${field.name}`);
+                if (input) input.value = '';
+            });
+        }
+    }
+
+    // === UPDATE TOOL NUMBER DROPDOWN (Disable used numbers) ===
+    function updateToolNumberDropdown() {
+        Array.from(modalToolNumber.options).forEach(option => {
+            if (option.value) {
+                // Reset first
+                option.disabled = false;
+                option.textContent = `T${option.value}`;
+
+                // Disable if used (and not currently editing this tool)
+                if (usedToolNumbers.has(option.value)) {
+                    const currentToolNumber = editingToolIndex >= 0 ? toolingArray[editingToolIndex].Tool_Number : null;
+                    if (option.value !== currentToolNumber) {
+                        option.disabled = true;
+                        option.textContent += ' (Used)';
+                    }
+                }
+            }
+        });
+    }
+
+    // === CONFIRM ADD/EDIT TOOL ===
+    modalConfirm.addEventListener('click', () => {
+        const toolNumber = modalToolNumber.value;
+
+        if (!toolNumber) {
+            alert('Please select Tool Number');
+            return;
+        }
+
+        // Check if tool number is already used (except when editing)
+        if (editingToolIndex === -1 && usedToolNumbers.has(toolNumber)) {
+            alert('Tool Number already used!');
+            return;
+        }
+
+        // Collect field values
+        const tool = {
+            Tool_Number: toolNumber
+        };
+
+        let hasError = false;
+        toolingMetadata.fields.forEach(field => {
+            const input = document.getElementById(`modal-${field.name}`);
+            const value = input ? input.value.trim() : '';
+
+            if (field.required && !value) {
+                alert(`${field.label} is required`);
+                hasError = true;
+                return;
+            }
+
+            tool[field.name] = value;
+        });
+
+        if (hasError) return;
+
+        // Add or update tool
+        if (editingToolIndex >= 0) {
+            // Editing existing tool
+            const oldToolNumber = toolingArray[editingToolIndex].Tool_Number;
+            if (oldToolNumber !== toolNumber) {
+                usedToolNumbers.delete(oldToolNumber);
+                usedToolNumbers.add(toolNumber);
+            }
+            toolingArray[editingToolIndex] = tool;
+        } else {
+            // Adding new tool
+            toolingArray.push(tool);
+            usedToolNumbers.add(toolNumber);
+        }
+
+        updateToolingDisplay();
+        closeToolingModal();
+    });
+
+    // === UPDATE TOOLING DISPLAY ===
+    function updateToolingDisplay() {
+        if (toolingArray.length === 0) {
+            toolingList.innerHTML = '<p class="empty-state">No tools added yet. Click "Add Tooling" to add tools.</p>';
+            return;
+        }
+
+        let html = '';
+        toolingArray.forEach((tool, index) => {
+            const machineType = toolingMetadata.machineType;
+            const toolNum = tool.Tool_Number;
+
+            let displayInfo = '';
+            if (machineType === 'grinding') {
+                const toolingNo = tool.tooling_no || 'N/A';
+                const maker = tool.maker || 'N/A';
+                displayInfo = `
+                    <strong>T${toolNum}: ${toolingNo}</strong>
+                    <span>Maker: ${maker}</span>
+                `;
+            } else if (machineType === 'turning') {
+                const toolName = tool.Tool_Name || 'N/A';
+                const insertInfo = tool.Insert_Info || '';
+                displayInfo = `
+                    <strong>T${toolNum}: ${toolName}</strong>
+                    ${insertInfo ? `<span>Insert: ${insertInfo}</span>` : ''}
+                `;
+            }
+
+            html += `
+                <div class="tool-item">
+                    <div class="tool-info">
+                        ${displayInfo}
+                    </div>
+                    <div class="tool-actions">
+                        <button onclick="editTool(${index})" class="btn-edit" type="button">Edit</button>
+                        <button onclick="removeTool(${index})" class="btn-remove" type="button">Remove</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        toolingList.innerHTML = html;
+    }
+
+    // === EDIT TOOL ===
+    window.editTool = function(index) {
+        editingToolIndex = index;
+        const tool = toolingArray[index];
+
+        // Populate modal with tool data
+        modalToolNumber.value = tool.Tool_Number;
+
+        toolingMetadata.fields.forEach(field => {
+            const input = document.getElementById(`modal-${field.name}`);
+            if (input) {
+                input.value = tool[field.name] || '';
+            }
+        });
+
+        updateToolNumberDropdown();
+        modal.style.display = 'block';
+    };
+
+    // === REMOVE TOOL ===
+    window.removeTool = function(index) {
+        if (!confirm('Remove this tool?')) return;
+
+        const tool = toolingArray[index];
+        usedToolNumbers.delete(tool.Tool_Number);
+        toolingArray.splice(index, 1);
+
+        updateToolingDisplay();
+    };
+
+    // === RESET TOOLING ===
+    function resetTooling() {
+        toolingArray = [];
+        usedToolNumbers.clear();
+        editingToolIndex = -1;
+        toolingMetadata = null;
+        updateToolingDisplay();
+    }
+
+    // === SAVE DATA ===
+    saveButton.addEventListener('click', () => {
+        const selectedSheet = sheetSelect.value;
+        if (!selectedSheet) {
+            alert('Please select a template first.');
+            return;
+        }
+
+        loader.style.display = 'block';
+        loader.textContent = 'Saving data...';
+        saveButton.disabled = true;
+        showMessage(false);
+
+        // Collect main fields
+        const formData = {
+            sheetName: selectedSheet
+        };
+
+        const inputs = formContainer.querySelectorAll('.form-input');
+        inputs.forEach(input => {
+            formData[input.name] = input.value;
+        });
+
+        // Convert toolingArray to flat format
+        if (toolingMetadata && toolingArray.length > 0) {
+            toolingArray.forEach(tool => {
+                const toolNum = tool.Tool_Number;
+
+                if (toolingMetadata.machineType === 'grinding') {
+                    // Grinding format: tooling_no_01, no_01_maker
+                    formData[`tooling_no_${toolNum}`] = tool.tooling_no || '';
+                    formData[`no_${toolNum}_maker`] = tool.maker || '';
+                } else if (toolingMetadata.machineType === 'turning') {
+                    // Turning format: Tool_Name_1, Tool_Number_1, Insert_Info_1, ...
+                    const numInt = parseInt(toolNum);
+                    formData[`Tool_Name_${numInt}`] = tool.Tool_Name || '';
+                    formData[`Insert_Info_${numInt}`] = tool.Insert_Info || '';
+                    formData[`Insert_I_${numInt}`] = tool.Insert_I || '';
+                    formData[`Insert_E_${numInt}`] = tool.Insert_E || '';
+                    formData[`Insert_Maker_${numInt}`] = tool.Insert_Maker || '';
+                    formData[`Holder_Info_${numInt}`] = tool.Holder_Info || '';
+                    formData[`Holder_Maker_${numInt}`] = tool.Holder_Maker || '';
+                    formData[`Hand_${numInt}`] = tool.Hand || '';
+                    formData[`Overhang_${numInt}`] = tool.Overhang || '';
+                    formData[`H_Width_${numInt}`] = tool.H_Width || '';
+                    formData[`Rotation_${numInt}`] = tool.Rotation || '';
+                    formData[`F_${numInt}`] = tool.F || '';
+                    formData[`AP_${numInt}`] = tool.AP || '';
+                    formData[`Nose_R_${numInt}`] = tool.Nose_R || '';
+                    formData[`Usaged_${numInt}`] = tool.Usaged || '';
+                }
+            });
+        }
+
+        const onSaveComplete = (response) => {
+            loader.style.display = 'none';
+            saveButton.disabled = false;
+            if (response.success) {
+                showMessage(true, response.message);
+                formContainer.innerHTML = '';
+                toolingSection.style.display = 'none';
+                sheetSelect.value = '';
+                saveButton.style.display = 'none';
+                resetTooling();
+            } else {
+                showMessage(false, response.error);
+            }
+        };
+
+        const onSaveFailure = (err) => {
+            loader.style.display = 'none';
+            saveButton.disabled = false;
+            showError(err.message);
+        };
+
+        google.script.run
+            .withSuccessHandler(onSaveComplete)
+            .withFailureHandler(onSaveFailure)
+            .saveData(formData);
+    });
+
+    // === UTILITY FUNCTIONS ===
+    function showError(message) {
+        loader.style.display = 'none';
+        showMessage(false, `Error: ${message}`);
+    }
+
+    function showMessage(isSuccess, message) {
+        statusMessage.textContent = message;
+        statusMessage.className = isSuccess ? 'status-message success' : 'status-message error';
+        statusMessage.style.display = 'block';
+    }
+
+</script>
+</body>
+</html>

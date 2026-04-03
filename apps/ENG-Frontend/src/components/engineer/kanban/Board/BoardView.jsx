@@ -24,7 +24,10 @@ import KanbanList from './KanbanList';
 import KanbanCard from './KanbanCard';
 import { useTheme } from '../../../../theme';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
+<<<<<<< HEAD
 import { useAuthStore } from '../../../../stores/authStore';
+=======
+>>>>>>> old-work-backup
 
 const { Text } = Typography;
 
@@ -84,7 +87,11 @@ const ListViewCard = ({ card, theme }) => {
         return { total, completed, percent: total > 0 ? Math.round((completed / total) * 100) : 0 };
     }, [card.task_lists, card.total_tasks, card.completed_tasks]);
 
+<<<<<<< HEAD
     const assignees = card.assignees || card.memberships || card.members || [];
+=======
+    const assignees = card.assignees || card.members || [];
+>>>>>>> old-work-backup
     const commentCount = card.comments?.length || card.comment_count || 0;
     const attachmentCount = card.attachments?.length || card.attachment_count || 0;
 
@@ -305,6 +312,7 @@ const BoardView = () => {
     const {
         activeBoard, lists, cards, moveCard,
         searchQuery, filterMembers, filterLabels,
+<<<<<<< HEAD
         viewMode, createList, reorderList, reorderCard,
         activeProject, activeBoardMembers
     } = useKanbanStore();
@@ -317,6 +325,12 @@ const BoardView = () => {
         projectRole: activeProject?.role,
         boardRole: currentUserRole
     });
+=======
+        viewMode, createList, reorderList, reorderCard
+    } = useKanbanStore();
+    const { theme } = useTheme();
+    const { canEditBoard, canEditCard } = useKanbanPermissions();
+>>>>>>> old-work-backup
 
     const [isAddingList, setIsAddingList] = useState(false);
     const [newListName, setNewListName] = useState('');
@@ -343,9 +357,14 @@ const BoardView = () => {
                     }
                 }
                 if (filterMembers.length > 0) {
+<<<<<<< HEAD
                     const assignees = card.assignees || card.memberships || card.members || [];
                     const memberCodes = assignees.map(m => typeof m === 'string' ? m : (m.u_code || m));
                     if (!filterMembers.some(m => memberCodes.includes(m))) return false;
+=======
+                    const assignees = card.assignees || [];
+                    if (!filterMembers.some(m => assignees.includes(m))) return false;
+>>>>>>> old-work-backup
                 }
                 if (filterLabels.length > 0) {
                     const cardLabelIds = (card.label_ids || []).map(id => String(id));

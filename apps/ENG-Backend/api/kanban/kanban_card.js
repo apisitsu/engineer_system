@@ -4,7 +4,10 @@
  * Route prefix: /api/kanban/cards, /api/kanban/lists/:id/cards
  */
 const { engPool } = require('../../instance/eng_db');
+<<<<<<< HEAD
 const fs = require('fs');
+=======
+>>>>>>> old-work-backup
 const path = require('path');
 const {
     canAccessProject, canManageProject,
@@ -64,6 +67,7 @@ const GetCards = async (req, res) => {
                    ) AS tasks,
                    (SELECT COUNT(*) FROM kb_comment WHERE card_id=c.id) AS comment_count,
                    (SELECT COUNT(*) FROM kb_attachment WHERE card_id=c.id) AS attachment_count,
+<<<<<<< HEAD
                    (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count,
                    (
                        SELECT a.created_at
@@ -81,6 +85,9 @@ const GetCards = async (req, res) => {
                          AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
                        ORDER BY a.created_at DESC LIMIT 1
                    ) AS action_done_at
+=======
+                   (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count
+>>>>>>> old-work-backup
             FROM kb_card c
             WHERE c.list_id=$1
               AND (
@@ -928,10 +935,15 @@ const DeleteAttachment = async (req, res) => {
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
     await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
+<<<<<<< HEAD
     if (att.attachment_type === 'file') {
         const fullPath = path.join(__dirname, '../../', att.file_path);
         if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
     }
+=======
+    const fullPath = path.join(__dirname, '../../', att.file_path);
+    if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+>>>>>>> old-work-backup
     res.json({ message: 'Attachment deleted' });
 };
 

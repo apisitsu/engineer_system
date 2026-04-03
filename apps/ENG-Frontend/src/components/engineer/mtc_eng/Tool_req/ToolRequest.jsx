@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
+<<<<<<< HEAD
     Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, Form
 } from 'antd';
 import {
     PlusOutlined, SearchOutlined, ReloadOutlined, EyeOutlined, EditOutlined, DeleteOutlined,
     SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CalendarOutlined, CheckCircleOutlined
+=======
+    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
+} from 'antd';
+import {
+    PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
+    StopOutlined
+>>>>>>> old-work-backup
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
+<<<<<<< HEAD
 import axios from 'axios';
 import moment from 'moment';
 
@@ -20,10 +29,33 @@ const { Option } = Select;
 const { TextArea } = Input;
 
 const ToolRequest = () => {
+=======
+import { httpClient as axios } from '../../../../utils/HttpClient';
+import moment from 'moment';
+import RequestDetailsModal from './components/RequestDetailsModal';
+import { 
+    WORKFLOW_STATUS, 
+    STATUS_COLORS, 
+    FILTER_TYPES, 
+    FILTER_TYPE_LABELS,
+    isDoneStatus,
+    isDeniedStatus,
+} from '../../../../constants/workflowConstants';
+
+const { Content } = Layout;
+const { Title, Text } = Typography;
+
+const ToolRequestContent = () => {
+    const { message, modal } = App.useApp();
+>>>>>>> old-work-backup
     const { theme } = useTheme();
     const userName = useAuthStore(state => state.userName);
     const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
+<<<<<<< HEAD
+=======
+    const userInfo = useAuthStore(state => state.userInfo);
+>>>>>>> old-work-backup
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
@@ -34,7 +66,10 @@ const ToolRequest = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
+<<<<<<< HEAD
     const [form] = Form.useForm();
+=======
+>>>>>>> old-work-backup
 
     useEffect(() => {
         fetchRequests();
@@ -43,7 +78,11 @@ const ToolRequest = () => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
+<<<<<<< HEAD
             const { data } = await axios.get(server.MTC_TOOL_REQUESTS);
+=======
+            const { data } = await axios.get(server.MTC_TOOL_REQUESTS, { params: { limit: 200 } });
+>>>>>>> old-work-backup
             setRequests(data.data || []);
         } catch (error) {
             console.error('Error fetching tool requests:', error);
@@ -53,9 +92,15 @@ const ToolRequest = () => {
     };
 
     const handleCreateNew = () => {
+<<<<<<< HEAD
         const newRequestData = {
             requester: userName,
             requester_email: userName ? `${userName}@company.com` : '',
+=======
+        setSelectedRequest({
+            requester: userName,
+            requester_email: userInfo?.gmail_email || '',
+>>>>>>> old-work-backup
             department: userDepartment || '',
             work_center: '',
             work_center_name: '',
@@ -67,24 +112,37 @@ const ToolRequest = () => {
             detail: '',
             machine_no: '',
             machine_name: ''
+<<<<<<< HEAD
         };
 
         setSelectedRequest(newRequestData);
         form.resetFields();
         form.setFieldsValue(newRequestData);
+=======
+        });
+>>>>>>> old-work-backup
         setIsEditing(true);
         setModalVisible(true);
     };
 
     const handleViewRequest = async (record) => {
         try {
+<<<<<<< HEAD
             const { data } = await axios.get(`${server.MTC_TOOL_REQUEST_DETAIL}/${record.id}`);
             setSelectedRequest(data.data);
             form.setFieldsValue(data.data);
+=======
+            const { data } = await axios.get(`${server.MTC_TOOL_REQUESTS}/${record.id}`);
+            setSelectedRequest(data.data);
+>>>>>>> old-work-backup
             setIsEditing(false);
             setModalVisible(true);
         } catch (error) {
             console.error('Error fetching request details:', error);
+<<<<<<< HEAD
+=======
+            message.error('Failed to fetch request details');
+>>>>>>> old-work-backup
         }
     };
 
@@ -92,6 +150,7 @@ const ToolRequest = () => {
         setModalVisible(false);
         setSelectedRequest(null);
         setIsEditing(false);
+<<<<<<< HEAD
         form.resetFields();
     };
 
@@ -110,23 +169,71 @@ const ToolRequest = () => {
             handleModalClose();
             fetchRequests();
         } catch (error) {
+=======
+    };
+
+    const handleSave = async (values) => {
+        try {
+            // Use FormData for file upload support
+            const formData = new FormData();
+            Object.keys(values).forEach(key => {
+                if (key === 'attachment') {
+                    const fileObj = values[key]?.[0]?.originFileObj;
+                    if (fileObj) {
+                        formData.append('attachment', fileObj);
+                    }
+                } else if (values[key] !== undefined && values[key] !== null) {
+                    formData.append(key, values[key]);
+                }
+            });
+
+            const config = {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            };
+
+            if (selectedRequest?.id) {
+                await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, formData, config);
+            } else {
+                await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
+            }
+            message.success(selectedRequest?.id ? 'Request updated' : 'Request created');
+            handleModalClose();
+            fetchRequests();
+        } catch (error) {
+            const errorMsg = error.response?.data?.message || error.message || 'Failed to save request';
+            message.error(errorMsg);
+>>>>>>> old-work-backup
             console.error('Error saving request:', error);
         }
     };
 
     const handleDelete = async (id) => {
+<<<<<<< HEAD
         Modal.confirm({
+=======
+        modal.confirm({
+>>>>>>> old-work-backup
             title: 'Confirm deletion',
             content: 'Are you sure you want to delete this request?',
             okText: 'Delete',
             okType: 'danger',
             onOk: async () => {
                 try {
+<<<<<<< HEAD
                     await axios.delete(`${server.MTC_TOOL_REQUEST_DETAIL}/${id}`);
                     handleModalClose();
                     fetchRequests();
                 } catch (error) {
                     console.error('Error deleting request:', error);
+=======
+                    await axios.delete(`${server.MTC_TOOL_REQUESTS}/${id}`);
+                    handleModalClose();
+                    fetchRequests();
+                    message.success('Request deleted');
+                } catch (error) {
+                    console.error('Error deleting request:', error);
+                    message.error('Failed to delete request');
+>>>>>>> old-work-backup
                 }
             }
         });
@@ -136,19 +243,55 @@ const ToolRequest = () => {
         setFilterType(type);
     };
 
+<<<<<<< HEAD
     // Filter data based on search and filter type
     const filteredRequests = requests.filter(item => {
         // Search filter
+=======
+    // Group requests by Year → Month (year ascending, month ascending within year)
+    const groupByYearMonth = (items) => {
+        const yearMap = {};
+        items.forEach(item => {
+            const date = item.created_at ? moment(item.created_at) : moment();
+            const year = date.format('YYYY');
+            const monthKey = date.format('YYYY-MM');
+            if (!yearMap[year]) yearMap[year] = {};
+            if (!yearMap[year][monthKey]) yearMap[year][monthKey] = [];
+            yearMap[year][monthKey].push(item);
+        });
+        return Object.entries(yearMap)
+            .sort(([a], [b]) => a.localeCompare(b)) // year ascending (oldest on top)
+            .map(([year, monthMap]) => ({
+                year,
+                totalCount: Object.values(monthMap).reduce((s, r) => s + r.length, 0),
+                months: Object.entries(monthMap)
+                    .sort(([a], [b]) => a.localeCompare(b)) // month ascending Jan→Dec
+                    .map(([monthKey, rows]) => ({
+                        key: monthKey,
+                        label: moment(monthKey, 'YYYY-MM').format('MMMM'),
+                        rows
+                    }))
+            }));
+    };
+
+    // Filter data based on search and filter type
+    const filteredRequests = requests.filter(item => {
+>>>>>>> old-work-backup
         if (searchText) {
             const lowerSearch = searchText.toLowerCase();
             const matchesSearch =
                 item.request_item?.toLowerCase().includes(lowerSearch) ||
+<<<<<<< HEAD
+=======
+                item.req_no?.toLowerCase().includes(lowerSearch) ||
+>>>>>>> old-work-backup
                 item.title?.toLowerCase().includes(lowerSearch) ||
                 item.requester?.toLowerCase().includes(lowerSearch) ||
                 item.department?.toLowerCase().includes(lowerSearch);
             if (!matchesSearch) return false;
         }
 
+<<<<<<< HEAD
         // Status filter
         if (filterType === 'pending') {
             return item.status === 'Pending';
@@ -156,11 +299,22 @@ const ToolRequest = () => {
             return item.status === 'In Progress';
         } else if (filterType === 'complete') {
             return item.status === 'Complete';
+=======
+        if (filterType === FILTER_TYPES.PENDING) {
+            return item.status === WORKFLOW_STATUS.PENDING_ENG_CHECK;
+        } else if (filterType === FILTER_TYPES.IN_PROGRESS) {
+            return item.status?.startsWith('Pending') && item.status !== WORKFLOW_STATUS.PENDING_ENG_CHECK;
+        } else if (filterType === FILTER_TYPES.COMPLETE) {
+            return isDoneStatus(item.status) && !isDeniedStatus(item.status);
+        } else if (filterType === FILTER_TYPES.DENIED) {
+            return isDeniedStatus(item.status);
+>>>>>>> old-work-backup
         }
 
         return true; // 'all'
     });
 
+<<<<<<< HEAD
     const getStatusColor = (status) => {
         const colors = {
             'Pending': theme.colors.warning,
@@ -170,6 +324,9 @@ const ToolRequest = () => {
         };
         return colors[status] || theme.colors.textTertiary;
     };
+=======
+    const getStatusColor = (status) => STATUS_COLORS[status] || 'default';
+>>>>>>> old-work-backup
 
     const columns = [
         {
@@ -178,6 +335,7 @@ const ToolRequest = () => {
             key: 'request_item',
             width: 160,
             fixed: 'left',
+<<<<<<< HEAD
             render: (text) => <strong style={{ color: theme.colors.primary }}>{text}</strong>
         },
         {
@@ -186,6 +344,19 @@ const ToolRequest = () => {
             key: 'request_no',
             width: 120,
             render: (text) => text || '-'
+=======
+            render: (text, record) => <strong style={{ color: theme.colors.primary }}>{text || record.req_no || '-'}</strong>
+        },
+        {
+            title: 'Request No.',
+            dataIndex: 'req_no',
+            key: 'req_no',
+            width: 130,
+            render: (text, record) => {
+                const display = text && text !== record.request_item ? text : null;
+                return display ? <Text style={{ color: '#1890ff', fontWeight: 600 }}>{display}</Text> : '-';
+            }
+>>>>>>> old-work-backup
         },
         {
             title: 'Created',
@@ -226,10 +397,33 @@ const ToolRequest = () => {
             width: 250
         },
         {
+<<<<<<< HEAD
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
             width: 110,
+=======
+            title: 'Due Date',
+            dataIndex: 'req_due_date',
+            key: 'req_due_date',
+            width: 110,
+            render: (date, record) => {
+                if (!date) return '-';
+                const isOverdue = moment(date).isBefore(moment(), 'day') &&
+                    !['Completed & Informed', 'Denied', 'Denied by Approve'].includes(record.status);
+                return (
+                    <Text type={isOverdue ? 'danger' : undefined} style={isOverdue ? { fontWeight: 600 } : {}}>
+                        {moment(date).format('DD-MMM-YY')}
+                    </Text>
+                );
+            }
+        },
+        {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            width: 150,
+>>>>>>> old-work-backup
             render: (status) => (
                 <Tag color={getStatusColor(status)}>{status}</Tag>
             )
@@ -239,7 +433,11 @@ const ToolRequest = () => {
             dataIndex: 'current_stage',
             key: 'current_stage',
             width: 120,
+<<<<<<< HEAD
             render: (stage) => <Tag color={theme.colors.info}>{stage}</Tag>
+=======
+            render: (stage) => stage ? <Tag color="blue">{stage}</Tag> : '-'
+>>>>>>> old-work-backup
         },
         {
             title: 'Actions',
@@ -276,7 +474,11 @@ const ToolRequest = () => {
                                     <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 60 }} />
                                     <div style={{ padding: '16px 16px' }}>
                                         <Title level={2} style={{ marginBottom: 0 }}>
+<<<<<<< HEAD
                                             Tool Drawing Request System
+=======
+                                            General DWG Request
+>>>>>>> old-work-backup
                                         </Title>
                                         <Text type="secondary">Manage and track tool & drawing requests</Text>
                                     </div>
@@ -316,6 +518,7 @@ const ToolRequest = () => {
                                                 buttonStyle="solid"
                                                 onChange={(e) => handleFilterChange(e.target.value)}
                                             >
+<<<<<<< HEAD
                                                 <Radio.Button value="pending">
                                                     <ClockCircleOutlined /> Pending
                                                 </Radio.Button>
@@ -326,6 +529,21 @@ const ToolRequest = () => {
                                                     <CheckCircleOutlined /> Complete
                                                 </Radio.Button>
                                                 <Radio.Button value="all">
+=======
+                                                <Radio.Button value={FILTER_TYPES.PENDING}>
+                                                    <ClockCircleOutlined /> Eng Check
+                                                </Radio.Button>
+                                                <Radio.Button value={FILTER_TYPES.IN_PROGRESS}>
+                                                    <SyncOutlined spin /> In Progress
+                                                </Radio.Button>
+                                                <Radio.Button value={FILTER_TYPES.COMPLETE}>
+                                                    <CheckCircleOutlined /> Complete
+                                                </Radio.Button>
+                                                <Radio.Button value={FILTER_TYPES.DENIED}>
+                                                    <StopOutlined /> Denied
+                                                </Radio.Button>
+                                                <Radio.Button value={FILTER_TYPES.ALL}>
+>>>>>>> old-work-backup
                                                     <UnorderedListOutlined /> All
                                                 </Radio.Button>
                                             </Radio.Group>
@@ -334,6 +552,7 @@ const ToolRequest = () => {
                                 </Row>
                             </Card>
 
+<<<<<<< HEAD
                             {/* Table Section */}
                             <Card
                                 title={
@@ -522,6 +741,66 @@ const ToolRequest = () => {
                                 </Row>
                             </Form>
                         </Modal>
+=======
+                            {/* Table Section — grouped by Year → Month (collapsed by default) */}
+                            <div style={{ marginTop: 16 }}>
+                                <Collapse
+                                    ghost
+                                    items={groupByYearMonth(filteredRequests).map(yearGroup => ({
+                                        key: yearGroup.year,
+                                        label: (
+                                            <Space>
+                                                <Text strong style={{ fontSize: 15 }}>{yearGroup.year}</Text>
+                                                <Tag color="geekblue">{yearGroup.totalCount} requests</Tag>
+                                            </Space>
+                                        ),
+                                        children: (
+                                            <Collapse
+                                                ghost
+                                                items={yearGroup.months.map(monthGroup => ({
+                                                    key: monthGroup.key,
+                                                    label: (
+                                                        <Space>
+                                                            <Text style={{ fontSize: 13 }}>{monthGroup.label}</Text>
+                                                            <Tag color="blue">{monthGroup.rows.length} request{monthGroup.rows.length !== 1 ? 's' : ''}</Tag>
+                                                        </Space>
+                                                    ),
+                                                    children: (
+                                                        <Table
+                                                            dataSource={monthGroup.rows}
+                                                            columns={columns}
+                                                            rowKey="id"
+                                                            pagination={false}
+                                                            scroll={{ x: 'max-content' }}
+                                                            size="small"
+                                                            onRow={(record) => ({
+                                                                onDoubleClick: () => handleViewRequest(record),
+                                                                style: { cursor: 'pointer' }
+                                                            })}
+                                                        />
+                                                    )
+                                                }))}
+                                                style={{ marginLeft: 8 }}
+                                            />
+                                        )
+                                    }))}
+                                    style={{ background: theme.colors.surface, borderRadius: 8 }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Request Details Modal */}
+                        <RequestDetailsModal
+                            visible={modalVisible}
+                            onClose={handleModalClose}
+                            request={selectedRequest}
+                            isEditing={isEditing}
+                            onSave={handleSave}
+                            onDelete={handleDelete}
+                            onEdit={() => setIsEditing(true)}
+                            onActionDone={() => { fetchRequests(); handleModalClose(); }}
+                        />
+>>>>>>> old-work-backup
                     </Content>
                 </Spin>
             </Layout>
@@ -529,4 +808,13 @@ const ToolRequest = () => {
     );
 };
 
+<<<<<<< HEAD
+=======
+const ToolRequest = () => (
+    <App>
+        <ToolRequestContent />
+    </App>
+);
+
+>>>>>>> old-work-backup
 export default ToolRequest;

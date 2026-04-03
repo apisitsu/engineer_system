@@ -119,12 +119,19 @@ const IconPicker = ({ value, onChange, theme }) => (
 const ProjectSettingsDrawer = () => {
     const { theme } = useTheme();
 
+<<<<<<< HEAD
     const activeProject = useKanbanStore(state => state.activeProject);
     const projects = useKanbanStore(state => state.projects);
+=======
+>>>>>>> old-work-backup
     const {
         isProjectSettingsOpen,
         closeProjectSettings,
         projectSettingsTargetId,
+<<<<<<< HEAD
+=======
+        projects,
+>>>>>>> old-work-backup
         fetchProjects,
         setActiveProject,
         updateProject,
@@ -146,6 +153,7 @@ const ProjectSettingsDrawer = () => {
     const [editingPrivate, setEditingPrivate] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
 
+<<<<<<< HEAD
     const targetId = projectSettingsTargetId || activeProject?.id;
     const activeProjectForPermissions = projects.find(p => String(p.id) === String(targetId));
     const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions({
@@ -156,6 +164,13 @@ const ProjectSettingsDrawer = () => {
     useEffect(() => {
         if (isProjectSettingsOpen) fetchUserPreferences();
     }, [isProjectSettingsOpen, fetchUserPreferences]);
+=======
+    const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions();
+
+    useEffect(() => {
+        if (isProjectSettingsOpen) fetchUserPreferences();
+    }, [isProjectSettingsOpen]);
+>>>>>>> old-work-backup
 
     // Single-project mode: auto-open editing when drawer opens with a target
     const isSingleProjectMode = !!projectSettingsTargetId;

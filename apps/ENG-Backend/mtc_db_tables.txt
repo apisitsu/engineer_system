@@ -1,0 +1,130 @@
+================================================================================
+  MTC ENG — Database Tables Inventory
+  Database: eng_system (PostgreSQL localhost:5432)
+  Date: 2026-03-29
+================================================================================
+
+--------------------------------------------------------------------------------
+1. TOOLING INSPECT
+   File: api/engineer/mtc/eng_mtc_model.js
+   Route: /api/tooling_inspect/*
+   Frontend: /eng/mtc_eng/tooling
+--------------------------------------------------------------------------------
+
+  TABLE              | USED FOR
+  -------------------|----------------------------------------------------------
+  tooling_inspect    | รายการ tooling ทั้งหมด (inspect data)
+  tool_dwg_request   | คำขอ drawing เก่า (ระบบเก่าก่อน General DWG Request)
+  tb_tooling_return  | บันทึกการคืน tooling
+  wc_code            | รหัส Work Center (lookup)
+  holidays_date      | วันหยุด (คำนวณ due date)
+
+--------------------------------------------------------------------------------
+2. GENERAL DWG REQUEST  ← ระบบใหม่
+   File: api/engineer/mtc/tool_req.js
+   Route: /api/engineer/mtc/tool-requests/*
+   Frontend: /eng/mtc_eng/tool-request
+--------------------------------------------------------------------------------
+
+  TABLE              | USED FOR
+  -------------------|----------------------------------------------------------
+  tr_request         | คำขอ DWG Request (main record)
+  tr_workflow        | ประวัติ workflow แต่ละ stage (Eng Check → Eng Inform)
+
+--------------------------------------------------------------------------------
+3. SETUP DATA SHEET (SDS)
+   File: api/engineer/mtc/sds.js
+   Route: /api/sds/*
+   Frontend: /eng/mtc_eng/sds
+--------------------------------------------------------------------------------
+
+  TABLE                  | USED FOR
+  -----------------------|------------------------------------------------------
+  setup_sheet            | Setup Sheet หลัก
+  approval               | ข้อมูลการอนุมัติ setup sheet
+  template               | Template ไฟล์ Excel
+  template_excel_mapping | Mapping cell address ↔ param key ใน template
+  setup_parameter_value  | ค่า parameter แต่ละ setup sheet
+  template_parameter     | (มีใน DB แต่ยังไม่ใช้ใน sds.js)
+
+--------------------------------------------------------------------------------
+4. TOOLING SELECT
+   File: api/engineer/mtc/tooling_select.js
+         api/engineer/mtc/logic/fixtureLogic.js
+         api/engineer/mtc/logic/dynamicLogic.js
+   Route: /api/tooling-select/*
+   Frontend: /eng/mtc_eng/tooling-select
+--------------------------------------------------------------------------------
+
+  TABLE                  | USED FOR
+  -----------------------|------------------------------------------------------
+  mtc_selection_rules    | กฎการเลือก tooling ตาม machine/category
+  tooling                | (มีใน DB — อาจเป็น tooling master เก่า)
+  tooling_ksb22g         | Tooling data สำหรับ machine KSB22G
+  tooling_ksb80          | Tooling data สำหรับ machine KSB80
+  tooling_tsg300         | Tooling data สำหรับ machine TSG300
+  tooling_ks03a          | Tooling data สำหรับ machine KS03A
+  tooling_ks400b         | Tooling data สำหรับ machine KS400B
+  tooling_ks500rd        | Tooling data สำหรับ machine KS500RD
+  tooling_ks400b5        | Tooling data สำหรับ machine KS400B5
+  tooling_ks400b6        | Tooling data สำหรับ machine KS400B6
+  spec_process           | Spec/process data (lookup สำหรับ fixture logic)
+
+================================================================================
+  ⚠️  ตารางใน DB ที่ดูเหมือนซ้ำซ้อน / ต้องตรวจสอบ
+================================================================================
+
+  ISSUE 1: DWG Request มี 2 ระบบ
+  ─────────────────────────────────────────────────────────────────────────────
+  tool_dwg_request   ← ระบบเก่า (ใช้ใน eng_mtc_model.js / Tooling Inspect)
+  tr_request         ← ระบบใหม่ (General DWG Request)
+  tr_workflow        ← ระบบใหม่ (workflow history)
+
+  → tr_request มี 35 legacy records ที่ migrate มาจากระบบเก่า
+    (request_item = NULL หมายถึง record เก่า)
+  → แนะนำ: ตัดสินใจว่าจะ deprecate tool_dwg_request หรือไม่
+
+  ISSUE 2: Workflow tables อาจซ้ำกับ tr_workflow
+  ─────────────────────────────────────────────────────────────────────────────
+  approval           ← ใช้ใน sds.js (approval ของ setup sheet)
+  eng_check          ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+  draft_man          ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+  dwg_check          ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+  eng_review         ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+  eng_approve        ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+  eng_inform         ← มีใน DB แต่ไม่พบการใช้ใน mtc files
+
+  → tables เหล่านี้ชื่อตรงกับ stage ของ General DWG Request
+  → อาจเป็น draft schema เก่าก่อนจะรวมเป็น tr_workflow
+  → แนะนำ: ตรวจสอบว่ามีข้อมูลใน tables เหล่านี้หรือไม่ ถ้าว่างสามารถ DROP ได้
+
+  ISSUE 3: tooling master ซ้ำซ้อน
+  ─────────────────────────────────────────────────────────────────────────────
+  tooling            ← generic tooling table (มีใน DB แต่ไม่พบการใช้ใน mtc files)
+  tooling_ksb22g     ← machine-specific tooling
+  tooling_ksb80      ← machine-specific tooling
+  ... (อีก 7 tables)
+
+  → tooling ทั่วไปกับ tooling_* เฉพาะเครื่องอาจซ้ำกัน
+  → แนะนำ: ตรวจสอบโครงสร้าง column ว่าต่างกันอย่างไร
+
+================================================================================
+  ตารางใน DB ที่ไม่เกี่ยวกับ MTC (ข้อมูลเพิ่มเติม)
+================================================================================
+
+  System-wide:
+    users, m_user, m_user_profile, departments, work_centers
+
+  Process Eng:
+    ecr_requests, ecnt_document, ecnt_tasks, ecnt_approval_log,
+    ecnt_notifications, feed_condition, specifications, spec_parts,
+    spec_extended, spec_race, tracking
+
+  Project Management (Kanban):
+    kb_*, pm_*, requests, revision_history
+
+  Other:
+    email_config, system_logs, due_days_config, holidays,
+    machines, sheet8_mapping
+
+================================================================================

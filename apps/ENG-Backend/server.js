@@ -111,13 +111,18 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
+<<<<<<< HEAD
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')) {
+=======
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/sds/test-puppeteer' || req.path.startsWith('/public')) {
+>>>>>>> old-work-backup
     return next();
   }
 
   return verifyToken(req, res, next);
 });
 
+<<<<<<< HEAD
 
 
 //--------------------User----------------------//
@@ -126,6 +131,8 @@ const newProducts = require('./api/engineer/new_prod/tool');
 app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
 
 
+=======
+>>>>>>> old-work-backup
 //--------------------User----------------------//
 const userController = require('./api/user/userModel');
 
@@ -140,6 +147,7 @@ app.route('/api/refresh-token').post(userController.RefreshToken)
 //------------------Process Engineer------------------//
 const engProcess = require('./api/engineer/process/eng_process_model');
 
+<<<<<<< HEAD
 app.route('/api/ecr/getlist').get(verifyToken, engProcess.ecrGetList)
 app.route('/api/ecr/create').post(verifyToken, engProcess.ecrCreate)
 app.route('/api/ecr/:id').get(verifyToken, engProcess.ecrGetById)
@@ -151,6 +159,10 @@ app.get('/api/ecr/:id/tasks', verifyToken, engProcess.ecrGetTasks);
 app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
 
 // --------- GENERIC UPLOAD API FOR ECR FILES ---------
+=======
+app.route('/api/ecr/getlist').get(engProcess.ecrGetList)
+app.route('/api/ecr/create').post(engProcess.ecrCreate)
+>>>>>>> old-work-backup
 app.route('/api/tumble/getAllCondition').get(engProcess.tumbleGetAllCondition)
 app.route('/api/tumble/createCondition').post(engProcess.tumbleCreateCondition)
 app.route('/api/tumble/updateCondition/:id').put(engProcess.tumbleUpdateCondition)
@@ -160,6 +172,7 @@ app.route('/api/tumble/createModel').post(engProcess.tumbleCreateModel)
 app.route('/api/tumble/updateModel/:id').put(engProcess.tumbleUpdateModel)
 app.route('/api/tumble/deleteModel/:id').delete(engProcess.tumbleDeleteModel)
 
+<<<<<<< HEAD
 // File Upload API
 app.post('/api/upload', (req, res) => {
   if (!req.files || Object.keys(req.files).length === 0) {
@@ -181,12 +194,19 @@ app.post('/api/upload', (req, res) => {
 
 //------------------MTC Engineer------------------//
 const engMTC = require('./api/engineer/mtc/eng_mtc_model');
+=======
+//------------------ MTC Routes ----------------//
+const engMTC = require('./api/engineer/mtc/eng_mtc_model');
+const toolingSelect = require('./api/engineer/mtc/tooling_select');
+const sds = require('./api/engineer/mtc/sds');
+>>>>>>> old-work-backup
 
 app.route('/api/tooling_inspect/getlist').get(engMTC.ToolingInspectGetlist)
 app.route('/api/tooling_inspect/dwg_require_getlist').get(engMTC.ToolDWGRequestGetList)
 app.route('/api/tooling_inspect/dwg_require_add').post(engMTC.ToolDWGRequestAdd)
 app.route('/api/tooling_inspect/dashboard_stats').get(engMTC.ToolingDashboadtGetlist)
 app.route('/api/tooling_inspect/return_add').post(engMTC.ToolingReturnAdd)
+<<<<<<< HEAD
 app.route('/api/tooling_inspect/update').post(engMTC.ToolingInspectUpdate)
 
 // Tool Request System
@@ -199,6 +219,48 @@ app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
 app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
 app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
 
+=======
+app.route('/api/tooling_inspect/inspect_update').post(engMTC.ToolingInspectUpdate)
+app.route('/api/master/wc').get(engMTC.GetWCCodes)
+
+app.use('/api/tooling-select', toolingSelect);
+app.use('/api/sds', sds);
+
+
+// ============================================================================
+// Tool Request System (General DWG Request)
+// ============================================================================
+const toolReq = require('./api/engineer/mtc/tool_req');
+
+// Optional: Import middleware for enhanced security (uncomment to enable)
+// const { verifyToken, optionalAuth } = require('./api/engineer/mtc/middleware/toolRequestAuth');
+// const { validateFileUpload } = require('./api/engineer/mtc/middleware/fileUpload');
+
+// Public endpoints (no authentication required)
+app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
+app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
+app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
+app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
+
+// To enable authentication and file validation, uncomment the middleware:
+// app.post('/api/engineer/mtc/tool-requests',
+//   verifyToken,
+//   validateFileUpload({ fieldName: 'attachment', required: false }),
+//   toolReq.createToolRequest
+// );
+
+app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
+app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
+app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
+app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
+
+// Note: For production deployment, enable authentication by:
+// 1. Uncomment the middleware imports above
+// 2. Add verifyToken middleware to protected endpoints
+// 3. Set JWT_SECRET in .env file
+// 4. See API_DOCUMENTATION.md for authentication details
+
+>>>>>>> old-work-backup
 
 //--------------------System Engineer (TODO/Project Management v2)---------------------//
 const system = require('./api/engineer/system/todoModel_v2');
@@ -329,6 +391,7 @@ app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUse
 app.post('/api/system/user-management/schema/add-column', requireSuperAdminOrEmergency, userManagement.addColumn);
 app.post('/api/system/user-management/schema/drop-column', requireSuperAdminOrEmergency, userManagement.dropColumn);
 
+<<<<<<< HEAD
 // System Settings
 const requireSystemEngineer = (req, res, next) => {
   const dept = req.user?.department || req.user?.u_department;
@@ -344,3 +407,5 @@ const settingsModel = require('./api/system/settingsModel');
 app.get('/api/system/settings', settingsModel.getSettings);
 app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSettings);
 
+=======
+>>>>>>> old-work-backup

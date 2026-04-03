@@ -4,6 +4,10 @@ import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from '../../../theme';
 import { ProjectOutlined } from '@ant-design/icons';
 import ScrollbarStyle from '../../common/scrollbar';
+<<<<<<< HEAD
+=======
+// import { SendEmailButton } from '../../shared/SendEmailButton';
+>>>>>>> old-work-backup
 import { SendEmailButton } from '../../shared';
 
 const { Content } = Layout;
@@ -31,6 +35,10 @@ function Tooling_Report() {
           }}>
             {/* Tool Request System */}
             <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
+<<<<<<< HEAD
+=======
+              {/* <h2 style={{ marginBottom: '16px' }}>System Engineer Report</h2> */}
+>>>>>>> old-work-backup
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
                   <h2><ProjectOutlined style={{ color: theme.colors.primary }} />
@@ -40,6 +48,7 @@ function Tooling_Report() {
                 </Divider>
               </div>
             </div>
+<<<<<<< HEAD
 
             {/* --- Email Notification Test --- */}
             <div style={{ marginTop: 16 }}>
@@ -50,6 +59,14 @@ function Tooling_Report() {
                 onSuccess={(params) => console.log('📧 Notification sent!', params)}
               />
             </div>
+=======
+            <SendEmailButton
+              to="nanthiwa.k@minebea.co.th"
+              subject="Test Email"
+              htmlContent="<h1>Hello!</h1>"
+              onSuccess={(data) => console.log('Sent!', data)}
+            />
+>>>>>>> old-work-backup
           </Content>
         </Spin>
       </Layout>

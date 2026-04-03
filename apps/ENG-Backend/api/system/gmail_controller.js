@@ -1,7 +1,17 @@
 const { sendEmailViaAS } = require('./emailService');
 const { engPool } = require('../../instance/eng_db');
 
+<<<<<<< HEAD
 const handleSendEmail = async (req, res) => {
+=======
+/**
+ * POST /api/send-email
+ * Sends an email via Google Apps Script on behalf of the authenticated user.
+ * Requires JWT authentication (req.user.empno must be populated).
+ * Body: { to, subject, htmlContent }
+ */
+exports.handleSendEmail = async (req, res) => {
+>>>>>>> old-work-backup
     const { to, subject, htmlContent } = req.body;
 
     if (!to || !subject) {
@@ -44,7 +54,16 @@ const handleSendEmail = async (req, res) => {
     }
 };
 
+<<<<<<< HEAD
 const getGmailStatus = async (req, res) => {
+=======
+/**
+ * GET /api/gmail-status
+ * Returns the email service status for the authenticated user.
+ * With GAS approach, the service is always "connected" as long as the user is authenticated.
+ */
+exports.getGmailStatus = async (req, res) => {
+>>>>>>> old-work-backup
     try {
         const userId = req.user?.empno;
         if (!userId) {
@@ -69,9 +88,12 @@ const getGmailStatus = async (req, res) => {
         console.error('❌ Gmail status error:', error);
         res.status(500).json({ error: error.message });
     }
+<<<<<<< HEAD
 };
 
 module.exports = {
     handleSendEmail,
     getGmailStatus
+=======
+>>>>>>> old-work-backup
 };

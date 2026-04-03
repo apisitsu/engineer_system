@@ -277,7 +277,11 @@ function Sign_in() {
         position: 'relative',
         zIndex: 1,
       }}>
+<<<<<<< HEAD
         <Card style={cardStyle} bordered={false}>
+=======
+        <Card style={cardStyle} variant="borderless">
+>>>>>>> old-work-backup
           {/* Logo Section */}
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div style={{

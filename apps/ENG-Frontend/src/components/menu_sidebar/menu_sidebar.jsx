@@ -57,12 +57,17 @@ export const system = createMenu([
             { label: "Task", path: "/eng/system_eng/todo_project", key: "3" }
         ]
     },
+<<<<<<< HEAD
     { label: "User Management", path: "/eng/system_eng/user_management", key: "4" },
     { label: "Setting", path: "/eng/system_eng/setting", key: "5" }
+=======
+    { label: "User Management", path: "/eng/system_eng/user_management", key: "4" }
+>>>>>>> old-work-backup
 ]);
 
 export const process = createMenu([
     { label: "Home", path: "/eng/process_eng" },
+<<<<<<< HEAD
     {
         label: "ECNT",
         key: "ecnt",
@@ -73,6 +78,9 @@ export const process = createMenu([
             { label: "History", path: "/eng/process_eng/ecnt/history" },
         ]
     },
+=======
+    { label: "ECNT", path: "/eng/process_eng/ecnt" },
+>>>>>>> old-work-backup
     { label: "Tumble", path: "/eng/process_eng/tumble" },
 ]);
 
@@ -83,7 +91,14 @@ export const newprod = createMenu([
 export const mtc = createMenu([
     { label: "Home", path: "/eng/mtc_eng" },
     { label: "Tooling Inspect", path: "/eng/mtc_eng/tooling" },
+<<<<<<< HEAD
     { label: "Tool Request", path: "/eng/mtc_eng/tool-request" },
+=======
+    { label: "General DWG Request", path: "/eng/mtc_eng/tool-request" },
+    { label: "Tooling Select", path: "/eng/mtc_eng/tooling-select" },
+    { label: "Setup Data Sheet", path: "/eng/mtc_eng/sds" },
+
+>>>>>>> old-work-backup
 ]);
 
 export const all = createMenu([

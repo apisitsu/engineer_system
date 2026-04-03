@@ -1,5 +1,31 @@
+<<<<<<< HEAD
 apps/ENG-Frontend/node_modules
 node_modules
 dist
 .env
 .DS_Store
+=======
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables (Security)
+.env
+.env.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Large tool binaries (LibreOffice, etc.)
+apps/ENG-Backend/tools/
+*.exe
+*.dll
+
+# Database
+db_eng/
+>>>>>>> old-work-backup

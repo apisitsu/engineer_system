@@ -8,7 +8,12 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
+<<<<<<< HEAD
 export const apiUrl = "http://plbmp129:2005/";
+=======
+// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp118:2005/";
+>>>>>>> old-work-backup
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -20,6 +25,7 @@ export const server = {
   //--------------------MAQ--------------------//
 
   //--------------------Tooling--------------------//
+<<<<<<< HEAD
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
@@ -42,6 +48,38 @@ export const server = {
   ECR_REQUIRE_ACK_TASK: `${apiUrl}api/ecr/tasks/`, // append taskId/ack
   ECR_USERS_BY_DEPT: `${apiUrl}api/ecr/users-by-dept/`, // append dept
   ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
+=======
+  // Tooling Inspect (Legacy System)
+  TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
+  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
+  TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
+  
+  // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
+  TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
+  TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
+  
+  // General DWG Request (New System - tr_request)
+  MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
+  MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
+  MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
+  MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
+
+  // Tooling Select & SDS
+  MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,
+  MTC_TOOLING_INVENTORY: `${apiUrl}api/tooling-select/inventory`,
+  MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
+  MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
+  MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
+  MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
+  MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
+  MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
+  MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
+  MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
+
+  //--------------------ECNT--------------------//
+  ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
+  ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,
+>>>>>>> old-work-backup
   ECR_REQUIRE_SEND_EMAIL: `${apiUrl}api/send-email`,
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
@@ -167,6 +205,9 @@ export const color = {
 export const mm_safety = {
   TOTAL_STOCK: "TOTAL_STOCK"
 }
+<<<<<<< HEAD
 
 // Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
 export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
+=======
+>>>>>>> old-work-backup

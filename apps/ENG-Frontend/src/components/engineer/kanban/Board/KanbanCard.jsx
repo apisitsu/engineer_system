@@ -44,7 +44,11 @@ const KanbanCard = ({ card, isOverlay }) => {
     const hasDescription = !!card.description;
     const commentCount = card.comments?.length || card.comment_count || 0;
     const attachmentCount = card.attachments?.length || card.attachment_count || 0;
+<<<<<<< HEAD
     const assignees = card.assignees || card.memberships || card.members || [];
+=======
+    const assignees = card.assignees || card.members || [];
+>>>>>>> old-work-backup
     const hasCoverImage = !!card.cover_image;
 
     const hasProblemOrSolution = !!card.problem_detail || !!card.solution_detail || Number(card.issue_count) > 0 || (card.issues && card.issues.length > 0);
@@ -68,6 +72,7 @@ const KanbanCard = ({ card, isOverlay }) => {
         return { bgColor, textColor, dateStr, fullDate: due.toLocaleString() };
     }, [card.due_date]);
 
+<<<<<<< HEAD
     // Current State Time (If Done: shows total time from InProgress to Done. Otherwise: time spent in current list)
     const currentStateTimeInfo = useMemo(() => {
         let startMs, endMs, tooltipStr;
@@ -101,6 +106,8 @@ const KanbanCard = ({ card, isOverlay }) => {
         return { displayStr, tooltip: tooltipStr };
     }, [card.list_changed_at, card.created_at, card.action_in_progress_at, card.action_done_at]);
 
+=======
+>>>>>>> old-work-backup
     return (
         <div
             onClick={() => openCardDetail(card.id)}
@@ -271,6 +278,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                             </Tooltip>
                         )}
 
+<<<<<<< HEAD
                         {/* Current State Time Badge */}
                         {currentStateTimeInfo && (
                             <Tooltip title={currentStateTimeInfo.tooltip}>
@@ -292,6 +300,8 @@ const KanbanCard = ({ card, isOverlay }) => {
                         )}
 
 
+=======
+>>>>>>> old-work-backup
                         {/* Description indicator */}
                         {hasDescription && (
                             <Tooltip title="Has description">
@@ -309,7 +319,11 @@ const KanbanCard = ({ card, isOverlay }) => {
                         {/* Memo indicator */}
                         {hasMemo && (
                             <Tooltip title="Has Memo">
+<<<<<<< HEAD
                                 <CiMemoPad size={15} color={theme.colors.textTertiary} />
+=======
+                                <CiMemoPad  size={15} color={theme.colors.textTertiary} />
+>>>>>>> old-work-backup
                             </Tooltip>
                         )}
 

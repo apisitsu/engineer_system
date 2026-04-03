@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment variables (sensitive)
+.env
+.env.local
+.env.*.local
+
+# Build output
+apps/web/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PDF cache & uploads (generated at runtime)
+apps/api/output/
+apps/api/uploads/
+
+# Editor
+.vscode/

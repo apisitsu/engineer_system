@@ -51,6 +51,10 @@
     "pg-format": "^1.0.4",
     "pg-hstore": "^2.3.4",
     "pool": "^0.4.1",
+<<<<<<< HEAD
+=======
+    "puppeteer": "^24.40.0",
+>>>>>>> old-work-backup
     "qrcode": "^1.5.4",
     "read-excel-file": "^5.6.1",
     "sequelize": "^6.21.0",

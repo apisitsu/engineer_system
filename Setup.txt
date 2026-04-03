@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 npm config set proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
 npm config set https-proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
+=======
+npm config set proxy http://lble485:Kpx89164#4@proxyth.bp.minebea.local:8080
+npm config set https-proxy http://lble485:Kpx89164#4@proxyth.bp.minebea.local:8080
+>>>>>>> old-work-backup
 
 npm init -y
 npm install axios bcryptjs body-parser cors exceljs express express-fileupload express-promise-router formidable fs-extra moment-timezone multer nodemon pdf-lib pdfjs pg pg-hstore pool qrcode read-excel-file sequelize tedious xlsx

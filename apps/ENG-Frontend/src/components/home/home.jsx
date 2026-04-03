@@ -19,7 +19,12 @@ const HomeEng = () => {
   const { theme } = useTheme();
   const { userDepartment, userRole } = useAuthStore();
 
+<<<<<<< HEAD
   const hasRestrictedAccess = userDepartment === 'AD'
+=======
+  const hasRestrictedAccess =
+    userDepartment === 'AD'
+>>>>>>> old-work-backup
   // (userDepartment === 'ENG' && ['MGR', 'COORD'].includes(userRole));
 
   const styles = {

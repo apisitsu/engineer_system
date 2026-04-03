@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState } from "react";
 import { Layout, Spin } from "antd";
 import { Card, Button, Select } from 'antd';
@@ -7,6 +8,17 @@ import { BsFillClipboard2CheckFill } from "react-icons/bs";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from "../../../theme";
 import { SendEmailButton } from '../../shared';
+=======
+import React, { useState, useRef } from "react";
+import { Layout, Space, Input, Spin } from "antd";
+import { Card, Table, Button, Select } from 'antd';
+import { SearchOutlined, FileSearchOutlined } from '@ant-design/icons';
+import Highlighter from 'react-highlight-words';
+import { MdAssessment } from "react-icons/md";
+import { BsFillClipboard2CheckFill } from "react-icons/bs";
+import { MenuTemplate } from "../../menu_sidebar/menu_template";
+import { useTheme } from "../../../theme";
+>>>>>>> old-work-backup
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -68,6 +80,7 @@ const App = () => {
                   >
                     DWG Check Tool
                   </Button>
+<<<<<<< HEAD
                   <Button
                     type="primary"
                     icon={<MdArtTrack />}
@@ -98,6 +111,8 @@ const App = () => {
                       onSuccess={(params) => console.log('📧 Notification sent!', params)}
                     />
                   </div> */}
+=======
+>>>>>>> old-work-backup
                 </div>
               </Card>
             </div>

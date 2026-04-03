@@ -77,8 +77,12 @@ export const useKanbanStore = create((set, get) => ({
             set({ projects: prjs });
             const currentActive = get().activeProject;
             if (prjs.length > 0) {
+<<<<<<< HEAD
                 // Only auto-switch if currently active project is no longer in the list
                 if (currentActive && !prjs.find(p => p.id === currentActive.id)) {
+=======
+                if (!currentActive || !prjs.find(p => p.id === currentActive.id)) {
+>>>>>>> old-work-backup
                     get().setActiveProject(prjs[0]);
                 }
             } else {
@@ -104,7 +108,10 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(server.KANBAN_PROJECTS, data);
             if (res.data?.data) {
                 set(state => ({ projects: [...state.projects, res.data.data] }));
+<<<<<<< HEAD
                 get().checkAndAutoJoin('project', res.data.data.id);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -125,7 +132,10 @@ export const useKanbanStore = create((set, get) => ({
                         ? { ...state.activeProject, ...res.data.data }
                         : state.activeProject
                 }));
+<<<<<<< HEAD
                 get().checkAndAutoJoin('project', projectId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -179,8 +189,12 @@ export const useKanbanStore = create((set, get) => ({
     fetchProjectManagers: async (projectId) => {
         try {
             const res = await axios.get(`${server.KANBAN_PROJECTS}/${projectId}/managers`);
+<<<<<<< HEAD
             const managers = res.data?.data || [];
             set({ projectManagers: managers });
+=======
+            set({ projectManagers: res.data?.data || [] });
+>>>>>>> old-work-backup
         } catch (err) {
             console.error('Failed to fetch project managers', err);
         }
@@ -283,8 +297,12 @@ export const useKanbanStore = create((set, get) => ({
     fetchBoardMembers: async (boardId) => {
         try {
             const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/members`);
+<<<<<<< HEAD
             const members = res.data?.data || [];
             set({ activeBoardMembers: members });
+=======
+            set({ activeBoardMembers: res.data?.data || [] });
+>>>>>>> old-work-backup
         } catch (err) {
             console.error('Failed to fetch board members', err);
             set({ activeBoardMembers: [] });
@@ -301,7 +319,10 @@ export const useKanbanStore = create((set, get) => ({
                         ? { ...state.activeBoard, ...res.data.data }
                         : state.activeBoard
                 }));
+<<<<<<< HEAD
                 get().checkAndAutoJoin('board', boardId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -317,7 +338,10 @@ export const useKanbanStore = create((set, get) => ({
             const projectId = get().activeProject?.id;
             if (projectId) {
                 get().fetchBoards(projectId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('project', projectId);
+=======
+>>>>>>> old-work-backup
             }
             return true;
         } catch (err) {
@@ -359,11 +383,26 @@ export const useKanbanStore = create((set, get) => ({
     //  BOARD MEMBERSHIPS
     // ====================================================================
 
+<<<<<<< HEAD
+=======
+    fetchBoardMembers: async (boardId) => {
+        try {
+            const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/members`);
+            set({ activeBoardMembers: res.data?.data || [] });
+        } catch (err) {
+            console.error('Failed to fetch board members', err);
+        }
+    },
+
+>>>>>>> old-work-backup
     addBoardMember: async (boardId, uCode) => {
         try {
             await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, { target_u_code: uCode });
             get().fetchBoardMembers(boardId);
+<<<<<<< HEAD
             get().checkAndAutoJoin('board', boardId);
+=======
+>>>>>>> old-work-backup
         } catch (err) {
             console.error('Failed to add board member', err);
             Swal.fire('Error', err.response?.data?.error || 'Cannot add board member', 'error');
@@ -401,7 +440,10 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_BOARDS}/${boardId}/lists`, { name });
             if (res.data?.data) {
                 get().fetchBoardDetails(boardId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('board', boardId);
+=======
+>>>>>>> old-work-backup
             }
             return res.data?.data;
         } catch (err) {
@@ -418,7 +460,10 @@ export const useKanbanStore = create((set, get) => ({
                 set(state => ({
                     lists: state.lists.map(l => l.id === listId ? { ...l, ...res.data.data } : l)
                 }));
+<<<<<<< HEAD
                 get().checkAndAutoJoin('list', listId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -451,9 +496,13 @@ export const useKanbanStore = create((set, get) => ({
         try {
             const res = await axios.post(`${server.KANBAN_LISTS}/${listId}/cards`, { name, is_private: isPrivate });
             if (res.data?.data) {
+<<<<<<< HEAD
                 const newCard = res.data.data;
                 get().fetchCardsForList(listId);
                 get().checkAndAutoJoin('list', listId);
+=======
+                get().fetchCardsForList(listId);
+>>>>>>> old-work-backup
             }
             return res.data?.data;
         } catch (err) {
@@ -468,6 +517,7 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.get(`${server.KANBAN_CARDS}/${cardId}`);
             if (res.data?.data) {
                 const refreshedCard = res.data.data;
+<<<<<<< HEAD
 
                 // Sync fields that board view expects (assignees, label_ids)
                 if (refreshedCard.memberships) {
@@ -477,6 +527,8 @@ export const useKanbanStore = create((set, get) => ({
                     refreshedCard.label_ids = refreshedCard.labels.map(l => l.id);
                 }
 
+=======
+>>>>>>> old-work-backup
                 set(state => {
                     const newCards = { ...state.cards };
                     // Apply update to board's card list too to keep progress/badges in sync
@@ -521,7 +573,10 @@ export const useKanbanStore = create((set, get) => ({
                             : state.activeCardDetail
                     };
                 });
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return updatedCard;
             }
         } catch (err) {
@@ -554,7 +609,10 @@ export const useKanbanStore = create((set, get) => ({
                     }
                     return { cards: newCards };
                 });
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return true;
             }
         } catch (err) {
@@ -575,7 +633,10 @@ export const useKanbanStore = create((set, get) => ({
                 } else if (get().activeBoard) {
                     get().fetchBoardDetails(get().activeBoard.id); // fallback
                 }
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', res.data.data.id);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -679,7 +740,10 @@ export const useKanbanStore = create((set, get) => ({
                 }
                 return { cards: newCards };
             });
+<<<<<<< HEAD
             get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
             return true;
         } catch (err) {
             console.error('Failed to add card label', err);
@@ -726,7 +790,10 @@ export const useKanbanStore = create((set, get) => ({
             if (res.data?.data) {
                 // Refresh card detail to get updated comments
                 get().fetchCardDetail(cardId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -744,7 +811,10 @@ export const useKanbanStore = create((set, get) => ({
         try {
             await axios.post(`${server.KANBAN_CARDS}/${cardId}/memberships`, { target_u_code: uCode, owner_u_code: ownerUCode });
             get().fetchCardDetail(cardId);
+<<<<<<< HEAD
             get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
             return true;
         } catch (err) {
             console.error('Failed to add card member', err);
@@ -783,7 +853,10 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/task-lists`, { name });
             if (res.data?.data) {
                 get().fetchCardDetail(cardId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -810,7 +883,10 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_TASK_LISTS}/${taskListId}/tasks`, { name });
             if (res.data?.data) {
                 if (cardId) get().fetchCardDetail(cardId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -852,7 +928,10 @@ export const useKanbanStore = create((set, get) => ({
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/issues`, data);
             if (res.data?.data) {
                 get().fetchCardDetail(cardId);
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
                 return res.data.data;
             }
         } catch (err) {
@@ -921,7 +1000,10 @@ export const useKanbanStore = create((set, get) => ({
                 if (sourceListId && String(sourceListId) !== String(targetListId)) {
                     get().fetchCardsForList(sourceListId);
                 }
+<<<<<<< HEAD
                 get().checkAndAutoJoin('card', cardId);
+=======
+>>>>>>> old-work-backup
             }
         } catch (err) {
             console.error('Failed to reorder card', err);
@@ -946,6 +1028,7 @@ export const useKanbanStore = create((set, get) => ({
     },
 
     // ====================================================================
+<<<<<<< HEAD
     //  REPORT DATA
     // ====================================================================
 
@@ -960,6 +1043,8 @@ export const useKanbanStore = create((set, get) => ({
     },
 
     // ====================================================================
+=======
+>>>>>>> old-work-backup
     //  WEBSOCKET
     // ====================================================================
 
@@ -1497,6 +1582,7 @@ export const useKanbanStore = create((set, get) => ({
     openBoardSettings: () => set({ isBoardSettingsOpen: true }),
     closeBoardSettings: () => set({ isBoardSettingsOpen: false }),
 
+<<<<<<< HEAD
     // ====================================================================
     //  AUTO-MEMBERSHIP FOR ADMINS (Elevated tracking)
     // ====================================================================
@@ -1550,3 +1636,6 @@ export const useKanbanStore = create((set, get) => ({
     },
 }));
 
+=======
+}));
+>>>>>>> old-work-backup

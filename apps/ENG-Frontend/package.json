@@ -7,12 +7,20 @@
     "dev": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+<<<<<<< HEAD
     "eject": "react-scripts eject",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
+=======
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+>>>>>>> old-work-backup
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -79,6 +87,10 @@
     "sweetalert2": "^11.26.3",
     "tableau-api": "^2.2.3",
     "url-join": "^5.0.0",
+<<<<<<< HEAD
+=======
+    "uuid": "^13.0.0",
+>>>>>>> old-work-backup
     "web-vitals": "^2.1.4",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.11"
@@ -100,8 +112,11 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+<<<<<<< HEAD
   },
   "devDependencies": {
     "cypress": "^15.13.0"
+=======
+>>>>>>> old-work-backup
   }
 }

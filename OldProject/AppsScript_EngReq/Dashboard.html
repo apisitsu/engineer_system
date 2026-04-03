@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - ROD END Request System</title>
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <div class="container">
+    <!-- MAIN CONTENT AREA -->
+    <main class="content-area" style="margin-left:0; max-width:100%;">
+      <!-- Dashboard Header -->
+      <div class="form-card">
+        <div class="dashboard-header">
+          <div>
+            <h1>ROD END General Drawing Request Dashboard</h1>
+            <div id="userRoleDisplay" style="font-size:12px; margin-top:5px; opacity:0.9;">
+              Loading user info...
+            </div>
+          </div>
+          <div class="header-actions">
+            <button onclick="goToPage('new-request')" class="btn btn-primary">
+              + New Request
+            </button>
+            <button onclick="refreshDashboard()" class="btn btn-secondary">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent Requests Table -->
+      <div class="form-card">
+        <div class="form-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <span><span>ROD</span>: All Requests</span>
+          <input type="text" id="searchInput" placeholder="Search Request Item, Request No, Name, Title..."
+                 style="flex:1; min-width:200px; max-width:400px; padding:6px 12px; border:1px solid #ccc; border-radius:6px; font-size:13px;">
+        </div>
+        <div class="data-table-container">
+          <table class="data-table" id="requestsTable">
+            <thead>
+              <tr>
+                <th>Request Item</th>
+                <th>Request No.</th>
+                <th>Date</th>
+                <th>Requester</th>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Current Stage</th>
+                <th>Due Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="requestsBody">
+              <tr>
+                <td colspan="10" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== ENG CHECK MODAL ===== -->
+  <div id="engCheckModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Engineering Check</h2>
+      <form id="engCheckForm" onsubmit="submitEngCheck(event)">
+        <input type="hidden" id="engCheck_requestItem" name="requestItem">
+
+        <div class="form-group">
+          <label>Request Item</label>
+          <input type="text" id="engCheck_requestItemDisplay" readonly class="readonly-field">
+        </div>
+
+        <div class="form-group">
+          <label for="engCheck_requestNo">Request No. <span class="required">*</span></label>
+          <input type="text" id="engCheck_requestNo" name="requestNo" required>
+        </div>
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="engCheck_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Attached Files</label>
+          <div id="engCheck_attachments" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Status <span class="required">*</span></label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="engCheck_status" value="Approve" onchange="toggleEngCheckComment()" required>
+              Approve
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="engCheck_status" value="Deny" onchange="toggleEngCheckComment()" required>
+              Deny
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="engCheck_commentGroup" style="display:none;">
+          <label for="engCheck_comment">Comment <span class="required">*</span></label>
+          <textarea id="engCheck_comment" rows="3"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Submit</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('engCheckModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== DRAFT MAN MODAL ===== -->
+  <div id="draftManModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Upload Drawing Files</h2>
+      <form id="draftManForm" onsubmit="submitDraftMan(event)">
+        <input type="hidden" id="draftMan_requestItem" name="requestItem">
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="draftMan_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Attached Files from Requester</label>
+          <div id="draftMan_attachments" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>DWG Files</label>
+          <div class="file-upload-area" id="draftMan_fileUploadArea">
+            <div class="file-upload-icon">📁</div>
+            <div class="file-upload-text">Drag files here or</div>
+            <button type="button" class="btn-secondary" onclick="document.getElementById('draftMan_fileInput').click()">
+              Select Files
+            </button>
+            <input type="file" id="draftMan_fileInput" multiple accept=".dwg,.dxf,.pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleDraftManFiles(this.files)">
+          </div>
+          <div id="draftMan_fileList" class="file-list"></div>
+          <small class="form-hint">Supported: DWG, DXF, PDF, JPG, PNG (max 10MB)</small>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Submit Drawing</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('draftManModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== DWG CHECK MODAL ===== -->
+  <div id="dwgCheckModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Drawing Verification</h2>
+      <form id="dwgCheckForm" onsubmit="submitDWGCheck(event)">
+        <input type="hidden" id="dwgCheck_requestNo" name="requestNo">
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="dwgCheck_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Drawing Files</label>
+          <div id="dwgCheck_files" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Status <span class="required">*</span></label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="dwgCheck_status" value="Approve" onchange="toggleDWGCheckComment()" required>
+              Approve - Drawing is correct
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="dwgCheck_status" value="Deny" onchange="toggleDWGCheckComment()" required>
+              Deny - Need revision
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="dwgCheck_commentGroup" style="display:none;">
+          <label for="dwgCheck_comment">Comment <span class="required">*</span></label>
+          <textarea id="dwgCheck_comment" rows="3" placeholder="Describe what needs revision..."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Submit Verification</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('dwgCheckModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== ENG REVIEW MODAL ===== -->
+  <div id="engReviewModal" class="modal" style="display:none;">
+    <div class="modal-content modal-large">
+      <h2>Engineering Review</h2>
+      <form id="engReviewForm" onsubmit="submitEngReview(event)">
+        <input type="hidden" id="engReview_requestNo" name="requestNo">
+        <input type="hidden" id="engReview_typeOfRequest" name="typeOfRequest">
+        <input type="hidden" id="engReview_category" name="category">
+        <input type="hidden" id="engReview_drawingRequired" name="drawingRequired">
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="engReview_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="engReview_section">Section <span class="required">*</span></label>
+          <input type="text" id="engReview_section" name="section" required>
+        </div>
+
+        <div class="form-group" id="engReview_sparePartTypeGroup" style="display:none;">
+          <label>Spare Part Type <span class="required">*</span></label>
+          <div id="engReview_sparePartTypeOptions" class="radio-group"></div>
+        </div>
+
+        <div id="engReview_registDrawingFields" style="display:none;">
+          <div class="form-group">
+            <label>General (01) <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="engReview_general" value="Single part"> Single part</label>
+              <label class="radio-label"><input type="radio" name="engReview_general" value="Assembly part"> Assembly part</label>
+              <label class="radio-label"><input type="radio" name="engReview_general" value="Other"> Other</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Machine part (02) <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="engReview_machinePart" value="Maintenance"> Maintenance</label>
+              <label class="radio-label"><input type="radio" name="engReview_machinePart" value="Improvement"> Improvement</label>
+              <label class="radio-label"><input type="radio" name="engReview_machinePart" value="Other"> Other</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Gauge type (03) <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="engReview_gaugeType" value="Inspection"> Inspection</label>
+              <label class="radio-label"><input type="radio" name="engReview_gaugeType" value="Sorting"> Sorting</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="engReview_noOfDwg">No. of DWG. <span class="required">*</span></label>
+            <input type="text" id="engReview_noOfDwg" name="noOfDwg" required>
+          </div>
+          <div class="form-group">
+            <label for="engReview_drawingNo">Drawing No. <span class="required">*</span></label>
+            <input type="text" id="engReview_drawingNo" name="drawingNo" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Attach Files</label>
+          <div class="file-upload-area" id="engReview_fileUploadArea">
+            <div class="file-upload-icon">📁</div>
+            <div class="file-upload-text">Drag files here or</div>
+            <button type="button" class="btn-secondary" onclick="document.getElementById('engReview_fileInput').click()">
+              Select Files
+            </button>
+            <input type="file" id="engReview_fileInput" multiple accept=".dwg,.dxf,.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="display:none;" onchange="handleEngReviewFiles(this.files)">
+          </div>
+          <div id="engReview_fileList" class="file-list"></div>
+          <small class="form-hint">Supported: DWG, DXF, PDF, Images, Office files (max 10MB)</small>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Submit Review</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('engReviewModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== ENG APPROVE MODAL ===== -->
+  <div id="engApproveModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Final Approval</h2>
+      <form id="engApproveForm" onsubmit="submitEngApprove(event)">
+        <input type="hidden" id="engApprove_requestNo" name="requestNo">
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="engApprove_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Review Information</label>
+          <div id="engApprove_reviewDetails" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Judgement <span class="required">*</span></label>
+          <div class="radio-group">
+            <label class="radio-label approve-option">
+              <input type="radio" name="engApprove_judgement" value="Approve" onchange="toggleEngApproveComment()" required>
+              Approve - Request is completed
+            </label>
+            <label class="radio-label deny-option">
+              <input type="radio" name="engApprove_judgement" value="Deny" onchange="toggleEngApproveComment()" required>
+              Deny - Need more work
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="engApprove_commentGroup" style="display:none;">
+          <label for="engApprove_comment">Comment <span class="required">*</span></label>
+          <textarea id="engApprove_comment" rows="3" placeholder="Reason for denial..."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Submit Decision</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('engApproveModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== ENG INFORM MODAL ===== -->
+  <div id="engInformModal" class="modal" style="display:none;">
+    <div class="modal-content modal-large">
+      <h2>Send Completion Notice</h2>
+      <form id="engInformForm" onsubmit="submitEngInform(event)">
+        <input type="hidden" id="engInform_requestNo" name="requestNo">
+        <input type="hidden" id="engInform_requesterEmail" name="requesterEmail">
+
+        <div class="form-group">
+          <label>Request Details</label>
+          <div id="engInform_details" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Drawing Information</label>
+          <div id="engInform_drawingDetails" class="details-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="engInform_cost">Cost (if applicable)</label>
+          <input type="text" id="engInform_cost" placeholder="e.g., 5,000 THB or N/A">
+        </div>
+
+        <div class="form-group">
+          <label for="engInform_evidence">Evidence / Notes</label>
+          <textarea id="engInform_evidence" rows="3" placeholder="Additional notes..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Attached Files</label>
+          <div id="engInform_attachFilesDisplay" class="details-box"><em>No attached files</em></div>
+          <input type="hidden" id="engInform_attachFiles" name="attachFiles">
+        </div>
+
+        <div class="info-box">
+          <strong>Email will be sent to:</strong> <span id="engInform_recipientEmail"></span>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Send to Requester</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('engInformModal')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+    <div class="spinner"></div>
+    <p>Processing...</p>
+  </div>
+
+  <style>
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      overflow: auto;
+    }
+    .modal-content {
+      background: white;
+      margin: 50px auto;
+      max-width: 900px;
+      border-radius: 12px;
+      padding: 30px;
+    }
+    .modal-large {
+      max-width: 1100px;
+    }
+    .details-box {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .readonly-field {
+      background: #e9ecef;
+      cursor: not-allowed;
+    }
+    .file-upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      background: #fafafa;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+    .file-upload-area:hover, .file-upload-area.dragover {
+      border-color: #4285F4;
+      background: #e8f0fe;
+    }
+    .file-upload-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .file-upload-text {
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .file-list {
+      margin-top: 15px;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .file-item-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-item-size {
+      color: #888;
+      font-size: 12px;
+      margin: 0 10px;
+    }
+    .file-item-remove {
+      color: #dc3545;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .info-box {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 20px 0;
+    }
+    .approve-option:has(input:checked) {
+      border-color: #4CAF50;
+      background: #E8F5E9;
+    }
+    .deny-option:has(input:checked) {
+      border-color: #F44336;
+      background: #FFEBEE;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #4285F4;
+      color: #4285F4;
+    }
+    .btn-outline:hover {
+      background: #e8f0fe;
+    }
+    .group-header {
+      background: #e3f2fd !important;
+    }
+    .group-header td {
+      font-weight: bold;
+    }
+  </style>
+
+  <script>
+    var BASE_URL = '<?= baseUrl ?>';
+    var draftManSelectedFiles = [];
+    var engReviewSelectedFiles = [];
+
+    // Store admin status and user roles
+    var isUserAdmin = false;
+    var userRoles = [];
+    var currentEditingRequestItem = '';
+
+    // ===== DASHBOARD FUNCTIONS =====
+    function toggleFlows() {
+      var sidebar = document.getElementById('workflowSidebar');
+      var btn = document.querySelector('.toggle-btn-text');
+      sidebar.classList.toggle('hidden');
+      btn.textContent = sidebar.classList.contains('hidden') ? 'Show Flows' : 'Hide Flows';
+    }
+
+    function goToPage(page) {
+      window.top.location.href = BASE_URL + '?page=' + page;
+    }
+
+    // Store user role for permission check
+    var isUserDraftman = false;
+
+    window.onload = function() {
+      loadDashboardData();
+      setupDraftManDragDrop();
+      setupEngReviewDragDrop();
+      // Setup search input listener
+      var searchEl = document.getElementById('searchInput');
+      if (searchEl) {
+        searchEl.addEventListener('input', debounceSearch);
+        searchEl.addEventListener('keyup', debounceSearch);
+      }
+      // Load all dashboard data in one call (user info + requests)
+      loadDashboardData();
+
+      // Handle URL parameters to auto-open modals (passed from server)
+      var openModal = '<?= openModal ?>';
+      var requestNoParam = '<?= requestNo ?>';
+
+      if (requestNoParam && openModal) {
+        // Wait for dashboard to load, then open the appropriate modal
+        setTimeout(function() {
+          switch(openModal) {
+            case 'eng-check':
+              openEngCheckModal(requestNoParam);
+              break;
+            case 'draft-man':
+              openDraftManModal(requestNoParam);
+              break;
+            case 'dwg-check':
+              openDWGCheckModal(requestNoParam);
+              break;
+            case 'eng-review':
+              openEngReviewModal(requestNoParam);
+              break;
+            case 'eng-approve':
+              openEngApproveModal(requestNoParam);
+              break;
+            case 'eng-inform':
+              openEngInformModal(requestNoParam);
+              break;
+            case 'view':
+              // Navigate to Request Details page for viewing (read-only)
+              window.top.location.href = BASE_URL + '?page=request-details&requestItem=' + encodeURIComponent(requestNoParam);
+              break;
+          }
+        }, 1000);
+      }
+    };
+
+    function loadDashboardData() {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          // Set user info from combined response
+          if (data.userInfo) {
+            isUserAdmin = data.userInfo.isAdmin;
+            userRoles = data.userInfo.roles || [];
+            displayUserRoles(data.userInfo);
+          }
+          isUserDraftman = data.isDraftman || false;
+          // Render dashboard
+          renderDashboard(data);
+        })
+        .withFailureHandler(showError)
+        .getDashboardDataWithUserInfo();
+    }
+
+    // Store all requests data for filtering
+    var allRequestsData = [];
+    var searchQuery = '';
+    var searchTimer = null;
+    var expandedGroups = {};
+
+    function renderDashboard(data) {
+      if (!data || !data.recentRequests) {
+        document.getElementById('requestsBody').innerHTML = '<tr><td colspan="10" class="no-data">No data available</td></tr>';
+        return;
+      }
+
+      // Store all data for filtering
+      allRequestsData = data.recentRequests || [];
+
+      // Apply filter and render
+      renderFilteredRequests();
+    }
+
+    function renderFilteredRequests() {
+      var tbody = document.getElementById('requestsBody');
+      tbody.innerHTML = '';
+
+      // Apply search filter
+      var filteredRequests = allRequestsData;
+      if (searchQuery) {
+        var q = searchQuery.toLowerCase();
+        filteredRequests = allRequestsData.filter(function(request) {
+          return String(request.requestItem || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(request.requestNo || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(request.requester || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(request.title || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(request.typeOfRequest || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(request.status || '').toLowerCase().indexOf(q) !== -1;
+        });
+      }
+
+      if (filteredRequests.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="no-data">No requests found' + (searchQuery ? ' for "' + searchQuery + '"' : '') + '</td></tr>';
+        return;
+      }
+
+      // Group by year-month
+      var grouped = {};
+      filteredRequests.forEach(function(request) {
+        var date = new Date(request.timestamp);
+        var yearMonth = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+        var label = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        if (!grouped[yearMonth]) {
+          grouped[yearMonth] = { label: label, requests: [] };
+        }
+        grouped[yearMonth].requests.push(request);
+      });
+
+      // Sort by year-month descending
+      var sortedKeys = Object.keys(grouped).sort().reverse();
+
+      sortedKeys.forEach(function(yearMonth) {
+        var group = grouped[yearMonth];
+        var isExpanded = expandedGroups[yearMonth] !== false; // Default to expanded
+
+        // Add group header row
+        var headerRow = tbody.insertRow();
+        headerRow.className = 'group-header';
+        headerRow.innerHTML = '<td colspan="10" onclick="toggleGroup(\'' + yearMonth + '\')" style="cursor:pointer; background:#e3f2fd; font-weight:bold; padding:12px;">' +
+          '<span class="toggle-icon">' + (isExpanded ? '▼' : '▶') + '</span> ' + group.label + ' (' + group.requests.length + ' requests)</td>';
+
+        // Add request rows for this group
+        if (isExpanded) {
+          group.requests.forEach(function(request) {
+            renderRequestRow(tbody, request);
+          });
+        }
+      });
+    }
+
+    function debounceSearch() {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(function() {
+        searchQuery = document.getElementById('searchInput').value.trim();
+        renderFilteredRequests();
+      }, 300);
+    }
+
+    function renderRequestRow(tbody, request) {
+      var row = tbody.insertRow();
+      var date = new Date(request.timestamp);
+      var formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      var formattedTime = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      var dueDate = new Date(request.dueDate);
+      var formattedDueDate = dueDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+      var today = new Date();
+      var isOverdue = today > dueDate && request.status.indexOf('Pending') !== -1;
+      var statusClass = request.status.indexOf('Completed') !== -1 ? 'status-completed' :
+                       request.status.indexOf('Denied') !== -1 ? 'status-denied' :
+                       isOverdue ? 'status-overdue' : 'status-pending';
+
+      // Determine if action button should be shown
+      // Hide for finished requests and for users without any workflow role
+      var isFinished = request.status === 'Completed & Informed' ||
+                       request.status === 'Completed' ||
+                       request.status === 'Denied';
+      var hasWorkflowRole = userRoles.length > 0;
+      var actionCell;
+      if (isFinished || !hasWorkflowRole) {
+        actionCell = '<td><span style="color: #888; font-size: 12px;">-</span></td>';
+      } else {
+        actionCell = '<td><button onclick="event.stopPropagation(); viewRequest(\'' + request.requestItem + '\', \'' + request.currentStage + '\')" class="btn btn-primary btn-small">View</button></td>';
+      }
+
+      row.style.cursor = 'pointer';
+      row.ondblclick = function() { window.top.location.href = BASE_URL + '?page=request-details&requestItem=' + encodeURIComponent(request.requestItem); };
+
+      row.innerHTML =
+        '<td><strong>' + request.requestItem + '</strong></td>' +
+        '<td>' + (request.requestNo || '-') + '</td>' +
+        '<td><div>' + formattedDate + '</div><div style="font-size: 11px; color: #888;">' + formattedTime + '</div></td>' +
+        '<td>' + request.requester + '</td>' +
+        '<td>' + request.typeOfRequest + '</td>' +
+        '<td>' + request.title + '</td>' +
+        '<td><span class="badge">' + request.currentStage + '</span></td>' +
+        '<td>' + formattedDueDate + '</td>' +
+        '<td><span class="status ' + statusClass + '">' + request.status + '</span></td>' +
+        actionCell;
+    }
+
+    function toggleGroup(yearMonth) {
+      expandedGroups[yearMonth] = !expandedGroups[yearMonth];
+      if (expandedGroups[yearMonth] === undefined) {
+        expandedGroups[yearMonth] = false;
+      }
+      renderFilteredRequests();
+    }
+
+    // Helper function to parse file string (filename|url or just url)
+    function parseFileDisplay(fileStr, index) {
+      fileStr = fileStr.trim();
+      var fileName, url;
+      if (fileStr.indexOf('|') !== -1) {
+        var parts = fileStr.split('|');
+        fileName = parts[0];
+        url = parts[1];
+      } else {
+        url = fileStr;
+        fileName = 'File ' + (index + 1);
+      }
+      return { fileName: fileName, url: url };
+    }
+
+    // Open DraftManForm from flow (for Draftman users only)
+    function openDraftManFormFromFlow(requestItem) {
+      if (!isUserDraftman) {
+        alert('You do not have permission to access Draft Man form.');
+        return;
+      }
+      openDraftManModal(requestItem);
+    }
+
+    function refreshDashboard() {
+      document.getElementById('requestsBody').innerHTML = '<tr><td colspan="10" class="loading">Loading...</td></tr>';
+      loadDashboardData();
+    }
+
+    function viewRequest(requestItem, currentStage) {
+      var stageMap = {
+        'Eng Check': 'openEngCheckModal',
+        'Draft Man': 'openDraftManModal',
+        'DWG Check': 'openDWGCheckModal',
+        'Eng Review': 'openEngReviewModal',
+        'Eng Approve': 'openEngApproveModal',
+        'Eng Inform': 'openEngInformModal',
+        'Informed': 'openEngInformModal',
+        'Completed': 'openEngInformModal'
+      };
+      var fn = stageMap[currentStage];
+      if (fn && window[fn]) {
+        window[fn](requestItem);
+      } else {
+        // Show details modal for unknown stages
+        alert('Request is at stage: ' + currentStage);
+      }
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).style.display = 'none';
+    }
+
+    function showLoading() {
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    function showError(error) {
+      alert('Error: ' + error.message);
+    }
+
+    // Display user roles in header
+    function displayUserRoles(userData) {
+      var roleDisplay = document.getElementById('userRoleDisplay');
+      var html = '👤 ' + userData.email;
+
+      if (userData.roles && userData.roles.length > 0) {
+        html += ' | Roles: ';
+        var roleSpans = userData.roles.map(function(role) {
+          var color = role === 'Admin' ? '#ff6b6b' : '#90EE90';
+          return '<span style="background:' + color + '; color:#000; padding:2px 8px; border-radius:10px; font-size:11px; margin-right:4px;">' + role + '</span>';
+        });
+        html += roleSpans.join('');
+      } else {
+        html += ' | <span style="background:#B0BEC5; color:#000; padding:2px 8px; border-radius:10px; font-size:11px;">Rod User</span>';
+      }
+
+      roleDisplay.innerHTML = html;
+    }
+
+    // ===== ENG CHECK MODAL =====
+    function openEngCheckModal(requestItem) {
+      console.log('openEngCheckModal called with:', requestItem);
+      google.script.run
+        .withSuccessHandler(function(data) {
+          console.log('getRequestForEngCheck returned:', data);
+          if (!data) {
+            alert('Request not found: ' + requestItem);
+            return;
+          }
+          console.log('attachFiles value:', data.attachFiles);
+          document.getElementById('engCheck_requestItem').value = requestItem;
+          document.getElementById('engCheck_requestItemDisplay').value = requestItem;
+          document.getElementById('engCheck_requestNo').value = data.requestNo || '';
+          document.getElementById('engCheck_details').innerHTML =
+            '<strong>Requester:</strong> ' + data.requester + '<br>' +
+            '<strong>Department:</strong> ' + data.department + '<br>' +
+            '<strong>Type:</strong> ' + data.typeOfRequest + '<br>' +
+            '<strong>Title:</strong> ' + data.title + '<br>' +
+            '<strong>Detail:</strong> ' + data.detail;
+          // Display attached files from request
+          var attachmentsDiv = document.getElementById('engCheck_attachments');
+          if (data.attachFiles && data.attachFiles.trim()) {
+            var files = data.attachFiles.split('\n').filter(function(f) { return f.trim(); });
+            console.log('Files to display:', files);
+            var html = '';
+            files.forEach(function(file, i) {
+              var parsed = parseFileDisplay(file, i);
+              html += '<a href="' + parsed.url + '" target="_blank">📄 ' + parsed.fileName + '</a><br>';
+            });
+            attachmentsDiv.innerHTML = html;
+          } else {
+            console.log('No attachFiles found or empty');
+            attachmentsDiv.innerHTML = '<em>No attached files</em>';
+          }
+          document.getElementById('engCheckModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('getRequestForEngCheck error:', err);
+        })
+        .getRequestForEngCheck(requestItem);
+    }
+
+    function toggleEngCheckComment() {
+      var status = document.querySelector('input[name="engCheck_status"]:checked');
+      document.getElementById('engCheck_commentGroup').style.display = status && status.value === 'Deny' ? 'block' : 'none';
+    }
+
+    function submitEngCheck(event) {
+      event.preventDefault();
+      showLoading();
+      var formData = {
+        requestItem: document.getElementById('engCheck_requestItem').value,
+        requestNo: document.getElementById('engCheck_requestNo').value,
+        status: document.querySelector('input[name="engCheck_status"]:checked').value,
+        comment: document.getElementById('engCheck_comment').value
+      };
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          if (result.success) {
+            alert('Success: ' + result.message);
+            closeModal('engCheckModal');
+            refreshDashboard();
+            if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+          } else {
+            alert('Error: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+        .submitEngCheck(formData);
+    }
+
+    // ===== DRAFT MAN MODAL =====
+    function setupDraftManDragDrop() {
+      var uploadArea = document.getElementById('draftMan_fileUploadArea');
+      if (!uploadArea) return;
+      uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+      uploadArea.addEventListener('dragleave', function(e) { e.preventDefault(); this.classList.remove('dragover'); });
+      uploadArea.addEventListener('drop', function(e) { e.preventDefault(); this.classList.remove('dragover'); handleDraftManFiles(e.dataTransfer.files); });
+    }
+
+    function handleDraftManFiles(files) {
+      for (var i = 0; i < files.length; i++) {
+        if (files[i].size > 10 * 1024 * 1024) {
+          alert('File ' + files[i].name + ' exceeds 10MB');
+          continue;
+        }
+        draftManSelectedFiles.push(files[i]);
+      }
+      renderDraftManFileList();
+    }
+
+    function renderDraftManFileList() {
+      var fileList = document.getElementById('draftMan_fileList');
+      fileList.innerHTML = '';
+      draftManSelectedFiles.forEach(function(file, index) {
+        var size = (file.size / 1024).toFixed(1) + ' KB';
+        if (file.size > 1024 * 1024) size = (file.size / 1024 / 1024).toFixed(1) + ' MB';
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = '<span class="file-item-name">📄 ' + file.name + '</span><span class="file-item-size">' + size + '</span><span class="file-item-remove" onclick="removeDraftManFile(' + index + ')">✕</span>';
+        fileList.appendChild(div);
+      });
+    }
+
+    function removeDraftManFile(index) {
+      draftManSelectedFiles.splice(index, 1);
+      renderDraftManFileList();
+    }
+
+    function openDraftManModal(requestItem) {
+      draftManSelectedFiles = [];
+      renderDraftManFileList();
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (!data) {
+            alert('Request not found: ' + requestItem);
+            return;
+          }
+          document.getElementById('draftMan_requestItem').value = requestItem;
+          document.getElementById('draftMan_details').innerHTML =
+            '<strong>Request Item:</strong> ' + (data.requestItem || requestItem) + '<br>' +
+            '<strong>Request No:</strong> ' + (data.requestNo || '-') + '<br>' +
+            '<strong>Requester:</strong> ' + data.requester + '<br>' +
+            '<strong>Type:</strong> ' + data.typeOfRequest + '<br>' +
+            '<strong>Title:</strong> ' + data.title + '<br>' +
+            '<strong>Detail:</strong> ' + (data.detail || '-');
+          // Display attached files from requester
+          var attachmentsDiv = document.getElementById('draftMan_attachments');
+          if (data.attachFiles && data.attachFiles.trim()) {
+            var files = data.attachFiles.split('\n').filter(function(f) { return f.trim(); });
+            var html = '';
+            files.forEach(function(file, i) {
+              var parsed = parseFileDisplay(file, i);
+              html += '<a href="' + parsed.url + '" target="_blank">📄 ' + parsed.fileName + '</a><br>';
+            });
+            attachmentsDiv.innerHTML = html;
+          } else {
+            attachmentsDiv.innerHTML = '<em>No attached files</em>';
+          }
+          document.getElementById('draftManModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('openDraftManModal error:', err);
+          alert('Error loading Draft Man form: ' + err.message);
+        })
+        .getRequestForEngCheck(requestItem);
+    }
+
+    function submitDraftMan(event) {
+      event.preventDefault();
+      showLoading();
+      if (draftManSelectedFiles.length === 0) {
+        // No files selected - submit with empty dwgFiles
+        var formData = {
+          requestItem: document.getElementById('draftMan_requestItem').value,
+          dwgFiles: ''
+        };
+        google.script.run
+          .withSuccessHandler(function(result) {
+            hideLoading();
+            if (result.success) {
+              alert('Success: ' + result.message);
+              closeModal('draftManModal');
+              draftManSelectedFiles = [];
+              renderDraftManFileList();
+              refreshDashboard();
+              if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+            } else {
+              alert('Error: ' + result.message);
+            }
+          })
+          .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+          .submitDraftMan(formData);
+        return;
+      }
+      uploadDraftManFiles(function(fileUrls) {
+        if (fileUrls.length === 0) {
+          hideLoading();
+          alert('File upload failed. Please try again.');
+          return;
+        }
+        console.log('Submitting with fileUrls:', fileUrls);
+        var formData = {
+          requestItem: document.getElementById('draftMan_requestItem').value,
+          dwgFiles: fileUrls.join('\n')
+        };
+        google.script.run
+          .withSuccessHandler(function(result) {
+            hideLoading();
+            if (result.success) {
+              alert('Success: ' + result.message);
+              closeModal('draftManModal');
+              draftManSelectedFiles = [];
+              renderDraftManFileList();
+              refreshDashboard();
+              if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+            } else {
+              alert('Error: ' + result.message);
+            }
+          })
+          .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+          .submitDraftMan(formData);
+      });
+    }
+
+    function uploadDraftManFiles(callback) {
+      var fileUrls = [];
+      var uploadCount = 0;
+      var failedFiles = [];
+      var requestItem = document.getElementById('draftMan_requestItem').value;
+      if (draftManSelectedFiles.length === 0) { callback([]); return; }
+      draftManSelectedFiles.forEach(function(file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var base64 = e.target.result.split(',')[1];
+          console.log('Uploading file:', file.name, 'size:', base64.length);
+          google.script.run
+            .withSuccessHandler(function(result) {
+              console.log('Upload result:', result);
+              if (result.success) {
+                // Store as filename|url format for display
+                fileUrls.push(result.fileName + '|' + result.url);
+                console.log('Upload success:', result.fileName, result.url);
+              } else {
+                failedFiles.push(file.name + ': ' + result.message);
+                console.error('Upload failed:', result.message);
+              }
+              uploadCount++;
+              if (uploadCount === draftManSelectedFiles.length) {
+                if (failedFiles.length > 0) {
+                  alert('Upload errors:\n' + failedFiles.join('\n'));
+                }
+                callback(fileUrls);
+              }
+            })
+            .withFailureHandler(function(error) {
+              failedFiles.push(file.name + ': ' + (error.message || error));
+              uploadCount++;
+              console.error('Upload error:', error);
+              if (uploadCount === draftManSelectedFiles.length) {
+                if (failedFiles.length > 0) {
+                  alert('Upload errors:\n' + failedFiles.join('\n'));
+                }
+                callback(fileUrls);
+              }
+            })
+            .uploadFile({ name: file.name, mimeType: file.type || 'application/octet-stream', data: base64 }, requestItem);
+        };
+        reader.onerror = function(e) {
+          failedFiles.push(file.name + ': Failed to read file');
+          uploadCount++;
+          if (uploadCount === draftManSelectedFiles.length) {
+            if (failedFiles.length > 0) {
+              alert('Upload errors:\n' + failedFiles.join('\n'));
+            }
+            callback(fileUrls);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ===== DWG CHECK MODAL =====
+    function openDWGCheckModal(requestNo) {
+      console.log('openDWGCheckModal called with:', requestNo);
+      google.script.run
+        .withSuccessHandler(function(data) {
+          console.log('getRequestForEngCheck returned:', data);
+          if (!data) {
+            alert('Request not found: ' + requestNo);
+            return;
+          }
+          document.getElementById('dwgCheck_requestNo').value = requestNo;
+          document.getElementById('dwgCheck_details').innerHTML =
+            '<strong>Request No:</strong> ' + (data.requestNo || requestNo) + '<br>' +
+            '<strong>Requester:</strong> ' + data.requester + '<br>' +
+            '<strong>Type:</strong> ' + data.typeOfRequest + '<br>' +
+            '<strong>Title:</strong> ' + data.title;
+          console.log('Calling getDraftManData with:', requestNo);
+          google.script.run
+            .withSuccessHandler(function(dwgData) {
+              console.log('getDraftManData returned:', dwgData);
+              if (dwgData && dwgData.dwgFiles) {
+                var files = dwgData.dwgFiles.split('\n').filter(function(f) { return f.trim(); });
+                console.log('Files found:', files);
+                var html = '<strong>Drawing Files:</strong><br>';
+                files.forEach(function(file, i) {
+                  var parsed = parseFileDisplay(file, i);
+                  html += '<a href="' + parsed.url + '" target="_blank">📄 ' + parsed.fileName + '</a><br>';
+                });
+                document.getElementById('dwgCheck_files').innerHTML = html;
+              } else {
+                console.log('No dwgFiles in response');
+                document.getElementById('dwgCheck_files').innerHTML = '<em>No files uploaded</em>';
+              }
+            })
+            .withFailureHandler(function(err) {
+              console.error('getDraftManData error:', err);
+              document.getElementById('dwgCheck_files').innerHTML = '<em>Error loading files</em>';
+            })
+            .getDraftManData(requestNo);
+          document.getElementById('dwgCheckModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('openDWGCheckModal error:', err);
+          alert('Error loading DWG Check form: ' + err.message);
+        })
+        .getRequestForEngCheck(requestNo);
+    }
+
+    function toggleDWGCheckComment() {
+      var status = document.querySelector('input[name="dwgCheck_status"]:checked');
+      document.getElementById('dwgCheck_commentGroup').style.display = status && status.value === 'Deny' ? 'block' : 'none';
+    }
+
+    function submitDWGCheck(event) {
+      event.preventDefault();
+      var status = document.querySelector('input[name="dwgCheck_status"]:checked').value;
+      var comment = document.getElementById('dwgCheck_comment').value;
+      if (status === 'Deny' && !comment.trim()) { alert('Please provide a comment'); return; }
+      showLoading();
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          if (result.success) {
+            alert('Success: ' + result.message);
+            closeModal('dwgCheckModal');
+            refreshDashboard();
+            if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+          } else {
+            alert('Error: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+        .submitDWGCheck({ requestNo: document.getElementById('dwgCheck_requestNo').value, status: status, comment: comment });
+    }
+
+    // ===== ENG REVIEW MODAL =====
+    function setupEngReviewDragDrop() {
+      var uploadArea = document.getElementById('engReview_fileUploadArea');
+      if (!uploadArea) return;
+      uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+      uploadArea.addEventListener('dragleave', function(e) { e.preventDefault(); this.classList.remove('dragover'); });
+      uploadArea.addEventListener('drop', function(e) { e.preventDefault(); this.classList.remove('dragover'); handleEngReviewFiles(e.dataTransfer.files); });
+    }
+
+    function handleEngReviewFiles(files) {
+      for (var i = 0; i < files.length; i++) {
+        if (files[i].size > 10 * 1024 * 1024) {
+          alert('File ' + files[i].name + ' exceeds 10MB');
+          continue;
+        }
+        engReviewSelectedFiles.push(files[i]);
+      }
+      renderEngReviewFileList();
+    }
+
+    function renderEngReviewFileList() {
+      var fileList = document.getElementById('engReview_fileList');
+      fileList.innerHTML = '';
+      engReviewSelectedFiles.forEach(function(file, index) {
+        var size = (file.size / 1024).toFixed(1) + ' KB';
+        if (file.size > 1024 * 1024) size = (file.size / 1024 / 1024).toFixed(1) + ' MB';
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = '<span class="file-item-name">📄 ' + file.name + '</span><span class="file-item-size">' + size + '</span><span class="file-item-remove" onclick="removeEngReviewFile(' + index + ')">✕</span>';
+        fileList.appendChild(div);
+      });
+    }
+
+    function removeEngReviewFile(index) {
+      engReviewSelectedFiles.splice(index, 1);
+      renderEngReviewFileList();
+    }
+
+    function openEngReviewModal(requestItem) {
+      engReviewSelectedFiles = [];
+      renderEngReviewFileList();
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (!data) {
+            alert('Request not found: ' + requestItem);
+            return;
+          }
+          document.getElementById('engReview_requestNo').value = requestItem;
+          document.getElementById('engReview_typeOfRequest').value = data.typeOfRequest || '';
+          document.getElementById('engReview_category').value = data.category || '';
+          document.getElementById('engReview_drawingRequired').value = data.drawingRequired || '';
+          document.getElementById('engReview_details').innerHTML =
+            '<strong>Request Item:</strong> ' + (data.requestItem || requestItem) + '<br>' +
+            '<strong>Request No:</strong> ' + (data.requestNo || '-') + '<br>' +
+            '<strong>Requester:</strong> ' + (data.requester || '-') + '<br>' +
+            '<strong>Type:</strong> ' + (data.typeOfRequest || '-') + '<br>' +
+            '<strong>Category:</strong> ' + (data.category || 'N/A') + '<br>' +
+            '<strong>Title:</strong> ' + (data.title || '-') + '<br>' +
+            '<strong>Detail:</strong> ' + (data.detail || '-');
+          updateEngReviewFormFields(data.typeOfRequest, data.category, data.drawingRequired);
+          document.getElementById('engReviewModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('openEngReviewModal error:', err);
+          alert('Error loading Eng Review form: ' + err.message);
+        })
+        .getRequestForEngReview(requestItem);
+    }
+
+    function updateEngReviewFormFields(typeOfRequest, category, drawingRequired) {
+      var sparePartTypeGroup = document.getElementById('engReview_sparePartTypeGroup');
+      var registDrawingFields = document.getElementById('engReview_registDrawingFields');
+      var sparePartTypeOptions = document.getElementById('engReview_sparePartTypeOptions');
+      sparePartTypeGroup.style.display = 'none';
+      registDrawingFields.style.display = 'none';
+      if (typeOfRequest === 'Regist Drawing') {
+        registDrawingFields.style.display = 'block';
+      } else if (typeOfRequest === 'Draft Drawing' || (typeOfRequest === '3D Print' && drawingRequired === 'With Drawing')) {
+        sparePartTypeGroup.style.display = 'block';
+        var options = category === 'Gauge' ? ['Inspection', 'Sorting'] : ['Maintenance', 'Improvement', 'Other'];
+        sparePartTypeOptions.innerHTML = options.map(function(opt) {
+          return '<label class="radio-label"><input type="radio" name="engReview_sparePartType" value="' + opt + '"> ' + opt + '</label>';
+        }).join('');
+      }
+    }
+
+    function submitEngReview(event) {
+      event.preventDefault();
+      showLoading();
+      if (engReviewSelectedFiles.length === 0) {
+        // No files selected - submit with empty attachFiles
+        var formData = {
+          requestNo: document.getElementById('engReview_requestNo').value,
+          section: document.getElementById('engReview_section').value,
+          sparePartType: (document.querySelector('input[name="engReview_sparePartType"]:checked') || {}).value || '',
+          general: (document.querySelector('input[name="engReview_general"]:checked') || {}).value || '',
+          machinePart: (document.querySelector('input[name="engReview_machinePart"]:checked') || {}).value || '',
+          gaugeType: (document.querySelector('input[name="engReview_gaugeType"]:checked') || {}).value || '',
+          noOfDwg: document.getElementById('engReview_noOfDwg').value,
+          drawingNo: document.getElementById('engReview_drawingNo').value,
+          attachFiles: ''
+        };
+        google.script.run
+          .withSuccessHandler(function(result) {
+            hideLoading();
+            if (result.success) {
+              alert('Success: ' + result.message);
+              closeModal('engReviewModal');
+              engReviewSelectedFiles = [];
+              renderEngReviewFileList();
+              refreshDashboard();
+              if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+            } else {
+              alert('Error: ' + result.message);
+            }
+          })
+          .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+          .submitEngReview(formData);
+        return;
+      }
+      uploadEngReviewFiles(function(fileUrls) {
+        if (fileUrls.length === 0) {
+          hideLoading();
+          alert('File upload failed. Please try again.');
+          return;
+        }
+        console.log('Submitting Eng Review with fileUrls:', fileUrls);
+        var formData = {
+          requestNo: document.getElementById('engReview_requestNo').value,
+          section: document.getElementById('engReview_section').value,
+          sparePartType: (document.querySelector('input[name="engReview_sparePartType"]:checked') || {}).value || '',
+          general: (document.querySelector('input[name="engReview_general"]:checked') || {}).value || '',
+          machinePart: (document.querySelector('input[name="engReview_machinePart"]:checked') || {}).value || '',
+          gaugeType: (document.querySelector('input[name="engReview_gaugeType"]:checked') || {}).value || '',
+          noOfDwg: document.getElementById('engReview_noOfDwg').value,
+          drawingNo: document.getElementById('engReview_drawingNo').value,
+          attachFiles: fileUrls.join('\n')
+        };
+        google.script.run
+          .withSuccessHandler(function(result) {
+            hideLoading();
+            if (result.success) {
+              alert('Success: ' + result.message);
+              closeModal('engReviewModal');
+              engReviewSelectedFiles = [];
+              renderEngReviewFileList();
+              refreshDashboard();
+              if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+            } else {
+              alert('Error: ' + result.message);
+            }
+          })
+          .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+          .submitEngReview(formData);
+      });
+    }
+
+    function uploadEngReviewFiles(callback) {
+      var fileUrls = [];
+      var uploadCount = 0;
+      var failedFiles = [];
+      var requestNo = document.getElementById('engReview_requestNo').value;
+      if (engReviewSelectedFiles.length === 0) { callback([]); return; }
+      engReviewSelectedFiles.forEach(function(file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var base64 = e.target.result.split(',')[1];
+          console.log('Uploading Eng Review file:', file.name, 'size:', base64.length);
+          google.script.run
+            .withSuccessHandler(function(result) {
+              console.log('Upload result:', result);
+              if (result.success) {
+                // Store as filename|url format for display
+                fileUrls.push(result.fileName + '|' + result.url);
+                console.log('Upload success:', result.fileName, result.url);
+              } else {
+                failedFiles.push(file.name + ': ' + result.message);
+                console.error('Upload failed:', result.message);
+              }
+              uploadCount++;
+              if (uploadCount === engReviewSelectedFiles.length) {
+                if (failedFiles.length > 0) {
+                  alert('Upload errors:\n' + failedFiles.join('\n'));
+                }
+                callback(fileUrls);
+              }
+            })
+            .withFailureHandler(function(error) {
+              failedFiles.push(file.name + ': ' + (error.message || error));
+              uploadCount++;
+              console.error('Upload error:', error);
+              if (uploadCount === engReviewSelectedFiles.length) {
+                if (failedFiles.length > 0) {
+                  alert('Upload errors:\n' + failedFiles.join('\n'));
+                }
+                callback(fileUrls);
+              }
+            })
+            .uploadFile({ name: file.name, mimeType: file.type || 'application/octet-stream', data: base64 }, requestNo);
+        };
+        reader.onerror = function(e) {
+          failedFiles.push(file.name + ': Failed to read file');
+          uploadCount++;
+          if (uploadCount === engReviewSelectedFiles.length) {
+            if (failedFiles.length > 0) {
+              alert('Upload errors:\n' + failedFiles.join('\n'));
+            }
+            callback(fileUrls);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ===== ENG APPROVE MODAL =====
+    function openEngApproveModal(requestNo) {
+      // Parallel: เรียกทั้ง 2 calls พร้อมกัน
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (!data) {
+            alert('Request not found: ' + requestNo);
+            return;
+          }
+          document.getElementById('engApprove_requestNo').value = requestNo;
+          document.getElementById('engApprove_details').innerHTML =
+            '<strong>Request No:</strong> ' + (data.requestNo || requestNo) + '<br>' +
+            '<strong>Requester:</strong> ' + (data.requester || '-') + '<br>' +
+            '<strong>Type:</strong> ' + (data.typeOfRequest || '-') + '<br>' +
+            '<strong>Title:</strong> ' + (data.title || '-');
+          document.getElementById('engApproveModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('openEngApproveModal error:', err);
+          alert('Error loading Eng Approve form: ' + err.message);
+        })
+        .getRequestForEngCheck(requestNo);
+
+      google.script.run
+        .withSuccessHandler(function(reviewData) {
+          if (reviewData) {
+            var html = '<strong>Reviewed by:</strong> ' + reviewData.reviewer + '<br>' +
+              '<strong>Drawing No:</strong> ' + reviewData.drawingNo + '<br>' +
+              '<strong>No. of Drawings:</strong> ' + reviewData.noOfDwg + '<br>' +
+              '<strong>Section:</strong> ' + (reviewData.section || 'N/A');
+            if (reviewData.attachFiles) {
+              html += '<br><strong>Attached Files:</strong><br>';
+              var files = reviewData.attachFiles.split('\n').filter(function(f) { return f.trim(); });
+              files.forEach(function(file, i) {
+                var parsed = parseFileDisplay(file, i);
+                html += '<a href="' + parsed.url + '" target="_blank">📄 ' + parsed.fileName + '</a><br>';
+              });
+            }
+            document.getElementById('engApprove_reviewDetails').innerHTML = html;
+          } else {
+            document.getElementById('engApprove_reviewDetails').innerHTML = '<em>No review data</em>';
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error('getEngReviewData error:', err);
+          document.getElementById('engApprove_reviewDetails').innerHTML = '<em>Error loading review data</em>';
+        })
+        .getEngReviewData(requestNo);
+    }
+
+    function toggleEngApproveComment() {
+      var judgement = document.querySelector('input[name="engApprove_judgement"]:checked');
+      document.getElementById('engApprove_commentGroup').style.display = judgement && judgement.value === 'Deny' ? 'block' : 'none';
+    }
+
+    function submitEngApprove(event) {
+      event.preventDefault();
+      var judgement = document.querySelector('input[name="engApprove_judgement"]:checked').value;
+      var comment = document.getElementById('engApprove_comment').value;
+      if (judgement === 'Deny' && !comment.trim()) { alert('Please provide a reason'); return; }
+      if (judgement === 'Approve' && !confirm('Are you sure you want to approve this request?')) return;
+      showLoading();
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          if (result.success) {
+            alert('Success: ' + result.message);
+            closeModal('engApproveModal');
+            refreshDashboard();
+            if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+          } else {
+            alert('Error: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+        .submitEngApprove({ requestNo: document.getElementById('engApprove_requestNo').value, judgement: judgement, comment: comment });
+    }
+
+    // ===== ENG INFORM MODAL =====
+    function openEngInformModal(requestNo) {
+      // เก็บ requestNo ไว้ให้ reviewData callback ใช้
+      var engInformActualRequestNo = '-';
+
+      // Parallel: เรียกทั้ง 2 calls พร้อมกัน
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (!data) {
+            alert('Request not found: ' + requestNo);
+            return;
+          }
+          document.getElementById('engInform_requestNo').value = requestNo;
+          document.getElementById('engInform_requesterEmail').value = data.requesterEmail || '';
+          document.getElementById('engInform_recipientEmail').textContent = data.requesterEmail || '-';
+          engInformActualRequestNo = data.requestNo || '-';
+          document.getElementById('engInform_details').innerHTML =
+            '<strong>Request Item:</strong> ' + requestNo + '<br>' +
+            '<strong>Requester:</strong> ' + (data.requester || '-') + '<br>' +
+            '<strong>Email:</strong> ' + (data.requesterEmail || '-') + '<br>' +
+            '<strong>Department:</strong> ' + (data.department || '-') + '<br>' +
+            '<strong>Type:</strong> ' + (data.typeOfRequest || '-') + '<br>' +
+            '<strong>Title:</strong> ' + (data.title || '-');
+          document.getElementById('engInformModal').style.display = 'block';
+        })
+        .withFailureHandler(function(err) {
+          console.error('openEngInformModal error:', err);
+          alert('Error loading Eng Inform form: ' + err.message);
+        })
+        .getRequestForEngInform(requestNo);
+
+      google.script.run
+        .withSuccessHandler(function(reviewData) {
+          if (reviewData) {
+            document.getElementById('engInform_drawingDetails').innerHTML =
+              '<strong>Drawing No:</strong> ' + (reviewData.drawingNo || '-') + '<br>' +
+              '<strong>Request No:</strong> ' + engInformActualRequestNo + '<br>' +
+              '<strong>No. of DWG:</strong> ' + (reviewData.noOfDwg || '-');
+            var attachFilesDisplay = document.getElementById('engInform_attachFilesDisplay');
+            if (reviewData.attachFiles && reviewData.attachFiles.trim()) {
+              var files = reviewData.attachFiles.split('\n').filter(function(f) { return f.trim(); });
+              var html = '';
+              files.forEach(function(file, i) {
+                var parsed = parseFileDisplay(file, i);
+                html += '<a href="' + parsed.url + '" target="_blank">📄 ' + parsed.fileName + '</a><br>';
+              });
+              attachFilesDisplay.innerHTML = html;
+              document.getElementById('engInform_attachFiles').value = reviewData.attachFiles;
+            } else {
+              attachFilesDisplay.innerHTML = '<em>No attached files</em>';
+            }
+          } else {
+            document.getElementById('engInform_drawingDetails').innerHTML = '<em>No drawing info</em>';
+            document.getElementById('engInform_attachFilesDisplay').innerHTML = '<em>No attached files</em>';
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error('getEngReviewData error:', err);
+          document.getElementById('engInform_drawingDetails').innerHTML = '<em>Error loading drawing info</em>';
+        })
+        .getEngReviewData(requestNo);
+    }
+
+    function submitEngInform(event) {
+      event.preventDefault();
+      if (!confirm('Send completion notice to the requester?')) return;
+      showLoading();
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          if (result.success) {
+            alert('Success: ' + result.message);
+            closeModal('engInformModal');
+            refreshDashboard();
+            if (result.emailParams) google.script.run.sendFormEmail(result.emailParams);
+          } else {
+            alert('Error: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(err) { hideLoading(); alert('Error: ' + err.message); })
+        .submitEngInform({
+          requestNo: document.getElementById('engInform_requestNo').value,
+          requesterEmail: document.getElementById('engInform_requesterEmail').value,
+          cost: document.getElementById('engInform_cost').value,
+          evidence: document.getElementById('engInform_evidence').value,
+          attachFiles: document.getElementById('engInform_attachFiles').value
+        });
+    }
+  </script>
+</body>
+</html>

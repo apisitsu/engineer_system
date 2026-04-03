@@ -347,6 +347,7 @@ const RemoveManager = async (req, res) => {
     }
 };
 
+<<<<<<< HEAD
 // ─── GET /api/kanban/projects/:id/report-data ─────────────────────
 // Aggregates all boards, lists, cards, issues, actions, labels, members for report generation
 const GetReportData = async (req, res) => {
@@ -460,6 +461,8 @@ const GetReportData = async (req, res) => {
     }
 };
 
+=======
+>>>>>>> old-work-backup
 module.exports = {
     GetProjects,
     GetProjectById,
@@ -471,5 +474,8 @@ module.exports = {
     AddManager,
     RemoveManager,
     GetUsers,
+<<<<<<< HEAD
     GetReportData,
+=======
+>>>>>>> old-work-backup
 };

@@ -1,0 +1,104 @@
+================================================================================
+                    FILE COMPARISON REPORT
+            Engineering_system vs Eng_Sys
+================================================================================
+Generated: 2026-04-01 10:55 AM
+Source: C:\Users\lble485\Engineering_system
+Target: C:\Users\lble485\Eng_Sys
+
+================================================================================
+                    FILES ONLY IN Engineering_system
+================================================================================
+(Missing from Eng_Sys)
+
+  [FILE] .env (110 bytes) - NOTE: Eng_Sys has different .env
+  [FILE] test_store.js (149 bytes)
+  [DIR]  docs\
+  [DIR]  pg_backup\
+
+================================================================================
+                    FILES ONLY IN Eng_Sys
+================================================================================
+(New files not in Engineering_system)
+
+  [FILE] CHANGES_LOG.txt (2689 bytes)
+  [FILE] GENERAL_DWG_IMPROVEMENTS.md (11059 bytes)
+  [FILE] general_dwg_request_tables.txt (2096 bytes)
+  [FILE] IMPLEMENTATION_SUMMARY.md (12603 bytes)
+  [FILE] MTC_CHANGES_LOG.txt (4360 bytes)
+  [FILE] PROJECT_OVERVIEW.md (3339 bytes)
+  [FILE] run_claude.ps1 (1014 bytes)
+  [FILE] run_qwen.ps1 (1012 bytes)
+  [FILE] tooling_select_tables.txt (3138 bytes)
+  [DIR]  .claude\
+  [DIR]  .qwen\
+  [DIR]  OldProject\
+  [DIR]  temp_gas_project\
+  [DIR]  db_eng\
+  [DIR]  node_modules\
+
+================================================================================
+                    MODIFIED FILES (Different)
+================================================================================
+(Exist in both but with different content/size/date)
+
+  .gitignore
+    Engineering_system: 63 bytes, 3/23/2026 10:17:49 AM
+    Eng_Sys:           278 bytes, 3/31/2026 7:57:44 AM
+    STATUS: MODIFIED (different size)
+
+  package-lock.json
+    Engineering_system: 1,025,690 bytes, 3/27/2026 1:57:08 PM
+    Eng_Sys:           1,021,044 bytes, 3/30/2026 1:38:59 PM
+    STATUS: MODIFIED (different size and date)
+
+  package.json
+    Engineering_system: 573 bytes, 3/27/2026 1:57:07 PM
+    Eng_Sys:           546 bytes, 3/23/2026 10:17:49 PM
+    STATUS: MODIFIED (different size)
+
+  Setup.txt
+    Engineering_system: 6,786 bytes, 3/23/2026 10:17:50 AM
+    Eng_Sys:           6,780 bytes, 3/26/2026 9:36:07 AM
+    STATUS: MODIFIED (different size and date)
+
+================================================================================
+                    UNCHANGED FILES
+================================================================================
+(Same in both directories)
+
+  docker-compose.yml (642 bytes) - IDENTICAL
+
+================================================================================
+                    DIRECTORIES IN BOTH
+================================================================================
+
+  apps\  - Need deeper comparison
+  db\    - Need deeper comparison
+  tmp\   - Temp directory
+
+================================================================================
+                    SUMMARY
+================================================================================
+
+Files only in Engineering_system:     4 (2 files + 2 directories)
+Files only in Eng_Sys:               19 (10 files + 9 directories)
+Modified files:                       4
+Unchanged files:                      1
+
+Total files in Engineering_system:    7 root files + subdirectories
+Total files in Eng_Sys:              28 root files + subdirectories
+
+================================================================================
+                    RECOMMENDATION
+================================================================================
+
+Key differences:
+1. Eng_Sys has additional documentation files (CHANGES_LOG.txt, etc.)
+2. Eng_Sys has PowerShell scripts for running Claude and Qwen
+3. Eng_Sys has additional directories (OldProject, db_eng, temp_gas_project)
+4. Core config files (.gitignore, package.json, package-lock.json, Setup.txt) 
+   have been modified in Eng_Sys
+5. Engineering_system has test_store.js and docs\ that are not in Eng_Sys
+
+================================================================================
