@@ -11,18 +11,6 @@ import ScrollbarStyle from '../../common/scrollbar';
 
 const { Content } = Layout;
 
-<<<<<<< HEAD
-const ToolingInspect = () => {
-  const { theme } = useTheme();
-  const [loading, setLoading] = useState(false);
-  const [dataSource, setDataSource] = useState([]);
-
-  const fetchECRData = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get(`${server.ECR_REQUIRE_GETLIST}`);
-      setDataSource(response.data.data);
-=======
 const HomeMTCEng = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -41,7 +29,6 @@ const HomeMTCEng = () => {
       setToolingData(toolingRes.data.data || []);
       setDwgData(dwgRes.data.data || []);
       setDwgStats(dwgStatsRes.data.data || null);
->>>>>>> old-work-backup
     } catch (error) {
       console.error("Fetch Error:", error);
     } finally {
@@ -50,35 +37,6 @@ const HomeMTCEng = () => {
   };
 
   const dashboardStats = useMemo(() => {
-<<<<<<< HEAD
-    const totalJobs = dataSource.length;
-
-    const onTimeCount = dataSource.filter(item => {
-      if (!item.due_date) return false;
-      return moment().isSameOrBefore(moment(item.due_date), 'day') && item.process_status?.toLowerCase() !== 'pending';
-    }).length;
-
-    const delayCount = dataSource.filter(item => {
-      if (!item.due_date) return false;
-      return moment().isAfter(moment(item.due_date), 'day') && item.process_status?.toLowerCase() !== 'pending';
-    }).length;
-
-    const pendingCount = dataSource.filter(item => item.process_status?.toLowerCase() === 'pending').length;
-
-    return {
-      totalJobs,
-      onTimeCount,
-      delayCount,
-      pendingCount,
-      onTimePercent: totalJobs > 0 ? Number(((onTimeCount / totalJobs) * 100).toFixed(1)) : 0,
-      delayPercent: totalJobs > 0 ? Number(((delayCount / totalJobs) * 100).toFixed(1)) : 0,
-      pendingPercent: totalJobs > 0 ? Number(((pendingCount / totalJobs) * 100).toFixed(1)) : 0,
-    };
-  }, [dataSource]);
-
-  useEffect(() => {
-    fetchECRData();
-=======
     // Tooling Inspection Stats
     const totalToolingJobs = toolingData.length;
     const toolingPending = toolingData.filter(item => !item.issue_date).length;
@@ -114,7 +72,6 @@ const HomeMTCEng = () => {
 
   useEffect(() => {
     fetchMTCData();
->>>>>>> old-work-backup
   }, []);
 
   return (
@@ -129,29 +86,13 @@ const HomeMTCEng = () => {
             padding: '15px'
           }}>
             <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
-<<<<<<< HEAD
-=======
               {/* Tooling Inspection Report */}
->>>>>>> old-work-backup
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
                   <h2><AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
                     <a href="/eng/mtc_eng/tooling" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
                   </h2>
                 </Divider>
-<<<<<<< HEAD
-                {/* ส่วนที่ 1: Row ของ Stats Cards (Total Jobs, On Time, etc.) */}
-                <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={16}>
-                    <Row padding={8} gutter={[16, 16]}>
-                      <Col span={12}>
-                        <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalJobs}</h2></Card>
-                        <Card size="small" title="Delay" style={{ marginTop: 10 }}><h2 style={{ color: theme.colors.error }}>{dashboardStats.delayCount}</h2></Card>
-                      </Col>
-                      <Col span={12}>
-                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.onTimeCount}</h2></Card>
-                        <Card size="small" title="Pending" style={{ marginTop: 10 }}><h2 style={{ color: theme.colors.warning }}>{dashboardStats.pendingCount}</h2></Card>
-=======
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
                   <Col span={16}>
                     <Row padding={8} gutter={[16, 16]}>
@@ -173,40 +114,19 @@ const HomeMTCEng = () => {
                         <Card size="small" title="Performance">
                           <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
                         </Card>
->>>>>>> old-work-backup
                       </Col>
                     </Row>
                   </Col>
                   <Col span={8}>
-<<<<<<< HEAD
-                    <Card size="small" title="Performance Overview">
-                      On Time <Progress percent={dashboardStats.onTimePercent} strokeColor={theme.colors.success} size="small" />
-                      Pending <Progress percent={dashboardStats.pendingPercent} strokeColor={theme.colors.warning} size="small" />
-                      Delay <Progress percent={dashboardStats.delayPercent} strokeColor={theme.colors.error} size="small" />
-=======
                     <Card size="small" title="Status Overview">
                       On Time <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
                       Pending <Progress percent={dashboardStats.toolingPendingPercent} strokeColor={theme.colors.warning} size="small" />
                       Delay <Progress percent={dashboardStats.toolingDelayPercent} strokeColor={theme.colors.error} size="small" />
->>>>>>> old-work-backup
                     </Card>
                   </Col>
                 </Row>
               </div>
 
-<<<<<<< HEAD
-              {/* Tool Request System */}
-              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
-                  <h2><AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
-                    <a href="/eng/mtc_eng/tool-request" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tool Drawing Request System</a>
-                  </h2>
-                </Divider>
-                <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={24}>
-                    <Card size="small" title="📝 Manage Tool & Drawing Requests">
-                      <p style={{ margin: 0 }}>
-=======
               {/* General DWG Request */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                 <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
@@ -236,7 +156,6 @@ const HomeMTCEng = () => {
                   <Col span={8}>
                     <Card size="small" title="📝 Manage Tool & Drawing Requests">
                       <p style={{ margin: 0, fontSize: '12px' }}>
->>>>>>> old-work-backup
                         Submit and track requests for tool drawings, fixtures, gauges, and 3D printing.
                         Monitor workflow progress from engineering check to completion.
                       </p>
@@ -252,8 +171,4 @@ const HomeMTCEng = () => {
   );
 }
 
-<<<<<<< HEAD
-export default ToolingInspect;
-=======
 export default HomeMTCEng;
->>>>>>> old-work-backup

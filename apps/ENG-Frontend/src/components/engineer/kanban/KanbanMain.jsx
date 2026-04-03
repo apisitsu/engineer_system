@@ -18,11 +18,7 @@ import {
     IoFitnessOutline, IoHomeOutline, IoLockClosedOutline
 } from 'react-icons/io5';
 import { useKanbanPermissions } from './hooks/useKanbanPermissions';
-<<<<<<< HEAD
 import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1, MdOutlineAssessment } from 'react-icons/md';
-=======
-import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1 } from 'react-icons/md';
->>>>>>> old-work-backup
 import { BsKanban, BsThreeDots, BsGrid3X3Gap, BsList } from 'react-icons/bs';
 import { FiPlus, FiEdit2 } from 'react-icons/fi';
 import { AiOutlineCheck, AiOutlineClose, AiOutlineEdit, AiOutlineStar, AiFillStar } from 'react-icons/ai';
@@ -34,10 +30,7 @@ import CardDetailDrawer from './CardDetail/CardDetailDrawer';
 import ProjectSettingsDrawer from './Settings/ProjectSettingsDrawer';
 import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
-<<<<<<< HEAD
 import ReportDashboard from './Reports/ReportDashboard';
-=======
->>>>>>> old-work-backup
 
 dayjs.extend(relativeTime);
 
@@ -470,19 +463,10 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const stats = useMemo(() => ({
         total: projects.length,
         totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-<<<<<<< HEAD
-        owned: projects.filter(p => p.role === 'owner').length,
-        favorites: projects.filter(p => p.is_favorite).length,
-        recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
-    }), [projects]);
-    // console.log('projects', projects)
-    // console.log('stats', stats)
-=======
         owned: projects.filter(p => p.is_owner).length,
         favorites: projects.filter(p => p.is_favorite).length,
         recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
     }), [projects]);
->>>>>>> old-work-backup
 
     // Filtered & sorted projects for tab 2
     const filteredProjects = useMemo(() => {
@@ -491,11 +475,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-<<<<<<< HEAD
-        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
-=======
         if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
->>>>>>> old-work-backup
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -592,7 +572,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </span>
                                 ),
                             },
-<<<<<<< HEAD
                             {
                                 key: 'reports',
                                 label: (
@@ -604,8 +583,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </span>
                                 ),
                             },
-=======
->>>>>>> old-work-backup
                         ]}
                     />
                 </div>
@@ -700,16 +677,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         </div>
                     )}
 
-<<<<<<< HEAD
-                    {/* ═══ REPORTS TAB ═══ */}
-                    {activeTab === 'reports' && (
-                        <div style={{ height: '100%' }}>
-                            <ReportDashboard theme={theme} />
-                        </div>
-                    )}
-
-=======
->>>>>>> old-work-backup
                     {/* ═══ PROJECTS TAB ═══ */}
                     {activeTab === 'projects' && (
                         <div>
@@ -903,10 +870,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
     const [showAddMember, setShowAddMember] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const [memberFilterSearch, setMemberFilterSearch] = useState('');
-<<<<<<< HEAD
     const [showAllNotifs, setShowAllNotifs] = useState(false);
-=======
->>>>>>> old-work-backup
 
     useEffect(() => {
         if (activeProject?.id) { fetchProjectManagers(activeProject.id); }
@@ -926,7 +890,6 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
     const hasFilters = searchQuery || filterMembers.length > 0 || filterLabels.length > 0;
 
-<<<<<<< HEAD
     const filteredNotifications = useMemo(() => {
         if (showAllNotifs) return notifications || [];
         return (notifications || []).filter(n => {
@@ -937,8 +900,6 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
     const hasHiddenNotifs = (notifications?.length || 0) > filteredNotifications.length;
 
-=======
->>>>>>> old-work-backup
     return (
         <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1229,16 +1190,11 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     </Button>
                                 )}
                             </div>
-<<<<<<< HEAD
                             {(!filteredNotifications || filteredNotifications.length === 0) ? (
-=======
-                            {(!notifications || notifications.length === 0) ? (
->>>>>>> old-work-backup
                                 <div style={{ padding: theme.spacing.xl, textAlign: 'center' }}>
                                     <Text type="secondary" style={{ fontSize: 13 }}>No notifications yet</Text>
                                 </div>
                             ) : (
-<<<<<<< HEAD
                                 <>
                                     {filteredNotifications.map(n => {
                                         let textStr = 'Notification';
@@ -1288,39 +1244,6 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                         </div>
                                     )}
                                 </>
-=======
-                                notifications.slice(0, 20).map(n => {
-                                    let textStr = 'Notification';
-                                    if (n.notif_type === 'mentionInComment') textStr = `${n.actor_u_code} mentioned you in a comment`;
-                                    else if (n.notif_type === 'commentCard') textStr = `${n.actor_u_code} commented on a card you follow`;
-                                    else if (n.notif_type === 'addMemberToCard') textStr = `${n.actor_u_code} added you to a card`;
-                                    else textStr = n.content || n.action || textStr;
-
-                                    return (
-                                        <div key={n.id}
-                                            onClick={() => {
-                                                if (!n.is_read) markNotificationRead(n.id);
-                                                if (n.card_id) openCardDetail(n.card_id);
-                                                setNotifOpen(false);
-                                            }}
-                                            style={{
-                                                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                                                borderBottom: `1px solid ${theme.colors.border}`,
-                                                background: n.is_read ? 'transparent' : `${theme.colors.primary}08`,
-                                                cursor: 'pointer',
-                                                transition: `background ${theme.transitions.fast}`,
-                                            }}>
-                                            <Text style={{ fontSize: 13, display: 'block', fontWeight: n.is_read ? 'normal' : '500' }}>{textStr}</Text>
-                                            <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(n.created_at).fromNow()}</Text>
-                                            {n.notif_data?.text && (
-                                                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    "{n.notif_data.text}"
-                                                </Text>
-                                            )}
-                                        </div>
-                                    );
-                                })
->>>>>>> old-work-backup
                             )}
                         </div>
                     )}
@@ -1365,18 +1288,12 @@ const KanbanMain = () => {
     }, [fetchProjects]);
 
     useEffect(() => {
-<<<<<<< HEAD
         if (projectIdParam && projects.length > 0) {
             const currentId = activeProject?.id ? String(activeProject.id) : null;
             if (currentId !== String(projectIdParam)) {
                 const p = projects.find(pr => String(pr.id) === String(projectIdParam));
                 if (p) setActiveProject(p);
             }
-=======
-        if (projectIdParam && projects.length > 0 && !activeProject) {
-            const p = projects.find(pr => String(pr.id) === String(projectIdParam));
-            if (p) setActiveProject(p);
->>>>>>> old-work-backup
         }
     }, [projectIdParam, projects, activeProject, setActiveProject]);
 
@@ -1391,10 +1308,7 @@ const KanbanMain = () => {
     }, [disconnectWebSocket]);
 
     const handleSelectProject = (project) => {
-<<<<<<< HEAD
-=======
         setActiveProject(project);
->>>>>>> old-work-backup
         navigate(`/eng/kanban/${project.id}`);
     };
 
@@ -1456,15 +1370,10 @@ const KanbanMain = () => {
                                 <Select
                                     value={activeProject?.id}
                                     onChange={(val) => {
-<<<<<<< HEAD
-                                        if (val) {
-                                            navigate(`/eng/kanban/${val}`);
-=======
                                         const p = projects.find(pr => pr.id === val);
                                         if (p) {
                                             setActiveProject(p);
                                             navigate(`/eng/kanban/${p.id}`);
->>>>>>> old-work-backup
                                         }
                                     }}
                                     style={{ minWidth: 220 }}

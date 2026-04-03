@@ -15,12 +15,9 @@
     "concurrently": "^9.2.1"
   },
   "dependencies": {
-<<<<<<< HEAD
     "cypress": "^15.13.0",
     "html2canvas": "^1.4.1",
-=======
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
->>>>>>> old-work-backup
     "react-icons": "^5.5.0",
     "uuid": "^13.0.0"
   }

@@ -8,12 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-<<<<<<< HEAD
 export const apiUrl = "http://plbmp129:2005/";
-=======
-// export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
->>>>>>> old-work-backup
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -23,20 +19,6 @@ export const server = {
   //--------------------Master--------------------//
 
   //--------------------MAQ--------------------//
-
-  //--------------------Tooling--------------------//
-<<<<<<< HEAD
-  TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
-  TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
-  TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
-  TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
-  TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
-  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
-
-  // Tool Request System
-  MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
-  MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,  // with /:id
-  MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
 
   //--------------------ECNT--------------------//
   UPLOAD_API: `${apiUrl}api/upload`,
@@ -48,7 +30,6 @@ export const server = {
   ECR_REQUIRE_ACK_TASK: `${apiUrl}api/ecr/tasks/`, // append taskId/ack
   ECR_USERS_BY_DEPT: `${apiUrl}api/ecr/users-by-dept/`, // append dept
   ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
-=======
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
@@ -63,6 +44,7 @@ export const server = {
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
+  TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
 
   // Tooling Select & SDS
   MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,
@@ -76,11 +58,6 @@ export const server = {
   MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
   MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
 
-  //--------------------ECNT--------------------//
-  ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
-  ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,
->>>>>>> old-work-backup
-  ECR_REQUIRE_SEND_EMAIL: `${apiUrl}api/send-email`,
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
 
@@ -205,9 +182,6 @@ export const color = {
 export const mm_safety = {
   TOTAL_STOCK: "TOTAL_STOCK"
 }
-<<<<<<< HEAD
 
 // Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
 export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
-=======
->>>>>>> old-work-backup

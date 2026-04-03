@@ -99,12 +99,8 @@ const CreateBoard = async (req, res) => {
         const defaultLists = [
             { name: 'To Do', type: 'active', pos: 65536 },
             { name: 'In Progress', type: 'active', pos: 131072 },
-<<<<<<< HEAD
             { name: 'Check', type: 'active', pos: 196608 },
             { name: 'Done', type: 'closed', pos: 262144 },
-=======
-            { name: 'Done', type: 'closed', pos: 196608 },
->>>>>>> old-work-backup
             { name: null, type: 'archive', pos: null },
             { name: null, type: 'trash', pos: null },
         ];
@@ -586,7 +582,6 @@ const SortListCards = async (req, res) => {
                        WHERE tl.card_id=c.id
                    ) AS tasks,
                    (SELECT COUNT(*) FROM kb_comment WHERE card_id=c.id) AS comment_count,
-<<<<<<< HEAD
                    (SELECT COUNT(*) FROM kb_attachment WHERE card_id=c.id) AS attachment_count,
                    (SELECT COUNT(*) FROM kb_card_issue WHERE card_id=c.id) AS issue_count,
                    (
@@ -605,9 +600,6 @@ const SortListCards = async (req, res) => {
                          AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
                        ORDER BY a.created_at DESC LIMIT 1
                    ) AS action_done_at
-=======
-                   (SELECT COUNT(*) FROM kb_attachment WHERE card_id=c.id) AS attachment_count
->>>>>>> old-work-backup
             FROM kb_card c
             WHERE c.list_id=$1
             ORDER BY c.position ASC

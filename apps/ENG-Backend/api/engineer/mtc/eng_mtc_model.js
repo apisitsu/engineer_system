@@ -2,12 +2,6 @@ const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
 
 const ToolingInspectGetlist = async (req, res) => {
-<<<<<<< HEAD
-    try {
-        const sql = `SELECT * FROM tooling_inspect`;
-        const result = await engPool.query(sql);
-        res.json({ data: result.rows });
-=======
     const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
     const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const offset   = (pageNum - 1) * limitNum;
@@ -21,7 +15,6 @@ const ToolingInspectGetlist = async (req, res) => {
             data: dataRes.rows,
             pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
         });
->>>>>>> old-work-backup
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ error: err.message });
@@ -29,12 +22,6 @@ const ToolingInspectGetlist = async (req, res) => {
 };
 
 const ToolDWGRequestGetList = async (req, res) => {
-<<<<<<< HEAD
-    try {
-        const sql = `SELECT * FROM tool_dwg_request`;
-        const result = await engPool.query(sql);
-        res.json({ data: result.rows });
-=======
     const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
     const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const offset   = (pageNum - 1) * limitNum;
@@ -48,15 +35,12 @@ const ToolDWGRequestGetList = async (req, res) => {
             data: dataRes.rows,
             pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
         });
->>>>>>> old-work-backup
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ error: err.message });
     }
 }
 
-<<<<<<< HEAD
-=======
 const GetWCCodes = async (req, res) => {
     try {
         // Try to fetch with multiple possible column names and format code to 2 digits
@@ -74,7 +58,6 @@ const GetWCCodes = async (req, res) => {
     }
 }
 
->>>>>>> old-work-backup
 const ToolDWGRequestAdd = async (req, res) => {
     console.log('Start Tooling DWG Request Add')
     try {
@@ -131,18 +114,14 @@ const getPreviousWorkingDay = async (fromDate) => {
         do {
             day.subtract(1, 'days');
         } while (
-<<<<<<< HEAD
-            day.isoWeekday() > 6 || // > 6 คือหยุดแค่อาทิตย์, >= 6 คือหยุดเสาร์-อาทิตย์
-=======
-            day.isoWeekday() >= 6 || // >= 6: ข้ามเสาร์ (6) และอาทิตย์ (7) — ตรงกับ calcDueDate ใน tool_req.js
->>>>>>> old-work-backup
-            holidays.includes(day.format('YYYY-MM-DD'))
+            day.isoWeekday() >= 6 || 
+            (holidays && holidays.includes(day.format('YYYY-MM-DD')))
         );
-
+ 
         return day.format('YYYY-MM-DD');
     } catch (error) {
-        console.error(error.message);
-        throw error;
+        console.warn("Table holidays_date might be missing, defaulting to yesterday:", error.message);
+        return moment(fromDate).subtract(1, 'days').format('YYYY-MM-DD');
     }
 };
 
@@ -332,10 +311,7 @@ module.exports = {
     ToolingInspectGetlist,
     ToolDWGRequestGetList,
     ToolDWGRequestAdd,
-<<<<<<< HEAD
-=======
     GetWCCodes,
->>>>>>> old-work-backup
     ToolingDashboadtGetlist,
     ToolingReturnAdd,
     ToolingInspectUpdate,

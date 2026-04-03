@@ -15,10 +15,7 @@ import { useKanbanStore } from '../store/kanbanStore';
 import { useTheme } from '../../../../theme';
 import KanbanCard from './KanbanCard';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
-<<<<<<< HEAD
 import { useAuthStore } from '../../../../stores/authStore';
-=======
->>>>>>> old-work-backup
 
 const { Text } = Typography;
 
@@ -50,17 +47,11 @@ const SortableCard = ({ card }) => {
 const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const {
         cards, createCard, updateList, deleteList, sortListCards,
-<<<<<<< HEAD
         searchQuery, filterMembers, filterLabels,
         activeProject, activeBoardMembers
     } = useKanbanStore();
     const { theme } = useTheme();
     const { empNo } = useAuthStore();
-=======
-        searchQuery, filterMembers, filterLabels
-    } = useKanbanStore();
-    const { theme } = useTheme();
->>>>>>> old-work-backup
 
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [newCardName, setNewCardName] = useState('');
@@ -69,16 +60,12 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const [editName, setEditName] = useState(list.name);
 
     // Permission Hook
-<<<<<<< HEAD
     const currentUserRole = activeBoardMembers.find(m => m.u_code === empNo)?.role;
     const { canEditBoard, isReadOnly } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
         boardRole: currentUserRole
     });
-=======
-    const { canEditBoard, isReadOnly } = useKanbanPermissions();
->>>>>>> old-work-backup
 
     // Get and filter cards
     const filteredCards = useMemo(() => {

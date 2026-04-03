@@ -8,7 +8,6 @@ const activity_log = () => {
 
 const ecrCreate = async (req, res) => {
     const data = req.body;
-<<<<<<< HEAD
 
     const sql = `
     INSERT INTO ecnt_document (
@@ -52,57 +51,11 @@ const ecrCreate = async (req, res) => {
         data.objective,
         data.objective_others || null,
 
-=======
-    // console.log("Received ECR Create Request:", data);
-
-    const sql = `
-    INSERT INTO ecr_request (
-        request_no, req_date, requester, department, req_due_date, status, 
-        drawing_required, tooling_required, program_required, tool_usage_required,
-        
-        -- Tooling / Program / Usage Section
-        setup_data_sheet_no, part_no_tooling, cn_tooling, process_tooling, 
-        program_no, machine_no, cycle_time, title_of_change, 
-        reason_of_tooling, tooling_before_change, tooling_after_change,
-        
-        -- Tool Usage Only
-        current_tooling_no, current_tooling_usage, new_tooling_no, new_tooling_usage,
-        
-        -- Drawing Section
-        part_no_drawing, cn_drawing, rev_drawing, reason_of_drawing, 
-        drawing_before_change, drawing_after_change,
-        
-        -- Upload Files
-        upload_tooling_before, upload_tooling_after,
-        upload_drawing_before, upload_drawing_after
-    ) VALUES (
-        $1, $2, $3, $4, $5, $6,  -- Header
-        $7, $8, $9, $10,        -- Flags
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, -- Tooling
-        $22, $23, $24, $25,        -- Usage
-        $26, $27, $28, $29, $30, $31,  -- Drawing
-        $32, $33, $34, $35         -- Files
-    ) RETURNING id
-`;
-
-    // เตรียม Array ของค่าที่จะ Insert (เรียงลำดับให้ตรงกับ SQL ข้างบน)
-    const params = [
-        data.ecr_no, // Maps to request_no
-        data.require_date ? moment(data.require_date).format('YYYY-MM-DD HH:mm:ss') : null, // req_date
-        data.request_by, // requester
-        data.department,
-        data.due_date ? moment(data.due_date).format('YYYY-MM-DD HH:mm:ss') : null, // req_due_date
-        data.status,
-
-        // Flags (0/1 -> map to boolean internally or keep smallint mapping depending on DB)
-        // Assume Postgres accepts boolean for flags if they were converted or integer
->>>>>>> old-work-backup
         data.is_drawing ? true : false,
         data.is_tooling ? true : false,
         data.is_program ? true : false,
         data.is_usage ? true : false,
 
-<<<<<<< HEAD
         data.part_no_drawing || null,
         data.cn_drawing || null,
         data.rev_drawing || null,
@@ -131,64 +84,22 @@ const ecrCreate = async (req, res) => {
         data.new_tooling_usage || null,
 
         data.process_status || 'Pending Dept Mgr'
-=======
-        // Tooling Section
-        data.setup_data_sheet_no || '',
-        data.part_no_tooling || '',   // ตรงกับ fieldsForToolProUsage
-        data.cn_tooling || '',
-        data.process || '', // process_tooling
-        data.program_no || '',
-        data.machine_no || '',
-        data.cycle_time || '',
-        data.title_of_change || '',
-        data.reason_of_tooling || '',
-        data.tooling_before_change || '',
-        data.tooling_after_change || '',
-
-        // Tool Usage Section
-        data.current_tooling_no || '',
-        data.current_tooling_usage || null,
-        data.new_tooling_no || '',
-        data.new_tooling_usage || null,
-
-        // Drawing Section
-        data.part_no_drawing || '',   // ตรงกับ fieldsDrawingChange
-        data.cn_drawing || '',
-        data.rev_drawing || '',       // ฟิลด์ใหม่ที่เพิ่มเข้ามา
-        data.reason_of_drawing || '',
-        data.drawing_before_change || '',
-        data.drawing_after_change || '',
-
-        // Upload Files
-        data.upload_tooling_before || '', // รับค่าจากฟิลด์ upload
-        data.upload_tooling_after || '',
-        data.upload_drawing_before || '', // รับค่าจากฟิลด์ upload
-        data.upload_drawing_after || ''
->>>>>>> old-work-backup
     ];
 
     try {
         const result = await engPool.query(sql, params);
         res.json({
             message: "Success",
-<<<<<<< HEAD
             id: result.rows[0].id
         });
     } catch (err) {
         console.error("ECR Create Error:", err.message);
-=======
-            id: result.rows[0].id // ส่ง ID ที่เพิ่งสร้างกลับไป
-        });
-    } catch (err) {
-        console.error("PG Error:", err.message);
->>>>>>> old-work-backup
         res.status(500).json({ error: err.message });
     }
 };
 
 const ecrGetList = async (req, res) => {
     try {
-<<<<<<< HEAD
         const sql = `SELECT * FROM ecnt_document ORDER BY created_at DESC`;
         const result = await engPool.query(sql);
         res.json({ data: result.rows });
@@ -411,17 +322,6 @@ const ecrAckTask = async (req, res) => {
         res.json({ message: "Task acknowledged successfully" });
     } catch (err) {
         console.error("ECR Ack Task Error:", err.message);
-=======
-        const sql = `
-            SELECT * FROM ecr_request
-        `;
-        const result = await engPool.query(sql);
-        res.json({
-            data: result.rows
-        });
-    } catch (err) {
-        console.error(err.message);
->>>>>>> old-work-backup
         res.status(500).json({ error: err.message });
     }
 };
@@ -637,7 +537,6 @@ const tumbleDeleteModel = async (req, res) => {
     }
 };
 
-<<<<<<< HEAD
 const axios = require('axios');
 
 const getJobCheck = async (req, res) => {
@@ -663,11 +562,6 @@ module.exports = {
     ecrSetTasks,
     ecrGetTasks,
     ecrAckTask,
-=======
-module.exports = {
-    ecrCreate,
-    ecrGetList,
->>>>>>> old-work-backup
     tumbleGetAllCondition,
     tumbleUpdateCondition,
     tumbleCreateCondition,
@@ -676,8 +570,5 @@ module.exports = {
     tumbleCreateModel,
     tumbleUpdateModel,
     tumbleDeleteModel,
-<<<<<<< HEAD
     getJobCheck,
-=======
->>>>>>> old-work-backup
 };

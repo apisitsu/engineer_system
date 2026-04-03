@@ -1,35 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-<<<<<<< HEAD
-    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, Form
-} from 'antd';
-import {
-    PlusOutlined, SearchOutlined, ReloadOutlined, EyeOutlined, EditOutlined, DeleteOutlined,
-    SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CalendarOutlined, CheckCircleOutlined
-=======
     Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
 } from 'antd';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
     StopOutlined
->>>>>>> old-work-backup
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
-<<<<<<< HEAD
-import axios from 'axios';
-import moment from 'moment';
-
-const { Content } = Layout;
-const { Title, Text } = Typography;
-const { Option } = Select;
-const { TextArea } = Input;
-
-const ToolRequest = () => {
-=======
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
 import RequestDetailsModal from './components/RequestDetailsModal';
@@ -47,15 +28,11 @@ const { Title, Text } = Typography;
 
 const ToolRequestContent = () => {
     const { message, modal } = App.useApp();
->>>>>>> old-work-backup
     const { theme } = useTheme();
     const userName = useAuthStore(state => state.userName);
     const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
-<<<<<<< HEAD
-=======
     const userInfo = useAuthStore(state => state.userInfo);
->>>>>>> old-work-backup
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
@@ -66,10 +43,6 @@ const ToolRequestContent = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
-<<<<<<< HEAD
-    const [form] = Form.useForm();
-=======
->>>>>>> old-work-backup
 
     useEffect(() => {
         fetchRequests();
@@ -78,11 +51,7 @@ const ToolRequestContent = () => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-<<<<<<< HEAD
-            const { data } = await axios.get(server.MTC_TOOL_REQUESTS);
-=======
             const { data } = await axios.get(server.MTC_TOOL_REQUESTS, { params: { limit: 200 } });
->>>>>>> old-work-backup
             setRequests(data.data || []);
         } catch (error) {
             console.error('Error fetching tool requests:', error);
@@ -92,15 +61,9 @@ const ToolRequestContent = () => {
     };
 
     const handleCreateNew = () => {
-<<<<<<< HEAD
-        const newRequestData = {
-            requester: userName,
-            requester_email: userName ? `${userName}@company.com` : '',
-=======
         setSelectedRequest({
             requester: userName,
             requester_email: userInfo?.gmail_email || '',
->>>>>>> old-work-backup
             department: userDepartment || '',
             work_center: '',
             work_center_name: '',
@@ -112,37 +75,20 @@ const ToolRequestContent = () => {
             detail: '',
             machine_no: '',
             machine_name: ''
-<<<<<<< HEAD
-        };
-
-        setSelectedRequest(newRequestData);
-        form.resetFields();
-        form.setFieldsValue(newRequestData);
-=======
         });
->>>>>>> old-work-backup
         setIsEditing(true);
         setModalVisible(true);
     };
 
     const handleViewRequest = async (record) => {
         try {
-<<<<<<< HEAD
-            const { data } = await axios.get(`${server.MTC_TOOL_REQUEST_DETAIL}/${record.id}`);
-            setSelectedRequest(data.data);
-            form.setFieldsValue(data.data);
-=======
             const { data } = await axios.get(`${server.MTC_TOOL_REQUESTS}/${record.id}`);
             setSelectedRequest(data.data);
->>>>>>> old-work-backup
             setIsEditing(false);
             setModalVisible(true);
         } catch (error) {
             console.error('Error fetching request details:', error);
-<<<<<<< HEAD
-=======
             message.error('Failed to fetch request details');
->>>>>>> old-work-backup
         }
     };
 
@@ -150,26 +96,6 @@ const ToolRequestContent = () => {
         setModalVisible(false);
         setSelectedRequest(null);
         setIsEditing(false);
-<<<<<<< HEAD
-        form.resetFields();
-    };
-
-    const handleSave = async () => {
-        try {
-            const values = await form.validateFields();
-
-            if (selectedRequest?.id) {
-                // Update existing
-                await axios.put(`${server.MTC_TOOL_REQUEST_DETAIL}/${selectedRequest.id}`, values);
-            } else {
-                // Create new
-                await axios.post(server.MTC_TOOL_REQUESTS, values);
-            }
-
-            handleModalClose();
-            fetchRequests();
-        } catch (error) {
-=======
     };
 
     const handleSave = async (values) => {
@@ -202,30 +128,18 @@ const ToolRequestContent = () => {
         } catch (error) {
             const errorMsg = error.response?.data?.message || error.message || 'Failed to save request';
             message.error(errorMsg);
->>>>>>> old-work-backup
             console.error('Error saving request:', error);
         }
     };
 
     const handleDelete = async (id) => {
-<<<<<<< HEAD
-        Modal.confirm({
-=======
         modal.confirm({
->>>>>>> old-work-backup
             title: 'Confirm deletion',
             content: 'Are you sure you want to delete this request?',
             okText: 'Delete',
             okType: 'danger',
             onOk: async () => {
                 try {
-<<<<<<< HEAD
-                    await axios.delete(`${server.MTC_TOOL_REQUEST_DETAIL}/${id}`);
-                    handleModalClose();
-                    fetchRequests();
-                } catch (error) {
-                    console.error('Error deleting request:', error);
-=======
                     await axios.delete(`${server.MTC_TOOL_REQUESTS}/${id}`);
                     handleModalClose();
                     fetchRequests();
@@ -233,7 +147,6 @@ const ToolRequestContent = () => {
                 } catch (error) {
                     console.error('Error deleting request:', error);
                     message.error('Failed to delete request');
->>>>>>> old-work-backup
                 }
             }
         });
@@ -243,11 +156,6 @@ const ToolRequestContent = () => {
         setFilterType(type);
     };
 
-<<<<<<< HEAD
-    // Filter data based on search and filter type
-    const filteredRequests = requests.filter(item => {
-        // Search filter
-=======
     // Group requests by Year → Month (year ascending, month ascending within year)
     const groupByYearMonth = (items) => {
         const yearMap = {};
@@ -276,30 +184,17 @@ const ToolRequestContent = () => {
 
     // Filter data based on search and filter type
     const filteredRequests = requests.filter(item => {
->>>>>>> old-work-backup
         if (searchText) {
             const lowerSearch = searchText.toLowerCase();
             const matchesSearch =
                 item.request_item?.toLowerCase().includes(lowerSearch) ||
-<<<<<<< HEAD
-=======
                 item.req_no?.toLowerCase().includes(lowerSearch) ||
->>>>>>> old-work-backup
                 item.title?.toLowerCase().includes(lowerSearch) ||
                 item.requester?.toLowerCase().includes(lowerSearch) ||
                 item.department?.toLowerCase().includes(lowerSearch);
             if (!matchesSearch) return false;
         }
 
-<<<<<<< HEAD
-        // Status filter
-        if (filterType === 'pending') {
-            return item.status === 'Pending';
-        } else if (filterType === 'inProgress') {
-            return item.status === 'In Progress';
-        } else if (filterType === 'complete') {
-            return item.status === 'Complete';
-=======
         if (filterType === FILTER_TYPES.PENDING) {
             return item.status === WORKFLOW_STATUS.PENDING_ENG_CHECK;
         } else if (filterType === FILTER_TYPES.IN_PROGRESS) {
@@ -308,25 +203,12 @@ const ToolRequestContent = () => {
             return isDoneStatus(item.status) && !isDeniedStatus(item.status);
         } else if (filterType === FILTER_TYPES.DENIED) {
             return isDeniedStatus(item.status);
->>>>>>> old-work-backup
         }
 
         return true; // 'all'
     });
 
-<<<<<<< HEAD
-    const getStatusColor = (status) => {
-        const colors = {
-            'Pending': theme.colors.warning,
-            'In Progress': theme.colors.info,
-            'Complete': theme.colors.success,
-            'Denied': theme.colors.error
-        };
-        return colors[status] || theme.colors.textTertiary;
-    };
-=======
     const getStatusColor = (status) => STATUS_COLORS[status] || 'default';
->>>>>>> old-work-backup
 
     const columns = [
         {
@@ -335,16 +217,6 @@ const ToolRequestContent = () => {
             key: 'request_item',
             width: 160,
             fixed: 'left',
-<<<<<<< HEAD
-            render: (text) => <strong style={{ color: theme.colors.primary }}>{text}</strong>
-        },
-        {
-            title: 'Request No.',
-            dataIndex: 'request_no',
-            key: 'request_no',
-            width: 120,
-            render: (text) => text || '-'
-=======
             render: (text, record) => <strong style={{ color: theme.colors.primary }}>{text || record.req_no || '-'}</strong>
         },
         {
@@ -356,7 +228,6 @@ const ToolRequestContent = () => {
                 const display = text && text !== record.request_item ? text : null;
                 return display ? <Text style={{ color: '#1890ff', fontWeight: 600 }}>{display}</Text> : '-';
             }
->>>>>>> old-work-backup
         },
         {
             title: 'Created',
@@ -397,12 +268,6 @@ const ToolRequestContent = () => {
             width: 250
         },
         {
-<<<<<<< HEAD
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            width: 110,
-=======
             title: 'Due Date',
             dataIndex: 'req_due_date',
             key: 'req_due_date',
@@ -423,7 +288,6 @@ const ToolRequestContent = () => {
             dataIndex: 'status',
             key: 'status',
             width: 150,
->>>>>>> old-work-backup
             render: (status) => (
                 <Tag color={getStatusColor(status)}>{status}</Tag>
             )
@@ -433,11 +297,7 @@ const ToolRequestContent = () => {
             dataIndex: 'current_stage',
             key: 'current_stage',
             width: 120,
-<<<<<<< HEAD
-            render: (stage) => <Tag color={theme.colors.info}>{stage}</Tag>
-=======
             render: (stage) => stage ? <Tag color="blue">{stage}</Tag> : '-'
->>>>>>> old-work-backup
         },
         {
             title: 'Actions',
@@ -474,11 +334,7 @@ const ToolRequestContent = () => {
                                     <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 60 }} />
                                     <div style={{ padding: '16px 16px' }}>
                                         <Title level={2} style={{ marginBottom: 0 }}>
-<<<<<<< HEAD
-                                            Tool Drawing Request System
-=======
                                             General DWG Request
->>>>>>> old-work-backup
                                         </Title>
                                         <Text type="secondary">Manage and track tool & drawing requests</Text>
                                     </div>
@@ -518,18 +374,6 @@ const ToolRequestContent = () => {
                                                 buttonStyle="solid"
                                                 onChange={(e) => handleFilterChange(e.target.value)}
                                             >
-<<<<<<< HEAD
-                                                <Radio.Button value="pending">
-                                                    <ClockCircleOutlined /> Pending
-                                                </Radio.Button>
-                                                <Radio.Button value="inProgress">
-                                                    <SyncOutlined spin /> In Progress
-                                                </Radio.Button>
-                                                <Radio.Button value="complete">
-                                                    <CheckCircleOutlined /> Complete
-                                                </Radio.Button>
-                                                <Radio.Button value="all">
-=======
                                                 <Radio.Button value={FILTER_TYPES.PENDING}>
                                                     <ClockCircleOutlined /> Eng Check
                                                 </Radio.Button>
@@ -543,7 +387,6 @@ const ToolRequestContent = () => {
                                                     <StopOutlined /> Denied
                                                 </Radio.Button>
                                                 <Radio.Button value={FILTER_TYPES.ALL}>
->>>>>>> old-work-backup
                                                     <UnorderedListOutlined /> All
                                                 </Radio.Button>
                                             </Radio.Group>
@@ -552,196 +395,6 @@ const ToolRequestContent = () => {
                                 </Row>
                             </Card>
 
-<<<<<<< HEAD
-                            {/* Table Section */}
-                            <Card
-                                title={
-                                    <div style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}>
-                                        <Space wrap>
-                                            <Text style={{ fontSize: 16 }}>Request List</Text>
-                                            <Text style={{ color: theme.colors.textTertiary }}>
-                                                ({filterType === 'pending' ? 'Pending' :
-                                                    filterType === 'inProgress' ? 'In Progress' :
-                                                        filterType === 'complete' ? 'Complete' : 'All'})
-                                            </Text>
-                                        </Space>
-                                        <Text style={{ color: theme.colors.textTertiary, paddingRight: 8 }}>
-                                            {filteredRequests.length} Requests
-                                        </Text>
-                                    </div>
-                                }
-                                style={{ marginTop: 16 }}
-                            >
-                                <Table
-                                    dataSource={filteredRequests}
-                                    columns={columns}
-                                    rowKey="id"
-                                    loading={loading}
-                                    pagination={{ pageSize: 5 }}
-                                    scroll={{ x: 'max-content' }}
-                                />
-                            </Card>
-                        </div>
-
-                        {/* Request Details Modal */}
-                        <Modal
-                            title={
-                                selectedRequest?.id
-                                    ? `Request Details: ${selectedRequest.request_item}`
-                                    : 'Create New Request'
-                            }
-                            open={modalVisible}
-                            onCancel={handleModalClose}
-                            width={900}
-                            footer={
-                                isEditing ? (
-                                    <Space>
-                                        <Button onClick={handleModalClose}>Cancel</Button>
-                                        <Button type="primary" onClick={handleSave}>Save</Button>
-                                    </Space>
-                                ) : (
-                                    <Space>
-                                        <Button onClick={() => setIsEditing(true)} icon={<EditOutlined />}>
-                                            Edit
-                                        </Button>
-                                        {selectedRequest?.id && (
-                                            <Button
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                onClick={() => handleDelete(selectedRequest.id)}
-                                            >
-                                                Delete
-                                            </Button>
-                                        )}
-                                        <Button onClick={handleModalClose}>Close</Button>
-                                    </Space>
-                                )
-                            }
-                        >
-                            <Form
-                                form={form}
-                                layout="vertical"
-                                initialValues={selectedRequest}
-                                disabled={!isEditing}
-                            >
-                                <Title level={5}>Requester Information</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Requester"
-                                            name="requester"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Email" name="requester_email">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Department"
-                                            name="department"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Work Center"
-                                            name="work_center"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                <Title level={5} style={{ marginTop: 16 }}>Request Details</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Type of Request"
-                                            name="type_of_request"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Select>
-                                                <Option value="Regist Drawing">Regist Drawing</Option>
-                                                <Option value="Draft Drawing">Draft Drawing</Option>
-                                                <Option value="3D Print">3D Print</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item
-                                            label="Category"
-                                            name="category"
-                                            rules={[{ required: true }]}
-                                        >
-                                            <Select>
-                                                <Option value="Machine part">Machine part</Option>
-                                                <Option value="Gauge">Gauge</Option>
-                                                <Option value="Other">Other</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item label="Drawing Required" name="drawing_required">
-                                            <Select>
-                                                <Option value="With Drawing">With Drawing</Option>
-                                                <Option value="Without Drawing">Without Drawing</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Type of Drawing" name="type_of_drawing">
-                                            <Select>
-                                                <Option value="Copy">Copy</Option>
-                                                <Option value="Remake">Remake</Option>
-                                                <Option value="New Design">New Design</Option>
-                                                <Option value="Modify">Modify</Option>
-                                            </Select>
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Form.Item
-                                    label="Title"
-                                    name="title"
-                                    rules={[{ required: true }]}
-                                >
-                                    <Input />
-                                </Form.Item>
-                                <Form.Item
-                                    label="Detail"
-                                    name="detail"
-                                    rules={[{ required: true }]}
-                                >
-                                    <TextArea rows={4} />
-                                </Form.Item>
-
-                                <Title level={5} style={{ marginTop: 16 }}>Machine Information (Optional)</Title>
-                                <Row gutter={16}>
-                                    <Col span={12}>
-                                        <Form.Item label="Machine No." name="machine_no">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Machine Name" name="machine_name">
-                                            <Input />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                            </Form>
-                        </Modal>
-=======
                             {/* Table Section — grouped by Year → Month (collapsed by default) */}
                             <div style={{ marginTop: 16 }}>
                                 <Collapse
@@ -800,7 +453,6 @@ const ToolRequestContent = () => {
                             onEdit={() => setIsEditing(true)}
                             onActionDone={() => { fetchRequests(); handleModalClose(); }}
                         />
->>>>>>> old-work-backup
                     </Content>
                 </Spin>
             </Layout>
@@ -808,13 +460,10 @@ const ToolRequestContent = () => {
     );
 };
 
-<<<<<<< HEAD
-=======
 const ToolRequest = () => (
     <App>
         <ToolRequestContent />
     </App>
 );
 
->>>>>>> old-work-backup
 export default ToolRequest;

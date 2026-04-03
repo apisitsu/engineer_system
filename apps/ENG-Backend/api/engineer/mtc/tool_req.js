@@ -1,7 +1,5 @@
 const { engPool } = require('../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
-<<<<<<< HEAD
-=======
 const { sendEmailWithFallback } = require('../../system/emailService');
 const path = require('path');
 
@@ -72,18 +70,12 @@ const STAGE_MAP = {
   [WORKFLOW_STAGES.ENG_APPROVE]:{ stepNo: 5, approveStatus: WORKFLOW_STATUS.PENDING_ENG_INFORM,  approveStage: 'Eng Inform',  denyStatus: WORKFLOW_STATUS.DENIED_BY_APPROVE,  denyStage: 'Denied',    emailApprove: WORKFLOW_STAGES.ENG_INFORM,  emailDeny: null },
   [WORKFLOW_STAGES.ENG_INFORM]: { stepNo: 6, approveStatus: WORKFLOW_STATUS.COMPLETED_INFORMED,  approveStage: 'Completed',                                                              emailApprove: null },
 };
->>>>>>> old-work-backup
 
 /**
  * GET /api/engineer/mtc/tool-requests
  * List all tool requests with optional filtering
  */
 const getToolRequests = async (req, res) => {
-<<<<<<< HEAD
-    const { status, search, startDate, endDate } = req.query;
-
-    let sql = `SELECT * FROM tr_request WHERE 1=1`;
-=======
     const { status, search, startDate, endDate, page, limit } = req.query;
 
     const pageNum  = Math.max(1, parseInt(page)  || 1);
@@ -91,49 +83,25 @@ const getToolRequests = async (req, res) => {
     const offset   = (pageNum - 1) * limitNum;
 
     let baseWhere = `WHERE deleted_at IS NULL`;
->>>>>>> old-work-backup
     const params = [];
     let paramIndex = 1;
 
     if (status && status !== 'all') {
-<<<<<<< HEAD
-        sql += ` AND status = $${paramIndex++}`;
-=======
         baseWhere += ` AND status = $${paramIndex++}`;
->>>>>>> old-work-backup
         params.push(status);
     }
 
     if (search) {
-<<<<<<< HEAD
-        sql += ` AND (request_item ILIKE $${paramIndex++} OR title ILIKE $${paramIndex++} OR requester ILIKE $${paramIndex++})`;
-=======
         baseWhere += ` AND (request_item ILIKE $${paramIndex++} OR title ILIKE $${paramIndex++} OR requester ILIKE $${paramIndex++})`;
->>>>>>> old-work-backup
         params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (startDate) {
-<<<<<<< HEAD
-        sql += ` AND DATE(created_at) >= $${paramIndex++}`;
-=======
         baseWhere += ` AND DATE(created_at) >= $${paramIndex++}`;
->>>>>>> old-work-backup
         params.push(startDate);
     }
 
     if (endDate) {
-<<<<<<< HEAD
-        sql += ` AND DATE(created_at) <= $${paramIndex++}`;
-        params.push(endDate);
-    }
-
-    sql += ` ORDER BY created_at DESC`;
-
-    try {
-        const result = await engPool.query(sql, params);
-        res.json({ data: result.rows });
-=======
         baseWhere += ` AND DATE(created_at) <= $${paramIndex++}`;
         params.push(endDate);
     }
@@ -152,7 +120,6 @@ const getToolRequests = async (req, res) => {
             data: dataRes.rows,
             pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
         });
->>>>>>> old-work-backup
     } catch (err) {
         console.error('Error fetching tool requests:', err.message);
         return res.status(500).json({ error: err.message });
@@ -168,11 +135,7 @@ const getToolRequestById = async (req, res) => {
 
     try {
         // First get the main request
-<<<<<<< HEAD
-        const requestRes = await engPool.query('SELECT * FROM tr_request WHERE id = $1', [id]);
-=======
         const requestRes = await engPool.query('SELECT * FROM tr_request WHERE id = $1 AND deleted_at IS NULL', [id]);
->>>>>>> old-work-backup
         const request = requestRes.rows[0];
 
         if (!request) {
@@ -180,10 +143,7 @@ const getToolRequestById = async (req, res) => {
         }
 
         // Then get workflow history
-<<<<<<< HEAD
-=======
         // Use created_at for ordering as it is the standard in the new migration
->>>>>>> old-work-backup
         const workflowRes = await engPool.query('SELECT * FROM tr_workflow WHERE req_id = $1 ORDER BY created_at ASC', [id]);
 
         res.json({
@@ -193,23 +153,11 @@ const getToolRequestById = async (req, res) => {
             }
         });
     } catch (err) {
-<<<<<<< HEAD
-        console.error('Error fetching tool request details:', err.message);
-        return res.status(500).json({ error: err.message });
-    }
-};
-
-/**
- * POST /api/engineer/mtc/tool-requests
- * Create new tool request
- */
-=======
         console.error(`❌ Error fetching tool request details (ID: ${id}):`, err.message);
         return res.status(500).json({ error: 'Internal Server Error: ' + err.message });
     }
 };
 
->>>>>>> old-work-backup
 const createToolRequest = async (req, res) => {
     try {
         const {
@@ -232,12 +180,6 @@ const createToolRequest = async (req, res) => {
         if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
             return res.status(400).json({
                 result: 'false',
-<<<<<<< HEAD
-                message: 'กรุณากรอกข้อมูลให้ครบถ้วน (Department, Work Center, Requester, Type, Category, Title, Detail)'
-            });
-        }
-
-=======
                 message: 'กรุณากรอกข้อมูลให้ครบถ้วน'
             });
         }
@@ -262,77 +204,31 @@ const createToolRequest = async (req, res) => {
             logger.info('File uploaded successfully', { originalName: file.name, savedPath: file_path });
         }
 
->>>>>>> old-work-backup
         // Generate request_item: ITEM-YYYYMMDD-XXX
         const now = moment();
         const dateStr = now.format('YYYYMMDD');
 
-<<<<<<< HEAD
-        // Get count for today to generate sequence
-        const countRes = await engPool.query(`SELECT COUNT(*) as count FROM tr_request WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
-        const count = parseInt(countRes.rows[0].count);
-
-        const seq = String((count || 0) + 1).padStart(3, '0');
-        const request_item = `ITEM-${dateStr}-${seq}`;
-
-        // Calculate due date (default 14 days)
-        const req_due_date = now.add(14, 'days').format('YYYY-MM-DD HH:mm:ss');
-=======
         const countRes = await engPool.query(`SELECT COUNT(*) as count FROM tr_request WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
         const count = parseInt(countRes.rows[0].count);
         const seq = String((count || 0) + 1).padStart(3, '0');
         const request_item = `ITEM-${dateStr}-${seq}`;
 
         const req_due_date = calcDueDate(type_of_request);
->>>>>>> old-work-backup
 
         const sql = `
             INSERT INTO tr_request (
                 request_item, department, work_center, work_center_name,
                 requester, requester_email, type_of_request, category,
                 drawing_required, type_of_drawing, title, detail,
-<<<<<<< HEAD
-                machine_no, machine_name, req_due_date, req_no
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
-        `;
-
-        // Setting req_no = request_item mapping from older codebase since req_no replaces request_no
-=======
                 machine_no, machine_name, req_due_date, req_no,
                 status, current_stage, file_path, req_by, req_date
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $5, NOW()) RETURNING id
         `;
 
->>>>>>> old-work-backup
         const params = [
             request_item, department, work_center, work_center_name,
             requester, requester_email, type_of_request, category,
             drawing_required, type_of_drawing, title, detail,
-<<<<<<< HEAD
-            machine_no, machine_name, req_due_date, request_item
-        ];
-
-        const insertRes = await engPool.query(sql, params);
-        const newId = insertRes.rows[0].id;
-
-        console.log(`✅ Created tool request: ${request_item} (ID: ${newId})`);
-
-        res.json({
-            result: 'true',
-            message: 'บันทึกคำขอเรียบร้อยแล้ว',
-            data: {
-                id: newId,
-                request_item
-            }
-        });
-
-    } catch (error) {
-        console.error('Server Error:', error);
-        res.status(500).json({
-            result: 'false',
-            message: 'Server Error'
-        });
-=======
             machine_no, machine_name, req_due_date, request_item,
             WORKFLOW_STATUS.PENDING_ENG_CHECK, 'Eng Check', file_path
         ];
@@ -348,7 +244,6 @@ const createToolRequest = async (req, res) => {
     } catch (error) {
         logger.error('Server Error', { error: error.message });
         res.status(500).json({ result: 'false', message: 'Server Error' });
->>>>>>> old-work-backup
     }
 };
 
@@ -428,30 +323,11 @@ const updateToolRequest = async (req, res) => {
 
 /**
  * DELETE /api/engineer/mtc/tool-requests/:id
-<<<<<<< HEAD
- * Delete tool request
-=======
  * Soft-delete tool request (ตั้ง deleted_at แทนการลบจริง เพื่อรักษา audit trail)
->>>>>>> old-work-backup
  */
 const deleteToolRequest = async (req, res) => {
     const { id } = req.params;
 
-<<<<<<< HEAD
-    const client = await engPool.connect();
-
-    try {
-        await client.query('BEGIN');
-
-        // Delete workflow records first (if any)
-        await client.query('DELETE FROM tr_workflow WHERE req_id = $1', [id]);
-
-        // Then delete the main request
-        const delRes = await client.query('DELETE FROM tr_request WHERE id = $1', [id]);
-
-        if (delRes.rowCount === 0) {
-            await client.query('ROLLBACK');
-=======
     try {
         const result = await engPool.query(
             `UPDATE tr_request SET deleted_at = NOW(), updated_at = NOW()
@@ -460,37 +336,22 @@ const deleteToolRequest = async (req, res) => {
         );
 
         if (result.rowCount === 0) {
->>>>>>> old-work-backup
             return res.status(404).json({
                 result: 'false',
                 message: 'ไม่พบข้อมูลที่ต้องการลบ'
             });
         }
 
-<<<<<<< HEAD
-        await client.query('COMMIT');
-
-=======
->>>>>>> old-work-backup
         res.json({
             result: 'true',
             message: 'ลบข้อมูลเรียบร้อยแล้ว'
         });
     } catch (err) {
-<<<<<<< HEAD
-        await client.query('ROLLBACK');
-=======
->>>>>>> old-work-backup
         console.error('Error deleting tool request:', err.message);
         return res.status(500).json({
             result: 'false',
             message: err.message
         });
-<<<<<<< HEAD
-    } finally {
-        client.release();
-=======
->>>>>>> old-work-backup
     }
 };
 
@@ -504,18 +365,11 @@ const getToolRequestDashboard = async (req, res) => {
     try {
         // Get total counts by status
         const statusCountsRes = await engPool.query(`
-<<<<<<< HEAD
-            SELECT 
-                status,
-                COUNT(*) as count
-            FROM tr_request
-=======
             SELECT
                 status,
                 COUNT(*) as count
             FROM tr_request
             WHERE deleted_at IS NULL
->>>>>>> old-work-backup
             GROUP BY status
         `);
 
@@ -525,33 +379,20 @@ const getToolRequestDashboard = async (req, res) => {
         }, {});
 
         // Get total count
-<<<<<<< HEAD
-        const totalRes = await engPool.query('SELECT COUNT(*) as total FROM tr_request');
-=======
         const totalRes = await engPool.query('SELECT COUNT(*) as total FROM tr_request WHERE deleted_at IS NULL');
->>>>>>> old-work-backup
         stats.total = parseInt(totalRes.rows[0].total);
 
         // Get requests created in last 30 days
         const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
-<<<<<<< HEAD
-        const recentRes = await engPool.query('SELECT COUNT(*) as recent FROM tr_request WHERE DATE(created_at) >= $1', [thirtyDaysAgo]);
-=======
         const recentRes = await engPool.query('SELECT COUNT(*) as recent FROM tr_request WHERE deleted_at IS NULL AND DATE(created_at) >= $1', [thirtyDaysAgo]);
->>>>>>> old-work-backup
         stats.last30Days = parseInt(recentRes.rows[0].recent);
 
         // Get overdue count
         const today = moment().format('YYYY-MM-DD');
         const overdueRes = await engPool.query(`
-<<<<<<< HEAD
-             SELECT COUNT(*) as overdue FROM tr_request 
-             WHERE status != 'Complete' AND status != 'Denied' 
-=======
              SELECT COUNT(*) as overdue FROM tr_request
              WHERE deleted_at IS NULL
              AND status NOT IN ('Completed & Informed', 'Denied', 'Denied by Approve')
->>>>>>> old-work-backup
              AND DATE(req_due_date) < $1
         `, [today]);
         stats.overdue = parseInt(overdueRes.rows[0].overdue);
@@ -563,8 +404,6 @@ const getToolRequestDashboard = async (req, res) => {
     }
 };
 
-<<<<<<< HEAD
-=======
 /**
  * POST /api/engineer/mtc/tool-requests/:id/action
  * Submit a workflow stage action (approve/deny/submit)
@@ -730,18 +569,13 @@ const submitAction = async (req, res) => {
     }
 };
 
->>>>>>> old-work-backup
 module.exports = {
     getToolRequests,
     getToolRequestById,
     createToolRequest,
     updateToolRequest,
     deleteToolRequest,
-<<<<<<< HEAD
-    getToolRequestDashboard
-=======
     getToolRequestDashboard,
     getStagePermissions,
     submitAction,
->>>>>>> old-work-backup
 };

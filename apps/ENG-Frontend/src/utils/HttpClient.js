@@ -42,11 +42,7 @@ axios.interceptors.response.use(
       localStorage.removeItem("user_info");
 
       // Force redirect to login page. We use window.location because we might be out of React context here.
-<<<<<<< HEAD
       if (window.location.pathname !== "/sign_in" && window.location.pathname !== "/" && window.location.pathname !== "/job_check_tracker") {
-=======
-      if (window.location.pathname !== "/sign_in" && window.location.pathname !== "/") {
->>>>>>> old-work-backup
         window.location.href = "/sign_in";
       }
       return Promise.reject(error);

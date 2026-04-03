@@ -22,10 +22,7 @@ router.post('/projects/:id/favorite', Project.ToggleFavorite);
 router.get('/projects/:id/managers', Project.GetManagers);
 router.post('/projects/:id/managers', Project.AddManager);
 router.delete('/projects/:id/managers', Project.RemoveManager);
-<<<<<<< HEAD
 router.get('/projects/:id/report-data', Project.GetReportData);
-=======
->>>>>>> old-work-backup
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);

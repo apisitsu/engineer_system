@@ -12,7 +12,6 @@ export const useAuthStore = create((set) => ({
   userInfo: JSON.parse(localStorage.getItem(key_constance.USER_INFO) || "{}"),
   empNo: localStorage.getItem(key_constance.USER_EMPNO) || "",
 
-<<<<<<< HEAD
   getData: () => {
     return {
       isLogin: localStorage.getItem(key_constance.LOGIN_PASSED),
@@ -26,8 +25,6 @@ export const useAuthStore = create((set) => ({
     };
   },
 
-=======
->>>>>>> old-work-backup
   // 2. ฟังก์ชัน Login (รับ object ข้อมูล user จาก API มาเซ็ตทีเดียว)
   login: (userData) => {
     // บันทึกลง LocalStorage

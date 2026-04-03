@@ -57,20 +57,26 @@ export const ThemeProvider = ({ children }) => {
         localStorage.setItem(THEME_STORAGE_KEY, currentThemeName);
     }, [currentThemeName]);
 
+    const axiosLocal = axios.create(); // Separate instance to avoid global interceptors for non-critical sync
+
     const switchTheme = async (themeName, saveToBackend = true) => {
         if (themes[themeName]) {
             setCurrentThemeName(themeName);
 
             // Sync with backend if user is logged in
             const empno = localStorage.getItem(key_constance.USER_EMPNO);
-            if (empno && saveToBackend) {
+            const token = localStorage.getItem("token");
+            if (empno && token && saveToBackend) {
                 try {
-                    await axios.post(server.UPDATE_USER_THEME, {
+                    await axiosLocal.post(server.UPDATE_USER_THEME, {
                         empno: empno,
                         theme: themeName
+                    }, {
+                        headers: { Authorization: `Bearer ${token}` }
                     });
                 } catch (error) {
-                    console.error("Failed to sync theme with backend:", error);
+                    // Fail silently for theme sync to avoid redirect loops
+                    console.warn("Could not sync theme with server (non-critical):", error.message);
                 }
             }
         }

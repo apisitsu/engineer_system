@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-import React, { useState } from "react";
-import { Layout, Spin } from "antd";
-import { Card, Button, Select } from 'antd';
-import { MdAssessment } from "react-icons/md";
-import { MdArtTrack } from "react-icons/md";
-import { BsFillClipboard2CheckFill } from "react-icons/bs";
-import { MenuTemplate } from "../../menu_sidebar/menu_template";
-import { useTheme } from "../../../theme";
-import { SendEmailButton } from '../../shared';
-=======
 import React, { useState, useRef } from "react";
 import { Layout, Space, Input, Spin } from "antd";
 import { Card, Table, Button, Select } from 'antd';
@@ -18,7 +7,6 @@ import { MdAssessment } from "react-icons/md";
 import { BsFillClipboard2CheckFill } from "react-icons/bs";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from "../../../theme";
->>>>>>> old-work-backup
 
 const { Content } = Layout;
 const { Option } = Select;
@@ -80,39 +68,6 @@ const App = () => {
                   >
                     DWG Check Tool
                   </Button>
-<<<<<<< HEAD
-                  <Button
-                    type="primary"
-                    icon={<MdArtTrack />}
-                    size="large"
-                    onClick={() => window.open('/job_check_tracker', '_blank')}
-                    style={{
-                      background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryDark})`,
-                      border: 'none',
-                      borderRadius: theme.borderRadius.md,
-                      boxShadow: theme.shadows.md,
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      height: '42px',
-                      padding: '0 20px',
-                    }}
-                  >
-                    3D PDF Generate Tracker
-                  </Button>
-                  {/* --- Email Notification Test --- */}
-                  {/* <div style={{ marginTop: 16 }}>
-                    <SendEmailButton
-                      cn="TEST-001"
-                      process="Tumble"
-                      rev="A"
-                      onSuccess={(params) => console.log('📧 Notification sent!', params)}
-                    />
-                  </div> */}
-=======
->>>>>>> old-work-backup
                 </div>
               </Card>
             </div>
