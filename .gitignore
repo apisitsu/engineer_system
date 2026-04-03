@@ -29,3 +29,10 @@ apps/ENG-Backend/tools/
 # Database
 db_eng/
 >>>>>>> old-work-backup
+
+# Attachment files
+apps/ENG-Backend/files/tool_requests/
+apps/ENG-Backend/files/output/pdf-cache/
+
+# Template excel files for setup data sheet
+apps/ENG-Backend/files/template/
