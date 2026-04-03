@@ -120,10 +120,9 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
         setIsConflictModalOpen(true);
       } else {
-        // const payload = { ...initialData, ...currentValues };
+        const payload = { ...initialData, ...currentValues };
         // console.log("Final Payload:", payload);
-
-        // onSubmit(payload);
+        onSubmit(payload);
         onCancel();
       }
     });
