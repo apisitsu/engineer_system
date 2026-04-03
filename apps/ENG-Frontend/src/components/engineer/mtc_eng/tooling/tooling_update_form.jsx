@@ -65,7 +65,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
         return <DatePicker style={{ width: '100%' }} format="MM/DD/YYYY" placeholder={field.placeholder} />;
       case 'select':
         return (
-          <Select placeholder={field?.placeholder} allowClear defaultValue={initialData?.[field?.name] || null}>
+          <Select placeholder={field?.placeholder} allowClear>
             {field.options?.map((opt) => (
               <Option key={opt?.value} value={opt?.value}>{opt?.label}</Option>
             ))}
@@ -202,6 +202,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
         open={open}
         onCancel={onCancel}
         centered
+        forceRender
         width={700}
         footer={[
           <Button key="cancel" onClick={onCancel}>Cancel</Button>,

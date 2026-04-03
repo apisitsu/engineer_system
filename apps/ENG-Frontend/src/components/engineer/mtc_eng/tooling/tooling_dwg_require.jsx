@@ -57,6 +57,7 @@ const DWGRequestForm = ({ open, onCancel }) => {
                 const payload = {
                     date_request: (values.date_request ? values.date_request : requestdate),
                     item: values.item,
+                    remark: values.remark,
                     status: 'Pending',
                 };
 
@@ -131,6 +132,7 @@ const DWGRequestForm = ({ open, onCancel }) => {
                 footer={null}
                 width={1100}
                 centered
+                forceRender
                 destroyOnHidden={true}
                 maskClosable={false}
             >
