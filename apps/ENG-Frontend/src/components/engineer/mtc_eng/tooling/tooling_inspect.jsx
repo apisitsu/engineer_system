@@ -120,11 +120,7 @@ function InspectionReport() {
 
     const filtered = targetData.filter(item => {
       if (!item.receive_date) return false;
-<<<<<<< HEAD
-      const itemDate = moment(item.receive_date, 'DD-MM-YYYY' || 'YYYY-MM-DD'); // เช็ค Format วันที่ให้ตรง DB
-=======
       const itemDate = moment(item.receive_date, dateFormat); // เช็ค Format วันที่ให้ตรง DB
->>>>>>> 562a216 (resolve limit show data 100 rows and set date format)
       const targetMonth = moment(value, 'MM-YYYY');
       return itemDate.isSame(targetMonth, 'month');
     });
@@ -210,16 +206,8 @@ function InspectionReport() {
     fetchToolingInspectData();
   }, [fetchToolingInspectData]);
 
-<<<<<<< HEAD
-  const dateFormate = (date) => {
-    return moment(date, ["YYYY-MM-DD", "MM/DD/YYYY", "YYYY-MM-DD HH:mm:ss"]).format('DD-MMM-YYYY');
-  }
-
-  const columns = [
-=======
   // useMemo
   const columns = useMemo(() => [
->>>>>>> 562a216 (resolve limit show data 100 rows and set date format)
     {
       title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date',
       render: (text) => text ? moment(text, dateFormat).format(dateFormat) : '-'
