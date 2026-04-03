@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Layout, DatePicker, Spin, Typography } from "antd";
 import { Card, Row, Col, Table, Input, Button, Select, Space, Radio, Tag } from 'antd';
 import {
@@ -19,12 +19,12 @@ import DWGRequestForm from "./tooling_dwg_require";
 import ToolingReturnForm from "./tooling_inspect_form";
 import UpdateFormModal from "./tooling_update_form";
 
-
-
 const { Content } = Layout;
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { Option } = Select;
+
+const dateFormat = 'DD-MM-YYYY';
 
 function InspectionReport() {
   const { theme } = useTheme();
@@ -58,22 +58,40 @@ function InspectionReport() {
     setUpdateFormOpen(true);
     // console.log("Update Record:", record);
     // console.log(updateFormOpen)
-    // ใส่ Logic เปิด Modal Update ตรงนี้
   };
 
-  const fetchToolingInspectData = async () => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  // useCallback Performance
+  const fetchToolingInspectData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${server.TOOLING_INSPECT_GETLIST}`);
-      const result = response.data.data;
-      setDataSource(result);
+      const params = new URLSearchParams({
+        page: currentPage,
+        limit: pageSize,
+        search: searchText,
+        status: filterType,
+      });
 
-      generateMonthOptions(result);
+      const response = await axios.get(`${server.TOOLING_INSPECT_GETLIST}?${params.toString()}`);
+
+      const resultData = response.data.data;
+      setDataSource(resultData);
+      setTotalRecords(response.data.pagination.total);
+
+      generateMonthOptions(resultData);
     } catch (error) {
       console.error("Fetch Inspect Error:", error);
     } finally {
       setLoading(false);
     }
+  }, [currentPage, pageSize, searchText, filterType]);
+
+  const handleTableChange = (pagination) => {
+    setCurrentPage(pagination.current);
+    setPageSize(pagination.pageSize);
   };
 
   // --- Logic Functions ---
@@ -102,7 +120,11 @@ function InspectionReport() {
 
     const filtered = targetData.filter(item => {
       if (!item.receive_date) return false;
+<<<<<<< HEAD
       const itemDate = moment(item.receive_date, 'DD-MM-YYYY' || 'YYYY-MM-DD'); // เช็ค Format วันที่ให้ตรง DB
+=======
+      const itemDate = moment(item.receive_date, dateFormat); // เช็ค Format วันที่ให้ตรง DB
+>>>>>>> 562a216 (resolve limit show data 100 rows and set date format)
       const targetMonth = moment(value, 'MM-YYYY');
       return itemDate.isSame(targetMonth, 'month');
     });
@@ -133,7 +155,7 @@ function InspectionReport() {
         data = data.filter(item => {
           if (!item.receive_date) return false;
           const currentMonth = moment();
-          const itemDate = moment(item.receive_date, ["MM/DD/YYYY", "M/D/YYYY", "YYYY-MM-DD", "YYYY-MM-DD HH:mm:ss"]);
+          const itemDate = moment(item.receive_date); // แก้บั๊ก dateFormat
           const isThisMonth = itemDate.isSame(currentMonth, 'month');
           const isPending = !item.issue_date;
           return isThisMonth && isPending;
@@ -157,7 +179,7 @@ function InspectionReport() {
 
           data = data.filter(item => {
             if (!item.receive_date) return false;
-            const itemDate = moment(item.receive_date, ["MM/DD/YYYY", "M/D/YYYY", "YYYY-MM-DD", "YYYY-MM-DD HH:mm:ss"]);
+            const itemDate = moment(item.receive_date, dateFormat); // แก้บั๊ก dateFormat
             return itemDate.isValid() && itemDate.isBetween(startDate, endDate, 'day', '[]');
           });
         } else {
@@ -186,16 +208,21 @@ function InspectionReport() {
 
   useEffect(() => {
     fetchToolingInspectData();
-  }, []);
+  }, [fetchToolingInspectData]);
 
+<<<<<<< HEAD
   const dateFormate = (date) => {
     return moment(date, ["YYYY-MM-DD", "MM/DD/YYYY", "YYYY-MM-DD HH:mm:ss"]).format('DD-MMM-YYYY');
   }
 
   const columns = [
+=======
+  // useMemo
+  const columns = useMemo(() => [
+>>>>>>> 562a216 (resolve limit show data 100 rows and set date format)
     {
       title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date',
-      render: (text) => text ? moment(text, ["YYYY-MM-DD", "MM/DD/YYYY", "YYYY-MM-DD HH:mm:ss"]).format('DD-MMM-YYYY') : '-'
+      render: (text) => text ? moment(text, dateFormat).format(dateFormat) : '-'
     },
     { title: 'Time', dataIndex: 'time', key: 'time', },
     { title: 'W/C', dataIndex: 'w_c', key: 'w_c', },
@@ -205,7 +232,7 @@ function InspectionReport() {
     { title: 'Qty', dataIndex: 'qty', key: 'qty', },
     {
       title: 'Issue Date', dataIndex: 'issue_date', key: 'issue_date',
-      render: (text) => text ? moment(text, ["YYYY-MM-DD", "MM/DD/YYYY", "YYYY-MM-DD HH:mm:ss"]).format('DD-MMM-YYYY') : '-'
+      render: (text) => text ? moment(text, dateFormat).format(dateFormat) : '-'
     },
     { title: 'Diff.', dataIndex: 'diff', key: 'diff', },
     {
@@ -233,7 +260,7 @@ function InspectionReport() {
         </Button>
       ),
     },
-  ];
+  ], [theme.colors]);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -377,13 +404,17 @@ function InspectionReport() {
                 <ScrollbarStyle primary={theme.colors.primary} />
                 <Table
                   className="kb-vscroll"
-                  dataSource={finalDataSource}
+                  dataSource={dataSource}
                   columns={columns}
                   rowKey="id"
                   loading={loading}
+                  onChange={handleTableChange}
                   pagination={{
-                    defaultPageSize: 5,
+                    current: currentPage,
+                    pageSize: pageSize,
+                    total: totalRecords,
                     pageSizeOptions: ['5', '10', '15', '20', '25', '30'],
+                    showSizeChanger: true,
                     position: ['bottomRight']
                   }}
                   scroll={{ x: 'max-content' }}
@@ -396,7 +427,6 @@ function InspectionReport() {
               open={toolingReturn}
               onCancel={() => {
                 setToolingReturn(false);
-                // อาจจะ refresh table ตรงนี้ด้วยถ้าต้องการ
                 // fetchToolingInspectData();
               }}
             />
