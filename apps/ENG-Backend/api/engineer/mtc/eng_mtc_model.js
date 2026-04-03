@@ -2,18 +2,46 @@ const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
 
 const ToolingInspectGetlist = async (req, res) => {
-    const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
-    const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
-    const offset   = (pageNum - 1) * limitNum;
+    const pageNum = Math.max(1, parseInt(req.query.page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+    const offset = (pageNum - 1) * limitNum;
+
+    const search = req.query.search || '';
+    const status = req.query.status || 'all';
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    let baseSql = `FROM tooling_inspect WHERE 1=1`;
+    let params = [];
+    let paramCount = 1;
+
+    if (search) {
+        baseSql += ` AND (po_no ILIKE $${paramCount} OR item_name ILIKE $${paramCount})`;
+        params.push(`%${search}%`);
+        paramCount++;
+    }
+
+    if (status === 'pending') {
+        baseSql += ` AND issue_date IS NULL`;
+    }
+
+    if (startDate && endDate) {
+        baseSql += ` AND receive_date >= $${paramCount} AND receive_date <= $${paramCount + 1}`;
+        params.push(startDate, endDate);
+        paramCount += 2;
+    }
+
     try {
-        const [dataRes, countRes] = await Promise.all([
-            engPool.query(`SELECT * FROM tooling_inspect ORDER BY receive_date DESC LIMIT $1 OFFSET $2`, [limitNum, offset]),
-            engPool.query(`SELECT COUNT(*) as total FROM tooling_inspect`),
-        ]);
+        const countSql = `SELECT COUNT(*) as total ${baseSql}`;
+        const countRes = await engPool.query(countSql, params);
         const total = parseInt(countRes.rows[0].total);
+
+        const dataSql = `SELECT * ${baseSql} ORDER BY receive_date DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        const dataRes = await engPool.query(dataSql, [...params, limitNum, offset]);
+
         res.json({
             data: dataRes.rows,
-            pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            pagination: { total, page: pageNum, limit: limitNum }
         });
     } catch (err) {
         console.error(err.message);
@@ -22,18 +50,18 @@ const ToolingInspectGetlist = async (req, res) => {
 };
 
 const ToolDWGRequestGetList = async (req, res) => {
-    const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
-    const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
-    const offset   = (pageNum - 1) * limitNum;
+    // const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
+    // const limitNum = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+    // const offset   = (pageNum - 1) * limitNum;
     try {
         const [dataRes, countRes] = await Promise.all([
-            engPool.query(`SELECT * FROM tool_dwg_request ORDER BY req_date DESC LIMIT $1 OFFSET $2`, [limitNum, offset]),
+            engPool.query(`SELECT * FROM tool_dwg_request ORDER BY req_date DESC`),
             engPool.query(`SELECT COUNT(*) as total FROM tool_dwg_request`),
         ]);
         const total = parseInt(countRes.rows[0].total);
         res.json({
             data: dataRes.rows,
-            pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            pagination: { total, page: 1, limit: 1, totalPages: 1 },
         });
     } catch (err) {
         console.error(err.message);
@@ -114,10 +142,10 @@ const getPreviousWorkingDay = async (fromDate) => {
         do {
             day.subtract(1, 'days');
         } while (
-            day.isoWeekday() >= 6 || 
+            day.isoWeekday() >= 6 ||
             (holidays && holidays.includes(day.format('YYYY-MM-DD')))
         );
- 
+
         return day.format('YYYY-MM-DD');
     } catch (error) {
         console.warn("Table holidays_date might be missing, defaulting to yesterday:", error.message);
@@ -211,7 +239,7 @@ const ToolingReturnAdd = async (req, res) => {
         }
 
         const getWcName = async (code) => {
-            const query = "SELECT description FROM wc_code WHERE code = $1";
+            const query = "SELECT description FROM work_centers WHERE code = $1";
             const result = await engPool.query(query, [code.toString()]);
             return result.rows.length > 0 ? result.rows[0].description : '';
         };
