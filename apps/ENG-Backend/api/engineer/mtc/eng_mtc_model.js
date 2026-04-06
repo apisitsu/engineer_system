@@ -11,6 +11,8 @@ const ToolingInspectGetlist = async (req, res) => {
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
+    const currentMonthStr = req.query.currentMonth;
+
     let baseSql = `FROM tooling_inspect WHERE 1=1`;
     let params = [];
     let paramCount = 1;
@@ -21,12 +23,31 @@ const ToolingInspectGetlist = async (req, res) => {
         paramCount++;
     }
 
-    if (status === 'pending') {
-        baseSql += ` AND issue_date IS NULL`;
+    if (status === 'all' && currentMonthStr) {
+        const startOfMonth = moment(currentMonthStr, 'MM-YYYY').startOf('month').format('YYYY-MM-DD');
+        const endOfMonth = moment(currentMonthStr, 'MM-YYYY').endOf('month').format('YYYY-MM-DD');
+
+        baseSql += ` AND NULLIF(receive_date, '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1}`;
+        params.push(startOfMonth, endOfMonth);
+        paramCount += 2;
+    }
+
+    else if (status === 'pending' && currentMonthStr) {
+        const startOfMonth = moment(currentMonthStr, 'MM-YYYY').startOf('month').format('YYYY-MM-DD');
+        const endOfMonth = moment(currentMonthStr, 'MM-YYYY').endOf('month').format('YYYY-MM-DD');
+
+        baseSql += ` AND (issue_date IS NULL OR TRIM(issue_date::TEXT) = '') 
+                     AND NULLIF(receive_date, '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1}`;
+        params.push(startOfMonth, endOfMonth);
+        paramCount += 2;
+    }
+
+    else if (status === 'pending_all' || status === 'pendingAll') {
+        baseSql += ` AND (issue_date IS NULL OR TRIM(issue_date::TEXT) = '')`;
     }
 
     if (startDate && endDate) {
-        baseSql += ` AND receive_date >= $${paramCount} AND receive_date <= $${paramCount + 1}`;
+        baseSql += ` AND NULLIF(TRIM(receive_date::TEXT), '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1}`;
         params.push(startDate, endDate);
         paramCount += 2;
     }
@@ -112,7 +133,7 @@ const ToolDWGRequestAdd = async (req, res) => {
 
         // Let's use correct columns based on migration script: req_date, reason, status.
         // Assuming item mapping to reason or detail
-        const params = [date_request ? moment(date_request).format('YYYY-MM-DD HH:mm:ss') : null, item, initialStatus, remark];
+        const params = [date_request ? moment(date_request).format('YYYY-MM-DD') : null, item, initialStatus, remark];
 
         const result = await engPool.query(`INSERT INTO tool_dwg_request (req_date, tool_number, status, reason) VALUES ($1, $2, $3, $4) RETURNING id`, params);
 
@@ -153,12 +174,53 @@ const getPreviousWorkingDay = async (fromDate) => {
     }
 };
 
+const calculateDiffAndStatus = async (receiveDateVal, issueDateVal) => {
+    if (!receiveDateVal || !issueDateVal) {
+        return { diff: null, status: 'Pending' };
+    }
+
+    try {
+        const start = moment(receiveDateVal).startOf('day');
+        const end = moment(issueDateVal).startOf('day');
+
+        const holidayQuery = await engPool.query(`SELECT holiday_date FROM holidays_date`);
+        const holidays = holidayQuery.rows.map(row => moment(row.holiday_date).format('YYYY-MM-DD'));
+
+        let diffDays = 0;
+        let current = start.clone();
+
+        while (current.isSameOrBefore(end)) {
+            const isWeekend = current.isoWeekday() >= 6; // 6 = Sat, 7 = Sun
+            const isHoliday = holidays.includes(current.format('YYYY-MM-DD'));
+
+            if (!isWeekend && !isHoliday) {
+                diffDays++;
+            }
+            current.add(1, 'days');
+        }
+
+        // diffDays = diffDays > 0 ? diffDays - 1 : 0;
+
+        const status = diffDays > 3 ? 'Delay' : 'On time';
+
+        return { diff: diffDays, status: status };
+
+    } catch (error) {
+        console.error("Error calculating working days:", error);
+        return { diff: null, status: 'Pending' };
+    }
+};
+
 const ToolingDashboadtGetlist = async (req, res) => {
     try {
         const today = moment();
         const prevWorkingDate = await getPreviousWorkingDay(today);
+        const targetMonth = req.query.month ? moment(req.query.month, 'MM-YYYY') : moment();
+        const startDate = targetMonth.clone().startOf('month').format('YYYY-MM-DD');
 
-        const [toolingStats, dwgStats, rawStats] = await Promise.all([
+        const [toolingStats, dwgStats, rawStats, inspectMonthStats] = await Promise.all([
+
+            // 1. toolingStats (การ์ด Tooling Return)
             new Promise(async (resolve) => {
                 const sql = `
                     SELECT 
@@ -174,39 +236,70 @@ const ToolingDashboadtGetlist = async (req, res) => {
                 }
             }),
 
+            // 2. dwgStats (การ์ด DWG Request - คืนชีพกลับมาให้แล้วครับ!)
             new Promise(async (resolve) => {
                 const sql = `
                     SELECT 
                         COUNT(*) as total_all,
-                        SUM(CASE WHEN date(req_date) = $1 THEN 1 ELSE 0 END) as total_yesterday,
-                        SUM(CASE WHEN date(req_date) = $2 AND status = 'Complete' THEN 1 ELSE 0 END) as complete_yesterday,
-                        SUM(CASE WHEN date(req_date) = $3 AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
+                        SUM(CASE WHEN req_date::TEXT LIKE $1 || '%' THEN 1 ELSE 0 END) as total_yesterday,
+                        SUM(CASE WHEN req_date::TEXT LIKE $1 || '%' AND status = 'Complete' THEN 1 ELSE 0 END) as complete_yesterday,
+                        SUM(CASE WHEN req_date::TEXT LIKE $1 || '%' AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
                     FROM tool_dwg_request 
                 `;
                 try {
-                    const res = await engPool.query(sql, [prevWorkingDate, prevWorkingDate, prevWorkingDate]);
+                    const res = await engPool.query(sql, [prevWorkingDate]);
                     resolve(res.rows[0] || { total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
                 } catch (err) {
                     resolve({ total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
                 }
             }),
 
+            // 3. rawStats (การ์ด Tooling Inspection Yesterday)
             new Promise(async (resolve) => {
                 const sql = `
                     SELECT 
-                        SUM(CASE WHEN date(receive_date) = $1 THEN 1 ELSE 0 END) as received_yesterday,
-                        SUM(CASE WHEN date(issue_date) = $2 THEN 1 ELSE 0 END) as issued_yesterday
+                        SUM(CASE WHEN receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE = $1::DATE THEN 1 ELSE 0 END) as received_yesterday,
+                        SUM(CASE WHEN issue_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE = $1::DATE THEN 1 ELSE 0 END) as issued_yesterday
                     FROM tooling_inspect
                 `;
                 try {
-                    const res = await engPool.query(sql, [prevWorkingDate, prevWorkingDate]);
+                    const res = await engPool.query(sql, [prevWorkingDate]);
                     resolve(res.rows[0] || { received_yesterday: 0, issued_yesterday: 0 });
                 } catch (err) {
+                    console.error("Yesterday Stats Error:", err.message);
                     resolve({ received_yesterday: 0, issued_yesterday: 0 });
+                }
+            }),
+
+            // 4. inspectMonthStats (กราฟ Performance ด้านบน)
+            new Promise(async (resolve) => {
+                const monthYear = startDate.substring(0, 7); // จะได้ '2026-04'
+                const sql = `
+                    SELECT 
+                        COUNT(*) as total,
+                        SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
+                        SUM(CASE WHEN status = 'Delay' THEN 1 ELSE 0 END) as delay,
+                        SUM(CASE WHEN (issue_date IS NULL OR TRIM(issue_date::TEXT) = '') THEN 1 ELSE 0 END) as pending
+                    FROM tooling_inspect
+                    WHERE receive_date::TEXT LIKE $1 || '%'
+                `;
+                try {
+                    const res = await engPool.query(sql, [monthYear]);
+                    const data = res.rows[0];
+                    resolve({
+                        total: Number(data.total) || 0,
+                        on_time: Number(data.on_time) || 0,
+                        delay: Number(data.delay) || 0,
+                        pending: Number(data.pending) || 0
+                    });
+                } catch (err) {
+                    console.error("Performance Stats Error:", err.message);
+                    resolve({ total: 0, on_time: 0, delay: 0, pending: 0 });
                 }
             })
         ]);
 
+        // รวมร่างข้อมูลอย่างถูกต้อง
         const result = {
             yesterdayDate: prevWorkingDate,
 
@@ -219,7 +312,12 @@ const ToolingDashboadtGetlist = async (req, res) => {
             dwgPendingCount: dwgStats.pending_yesterday || 0,
 
             rawDataReceivedYesterday: rawStats.received_yesterday || 0,
-            rawDataIssuedYesterday: rawStats.issued_yesterday || 0
+            rawDataIssuedYesterday: rawStats.issued_yesterday || 0,
+
+            total: inspectMonthStats.total || 0,
+            onTime: inspectMonthStats.on_time || 0,
+            delay: inspectMonthStats.delay || 0,
+            pending: inspectMonthStats.pending || 0
         };
 
         res.json(result);
@@ -265,7 +363,7 @@ const ToolingReturnAdd = async (req, res) => {
 
         // Mapping values logically based on new schema
         const params = [
-            date_return ? moment(date_return).format('YYYY-MM-DD HH:mm:ss') : null,
+            date_return ? moment(date_return).format('YYYY-MM-DD') : null,
             stringCode, // mapped part_number -> wc_code locally since it has no direct column
             wc_name, // tool_number is used to store wc_name locally
             qty,
@@ -290,8 +388,8 @@ const ToolingReturnAdd = async (req, res) => {
 
 const ToolingInspectUpdate = async (req, res) => {
     const {
-        po_no,
-        item_name,
+        id,
+        receive_date,
         issue_date,
         measuring_tools,
         judgement,
@@ -300,38 +398,49 @@ const ToolingInspectUpdate = async (req, res) => {
     } = req.body;
 
     try {
+        let finalStatus = 'Pending';
+        let finalDiff = null;
+
+        if (issue_date && receive_date) {
+            const calcResult = await calculateDiffAndStatus(receive_date, issue_date);
+            finalStatus = calcResult.status;
+            finalDiff = calcResult.diff;
+        }
+
         const sql = `
             UPDATE tooling_inspect 
-            SET issue_date = $1, 
+            SET 
+                issue_date = $1, 
                 measuring_tools = $2, 
                 judgement = $3, 
                 reason = $4, 
-                remark = $5
-            WHERE po_no = $6 AND item_name = $7
+                remark = $5,
+                status = $6,
+                diff = $7
+            WHERE id = $8
         `;
 
-        const params = [issue_date ? moment(issue_date).format('YYYY-MM-DD HH:mm:ss') : null, measuring_tools, judgement, reason, remark, po_no, item_name];
+        const params = [
+            issue_date ? moment(issue_date).format('YYYY-MM-DD') : null,
+            measuring_tools,
+            judgement,
+            reason,
+            remark,
+            finalStatus,
+            finalDiff,
+            id
+        ];
 
         const result = await engPool.query(sql, params);
 
         if (result.rowCount === 0) {
-            return res.status(404).json({
-                result: "false",
-                message: "ไม่พบข้อมูลที่ต้องการแก้ไข (ตรวจสอบ PO No หรือ Item Name)"
-            });
+            return res.status(404).json({ result: "false", message: "ไม่พบข้อมูลที่ต้องการแก้ไข" });
         }
 
-        res.json({
-            result: "true",
-            message: "อัพเดทข้อมูลเรียบร้อยแล้ว",
-            changes: result.rowCount
-        });
+        res.json({ result: "true", message: "อัพเดทข้อมูลเรียบร้อยแล้ว", changes: result.rowCount });
     } catch (err) {
         console.error("SQL Error:", err.message);
-        return res.status(500).json({
-            result: "false",
-            message: "Database error: " + err.message
-        });
+        return res.status(500).json({ result: "false", message: "Database error: " + err.message });
     }
 }
 
