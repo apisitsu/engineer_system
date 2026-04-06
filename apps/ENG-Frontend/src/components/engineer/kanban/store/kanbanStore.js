@@ -1009,10 +1009,10 @@ export const useKanbanStore = create((set, get) => ({
     //  WORKLOAD DATA
     // ====================================================================
 
-    fetchTeamWorkload: async () => {
+    fetchTeamWorkload: async (params = {}) => {
         set({ isLoading: true });
         try {
-            const res = await axios.get(server.KANBAN_WORKLOAD);
+            const res = await axios.get(server.KANBAN_WORKLOAD, { params });
             set({ teamWorkload: res.data?.data || [] });
         } catch (err) {
             console.error('Failed to fetch team workload', err);
