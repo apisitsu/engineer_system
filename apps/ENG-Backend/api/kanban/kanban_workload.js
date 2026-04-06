@@ -26,7 +26,6 @@ const GetTeamWorkload = async (req, res) => {
             // Silently ignore – column likely already exists
         }
 
-<<<<<<< HEAD
         const requestingUCode = req.user?.empno;
         if (!requestingUCode) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -36,17 +35,10 @@ const GetTeamWorkload = async (req, res) => {
         const seeAll = !isAdmin && await canSeeAllProjects(req);
 
         // Build WHERE conditions dynamically
-=======
-        const { week_start, week_end, project_id, u_code } = req.query;
-
-        // Build WHERE conditions dynamically
-        // Key fix: use (is_closed IS NOT TRUE) to include NULL and false
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
         const conditions = ['(c.is_closed IS NOT TRUE)'];
         const params = [];
         let paramIdx = 1;
 
-<<<<<<< HEAD
         // Privacy Filter:
         // - Admins see everything.
         // - Managers/Coords see all non-private + private projects they are in.
@@ -72,10 +64,6 @@ const GetTeamWorkload = async (req, res) => {
             params.push(requestingUCode);
             paramIdx++;
         }
-=======
-        // Project privacy filter
-        conditions.push('(p.is_private IS NULL OR p.is_private = false)');
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
 
         // Exclude cards in archive/trash lists
         conditions.push("(l.list_type IS NULL OR l.list_type NOT IN ('archive', 'trash'))");
@@ -94,15 +82,9 @@ const GetTeamWorkload = async (req, res) => {
             paramIdx++;
         }
 
-<<<<<<< HEAD
         // User filter (Team view drill-down or specific user lookup)
         if (u_code && u_code !== 'null' && u_code !== 'undefined') {
             conditions.push(`LOWER(cm.u_code) = LOWER($${paramIdx})`);
-=======
-        // User filter
-        if (u_code && u_code !== 'null' && u_code !== 'undefined') {
-            conditions.push(`cm.u_code = $${paramIdx}`);
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
             params.push(u_code);
             paramIdx++;
         }
@@ -137,12 +119,9 @@ const GetTeamWorkload = async (req, res) => {
             ORDER BY cm.u_code ASC, c.due_date ASC NULLS LAST
         `;
 
-<<<<<<< HEAD
         // Debug log (remove or comment out later)
         // console.log('Workload Query Params:', params);
 
-=======
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
         const { rows: workloadData } = await engPool.query(query, params);
 
         // Group data by user
