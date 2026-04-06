@@ -24,8 +24,6 @@ const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const dateFormat = 'DD-MM-YYYY';
-
 function InspectionReport() {
   const { theme } = useTheme();
 
@@ -33,11 +31,18 @@ function InspectionReport() {
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState([]);
   const [selectedData, setSelectedData] = useState(null);
+
+  // Dashboard States
   const [dashboarddata, setDashboardData] = useState([]);
   const [timelineDashboard, setTimelineDashboard] = useState([]);
+
+  // Filter & Pagination States
   const [selectedRange, setSelectedRange] = useState(null);
   const [searchText, setSearchText] = useState("");
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState('pending');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
 
   // Modal States
   const [toolingReturn, setToolingReturn] = useState(false);
@@ -45,26 +50,16 @@ function InspectionReport() {
   const [updateFormOpen, setUpdateFormOpen] = useState(false);
 
   // --- Handlers for Modals ---
-  const handleOpenReturn = () => {
-    setToolingReturn(true);
-  };
-
-  const handleOpenDwg = () => {
-    setDwgRequestOpen(true);
-  };
-
+  const handleOpenReturn = () => setToolingReturn(true);
+  const handleOpenDwg = () => setDwgRequestOpen(true);
   const handleUpdateRecord = (record) => {
     setSelectedData(record);
     setUpdateFormOpen(true);
-    // console.log("Update Record:", record);
-    // console.log(updateFormOpen)
   };
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [totalRecords, setTotalRecords] = useState(0);
+  // --- Data Fetching Logic ---
 
-  // useCallback Performance
+  // 1. Fetch Table Data
   const fetchToolingInspectData = useCallback(async () => {
     setLoading(true);
     try {
@@ -75,27 +70,51 @@ function InspectionReport() {
         status: filterType,
       });
 
+      // ✅ 1. เพิ่มบล็อกนี้เข้าไป เพื่อให้ปุ่ม all และ pending ส่งค่าเดือนปัจจุบันไปให้ Backend กรอง
+      if (filterType === 'all' || filterType === 'pending') {
+        params.append('currentMonth', moment().format('MM-YYYY'));
+      }
+
+      // Append date range to API parameters if selected
+      if (filterType === 'date' && selectedRange && selectedRange.length === 2) {
+        const startDate = selectedRange[0].format('YYYY-MM-DD');
+        const endDate = selectedRange[1].format('YYYY-MM-DD');
+        params.append('startDate', startDate);
+        params.append('endDate', endDate);
+      }
+
       const response = await axios.get(`${server.TOOLING_INSPECT_GETLIST}?${params.toString()}`);
 
       const resultData = response.data.data;
-      setDataSource(resultData);
-      setTotalRecords(response.data.pagination.total);
+      setDataSource(resultData || []);
+      setTotalRecords(response.data.pagination?.total || 0);
 
-      generateMonthOptions(resultData);
     } catch (error) {
       console.error("Fetch Inspect Error:", error);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchText, filterType]);
+  }, [currentPage, pageSize, searchText, filterType, selectedRange]);
 
-  const handleTableChange = (pagination) => {
-    setCurrentPage(pagination.current);
-    setPageSize(pagination.pageSize);
+  // 2. Fetch Dashboard Data (Independent of Table Pagination)
+  const fetchDashboardData = async (monthYear) => {
+    try {
+
+      console.log(`Fetching comprehensive data for month: ${monthYear}`);
+      const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${monthYear}`);
+      console.log("Dashboard API Response:", response.data);
+      setDashboardData(response.data);
+
+    } catch (error) {
+      console.error("Fetch Dashboard Error:", error);
+      setDashboardData({});
+    }
   };
 
-  // --- Logic Functions ---
-  const generateMonthOptions = (allData) => {
+  // --- Lifecycle Hooks ---
+
+  // Initialize Timeline Dashboard Options
+  useEffect(() => {
     const monthOptions = [];
     for (let i = 0; i <= 11; i++) {
       const monthDate = moment().subtract(i, 'months');
@@ -106,34 +125,36 @@ function InspectionReport() {
     }
     setTimelineDashboard(monthOptions);
 
+    // Fetch initial dashboard data for current month
     const currentMonth = moment().format('MM-YYYY');
-    handleMonthChange(currentMonth, allData);
+    fetchDashboardData(currentMonth);
+  }, []);
+
+  // Fetch table data when dependencies change
+  useEffect(() => {
+    fetchToolingInspectData();
+  }, [fetchToolingInspectData]);
+
+  // --- Interaction Handlers ---
+
+  const handleTableChange = (pagination) => {
+    setCurrentPage(pagination.current);
+    setPageSize(pagination.pageSize);
   };
 
-  const handleMonthChange = (value, customData) => {
-    const targetData = Array.isArray(customData) ? customData : dataSource;
-
-    if (!Array.isArray(targetData)) {
-      console.warn("Target data is not an array");
-      return;
-    }
-
-    const filtered = targetData.filter(item => {
-      if (!item.receive_date) return false;
-      const itemDate = moment(item.receive_date, dateFormat); // เช็ค Format วันที่ให้ตรง DB
-      const targetMonth = moment(value, 'MM-YYYY');
-      return itemDate.isSame(targetMonth, 'month');
-    });
-    setDashboardData(filtered);
+  const handleMonthChange = (value) => {
+    // Fetch new dashboard data specifically for the selected month
+    fetchDashboardData(value);
   };
 
-  const syncCSV = (data) => {
-    console.log("Sync CSV Action:", data);
-    // ใส่ Logic Sync CSV ตรงนี้
+  const handleSearch = (value) => {
+    setSearchText(value);
+    setCurrentPage(1); // Always reset to page 1 on new search
   };
 
   const handleFilterChange = (type) => {
     setFilterType(type);
+    setCurrentPage(1); // Always reset to page 1 on filter change
     if (type !== 'date') {
       setSelectedRange(null);
     }
@@ -141,76 +162,19 @@ function InspectionReport() {
 
   const handleRangeChange = (values) => {
     setSelectedRange(values);
+    setCurrentPage(1); // Always reset to page 1 on date range change
   };
 
-  const finalDataSource = useMemo(() => {
-    let data = dataSource || [];
+  const syncCSV = (data) => {
+    console.log("Sync CSV Action executed");
+    // Implementation for Sync CSV
+  };
 
-    switch (filterType) {
-      case 'pending': // งานค้างเดือนนี้
-        data = data.filter(item => {
-          if (!item.receive_date) return false;
-          const currentMonth = moment();
-          const itemDate = moment(item.receive_date); // แก้บั๊ก dateFormat
-          const isThisMonth = itemDate.isSame(currentMonth, 'month');
-          const isPending = !item.issue_date;
-          return isThisMonth && isPending;
-        });
-        break;
-
-      case 'pendingAll': // งานค้างทั้งหมด
-        data = data.filter(item => {
-          if (!item.receive_date) return false;
-          return !item.issue_date;
-        });
-        break;
-
-      case 'date': // กรองตามช่วงเวลา
-        if (selectedRange && selectedRange.length === 2) {
-          const v0 = selectedRange[0].toDate ? selectedRange[0].toDate() : selectedRange[0];
-          const v1 = selectedRange[1].toDate ? selectedRange[1].toDate() : selectedRange[1];
-
-          const startDate = moment(v0).startOf('day');
-          const endDate = moment(v1).endOf('day');
-
-          data = data.filter(item => {
-            if (!item.receive_date) return false;
-            const itemDate = moment(item.receive_date, dateFormat); // แก้บั๊ก dateFormat
-            return itemDate.isValid() && itemDate.isBetween(startDate, endDate, 'day', '[]');
-          });
-        } else {
-          data = [];
-        }
-        break;
-      case 'all':
-      default:
-        break;
-    }
-
-    if (searchText) {
-      const lowerSearch = searchText.toLowerCase();
-      data = data.filter(item =>
-        Object.keys(item).some(key =>
-          item[key] !== null &&
-          item[key] !== undefined &&
-          String(item[key]).toLowerCase().includes(lowerSearch)
-        )
-      );
-    }
-
-    return data;
-
-  }, [dataSource, filterType, selectedRange, searchText]);
-
-  useEffect(() => {
-    fetchToolingInspectData();
-  }, [fetchToolingInspectData]);
-
-  // useMemo
+  // --- Table Columns ---
   const columns = useMemo(() => [
     {
       title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date',
-      render: (text) => text ? moment(text, dateFormat).format(dateFormat) : '-'
+      render: (text) => text ? moment(text, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-',
     },
     { title: 'Time', dataIndex: 'time', key: 'time', },
     { title: 'W/C', dataIndex: 'w_c', key: 'w_c', },
@@ -220,7 +184,7 @@ function InspectionReport() {
     { title: 'Qty', dataIndex: 'qty', key: 'qty', },
     {
       title: 'Issue Date', dataIndex: 'issue_date', key: 'issue_date',
-      render: (text) => text ? moment(text, dateFormat).format(dateFormat) : '-'
+      render: (text) => text ? moment(text, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-',
     },
     { title: 'Diff.', dataIndex: 'diff', key: 'diff', },
     {
@@ -263,7 +227,7 @@ function InspectionReport() {
           }}>
             <div style={{ padding: '24px', background: theme.colors.background }}>
 
-              {/* Header ส่วนหัว */}
+              {/* Header Section */}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
                 <div style={{ display: 'flex', justifyContent: 'Left', alignItems: 'center' }}>
                   <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 60 }} />
@@ -290,9 +254,10 @@ function InspectionReport() {
               {/* 1. Dashboard Chart Section */}
               <Dashboard data={dashboarddata} />
 
-              {/* 2. Control Cards Section (Imported Component) */}
+              {/* 2. Control Cards Section */}
               <Card style={{ marginTop: 16 }}>
                 <DashboardCards
+                  data={dashboarddata}
                   onOpenReturn={handleOpenReturn}
                   onOpenDwg={handleOpenDwg}
                 />
@@ -302,14 +267,14 @@ function InspectionReport() {
               <Card style={{ marginTop: 16 }} styles={{ padding: '16px' }}>
                 <Row gutter={[16, 16]} align="middle">
                   <Col xs={24} md={8}>
-                    <Space.Compact style={{ width: 300 }}>
-                      <Input
-                        placeholder="Search PO, Item, W/C..."
-                        allowClear
-                        onChange={(e) => setSearchText(e.target.value)}
-                      />
-                      <Button type="primary">Search</Button>
-                    </Space.Compact>
+                    {/* Changed from Input to Input.Search to prevent API spamming */}
+                    <Input.Search
+                      placeholder="Search PO, Item, W/C..."
+                      allowClear
+                      onSearch={handleSearch}
+                      style={{ width: 300 }}
+                      enterButton
+                    />
                   </Col>
 
                   <Col xs={24} md={16} style={{ textAlign: 'right' }}>
@@ -319,7 +284,7 @@ function InspectionReport() {
                       </Button>
 
                       <Radio.Group
-                        defaultValue="all"
+                        defaultValue="pending"
                         buttonStyle="solid"
                         onChange={(e) => handleFilterChange(e.target.value)}
                         style={{ fontWeight: 400 }}
@@ -349,21 +314,16 @@ function InspectionReport() {
                   )}
 
                   {/* Status Message */}
-                  {selectedRange && (
+                  {filterType === 'date' && selectedRange && (
                     <Col span={24}>
                       <div style={{ textAlign: 'right', fontWeight: 'normal', color: theme.colors.textSecondary, fontSize: '13px', marginTop: '4px' }}>
-                        {!selectedRange && (
-                          <span><ExclamationCircleOutlined style={{ color: theme.colors.warning, marginRight: '4px' }} /> Please select a date range to view data</span>
-                        )}
-                        {selectedRange && (
-                          <span style={{ color: finalDataSource.length > 0 ? theme.colors.success : theme.colors.error }}>
-                            {finalDataSource.length > 0 ? (
-                              <><CheckCircleOutlined style={{ marginRight: '4px' }} /> Found {finalDataSource.length} jobs in the selected period</>
-                            ) : (
-                              <><ExclamationCircleOutlined style={{ marginRight: '4px' }} /> No jobs found in the selected period</>
-                            )}
-                          </span>
-                        )}
+                        <span style={{ color: totalRecords > 0 ? theme.colors.success : theme.colors.error }}>
+                          {totalRecords > 0 ? (
+                            <><CheckCircleOutlined style={{ marginRight: '4px' }} /> Found {totalRecords} jobs in the selected period</>
+                          ) : (
+                            <><ExclamationCircleOutlined style={{ marginRight: '4px' }} /> No jobs found in the selected period</>
+                          )}
+                        </span>
                       </div>
                     </Col>
                   )}
@@ -381,7 +341,7 @@ function InspectionReport() {
                       </Text>
                     </Space>
                     <Space wrap>
-                      <Text style={{ color: theme.colors.textTertiary, paddingRight: 8 }}>{finalDataSource.length} Jobs</Text>
+                      <Text style={{ color: theme.colors.textTertiary, paddingRight: 8 }}>{totalRecords} Jobs</Text>
                       <Button type="primary" icon={<PlusCircleOutlined />} onClick={fetchToolingInspectData}>Refresh</Button>
                     </Space>
                   </div>
@@ -413,23 +373,16 @@ function InspectionReport() {
             {/* Modals */}
             <ToolingReturnForm
               open={toolingReturn}
-              onCancel={() => {
-                setToolingReturn(false);
-                // fetchToolingInspectData();
-              }}
+              onCancel={() => setToolingReturn(false)}
             />
             <DWGRequestForm
               open={dwgRequestOpen}
-              onCancel={() => {
-                setDwgRequestOpen(false);
-              }}
+              onCancel={() => setDwgRequestOpen(false)}
             />
             <UpdateFormModal
               open={updateFormOpen}
               initialData={selectedData}
-              onCancel={() => {
-                setUpdateFormOpen(false);
-              }}
+              onCancel={() => setUpdateFormOpen(false)}
               onSuccess={fetchToolingInspectData}
             />
           </Content>
