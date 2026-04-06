@@ -9,10 +9,22 @@ const Dashboard = ({ data }) => {
     const { theme } = useTheme();
 
     const stats = useMemo(() => {
-        const total = data.length;
-        const onTime = data.filter(d => d.status === 'On time').length;
-        const delay = data.filter(d => d.status === 'Delay').length;
-        const pending = data.filter(d => !d.issue_date).length;
+        let total = 0, onTime = 0, delay = 0, pending = 0;
+
+        if (Array.isArray(data)) {
+            total = data.length;
+            onTime = data.filter(d => d.status === 'On time').length;
+            delay = data.filter(d => d.status === 'Delay').length;
+            pending = data.filter(d => !d.issue_date).length;
+        }
+
+        else if (data && typeof data === 'object') {
+
+            total = Number(data.total) || 0;
+            onTime = Number(data.onTime) || 0;
+            delay = Number(data.delay) || 0;
+            pending = Number(data.pending) || 0;
+        }
 
         return {
             total,

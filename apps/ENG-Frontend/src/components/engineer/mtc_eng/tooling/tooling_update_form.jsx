@@ -29,7 +29,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
   const [conflictList, setConflictList] = useState([]);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
-  const [pendingValues, setPendingValues] = useState(null);
+  // const [pendingValues, setPendingValues] = useState(null);
   const [resolutions, setResolutions] = useState({});
 
   // Reset Form เมื่อเปิด Modal ใหม่
@@ -52,7 +52,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
 
   const formFields = [
-    { name: 'issue_date', label: 'Issue Date', type: 'date', span: 12, required: false, placeholder: 'mm/dd/yyyy' },
+    { name: 'issue_date', label: 'Issue Date', type: 'date', span: 12, required: false, placeholder: 'DD-MM-YYYY' },
     { name: 'measuring_tools', label: 'Measuring Tools', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: MEASURING_TOOL_OPTIONS },
     { name: 'judgement', label: 'Judgement', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: JUDGEMENT_OPTIONS },
     { name: 'reason', label: 'Reason', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: REASON_OPTIONS },
@@ -62,7 +62,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
   const renderInput = (field) => {
     switch (field.type) {
       case 'date':
-        return <DatePicker style={{ width: '100%' }} format="MM/DD/YYYY" placeholder={field.placeholder} />;
+        return <DatePicker style={{ width: '100%' }} format="DD-MM-YYYY" placeholder={field.placeholder} />;
       case 'select':
         return (
           <Select placeholder={field?.placeholder} allowClear>
@@ -97,8 +97,11 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
 
         // ตรวจสอบ: ต้องมีค่าทั้งคู่ และ ค่าต้องไม่เหมือนกัน
-        if (newValue && newValue !== '' && oldValue !== newValue) {
-          // console.log(`Field: {${field}} Old: ${oldValue} New: ${newValue}`)
+        if (
+          oldValue && oldValue !== '' &&
+          newValue && newValue !== '' &&
+          oldValue !== newValue
+        ) {
           conflicts.push({
             field: field,
             oldValue: oldValue,
@@ -110,7 +113,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
       if (conflicts.length > 0) {
         // console.log("เจอ Conflict:", conflicts);
         setConflictList(conflicts);
-        setPendingValues(currentValues);
+        // setPendingValues(currentValues);
         // console.log("Pending Values:", conflicts);
         // console.log("Resolutions:", resolutions);
 
@@ -181,7 +184,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
     onSubmit(finalPayload);
     setIsConflictModalOpen(false);
-    setPendingValues(null);
+    // setPendingValues(null);
     onCancel();
   };
 

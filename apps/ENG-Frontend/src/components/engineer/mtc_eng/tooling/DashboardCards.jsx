@@ -1,34 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, Row, Col, Spin, Typography, Divider, Button } from 'antd';
 import { ReloadOutlined, FileTextOutlined, AuditOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../theme';
-import axios from 'axios';
+//import axios from 'axios';
 import moment from 'moment';
-import { server } from '../../../../constance/constance';
+//import { server } from '../../../../constance/constance';
 
 const { Title, Text } = Typography;
 
-const DashboardCards = ({ onOpenReturn, onOpenDwg }) => {
+const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
     const { theme } = useTheme();
-    const [stats, setStats] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const res = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}`);
-                if (res.data) {
-                    setStats(res.data);
-                }
-            } catch (error) {
-                console.error("Error fetching stats:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDashboardData();
-    }, []);
+    const stats = data;
+    const loading = !data;
 
     const formattedDate = stats?.yesterdayDate
         ? moment(stats.yesterdayDate).format('D MMM YYYY')
@@ -78,12 +61,12 @@ const DashboardCards = ({ onOpenReturn, onOpenDwg }) => {
             cardColorLight: theme.colors.blueLight,
             cardColorDark: theme.colors.blueDark,
             unit: "List",
-            mainValue: (stats?.rawDataReceivedYesterday || 0) + (stats?.rawDataIssuedYesterday || 0),
+            mainValue: (Number(stats?.rawDataReceivedYesterday) || 0) + (Number(stats?.rawDataIssuedYesterday) || 0),
             footerType: 'double',
             footerLabels: ['Received', 'Issued'],
             footervalues: [
-                stats?.rawDataReceivedYesterday || 0,
-                stats?.rawDataIssuedYesterday || 0
+                Number(stats?.rawDataReceivedYesterday) || 0,
+                Number(stats?.rawDataIssuedYesterday) || 0
             ],
             hasButton: false,
             btnText: "Add Inspection"
