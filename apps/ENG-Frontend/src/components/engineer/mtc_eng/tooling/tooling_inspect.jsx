@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import axios from "axios";
 import moment from "moment";
+import Swal from 'sweetalert2';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import { server } from '../../../../constance/constance';
@@ -171,9 +172,43 @@ function InspectionReport() {
     setCurrentPage(1); // Always reset to page 1 on date range change
   };
 
-  const syncCSV = (data) => {
-    console.log("Sync CSV Action executed");
-    // Implementation for Sync CSV
+  const syncCSV = async () => {
+    try {
+      Swal.fire({
+        title: 'Syncing CSV...',
+        text: 'Please wait while the python script runs.',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      const response = await axios.post(server.TOOLING_SYNC_CSV);
+      
+      if (response.data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Sync Complete',
+          text: 'CSV updated successfully.',
+          timer: 2000,
+          showConfirmButton: false
+        });
+        fetchToolingInspectData();
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Sync Failed',
+          text: response.data.message || 'An error occurred during sync.'
+        });
+      }
+    } catch (error) {
+      console.error("Sync CSV Error:", error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Execution Error',
+        text: error.response?.data?.message || error.message
+      });
+    }
   };
 
   // --- Table Columns ---
