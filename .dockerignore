@@ -1,6 +1,10 @@
 node_modules
-dist
+**/node_modules
+apps/ENG-Frontend/node_modules
+apps/ENG-Backend/node_modules
 build
+dist
 .git
+.vscode
 .dockerignore
-npm-debug.log
+*.log

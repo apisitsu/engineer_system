@@ -1,27 +1,29 @@
-version: '3.9'
-
 services:
-  postgres_eng:
-    image: postgres:15-alpine
-    container_name: postgres_eng
+  backend:
+    build:
+      context: ./apps/ENG-Backend
+      dockerfile: Dockerfile
+    container_name: eng_backend
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: eng_system
-      POSTGRES_USER: eng_admin
-      POSTGRES_PASSWORD: eng_secret_2026
-      TZ: Asia/Bangkok
-      PGTZ: Asia/Bangkok
     ports:
-      - "6543:5432"
+      - "2005:2005"
+    env_file:
+      - ./apps/ENG-Backend/.env
+    environment:
+      - NODE_ENV=production
     volumes:
-      - postgres_eng_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eng_admin -d eng_system"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - backend_uploads:/app/files/uploads
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/ENG-Frontend/Dockerfile
+    container_name: eng_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
-  postgres_eng_data:
-    name: postgres_eng_data
+  backend_uploads: # Volume for persistent backend file uploads (pdf, images, etc.)
