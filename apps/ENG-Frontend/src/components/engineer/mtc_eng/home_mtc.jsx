@@ -21,12 +21,14 @@ const HomeMTCEng = () => {
   const fetchMTCData = async () => {
     setLoading(true);
     try {
-      const [toolingRes, dwgRes, dwgStatsRes] = await Promise.all([
+      const currentMonth = moment().format('MM-YYYY');
+      const [toolingRes, dwgRes, dwgStatsRes, toolingStatsRes] = await Promise.all([
         axios.get(`${server.TOOLING_INSPECT_GETLIST}`),
         axios.get(`${server.MTC_TOOL_REQUESTS}?limit=500`),  // Get more records
-        axios.get(`${server.MTC_TOOL_REQUEST_DASHBOARD}`)  // Get dashboard stats
+        axios.get(`${server.MTC_TOOL_REQUEST_DASHBOARD}`),  // Get dashboard stats
+        axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${currentMonth}`) // Get tooling Dashboard stats
       ]);
-      setToolingData(toolingRes.data.data || []);
+      setToolingData(toolingStatsRes.data || {});
       setDwgData(dwgRes.data.data || []);
       setDwgStats(dwgStatsRes.data.data || null);
     } catch (error) {
@@ -37,14 +39,11 @@ const HomeMTCEng = () => {
   };
 
   const dashboardStats = useMemo(() => {
-    // Tooling Inspection Stats
-    const totalToolingJobs = toolingData.length;
-    const toolingPending = toolingData.filter(item => !item.issue_date).length;
-    const toolingOnTime = toolingData.filter(item => {
-      if (!item.due_date) return false;
-      return moment().isSameOrBefore(moment(item.due_date), 'day');
-    }).length;
-    const toolingDelay = totalToolingJobs - toolingOnTime - toolingPending;
+    // Tooling Inspection Stats (From Server)
+    const totalToolingJobs = Number(toolingData.total) || 0;
+    const toolingPending = Number(toolingData.pending) || 0;
+    const toolingOnTime = Number(toolingData.onTime) || 0;
+    const toolingDelay = Number(toolingData.delay) || 0;
 
     // DWG Request Stats (from General DWG Request - tr_request)
     // Use dashboard stats from API if available, otherwise calculate from dwgData

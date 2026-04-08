@@ -41,6 +41,7 @@ export const server = {
   // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
+  TOOLING_DWG_REQUEST_UPDATE: `${apiUrl}api/tooling_inspect/dwg_require_update`,
   MASTER_WC: `${apiUrl}api/master/wc`,
 
   // General DWG Request (New System - tr_request)
