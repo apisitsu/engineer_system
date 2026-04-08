@@ -5,8 +5,6 @@ import axios from 'axios';
 import { server } from '../../../constance/constance';
 import { useTheme } from '../../../theme';
 import { orgRpgTheme } from './orgTheme';
-
-// New Components
 import RpgCard, { ELEMENT_CONFIG } from './components/RpgCard';
 import FormalCard from './components/FormalCard';
 import ViewSwitcher from './components/ViewSwitcher';
@@ -20,7 +18,7 @@ function OrganizationEng() {
   const [membersData, setMembersData] = useState([]);
   const [activeTab, setActiveTab] = useState("OVERALL");
   const [selectedCard, setSelectedCard] = useState(null);
-  const [viewMode, setViewMode] = useState('rpg'); // 'rpg' or 'formal'
+  const [viewMode, setViewMode] = useState('formal'); // 'rpg' or 'formal'
 
   useEffect(() => {
     fetchData();
@@ -34,9 +32,16 @@ function OrganizationEng() {
       });
 
       const rawData = response.data;
-      console.log(rawData)
+      // console.log(rawData)
 
-      const processedData = rawData.map((member) => {
+      const filteredData = rawData.filter(member => {
+        if (!member.name) return true;
+        return !member.name.includes("(Admin)");
+      });
+
+      // console.log(filteredData)
+
+      const processedData = filteredData.map((member) => {
         let finalImage = member.img;
         let displayImage = "";
         const hasImage = finalImage && finalImage !== "" && finalImage !== "null";
@@ -58,7 +63,11 @@ function OrganizationEng() {
         };
       });
 
-      setMembersData(processedData);
+      const sortedData = processedData.sort((a, b) => {
+        return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+      });
+
+      setMembersData(sortedData);
 
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -184,6 +193,8 @@ function OrganizationEng() {
 
     const staffByPosition = groupByPosition(staff);
     const positionKeys = Object.keys(staffByPosition);
+
+    console.log(staffByPosition)
 
     let themeBg = orgRpgTheme.layout.defaultBg;
     if (viewMode === 'rpg' && head && head.element && orgRpgTheme.elements[head.element]) {

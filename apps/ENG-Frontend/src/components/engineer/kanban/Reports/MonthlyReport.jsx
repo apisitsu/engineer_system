@@ -53,7 +53,7 @@ const MiniStat = ({ label, value, sub, color, theme }) => (
     </div>
 );
 
-const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
+const MonthlyReport = ({ reportData, selectedMonth, theme, users, isExporting }) => {
     const year = selectedMonth.year();
     const month = selectedMonth.month();
 
@@ -142,7 +142,8 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
         [actionPlan, inProgressItems]);
 
-    const visibleTodo = showAllTodo ? todoItems : todoItems.slice(0, 3);
+    const actualShowAll = showAllTodo || isExporting;
+    const visibleTodo = actualShowAll ? todoItems : todoItems.slice(0, 3);
     const combinedVisible = [...inProgressItems, ...visibleTodo];
 
     const renderLayoutToggle = (value, setter) => (
@@ -158,7 +159,7 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
         : { display: 'grid', gridTemplateColumns: `repeat(${layout}, 1fr)`, gap: 12 };
 
     return (
-        <div className="kanban-report-content" style={{ maxWidth: 1100, margin: '6px auto' }}>
+        <div className="kanban-report-content" style={{ maxWidth: 1200, margin: '6px auto' }}>
             {/* Report Header */}
             <div style={{
                 background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primary}CC)`,
@@ -179,8 +180,8 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 1.1: Completed Tasks ═══ */}
-            <div style={sectionStyle(theme)}>
-                {sectionTitle(theme, <IoCheckmarkDoneOutline />, `1.1 Completed Tasks — ${effectiveDoneCards.length} items`, '#10b981', renderLayoutToggle(doneLayout, setDoneLayout))}
+            <div className="report-section" data-section-title="1.1 Completed Tasks" style={sectionStyle(theme)}>
+                {sectionTitle(theme, <IoCheckmarkDoneOutline />, `1.1 Completed Tasks — ${effectiveDoneCards.length} items`, '#10b981', !isExporting && renderLayoutToggle(doneLayout, setDoneLayout))}
 
                 {effectiveDoneCards.length === 0 ? (
                     <Empty description="No completed cards found for this month" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -235,8 +236,8 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 1.2: Newly Added Tasks ═══ */}
-            <div style={sectionStyle(theme)}>
-                {sectionTitle(theme, <MdAddCircle />, `1.2 Newly Added Tasks — ${newCards.length} items`, '#3b82f6', renderLayoutToggle(newLayout, setNewLayout))}
+            <div className="report-section" data-section-title="1.2 Newly Added Tasks" style={sectionStyle(theme)}>
+                {sectionTitle(theme, <MdAddCircle />, `1.2 Newly Added Tasks — ${newCards.length} items`, '#3b82f6', !isExporting && renderLayoutToggle(newLayout, setNewLayout))}
 
                 {newCards.length === 0 ? (
                     <Empty description="No new cards added this month" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -275,7 +276,7 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 2: KPIs & Results ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="2. KPIs & Results" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <MdTrendingUp />, '2. KPIs & Results', '#3b82f6')}
 
                 <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', marginBottom: theme.spacing.lg }}>
@@ -388,8 +389,8 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 3: Issues & Blockers ═══ */}
-            <div style={sectionStyle(theme)}>
-                {sectionTitle(theme, <IoAlertCircleOutline />, `3. Issues & Blockers`, '#ef4444')}
+            <div className="report-section" data-section-title="3. Issues & Blockers" style={sectionStyle(theme)}>
+                {sectionTitle(theme, <IoAlertCircleOutline />, `3. Issues & Blockers`, '#ef4444', !isExporting && renderLayoutToggle(stuckLayout, setStuckLayout))}
 
                 {/* Issue stats row */}
                 <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', marginBottom: theme.spacing.lg }}>
@@ -472,7 +473,7 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 4: Solutions & Actions ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="4. Solutions & Actions" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <MdBuild />, '4. Solutions & Actions', '#10b981')}
 
                 {issueSummary.resolvedIssues > 0 ? (
@@ -517,7 +518,7 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
                                         </div>
                                     </div>
                                 ))
-                            ).slice(0, 15)}
+                            ).slice(0, isExporting ? 999 : 15)}
                         </div>
                     </div>
                 ) : (
@@ -526,8 +527,8 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
             </div>
 
             {/* ═══ Section 5: Action Plan (3W1H) ═══ */}
-            <div style={sectionStyle(theme)}>
-                {sectionTitle(theme, <MdAssignment />, `5. Action Plan (3W1H) — ${actionPlan.length} items`, '#f59e0b', renderLayoutToggle(actionLayout, setActionLayout))}
+            <div className="report-section" data-section-title="5. Action Plan (3W1H)" style={sectionStyle(theme)}>
+                {sectionTitle(theme, <MdAssignment />, `5. Action Plan (3W1H) — ${actionPlan.length} items`, '#f59e0b', !isExporting && renderLayoutToggle(actionLayout, setActionLayout))}
 
                 {actionPlan.length === 0 ? (
                     <Empty description="No action items found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -636,10 +637,10 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users }) => {
                             </div>
                         )}
 
-                        {todoItems.length > 3 && (
+                        {todoItems.length > 3 && !isExporting && (
                             <div style={{ textAlign: 'center', marginTop: 8 }}>
-                                <Button 
-                                    size="small" 
+                                <Button
+                                    size="small"
                                     onClick={() => setShowAllTodo(!showAllTodo)}
                                     style={{ borderRadius: 12, fontSize: 12, fontWeight: 600 }}
                                 >

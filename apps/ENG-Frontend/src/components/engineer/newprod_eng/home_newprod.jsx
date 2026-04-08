@@ -1,8 +1,7 @@
-import React, { useState, useRef } from "react";
-import { Layout, Space, Input, Spin } from "antd";
-import { Card, Table, Button, Select } from 'antd';
-import { SearchOutlined, FileSearchOutlined } from '@ant-design/icons';
-import Highlighter from 'react-highlight-words';
+import React, { useState } from "react";
+import { Layout, Spin } from "antd";
+import { Card, Button, Select } from 'antd';
+import { FaListCheck } from "react-icons/fa6";
 import { MdAssessment } from "react-icons/md";
 import { BsFillClipboard2CheckFill } from "react-icons/bs";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
@@ -67,6 +66,27 @@ const App = () => {
                     }}
                   >
                     DWG Check Tool
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<FaListCheck />}
+                    size="large"
+                    onClick={() => window.open('/job_check_tracker', '_blank')}
+                    style={{
+                      background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryDark})`,
+                      border: 'none',
+                      borderRadius: theme.borderRadius.md,
+                      boxShadow: theme.shadows.md,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      height: '42px',
+                      padding: '0 20px',
+                    }}
+                  >
+                    Job Check Tracker
                   </Button>
                 </div>
               </Card>

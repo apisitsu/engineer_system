@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -137,6 +137,7 @@ export const server = {
   KANBAN_NOTIFICATION_SERVICES: `${apiUrl}api/kanban/notification-services`,
   KANBAN_BACKGROUND_IMAGES: `${apiUrl}api/kanban/background-images`,
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
+  KANBAN_WORKLOAD: `${apiUrl}api/kanban/workload/team-workload`,
 
 };
 

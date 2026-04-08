@@ -111,7 +111,7 @@ const GetUsersOrganization = async (req, res) => {
             return {
                 id: row.u_code, // u_code is PK now
                 name: `${row.u_name || ''} (${row.u_nickname || '-'})`,
-                position: row.role, // Mapping role -> position since we dropped legacy position in sqlite
+                position: row.position, // Mapping role -> position since we dropped legacy position in sqlite
                 role: row.role,
                 group: row.user_group,
                 element: row.element,

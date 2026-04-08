@@ -52,6 +52,14 @@ export const getFileType = (url, name) => {
         return 'google';
     }
 
+    // Folders (Local path without extension OR Google Drive folder)
+    const isLocalPath = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(url);
+    const hasExtension = /\.[a-zA-Z0-9]{2,5}$/.test(cleanName) || /\.[a-zA-Z0-9]{2,5}$/.test(cleanUrl);
+    
+    if ((isLocalPath && !hasExtension) || url?.includes('drive.google.com/drive/folders/')) {
+        return 'folder';
+    }
+
     return 'other';
 };
 
@@ -157,21 +165,49 @@ export const AttachmentLink = ({ attachment, theme, onClick }) => {
         if (type === 'image' || type === 'pdf' || type === 'google_file') {
             e.preventDefault();
             onClick(attachment);
-        } else if (type === 'microsoft') {
-            // Check if it's a local/mapped drive path (e.g., H:\)
+        } else if (type === 'microsoft' || type === 'folder') {
+            // Check if it's a local/mapped drive path (e.g., H:\) or a UNC path
             const isLocalPath = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(url);
 
             if (isLocalPath) {
                 const scheme = getOfficeScheme(url);
                 if (scheme) {
                     e.preventDefault();
-                    // Using URI schemes for local paths is the best way to bypass browser security
+                    // Using URI schemes for local/network paths is the best way to bypass browser security
                     window.location.href = `${scheme}${url}`;
                 }
             }
         }
         // For others, let the default behavior happen
     };
+
+    if (type === 'folder') {
+        return (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={handleClick}
+                    style={{
+                        color: theme.colors.primary,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                    }}
+                >
+                    📁 {name || 'Open Folder'}
+                </a>
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {url}
+                </Text>
+            </div>
+        );
+    }
 
     return (
         <a

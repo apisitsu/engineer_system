@@ -4,10 +4,10 @@
  * Export as 19:9 landscape image via dedicated ExportRenderer
  */
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Typography, Select, DatePicker, Button, Spin, Empty, Radio, Tag, Tooltip, message } from 'antd';
+import { Typography, Select, DatePicker, Button, Spin, Empty, Radio, Tooltip, App, Dropdown } from 'antd';
 import { MdOutlineAssessment } from 'react-icons/md';
-import { IoDocumentTextOutline, IoCalendarOutline, IoFolderOpenOutline, IoImageOutline, IoDownloadOutline } from 'react-icons/io5';
-import { BsFileEarmarkBarGraph, BsKanban } from 'react-icons/bs';
+import { IoDocumentTextOutline, IoCalendarOutline, IoFolderOpenOutline, IoImageOutline, IoDownloadOutline, IoChevronDown } from 'react-icons/io5';
+import { BsFileEarmarkBarGraph } from 'react-icons/bs';
 import { useKanbanStore } from '../store/kanbanStore';
 import dayjs from 'dayjs';
 import MonthlyReport from './MonthlyReport';
@@ -22,6 +22,7 @@ const EXPORT_HEIGHT = 900;
 
 const ReportDashboard = ({ theme }) => {
     const { projects, users, fetchProjectReportData, fetchUsers } = useKanbanStore();
+    const { message } = App.useApp();
 
     useEffect(() => {
         if (!users || users.length === 0) {
@@ -118,7 +119,7 @@ const ReportDashboard = ({ theme }) => {
     }, [reportData, reportType, selectedMonth]);
 
     // ─── Export Active View: Capture what's currently on screen ────────
-    const handleExportActiveView = useCallback(async () => {
+    const handleExportActiveView = useCallback(async (mode = 'single') => {
         const el = reportContentRef.current;
         if (!el) {
             message.warning('No content to export');
@@ -128,34 +129,76 @@ const ReportDashboard = ({ theme }) => {
         setIsExportingActive(true);
         try {
             const html2canvas = (await import('html2canvas')).default;
+            const projectNames = (reportData || []).map(r => r.project?.name || 'report').join('_');
+            const timestamp = dayjs().format('YYYY-MM-DD_HHmm');
 
-            const canvas = await html2canvas(el, {
-                backgroundColor: '#f8fafc',
-                useCORS: true,
-                scale: 2,
-                logging: false,
-                scrollX: 0,
-                scrollY: -window.scrollY, // ensure we capture from top of element
-            });
+            const exportElement = async (target, filename) => {
+                const canvas = await html2canvas(target, {
+                    backgroundColor: '#f8fafc',
+                    useCORS: true,
+                    scale: 2,
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: -window.scrollY, // ensure we capture from top of element
+                });
 
-            canvas.toBlob((blob) => {
-                if (!blob) return;
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                const projectNames = (reportData || []).map(r => r.project?.name || 'report').join('_');
-                a.href = url;
-                a.download = `active_view_${projectNames}_${dayjs().format('YYYY-MM-DD_HHmm')}.png`;
-                a.click();
-                URL.revokeObjectURL(url);
-                message.success('Active view exported!');
-            }, 'image/png');
+                return new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        if (!blob) { resolve(); return; }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${filename}.png`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    }, 'image/png');
+                });
+            };
+
+            if (mode === 'single') {
+                await exportElement(el, `full_report_${projectNames}_${timestamp}`);
+                message.success('Full report exported!');
+            } else {
+                // Split mode: find elements with 'report-section' class
+                const sections = el.querySelectorAll('.report-section');
+                if (sections.length === 0) {
+                    message.warning('No sections found to export separately. Exporting full view.');
+                    await exportElement(el, `full_report_${projectNames}_${timestamp}`);
+                } else {
+                    for (let i = 0; i < sections.length; i++) {
+                        const section = sections[i];
+                        const title = section.getAttribute('data-section-title') || `section_${i + 1}`;
+                        const safeTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        await exportElement(section, `part_${i + 1}_${safeTitle}_${projectNames}_${timestamp}`);
+                        // Small delay between triggers to help browser stability
+                        if (i < sections.length - 1) await new Promise(r => setTimeout(r, 600));
+                    }
+                    message.success(`Exported ${sections.length} sections!`);
+                }
+            }
         } catch (err) {
             console.error('Active view export failed:', err);
             message.error('Failed to export current view');
         } finally {
             setIsExportingActive(false);
         }
-    }, [reportData]);
+    }, [reportData, message]);
+
+    const exportMenuItems = [
+        {
+            key: 'single',
+            label: 'Export as Single Image',
+            icon: <IoImageOutline size={16} />,
+            onClick: () => handleExportActiveView('single'),
+        },
+        {
+            key: 'split',
+            label: 'Export as Separate Sections',
+            icon: <IoDownloadOutline size={16} />,
+            onClick: () => handleExportActiveView('split'),
+        },
+    ];
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -241,17 +284,24 @@ const ReportDashboard = ({ theme }) => {
                 <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-end' }}>
                     {reportData && (
                         <>
-                            <Tooltip title="Export Current View (as seen on screen)">
-                                <Button
-                                    icon={<IoImageOutline size={18} />}
-                                    onClick={handleExportActiveView}
-                                    loading={isExportingActive}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: 4,
-                                        borderColor: '#3b82f6', color: '#3b82f6',
-                                    }}
-                                />
-                            </Tooltip>
+                            <Dropdown menu={{ items: exportMenuItems }} trigger={['click']} placement="bottomRight">
+                                <Tooltip title="Export Current View (Options)">
+                                    <Button
+                                        loading={isExportingActive}
+                                        style={{
+                                            // height: 32,
+                                            display: 'flex', alignItems: 'center', gap: 6,
+                                            borderColor: '#3b82f6', color: '#3b82f6',
+                                            fontWeight: 600, fontSize: 13,
+                                            // padding: '4px 12px',
+                                        }}
+                                    >
+                                        <IoImageOutline size={18} />
+                                        {/* Export View */}
+                                        <IoChevronDown size={14} style={{ marginLeft: 2 }} />
+                                    </Button>
+                                </Tooltip>
+                            </Dropdown>
 
                             <Tooltip title="HD Export (Professional 19:9 Layout)">
                                 <Button
@@ -358,12 +408,14 @@ const ReportDashboard = ({ theme }) => {
                                 selectedMonth={selectedMonth}
                                 theme={theme}
                                 users={users}
+                                isExporting={isExportingActive}
                             />
                         ) : (
                             <ProjectReport
                                 reportData={reportData}
                                 theme={theme}
                                 users={users}
+                                isExporting={isExportingActive}
                             />
                         )}
 

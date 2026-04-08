@@ -178,10 +178,8 @@ const DeleteProject = async (req, res) => {
     const { id } = req.params;
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const r = await engPool.query(
-        "SELECT * FROM kb_project_membership WHERE project_id=$1 AND u_code=$2 AND role='owner'", [id, uCode]
-    );
-    if (!r.rows.length) return res.status(403).json({ error: 'Only project owner can delete' });
+    if (!(await canManageProject(req, id)))
+        return res.status(403).json({ error: 'Only project owners or admins can delete' });
 
     try {
         await engPool.query('DELETE FROM kb_project WHERE id = $1', [id]);

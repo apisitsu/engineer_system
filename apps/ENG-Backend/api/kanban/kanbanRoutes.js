@@ -10,6 +10,7 @@ const Board = require('./kanban_board');
 const Card = require('./kanban_card');
 const Extra = require('./kanban_extra');
 const Issue = require('./kanban_issue');
+const Workload = require('./kanban_workload');
 
 // ─── PROJECT ROUTES ────────────────────────────────────────────────
 router.get('/users', Project.GetUsers);
@@ -23,6 +24,9 @@ router.get('/projects/:id/managers', Project.GetManagers);
 router.post('/projects/:id/managers', Project.AddManager);
 router.delete('/projects/:id/managers', Project.RemoveManager);
 router.get('/projects/:id/report-data', Project.GetReportData);
+
+// ─── WORKLOAD ROUTES ─────────────
+router.get('/workload/team-workload', Workload.GetTeamWorkload);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);
@@ -74,7 +78,9 @@ router.patch('/cards/:id/cover', Card.SetCoverImage);
 router.get('/cards/:id/task-lists', Card.GetTaskLists);
 router.post('/cards/:id/task-lists', Card.CreateTaskList);
 router.patch('/task-lists/:id', Card.UpdateTaskList);
+router.delete('/task-lists/:id', Card.DeleteTaskList);
 router.post('/task-lists/:id/tasks', Card.CreateTask);
+
 router.patch('/tasks/:id', Card.UpdateTask);
 router.delete('/tasks/:id', Card.DeleteTask);
 

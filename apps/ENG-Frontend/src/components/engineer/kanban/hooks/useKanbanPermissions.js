@@ -7,9 +7,8 @@ export const useKanbanPermissions = ({
     boardRole = null,
     cardRole = null,
 } = {}) => {
-    const user = useAuthStore();
-    const globalRole = user?.role;
-    const globalDepartment = user?.userDepartment;
+    const globalRole = useAuthStore(state => state.userRole);
+    const globalDepartment = useAuthStore(state => state.userDepartment);
 
     // console.log(`User :`, globalRole, globalDepartment);
 

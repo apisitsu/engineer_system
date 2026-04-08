@@ -48,7 +48,7 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const {
         cards, createCard, updateList, deleteList, sortListCards,
         searchQuery, filterMembers, filterLabels,
-        activeProject, activeBoardMembers
+        activeProject, activeBoardMembers, activeBoard
     } = useKanbanStore();
     const { theme } = useTheme();
     const { empNo } = useAuthStore();
@@ -134,7 +134,19 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
 
     const menuItems = [];
 
+    const allowAddCard = activeBoard?.allow_add_card !== false;
+
+    if (!isReadOnly && allowAddCard) {
+        menuItems.push({
+            key: 'add-card',
+            label: 'Add Card',
+            icon: <FiPlus />,
+            onClick: () => setIsAddingCard(true)
+        });
+    }
+
     if (canEditBoard) {
+        if (menuItems.length > 0) menuItems.push({ type: 'divider' });
         menuItems.push({
             key: 'edit',
             label: 'Rename List',
@@ -144,8 +156,9 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
                 setIsEditingName(true);
             }
         });
-        menuItems.push({ type: 'divider' });
     }
+
+    if (menuItems.length > 0) menuItems.push({ type: 'divider' });
 
     menuItems.push({
         key: 'sort',
@@ -182,10 +195,9 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
 
     return (
         <div style={{
-            width: 320,
-            minWidth: 320,
+            width: 340,
+            minWidth: 340,
             marginBottom: '16px',
-            overflow: 'hidden',
             maxHeight: '100%',
             flexShrink: 0,
             background: `${theme.colors.surfaceHover}E8`,
@@ -196,14 +208,22 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             flexDirection: 'column',
             backdropFilter: 'blur(8px)',
             transition: `box-shadow ${theme.transitions.fast}`,
+            overflow: 'hidden',
         }}>
-            {/* List Header */}
+            {/* List Header — sticky so it stays visible when scrolling cards */}
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: `${theme.spacing.md} ${theme.spacing.md}`,
-                borderBottom: `1px solid ${theme.colors.border}22`,
+                borderBottom: `1px solid ${theme.colors.border}44`,
+                position: 'sticky',
+                top: 0,
+                zIndex: 2,
+                background: `${theme.colors.surfaceHover}`,
+                backdropFilter: 'blur(12px)',
+                boxShadow: `0 1px 3px ${theme.colors.border}22`,
+                flexShrink: 0,
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                     {/* Drag Handle for List */}
@@ -300,7 +320,7 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             </div>
 
             {/* Add Card Section */}
-            {!isReadOnly && (
+            {!isReadOnly && allowAddCard && (
                 <div style={{
                     padding: `${theme.spacing.xs} ${theme.spacing.sm} ${theme.spacing.sm}`,
                     borderTop: filteredCards.length > 0 ? `1px solid ${theme.colors.border}22` : 'none',

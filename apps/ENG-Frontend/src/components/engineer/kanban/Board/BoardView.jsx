@@ -526,7 +526,7 @@ const BoardView = () => {
                     )}
 
                     {/* Add List Button/Form */}
-                    {canEditBoard && (
+                    {canEditBoard && activeBoard?.allow_add_list && (
                         <div style={{
                             width: 220,
                             minWidth: 220,
@@ -586,7 +586,7 @@ const BoardView = () => {
                 {/* Drag Overlay — shows ghost while dragging */}
                 <DragOverlay>
                     {activeItem?.type === 'list' && activeItem.data && (
-                        <div style={{ opacity: 0.85, width: 320, pointerEvents: 'none' }}>
+                        <div style={{ opacity: 0.85, width: 340, pointerEvents: 'none' }}>
                             <KanbanList list={activeItem.data} isOverlay />
                         </div>
                     )}

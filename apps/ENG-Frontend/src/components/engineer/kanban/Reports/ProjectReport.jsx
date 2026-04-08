@@ -135,7 +135,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
     const maxStatusCount = statusDist.length > 0 ? Math.max(...statusDist.map(s => s.count)) : 1;
 
     return (
-        <div className="kanban-report-content" style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div className="kanban-report-content" style={{ maxWidth: 1400, margin: '0 auto' }}>
             {/* Report Header */}
             <div style={{
                 background: `linear-gradient(135deg, #8b5cf6, #6366f1)`,
@@ -156,7 +156,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
             </div>
 
             {/* ═══ Overview Stats ═══ */}
-            <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', marginBottom: theme.spacing.xl }}>
+            <div className="report-section" data-section-title="Overview Stats" style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap', marginBottom: theme.spacing.xl }}>
                 <BigStat icon={<BsKanban />} label="Total Cards" value={allCards.length} color="#3b82f6" theme={theme} />
                 <BigStat icon={<IoCheckmarkDoneOutline />} label="Done" value={doneCards.length} color="#10b981" theme={theme} />
                 <BigStat icon={<IoStatsChartOutline />} label="In Progress" value={inProgressCards.length} color="#f59e0b" theme={theme} />
@@ -164,7 +164,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
             </div>
 
             {/* ═══ Board Breakdown ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="Board Breakdown" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <IoLayersOutline />, 'Board Breakdown', '#3b82f6')}
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: theme.spacing.md }}>
@@ -200,7 +200,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
             </div>
 
             {/* ═══ Card Status Distribution ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="Card Status Distribution" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <IoPieChartOutline />, 'Card Status Distribution', '#8b5cf6')}
 
                 {statusDist.length === 0 ? (
@@ -225,8 +225,8 @@ const ProjectReport = ({ reportData, theme, users }) => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.xl, marginBottom: theme.spacing.xl }}>
 
                 {/* Member Workload */}
-                <div style={sectionStyle(theme)}>
-                    {sectionTitle(theme, <MdOutlinePeople />, 'Member Workload', '#f59e0b')}
+                    <div className="report-section" data-section-title="Member Workload" style={sectionStyle(theme)}>
+                        {sectionTitle(theme, <MdOutlinePeople />, 'Member Workload', '#f59e0b')}
                     {memberWorkload.length === 0 ? (
                         <Empty description="No member data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                     ) : (
@@ -272,8 +272,8 @@ const ProjectReport = ({ reportData, theme, users }) => {
                 </div>
 
                 {/* Label Distribution */}
-                <div style={sectionStyle(theme)}>
-                    {sectionTitle(theme, <MdOutlineLabel />, 'Label Distribution', '#ec4899')}
+                    <div className="report-section" data-section-title="Label Distribution" style={sectionStyle(theme)}>
+                        {sectionTitle(theme, <MdOutlineLabel />, 'Label Distribution', '#ec4899')}
                     {labelDist.length === 0 ? (
                         <Empty description="No labels used" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                     ) : (
@@ -294,7 +294,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
             </div>
 
             {/* ═══ Time Metrics ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="Time Metrics" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <MdAccessTime />, 'Time Metrics', '#6366f1')}
 
                 <div style={{ display: 'flex', gap: theme.spacing.md, flexWrap: 'wrap' }}>
@@ -336,7 +336,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
             </div>
 
             {/* ═══ Issue Summary ═══ */}
-            <div style={sectionStyle(theme)}>
+            <div className="report-section" data-section-title="Issue Summary" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <MdBugReport />, 'Issue Summary', '#ef4444')}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xl, marginBottom: theme.spacing.lg }}>
