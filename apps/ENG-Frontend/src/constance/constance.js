@@ -137,6 +137,7 @@ export const server = {
   KANBAN_NOTIFICATION_SERVICES: `${apiUrl}api/kanban/notification-services`,
   KANBAN_BACKGROUND_IMAGES: `${apiUrl}api/kanban/background-images`,
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
+  KANBAN_WORKLOAD: `${apiUrl}api/kanban/workload/team-workload`,
 
 };
 

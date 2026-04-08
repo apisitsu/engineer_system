@@ -113,7 +113,8 @@ const CardDetailDrawer = () => {
         isCardDetailOpen, activeCardId, activeCardDetail, closeCardDetail,
         lists, labels, updateCard, deleteCard, moveCard,
         addComment, deleteComment,
-        createTaskList, updateTaskList, createTask, updateTask, deleteTask,
+        createTaskList, updateTaskList, deleteTaskList, createTask, updateTask, deleteTask,
+
         addCardLabel, removeCardLabel, fetchCardActions,
         addLinkAttachment, addFileAttachment, deleteAttachment,
         fetchCustomFieldValues, upsertCustomFieldValue,
@@ -139,6 +140,9 @@ const CardDetailDrawer = () => {
     const [newTaskNames, setNewTaskNames] = useState({});
     const [editingTaskId, setEditingTaskId] = useState(null);
     const [editTaskName, setEditTaskName] = useState('');
+    const [editingTaskListId, setEditingTaskListId] = useState(null);
+    const [editTaskListName, setEditTaskListName] = useState('');
+
     const [showMoveSelect, setShowMoveSelect] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [activityLog, setActivityLog] = useState([]);
@@ -148,6 +152,7 @@ const CardDetailDrawer = () => {
     const [linkName, setLinkName] = useState('');
     const [customFieldValues, setCustomFieldValues] = useState([]);
     const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+    const [showEstimatedHours, setShowEstimatedHours] = useState(false);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
     const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -162,6 +167,7 @@ const CardDetailDrawer = () => {
     const [isEditingMemo, setIsEditingMemo] = useState(false);
     const [editMemo, setEditMemo] = useState('');
     const [showMemoSection, setShowMemoSection] = useState(false);
+    const [editEstimatedHours, setEditEstimatedHours] = useState(0);
 
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [isPreviewVisible, setIsPreviewVisible] = useState(false);
@@ -180,13 +186,17 @@ const CardDetailDrawer = () => {
         canManageCard,
         canEditCard,
         isReadOnly,
-        isCardMember
+        isCardMember,
+        isSuperAdmin,
+        isManagerOrCoord
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
         boardRole: activeBoardMembers?.find(m => m.u_code === currentUserCode)?.role,
         cardRole: tempCardMembers.find(m => m.u_code === currentUserCode)?.role,
     });
+
+    const canEditEstimatedHours = isSuperAdmin || isManagerOrCoord;
 
     const timeTrackingData = useMemo(() => {
         if (!card || !activityLog) return null;
@@ -301,6 +311,7 @@ const CardDetailDrawer = () => {
             setEditMemo(card.memo || '');
             setShowProblemSection((card.issues && card.issues.length > 0) || !!card.problem_detail || !!card.solution_detail);
             setShowMemoSection(!!card.memo);
+            setEditEstimatedHours(card.estimated_hours || 0);
 
             fetchCardActions(card.id).then(actions => setActivityLog(actions));
             fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
@@ -320,9 +331,13 @@ const CardDetailDrawer = () => {
             setShowMoveSelect(false);
             setShowLabelPicker(false);
             setShowDueDatePicker(false);
+            setShowEstimatedHours(false);
             setShowMemberPicker(false);
             setMemberSearch('');
+            setEditingTaskListId(null);
+            setEditTaskListName('');
             setIsPreviewVisible(false);
+
             setPreviewAttachment(null);
         }
     }, [isCardDetailOpen]);
@@ -394,6 +409,14 @@ const CardDetailDrawer = () => {
         setIsEditingMemo(false);
     };
 
+    const handleSaveEstimatedHours = async () => {
+        if (isReadOnly) return;
+        const val = parseFloat(editEstimatedHours);
+        if (!isNaN(val) && val !== (card.estimated_hours || 0)) {
+            await updateCard(card.id, { estimated_hours: val });
+        }
+    };
+
     const handleAddComment = async () => {
         if (!commentText.trim()) return;
 
@@ -445,6 +468,16 @@ const CardDetailDrawer = () => {
         setNewTaskListName('');
         setShowAddTaskList(false);
     };
+ 
+    const handleSaveTaskListName = async (tlId) => {
+        if (isReadOnly) return;
+        const oldName = taskLists.find(t => t.id === tlId)?.name;
+        if (editTaskListName.trim() && editTaskListName !== oldName) {
+            await updateTaskList(tlId, { name: editTaskListName.trim() }, card.id);
+        }
+        setEditingTaskListId(null);
+    };
+
 
     const handleAddTask = async (taskListId) => {
         const name = newTaskNames[taskListId]?.trim();
@@ -690,6 +723,19 @@ const CardDetailDrawer = () => {
                                                 <Tag color={new Date(card.due_date) < new Date() ? 'red' : 'green'} style={{ borderRadius: 4 }}>
                                                     <MdAccessTime size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
                                                     {new Date(card.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </Tag>
+                                            </div>
+                                        )}
+
+                                        {/* Estimated Hours Badge */}
+                                        {card.estimated_hours > 0 && (
+                                            <div>
+                                                <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                                                    Est. Hours
+                                                </Text>
+                                                <Tag color="blue" style={{ borderRadius: 4 }}>
+                                                    <MdOutlineTimer size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                                    {card.estimated_hours}h
                                                 </Tag>
                                             </div>
                                         )}
@@ -1108,8 +1154,30 @@ const CardDetailDrawer = () => {
                                         return (
                                             <div key={tl.id} style={{ marginBottom: theme.spacing.xl }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                                                    <SectionHeader icon={<FaCheckSquare />} title={tl.name} theme={theme} />
-                                                    {!isReadOnly && (
+                                                    {editingTaskListId === tl.id ? (
+                                                        <Input
+                                                            value={editTaskListName}
+                                                            onChange={(e) => setEditTaskListName(e.target.value)}
+                                                            onPressEnter={() => handleSaveTaskListName(tl.id)}
+                                                            onBlur={() => handleSaveTaskListName(tl.id)}
+                                                            autoFocus
+                                                            size="small"
+                                                            style={{ fontWeight: 600, fontSize: 14, borderRadius: theme.borderRadius.sm, marginBottom: 8, flex: 1 }}
+                                                        />
+                                                    ) : (
+                                                        <SectionHeader 
+                                                            icon={<FaCheckSquare />} 
+                                                            title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>} 
+                                                            theme={theme} 
+                                                            extra={!isReadOnly && (
+                                                                <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
+                                                                    <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
+                                                                </Popconfirm>
+                                                            )}
+                                                        />
+                                                    )}
+                                                    {!isReadOnly && editingTaskListId !== tl.id && (
+
                                                         <Button
                                                             type="text" size="small"
                                                             style={{ color: tl.hide_completed_tasks ? theme.colors.primary : theme.colors.textTertiary, fontSize: 12 }}
@@ -1671,6 +1739,40 @@ const CardDetailDrawer = () => {
                                                                 </Button>
                                                             )}
                                                         </div>
+                                                    )}
+
+                                                    {/* Estimated Hours Sidebar */}
+                                                    {canEditEstimatedHours && (
+                                                        <>
+                                                            <SidebarButton
+                                                                icon={<MdOutlineTimer size={16} />}
+                                                                label="Est. Hours"
+                                                                active={showEstimatedHours}
+                                                                onClick={() => setShowEstimatedHours(!showEstimatedHours)}
+                                                                theme={theme}
+                                                            />
+                                                            {showEstimatedHours && (
+                                                                <div style={{
+                                                                    background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
+                                                                    borderRadius: theme.borderRadius.md, padding: theme.spacing.sm, marginTop: 4
+                                                                }}>
+                                                                    <Input
+                                                                        type="number"
+                                                                        placeholder="0.0"
+                                                                        step="0.5"
+                                                                        min="0"
+                                                                        value={editEstimatedHours}
+                                                                        onChange={(e) => setEditEstimatedHours(e.target.value)}
+                                                                        onBlur={handleSaveEstimatedHours}
+                                                                        onPressEnter={handleSaveEstimatedHours}
+                                                                        prefix={<MdOutlineTimer size={14} color={theme.colors.textTertiary} />}
+                                                                        style={{ borderRadius: theme.borderRadius.sm, width: '100%' }}
+                                                                        size="small"
+                                                                        disabled={isReadOnly}
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     )}
 
                                                     {/* Checklist */}

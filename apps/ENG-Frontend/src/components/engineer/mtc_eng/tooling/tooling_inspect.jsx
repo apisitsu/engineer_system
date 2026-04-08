@@ -102,7 +102,7 @@ function InspectionReport() {
 
     const filtered = targetData.filter(item => {
       if (!item.receive_date) return false;
-      const itemDate = moment(item.receive_date, 'YYYY-MM-DD'); // เช็ค Format วันที่ให้ตรง DB
+      const itemDate = moment(item.receive_date, 'DD-MM-YYYY' || 'YYYY-MM-DD'); // เช็ค Format วันที่ให้ตรง DB
       const targetMonth = moment(value, 'MM-YYYY');
       return itemDate.isSame(targetMonth, 'month');
     });
@@ -187,6 +187,10 @@ function InspectionReport() {
   useEffect(() => {
     fetchToolingInspectData();
   }, []);
+
+  const dateFormate = (date) => {
+    return moment(date, ["YYYY-MM-DD", "MM/DD/YYYY", "YYYY-MM-DD HH:mm:ss"]).format('DD-MMM-YYYY');
+  }
 
   const columns = [
     {

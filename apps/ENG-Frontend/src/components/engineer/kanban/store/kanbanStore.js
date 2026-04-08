@@ -19,6 +19,7 @@ export const useKanbanStore = create((set, get) => ({
     cards: {},       // { [listId]: [card1, card2, ...] }
     labels: [],
     activeCardDetail: null, // Full card detail for drawer
+    teamWorkload: [], // Aggregated workload data for dashboard
 
     // --- UI State ---
     isLoading: false,
@@ -88,12 +89,34 @@ export const useKanbanStore = create((set, get) => ({
             set({ error: err.message });
             console.error("Failed to fetch projects", err);
         } finally {
+            // Only set loading false if we aren't immediately selecting a project from effect
+            // which would trigger its own loading state
             set({ isLoading: false });
         }
     },
 
     setActiveProject: (project) => {
-        set({ activeProject: project, activeBoard: null, boards: [], lists: [], cards: {}, searchQuery: '', filterMembers: [], filterLabels: [] });
+        // If it's already the active project, don't clear and re-fetch everything unless explicitly needed
+        const current = get().activeProject;
+        if (current && project && current.id === project.id) {
+            // Still ensures boards are fetched if list is empty
+            if (get().boards.length === 0) {
+                get().fetchBoards(project.id);
+            }
+            return;
+        }
+
+        set({
+            activeProject: project,
+            activeBoard: null,
+            boards: [],
+            lists: [],
+            cards: {},
+            searchQuery: '',
+            filterMembers: [],
+            filterLabels: []
+        });
+
         if (project) {
             get().fetchBoards(project.id);
         }
@@ -273,10 +296,21 @@ export const useKanbanStore = create((set, get) => ({
     },
 
     setActiveBoard: (board) => {
+        // If already active, don't reset
+        const current = get().activeBoard;
+        if (current && board && current.id === board.id) {
+            // Still check if we need to refresh details if boards were just fetched
+            if (get().lists.length === 0) {
+                get().fetchBoardDetails(board.id);
+                get().fetchBoardMembers(board.id);
+            }
+            return;
+        }
+
         set({ activeBoard: board, activeBoardMembers: [], lists: [], cards: {} });
         if (board) {
             get().fetchBoardDetails(board.id);
-            get().fetchBoardMembers(board.id); // Also fetch members when setting active board
+            get().fetchBoardMembers(board.id);
         }
     },
 
@@ -805,6 +839,18 @@ export const useKanbanStore = create((set, get) => ({
         return null;
     },
 
+    deleteTaskList: async (taskListId, cardId) => {
+        try {
+            await axios.delete(`${server.KANBAN_TASK_LISTS}/${taskListId}`);
+            if (cardId) get().fetchCardDetail(cardId);
+            return true;
+        } catch (err) {
+            console.error('Failed to delete task list', err);
+            return false;
+        }
+    },
+
+
     createTask: async (taskListId, name, cardId) => {
         try {
             const res = await axios.post(`${server.KANBAN_TASK_LISTS}/${taskListId}/tasks`, { name });
@@ -956,6 +1002,22 @@ export const useKanbanStore = create((set, get) => ({
         } catch (err) {
             console.error('Failed to fetch report data', err);
             return null;
+        }
+    },
+
+    // ====================================================================
+    //  WORKLOAD DATA
+    // ====================================================================
+
+    fetchTeamWorkload: async (params = {}) => {
+        set({ isLoading: true });
+        try {
+            const res = await axios.get(server.KANBAN_WORKLOAD, { params });
+            set({ teamWorkload: res.data?.data || [] });
+        } catch (err) {
+            console.error('Failed to fetch team workload', err);
+        } finally {
+            set({ isLoading: false });
         }
     },
 

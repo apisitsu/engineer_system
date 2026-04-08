@@ -172,7 +172,8 @@ const UpdateBoard = async (req, res) => {
 
     const { name, default_view, default_card_type, limit_card_types, position,
         background_type, background_value,
-        always_display_card_creator, expand_task_lists_by_default, is_private } = req.body;
+        always_display_card_creator, expand_task_lists_by_default, is_private,
+        allow_add_list, allow_add_card } = req.body;
 
     // Support explicit removal: frontend sends '__REMOVE__' to clear a field
     const bgType = background_type === '__REMOVE__' ? null : background_type;
@@ -192,11 +193,14 @@ const UpdateBoard = async (req, res) => {
                 background_value  = ${useBgValue ? '$7' : 'COALESCE($7, background_value)'},
                 always_display_card_creator  = COALESCE($8, always_display_card_creator),
                 expand_task_lists_by_default = COALESCE($9, expand_task_lists_by_default),
-                is_private                   = COALESCE($10, is_private)
-            WHERE id=$11 RETURNING *
+                is_private                   = COALESCE($10, is_private),
+                allow_add_list               = COALESCE($11, allow_add_list),
+                allow_add_card               = COALESCE($12, allow_add_card)
+            WHERE id=$13 RETURNING *
         `, [name, default_view, default_card_type, limit_card_types, position,
             bgType, bgValue,
-            always_display_card_creator, expand_task_lists_by_default, is_private, id]);
+            always_display_card_creator, expand_task_lists_by_default, is_private,
+            allow_add_list, allow_add_card, id]);
         res.json({ data: rows[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });

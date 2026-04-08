@@ -31,6 +31,7 @@ import ProjectSettingsDrawer from './Settings/ProjectSettingsDrawer';
 import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
 import ReportDashboard from './Reports/ReportDashboard';
+import WorkloadDashboard from './Workload/WorkloadDashboard';
 
 dayjs.extend(relativeTime);
 
@@ -534,7 +535,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
-                maxWidth: 1280,
+                maxWidth: 1500,
                 width: '100%',
                 margin: '0 auto',
                 padding: `0 ${theme.spacing['2xl']}`,
@@ -583,17 +584,26 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </span>
                                 ),
                             },
+                            {
+                                key: 'workload',
+                                label: (
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        gap: 6, minWidth: 140,
+                                    }}>
+                                        <IoTimeOutline size={15} /> Workload
+                                    </span>
+                                ),
+                            },
                         ]}
                     />
                 </div>
 
-                <div className="kb-vscroll" style={{
+                <div className={activeTab === 'reports' ? "" : "kb-vscroll"} style={{
                     flex: 1,
                     minHeight: 0,
-                    overflowY: 'auto',
-                    paddingTop: theme.spacing.xl,
-                    paddingBottom: theme.spacing.xl,
-                    padding: '16px'
+                    overflowY: activeTab === 'reports' ? 'hidden' : 'auto',
+                    padding: activeTab === 'reports' ? '16px 16px 0 16px' : '16px'
                 }}>
 
                     {/* ═══ DASHBOARD TAB ═══ */}
@@ -796,6 +806,20 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ═══ REPORTS TAB ═══ */}
+                    {activeTab === 'reports' && (
+                        <div style={{ height: '100%', overflow: 'hidden' }}>
+                            <ReportDashboard theme={theme} />
+                        </div>
+                    )}
+
+                    {/* ═══ WORKLOAD TAB ═══ */}
+                    {activeTab === 'workload' && (
+                        <div style={{ height: '100%', overflow: 'hidden' }}>
+                            <WorkloadDashboard theme={theme} />
                         </div>
                     )}
                 </div>
@@ -1166,6 +1190,11 @@ const BoardToolbar = ({ theme, activeProject }) => {
                             icon={<IoListOutline size={14} />} onClick={() => setViewMode('list')}
                             style={{ borderRadius: theme.borderRadius.sm, ...(viewMode === 'list' ? { background: theme.colors.primary, borderColor: theme.colors.primary } : {}) }} />
                     </Tooltip>
+                    <Tooltip title="Report View">
+                        <Button type={viewMode === 'report' ? 'primary' : 'text'} size="small"
+                            icon={<MdOutlineAssessment size={14} />} onClick={() => setViewMode('report')}
+                            style={{ borderRadius: theme.borderRadius.sm, ...(viewMode === 'report' ? { background: theme.colors.primary, borderColor: theme.colors.primary } : {}) }} />
+                    </Tooltip>
                 </div>
 
                 {/* Notification Bell */}
@@ -1273,7 +1302,7 @@ const KanbanMain = () => {
         projects, activeProject, boards, activeBoard, isLoading, error,
         fetchProjects, setActiveProject, fetchBoards, setActiveBoard,
         lists, openProjectSettings, openBoardSettings,
-        connectWebSocket, disconnectWebSocket
+        connectWebSocket, disconnectWebSocket, viewMode
     } = useKanbanStore();
 
     // Global permissions
@@ -1282,20 +1311,34 @@ const KanbanMain = () => {
         projectRole: activeProject?.role,
     });
 
-    // On mount: if URL has a projectId, restore that project
+    const [isInitLoading, setIsInitLoading] = useState(true);
+
+    // On mount: fetch all projects
     useEffect(() => {
-        fetchProjects();
+        let isMounted = true;
+        const initKanban = async () => {
+            await fetchProjects();
+            // Give the URL param effect a moment to process before dropping the shade
+            setTimeout(() => {
+                if (isMounted) setIsInitLoading(false);
+            }, 100);
+        };
+        initKanban();
+        return () => { isMounted = false; }
     }, [fetchProjects]);
 
+    // Handle initial selection from URL params
     useEffect(() => {
-        if (projectIdParam && projects.length > 0) {
+        if (projectIdParam && projects.length > 0 && !isLoading) {
             const currentId = activeProject?.id ? String(activeProject.id) : null;
             if (currentId !== String(projectIdParam)) {
                 const p = projects.find(pr => String(pr.id) === String(projectIdParam));
-                if (p) setActiveProject(p);
+                if (p) {
+                    setActiveProject(p);
+                }
             }
         }
-    }, [projectIdParam, projects, activeProject, setActiveProject]);
+    }, [projectIdParam, projects, activeProject, setActiveProject, isLoading]);
 
     // WebSocket lifecycle
     useEffect(() => {
@@ -1333,6 +1376,14 @@ const KanbanMain = () => {
         return (
             <div style={{ padding: theme.spacing.xl, background: theme.colors.background, minHeight: '100vh' }}>
                 <Alert message="Error Loading Kanban" description={error} type="error" showIcon />
+            </div>
+        );
+    }
+
+    if (isInitLoading) {
+        return (
+            <div style={{ padding: theme.spacing.xl, background: theme.colors.background, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <Spin size="large" />
             </div>
         );
     }
@@ -1381,14 +1432,14 @@ const KanbanMain = () => {
                                     popupMatchSelectWidth={false}
                                     variant="borderless"
                                     className="kanban-project-title"
-                                    showArrow={false}
+                                    suffixIcon={null}
                                 />
 
                                 {/* Project Members Popover triggered by Settings or Dropdown Icon near Project Name */}
                                 <Dropdown
                                     trigger={['click']}  //'hover', 
                                     placement="bottom"
-                                    dropdownRender={() => (
+                                    popupRender={() => (
                                         <div style={{ width: 300, padding: 16, background: theme.colors.surface, borderRadius: theme.borderRadius.lg, boxShadow: theme.shadows.lg }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                                 <Typography.Text strong>Project Members ({useKanbanStore.getState().projectManagers.length})</Typography.Text>
@@ -1546,6 +1597,8 @@ const KanbanMain = () => {
                             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                                 <Spin size="large" />
                             </div>
+                        ) : viewMode === 'report' ? (
+                            <ReportDashboard theme={theme} />
                         ) : activeBoard ? (
                             <BoardView />
                         ) : (

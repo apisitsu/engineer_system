@@ -80,7 +80,8 @@ const GetCards = async (req, res) => {
                        WHERE a.card_id = c.id AND a.action_type = 'card_moved'
                          AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
                        ORDER BY a.created_at DESC LIMIT 1
-                   ) AS action_done_at
+                   ) AS action_done_at,
+                   c.estimated_hours
             FROM kb_card c
             WHERE c.list_id=$1
               AND (
@@ -109,7 +110,7 @@ const CreateCard = async (req, res) => {
     if (!(await canEditBoard(req, list.board_id)))
         return res.status(403).json({ error: 'Editor permission required' });
 
-    const { name, card_type, description, due_date, is_private } = req.body;
+    const { name, card_type, description, due_date, is_private, estimated_hours } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // Next position
@@ -122,9 +123,9 @@ const CreateCard = async (req, res) => {
     try {
         await client.query('BEGIN');
         const { rows: [card] } = await client.query(`
-            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()) RETURNING *
-        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false]);
+            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10) RETURNING *
+        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false, estimated_hours || 0]);
 
         await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [card.id, uCode]);
         await autoSubscribe(client, card.id, uCode);
@@ -220,7 +221,7 @@ const UpdateCard = async (req, res) => {
     }
 
     const { name, description, due_date, is_due_completed, card_type, is_closed,
-        list_id, stopwatch, memo, is_private } = req.body;
+        list_id, stopwatch, memo, is_private, estimated_hours } = req.body;
 
     const client = await engPool.connect();
     try {
@@ -243,6 +244,7 @@ const UpdateCard = async (req, res) => {
         if (stopwatch !== undefined) { updateFields.push(`stopwatch = $${paramIdx++}`); updateValues.push(stopwatch ? JSON.stringify(stopwatch) : null); }
         if (memo !== undefined) { updateFields.push(`memo = $${paramIdx++}`); updateValues.push(memo); }
         if (is_private !== undefined) { updateFields.push(`is_private = $${paramIdx++}`); updateValues.push(is_private); }
+        if (estimated_hours !== undefined) { updateFields.push(`estimated_hours = $${paramIdx++}`); updateValues.push(estimated_hours); }
 
         if (listChanged) {
             updateFields.push(`list_changed_at = NOW()`);
@@ -269,6 +271,9 @@ const UpdateCard = async (req, res) => {
         }
         if (memo !== undefined && memo !== card.memo) {
             await logAction(client, id, uCode, 'memo_updated', { memo });
+        }
+        if (estimated_hours !== undefined && estimated_hours !== card.estimated_hours) {
+            await logAction(client, id, uCode, 'estimated_hours_updated', { estimated_hours });
         }
         await logAction(client, id, uCode, 'card_updated', { name, description, is_closed });
         await client.query('COMMIT');
@@ -710,6 +715,23 @@ const DeleteTask = async (req, res) => {
     res.json({ message: 'Task deleted' });
 };
 
+// DELETE /api/kanban/task-lists/:id
+const DeleteTaskList = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { rows: [list] } = await engPool.query('SELECT card_id FROM kb_task_list WHERE id=$1', [id]);
+        if (!list) return res.status(404).json({ error: 'Task list not found' });
+        if (!(await canEditCard(req, list.card_id))) return res.status(403).json({ error: 'Card editor permission required' });
+
+        await engPool.query('DELETE FROM kb_task WHERE task_list_id=$1', [id]);
+        await engPool.query('DELETE FROM kb_task_list WHERE id=$1', [id]);
+        res.json({ message: 'Task list deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+
 // ─── COMMENTS ──────────────────────────────────────────────────────
 
 // POST /api/kanban/cards/:id/comments
@@ -1118,7 +1140,8 @@ module.exports = {
     // Labels
     AddCardLabel, RemoveCardLabel,
     // Task Lists
-    GetTaskLists, CreateTaskList, UpdateTaskList, CreateTask, UpdateTask, DeleteTask,
+    GetTaskLists, CreateTaskList, UpdateTaskList, DeleteTaskList, CreateTask, UpdateTask, DeleteTask,
+
     // Comments
     AddComment, UpdateComment, DeleteComment,
     // Attachments

@@ -219,8 +219,8 @@ const AppContent = () => {
   }, [isAuthenticated, logout, getLastActiveTime]);
 
   return (
-    <AntdApp>
-      <ConfigProvider theme={getAntdTheme(theme)}>  {/* Dynamic theme! */}
+    <ConfigProvider theme={getAntdTheme(theme)}>  {/* Dynamic theme! */}
+      <AntdApp>
         <Router>
           <Routes>
 
@@ -303,8 +303,8 @@ const AppContent = () => {
 
           </Routes>
         </Router>
-      </ConfigProvider>
-    </AntdApp>
+      </AntdApp>
+    </ConfigProvider>
   );
 };
 

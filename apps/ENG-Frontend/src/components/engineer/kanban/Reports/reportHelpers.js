@@ -309,6 +309,7 @@ export const generate3W1H = (allCards, users) => {
             listName: card.list_name || '',
             rawStatus: (card.list_name || '').toLowerCase(),
             createdAt: card.created_at,
+            dueDate: card.due_date,
             priority: card.due_date && new Date(card.due_date) < new Date() ? 'overdue' : 'normal',
         };
     });

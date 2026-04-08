@@ -364,6 +364,33 @@ const BoardSettingsDrawer = () => {
                         </Card>
                     )}
 
+                    {/* Board Permissions */}
+                    {canManageBoardStructure && (
+                        <>
+                            <SectionLabel theme={theme}>Board Permissions</SectionLabel>
+                            <Card style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                <ToggleRow
+                                    title="Allow Adding Lists"
+                                    description={activeBoard.allow_add_list ? 'Members can create new lists' : 'Adding new lists is disabled'}
+                                    theme={theme}
+                                    checked={activeBoard.allow_add_list || false}
+                                    onChange={async (checked) => {
+                                        await updateBoard(activeBoard.id, { allow_add_list: checked });
+                                    }}
+                                />
+                                <ToggleRow
+                                    title="Allow Adding Cards"
+                                    description={activeBoard.allow_add_card !== false ? 'Members can create new cards' : 'Adding new cards is disabled'}
+                                    theme={theme}
+                                    checked={activeBoard.allow_add_card !== false}
+                                    onChange={async (checked) => {
+                                        await updateBoard(activeBoard.id, { allow_add_card: checked });
+                                    }}
+                                />
+                            </Card>
+                        </>
+                    )}
+
                 </>
             )}
 
