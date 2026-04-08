@@ -44,7 +44,6 @@ const GetTeamWorkload = async (req, res) => {
         // - Managers/Coords see all non-private + private projects they are in.
         // - Regular users see only projects they are members of.
         // Using LOWER() for u_code to be safe with case sensitivity.
-
         if (isAdmin) {
             // Admins see all
         } else if (seeAll) {
