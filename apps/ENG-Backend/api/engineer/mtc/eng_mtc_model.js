@@ -1,5 +1,6 @@
 const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
+const { exec } = require('child_process');
 
 const ToolingInspectGetlist = async (req, res) => {
     const pageNum = Math.max(1, parseInt(req.query.page) || 1);
@@ -489,6 +490,38 @@ const ToolingInspectUpdate = async (req, res) => {
     }
 }
 
+const ToolingSyncCSV = async (req, res) => {
+    try {
+        const scriptPath = 'D:\\PythonProject\\importPCtooling.py';
+        console.log(`Executing Python script: ${scriptPath}`);
+
+        exec(`python "${scriptPath}"`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`Python script error: ${error.message}`);
+                return res.status(500).json({ 
+                    success: false, 
+                    message: "Execution failed", 
+                    error: error.message, 
+                    stderr 
+                });
+            }
+            if (stderr) {
+                console.warn(`Python script stderr: ${stderr}`);
+            }
+            
+            console.log(`Python script stdout: ${stdout}`);
+            return res.json({ 
+                success: true, 
+                message: "CSV Synced Successfully", 
+                output: stdout 
+            });
+        });
+    } catch (error) {
+        console.error("ToolingSyncCSV Error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ToolingInspectGetlist,
     ToolDWGRequestGetList,
@@ -498,4 +531,5 @@ module.exports = {
     ToolingReturnAdd,
     ToolingInspectUpdate,
     ToolDWGRequestUpdate,
+    ToolingSyncCSV
 };
