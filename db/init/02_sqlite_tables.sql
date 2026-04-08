@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS tr_workflow (
 );
 
 -- 4. CREATE tooling tables (from test.db)
-CREATE TABLE IF NOT EXISTS tooling_inspect (
+CREATE TABLE IF NOT EXISTS ti_list (
     id BIGSERIAL PRIMARY KEY,
     part_number VARCHAR(100),
     tool_number VARCHAR(100),
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS tooling_inspect (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS tool_dwg_request (
+CREATE TABLE IF NOT EXISTS ti_dwg_job (
     id BIGSERIAL PRIMARY KEY,
     req_no VARCHAR(50) UNIQUE NOT NULL,
     req_date TIMESTAMPTZ,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS tool_dwg_request (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS tb_tooling_return (
+CREATE TABLE IF NOT EXISTS ti_return (
     id BIGSERIAL PRIMARY KEY,
     return_no VARCHAR(50) UNIQUE NOT NULL,
     part_number VARCHAR(100),
@@ -139,8 +139,8 @@ DECLARE
   tbl TEXT;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY[
-    'ecr_request', 'tr_request', 'tooling_inspect',
-    'tool_dwg_request', 'tb_tooling_return', 'wc_code', 'holidays_date'
+    'ecr_request', 'tr_request', 'ti_list',
+    'ti_dwg_job', 'ti_return', 'wc_code', 'holidays_date'
   ] LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_trigger WHERE tgname = format('trg_%s_updated_at', tbl)
@@ -154,3 +154,4 @@ BEGIN
   END LOOP;
 END;
 $$;
+

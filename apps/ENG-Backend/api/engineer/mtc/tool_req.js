@@ -13,9 +13,9 @@ const {
   STAGE_LABELS,
   DUE_DATE_CONFIG,
   REQUEST_TYPES,
-} = require('./constants/workflow');
-const { verifyToken, optionalAuth, checkStagePermission } = require('./middleware/toolRequestAuth');
-const { validateFileUpload, sanitizeFilename } = require('./middleware/fileUpload');
+} = require('./workflow');
+const { verifyToken, optionalAuth, checkStagePermission } = require('./toolRequestAuth');
+const { validateFileUpload, sanitizeFilename } = require('./fileUpload');
 const fs = require('fs');
 
 // ── Logger utility ───────────────────────────────────────────────────────────
@@ -579,3 +579,4 @@ module.exports = {
     getStagePermissions,
     submitAction,
 };
+

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Layout, Spin } from "antd";
-import { Card, Row, Col, Progress, Divider } from 'antd';
+import { Layout, Spin, Button, Card, Row, Col, Progress, Divider } from "antd";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import moment from "moment";
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
@@ -13,6 +13,7 @@ const { Content } = Layout;
 
 const HomeMTCEng = () => {
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [toolingData, setToolingData] = useState([]);
   const [dwgData, setDwgData] = useState([]);
@@ -22,11 +23,10 @@ const HomeMTCEng = () => {
     setLoading(true);
     try {
       const currentMonth = moment().format('MM-YYYY');
-      const [toolingRes, dwgRes, dwgStatsRes, toolingStatsRes] = await Promise.all([
-        axios.get(`${server.TOOLING_INSPECT_GETLIST}`),
-        axios.get(`${server.MTC_TOOL_REQUESTS}?limit=500`),  // Get more records
-        axios.get(`${server.MTC_TOOL_REQUEST_DASHBOARD}`),  // Get dashboard stats
-        axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${currentMonth}`) // Get tooling Dashboard stats
+      const [dwgRes, dwgStatsRes, toolingStatsRes] = await Promise.all([
+        axios.get(`${server.MTC_TOOL_REQUESTS}?limit=500`),
+        axios.get(`${server.MTC_TOOL_REQUEST_DASHBOARD}`),
+        axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${currentMonth}`)
       ]);
       setToolingData(toolingStatsRes.data || {});
       setDwgData(dwgRes.data.data || []);
@@ -87,36 +87,38 @@ const HomeMTCEng = () => {
             <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
               {/* Tooling Inspection Report */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
-                  <h2><AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
-                    <a href="/eng/mtc_eng/tooling" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
+                    <AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
+                    <a href="/eng/mtc_eng/tooling_inspect" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
                   </h2>
-                </Divider>
+                </div>
+                <Divider style={{ margin: '0 0 16px 0' }} />
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={16}>
+                  <Col span={18}>
                     <Row padding={8} gutter={[16, 16]}>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="Total Jobs"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalToolingJobs}</h2></Card>
                       </Col>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.toolingOnTime}</h2></Card>
                       </Col>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error }}>{dashboardStats.toolingDelay}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.toolingPending}</h2></Card>
                       </Col>
                     </Row>
                     <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
-                      <Col span={12}>
-                        <Card size="small" title="Pending"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.toolingPending}</h2></Card>
-                      </Col>
-                      <Col span={12}>
+                      <Col span={24}>
                         <Card size="small" title="Performance">
                           <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
                         </Card>
                       </Col>
                     </Row>
                   </Col>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Card size="small" title="Status Overview">
                       On Time <Progress percent={dashboardStats.toolingOnTimePercent} strokeColor={theme.colors.success} size="small" />
                       Pending <Progress percent={dashboardStats.toolingPendingPercent} strokeColor={theme.colors.warning} size="small" />
@@ -128,37 +130,36 @@ const HomeMTCEng = () => {
 
               {/* General DWG Request */}
               <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
-                  <h2><AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
+                    <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
                     <a href="/eng/mtc_eng/tool-request" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
                   </h2>
-                </Divider>
+                  <Button 
+                    type="primary" 
+                    size="middle"
+                    onClick={() => navigate("/eng/mtc_eng/tool-request?action=create")}
+                  >
+                    + Create New Request
+                  </Button>
+                </div>
+                <Divider style={{ margin: '0 0 16px 0' }} />
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={16}>
+                  <Col span={24}>
                     <Row padding={8} gutter={[16, 16]}>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="Total Requests"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalDwgJobs}</h2></Card>
                       </Col>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="Complete"><h2 style={{ color: theme.colors.success }}>{dashboardStats.dwgComplete}</h2></Card>
                       </Col>
-                      <Col span={8}>
+                      <Col span={6}>
                         <Card size="small" title="In Progress"><h2 style={{ color: theme.colors.primary }}>{dashboardStats.dwgInProgress}</h2></Card>
                       </Col>
-                    </Row>
-                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
-                      <Col span={24}>
+                      <Col span={6}>
                         <Card size="small" title="Pending Approval"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.dwgPending}</h2></Card>
                       </Col>
                     </Row>
-                  </Col>
-                  <Col span={8}>
-                    <Card size="small" title="📝 Manage Tool & Drawing Requests">
-                      <p style={{ margin: 0, fontSize: '12px' }}>
-                        Submit and track requests for tool drawings, fixtures, gauges, and 3D printing.
-                        Monitor workflow progress from engineering check to completion.
-                      </p>
-                    </Card>
                   </Col>
                 </Row>
               </div>

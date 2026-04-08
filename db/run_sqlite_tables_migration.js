@@ -86,38 +86,38 @@ async function runMigration() {
         
         console.log('✅ Migration completed successfully!');
         
-        // Verify tool_dwg_request table exists
+        // Verify ti_dwg_job table exists
         const verifyRes = await engPool.query(`
             SELECT column_name, data_type 
             FROM information_schema.columns 
-            WHERE table_name = 'tool_dwg_request' 
+            WHERE table_name = 'ti_dwg_job' 
             ORDER BY ordinal_position
         `);
         
         if (verifyRes.rows.length > 0) {
-            console.log('✅ tool_dwg_request table verified with columns:');
+            console.log('✅ ti_dwg_job table verified with columns:');
             verifyRes.rows.forEach(row => {
                 console.log(`   - ${row.column_name}: ${row.data_type}`);
             });
         } else {
-            console.log('⚠️  tool_dwg_request table not found');
+            console.log('⚠️  ti_dwg_job table not found');
         }
         
-        // Verify tooling_inspect table exists
+        // Verify ti_list table exists
         const inspectRes = await engPool.query(`
             SELECT column_name, data_type 
             FROM information_schema.columns 
-            WHERE table_name = 'tooling_inspect' 
+            WHERE table_name = 'ti_list' 
             ORDER BY ordinal_position
         `);
         
         if (inspectRes.rows.length > 0) {
-            console.log('✅ tooling_inspect table verified with columns:');
+            console.log('✅ ti_list table verified with columns:');
             inspectRes.rows.forEach(row => {
                 console.log(`   - ${row.column_name}: ${row.data_type}`);
             });
         } else {
-            console.log('⚠️  tooling_inspect table not found');
+            console.log('⚠️  ti_list table not found');
         }
         
     } catch (err) {
@@ -130,3 +130,4 @@ async function runMigration() {
 }
 
 runMigration();
+

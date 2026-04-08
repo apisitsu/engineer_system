@@ -257,7 +257,7 @@ async function runMigration() {
             await pgQuery(`SELECT setval('tr_workflow_id_seq', COALESCE((SELECT MAX(id) FROM tr_workflow), 1))`);
         }
 
-        // 8. Tooling tables (tooling_inspect, tool_dwg_request, tb_tooling_return, wc_code, holidays_date)
+        // 8. Tooling tables (ti_list, ti_dwg_job, ti_return, wc_code, holidays_date)
         const checkAndMigrate = async (tableName, insertSql, mapFn) => {
             const hasTable = await getSqliteData(testDb, `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
             if (hasTable.length > 0) {
@@ -266,18 +266,18 @@ async function runMigration() {
             }
         };
 
-        await checkAndMigrate('tooling_inspect',
-            `INSERT INTO tooling_inspect(id, part_number, tool_number, inspect_date, inspector, result, remark, created_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO NOTHING`,
+        await checkAndMigrate('ti_list',
+            `INSERT INTO ti_list(id, part_number, tool_number, inspect_date, inspector, result, remark, created_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO NOTHING`,
             (r) => [r.id, r.part_number, r.tool_number, r.inspect_date, r.inspector, r.result, r.remark, r.created_at]
         );
 
-        await checkAndMigrate('tool_dwg_request',
-            `INSERT INTO tool_dwg_request (id, req_no, req_date, req_by, tool_number, reason, status, file_path, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING`,
+        await checkAndMigrate('ti_dwg_job',
+            `INSERT INTO ti_dwg_job (id, req_no, req_date, req_by, tool_number, reason, status, file_path, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING`,
             (r) => [r.id, r.req_no || r.request_no || 'DRQ-' + r.id, r.req_date || r.created_at, r.req_by || r.requester || '', r.tool_number, r.reason, r.status, r.file_path, r.created_at]
         );
 
-        await checkAndMigrate('tb_tooling_return',
-            `INSERT INTO tb_tooling_return (id, return_no, part_number, tool_number, qty, return_by, return_date, reason, condition, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`,
+        await checkAndMigrate('ti_return',
+            `INSERT INTO ti_return (id, return_no, part_number, tool_number, qty, return_by, return_date, reason, condition, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`,
             (r) => [r.id, r.return_no || 'RTN-' + r.id, r.part_number || '', r.tool_number, r.qty || 1, r.return_by || '', r.return_date || r.date_return || r.created_at, r.reason, r.condition, r.created_at]
         );
 
@@ -304,3 +304,4 @@ async function runMigration() {
 }
 
 runMigration();
+
