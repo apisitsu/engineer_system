@@ -14,7 +14,7 @@ const ToolingInspectGetlist = async (req, res) => {
 
     const currentMonthStr = req.query.currentMonth;
 
-    let baseSql = `FROM tooling_inspect WHERE 1=1`;
+    let baseSql = `FROM ti_list WHERE 1=1`;
     let params = [];
     let paramCount = 1;
 
@@ -77,8 +77,8 @@ const ToolDWGRequestGetList = async (req, res) => {
     // const offset   = (pageNum - 1) * limitNum;
     try {
         const [dataRes, countRes] = await Promise.all([
-            engPool.query(`SELECT * FROM tool_dwg_request ORDER BY date_req DESC`),
-            engPool.query(`SELECT COUNT(*) as total FROM tool_dwg_request`),
+            engPool.query(`SELECT * FROM ti_dwg_job ORDER BY date_req DESC`),
+            engPool.query(`SELECT COUNT(*) as total FROM ti_dwg_job`),
         ]);
         const total = parseInt(countRes.rows[0].total);
         res.json({
@@ -123,7 +123,7 @@ const ToolDWGRequestAdd = async (req, res) => {
 
         const params = [date_req ? moment(date_req).format('YYYY-MM-DD') : null, item, initialStatus, remark];
 
-        const result = await engPool.query(`INSERT INTO tool_dwg_request (date_req, item, status, remark) VALUES ($1, $2, $3, $4) RETURNING id`, params);
+        const result = await engPool.query(`INSERT INTO ti_dwg_job (date_req, item, status, remark) VALUES ($1, $2, $3, $4) RETURNING id`, params);
 
         res.json({
             result: "true",
@@ -149,7 +149,7 @@ const ToolDWGRequestUpdate = async (req, res) => {
 
         const finalStatus = status || 'Complete';
 
-        const result = await engPool.query(`UPDATE tool_dwg_request SET status = $1 WHERE id = $2 RETURNING id`, [finalStatus, id]);
+        const result = await engPool.query(`UPDATE ti_dwg_job SET status = $1 WHERE id = $2 RETURNING id`, [finalStatus, id]);
 
         if (result.rowCount === 0) {
             return res.json({ result: "false", message: "ไม่พบข้อมูล" });
@@ -237,107 +237,106 @@ const ToolingDashboadtGetlist = async (req, res) => {
         const [toolingStats, dwgStats, rawStats, inspectMonthStats] = await Promise.all([
 
             // 1. toolingStats (การ์ด Tooling Return) — แสดงผลรวม qty สำหรับ Prev. Working Day และ Breakdown แยกตาม W/C
-            new Promise(async (resolve) => {
-                const sqlTotal = `
-                    SELECT 
-                        COUNT(*) as total_count,
-                        COALESCE(SUM(CASE 
-                            WHEN NULLIF(TRIM(return_date), '')::DATE = $1::DATE 
-                            THEN qty 
-                            ELSE 0 
-                        END), 0) as total_yesterday
-                    FROM tb_tooling_return 
-                    WHERE return_date IS NOT NULL AND TRIM(return_date) != ''
-                `;
+                        new Promise(async (resolve) => {
+                        const sqlTotal = `
+                            SELECT 
+                                COUNT(*) as total_count,
+                                COALESCE(SUM(CASE 
+                                    WHEN NULLIF(TRIM(return_date), '')::DATE = $1::DATE 
+                                    THEN qty 
+                                    ELSE 0 
+                                END), 0) as total_yesterday
+                            FROM ti_return 
+                            WHERE return_date IS NOT NULL AND TRIM(return_date) != ''
+                        `;
 
-                const sqlBreakdown = `
-                    SELECT 
-                        wc_code, 
-                        MAX(wc_name) as wc_name, 
-                        SUM(qty) as total_qty
-                    FROM tb_tooling_return 
-                    WHERE NULLIF(TRIM(return_date), '')::DATE = $1::DATE
-                    GROUP BY wc_code
-                    ORDER BY wc_code
-                `;
+                        const sqlBreakdown = `
+                            SELECT 
+                                wc_code, 
+                                MAX(wc_name) as wc_name, 
+                                SUM(qty) as total_qty
+                            FROM ti_return 
+                            WHERE NULLIF(TRIM(return_date), '')::DATE = $1::DATE
+                            GROUP BY wc_code
+                            ORDER BY wc_code
+                        `;
 
-                try {
-                    const resTotal = await engPool.query(sqlTotal, [prevWorkingDate]);
-                    const resBreakdown = await engPool.query(sqlBreakdown, [prevWorkingDate]);
-                    resolve({ 
-                        total_count: resTotal.rows[0]?.total_count || 0, 
-                        total_yesterday: resTotal.rows[0]?.total_yesterday || 0,
-                        breakdown: resBreakdown.rows || []
-                    });
-                } catch (err) {
-                    console.error('toolingStats Error:', err.message);
-                    resolve({ total_count: 0, total_yesterday: 0, breakdown: [] });
-                }
-            }),
+                        try {
+                            const resTotal = await engPool.query(sqlTotal, [prevWorkingDate]);
+                            const resBreakdown = await engPool.query(sqlBreakdown, [prevWorkingDate]);
+                            resolve({ 
+                                total_count: resTotal.rows[0]?.total_count || 0, 
+                                total_yesterday: resTotal.rows[0]?.total_yesterday || 0,
+                                breakdown: resBreakdown.rows || []
+                            });
+                        } catch (err) {
+                            console.error('toolingStats Error:', err.message);
+                            resolve({ total_count: 0, total_yesterday: 0, breakdown: [] });
+                        }
+                    }),
 
-            // 2. dwgStats (การ์ด DWG Request - คืนชีพกลับมาให้แล้วครับ!)
-            new Promise(async (resolve) => {
-                const sql = `
-                    SELECT 
-                        COUNT(*) as total_all,
-                        SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' THEN 1 ELSE 0 END) as total_yesterday,
-                        SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Complete' THEN 1 ELSE 0 END) as complete_yesterday,
-                        SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
-                    FROM tool_dwg_request 
-                `;
-                try {
-                    const res = await engPool.query(sql, [prevWorkingDate]);
-                    resolve(res.rows[0] || { total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
-                } catch (err) {
-                    resolve({ total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
-                }
-            }),
+                    // 2. dwgStats (การ์ด DWG Request - คืนชีพกลับมาให้แล้วครับ!)
+                    new Promise(async (resolve) => {
+                        const sql = `
+                            SELECT 
+                                COUNT(*) as total_all,
+                                SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' THEN 1 ELSE 0 END) as total_yesterday,
+                                SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Complete' THEN 1 ELSE 0 END) as complete_yesterday,
+                                SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
+                            FROM ti_dwg_job 
+                        `;
+                        try {
+                            const res = await engPool.query(sql, [prevWorkingDate]);
+                            resolve(res.rows[0] || { total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
+                        } catch (err) {
+                            resolve({ total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
+                        }
+                    }),
 
-            // 3. rawStats (การ์ด Tooling Inspection Yesterday)
-            new Promise(async (resolve) => {
-                const sql = `
-                    SELECT 
-                        SUM(CASE WHEN receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE = $1::DATE THEN 1 ELSE 0 END) as received_yesterday,
-                        SUM(CASE WHEN issue_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE = $1::DATE THEN 1 ELSE 0 END) as issued_yesterday
-                    FROM tooling_inspect
-                `;
-                try {
-                    const res = await engPool.query(sql, [prevWorkingDate]);
-                    resolve(res.rows[0] || { received_yesterday: 0, issued_yesterday: 0 });
-                } catch (err) {
-                    console.error("Yesterday Stats Error:", err.message);
-                    resolve({ received_yesterday: 0, issued_yesterday: 0 });
-                }
-            }),
+                    // 3. rawStats (การ์ด Tooling Inspection Yesterday)
+                    new Promise(async (resolve) => {
+                        const sql = `
+                            SELECT 
+                                SUM(CASE WHEN receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE = $1::DATE THEN 1 ELSE 0 END) as received_yesterday,
+                                SUM(CASE WHEN issue_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE = $1::DATE THEN 1 ELSE 0 END) as issued_yesterday
+                            FROM ti_list
+                        `;
+                        try {
+                            const res = await engPool.query(sql, [prevWorkingDate]);
+                            resolve(res.rows[0] || { received_yesterday: 0, issued_yesterday: 0 });
+                        } catch (err) {
+                            console.error("Yesterday Stats Error:", err.message);
+                            resolve({ received_yesterday: 0, issued_yesterday: 0 });
+                        }
+                    }),
 
-            // 4. inspectMonthStats (กราฟ Performance ด้านบน)
-            new Promise(async (resolve) => {
-                const monthYear = startDate.substring(0, 7); // จะได้ '2026-04'
-                const sql = `
-                    SELECT 
-                        COUNT(*) as total,
-                        SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
-                        SUM(CASE WHEN status = 'Delay' THEN 1 ELSE 0 END) as delay,
-                        SUM(CASE WHEN (issue_date IS NULL OR TRIM(issue_date::TEXT) = '') THEN 1 ELSE 0 END) as pending
-                    FROM tooling_inspect
-                    WHERE receive_date::TEXT LIKE $1 || '%'
-                `;
-                try {
-                    const res = await engPool.query(sql, [monthYear]);
-                    const data = res.rows[0];
-                    resolve({
-                        total: Number(data.total) || 0,
-                        on_time: Number(data.on_time) || 0,
-                        delay: Number(data.delay) || 0,
-                        pending: Number(data.pending) || 0
-                    });
-                } catch (err) {
-                    console.error("Performance Stats Error:", err.message);
-                    resolve({ total: 0, on_time: 0, delay: 0, pending: 0 });
-                }
-            })
-        ]);
-
+                    // 4. inspectMonthStats (กราฟ Performance ด้านบน)
+                    new Promise(async (resolve) => {
+                        const monthYear = startDate.substring(0, 7); // จะได้ '2026-04'
+                        const sql = `
+                            SELECT 
+                                COUNT(*) as total,
+                                SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
+                                SUM(CASE WHEN status = 'Delay' THEN 1 ELSE 0 END) as delay,
+                                SUM(CASE WHEN (issue_date IS NULL OR TRIM(issue_date::TEXT) = '') THEN 1 ELSE 0 END) as pending
+                            FROM ti_list
+                            WHERE receive_date::TEXT LIKE $1 || '%'
+                        `;
+                        try {
+                            const res = await engPool.query(sql, [monthYear]);
+                            const data = res.rows[0];
+                            resolve({
+                                total: Number(data.total) || 0,
+                                on_time: Number(data.on_time) || 0,
+                                delay: Number(data.delay) || 0,
+                                pending: Number(data.pending) || 0
+                            });
+                        } catch (err) {
+                            console.error("Performance Stats Error:", err.message);
+                            resolve({ total: 0, on_time: 0, delay: 0, pending: 0 });
+                        }
+                    })
+                ]);
         // รวมร่างข้อมูลอย่างถูกต้อง
         const result = {
             yesterdayDate: prevWorkingDate,
@@ -381,7 +380,7 @@ const ToolingReturnAdd = async (req, res) => {
 
         const getWcName = async (code) => {
             // work_centers stores code as "WC-09", "WC-25" etc.
-            // but tb_tooling_return stores wc_code as "09", "25" (digits only)
+            // but ti_return stores wc_code as "09", "25" (digits only)
             // So build the formatted lookup key: "09" → "WC-09"
             const paddedCode = code.padStart(2, '0');
             const wcCode = `WC-${paddedCode}`;
@@ -402,7 +401,7 @@ const ToolingReturnAdd = async (req, res) => {
         console.log(`✅ WC Code: ${stringCode} -> wc_name: '${wc_name}'`);
 
         const sql = `
-            INSERT INTO tb_tooling_return 
+            INSERT INTO ti_return 
             (return_date, wc_code, wc_name, qty, measuring_tools, remark) 
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
@@ -419,7 +418,7 @@ const ToolingReturnAdd = async (req, res) => {
 
         const result = await engPool.query(sql, params);
 
-        console.log(`✅ บันทึกข้อมูล tb_tooling_return -> ID: ${result.rows[0].id} เรียบร้อย`);
+        console.log(`✅ บันทึกข้อมูล ti_return -> ID: ${result.rows[0].id} เรียบร้อย`);
         res.json({
             result: "true",
             message: "บันทึกสำเร็จ",
@@ -454,7 +453,7 @@ const ToolingInspectUpdate = async (req, res) => {
         }
 
         const sql = `
-            UPDATE tooling_inspect 
+            UPDATE ti_list 
             SET 
                 issue_date = $1, 
                 measuring_tools = $2, 

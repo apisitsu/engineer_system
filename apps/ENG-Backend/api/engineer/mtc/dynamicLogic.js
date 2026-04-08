@@ -6,7 +6,7 @@
  * รองรับการ resolve nested calc keys เช่น "rollerShoe.A", "wd_A"
  */
 
-const { engPool } = require('../../../../instance/eng_db');
+const { engPool } = require('../../../instance/eng_db');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"

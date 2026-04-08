@@ -5,31 +5,22 @@ import {
 } from 'antd';
 import {
   EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  CheckCircleOutlined, CloseCircleOutlined, SendOutlined,
+  CheckCircleOutlined, SendOutlined,
   FileTextOutlined, AuditOutlined, UserOutlined, UploadOutlined
 } from '@ant-design/icons';
-import { httpClient as axios } from '../../../../../utils/HttpClient';
+import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
-import { server } from '../../../../../constance/constance';
-import { useAuthStore } from '../../../../../stores/authStore';
+import { server } from '../../../../constance/constance';
+import { useAuthStore } from '../../../../stores/authStore';
 import {
   WORKFLOW_STAGES,
-  STAGE_LABELS,
-  WORKFLOW_STATUS,
   STATUS_COLORS,
-  REQUEST_TYPES,
-  CATEGORIES,
-  DRAWING_REQUIRED,
-  DRAWING_TYPES,
-  ACTION_TYPES,
   isDoneStatus,
-  isDeniedStatus,
-  getDefaultRequestTemplate,
-} from '../../../../../constants/workflowConstants';
+} from './workflowConstants';
 
 const { Option } = Select;
 const { TextArea } = Input;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 // ── Stage config ──────────────────────────────────────────────────────────────
 const STAGES = [

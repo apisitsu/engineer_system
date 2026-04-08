@@ -1,6 +1,6 @@
 'use strict';
 
-const { engPool } = require('../../../../instance/eng_db');
+const { engPool } = require('../../../instance/eng_db');
 const {
   calculateToolingParams, calculateKS400B_Params,
   calculateKS03A_Params, calculateKS500RD_Params,
@@ -303,3 +303,4 @@ async function findFixtures(cnNumber) {
 }
 
 module.exports = { findFixtures };
+

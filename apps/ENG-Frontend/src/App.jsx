@@ -43,8 +43,8 @@ import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
 import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
-import ToolingInspect from './components/engineer/mtc_eng/tooling/tooling_inspect';
-import ToolRequest from './components/engineer/mtc_eng/Tool_req/ToolRequest';
+import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
+import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
 import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';

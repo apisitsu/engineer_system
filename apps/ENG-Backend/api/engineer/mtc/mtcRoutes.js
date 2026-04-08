@@ -5,6 +5,7 @@ const mtcController = require('./mtcController');
 // Define routes for MTC
 router.get('/tooling-inspect', mtcController.getToolingInspectList);
 router.get('/tool-dwg-request', mtcController.getToolDWGRequest);
+router.get('/generate-sds-pdf', mtcController.generateSdsPdf);
 
 module.exports = router;
 
