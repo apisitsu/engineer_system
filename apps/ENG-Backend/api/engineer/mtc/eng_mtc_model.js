@@ -492,10 +492,11 @@ const ToolingInspectUpdate = async (req, res) => {
 
 const ToolingSyncCSV = async (req, res) => {
     try {
+        const pythonExe = 'D:\\PythonProject\\env\\Scripts\\python.exe';
         const scriptPath = 'D:\\PythonProject\\importPCtooling.py';
-        console.log(`Executing Python script: ${scriptPath}`);
+        console.log(`Executing Python script: ${scriptPath} using venv`);
 
-        exec(`python "${scriptPath}"`, (error, stdout, stderr) => {
+        exec(`"${pythonExe}" "${scriptPath}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Python script error: ${error.message}`);
                 return res.status(500).json({ 
