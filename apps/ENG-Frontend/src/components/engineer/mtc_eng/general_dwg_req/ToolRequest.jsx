@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
 } from 'antd';
+import { useSearchParams } from 'react-router-dom';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
     StopOutlined
@@ -13,7 +14,7 @@ import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
-import RequestDetailsModal from './components/RequestDetailsModal';
+import RequestDetailsModal from './RequestDetailsModal';
 import { 
     WORKFLOW_STATUS, 
     STATUS_COLORS, 
@@ -21,7 +22,7 @@ import {
     FILTER_TYPE_LABELS,
     isDoneStatus,
     isDeniedStatus,
-} from '../../../../constants/workflowConstants';
+} from './workflowConstants';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -29,6 +30,7 @@ const { Title, Text } = Typography;
 const ToolRequestContent = () => {
     const { message, modal } = App.useApp();
     const { theme } = useTheme();
+    const [searchParams] = useSearchParams();
     const userName = useAuthStore(state => state.userName);
     const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
@@ -47,6 +49,12 @@ const ToolRequestContent = () => {
     useEffect(() => {
         fetchRequests();
     }, []);
+
+    useEffect(() => {
+        if (searchParams.get('action') === 'create') {
+            handleCreateNew();
+        }
+    }, [searchParams]);
 
     const fetchRequests = async () => {
         setLoading(true);

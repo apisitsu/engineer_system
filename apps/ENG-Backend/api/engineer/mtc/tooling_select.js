@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { findFixtures } = require('./logic/fixtureLogic');
+const { findFixtures } = require('./fixtureLogic');
 const { engPool } = require('../../../instance/eng_db');
 
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
@@ -103,7 +103,7 @@ router.get('/tables', async (req, res) => {
         ON c.table_name = t.table_name AND c.table_schema = 'public'
       WHERE t.table_schema = 'public'
         AND t.table_name LIKE 'tooling_%'
-        AND t.table_name != 'tooling_inspect'
+        AND t.table_name != 'ti_list'
       GROUP BY t.table_name
       ORDER BY t.table_name
     `);
@@ -249,3 +249,4 @@ router.delete('/inventory/:tableName/:id', async (req, res) => {
 });
 
 module.exports = router;
+

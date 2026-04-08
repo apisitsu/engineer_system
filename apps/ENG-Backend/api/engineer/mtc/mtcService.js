@@ -15,7 +15,7 @@ const getToolingInspectListService = async (query) => {
     const endDate = query.endDate;
     const currentMonthStr = query.currentMonth;
 
-    let baseSql = `FROM tooling_inspect WHERE 1=1`;
+    let baseSql = `FROM ti_list WHERE 1=1`;
     let params = [];
     let paramCount = 1;
 

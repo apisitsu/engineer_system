@@ -21,8 +21,8 @@ const getToolingInspectList = async (baseSql, params, limitNum, offset) => {
 const getToolDWGRequest = async () => {
     try {
         return await Promise.all([
-            engPool.query(`SELECT * FROM tool_dwg_request ORDER BY date_req DESC`),
-            engPool.query(`SELECT COUNT(*) as total FROM tool_dwg_request`),
+            engPool.query(`SELECT * FROM ti_dwg_job ORDER BY date_req DESC`),
+            engPool.query(`SELECT COUNT(*) as total FROM ti_dwg_job`),
         ]);
     } catch (err) {
         throw new Error(`Database error: ${err.message}`);
