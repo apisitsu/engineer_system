@@ -12,7 +12,7 @@ import { MEASURING_TOOL_OPTIONS } from './options_measuring';
 const { TextArea } = Input;
 const { Option } = Select;
 
-const ToolingReturnForm = ({ open, onCancel }) => {
+const ToolingReturnForm = ({ open, onCancel, onSuccess }) => {
     const { theme } = useTheme();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ const ToolingReturnForm = ({ open, onCancel }) => {
                 date_return: values.date_return
                     ? moment(values.date_return).format('YYYY-MM-DD')
                     : moment().format('YYYY-MM-DD'),
-                wc_code: parseInt(values.wc_code.replace(/\D/g, ''), 10),
+                wc_code: values.wc_code ? values.wc_code.toString().replace(/\D/g, '') : null,
                 qty: values.qty,
                 measuring_tool: values.measuring_tool,
                 remark: values.remark,
@@ -44,7 +44,9 @@ const ToolingReturnForm = ({ open, onCancel }) => {
                 });
 
                 form.resetFields();
-                onCancel();
+                // Call onSuccess to close modal AND refresh dashboard stats
+                if (onSuccess) onSuccess();
+                else onCancel();
             } else {
                 console.error("API Error:", res.data);
                 Swal.fire({

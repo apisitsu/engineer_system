@@ -52,6 +52,12 @@ function InspectionReport() {
   // --- Handlers for Modals ---
   const handleOpenReturn = () => setToolingReturn(true);
   const handleOpenDwg = () => setDwgRequestOpen(true);
+  const handleReturnSuccess = () => {
+    setToolingReturn(false);
+    // Refresh dashboard stats so the card count updates immediately
+    const currentMonth = moment().format('MM-YYYY');
+    fetchDashboardData(currentMonth);
+  };
   const handleUpdateRecord = (record) => {
     setSelectedData(record);
     setUpdateFormOpen(true);
@@ -374,6 +380,7 @@ function InspectionReport() {
             <ToolingReturnForm
               open={toolingReturn}
               onCancel={() => setToolingReturn(false)}
+              onSuccess={handleReturnSuccess}
             />
             <DWGRequestForm
               open={dwgRequestOpen}
