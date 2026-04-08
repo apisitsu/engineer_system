@@ -9,7 +9,7 @@ const XLSX = require('xlsx');
 
 const router = express.Router();
 
-const TEMPLATE_DIR = path.resolve(process.env.SDS_TEMPLATE_DIR || './template');
+const TEMPLATE_DIR = path.resolve(process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'));
 const CACHE_DIR = path.resolve('./output/pdf-cache');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
