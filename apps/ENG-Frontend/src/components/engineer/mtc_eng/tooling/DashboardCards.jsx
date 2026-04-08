@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Row, Col, Spin, Typography, Divider, Button } from 'antd';
-import { ReloadOutlined, FileTextOutlined, AuditOutlined, LoadingOutlined } from '@ant-design/icons';
+import { ReloadOutlined, FileTextOutlined, AuditOutlined, LoadingOutlined, RollbackOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../theme';
 //import axios from 'axios';
 import moment from 'moment';
@@ -27,9 +27,12 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
             cardColorLight: theme.colors.greenLight,
             cardColorDark: theme.colors.greenDark,
             unit: "pcs",
-            mainValue: stats?.toolingReturnYesterday || 0,
-            footerType: 'single',
-            footerLabels: [`Total Accumulate: ${stats?.toolingReturnTotal || 0}`],
+            mainValue: stats?.toolingReturnYesterday ?? 0,
+            footerType: 'breakdown',
+            breakdownData: stats?.toolingReturnBreakdown?.map(item => ({
+                label: `W/C ${item.wc_code} (${item.wc_name || 'Unknown'})`,
+                value: item.total_qty
+            })) || [],
             hasButton: true,
             btnText: "Add Return",
             action: onOpenReturn
@@ -93,6 +96,34 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                     </Col>
                 </Row>
             );
+        } else if (card.footerType === 'breakdown') {
+            return (
+                <div style={{ minHeight: '52px', maxHeight: '110px', overflowY: 'auto' }} className="kb-vscroll">
+                    {card.breakdownData && card.breakdownData.length > 0 ? (
+                        card.breakdownData.map((item, index) => (
+                            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
+                                <Text type="secondary" style={{ fontSize: '13px' }}>{item.label}</Text>
+                                <span style={{ 
+                                    backgroundColor: card.cardColorDark, 
+                                    color: '#fff', 
+                                    padding: '2px 6px', 
+                                    borderRadius: '4px',
+                                    fontWeight: 'bold',
+                                    fontSize: '12px',
+                                    minWidth: '24px',
+                                    textAlign: 'center'
+                                }}>
+                                    {item.value}
+                                </span>
+                            </div>
+                        ))
+                    ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', height: '52px', color: theme.colors.textSecondary }}>
+                            No returns for this date
+                        </div>
+                    )}
+                </div>
+            );
         }
         return null;
     };
@@ -123,7 +154,7 @@ const DashboardCards = ({ data, onOpenReturn, onOpenDwg }) => {
                                     <Title level={2} style={{ margin: 0 }}>
                                         {card.mainValue} <small style={{ fontSize: '14px', fontWeight: 'normal' }}>{card.unit}</small>
                                     </Title>
-                                    <Text type="secondary">{formattedDate} (Prev. Working Day)</Text>
+                                    <Text type="secondary">{card.dateLabel || `${formattedDate} (Prev. Working Day)`}</Text>
                                     <IconComponent style={{
                                         position: 'absolute',
                                         right: 0,

@@ -55,7 +55,7 @@ const DWGRequestForm = ({ open, onCancel }) => {
 
                 const requestdate = values.date_request ? moment(values.date_request).format('YYYY-MM-DD') : '';
                 const payload = {
-                    date_request: (values.date_request ? values.date_request : requestdate),
+                    date_req: requestdate,
                     item: values.item,
                     remark: values.remark,
                     status: 'Pending',
@@ -98,6 +98,40 @@ const DWGRequestForm = ({ open, onCancel }) => {
             .catch((info) => {
                 console.log("Validate Failed:", info);
             });
+    };
+
+    const handleComplete = async (id) => {
+        try {
+            // Confirm dialog optional, let's just complete it directly or with SweetAlert
+            const res = await axios.put(`${server.TOOLING_DWG_REQUEST_UPDATE}`, {
+                id: id,
+                status: 'Complete'
+            });
+
+            if (res.data.result === "true" || res.data === "OK") {
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: res.data.message || 'Status updated!',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                fetchData();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Failed',
+                    text: res.data.message || 'Something went wrong!'
+                });
+            }
+        } catch (error) {
+            console.error("API Error:", error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Cannot connect to server.'
+            });
+        }
     };
 
     // Configuration Fields
@@ -210,8 +244,8 @@ const DWGRequestForm = ({ open, onCancel }) => {
                                                         <Space align="center" style={{ color: theme.colors.textSecondary }}>
                                                             <CalendarOutlined />
                                                             <Text type="secondary">
-                                                                {item.date_request
-                                                                    ? moment(item.date_request, ["M/D/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).format("DD-MMM-YYYY")
+                                                                {item.date_req
+                                                                    ? moment(item.date_req, ["M/D/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).format("DD-MMM-YYYY")
                                                                     : "-"}
                                                             </Text>
                                                         </Space>
@@ -227,7 +261,19 @@ const DWGRequestForm = ({ open, onCancel }) => {
                                                     </Space>
                                                 </Col>
                                                 <Col>
-                                                    {getStatusTag(item.status)}
+                                                    <Space>
+                                                        {item.status === 'Pending' && (
+                                                            <Button
+                                                                size="small"
+                                                                type="primary"
+                                                                icon={<CheckCircleOutlined />}
+                                                                onClick={() => handleComplete(item.id)}
+                                                            >
+                                                                Complete
+                                                            </Button>
+                                                        )}
+                                                        {getStatusTag(item.status)}
+                                                    </Space>
                                                 </Col>
                                             </Row>
                                         </Card>
