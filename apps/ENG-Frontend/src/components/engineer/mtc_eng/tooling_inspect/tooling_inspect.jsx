@@ -184,7 +184,7 @@ function InspectionReport() {
       });
 
       const response = await axios.post(server.TOOLING_SYNC_CSV);
-      
+
       if (response.data.success) {
         Swal.fire({
           icon: 'success',
@@ -321,7 +321,7 @@ function InspectionReport() {
                   <Col xs={24} md={16} style={{ textAlign: 'right' }}>
                     <Space wrap>
                       <Button icon={<SyncOutlined />} onClick={syncCSV}>
-                        Sync CSV
+                        Update data
                       </Button>
 
                       <Radio.Group

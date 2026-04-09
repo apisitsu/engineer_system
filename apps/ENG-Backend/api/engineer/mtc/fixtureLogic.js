@@ -1,6 +1,7 @@
 'use strict';
 
 const { engPool } = require('../../../instance/eng_db');
+const { TABLES } = require('./mtcConstants');
 const {
   calculateToolingParams, calculateKS400B_Params,
   calculateKS03A_Params, calculateKS500RD_Params,
@@ -31,7 +32,7 @@ const h = name => name;
 async function findFixtures(cnNumber) {
   try {
     const partResult = await engPool.query(
-      `SELECT * FROM spec_process WHERE TRIM(cn) = $1 LIMIT 1`,
+      `SELECT * FROM ${TABLES.SPEC_PROCESS} WHERE TRIM(cn) = $1 LIMIT 1`,
       [String(cnNumber).trim()]
     );
     if (partResult.rows.length === 0) throw new Error('C/N not found in Specification.');
@@ -84,7 +85,7 @@ async function findFixtures(cnNumber) {
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                machine AS "Machine"
-        FROM tooling_ksb22g
+        FROM ${TABLES.TOOLING_KSB22G}
         WHERE (tooling_name ILIKE '%JAW%' AND dim_a BETWEEN $1 AND $2)
            OR (tooling_name ILIKE '%BACK PLATE%' AND dim_a BETWEEN $3 AND $4)`,
         [calc.jawA - 0.015, calc.jawA + 0.05, calc.bpAA, calc.bpAA + 2.5]
@@ -94,7 +95,7 @@ async function findFixtures(cnNumber) {
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C",
                dim_d AS "Dim_D", dim_e AS "Dim_E",
                machine AS "Machine"
-        FROM tooling_ksb80
+        FROM ${TABLES.TOOLING_KSB80}
         WHERE (tooling_name ILIKE '%JAW%' AND dim_a BETWEEN $1 AND $2)
            OR (tooling_name ILIKE '%BACK PLATE%' AND dim_a BETWEEN $3 AND $4)`,
         [calc.jawA - 0.015, calc.jawA + 0.05, calc.bpAA - 0.4, calc.bpAA + 3.1]
@@ -104,7 +105,7 @@ async function findFixtures(cnNumber) {
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G",
                machine AS "Machine"
-        FROM tooling_tsg300
+        FROM ${TABLES.TOOLING_TSG300}
         WHERE (tooling_name ILIKE '%CHUTE%' AND dim_a BETWEEN $1 AND $2 AND dim_b BETWEEN $3 AND $4)
            OR (tooling_name ILIKE '%CARRIER%' AND dim_a BETWEEN $5 AND $6)`,
         [
@@ -121,19 +122,19 @@ async function findFixtures(cnNumber) {
                dim_i AS "Dim_I", dim_j AS "Dim_J", dim_k AS "Dim_K", dim_l AS "Dim_L",
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
-               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM tooling_ks03a
+               dim_u AS "Dim_U", dim_v AS "Dim_V", machine AS "Machine" FROM ${TABLES.TOOLING_KS03A}
         WHERE tooling_name ILIKE ANY(ARRAY['%ROLLER SHOE%', '%CPX SHOE%', '%CHUTE COVER%', '%FRONT PLATE%', '%SETTING GAUGE%', '%MASTER RING%', '%PLUG GAUGE%', '%LOADER%', '%ROTOR%'])`) : Promise.resolve({ rows: [] }),
       ks400bOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C",
                dim_d AS "Dim_D", dim_e AS "Dim_E", dim_f AS "Dim_F",
-               machine AS "Machine" FROM tooling_ks400b
+               machine AS "Machine" FROM ${TABLES.TOOLING_KS400B}
         WHERE tooling_name ILIKE ANY(ARRAY['%WORK DRIVER%', '%SUPPORT BLOCK%', '%CHUTE%', '%PLUG%'])`) : Promise.resolve({ rows: [] }),
       ks500rdOK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
                dim_a AS "Dim_A", dim_b AS "Dim_B", dim_c AS "Dim_C", dim_d AS "Dim_D",
                dim_e AS "Dim_E", dim_f AS "Dim_F", dim_g AS "Dim_G", dim_h AS "Dim_H",
-               machine AS "Machine" FROM tooling_ks500rd
+               machine AS "Machine" FROM ${TABLES.TOOLING_KS500RD}
         WHERE tooling_name ILIKE ANY(ARRAY['%LOADING PINTLE%', '%WORK DRIVER%', '%FRONT SHOE%'])`) : Promise.resolve({ rows: [] }),
       ks400b5OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
@@ -143,7 +144,7 @@ async function findFixtures(cnNumber) {
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
                dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b5
+               FROM ${TABLES.TOOLING_KS400B5}
         WHERE tooling_name ILIKE ANY(ARRAY['%WORK CLAMP%', '%SHAFT%', '%WORK CHUTE%', '%WORK LOADER%', '%WORK CHUCK%', '%WORK HOLDER%', '%CHUCK JAW%', '%CHUTE GUIDE%', '%STOPPER%', '%MASTER RING%'])`) : Promise.resolve({ rows: [] }),
       ks400b6OK ? engPool.query(`
         SELECT tooling_name AS "Tooling_name", tooling_no AS "Tooling_no",
@@ -153,9 +154,10 @@ async function findFixtures(cnNumber) {
                dim_m AS "Dim_M", dim_n AS "Dim_N", dim_o AS "Dim_O", dim_p AS "Dim_P",
                dim_q AS "Dim_Q", dim_r AS "Dim_R", dim_s AS "Dim_S", dim_t AS "Dim_T",
                dim_u AS "Dim_U", dim_v AS "Dim_V", dim_w AS "Dim_W", dim_x AS "Type"
-               FROM tooling_ks400b6
+               FROM ${TABLES.TOOLING_KS400B6}
         WHERE tooling_name ILIKE ANY(ARRAY['%WORK DRIVER%', '%CHUTE%', '%PLUG%', '%WORK GUIDE%', '%WORK PUSHER%', '%FRONT SHOE%', '%REAR SHOE%', '%PILOT PIN%'])`) : Promise.resolve({ rows: [] }),
     ]);
+
 
     const ksb22gRows  = ksb22g.rows;
     const ksb80Rows   = ksb80.rows;

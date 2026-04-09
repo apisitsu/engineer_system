@@ -2,10 +2,10 @@ const { engPool } = require('../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
 const { sendEmailWithFallback } = require('../../system/emailService');
 const path = require('path');
+const { TABLES, PATHS } = require('./mtcConstants');
 
 // Load email renderer from templates folder (at ENG-Backend root)
-const emailRendererPath = path.join(__dirname, '../../../templates/email/emailRenderer');
-const { renderEmail, generateSubject } = require(emailRendererPath);
+const { renderEmail, generateSubject } = require(PATHS.EMAIL_RENDERER);
 
 const {
   WORKFLOW_STAGES,
@@ -109,10 +109,10 @@ const getToolRequests = async (req, res) => {
     try {
         const [dataRes, countRes] = await Promise.all([
             engPool.query(
-                `SELECT * FROM tr_request ${baseWhere} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+                `SELECT * FROM ${TABLES.TR_REQUEST} ${baseWhere} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
                 [...params, limitNum, offset]
             ),
-            engPool.query(`SELECT COUNT(*) as total FROM tr_request ${baseWhere}`, params),
+            engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TR_REQUEST} ${baseWhere}`, params),
         ]);
 
         const total = parseInt(countRes.rows[0].total);
@@ -135,7 +135,7 @@ const getToolRequestById = async (req, res) => {
 
     try {
         // First get the main request
-        const requestRes = await engPool.query('SELECT * FROM tr_request WHERE id = $1 AND deleted_at IS NULL', [id]);
+        const requestRes = await engPool.query(`SELECT * FROM ${TABLES.TR_REQUEST} WHERE id = $1 AND deleted_at IS NULL`, [id]);
         const request = requestRes.rows[0];
 
         if (!request) {
@@ -144,7 +144,7 @@ const getToolRequestById = async (req, res) => {
 
         // Then get workflow history
         // Use created_at for ordering as it is the standard in the new migration
-        const workflowRes = await engPool.query('SELECT * FROM tr_workflow WHERE req_id = $1 ORDER BY created_at ASC', [id]);
+        const workflowRes = await engPool.query(`SELECT * FROM ${TABLES.TR_WORKFLOW} WHERE req_id = $1 ORDER BY created_at ASC`, [id]);
 
         res.json({
             data: {
@@ -208,7 +208,7 @@ const createToolRequest = async (req, res) => {
         const now = moment();
         const dateStr = now.format('YYYYMMDD');
 
-        const countRes = await engPool.query(`SELECT COUNT(*) as count FROM tr_request WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
+        const countRes = await engPool.query(`SELECT COUNT(*) as count FROM ${TABLES.TR_REQUEST} WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
         const count = parseInt(countRes.rows[0].count);
         const seq = String((count || 0) + 1).padStart(3, '0');
         const request_item = `ITEM-${dateStr}-${seq}`;
@@ -216,7 +216,7 @@ const createToolRequest = async (req, res) => {
         const req_due_date = calcDueDate(type_of_request);
 
         const sql = `
-            INSERT INTO tr_request (
+            INSERT INTO ${TABLES.TR_REQUEST} (
                 request_item, department, work_center, work_center_name,
                 requester, requester_email, type_of_request, category,
                 drawing_required, type_of_drawing, title, detail,
@@ -271,7 +271,7 @@ const updateToolRequest = async (req, res) => {
     } = req.body;
 
     const sql = `
-        UPDATE tr_request SET
+        UPDATE ${TABLES.TR_REQUEST} SET
             department = COALESCE($1, department),
             work_center = COALESCE($2, work_center),
             work_center_name = COALESCE($3, work_center_name),
@@ -330,7 +330,7 @@ const deleteToolRequest = async (req, res) => {
 
     try {
         const result = await engPool.query(
-            `UPDATE tr_request SET deleted_at = NOW(), updated_at = NOW()
+            `UPDATE ${TABLES.TR_REQUEST} SET deleted_at = NOW(), updated_at = NOW()
              WHERE id = $1 AND deleted_at IS NULL`,
             [id]
         );
@@ -368,7 +368,7 @@ const getToolRequestDashboard = async (req, res) => {
             SELECT
                 status,
                 COUNT(*) as count
-            FROM tr_request
+            FROM ${TABLES.TR_REQUEST}
             WHERE deleted_at IS NULL
             GROUP BY status
         `);
@@ -379,18 +379,18 @@ const getToolRequestDashboard = async (req, res) => {
         }, {});
 
         // Get total count
-        const totalRes = await engPool.query('SELECT COUNT(*) as total FROM tr_request WHERE deleted_at IS NULL');
+        const totalRes = await engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TR_REQUEST} WHERE deleted_at IS NULL`);
         stats.total = parseInt(totalRes.rows[0].total);
 
         // Get requests created in last 30 days
         const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
-        const recentRes = await engPool.query('SELECT COUNT(*) as recent FROM tr_request WHERE deleted_at IS NULL AND DATE(created_at) >= $1', [thirtyDaysAgo]);
+        const recentRes = await engPool.query(`SELECT COUNT(*) as recent FROM ${TABLES.TR_REQUEST} WHERE deleted_at IS NULL AND DATE(created_at) >= $1`, [thirtyDaysAgo]);
         stats.last30Days = parseInt(recentRes.rows[0].recent);
 
         // Get overdue count
         const today = moment().format('YYYY-MM-DD');
         const overdueRes = await engPool.query(`
-             SELECT COUNT(*) as overdue FROM tr_request
+             SELECT COUNT(*) as overdue FROM ${TABLES.TR_REQUEST}
              WHERE deleted_at IS NULL
              AND status NOT IN ('Completed & Informed', 'Denied', 'Denied by Approve')
              AND DATE(req_due_date) < $1
@@ -475,7 +475,7 @@ const submitAction = async (req, res) => {
         logger.info('Starting action submit', { id, stage, decision });
 
         // Get current request
-        const reqRes = await client.query('SELECT * FROM tr_request WHERE id = $1 AND deleted_at IS NULL', [id]);
+        const reqRes = await client.query(`SELECT * FROM ${TABLES.TR_REQUEST} WHERE id = $1 AND deleted_at IS NULL`, [id]);
         const request = reqRes.rows[0];
         if (!request) {
             logger.error('Request not found', { id });
@@ -499,7 +499,7 @@ const submitAction = async (req, res) => {
 
         logger.info('Updating tr_request', { nextStatus, nextStage, newReqNo });
         await client.query(
-            `UPDATE tr_request SET
+            `UPDATE ${TABLES.TR_REQUEST} SET
                 status = $1,
                 current_stage = $2,
                 req_no = COALESCE($3, req_no),
@@ -511,7 +511,7 @@ const submitAction = async (req, res) => {
         // Insert workflow record
         logger.info('Inserting tr_workflow record', { stepNo: stageConfig.stepNo });
         await client.query(
-            `INSERT INTO tr_workflow (req_id, step_no, action_by, action_type, comment, status, stage_name, extra_data)
+            `INSERT INTO ${TABLES.TR_WORKFLOW} (req_id, step_no, action_by, action_type, comment, status, stage_name, extra_data)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [id, stageConfig.stepNo, action_by || 'system', decision,
              comment || '', nextStatus, stage, JSON.stringify(extra || {})]
@@ -579,4 +579,5 @@ module.exports = {
     getStagePermissions,
     submitAction,
 };
+
 

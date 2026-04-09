@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const { findFixtures } = require('./fixtureLogic');
 const { engPool } = require('../../../instance/eng_db');
+const { TABLES } = require('./mtcConstants');
 
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
 
@@ -55,7 +56,7 @@ router.post('/search', async (req, res) => {
 router.get('/rules', async (req, res) => {
   try {
     const r = await engPool.query(
-      'SELECT * FROM mtc_selection_rules WHERE is_active=true ORDER BY machine_name, tool_category'
+      `SELECT * FROM ${TABLES.MTC_SELECTION_RULES} WHERE is_active=true ORDER BY machine_name, tool_category`
     );
     res.json({ success: true, rules: r.rows });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
@@ -67,7 +68,7 @@ router.post('/rules', async (req, res) => {
           tolerance_plus, tolerance_minus } = req.body;
   try {
     const r = await engPool.query(
-      `INSERT INTO mtc_selection_rules
+      `INSERT INTO ${TABLES.MTC_SELECTION_RULES}
        (machine_name,tool_category,rule_name,source_field,operator,offset_value,
         target_tool_table,target_tool_field,tolerance_plus,tolerance_minus)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
@@ -80,7 +81,7 @@ router.post('/rules', async (req, res) => {
 
 router.delete('/rules/:id', async (req, res) => {
   try {
-    await engPool.query('UPDATE mtc_selection_rules SET is_active=false WHERE id=$1', [req.params.id]);
+    await engPool.query(`UPDATE ${TABLES.MTC_SELECTION_RULES} SET is_active=false WHERE id=$1`, [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -103,10 +104,10 @@ router.get('/tables', async (req, res) => {
         ON c.table_name = t.table_name AND c.table_schema = 'public'
       WHERE t.table_schema = 'public'
         AND t.table_name LIKE 'tooling_%'
-        AND t.table_name != 'ti_list'
+        AND t.table_name != $1
       GROUP BY t.table_name
       ORDER BY t.table_name
-    `);
+    `, [TABLES.TI_LIST]);
     res.json({ success: true, tables: r.rows });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -249,4 +250,5 @@ router.delete('/inventory/:tableName/:id', async (req, res) => {
 });
 
 module.exports = router;
+
 
