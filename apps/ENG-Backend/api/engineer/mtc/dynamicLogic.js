@@ -7,6 +7,7 @@
  */
 
 const { engPool } = require('../../../instance/eng_db');
+const { TABLES } = require('./mtcConstants');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"
@@ -34,7 +35,7 @@ function resolveCalcKey(calcObj, calcKey) {
 async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
   try {
     const rulesRes = await engPool.query(
-      'SELECT * FROM mtc_selection_rules WHERE is_active = true ORDER BY machine_name, tool_category, id'
+      `SELECT * FROM ${TABLES.MTC_SELECTION_RULES} WHERE is_active = true ORDER BY machine_name, tool_category, id`
     );
     const rules = rulesRes.rows;
     if (rules.length === 0) return [];
@@ -210,3 +211,4 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
 }
 
 module.exports = { findDynamicFixtures };
+

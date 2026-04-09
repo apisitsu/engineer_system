@@ -1,6 +1,7 @@
 const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
 const { exec } = require('child_process');
+const { TABLES, PATHS } = require('./mtcConstants');
 
 const ToolingInspectGetlist = async (req, res) => {
     const pageNum = Math.max(1, parseInt(req.query.page) || 1);
@@ -14,7 +15,7 @@ const ToolingInspectGetlist = async (req, res) => {
 
     const currentMonthStr = req.query.currentMonth;
 
-    let baseSql = `FROM ti_list WHERE 1=1`;
+    let baseSql = `FROM ${TABLES.TI_LIST} WHERE 1=1`;
     let params = [];
     let paramCount = 1;
 
@@ -77,8 +78,8 @@ const ToolDWGRequestGetList = async (req, res) => {
     // const offset   = (pageNum - 1) * limitNum;
     try {
         const [dataRes, countRes] = await Promise.all([
-            engPool.query(`SELECT * FROM ti_dwg_job ORDER BY date_req DESC`),
-            engPool.query(`SELECT COUNT(*) as total FROM ti_dwg_job`),
+            engPool.query(`SELECT * FROM ${TABLES.TI_DWG_JOB} ORDER BY date_req DESC`),
+            engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TI_DWG_JOB}`),
         ]);
         const total = parseInt(countRes.rows[0].total);
         res.json({
@@ -96,7 +97,7 @@ const GetWCCodes = async (req, res) => {
         // Try to fetch with multiple possible column names and format code to 2 digits
         const sql = `
             SELECT code, name AS description, department
-            FROM work_centers
+            FROM ${TABLES.WORK_CENTERS}
             ORDER BY code ASC
         `;
         const result = await engPool.query(sql);
@@ -123,7 +124,7 @@ const ToolDWGRequestAdd = async (req, res) => {
 
         const params = [date_req ? moment(date_req).format('YYYY-MM-DD') : null, item, initialStatus, remark];
 
-        const result = await engPool.query(`INSERT INTO ti_dwg_job (date_req, item, status, remark) VALUES ($1, $2, $3, $4) RETURNING id`, params);
+        const result = await engPool.query(`INSERT INTO ${TABLES.TI_DWG_JOB} (date_req, item, status, remark) VALUES ($1, $2, $3, $4) RETURNING id`, params);
 
         res.json({
             result: "true",
@@ -149,7 +150,7 @@ const ToolDWGRequestUpdate = async (req, res) => {
 
         const finalStatus = status || 'Complete';
 
-        const result = await engPool.query(`UPDATE ti_dwg_job SET status = $1 WHERE id = $2 RETURNING id`, [finalStatus, id]);
+        const result = await engPool.query(`UPDATE ${TABLES.TI_DWG_JOB} SET status = $1 WHERE id = $2 RETURNING id`, [finalStatus, id]);
 
         if (result.rowCount === 0) {
             return res.json({ result: "false", message: "ไม่พบข้อมูล" });
@@ -170,7 +171,7 @@ const ToolDWGRequestUpdate = async (req, res) => {
 
 const getPreviousWorkingDay = async (fromDate) => {
     try {
-        const sql = `SELECT holiday_date FROM holidays_date`;
+        const sql = `SELECT holiday_date FROM ${TABLES.HOLIDAYS}`;
         const result = await engPool.query(sql);
 
         const holidays = result.rows.map(row => moment(row.holiday_date).format('YYYY-MM-DD'));
@@ -185,7 +186,7 @@ const getPreviousWorkingDay = async (fromDate) => {
 
         return day.format('YYYY-MM-DD');
     } catch (error) {
-        console.warn("Table holidays_date might be missing, defaulting to yesterday:", error.message);
+        console.warn(`Table ${TABLES.HOLIDAYS} might be missing, defaulting to yesterday:`, error.message);
         return moment(fromDate).subtract(1, 'days').format('YYYY-MM-DD');
     }
 };
@@ -199,7 +200,7 @@ const calculateDiffAndStatus = async (receiveDateVal, issueDateVal) => {
         const start = moment(receiveDateVal).startOf('day');
         const end = moment(issueDateVal).startOf('day');
 
-        const holidayQuery = await engPool.query(`SELECT holiday_date FROM holidays_date`);
+        const holidayQuery = await engPool.query(`SELECT holiday_date FROM ${TABLES.HOLIDAYS}`);
         const holidays = holidayQuery.rows.map(row => moment(row.holiday_date).format('YYYY-MM-DD'));
 
         let diffDays = 0;
@@ -246,7 +247,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                                     THEN qty 
                                     ELSE 0 
                                 END), 0) as total_yesterday
-                            FROM ti_return 
+                            FROM ${TABLES.TI_RETURN} 
                             WHERE return_date IS NOT NULL AND TRIM(return_date) != ''
                         `;
 
@@ -255,7 +256,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                                 wc_code, 
                                 MAX(wc_name) as wc_name, 
                                 SUM(qty) as total_qty
-                            FROM ti_return 
+                            FROM ${TABLES.TI_RETURN} 
                             WHERE NULLIF(TRIM(return_date), '')::DATE = $1::DATE
                             GROUP BY wc_code
                             ORDER BY wc_code
@@ -283,7 +284,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                                 SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' THEN 1 ELSE 0 END) as total_yesterday,
                                 SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Complete' THEN 1 ELSE 0 END) as complete_yesterday,
                                 SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
-                            FROM ti_dwg_job 
+                            FROM ${TABLES.TI_DWG_JOB} 
                         `;
                         try {
                             const res = await engPool.query(sql, [prevWorkingDate]);
@@ -299,7 +300,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                             SELECT 
                                 SUM(CASE WHEN receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE = $1::DATE THEN 1 ELSE 0 END) as received_yesterday,
                                 SUM(CASE WHEN issue_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE = $1::DATE THEN 1 ELSE 0 END) as issued_yesterday
-                            FROM ti_list
+                            FROM ${TABLES.TI_LIST}
                         `;
                         try {
                             const res = await engPool.query(sql, [prevWorkingDate]);
@@ -319,7 +320,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                                 SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
                                 SUM(CASE WHEN status = 'Delay' THEN 1 ELSE 0 END) as delay,
                                 SUM(CASE WHEN (issue_date IS NULL OR TRIM(issue_date::TEXT) = '') THEN 1 ELSE 0 END) as pending
-                            FROM ti_list
+                            FROM ${TABLES.TI_LIST}
                             WHERE receive_date::TEXT LIKE $1 || '%'
                         `;
                         try {
@@ -385,7 +386,7 @@ const ToolingReturnAdd = async (req, res) => {
             const paddedCode = code.padStart(2, '0');
             const wcCode = `WC-${paddedCode}`;
 
-            const query = `SELECT department FROM work_centers WHERE code = $1 LIMIT 1`;
+            const query = `SELECT department FROM ${TABLES.WORK_CENTERS} WHERE code = $1 LIMIT 1`;
             const result = await engPool.query(query, [wcCode]);
             console.log(`🔎 WC Lookup: '${code}' -> '${wcCode}' -> found ${result.rows.length} rows`, result.rows[0] || '(none)');
             return result.rows.length > 0 ? (result.rows[0].department || '') : '';
@@ -401,7 +402,7 @@ const ToolingReturnAdd = async (req, res) => {
         console.log(`✅ WC Code: ${stringCode} -> wc_name: '${wc_name}'`);
 
         const sql = `
-            INSERT INTO ti_return 
+            INSERT INTO ${TABLES.TI_RETURN} 
             (return_date, wc_code, wc_name, qty, measuring_tools, remark) 
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
@@ -418,7 +419,7 @@ const ToolingReturnAdd = async (req, res) => {
 
         const result = await engPool.query(sql, params);
 
-        console.log(`✅ บันทึกข้อมูล ti_return -> ID: ${result.rows[0].id} เรียบร้อย`);
+        console.log(`✅ บันทึกข้อมูล ${TABLES.TI_RETURN} -> ID: ${result.rows[0].id} เรียบร้อย`);
         res.json({
             result: "true",
             message: "บันทึกสำเร็จ",
@@ -453,7 +454,7 @@ const ToolingInspectUpdate = async (req, res) => {
         }
 
         const sql = `
-            UPDATE ti_list 
+            UPDATE ${TABLES.TI_LIST} 
             SET 
                 issue_date = $1, 
                 measuring_tools = $2, 
@@ -491,11 +492,9 @@ const ToolingInspectUpdate = async (req, res) => {
 
 const ToolingSyncCSV = async (req, res) => {
     try {
-        const pythonExe = 'D:\\PythonProject\\env\\Scripts\\python.exe';
-        const scriptPath = 'D:\\PythonProject\\importPCtooling.py';
-        console.log(`Executing Python script: ${scriptPath} using venv`);
+        console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
 
-        exec(`"${pythonExe}" "${scriptPath}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
+        exec(`"${PATHS.PYTHON_EXE}" "${PATHS.TOOLING_IMPORT_SCRIPT}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Python script error: ${error.message}`);
                 return res.status(500).json({ 
@@ -533,3 +532,4 @@ module.exports = {
     ToolDWGRequestUpdate,
     ToolingSyncCSV
 };
+

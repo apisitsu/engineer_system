@@ -6,10 +6,11 @@ const { execFile } = require('child_process');
 const { engPool } = require('../../../instance/eng_db');
 const puppeteer = require('puppeteer');
 const XLSX = require('xlsx');
+const { TABLES, PATHS } = require('./mtcConstants');
 
 const router = express.Router();
 
-const TEMPLATE_DIR = path.resolve(process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'));
+const TEMPLATE_DIR = PATHS.SDS_TEMPLATE_DIR;
 const CACHE_DIR = path.resolve('./output/pdf-cache');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
@@ -48,7 +49,7 @@ router.get('/counts', async (_req, res) => {
         ELSE 'Other'
       END AS process_type,
       COUNT(*) AS count
-    FROM setup_sheet ss
+    FROM ${TABLES.SETUP_SHEET} ss
     GROUP BY process_type
     ORDER BY count DESC;
   `;
@@ -72,8 +73,8 @@ router.post('/search', async (req, res) => {
       const result = await engPool.query(
         `SELECT ss.id, ss.cn, ss.part_no, ss.process_name, ss.process_code, ss.machine,
                 ss.category, ss.setup_data_sheet_rev, a.prepared_by, a.checked_by, a.approved_by
-         FROM setup_sheet ss
-         LEFT JOIN approval a ON a.setup_sheet_id = ss.id
+         FROM ${TABLES.SETUP_SHEET} ss
+         LEFT JOIN ${TABLES.APPROVAL} a ON a.setup_sheet_id = ss.id
          WHERE ss.cn ILIKE $1 OR ss.part_no ILIKE $1 OR ss.process_name ILIKE $1
             OR ss.category ILIKE $1 OR ss.process_code ILIKE $1 OR ss.machine ILIKE $1
          ORDER BY ss.cn, ss.process_code, ss.machine
@@ -112,7 +113,7 @@ router.get('/pdf', async (req, res) => {
   try {
       const setupResult = await engPool.query(
         `SELECT ss.id, ss.cn, ss.process_code, ss.machine, ss.setup_data_sheet_rev
-         FROM setup_sheet ss WHERE ss.cn=$1 AND ss.process_code=$2 AND ss.machine=$3`,
+         FROM ${TABLES.SETUP_SHEET} ss WHERE ss.cn=$1 AND ss.process_code=$2 AND ss.machine=$3`,
         [cn, process_code, machine]
       );
     
@@ -120,7 +121,7 @@ router.get('/pdf', async (req, res) => {
       const setup = setupResult.rows[0];
 
       const tplResult = await engPool.query(
-        `SELECT t.excel_file_name FROM setup_sheet ss JOIN template t ON ss.template_id = t.id WHERE ss.id=$1`,
+        `SELECT t.excel_file_name FROM ${TABLES.SETUP_SHEET} ss JOIN ${TABLES.TEMPLATE} t ON ss.template_id = t.id WHERE ss.id=$1`,
         [setup.id]
       );
       const excelFileName = tplResult.rows[0]?.excel_file_name;
@@ -140,9 +141,9 @@ router.get('/pdf', async (req, res) => {
     
       const mappingResult = await engPool.query(
         `SELECT m.sheet_name, m.cell_address, m.param_key, COALESCE(v.param_value,'') AS param_value
-         FROM template_excel_mapping m
-         JOIN setup_sheet ss ON ss.template_id = m.template_id
-         LEFT JOIN setup_parameter_value v ON v.param_key = m.param_key AND v.setup_sheet_id = ss.id
+         FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} m
+         JOIN ${TABLES.SETUP_SHEET} ss ON ss.template_id = m.template_id
+         LEFT JOIN ${TABLES.SETUP_PARAMETER_VALUE} v ON v.param_key = m.param_key AND v.setup_sheet_id = ss.id
          WHERE ss.id=$1 ORDER BY m.id`,
         [setup.id]
       );
@@ -252,7 +253,7 @@ router.get('/test-puppeteer', async (req, res) => {
  */
 router.get('/templates', async (req, res) => {
     try {
-        const result = await engPool.query('SELECT * FROM template ORDER BY id DESC');
+        const result = await engPool.query(`SELECT * FROM ${TABLES.TEMPLATE} ORDER BY id DESC`);
         res.json(result.rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -261,7 +262,7 @@ router.post('/template', async (req, res) => {
     const { template_name, excel_file_name } = req.body;
     try {
         const result = await engPool.query(
-            'INSERT INTO template (template_name, excel_file_name) VALUES ($1, $2) RETURNING *',
+            `INSERT INTO ${TABLES.TEMPLATE} (template_name, excel_file_name) VALUES ($1, $2) RETURNING *`,
             [template_name, excel_file_name]
         );
         res.json(result.rows[0]);
@@ -271,7 +272,7 @@ router.post('/template', async (req, res) => {
 router.get('/mapping/:templateId', async (req, res) => {
     try {
         const result = await engPool.query(
-            'SELECT * FROM template_excel_mapping WHERE template_id = $1 ORDER BY id',
+            `SELECT * FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE template_id = $1 ORDER BY id`,
             [req.params.templateId]
         );
         res.json(result.rows);
@@ -282,7 +283,7 @@ router.post('/mapping', async (req, res) => {
     const { template_id, sheet_name, cell_address, param_key } = req.body;
     try {
         const result = await engPool.query(
-            'INSERT INTO template_excel_mapping (template_id, sheet_name, cell_address, param_key) VALUES ($1, $2, $3, $4) RETURNING *',
+            `INSERT INTO ${TABLES.TEMPLATE_EXCEL_MAPPING} (template_id, sheet_name, cell_address, param_key) VALUES ($1, $2, $3, $4) RETURNING *`,
             [template_id, sheet_name, cell_address, param_key]
         );
         res.json(result.rows[0]);
@@ -291,7 +292,7 @@ router.post('/mapping', async (req, res) => {
 
 router.delete('/mapping/:id', async (req, res) => {
     try {
-        await engPool.query('DELETE FROM template_excel_mapping WHERE id = $1', [req.params.id]);
+        await engPool.query(`DELETE FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE id = $1`, [req.params.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -300,7 +301,7 @@ router.put('/template/:id', async (req, res) => {
     const { template_name, excel_file_name } = req.body;
     try {
         const result = await engPool.query(
-            'UPDATE template SET template_name = $1, excel_file_name = $2 WHERE id = $3 RETURNING *',
+            `UPDATE ${TABLES.TEMPLATE} SET template_name = $1, excel_file_name = $2 WHERE id = $3 RETURNING *`,
             [template_name, excel_file_name, req.params.id]
         );
         res.json(result.rows[0]);
@@ -308,4 +309,5 @@ router.put('/template/:id', async (req, res) => {
 });
 
 module.exports = router;
+
 
