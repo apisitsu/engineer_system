@@ -1,0 +1,359 @@
+/* BushingConfigurator.css */
+
+.bushing-configurator-layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #121212;
+  color: #eeeeee;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.bushing-header {
+  height: 60px;
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  z-index: 100;
+}
+
+.bushing-header .header-title {
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.bushing-main-content {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 60px);
+  overflow: hidden;
+}
+
+.bushing-sider-left {
+  width: 320px;
+  background: #1a1a1a;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.bushing-sider-right {
+  width: 360px;
+  background: #1a1a1a;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.bushing-viewer-container {
+  flex: 1;
+  position: relative;
+  background: #000;
+  padding: 16px;
+}
+
+/* Scrollbar styling for dark theme (WebKit & Firefox) */
+.bushing-sider-left,
+.bushing-sider-right {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.bushing-sider-left::-webkit-scrollbar,
+.bushing-sider-right::-webkit-scrollbar {
+  width: 6px;
+}
+.bushing-sider-left::-webkit-scrollbar-track,
+.bushing-sider-right::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bushing-sider-left::-webkit-scrollbar-thumb,
+.bushing-sider-right::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+.bushing-sider-left::-webkit-scrollbar-thumb:hover,
+.bushing-sider-right::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Control Panel Styles */
+.bushing-parameter-form {
+  padding: 16px;
+}
+
+.param-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bushing-param-field {
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.param-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.param-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+}
+
+.param-symbol {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+
+.param-slider {
+  margin: 12px 6px 0 !important;
+}
+
+/* Collapse styling for dark theme */
+.param-collapse .ant-collapse-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.param-collapse .ant-collapse-header {
+  color: #fff !important;
+  font-weight: 600;
+  padding: 12px 0 !important;
+}
+.param-collapse .ant-collapse-content {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bushing-tolerance-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.tolerance-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Export Actions */
+.bushing-export-actions {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.action-section {
+  margin-bottom: 16px;
+}
+.action-section:last-child {
+  margin-bottom: 0;
+}
+.action-section-label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.view-toggles {
+  display: flex;
+  gap: 8px;
+}
+.view-toggles .ant-btn {
+  flex: 1;
+}
+
+/* Results Panel */
+.bushing-results-panel {
+  padding: 16px;
+}
+
+.result-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.result-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.result-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.result-total {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.result-total-value {
+  font-size: 28px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-weight: 700;
+  color: #fff;
+}
+.result-total-unit {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.result-secondary {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: -4px;
+}
+.result-divider {
+  margin: 16px 0 12px !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.breakdown-title {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.breakdown-row {
+  margin-bottom: 12px;
+}
+.breakdown-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 4px;
+}
+.breakdown-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.breakdown-value {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.quick-specs .spec-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.quick-specs .spec-row:last-child {
+  border-bottom: none;
+}
+.quick-specs .spec-value {
+  font-weight: 600;
+  color: #fff;
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* Mini Previews */
+.mini-preview-container {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+.mini-preview-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.mini-preview-canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.mini-preview-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+/* Antd dark mode overrides inside configurator */
+.bushing-configurator-layout .ant-input-number,
+.bushing-configurator-layout .ant-input-number-input,
+.bushing-configurator-layout .ant-select-selector,
+.bushing-configurator-layout .ant-select-selection-item {
+  background-color: transparent !important;
+  color: #fff !important;
+}
+.bushing-configurator-layout .ant-input-number,
+.bushing-configurator-layout .ant-select-selector {
+  background-color: #2a2a2a !important;
+  border-color: #3a3a3a !important;
+}
+.bushing-configurator-layout .ant-input-number-handler-wrap {
+  background-color: #303030 !important;
+}
+.bushing-configurator-layout .ant-input-number-group-addon {
+  background-color: #333 !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  border-color: #3a3a3a !important;
+}
+.bushing-configurator-layout .ant-input {
+  background-color: #2a2a2a !important;
+  color: #fff !important;
+  border-color: #3a3a3a !important;
+}
+
+/* Global Dropdown styling for dark mode */
+.bushing-dark-dropdown {
+  background-color: #2a2a2a !important;
+}
+.bushing-dark-dropdown .ant-select-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.bushing-dark-dropdown .ant-select-item-option-active {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+.bushing-dark-dropdown .ant-select-item-option-selected {
+  background-color: rgba(0, 255, 136, 0.2) !important;
+  color: #00ff88 !important;
+  font-weight: 600;
+}

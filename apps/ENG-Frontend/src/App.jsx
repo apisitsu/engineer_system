@@ -54,6 +54,7 @@ import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
+import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -62,10 +63,11 @@ const ProtectedRoute = ({ allowedRoles }) => {
   if (!isAuthenticated) {
     if (window.location.pathname === '/job_check_tracker') {
       return <Navigate to="/job_check_tracker" replace />;
+      // } else if (window.location.pathname === '/eng/bushing_configurator') {
+      //   return <Navigate to="/eng/bushing_configurator" replace />;
     } else {
       return <Navigate to="/sign_in" replace />;
     }
-    return <Navigate to="/sign_in" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(userDepartment)) {
@@ -224,7 +226,6 @@ const AppContent = () => {
       <AntdApp>
         <Router>
           <Routes>
-
             <Route path="/job_check_tracker" element={<JobCheckTracker />} />
             <Route path="/sign_in" element={<SignIn />} />
             <Route path="/" element={<Navigate replace to="/sign_in" />} />
@@ -281,7 +282,9 @@ const AppContent = () => {
 
               {/* ------ (Standalone - Full Viewport) ------ */}
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
+
               </Route>
 
 

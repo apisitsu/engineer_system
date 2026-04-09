@@ -88,6 +88,27 @@ const App = () => {
                   >
                     Job Check Tracker
                   </Button>
+                  <Button
+                    type="primary"
+                    icon={<MdAssessment />}
+                    size="large"
+                    onClick={() => window.open('/eng/bushing_configurator', '_blank')}
+                    style={{
+                      background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryDark})`,
+                      border: 'none',
+                      borderRadius: theme.borderRadius.md,
+                      boxShadow: theme.shadows.md,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      height: '42px',
+                      padding: '0 20px',
+                    }}
+                  >
+                    Parametric Bushing 3D
+                  </Button>
                 </div>
               </Card>
             </div>
