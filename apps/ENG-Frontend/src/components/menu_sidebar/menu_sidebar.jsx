@@ -7,6 +7,8 @@ import Looks4Icon from '@mui/icons-material/Looks4';
 import Looks5Icon from '@mui/icons-material/Looks5';
 import Looks6Icon from '@mui/icons-material/Looks6';
 
+import { MTC_PATHS } from "../../constance/mtc_constance";
+
 const iconStyle = { fontSize: '24px' };
 
 const numberIcons = [
@@ -81,12 +83,11 @@ export const newprod = createMenu([
 ]);
 
 export const mtc = createMenu([
-    { label: "Home", path: "/eng/mtc_eng" },
-    { label: "Tooling Inspect", path: "/eng/mtc_eng/tooling" },
-    { label: "General DWG Request", path: "/eng/mtc_eng/tool-request" },
-    { label: "Tooling Select", path: "/eng/mtc_eng/tooling-select" },
-    { label: "Setup Data Sheet", path: "/eng/mtc_eng/sds" },
-
+    { label: "Home", path: MTC_PATHS.HOME },
+    { label: "Tooling Inspect", path: MTC_PATHS.TOOLING_INSPECT },
+    { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST },
+    { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT },
+    { label: "Setup Data Sheet", path: MTC_PATHS.SDS },
 ]);
 
 export const all = createMenu([

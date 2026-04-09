@@ -6,6 +6,7 @@ import moment from "moment";
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { server } from '../../../constance/constance';
+import { MTC_PATHS, WORKFLOW_STATUS } from "../../../constance/mtc_constance";
 import { useTheme } from '../../../theme';
 import ScrollbarStyle from '../../common/scrollbar';
 
@@ -48,10 +49,10 @@ const HomeMTCEng = () => {
     // DWG Request Stats (from General DWG Request - tr_request)
     // Use dashboard stats from API if available, otherwise calculate from dwgData
     const totalDwgJobs = dwgStats ? dwgStats.total : dwgData.length;
-    const dwgPending = dwgStats ? (dwgStats.byStatus['Pending'] || 0) + (dwgStats.byStatus['Draft'] || 0) : 
-      dwgData.filter(item => item.status?.toLowerCase() === 'pending' || item.status?.toLowerCase() === 'draft').length;
-    const dwgComplete = dwgStats ? (dwgStats.byStatus['Completed & Informed'] || 0) : 
-      dwgData.filter(item => item.status?.toLowerCase() === 'completed & informed' || item.status?.toLowerCase() === 'completed').length;
+    const dwgPending = dwgStats ? (dwgStats.byStatus[WORKFLOW_STATUS.PENDING] || 0) + (dwgStats.byStatus['Draft'] || 0) : 
+      dwgData.filter(item => item.status?.toLowerCase() === WORKFLOW_STATUS.PENDING.toLowerCase() || item.status?.toLowerCase() === 'draft').length;
+    const dwgComplete = dwgStats ? (dwgStats.byStatus[WORKFLOW_STATUS.COMPLETED_INFORMED] || 0) : 
+      dwgData.filter(item => item.status?.toLowerCase() === WORKFLOW_STATUS.COMPLETED_INFORMED.toLowerCase() || item.status?.toLowerCase() === WORKFLOW_STATUS.COMPLETE.toLowerCase()).length;
     const dwgInProgress = dwgStats ? (dwgStats.total - dwgPending - dwgComplete) : totalDwgJobs - dwgPending - dwgComplete;
 
     return {
@@ -90,7 +91,7 @@ const HomeMTCEng = () => {
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
                   <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                     <AssessmentRoundedIcon sx={{ color: theme.colors.info, fontSize: 50 }} />
-                    <a href="/eng/mtc_eng/tooling_inspect" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
+                    <a href={MTC_PATHS.TOOLING_INSPECT} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Tooling Inspection Report</a>
                   </h2>
                 </div>
                 <Divider style={{ margin: '0 0 16px 0' }} />
@@ -133,12 +134,12 @@ const HomeMTCEng = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <h2 style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                     <AssessmentRoundedIcon sx={{ color: theme.colors.success, fontSize: 50 }} />
-                    <a href="/eng/mtc_eng/tool-request" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
+                    <a href={MTC_PATHS.TOOL_REQUEST} style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>General DWG Request</a>
                   </h2>
                   <Button 
                     type="primary" 
                     size="middle"
-                    onClick={() => navigate("/eng/mtc_eng/tool-request?action=create")}
+                    onClick={() => navigate(`${MTC_PATHS.TOOL_REQUEST}?action=create`)}
                   >
                     + Create New Request
                   </Button>
