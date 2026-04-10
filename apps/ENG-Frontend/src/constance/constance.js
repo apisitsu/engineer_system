@@ -8,11 +8,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-
-// Use Nginx proxy by default ("/") or environment variable if set
-export const apiUrl = process.env.REACT_APP_API_URL || "/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,

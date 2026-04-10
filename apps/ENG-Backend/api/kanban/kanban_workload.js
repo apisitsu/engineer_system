@@ -1,7 +1,6 @@
 /**
  * kanban_workload.js
  * Kanban API for Workload Dashboards
-<<<<<<< HEAD
  * Supports: date range filtering, project filtering, per-user filtering
  */
 const { engPool } = require('../../instance/eng_db');
@@ -45,7 +44,7 @@ const GetTeamWorkload = async (req, res) => {
         // - Managers/Coords see all non-private + private projects they are in.
         // - Regular users see only projects they are members of.
         // Using LOWER() for u_code to be safe with case sensitivity.
-        
+
         if (isAdmin) {
             // Admins see all
         } else if (seeAll) {
@@ -93,16 +92,6 @@ const GetTeamWorkload = async (req, res) => {
         const whereClause = 'WHERE ' + conditions.join(' AND ');
 
         const query = `
-=======
- */
-const { engPool } = require('../../instance/eng_db');
-
-const GetTeamWorkload = async (req, res) => {
-    try {
-        // Fetch all non-closed cards with their list, board, and project info
-        // We only fetch cards assigned to any user
-        const { rows: workloadData } = await engPool.query(`
->>>>>>> 7474709 (WIP: Individual Dashboard)
             SELECT 
                 cm.u_code AS user_code,
                 u.u_name,
@@ -110,25 +99,17 @@ const GetTeamWorkload = async (req, res) => {
                 u.profile_img_b64,
                 c.id AS card_id,
                 c.name AS card_name,
-<<<<<<< HEAD
                 COALESCE(c.estimated_hours, 0) AS estimated_hours,
                 c.due_date,
                 c.created_at AS card_created_at,
                 l.id AS list_id,
                 l.name AS list_name,
                 l.list_type,
-=======
-                c.estimated_hours,
-                c.due_date,
-                l.id AS list_id,
-                l.name AS list_name,
->>>>>>> 7474709 (WIP: Individual Dashboard)
                 b.id AS board_id,
                 b.name AS board_name,
                 p.id AS project_id,
                 p.name AS project_name
             FROM kb_card c
-<<<<<<< HEAD
             INNER JOIN kb_card_membership cm ON cm.card_id = c.id
             LEFT JOIN m_user_profile u ON u.u_code = cm.u_code
             LEFT JOIN kb_list l ON l.id = c.list_id
@@ -142,41 +123,22 @@ const GetTeamWorkload = async (req, res) => {
         // console.log('Workload Query Params:', params);
 
         const { rows: workloadData } = await engPool.query(query, params);
-=======
-            JOIN kb_card_membership cm ON cm.card_id = c.id
-            LEFT JOIN m_user_profile u ON u.u_code = cm.u_code
-            JOIN kb_list l ON l.id = c.list_id
-            JOIN kb_board b ON b.id = c.board_id
-            JOIN kb_project p ON p.id = b.project_id
-            WHERE c.is_closed = false
-              AND p.is_private = false
-            ORDER BY cm.u_code, p.id, b.id, l.position, c.position
-        `);
->>>>>>> 7474709 (WIP: Individual Dashboard)
 
         // Group data by user
         const userWorkloadsArr = [];
         const userMap = new Map();
 
         workloadData.forEach(row => {
-<<<<<<< HEAD
             const uCodeKey = (row.user_code || '').toLowerCase();
             if (!userMap.has(uCodeKey)) {
                 const newUser = {
                     u_code: row.user_code,
                     u_name: row.u_name || row.user_code,
-=======
-            if (!userMap.has(row.user_code)) {
-                const newUser = {
-                    u_code: row.user_code,
-                    u_name: row.u_name || row.user_code, // Fallback if profile missing
->>>>>>> 7474709 (WIP: Individual Dashboard)
                     u_nickname: row.u_nickname || '',
                     profile_img_b64: row.profile_img_b64 || null,
                     total_estimated_hours: 0,
                     cards: []
                 };
-<<<<<<< HEAD
                 userMap.set(uCodeKey, newUser);
                 userWorkloadsArr.push(newUser);
             }
@@ -185,23 +147,11 @@ const GetTeamWorkload = async (req, res) => {
             const estHours = parseFloat(row.estimated_hours) || 0;
             userEntry.total_estimated_hours += estHours;
 
-=======
-                userMap.set(row.user_code, newUser);
-                userWorkloadsArr.push(newUser);
-            }
-
-            const userEntry = userMap.get(row.user_code);
-            const estHours = parseFloat(row.estimated_hours) || 0;
-            userEntry.total_estimated_hours += estHours;
-
-            // Simplified structure for the WorkloadDashboard component
->>>>>>> 7474709 (WIP: Individual Dashboard)
             userEntry.cards.push({
                 card_id: row.card_id,
                 card_name: row.card_name,
                 estimated_hours: estHours,
                 due_date: row.due_date,
-<<<<<<< HEAD
                 card_created_at: row.card_created_at,
                 list_id: row.list_id,
                 list_name: row.list_name || 'No List',
@@ -214,18 +164,6 @@ const GetTeamWorkload = async (req, res) => {
         });
 
         // Round total hours
-=======
-                list_id: row.list_id,
-                list_name: row.list_name,
-                board_id: row.board_id,
-                board_name: row.board_name,
-                project_id: row.project_id,
-                project_name: row.project_name
-            });
-        });
-
-        // Round total hours to 2 decimal places
->>>>>>> 7474709 (WIP: Individual Dashboard)
         userWorkloadsArr.forEach(u => {
             u.total_estimated_hours = Math.round(u.total_estimated_hours * 100) / 100;
         });
@@ -233,7 +171,6 @@ const GetTeamWorkload = async (req, res) => {
         res.json({ data: userWorkloadsArr });
     } catch (err) {
         console.error('GetTeamWorkload error:', err);
-<<<<<<< HEAD
         res.status(500).json({
             error: err.message,
             stack: err.stack,
@@ -241,11 +178,6 @@ const GetTeamWorkload = async (req, res) => {
         });
     }
 };
-=======
-        res.status(500).json({ error: err.message });
-    }
-}
->>>>>>> 7474709 (WIP: Individual Dashboard)
 
 module.exports = {
     GetTeamWorkload

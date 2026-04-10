@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo } from 'react';
-<<<<<<< HEAD
 import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, Tabs, Drawer, DatePicker, Select, Button, Space } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -374,161 +373,10 @@ const WorkloadDashboard = ({ theme }) => {
                                 />
                             )}
                         </Space>
-=======
-import { Typography, Row, Col, Card, Avatar, Progress, Tag, Space, Input, List, Empty, Tooltip, Badge } from 'antd';
-import { useKanbanStore } from '../store/kanbanStore';
-import { useTheme } from '../../../../theme';
-import { 
-    MdOutlinePerson, 
-    MdOutlineWorkOutline,
-    MdOutlineKeyboardArrowRight,
-    MdOutlineKeyboardArrowDown
-} from 'react-icons/md';
-import { IoSearchOutline, IoTimeOutline } from 'react-icons/io5';
-import dayjs from 'dayjs';
-
-const { Title, Text } = Typography;
-
-const WorkloadDashboard = ({ theme }) => {
-    const { teamWorkload, fetchTeamWorkload, users, projects, isLoading } = useKanbanStore();
-    const [search, setSearch] = useState('');
-    const [selectedUser, setSelectedUser] = useState(null);
-
-    useEffect(() => {
-        fetchTeamWorkload();
-    }, [fetchTeamWorkload]);
-
-    const filteredWorkload = useMemo(() => {
-        if (!search) return teamWorkload;
-        const s = search.toLowerCase();
-        return teamWorkload.filter(w => 
-            w.u_name?.toLowerCase().includes(s) || 
-            w.u_code?.toLowerCase().includes(s) ||
-            w.u_nickname?.toLowerCase().includes(s)
-        );
-    }, [teamWorkload, search]);
-
-    // Capacity Baseline: 30 hours per week
-    const CAPACITY_HOURS = 30;
-
-    const renderUserWorkload = (worker) => {
-        const totalHours = parseFloat(worker.total_estimated_hours || 0);
-        const percent = Math.min(Math.round((totalHours / CAPACITY_HOURS) * 100), 100);
-        const isOverloaded = totalHours > CAPACITY_HOURS;
-        
-        // Find user details
-        const u = users.find(user => user.u_code === worker.u_code) || {};
-        const initials = (u.u_name || worker.u_code || 'U').charAt(0).toUpperCase();
-
-        const isExpanded = selectedUser === worker.u_code;
-
-        return (
-            <Card 
-                key={worker.u_code}
-                size="small"
-                hoverable
-                style={{ 
-                    marginBottom: 12, 
-                    borderRadius: theme.borderRadius.lg,
-                    border: isExpanded ? `1px solid ${theme.colors.primary}` : `1px solid ${theme.colors.border}`,
-                    boxShadow: isExpanded ? theme.shadows.md : theme.shadows.sm,
-                    transition: 'all 0.3s ease'
-                }}
-                onClick={() => setSelectedUser(isExpanded ? null : worker.u_code)}
-            >
-                <Row align="middle" gutter={16}>
-                    <Col>
-                        {u.profile_img_b64 ? (
-                            <Avatar size={40} src={u.profile_img_b64} />
-                        ) : (
-                            <Avatar size={40} style={{ backgroundColor: theme.colors.primary }}>{initials}</Avatar>
-                        )}
-                    </Col>
-                    <Col flex="1">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                                <Text strong style={{ fontSize: 15, display: 'block' }}>{u.u_name || worker.u_code}</Text>
-                                <Text type="secondary" style={{ fontSize: 12 }}>{worker.u_code}</Text>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <Text strong style={{ fontSize: 16, color: isOverloaded ? theme.colors.error : theme.colors.textPrimary }}>
-                                    {totalHours}h
-                                </Text>
-                                <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                                    / {CAPACITY_HOURS}h capacity
-                                </Text>
-                            </div>
-                        </div>
-                        <div style={{ marginTop: 8 }}>
-                            <Progress 
-                                percent={percent} 
-                                status={isOverloaded ? 'exception' : 'active'} 
-                                strokeColor={isOverloaded ? theme.colors.error : (percent > 80 ? theme.colors.warning : theme.colors.primary)}
-                                size="small"
-                                showInfo={false}
-                            />
-                        </div>
-                    </Col>
-                    <Col>
-                        {isExpanded ? <MdOutlineKeyboardArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
-                    </Col>
-                </Row>
-
-                {isExpanded && (
-                    <div style={{ marginTop: 16, borderTop: `1px solid ${theme.colors.border}`, paddingTop: 16 }}>
-                        <Title level={5} style={{ fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <MdOutlineWorkOutline size={16} /> Current Assignments ({worker.cards?.length || 0})
-                        </Title>
-                        <List
-                            dataSource={worker.cards || []}
-                            renderItem={card => (
-                                <List.Item style={{ padding: '8px 0' }}>
-                                    <div style={{ width: '100%' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-                                                    <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{card.project_name}</Tag>
-                                                    <Tag style={{ fontSize: 10, margin: 0 }}>{card.board_name}</Tag>
-                                                </div>
-                                                <Text strong style={{ fontSize: 13 }}>{card.card_name}</Text>
-                                            </div>
-                                            <Tag color="cyan" icon={<IoTimeOutline />} style={{ marginLeft: 8 }}>
-                                                {card.estimated_hours}h
-                                            </Tag>
-                                        </div>
-                                    </div>
-                                </List.Item>
-                            )}
-                        />
-                    </div>
-                )}
-            </Card>
-        );
-    };
-
-    return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flexShrink: 0, marginBottom: 20 }}>
-                <Row justify="space-between" align="middle">
-                    <Col>
-                        <Title level={4} style={{ margin: 0 }}>Team Workload Dashboard</Title>
-                        <Text type="secondary">Monitor individual capacity and task distribution across projects.</Text>
-                    </Col>
-                    <Col>
-                        <Input
-                            placeholder="Search team members..."
-                            prefix={<IoSearchOutline />}
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            style={{ width: 250, borderRadius: theme.borderRadius.md }}
-                            allowClear
-                        />
->>>>>>> 7474709 (WIP: Individual Dashboard)
                     </Col>
                 </Row>
             </div>
 
-<<<<<<< HEAD
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 <Tabs
                     activeKey={activeTab}
@@ -574,47 +422,6 @@ const WorkloadDashboard = ({ theme }) => {
             >
                 {drawerVisible && renderMyWorkload(targetDrawerWorkload, true)}
             </Drawer>
-=======
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
-                {isLoading && teamWorkload.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '100px 0' }}><Progress type="circle" percent={30} status="active" /></div>
-                ) : filteredWorkload.length > 0 ? (
-                    <Row gutter={[24, 24]}>
-                        <Col xs={24} lg={16}>
-                            {filteredWorkload.map(worker => renderUserWorkload(worker))}
-                        </Col>
-                        <Col xs={24} lg={8}>
-                            <Card 
-                                title="Insights" 
-                                style={{ borderRadius: theme.borderRadius.lg, position: 'sticky', top: 0 }}
-                                size="small"
-                            >
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Total Team Capacity</Text>
-                                        <Title level={3} style={{ margin: 0 }}>{teamWorkload.length * CAPACITY_HOURS}h</Title>
-                                    </div>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Allocated Hours</Text>
-                                        <Title level={3} style={{ margin: 0, color: theme.colors.primary }}>
-                                            {teamWorkload.reduce((sum, w) => sum + parseFloat(w.total_estimated_hours || 0), 0).toFixed(1)}h
-                                        </Title>
-                                    </div>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Overloaded Members</Text>
-                                        <Title level={3} style={{ margin: 0, color: theme.colors.error }}>
-                                            {teamWorkload.filter(w => parseFloat(w.total_estimated_hours) > CAPACITY_HOURS).length}
-                                        </Title>
-                                    </div>
-                                </div>
-                            </Card>
-                        </Col>
-                    </Row>
-                ) : (
-                    <Empty description="No workload data found" style={{ marginTop: 100 }} />
-                )}
-            </div>
->>>>>>> 7474709 (WIP: Individual Dashboard)
         </div>
     );
 };
