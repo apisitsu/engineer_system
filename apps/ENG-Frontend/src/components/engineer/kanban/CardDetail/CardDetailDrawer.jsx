@@ -479,6 +479,16 @@ const CardDetailDrawer = () => {
     };
 
 
+    // const handleSaveTaskListName = async (tlId) => {
+    //     if (isReadOnly) return;
+    //     const oldName = taskLists.find(t => t.id === tlId)?.name;
+    //     if (editTaskListName.trim() && editTaskListName !== oldName) {
+    //         await updateTaskList(tlId, { name: editTaskListName.trim() }, card.id);
+    //     }
+    //     setEditingTaskListId(null);
+    // };
+
+
     const handleAddTask = async (taskListId) => {
         const name = newTaskNames[taskListId]?.trim();
         if (!name) return;
@@ -1165,10 +1175,17 @@ const CardDetailDrawer = () => {
                                                             style={{ fontWeight: 600, fontSize: 14, borderRadius: theme.borderRadius.sm, marginBottom: 8, flex: 1 }}
                                                         />
                                                     ) : (
+<<<<<<< HEAD
                                                         <SectionHeader
                                                             icon={<FaCheckSquare />}
                                                             title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
                                                             theme={theme}
+=======
+                                                        <SectionHeader
+                                                            icon={<FaCheckSquare />}
+                                                            title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
+                                                            theme={theme}
+>>>>>>> 3784e4e6f762c1e1567e920b632eff4766fcc199
                                                             extra={!isReadOnly && (
                                                                 <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
                                                                     <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
@@ -1971,7 +1988,7 @@ const CardDetailDrawer = () => {
                                                         }}
                                                         theme={theme}
                                                     />
-                                                    
+
                                                     {/* Archive */}
                                                     <Popconfirm
                                                         title="Archive this card?"
