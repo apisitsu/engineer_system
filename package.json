@@ -13,7 +13,8 @@
     "start": "concurrently \"npm run start --workspace=apps/ENG-Backend\" \"npm run start --workspace=apps/ENG-Frontend\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
   },
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "^1.0.3",

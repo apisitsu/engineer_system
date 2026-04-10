@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Tabs, Select, Avatar } from 'antd';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineSetting, AiOutlineApi, AiOutlineBell } from 'react-icons/ai';
 import { RiInputField } from 'react-icons/ri';
 import { MdOutlineDashboard, MdOutlineLabel } from 'react-icons/md';
-import { IoSettingsOutline } from 'react-icons/io5';
+import { IoSettingsOutline, IoArchiveOutline } from 'react-icons/io5';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
@@ -79,7 +79,8 @@ const BoardSettingsDrawer = () => {
         customFields, fetchCustomFields, createCustomField, deleteCustomField,
         webhooks, fetchWebhooks, createWebhook, updateWebhook, deleteWebhook,
         notificationServices, fetchNotificationServices,
-        createNotificationService, deleteNotificationService, users
+        createNotificationService, deleteNotificationService, users,
+        archivedCards, fetchArchivedCards, moveCard, lists
     } = useKanbanStore();
 
     // Form
@@ -105,6 +106,10 @@ const BoardSettingsDrawer = () => {
     const [cfGroupName, setCfGroupName] = useState('');
     const [cfNewFieldName, setCfNewFieldName] = useState({});
     const [isSubscribed, setIsSubscribed] = useState(false);
+
+    // Restore UI state
+    const [restoringCardId, setRestoringCardId] = useState(null);
+    const [restoreToListId, setRestoreToListId] = useState(null);
 
     // Auth Store for Permission Checks
     const [memberSearch, setMemberSearch] = useState('');
@@ -768,10 +773,101 @@ const BoardSettingsDrawer = () => {
         </div>
     );
 
+    // ─── Tab: Archived Items ───────────────────────────────────────
+    const ArchivedItemsTab = () => {
+        useEffect(() => {
+            if (activeBoard) {
+                fetchArchivedCards();
+            }
+        }, [activeBoard]);
+
+        const visibleLists = useMemo(() => {
+            return lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
+        }, [lists]);
+
+        const handleRestore = async (cardId) => {
+            if (!restoreToListId) return;
+            await moveCard(cardId, restoreToListId);
+            setRestoringCardId(null);
+            setRestoreToListId(null);
+            // Optionally, immediately re-fetch to update
+            await fetchArchivedCards();
+        };
+
+        return (
+            <div>
+                {activeBoard ? (
+                    <Card>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                            <IoArchiveOutline size={18} color={theme.colors.primary} />
+                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Archived Cards</Title>
+                        </div>
+                        
+                        {!archivedCards || archivedCards.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
+                                <Text type="secondary">No archived items found.</Text>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {archivedCards.map(card => (
+                                    <div key={card.id} style={{
+                                        padding: theme.spacing.sm,
+                                        background: theme.colors.surfaceHover,
+                                        borderRadius: theme.borderRadius.sm,
+                                        border: `1px solid ${theme.colors.border}`,
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                            <Text strong style={{ fontSize: 13, flex: 1 }}>{card.name}</Text>
+                                            <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap', marginLeft: 8 }}>
+                                                {new Date(card.updated_at).toLocaleDateString()}
+                                            </Text>
+                                        </div>
+                                        
+                                        {restoringCardId === card.id ? (
+                                            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                                                <Select 
+                                                    size="small" 
+                                                    style={{ flex: 1 }}
+                                                    placeholder="Select list..."
+                                                    options={visibleLists.map(l => ({ label: l.name, value: l.id }))}
+                                                    onChange={setRestoreToListId}
+                                                    value={restoreToListId}
+                                                />
+                                                <Button size="small" type="primary" onClick={() => handleRestore(card.id)} disabled={!restoreToListId} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>
+                                                    Confirm Restore
+                                                </Button>
+                                                <Button size="small" onClick={() => { setRestoringCardId(null); setRestoreToListId(null); }}>
+                                                    Cancel
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button 
+                                                size="small" 
+                                                onClick={() => setRestoringCardId(card.id)}
+                                                style={{ marginTop: 4, borderRadius: theme.borderRadius.sm }}
+                                            >
+                                                Restore
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
+                        <Text type="secondary">Select a board to view archived items.</Text>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const tabItems = [
         { key: 'general', label: 'General', children: <GeneralTab /> },
         { key: 'preferences', label: 'Preferences', children: <PreferencesTab /> },
         { key: 'notifications', label: 'Notifications', children: <NotificationsTab /> },
+        { key: 'archived', label: 'Archived', children: <ArchivedItemsTab /> },
     ];
 
     return (

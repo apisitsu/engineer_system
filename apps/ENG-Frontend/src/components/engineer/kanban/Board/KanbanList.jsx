@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Typography, Space, Button, Input, Dropdown, Popconfirm, Badge, Switch, Tooltip } from 'antd';
 import { BsThreeDots, BsGripVertical } from 'react-icons/bs';
-import { IoCloseOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoArchiveOutline } from 'react-icons/io5';
 import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';
 import { FiPlus } from 'react-icons/fi';
 import {
@@ -47,6 +47,7 @@ const SortableCard = ({ card }) => {
 const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const {
         cards, createCard, updateList, deleteList, sortListCards,
+        archiveListCards,
         searchQuery, filterMembers, filterLabels,
         activeProject, activeBoardMembers, activeBoard
     } = useKanbanStore();
@@ -128,6 +129,10 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
         setIsEditingName(false);
     };
 
+    const handleArchiveAllCards = async () => {
+        await archiveListCards(list.id);
+    };
+
     const handleDeleteList = async () => {
         await deleteList(list.id);
     };
@@ -175,6 +180,21 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
 
     if (canEditBoard) {
         menuItems.push({ type: 'divider' });
+        menuItems.push({
+            key: 'archive_cards',
+            label: (
+                <Popconfirm
+                    title="Archive all cards in this list?"
+                    description="Cards will be moved to the Archive and hidden from the board."
+                    onConfirm={handleArchiveAllCards}
+                    okText="Archive All"
+                    cancelText="Cancel"
+                >
+                    <span style={{ color: theme.colors.textPrimary }}>Archive All Cards</span>
+                </Popconfirm>
+            ),
+            icon: <IoArchiveOutline style={{ color: theme.colors.textSecondary }} />,
+        });
         menuItems.push({
             key: 'delete',
             label: (

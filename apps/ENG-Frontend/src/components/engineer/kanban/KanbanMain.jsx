@@ -7,7 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     IoSettingsOutline, IoSearchOutline, IoAddOutline, IoGridOutline,
     IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoStarOutline, IoStar,
-    IoCalendarOutline, IoLayersOutline, IoTimeOutline,
+    IoCalendarOutline, IoLayersOutline, IoTimeOutline, IoHelpCircleOutline,
     IoRocketOutline, IoFlashOutline, IoHeartOutline, IoDiamondOutline,
     IoLeafOutline, IoBookOutline, IoCodeSlashOutline, IoColorPaletteOutline,
     IoGameControllerOutline, IoMusicalNotesOutline, IoPlanetOutline, IoShieldCheckmarkOutline,
@@ -32,6 +32,8 @@ import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
 import ReportDashboard from './Reports/ReportDashboard';
 import WorkloadDashboard from './Workload/WorkloadDashboard';
+import UserGuideDrawer from './UserGuide/UserGuideDrawer';
+import BoardGuideDrawer from './UserGuide/BoardGuideDrawer';
 
 dayjs.extend(relativeTime);
 
@@ -421,6 +423,7 @@ const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, th
 const ProjectListPage = ({ onSelectProject, theme }) => {
     const { projects, fetchProjects, isLoading, openProjectSettings, createProject, toggleFavorite } = useKanbanStore();
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showUserGuide, setShowUserGuide] = useState(false);
     const [form] = Form.useForm();
     const [activeTab, setActiveTab] = useState('projects');
     const [search, setSearch] = useState('');
@@ -505,8 +508,17 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         <RiKanbanView size={22} color="#fff" />
                     </div>
                     <div>
-                        <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary, lineHeight: 1 }}>
+                        <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary, lineHeight: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                             Projects Management System
+                            <Tooltip title="User Guide">
+                                <Button
+                                    type="text"
+                                    shape="circle"
+                                    icon={<IoHelpCircleOutline size={18} />}
+                                    onClick={() => setShowUserGuide(true)}
+                                    style={{ color: theme.colors.textSecondary, marginLeft: 4 }}
+                                />
+                            </Tooltip>
                         </Title>
                         <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
                             {stats.total} project{stats.total !== 1 ? 's' : ''} · {stats.totalBoards} board{stats.totalBoards !== 1 ? 's' : ''}
@@ -870,6 +882,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 </Form>
             </Modal>
             <ProjectSettingsDrawer />
+            <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} />
         </div >
     );
 };
@@ -889,6 +902,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
     const [showSearch, setShowSearch] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
+    const [showBoardGuide, setShowBoardGuide] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [showMemberFilter, setShowMemberFilter] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
@@ -940,7 +954,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 2 }}>Board</Typography.Text>
                         <Avatar.Group max={{ count: 3, style: { color: '#1677ff', backgroundColor: '#e6f4ff' } }} size="small">
                             {activeBoardMembers.map(mgr => {
-                                const userObj = users.find(u => u.u_code === mgr.u_code);
+                                const userObj = users.find(u => u.u_code?.toLowerCase() === mgr.u_code?.toLowerCase());
                                 const name = userObj?.u_name || userObj?.u_nickname || mgr.u_code;
                                 const words = (userObj?.u_name || '').split(' ');
                                 const initials = words.length >= 2
@@ -998,7 +1012,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     </Select>
                                     <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                                         {activeBoardMembers.map(mgr => {
-                                            const u = users.find(user => user.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
+                                            const u = users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code, u_name: mgr.u_code };
                                             const words = (u.u_name || '').split(' ');
                                             const initials = words.length >= 2
                                                 ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
@@ -1057,11 +1071,11 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     .filter(uCode => {
                                         if (!memberFilterSearch) return true;
                                         const q = memberFilterSearch.toLowerCase();
-                                        const u = users.find(user => user.u_code === uCode);
+                                        const u = users.find(user => user.u_code?.toLowerCase() === uCode?.toLowerCase());
                                         const name = u?.u_name || u?.u_nickname || uCode || '';
                                         return name.toLowerCase().includes(q) || uCode.toLowerCase().includes(q);
                                     }).map(uCode => {
-                                        const u = users.find(user => user.u_code === uCode);
+                                        const u = users.find(user => user.u_code?.toLowerCase() === uCode?.toLowerCase());
                                         const name = u?.u_name || u?.u_nickname || uCode || 'User';
                                         const initials = name.charAt(0).toUpperCase();
                                         const isChecked = filterMembers.includes(uCode);
@@ -1283,10 +1297,17 @@ const BoardToolbar = ({ theme, activeProject }) => {
                     </Badge>
                 </Dropdown>
 
+                <Tooltip title="Board Interface Guide">
+                    <Button type="text" size="small" icon={<IoHelpCircleOutline size={18} />}
+                        onClick={() => setShowBoardGuide(true)} style={{ color: theme.colors.textSecondary }} />
+                </Tooltip>
+
                 {/* Board Settings */}
                 <Button type="text" size="small" icon={<IoSettingsOutline size={16} />}
                     onClick={openBoardSettings} style={{ color: theme.colors.textSecondary }} />
             </Space>
+            
+            <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
         </div >
     );
 };
@@ -1483,7 +1504,7 @@ const KanbanMain = () => {
 
                                             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                                                 {useKanbanStore.getState().projectManagers.map(mgr => {
-                                                    const u = useKanbanStore.getState().users.find(user => user.u_code === mgr.u_code) || { u_code: mgr.u_code };
+                                                    const u = useKanbanStore.getState().users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code };
                                                     return (
                                                         <div key={mgr.u_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${theme.colors.border}` }}>
                                                             <Space>

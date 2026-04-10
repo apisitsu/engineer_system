@@ -17,6 +17,7 @@ export const useKanbanStore = create((set, get) => ({
 
     lists: [],
     cards: {},       // { [listId]: [card1, card2, ...] }
+    archivedCards: [],
     labels: [],
     activeCardDetail: null, // Full card detail for drawer
     teamWorkload: [], // Aggregated workload data for dashboard
@@ -643,6 +644,70 @@ export const useKanbanStore = create((set, get) => ({
             console.error('Failed to delete card', err);
             Swal.fire('Error', err.response?.data?.error || 'Failed to delete card', 'error');
             return false;
+        }
+    },
+
+    // ====================================================================
+    //  ARCHIVE ACTIONS
+    // ====================================================================
+
+    archiveCard: async (cardId) => {
+        const board = get().activeBoard;
+        if (!board) return false;
+        const archiveList = get().lists.find(l => l.list_type === 'archive');
+        if (!archiveList) {
+            Swal.fire('Error', 'Archive list not found for this board', 'error');
+            return false;
+        }
+        
+        return await get().moveCard(cardId, archiveList.id);
+    },
+
+    archiveListCards: async (listId) => {
+        const board = get().activeBoard;
+        if (!board) return false;
+        const archiveList = get().lists.find(l => l.list_type === 'archive');
+        if (!archiveList) return false;
+
+        const listCards = get().cards[listId] || [];
+        if (listCards.length === 0) return true;
+
+        try {
+            await Promise.all(listCards.map(c => 
+                axios.patch(`${server.KANBAN_CARDS}/${c.id}`, { list_id: archiveList.id })
+            ));
+            
+            // Clean up source list
+            set(state => {
+                const newCards = { ...state.cards };
+                newCards[listId] = [];
+                return { cards: newCards };
+            });
+            
+            // Re-fetch archive if it's currently populated
+            if (get().archivedCards?.length > 0) {
+               get().fetchArchivedCards();
+            }
+            return true;
+        } catch (err) {
+            console.error('Failed to archive list cards', err);
+            Swal.fire('Error', 'Failed to archive cards', 'error');
+            return false;
+        }
+    },
+
+    fetchArchivedCards: async () => {
+        const board = get().activeBoard;
+        if (!board) return;
+        const archiveList = get().lists.find(l => l.list_type === 'archive');
+        if (!archiveList) return;
+
+        try {
+            const res = await axios.get(`${server.KANBAN_LISTS}/${archiveList.id}/cards`);
+            const archivedCards = res.data?.data || [];
+            set({ archivedCards });
+        } catch (err) {
+            console.error(`Failed to fetch archived cards`, err);
         }
     },
 

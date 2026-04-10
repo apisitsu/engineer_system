@@ -11,7 +11,7 @@ import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
 import { GoDiscussionClosed } from 'react-icons/go';
-import { IoCloseOutline, IoSearchOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoSearchOutline, IoArchiveOutline } from 'react-icons/io5';
 import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy, AiOutlineEdit } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
 import { RiInputField } from 'react-icons/ri';
@@ -1971,6 +1971,28 @@ const CardDetailDrawer = () => {
                                                         }}
                                                         theme={theme}
                                                     />
+                                                    
+                                                    {/* Archive */}
+                                                    <Popconfirm
+                                                        title="Archive this card?"
+                                                        description="Card will be hidden from the board."
+                                                        onConfirm={async () => {
+                                                            await useKanbanStore.getState().archiveCard(card.id);
+                                                            closeCardDetail();
+                                                        }}
+                                                        okText="Archive"
+                                                        cancelText="Cancel"
+                                                    >
+                                                        <Button block style={{
+                                                            textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8,
+                                                            height: 36, borderRadius: theme.borderRadius.sm,
+                                                            background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
+                                                            color: theme.colors.textPrimary
+                                                        }}>
+                                                            <IoArchiveOutline size={16} />
+                                                            Archive
+                                                        </Button>
+                                                    </Popconfirm>
 
                                                     {/* Delete */}
                                                     {canManageCard && (
