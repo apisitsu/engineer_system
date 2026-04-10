@@ -468,7 +468,7 @@ const CardDetailDrawer = () => {
         setNewTaskListName('');
         setShowAddTaskList(false);
     };
- 
+
     const handleSaveTaskListName = async (tlId) => {
         if (isReadOnly) return;
         const oldName = taskLists.find(t => t.id === tlId)?.name;
@@ -1165,10 +1165,10 @@ const CardDetailDrawer = () => {
                                                             style={{ fontWeight: 600, fontSize: 14, borderRadius: theme.borderRadius.sm, marginBottom: 8, flex: 1 }}
                                                         />
                                                     ) : (
-                                                        <SectionHeader 
-                                                            icon={<FaCheckSquare />} 
-                                                            title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>} 
-                                                            theme={theme} 
+                                                        <SectionHeader
+                                                            icon={<FaCheckSquare />}
+                                                            title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
+                                                            theme={theme}
                                                             extra={!isReadOnly && (
                                                                 <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
                                                                     <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
@@ -1742,7 +1742,6 @@ const CardDetailDrawer = () => {
                                                     )}
 
                                                     {/* Estimated Hours Sidebar */}
-<<<<<<< HEAD
                                                     {canEditEstimatedHours && (
                                                         <>
                                                             <SidebarButton
@@ -1775,30 +1774,6 @@ const CardDetailDrawer = () => {
                                                             )}
                                                         </>
                                                     )}
-=======
-                                                    <div style={{ marginTop: 4 }}>
-                                                        <Text strong style={{
-                                                            fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
-                                                            color: theme.colors.textTertiary, display: 'block', marginBottom: 4
-                                                        }}>
-                                                            Estimated Hours
-                                                        </Text>
-                                                        <Input
-                                                            type="number"
-                                                            placeholder="0.0"
-                                                            step="0.5"
-                                                            min="0"
-                                                            value={editEstimatedHours}
-                                                            onChange={(e) => setEditEstimatedHours(e.target.value)}
-                                                            onBlur={handleSaveEstimatedHours}
-                                                            onPressEnter={handleSaveEstimatedHours}
-                                                            prefix={<MdOutlineTimer size={14} color={theme.colors.textTertiary} />}
-                                                            style={{ borderRadius: theme.borderRadius.sm, width: '100%' }}
-                                                            size="small"
-                                                            disabled={isReadOnly}
-                                                        />
-                                                    </div>
->>>>>>> 7474709 (WIP: Individual Dashboard)
 
                                                     {/* Checklist */}
                                                     <SidebarButton
