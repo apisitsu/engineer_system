@@ -93,20 +93,10 @@ const WorkloadDashboard = ({ theme }) => {
     }, [fetchTeamWorkload, dateRange, selectedProjectId]);
 
     // Data Memoization
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> e2085e0 (Release Ver 1.1.080402026)
     const myWorkload = useMemo(() => {
         const myUCodeClean = (myUCode || '').toLowerCase();
         return teamWorkload.find(w => (w.u_code || '').toLowerCase() === myUCodeClean) || { total_estimated_hours: 0, cards: [] };
     }, [teamWorkload, myUCode]);
-<<<<<<< HEAD
-=======
-    const myWorkload = useMemo(() => teamWorkload.find(w => w.u_code === myUCode) || { total_estimated_hours: 0, cards: [] }, [teamWorkload, myUCode]);
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
-=======
->>>>>>> e2085e0 (Release Ver 1.1.080402026)
 
     const teamWorkloadFiltered = useMemo(() => {
         let filtered = teamWorkload;
@@ -133,18 +123,10 @@ const WorkloadDashboard = ({ theme }) => {
         const isOverloaded = estHours > CAPACITY_HOURS;
         const gaugeColor = isOverloaded ? theme.colors.error : (utilPercent > 80 ? theme.colors.warning : theme.colors.success);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> e2085e0 (Release Ver 1.1.080402026)
         // console.log(isDrawer);
 
         const pendingCards = workloadData.cards?.filter(c => c.list_type !== 'closed') || [];
 
-=======
-        const pendingCards = workloadData.cards?.filter(c => c.list_type !== 'closed') || [];
-
->>>>>>> e817f80 (WIP:Verifly and update code of Bug)
         // Daily Workload Chart Data (Mon-Fri simple distribution)
         // Note: Real distribution requires analyzing each card's duration. 
         // For now, we group cards by due_date day.
