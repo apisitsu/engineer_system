@@ -16,6 +16,7 @@ git pull github dev
 
 // 6. merge with github
 git merge feature/plbmp118
+type :wq
 
 // 7. push to github
 git push github dev
