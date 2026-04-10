@@ -186,9 +186,11 @@ const sds = require('./api/engineer/mtc/sds');
 app.route('/api/tooling_inspect/getlist').get(engMTC.ToolingInspectGetlist)
 app.route('/api/tooling_inspect/dwg_require_getlist').get(engMTC.ToolDWGRequestGetList)
 app.route('/api/tooling_inspect/dwg_require_add').post(engMTC.ToolDWGRequestAdd)
+app.route('/api/tooling_inspect/dwg_require_update').put(engMTC.ToolDWGRequestUpdate)
 app.route('/api/tooling_inspect/dashboard_stats').get(engMTC.ToolingDashboadtGetlist)
 app.route('/api/tooling_inspect/return_add').post(engMTC.ToolingReturnAdd)
 app.route('/api/tooling_inspect/inspect_update').post(engMTC.ToolingInspectUpdate)
+app.route('/api/tooling_inspect/sync_csv').post(engMTC.ToolingSyncCSV)
 app.route('/api/master/wc').get(engMTC.GetWCCodes)
 
 app.use('/api/tooling-select', toolingSelect);

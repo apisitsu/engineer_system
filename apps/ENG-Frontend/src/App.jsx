@@ -10,6 +10,7 @@ import Swal from "sweetalert2";
 import { useIdleTimer } from 'react-idle-timer';
 import axios from "axios";
 import { server, key_constance } from "./constance/constance";
+import { MTC_PATHS } from "./constance/mtc_constance";
 
 // Import theme system
 import { ThemeProvider, useTheme } from './theme';
@@ -43,8 +44,8 @@ import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
 import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
-import ToolingInspect from './components/engineer/mtc_eng/tooling/tooling_inspect';
-import ToolRequest from './components/engineer/mtc_eng/Tool_req/ToolRequest';
+import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
+import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
 import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
@@ -258,12 +259,12 @@ const AppContent = () => {
                   <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
 
                   {/* ------ MTC Engineer ------ */}
-                  <Route path="/eng/mtc_eng" element={<HomeMTCEng />} />
-                  <Route path="/eng/mtc_eng/tooling" element={<ToolingInspect />} />
-                  <Route path="/eng/mtc_eng/tool-request" element={<ToolRequest />} />
-                  <Route path="/eng/mtc_eng/tooling-select" element={<ToolingSelectPage />} />
-                  <Route path="/eng/mtc_eng/tooling_inventory" element={<ToolingInventoryPage />} />
-                  <Route path="/eng/mtc_eng/sds" element={<SdsPage />} />
+                  <Route path={MTC_PATHS.HOME} element={<HomeMTCEng />} />
+                  <Route path={MTC_PATHS.TOOLING_INSPECT} element={<ToolingInspect />} />
+                  <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
+                  <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
+                  <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
+                  <Route path={MTC_PATHS.SDS} element={<SdsPage />} />
 
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />

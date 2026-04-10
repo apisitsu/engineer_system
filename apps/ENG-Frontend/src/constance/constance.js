@@ -32,13 +32,16 @@ export const server = {
   ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
-  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
+  TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/inspect_update`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
-  
+  TOOLING_SYNC_CSV: `${apiUrl}api/tooling_inspect/sync_csv`,
+
   // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
-  
+  TOOLING_DWG_REQUEST_UPDATE: `${apiUrl}api/tooling_inspect/dwg_require_update`,
+  MASTER_WC: `${apiUrl}api/master/wc`,
+
   // General DWG Request (New System - tr_request)
   MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
