@@ -1175,17 +1175,10 @@ const CardDetailDrawer = () => {
                                                             style={{ fontWeight: 600, fontSize: 14, borderRadius: theme.borderRadius.sm, marginBottom: 8, flex: 1 }}
                                                         />
                                                     ) : (
-<<<<<<< HEAD
                                                         <SectionHeader
                                                             icon={<FaCheckSquare />}
                                                             title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
                                                             theme={theme}
-=======
-                                                        <SectionHeader
-                                                            icon={<FaCheckSquare />}
-                                                            title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
-                                                            theme={theme}
->>>>>>> 3784e4e6f762c1e1567e920b632eff4766fcc199
                                                             extra={!isReadOnly && (
                                                                 <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
                                                                     <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
