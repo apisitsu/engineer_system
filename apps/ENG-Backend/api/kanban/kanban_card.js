@@ -946,7 +946,7 @@ const DeleteAttachment = async (req, res) => {
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
 
     const { rows: [card] } = await engPool.query('SELECT board_id, is_private FROM kb_card WHERE id=$1', [att.card_id]);
-    const canDelete = att.creator_u_code === uCode || await canManageCard(req, att.card_id);
+    const canDelete = att.creator_u_code === uCode || await canEditCard(req, att.card_id);
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
     await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
@@ -970,7 +970,7 @@ const UpdateAttachment = async (req, res) => {
     }
 
     const { rows: [card] } = await engPool.query('SELECT board_id, is_private FROM kb_card WHERE id=$1', [att.card_id]);
-    const canEdit = att.creator_u_code === uCode || await canManageCard(req, att.card_id);
+    const canEdit = att.creator_u_code === uCode || await canEditCard(req, att.card_id);
     if (!canEdit) return res.status(403).json({ error: 'Permission denied' });
 
     const linkData = { url: url || att.file_path, name: name || att.file_name };

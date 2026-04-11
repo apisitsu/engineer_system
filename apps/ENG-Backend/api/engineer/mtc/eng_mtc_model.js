@@ -238,8 +238,8 @@ const ToolingDashboadtGetlist = async (req, res) => {
         const [toolingStats, dwgStats, rawStats, inspectMonthStats] = await Promise.all([
 
             // 1. toolingStats (การ์ด Tooling Return) — แสดงผลรวม qty สำหรับ Prev. Working Day และ Breakdown แยกตาม W/C
-                        new Promise(async (resolve) => {
-                        const sqlTotal = `
+            new Promise(async (resolve) => {
+                const sqlTotal = `
                             SELECT 
                                 COUNT(*) as total_count,
                                 COALESCE(SUM(CASE 
@@ -251,7 +251,7 @@ const ToolingDashboadtGetlist = async (req, res) => {
                             WHERE return_date IS NOT NULL AND TRIM(return_date) != ''
                         `;
 
-                        const sqlBreakdown = `
+                const sqlBreakdown = `
                             SELECT 
                                 wc_code, 
                                 MAX(wc_name) as wc_name, 
@@ -262,23 +262,23 @@ const ToolingDashboadtGetlist = async (req, res) => {
                             ORDER BY wc_code
                         `;
 
-                        try {
-                            const resTotal = await engPool.query(sqlTotal, [prevWorkingDate]);
-                            const resBreakdown = await engPool.query(sqlBreakdown, [prevWorkingDate]);
-                            resolve({ 
-                                total_count: resTotal.rows[0]?.total_count || 0, 
-                                total_yesterday: resTotal.rows[0]?.total_yesterday || 0,
-                                breakdown: resBreakdown.rows || []
-                            });
-                        } catch (err) {
-                            console.error('toolingStats Error:', err.message);
-                            resolve({ total_count: 0, total_yesterday: 0, breakdown: [] });
-                        }
-                    }),
+                try {
+                    const resTotal = await engPool.query(sqlTotal, [prevWorkingDate]);
+                    const resBreakdown = await engPool.query(sqlBreakdown, [prevWorkingDate]);
+                    resolve({
+                        total_count: resTotal.rows[0]?.total_count || 0,
+                        total_yesterday: resTotal.rows[0]?.total_yesterday || 0,
+                        breakdown: resBreakdown.rows || []
+                    });
+                } catch (err) {
+                    console.error('toolingStats Error:', err.message);
+                    resolve({ total_count: 0, total_yesterday: 0, breakdown: [] });
+                }
+            }),
 
-                    // 2. dwgStats (การ์ด DWG Request - คืนชีพกลับมาให้แล้วครับ!)
-                    new Promise(async (resolve) => {
-                        const sql = `
+            // 2. dwgStats (การ์ด DWG Request - คืนชีพกลับมาให้แล้วครับ!)
+            new Promise(async (resolve) => {
+                const sql = `
                             SELECT 
                                 COUNT(*) as total_all,
                                 SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' THEN 1 ELSE 0 END) as total_yesterday,
@@ -286,35 +286,35 @@ const ToolingDashboadtGetlist = async (req, res) => {
                                 SUM(CASE WHEN date_req::TEXT LIKE $1 || '%' AND status = 'Pending' THEN 1 ELSE 0 END) as pending_yesterday
                             FROM ${TABLES.TI_DWG_JOB} 
                         `;
-                        try {
-                            const res = await engPool.query(sql, [prevWorkingDate]);
-                            resolve(res.rows[0] || { total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
-                        } catch (err) {
-                            resolve({ total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
-                        }
-                    }),
+                try {
+                    const res = await engPool.query(sql, [prevWorkingDate]);
+                    resolve(res.rows[0] || { total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
+                } catch (err) {
+                    resolve({ total_all: 0, total_yesterday: 0, complete_yesterday: 0, pending_yesterday: 0 });
+                }
+            }),
 
-                    // 3. rawStats (การ์ด Tooling Inspection Yesterday)
-                    new Promise(async (resolve) => {
-                        const sql = `
+            // 3. rawStats (การ์ด Tooling Inspection Yesterday)
+            new Promise(async (resolve) => {
+                const sql = `
                             SELECT 
                                 SUM(CASE WHEN receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE = $1::DATE THEN 1 ELSE 0 END) as received_yesterday,
                                 SUM(CASE WHEN issue_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE = $1::DATE THEN 1 ELSE 0 END) as issued_yesterday
                             FROM ${TABLES.TI_LIST}
                         `;
-                        try {
-                            const res = await engPool.query(sql, [prevWorkingDate]);
-                            resolve(res.rows[0] || { received_yesterday: 0, issued_yesterday: 0 });
-                        } catch (err) {
-                            console.error("Yesterday Stats Error:", err.message);
-                            resolve({ received_yesterday: 0, issued_yesterday: 0 });
-                        }
-                    }),
+                try {
+                    const res = await engPool.query(sql, [prevWorkingDate]);
+                    resolve(res.rows[0] || { received_yesterday: 0, issued_yesterday: 0 });
+                } catch (err) {
+                    console.error("Yesterday Stats Error:", err.message);
+                    resolve({ received_yesterday: 0, issued_yesterday: 0 });
+                }
+            }),
 
-                    // 4. inspectMonthStats (กราฟ Performance ด้านบน)
-                    new Promise(async (resolve) => {
-                        const monthYear = startDate.substring(0, 7); // จะได้ '2026-04'
-                        const sql = `
+            // 4. inspectMonthStats (กราฟ Performance ด้านบน)
+            new Promise(async (resolve) => {
+                const monthYear = startDate.substring(0, 7); // จะได้ '2026-04'
+                const sql = `
                             SELECT 
                                 COUNT(*) as total,
                                 SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
@@ -323,21 +323,21 @@ const ToolingDashboadtGetlist = async (req, res) => {
                             FROM ${TABLES.TI_LIST}
                             WHERE receive_date::TEXT LIKE $1 || '%'
                         `;
-                        try {
-                            const res = await engPool.query(sql, [monthYear]);
-                            const data = res.rows[0];
-                            resolve({
-                                total: Number(data.total) || 0,
-                                on_time: Number(data.on_time) || 0,
-                                delay: Number(data.delay) || 0,
-                                pending: Number(data.pending) || 0
-                            });
-                        } catch (err) {
-                            console.error("Performance Stats Error:", err.message);
-                            resolve({ total: 0, on_time: 0, delay: 0, pending: 0 });
-                        }
-                    })
-                ]);
+                try {
+                    const res = await engPool.query(sql, [monthYear]);
+                    const data = res.rows[0];
+                    resolve({
+                        total: Number(data.total) || 0,
+                        on_time: Number(data.on_time) || 0,
+                        delay: Number(data.delay) || 0,
+                        pending: Number(data.pending) || 0
+                    });
+                } catch (err) {
+                    console.error("Performance Stats Error:", err.message);
+                    resolve({ total: 0, on_time: 0, delay: 0, pending: 0 });
+                }
+            })
+        ]);
         // รวมร่างข้อมูลอย่างถูกต้อง
         const result = {
             yesterdayDate: prevWorkingDate,
@@ -497,22 +497,22 @@ const ToolingSyncCSV = async (req, res) => {
         exec(`"${PATHS.PYTHON_EXE}" "${PATHS.TOOLING_IMPORT_SCRIPT}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Python script error: ${error.message}`);
-                return res.status(500).json({ 
-                    success: false, 
-                    message: "Execution failed", 
-                    error: error.message, 
-                    stderr 
+                return res.status(500).json({
+                    success: false,
+                    message: "Execution failed",
+                    error: error.message,
+                    stderr
                 });
             }
             if (stderr) {
                 console.warn(`Python script stderr: ${stderr}`);
             }
-            
+
             console.log(`Python script stdout: ${stdout}`);
-            return res.json({ 
-                success: true, 
-                message: "CSV Synced Successfully", 
-                output: stdout 
+            return res.json({
+                success: true,
+                message: "CSV Synced Successfully",
+                output: stdout
             });
         });
     } catch (error) {

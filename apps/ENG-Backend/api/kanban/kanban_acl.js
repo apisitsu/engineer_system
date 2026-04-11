@@ -288,7 +288,7 @@ const canManageCard = async (req, cardId) => {
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id FROM kb_card WHERE id=$1', [cardId]
+        'SELECT board_id, is_private FROM kb_card WHERE id=$1', [cardId]
     );
     if (!card) return false;
 
@@ -302,22 +302,22 @@ const canManageCard = async (req, cardId) => {
 
 /**
  * Can the user EDIT a card (content, status)?
- *   Card Owner/Editor + board-level override
+ *   Any card member (regardless of role) OR board-level override (AD/MGR/COORD/Board Owner)
  */
 const canEditCard = async (req, cardId) => {
     const uCode = req.user?.empno;
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id FROM kb_card WHERE id=$1', [cardId]
+        'SELECT board_id, is_private FROM kb_card WHERE id=$1', [cardId]
     );
     if (!card) return false;
 
-    // Card Owner or Editor
+    // Any explicit card member can edit
     const cardMbr = await getCardMembership(cardId, uCode);
-    if (cardMbr && ['owner', 'editor'].includes(cardMbr.role)) return true;
+    if (cardMbr) return true;
 
-    // Board-level override
+    // Board-level override (AD, MGR, COORD, Board Owner, Project Owner)
     return await hasBoardLevelOverride(req, card.board_id);
 };
 

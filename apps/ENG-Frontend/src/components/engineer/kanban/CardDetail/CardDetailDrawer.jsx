@@ -361,8 +361,29 @@ const CardDetailDrawer = () => {
     const cardIssues = card?.issues || [];
 
     // ─── Handlers ──────────────────────────────────────────────────
+    const checkCanEdit = async (showWarning = true) => {
+        if (!isCardMember) {
+            if (canEditCard) {
+                // Auto join anyone with override rights immediately
+                await addCardMember(card.id, currentUserCode, empNo);
+                return true;
+            } else {
+                if (showWarning) {
+                    Swal.fire({
+                        title: 'แจ้งเตือน',
+                        text: 'กรุณากด Join เพื่อเข้าร่วมการ์ดก่อนทำการแก้ไข',
+                        icon: 'warning',
+                        confirmButtonColor: theme.colors.primary
+                    });
+                }
+                return false;
+            }
+        }
+        return true;
+    };
+
     const handleSaveName = async () => {
-        if (isReadOnly) return;
+        if (!(await checkCanEdit(false))) return;
         if (editName.trim() && editName !== card.name) {
             await updateCard(card.id, { name: editName.trim() });
         }
@@ -635,7 +656,11 @@ const CardDetailDrawer = () => {
                                                         style={{ fontSize: 18, fontWeight: 600, borderRadius: theme.borderRadius.sm }}
                                                     />
                                                 ) : (
-                                                    <h2 style={{ margin: 0, fontSize: 20, color: theme.colors.textPrimary, fontWeight: 600, wordBreak: 'break-word', cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && setIsEditingName(true)}>
+                                                    <h2 style={{ margin: 0, fontSize: 20, color: theme.colors.textPrimary, fontWeight: 600, wordBreak: 'break-word', cursor: isReadOnly ? 'pointer' : 'pointer' }} onClick={async () => {
+                                                        if (await checkCanEdit()) {
+                                                            setIsEditingName(true);
+                                                        }
+                                                    }}>
                                                         {card.name}
                                                     </h2>
                                                 )}
@@ -806,15 +831,17 @@ const CardDetailDrawer = () => {
                                             ) : (
                                                 <div
                                                     style={{
-                                                        // background: theme.colors.surfaceHover,
                                                         padding: theme.spacing.sm,
                                                         borderRadius: theme.borderRadius.md,
-                                                        // border: `1px solid ${theme.colors.border}`,
-                                                        cursor: isReadOnly ? 'default' : 'pointer',
+                                                        cursor: isReadOnly ? 'pointer' : 'pointer',
                                                         minHeight: 50,
                                                         transition: `background ${theme.transitions.fast}`,
                                                     }}
-                                                    onClick={() => !isReadOnly && setIsEditingDesc(true)}
+                                                    onClick={async () => {
+                                                        if (await checkCanEdit()) {
+                                                            setIsEditingDesc(true);
+                                                        }
+                                                    }}
                                                     onMouseOver={(e) => e.currentTarget.style.background = `${theme.colors.surfaceHover}CC`}
                                                     onMouseOut={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}
                                                 >
@@ -823,14 +850,10 @@ const CardDetailDrawer = () => {
                                                             margin: 0,
                                                             whiteSpace: 'pre-wrap',
                                                             color: theme.colors.textPrimary,
-                                                            cursor: isReadOnly ? 'default' : 'pointer', minHeight: 40
+                                                            cursor: isReadOnly ? 'pointer' : 'pointer', minHeight: 40
                                                         }}
-                                                        onClick={() => !isReadOnly && setIsEditingDesc(true)}>
-                                                        {card.description || <span style={{
-                                                            color: theme.colors.textTertiary
-                                                        }}>
-                                                            Add a more detailed description...
-                                                        </span>}
+                                                    >
+                                                        {card.description || <span style={{ color: theme.colors.textTertiary }}>Add a more detailed description...</span>}
                                                     </Paragraph>
                                                 </div>
                                             )}
@@ -1212,8 +1235,13 @@ const CardDetailDrawer = () => {
                                                         }}>
                                                             <Checkbox
                                                                 checked={task.is_completed}
-                                                                onChange={() => !isReadOnly && handleToggleTask(task)}
-                                                                disabled={isReadOnly}
+                                                                onChange={async (e) => {
+                                                                    if (await checkCanEdit()) {
+                                                                        handleToggleTask(task);
+                                                                    } else {
+                                                                        e.preventDefault();
+                                                                    }
+                                                                }}
                                                             />
                                                             {editingTaskId === task.id ? (
                                                                 <Input
@@ -1237,10 +1265,10 @@ const CardDetailDrawer = () => {
                                                                         flex: 1,
                                                                         color: task.is_completed ? theme.colors.textTertiary : theme.colors.textPrimary,
                                                                         fontSize: 13,
-                                                                        cursor: isReadOnly ? 'default' : 'pointer'
+                                                                        cursor: isReadOnly ? 'pointer' : 'pointer'
                                                                     }}
-                                                                    onClick={() => {
-                                                                        if (!isReadOnly) {
+                                                                    onClick={async () => {
+                                                                        if (await checkCanEdit()) {
                                                                             setEditingTaskId(task.id);
                                                                             setEditTaskName(task.name);
                                                                         }
