@@ -5,17 +5,17 @@ git add .
 git commit -m "comment"
 
 // 3. push to origin
-git push origin feature/plbmp118
+git push origin mtc
 
 // 4. push to github
-git push github feature/plbmp118
+git push github mtc
 
 // 5. pull from github
 git checkout dev
 git pull github dev
 
 // 6. merge with github
-git merge feature/plbmp118
+git merge mtc
 type :wq
 
 // 7. push to github
