@@ -39,8 +39,14 @@ const TABLES = {
 };
 
 const PATHS = {
-  PYTHON_EXE: process.env.PYTHON_EXE || 'python',
-  TOOLING_IMPORT_SCRIPT: process.env.TOOLING_IMPORT_SCRIPT,
+  // Resolve the python executable path (can be a relative path to a venv)
+  PYTHON_EXE: process.env.PYTHON_EXE 
+    ? path.resolve(__dirname, '../../../', process.env.PYTHON_EXE)
+    : 'python',
+  // Resolve the script path relative to the root of the backend
+  TOOLING_IMPORT_SCRIPT: process.env.TOOLING_IMPORT_SCRIPT 
+    ? path.resolve(__dirname, '../../../', process.env.TOOLING_IMPORT_SCRIPT)
+    : path.resolve(__dirname, 'src/importPCtooling.py'),
   EMAIL_RENDERER: path.join(__dirname, '../../../templates/email/emailRenderer'),
   SDS_TEMPLATE_DIR: process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'),
 };

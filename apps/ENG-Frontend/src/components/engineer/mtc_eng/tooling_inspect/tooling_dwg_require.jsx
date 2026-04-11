@@ -8,6 +8,7 @@ import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import axios from "axios";
 import moment from "moment";
+import dayjs from "dayjs";
 import Swal from "sweetalert2";
 
 const { TextArea } = Input;
@@ -53,7 +54,7 @@ const DWGRequestForm = ({ open, onCancel }) => {
             .then(async (values) => {
                 setSaveLoading(true);
 
-                const requestdate = values.date_request ? moment(values.date_request).format('YYYY-MM-DD') : '';
+                const requestdate = values.date_request ? dayjs(values.date_request).format('YYYY-MM-DD') : '';
                 const payload = {
                     date_req: requestdate,
                     item: values.item,

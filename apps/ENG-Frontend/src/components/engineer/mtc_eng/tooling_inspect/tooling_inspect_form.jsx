@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Modal, Form, Input, DatePicker, Select, Row, Col, Button, Alert, Space, InputNumber } from "antd";
 import { SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import moment from "moment";
+import dayjs from "dayjs";
 import axios from "axios";
 import Swal from 'sweetalert2';
 import { server } from "../../../../constance/constance";
@@ -24,8 +25,8 @@ const ToolingReturnForm = ({ open, onCancel, onSuccess }) => {
 
             const payload = {
                 date_return: values.date_return
-                    ? moment(values.date_return).format('YYYY-MM-DD')
-                    : moment().format('YYYY-MM-DD'),
+                    ? dayjs(values.date_return).format('YYYY-MM-DD')
+                    : dayjs().format('YYYY-MM-DD'),
                 wc_code: values.wc_code ? values.wc_code.toString().replace(/\D/g, '') : null,
                 qty: values.qty,
                 measuring_tool: values.measuring_tool,
