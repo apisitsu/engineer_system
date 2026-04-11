@@ -211,6 +211,13 @@ app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
 app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
+app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
+
+// Email Configuration Management
+app.get('/api/engineer/mtc/email-config', toolReq.getEmailConfigs);
+app.post('/api/engineer/mtc/email-config', toolReq.createEmailConfig);
+app.put('/api/engineer/mtc/email-config/:id', toolReq.updateEmailConfig);
+app.delete('/api/engineer/mtc/email-config/:id', toolReq.deleteEmailConfig);
 
 // To enable authentication and file validation, uncomment the middleware:
 // app.post('/api/engineer/mtc/tool-requests',

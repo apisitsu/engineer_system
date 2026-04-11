@@ -47,13 +47,17 @@ const HomeMTCEng = () => {
     const toolingDelay = Number(toolingData.delay) || 0;
 
     // DWG Request Stats (from General DWG Request - tr_request)
-    // Use dashboard stats from API if available, otherwise calculate from dwgData
     const totalDwgJobs = dwgStats ? dwgStats.total : dwgData.length;
     const dwgPending = dwgStats ? (dwgStats.byStatus[WORKFLOW_STATUS.PENDING] || 0) + (dwgStats.byStatus['Draft'] || 0) : 
       dwgData.filter(item => item.status?.toLowerCase() === WORKFLOW_STATUS.PENDING.toLowerCase() || item.status?.toLowerCase() === 'draft').length;
     const dwgComplete = dwgStats ? (dwgStats.byStatus[WORKFLOW_STATUS.COMPLETED_INFORMED] || 0) : 
       dwgData.filter(item => item.status?.toLowerCase() === WORKFLOW_STATUS.COMPLETED_INFORMED.toLowerCase() || item.status?.toLowerCase() === WORKFLOW_STATUS.COMPLETE.toLowerCase()).length;
     const dwgInProgress = dwgStats ? (dwgStats.total - dwgPending - dwgComplete) : totalDwgJobs - dwgPending - dwgComplete;
+
+    // Performance Stats for DWG
+    const dwgOnTime = dwgStats?.performance?.['On time'] || 0;
+    const dwgDelay = dwgStats?.performance?.['Delay'] || 0;
+    const dwgTotalFinished = dwgOnTime + dwgDelay;
 
     return {
       totalToolingJobs,
@@ -64,9 +68,14 @@ const HomeMTCEng = () => {
       dwgPending,
       dwgComplete,
       dwgInProgress,
+      dwgOnTime,
+      dwgDelay,
       toolingOnTimePercent: totalToolingJobs > 0 ? Number(((toolingOnTime / totalToolingJobs) * 100).toFixed(1)) : 0,
       toolingPendingPercent: totalToolingJobs > 0 ? Number(((toolingPending / totalToolingJobs) * 100).toFixed(1)) : 0,
       toolingDelayPercent: totalToolingJobs > 0 ? Number(((toolingDelay / totalToolingJobs) * 100).toFixed(1)) : 0,
+      dwgOnTimePercent: dwgTotalFinished > 0 ? Number(((dwgOnTime / dwgTotalFinished) * 100).toFixed(1)) : 0,
+      dwgInProgressPercent: totalDwgJobs > 0 ? Number(((dwgInProgress / totalDwgJobs) * 100).toFixed(1)) : 0,
+      dwgPendingPercent: totalDwgJobs > 0 ? Number(((dwgPending / totalDwgJobs) * 100).toFixed(1)) : 0,
     };
   }, [toolingData, dwgData, dwgStats]);
 
@@ -146,21 +155,35 @@ const HomeMTCEng = () => {
                 </div>
                 <Divider style={{ margin: '0 0 16px 0' }} />
                 <Row gutter={[16, 16]} style={{ marginTop: 20 }}>
-                  <Col span={24}>
+                  <Col span={18}>
                     <Row padding={8} gutter={[16, 16]}>
                       <Col span={6}>
                         <Card size="small" title="Total Requests"><h2 style={{ color: theme.colors.info }}>{dashboardStats.totalDwgJobs}</h2></Card>
                       </Col>
                       <Col span={6}>
-                        <Card size="small" title="Complete"><h2 style={{ color: theme.colors.success }}>{dashboardStats.dwgComplete}</h2></Card>
+                        <Card size="small" title="On Time"><h2 style={{ color: theme.colors.success }}>{dashboardStats.dwgOnTime}</h2></Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small" title="Delay"><h2 style={{ color: theme.colors.error }}>{dashboardStats.dwgDelay}</h2></Card>
                       </Col>
                       <Col span={6}>
                         <Card size="small" title="In Progress"><h2 style={{ color: theme.colors.primary }}>{dashboardStats.dwgInProgress}</h2></Card>
                       </Col>
-                      <Col span={6}>
-                        <Card size="small" title="Pending Approval"><h2 style={{ color: theme.colors.warning }}>{dashboardStats.dwgPending}</h2></Card>
+                    </Row>
+                    <Row padding={8} gutter={[16, 16]} style={{ marginTop: 10 }}>
+                      <Col span={24}>
+                        <Card size="small" title="Performance (Completed Only)">
+                          <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                        </Card>
                       </Col>
                     </Row>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" title="Status Overview">
+                      On Time <Progress percent={dashboardStats.dwgOnTimePercent} strokeColor={theme.colors.success} size="small" />
+                      In Progress <Progress percent={dashboardStats.dwgInProgressPercent} strokeColor={theme.colors.primary} size="small" />
+                      Pending Approval <Progress percent={dashboardStats.dwgPendingPercent} strokeColor={theme.colors.warning} size="small" />
+                    </Card>
                   </Col>
                 </Row>
               </div>

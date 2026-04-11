@@ -15,6 +15,7 @@ const TABLES = {
   // General DWG Request (New System)
   TR_REQUEST: 'tr_request',
   TR_WORKFLOW: 'tr_workflow',
+  TR_EMAIL_CONFIG: 'tr_email_config',
 
   // SDS (Setup Data Sheet)
   SETUP_SHEET: 'setup_sheet',

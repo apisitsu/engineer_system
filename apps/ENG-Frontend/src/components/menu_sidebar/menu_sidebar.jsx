@@ -88,6 +88,7 @@ export const mtc = createMenu([
     { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT },
     { label: "Setup Data Sheet", path: MTC_PATHS.SDS },
+    { label: "Email Config", path: "/eng/mtc/email-config" },
 ]);
 
 export const all = createMenu([
