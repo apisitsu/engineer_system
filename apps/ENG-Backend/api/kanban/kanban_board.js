@@ -8,7 +8,7 @@ const { insertToPositionables } = require('./positionHelper');
 const {
     canAccessProject, canManageProject, canSeeAllProjects,
     isSuperAdmin, isManagerOrCoord,
-    canManageBoard, canEditBoard, getBoardMembership, isProjectMember,
+    canManageBoard, canEditBoard, canViewBoard, getBoardMembership, isProjectMember,
 } = require('./kanban_acl');
 
 // ─── HELPERS ───────────────────────────────────────────────────────
@@ -229,6 +229,11 @@ const DeleteBoard = async (req, res) => {
 // GET /api/kanban/boards/:id/members
 const GetBoardMembers = async (req, res) => {
     const { id } = req.params;
+
+    if (!(await canViewBoard(req, id))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     try {
         const { rows } = await engPool.query(
             'SELECT * FROM kb_board_membership WHERE board_id=$1 ORDER BY role ASC', [id]
@@ -301,6 +306,11 @@ const RemoveBoardMember = async (req, res) => {
 // GET /api/kanban/boards/:boardId/lists
 const GetLists = async (req, res) => {
     const { boardId } = req.params;
+
+    if (!(await canViewBoard(req, boardId))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     try {
         const { rows } = await engPool.query(
             "SELECT * FROM kb_list WHERE board_id=$1 ORDER BY list_type ASC, position ASC", [boardId]
@@ -389,6 +399,11 @@ const DeleteList = async (req, res) => {
 // GET /api/kanban/boards/:boardId/labels
 const GetLabels = async (req, res) => {
     const { boardId } = req.params;
+
+    if (!(await canViewBoard(req, boardId))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     const { rows } = await engPool.query('SELECT * FROM kb_label WHERE board_id=$1 ORDER BY position ASC', [boardId]);
     res.json({ data: rows });
 };

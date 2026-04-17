@@ -9,7 +9,7 @@ const path = require('path');
 const {
     canAccessProject, canManageProject,
     getBoardMembership, getCardMembership,
-    hasBoardLevelOverride, canEditBoard, canEditCard, canManageCard, canViewCard,
+    hasBoardLevelOverride, canEditBoard, canViewBoard, canEditCard, canManageCard, canViewCard,
 } = require('./kanban_acl');
 const { insertToPositionables } = require('./positionHelper');
 
@@ -40,6 +40,10 @@ const GetCards = async (req, res) => {
     try {
         const { rows: [list] } = await engPool.query('SELECT l.board_id, b.project_id FROM kb_list l JOIN kb_board b ON b.id=l.board_id WHERE l.id=$1', [listId]);
         if (!list) return res.status(404).json({ error: 'List not found' });
+
+        if (!(await canViewBoard(req, list.board_id))) {
+            return res.status(403).json({ error: 'Access denied to board' });
+        }
 
         const globalOverride = await hasBoardLevelOverride(req, list.board_id);
 
@@ -149,12 +153,8 @@ const GetCard = async (req, res) => {
         const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
         if (!card) return res.status(404).json({ error: 'Card not found' });
 
-        if (card.is_private) {
-            const globalOverride = await hasBoardLevelOverride(req, card.board_id);
-            const { rows: mbr } = await engPool.query('SELECT 1 FROM kb_card_membership WHERE card_id=$1 AND u_code=$2', [id, uCode]);
-            if (!globalOverride && mbr.length === 0) {
-                return res.status(403).json({ error: 'Access denied to private card' });
-            }
+        if (!(await canViewCard(req, id))) {
+            return res.status(403).json({ error: 'Access denied to card' });
         }
 
         // Fetch all related data in parallel
@@ -571,6 +571,11 @@ const RemoveCardLabel = async (req, res) => {
 // GET /api/kanban/cards/:id/task-lists
 const GetTaskLists = async (req, res) => {
     const { id } = req.params;
+
+    if (!(await canViewCard(req, id))) {
+        return res.status(403).json({ error: 'Access denied to card' });
+    }
+
     const { rows } = await engPool.query(`
         SELECT tl.*, COALESCE(
             JSON_AGG(t.* ORDER BY t.position) FILTER (WHERE t.id IS NOT NULL), '[]'
