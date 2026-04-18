@@ -8,10 +8,9 @@ import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from "../../../theme";
 
 const { Content } = Layout;
-const { Option } = Select;
 
 const App = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const { theme } = useTheme();
 
   return (
@@ -108,6 +107,27 @@ const App = () => {
                     }}
                   >
                     Parametric Bushing 3D
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<MdAssessment />}
+                    size="large"
+                    onClick={() => window.open('/eng/fea_simulation', '_blank')}
+                    style={{
+                      background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primaryDark})`,
+                      border: 'none',
+                      borderRadius: theme.borderRadius.md,
+                      boxShadow: theme.shadows.md,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      height: '42px',
+                      padding: '0 20px',
+                    }}
+                  >
+                    FEA Simulations
                   </Button>
                 </div>
               </Card>

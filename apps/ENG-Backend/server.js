@@ -316,6 +316,13 @@ app.use('/api/kanban', (req, res, next) => {
 
 app.use('/api/kanban', kanbanRoutes);
 
+//--------------------FEA Simulation Module---------------------//
+const feaSimulation = require('./api/fea/fea_router');
+// Also initialize worker so it starts listening
+require('./api/fea/fea_worker');
+app.use('/api/fea', feaSimulation);
+// Expose the output directory so the frontend can fetch the generated JSON files
+app.use('/output', express.static(path.join(__dirname, 'output')));
 
 // const { HttpsProxyAgent } = require('https-proxy-agent');
 // const proxyUrl = 'http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080';

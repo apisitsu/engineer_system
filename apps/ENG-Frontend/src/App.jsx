@@ -55,6 +55,7 @@ import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
+import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -284,7 +285,7 @@ const AppContent = () => {
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
-
+                <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
               </Route>
 
 
