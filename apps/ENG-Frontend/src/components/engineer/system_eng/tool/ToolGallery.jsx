@@ -162,7 +162,7 @@ const ToolGallery = () => {
 
   return (
     <Layout style={{ minHeight: '100vh', display: 'flex' }}>
-      <MenuTemplate type={"System"} defaultSelectedKeys={"6"} />
+      <MenuTemplate type={"System"} defaultSelectedKeys={"3"} />
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <ScrollbarStyle primary={theme.colors.primary} />
         <Spin spinning={loading} tip="Loading Portal..." size="large">

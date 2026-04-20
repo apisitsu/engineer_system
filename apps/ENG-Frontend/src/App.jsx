@@ -24,9 +24,6 @@ import Home from "./components/home/home";
 import HomeEng from './components/engineer/home_eng';
 
 import HomeSystemEng from './components/engineer/system_eng/home_system';
-import SystemEngSetting from './components/engineer/system_eng/setting/setting';
-import TodoPoroject from './components/engineer/system_eng/todo/todo_project';
-import ProjectDashboard from './components/engineer/system_eng/todo/ProjectDashboard';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
 import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
@@ -296,9 +293,6 @@ const AppContent = () => {
                 <Route element={<MainLayout />}>
                   {/* ------ System Engineer ------ */}
                   <Route path="/eng/system_eng" element={<HomeSystemEng />} />
-                  <Route path="/eng/system_eng/project_dashboard" element={<ProjectDashboard />} />
-                  <Route path="/eng/system_eng/setting" element={<SystemEngSetting />} />
-                  <Route path="/eng/system_eng/todo_project" element={<TodoPoroject />} />
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
