@@ -385,31 +385,34 @@ const ProjectSettingsDrawer = () => {
                                             {/* Members Section inside Edit Modal */}
                                             <div>
                                                 <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Project Members</Text>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                                                <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
                                                     {projectManagers.map(mgr => {
-                                                        const userObj = users.find(u => u.u_code === mgr.u_code);
+                                                        const userObj = users.find(u => u.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
                                                         const words = (userObj?.u_name || '').split(' ');
                                                         const initials = words.length >= 2
                                                             ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
                                                             : (userObj?.u_nickname?.[0] || mgr.u_code[0]).toUpperCase();
                                                         return (
-                                                            <div key={mgr.id} style={{
-                                                                display: 'flex', alignItems: 'center', gap: 4,
-                                                                background: theme.colors.background, padding: '2px 8px 2px 2px',
-                                                                borderRadius: 16, border: `1px solid ${theme.colors.border}`
+                                                            <div key={mgr.u_code} style={{
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                padding: '6px 8px', borderRadius: theme.borderRadius.sm,
+                                                                background: `${theme.colors.info}10`,
                                                             }}>
-                                                                {userObj?.profile_img_b64 ? (
-                                                                    <Avatar size={24} src={userObj.profile_img_b64} />
-                                                                ) : (
-                                                                    <Avatar size={24}>{initials}</Avatar>
-                                                                )}
-                                                                <Text style={{ fontSize: 12 }}>{userObj?.u_name || userObj?.u_nickname || mgr.u_code}</Text>
+                                                                <Space>
+                                                                    {userObj?.profile_img_b64 ? (
+                                                                        <Avatar size="small" src={userObj.profile_img_b64} />
+                                                                    ) : (
+                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                                            {initials}
+                                                                        </Avatar>
+                                                                    )}
+                                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                        <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{userObj?.u_name || userObj?.u_nickname || userObj?.u_code}</Text>
+                                                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{userObj?.u_code} ({mgr.role})</Text>
+                                                                    </div>
+                                                                </Space>
                                                                 {mgr.role !== 'owner' && (
-                                                                    <AiOutlineClose
-                                                                        size={12}
-                                                                        style={{ cursor: 'pointer', marginLeft: 4, color: theme.colors.textSecondary }}
-                                                                        onClick={() => removeProjectManager(proj.id, mgr.u_code)}
-                                                                    />
+                                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => removeProjectManager(proj.id, mgr.u_code)} />
                                                                 )}
                                                             </div>
                                                         );
@@ -431,7 +434,18 @@ const ProjectSettingsDrawer = () => {
                                                     >
                                                         {availableUsersForProject.map(u => (
                                                             <Select.Option key={u.u_code} value={u.u_code}>
-                                                                {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                                <Space>
+                                                                    {u.profile_img_b64 ? (
+                                                                        <Avatar size="small" src={u.profile_img_b64} />
+                                                                    ) : (
+                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                                            {(u.u_name || u.u_code)[0].toUpperCase()}
+                                                                        </Avatar>
+                                                                    )}
+                                                                    <Text style={{ fontSize: 13 }}>
+                                                                        {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                                    </Text>
+                                                                </Space>
                                                             </Select.Option>
                                                         ))}
                                                     </Select>

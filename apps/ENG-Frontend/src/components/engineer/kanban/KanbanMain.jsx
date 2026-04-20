@@ -467,7 +467,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const stats = useMemo(() => ({
         total: projects.length,
         totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-        owned: projects.filter(p => p.is_owner).length,
+        owned: projects.filter(p => p.role === 'owner').length,
         favorites: projects.filter(p => p.is_favorite).length,
         recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
     }), [projects]);
@@ -479,7 +479,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
+        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

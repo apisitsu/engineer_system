@@ -11,7 +11,7 @@ import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
 import { GoDiscussionClosed } from 'react-icons/go';
-import { IoCloseOutline, IoSearchOutline, IoArchiveOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoSearchOutline, IoArchiveOutline, IoAddOutline } from 'react-icons/io5';
 import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy, AiOutlineEdit } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
 import { RiInputField } from 'react-icons/ri';
@@ -119,8 +119,8 @@ const CardDetailDrawer = () => {
         addLinkAttachment, addFileAttachment, deleteAttachment,
         fetchCustomFieldValues, upsertCustomFieldValue,
         activeBoardMembers, addCardMember, removeCardMember,
-        projectManagers, users, activeProject,
-        createCardIssue, updateCardIssue, deleteCardIssue
+        projectManagers, users, activeProject, activeBoard,
+        createCardIssue, updateCardIssue, deleteCardIssue, createLabel
     } = useKanbanStore();
     const { theme } = useTheme();
     const { user, empNo } = useAuthStore();
@@ -145,6 +145,9 @@ const CardDetailDrawer = () => {
 
     const [showMoveSelect, setShowMoveSelect] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
+    const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+    const [newLabelName, setNewLabelName] = useState('');
+    const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
     const [activityLog, setActivityLog] = useState([]);
     const [showActivityLog, setShowActivityLog] = useState(false);
     const [showLinkAttach, setShowLinkAttach] = useState(false);
@@ -188,7 +191,8 @@ const CardDetailDrawer = () => {
         isReadOnly,
         isCardMember,
         isSuperAdmin,
-        isManagerOrCoord
+        isManagerOrCoord,
+        canManageBoardStructure
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
@@ -1744,7 +1748,59 @@ const CardDetailDrawer = () => {
                                                                     </div>
                                                                 );
                                                             }) : (
-                                                                <Text type="secondary" style={{ fontSize: 13 }}>No labels on this board yet.</Text>
+                                                                <Text type="secondary" style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>No labels on this board yet.</Text>
+                                                            )}
+                                                            {canManageBoardStructure && (
+                                                                <>
+                                                                    <Divider style={{ margin: '8px 0' }} />
+                                                                    {isCreatingLabel ? (
+                                                                        <div style={{ marginTop: 8 }}>
+                                                                            <Input
+                                                                                size="small"
+                                                                                placeholder="Label name (optional)"
+                                                                                value={newLabelName}
+                                                                                onChange={e => setNewLabelName(e.target.value)}
+                                                                                style={{ marginBottom: 8, borderRadius: theme.borderRadius.sm }}
+                                                                            />
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                                                                                {LABEL_COLORS.map(color => (
+                                                                                    <div
+                                                                                        key={color}
+                                                                                        onClick={() => setNewLabelColor(color)}
+                                                                                        style={{
+                                                                                            width: 24, height: 20,
+                                                                                            borderRadius: 4,
+                                                                                            background: color,
+                                                                                            cursor: 'pointer',
+                                                                                            border: newLabelColor === color ? '2px solid #333' : '2px solid transparent',
+                                                                                            transition: `all ${theme.transitions.fast}`,
+                                                                                        }}
+                                                                                    />
+                                                                                ))}
+                                                                            </div>
+                                                                            <Space size={4}>
+                                                                                <Button size="small" type="primary" onClick={async () => {
+                                                                                    if (activeBoard?.id) {
+                                                                                        await createLabel(activeBoard.id, newLabelName, newLabelColor);
+                                                                                        setNewLabelName('');
+                                                                                        setIsCreatingLabel(false);
+                                                                                    }
+                                                                                }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>Create</Button>
+                                                                                <Button size="small" onClick={() => setIsCreatingLabel(false)}>Cancel</Button>
+                                                                            </Space>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <Button
+                                                                            type="dashed"
+                                                                            block
+                                                                            size="small"
+                                                                            icon={<IoAddOutline />}
+                                                                            onClick={() => setIsCreatingLabel(true)}
+                                                                        >
+                                                                            Create a new label
+                                                                        </Button>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     )}
