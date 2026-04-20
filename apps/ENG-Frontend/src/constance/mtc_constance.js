@@ -10,6 +10,8 @@ export const MTC_PATHS = {
   TOOLING_SELECT: '/eng/mtc_eng/tooling-select',
   TOOLING_INVENTORY: '/eng/mtc_eng/tooling_inventory',
   SDS: '/eng/mtc_eng/sds',
+  SDS_V2: '/eng/mtc_eng/sds-v2',
+  SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
 };
 
 export const WORKFLOW_STATUS = {

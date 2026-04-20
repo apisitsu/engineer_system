@@ -50,6 +50,9 @@ import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/Em
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
 import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
+import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
+import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
+import FormulaManager from './components/engineer/mtc_eng/formula/FormulaManager';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
@@ -266,6 +269,9 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
                   <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
                   <Route path={MTC_PATHS.SDS} element={<SdsPage />} />
+                  <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
+                  <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
+                  <Route path="/eng/mtc/formulas" element={<FormulaManager />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
 
                   {/* ------ New Product Engineer ------ */}

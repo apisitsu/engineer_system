@@ -246,7 +246,7 @@ const DWGRequestForm = ({ open, onCancel }) => {
                                                             <CalendarOutlined />
                                                             <Text type="secondary">
                                                                 {item.date_req
-                                                                    ? moment(item.date_req, ["M/D/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).format("DD-MMM-YYYY")
+                                                                    ? moment(item.date_req).format("DD-MMM-YYYY")
                                                                     : "-"}
                                                             </Text>
                                                         </Space>

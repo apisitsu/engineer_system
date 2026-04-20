@@ -31,7 +31,7 @@ if "ชุด" in df_dp.columns:
 else:
     print(f"Can not find {file_name}")
 
-output_filename = "record_dwg_print.csv"
+output_filename = "RecordForDrawingPrinted.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 #df_dp.to_csv(output_filename, index=False, encoding='utf-8-sig')
 #print(f"Complete csv! File name: {output_filename}")

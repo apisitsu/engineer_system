@@ -39,23 +39,20 @@ for file in all_files:
 df_master = pd.concat(all_data, ignore_index=True)
 df_master.columns = df_master.columns.str.strip()
 
-df_master = df_master.rename(columns={'Date รับงาน': 'ReceiveDate', 'NAME': 'Item Name', 'Spec': 'DWG. No'})
+df_master = df_master.rename(columns={'Date รับงาน': 'Receive Date', 'TIME': "Time", 'NAME': 'Item Name', 'Spec': 'DWG. No', 'วันที่ Insp เสร็จ': 'Issue Date'})
 df_master = df_master.dropna(subset=['PO No.'])
 
 # Fix Date parsing to avoid swapping Day and Month (using dayfirst=True)
-if 'ReceiveDate' in df_master.columns:
-    df_master['ReceiveDate'] = pd.to_datetime(df_master['ReceiveDate'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
+if 'Receive Date' in df_master.columns:
+    df_master['Receive Date'] = pd.to_datetime(df_master['Receive Date'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
 
-# If 'Issue_Date' exists, format it correctly as well
-if 'Issue_Date' in df_master.columns:
-    df_master['Issue_Date'] = pd.to_datetime(df_master['Issue_Date'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
+# If 'Issue Date' exists, format it correctly as well
+if 'Issue Date' in df_master.columns:
+    df_master['Issue Date'] = pd.to_datetime(df_master['Issue Date'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
 
 # Drop unused columns
-if 'V/D' in df_master.columns:
-    df_master = df_master.drop(columns=['V/D'])
-
-if 'Item NO' in df_master.columns:
-    df_master = df_master.drop(columns=['Item NO'])
+cols_to_drop = ['V/D', 'Item NO', 'REJECT LIST', 'งานกลับมา', 'ORDER CONFIRM']
+df_master = df_master.drop(columns=cols_to_drop, errors='ignore')
 
 # Format Work Center with leading zeros (e.g., '6' -> '06')
 if 'W/C' in df_master.columns:
@@ -68,9 +65,9 @@ if "Q'ty" in df_master.columns:
     df_master["Q'ty"] = df_master["Q'ty"].apply(lambda x: f"{int(x)}" if pd.notnull(x) else "")
 
 # Rearrange columns (move TIME and W/C to the front)
-if 'TIME' in df_master.columns:
-    temp_time = df_master.pop('TIME')
-    df_master.insert(1, 'TIME', temp_time)
+if 'Time' in df_master.columns:
+    temp_time = df_master.pop('Time')
+    df_master.insert(1, 'Time', temp_time)
 
 if 'W/C' in df_master.columns:
     temp_wc = df_master.pop('W/C')
@@ -85,7 +82,7 @@ print(f"\nMerge complete! Total {len(df_master)} rows.")
 # 3. Save to CSV (Backup)
 # ==========================================
 print("\n=== Saving to CSV ===")
-output_filename = "ins_2026.csv"
+output_filename = "ToolingInspection.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 # Save to local directory
@@ -104,8 +101,8 @@ except Exception as e:
 # ==========================================
 # Mapping to exact PostgreSQL column names
 rename_mapping = {
-    'ReceiveDate': 'receive_date',
-    'TIME': 'time',
+    'Receive Date': 'receive_date',
+    'Time': 'time',
     'W/C': 'w_c',
     'PO No.': 'po_no',
     'Item Name': 'item_name',

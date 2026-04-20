@@ -26,6 +26,7 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys }) => 
             collapsible
             collapsed={collapsed}
             onCollapse={(value) => setCollapsed(value)}
+            width={250}
         >
             <Menu
                 style={{ paddingLeft: '0px' }}

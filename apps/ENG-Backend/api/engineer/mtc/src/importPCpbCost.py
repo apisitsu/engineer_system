@@ -14,9 +14,10 @@ if full_path.exists():
     df_pb = pd.read_excel(full_path, engine='pyxlsb', usecols="F:U", header=0)
     df_pb.columns = df_pb.columns.str.strip()
     df_pb = df_pb.dropna(subset=['ITEM NAME'])
+    df_pb = df_pb.rename(columns={'PURPOSE.1': 'Purpose'})
 
-    cols_to_drop = ['ITEM NO.', 'CURRENCY', 'VENDOR CODE', 'UNIT', 'PURPOSE', 'PURPOSE.1', 'INPUT DATE']
-    df_pb = df_pb.drop(columns=cols_to_drop, errors='ignore')
+    # cols_to_drop = ['PURPOSE.1']
+    # df_pb = df_pb.drop(columns=cols_to_drop, errors='ignore')
 
 if 'REQ.DUE DATE' in df_pb.columns:
     df_pb['REQ.DUE DATE'] = pd.to_datetime(df_pb['REQ.DUE DATE'], unit='D', origin='1899-12-30')
@@ -37,7 +38,7 @@ if "Q'TY" in df_pb.columns:
 else:
     print(f"Can not find {file_name}")
 
-output_filename = "pb_cost.csv"
+output_filename = "PBcost.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 #df_pb.to_csv(output_filename, index=False, encoding='utf-8-sig')
 #print(f"Complete csv! File name: {output_filename}")

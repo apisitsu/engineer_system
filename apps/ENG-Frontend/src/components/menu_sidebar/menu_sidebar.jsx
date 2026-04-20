@@ -6,6 +6,7 @@ import Looks3Icon from '@mui/icons-material/Looks3';
 import Looks4Icon from '@mui/icons-material/Looks4';
 import Looks5Icon from '@mui/icons-material/Looks5';
 import Looks6Icon from '@mui/icons-material/Looks6';
+import Filter7Icon from '@mui/icons-material/Filter7';
 
 import { MTC_PATHS } from "../../constance/mtc_constance";
 
@@ -18,6 +19,7 @@ const numberIcons = [
     <Looks4Icon style={iconStyle} />,
     <Looks5Icon style={iconStyle} />,
     <Looks6Icon style={iconStyle} />,
+    <Filter7Icon style={iconStyle} />,
 ];
 
 const createMenu = (items) => {
@@ -88,6 +90,8 @@ export const mtc = createMenu([
     { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT },
     { label: "Setup Data Sheet", path: MTC_PATHS.SDS },
+    { label: "Setup Data Sheet v2", path: MTC_PATHS.SDS_V2 },
+    { label: "SDS v2 Admin", path: MTC_PATHS.SDS_V2_ADMIN },
     { label: "Email Config", path: "/eng/mtc/email-config" },
 ]);
 

@@ -9,6 +9,7 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
@@ -56,11 +57,21 @@ export const server = {
   MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
   MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
+  MTC_FORMULAS: `${apiUrl}api/mtc/formulas`,
   MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
   MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
   MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
   MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
   MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
+  MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
+  MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
+  MTC_SDS_V2_PDF_CACHE: `${apiUrl}api/sds/v2/pdf/cache`,
+  MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,
+  MTC_SDS_V2_ADMIN_PARAMETERS: `${apiUrl}api/sds/v2/admin/parameters`,
+  MTC_SDS_V2_ADMIN_PARAMETERS_BULK: `${apiUrl}api/sds/v2/admin/parameters/bulk`,
+  MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
+  MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
+  MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

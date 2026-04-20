@@ -30,6 +30,7 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^17.2.3",
     "exceljs": "^4.3.0",
+    "expr-eval": "^2.0.2",
     "express": "^4.18.1",
     "express-fileupload": "^1.4.0",
     "express-promise-router": "^4.1.1",

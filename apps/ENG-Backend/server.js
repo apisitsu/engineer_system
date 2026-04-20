@@ -178,58 +178,92 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
-//------------------MTC Engineer------------------//
-const engMTC = require('./api/engineer/mtc/eng_mtc_model');
-const toolingSelect = require('./api/engineer/mtc/tooling_select');
-const sds = require('./api/engineer/mtc/sds');
+//------------------MTC Engineer (Refactored)------------------//
+const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
+app.use('/api/engineer/mtc', mtcRoutes);
 
-app.route('/api/tooling_inspect/getlist').get(engMTC.ToolingInspectGetlist)
-app.route('/api/tooling_inspect/dwg_require_getlist').get(engMTC.ToolDWGRequestGetList)
-app.route('/api/tooling_inspect/dwg_require_add').post(engMTC.ToolDWGRequestAdd)
-app.route('/api/tooling_inspect/dwg_require_update').put(engMTC.ToolDWGRequestUpdate)
-app.route('/api/tooling_inspect/dashboard_stats').get(engMTC.ToolingDashboadtGetlist)
-app.route('/api/tooling_inspect/return_add').post(engMTC.ToolingReturnAdd)
-app.route('/api/tooling_inspect/inspect_update').post(engMTC.ToolingInspectUpdate)
-app.route('/api/tooling_inspect/sync_csv').post(engMTC.ToolingSyncCSV)
-app.route('/api/master/wc').get(engMTC.GetWCCodes)
+const toolingSelectController = require('./api/engineer/mtc/controllers/toolingSelectController');
+app.use('/api/tooling-select', verifyToken, toolingSelectController);
 
-app.use('/api/tooling-select', toolingSelect);
-app.use('/api/sds', sds);
+const formulaController = require('./api/engineer/mtc/controllers/formulaController');
+const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
+app.get('/api/mtc/formulas/:machineName', verifyToken, formulaController.getFormulasByMachine);
+app.post('/api/mtc/formulas', verifyToken, mtcIsAdmin, formulaController.createFormula);
+app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.testFormula);
+app.delete('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.deleteFormula);
+
+const sdsController = require('./api/engineer/mtc/controllers/sdsController');
+app.use('/api/sds', sdsController);
+
+const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
+app.use('/api/sds/v2', sdsV2Controller);
+
+const sdsV2ImageController = require('./api/engineer/mtc/controllers/sdsV2ImageController');
+app.use('/api/sds/v2/images', sdsV2ImageController);
+
+const sdsV2AdminController = require('./api/engineer/mtc/controllers/sdsV2AdminController');
+app.use('/api/sds/v2/admin', sdsV2AdminController);
+
+const sdsV2PdfController = require('./api/engineer/mtc/controllers/sdsV2PdfController');
+app.use('/api/sds/v2', sdsV2PdfController);
+
+// Backward Compatibility for Tooling Inspect
+const legacyMtcController = require('./api/engineer/mtc/controllers/legacyMtcController');
+app.route('/api/tooling_inspect/getlist').get(verifyToken, legacyMtcController.ToolingInspectGetlist);
+app.route('/api/tooling_inspect/dashboard_stats').get(verifyToken, legacyMtcController.ToolingDashboadtGetlist);
+app.route('/api/tooling_inspect/dwg_require_getlist').get(verifyToken, legacyMtcController.ToolDWGRequestGetList);
+
+// Protected Modification endpoints
+app.route('/api/tooling_inspect/dwg_require_add').post(verifyToken, legacyMtcController.ToolDWGRequestAdd);
+app.route('/api/tooling_inspect/dwg_require_update').put(verifyToken, legacyMtcController.ToolDWGRequestUpdate);
+app.route('/api/tooling_inspect/return_add').post(verifyToken, legacyMtcController.ToolingReturnAdd);
+app.route('/api/tooling_inspect/inspect_update').post(verifyToken, legacyMtcController.ToolingInspectUpdate);
+app.route('/api/tooling_inspect/sync_csv').post(verifyToken, legacyMtcController.ToolingSyncCSV);
+app.route('/api/master/wc').get(verifyToken, legacyMtcController.GetWCCodes);
 
 
 // ============================================================================
 // Tool Request System (General DWG Request)
 // ============================================================================
-const toolReq = require('./api/engineer/mtc/tool_req');
+const toolReq = require('./api/engineer/mtc/controllers/toolRequestController');
 
-// Optional: Import middleware for enhanced security (uncomment to enable)
-// const { verifyToken, optionalAuth } = require('./api/engineer/mtc/middleware/toolRequestAuth');
-// const { validateFileUpload } = require('./api/engineer/mtc/middleware/fileUpload');
+// Import middleware for enhanced security
+const { verifyToken: mtcVerifyToken, optionalAuth } = require('./api/engineer/mtc/utils/toolRequestAuth');
+const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 
-// Public endpoints (no authentication required)
+// Public endpoints (no authentication required - viewing only)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
 app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
-app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
 
-// Email Configuration Management
-app.get('/api/engineer/mtc/email-config', toolReq.getEmailConfigs);
-app.post('/api/engineer/mtc/email-config', toolReq.createEmailConfig);
-app.put('/api/engineer/mtc/email-config/:id', toolReq.updateEmailConfig);
-app.delete('/api/engineer/mtc/email-config/:id', toolReq.deleteEmailConfig);
+// Protected endpoints (require authentication)
+app.post('/api/engineer/mtc/tool-requests',
+  mtcVerifyToken,
+  validateFileUpload({ fieldName: 'attachment', required: false }),
+  toolReq.createToolRequest
+);
 
-// To enable authentication and file validation, uncomment the middleware:
-// app.post('/api/engineer/mtc/tool-requests',
-//   verifyToken,
-//   validateFileUpload({ fieldName: 'attachment', required: false }),
-//   toolReq.createToolRequest
-// );
+app.post('/api/engineer/mtc/tool-requests/:id/action',
+  mtcVerifyToken,
+  toolReq.submitAction
+);
 
-app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
-app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
-app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
-app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
+app.put('/api/engineer/mtc/tool-requests/:id',
+  mtcVerifyToken,
+  toolReq.updateToolRequest
+);
+
+app.delete('/api/engineer/mtc/tool-requests/:id',
+  mtcVerifyToken,
+  toolReq.deleteToolRequest
+);
+
+// Email Configuration Management (Admin only - verified by token)
+app.get('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.getEmailConfigs);
+app.post('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.createEmailConfig);
+app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.updateEmailConfig);
+app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.deleteEmailConfig);
 
 // Note: For production deployment, enable authentication by:
 // 1. Uncomment the middleware imports above
