@@ -144,6 +144,8 @@ const ProjectSettingsDrawer = () => {
     const [editingGradient, setEditingGradient] = useState(GRADIENTS[0]);
     const [editingIcon, setEditingIcon] = useState('rocket');
     const [editingPrivate, setEditingPrivate] = useState(false);
+    const [editingPriority, setEditingPriority] = useState('Medium');
+    const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
 
     const targetId = projectSettingsTargetId || activeProject?.id;
@@ -197,6 +199,8 @@ const ProjectSettingsDrawer = () => {
             background_value: editingGradient,
             icon: editingIcon,
             is_private: editingPrivate,
+            priority: editingPriority,
+            status: editingStatus,
         });
         setEditingId(null);
         setEditingName('');
@@ -210,6 +214,8 @@ const ProjectSettingsDrawer = () => {
         setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
         setEditingIcon(proj.icon || 'rocket');
         setEditingPrivate(proj.is_private || false);
+        setEditingPriority(proj.priority || 'Medium');
+        setEditingStatus(proj.status || 'Active');
         setMemberSearch('');
         fetchProjectManagers(proj.id);
     };
@@ -361,6 +367,26 @@ const ProjectSettingsDrawer = () => {
                                             <div>
                                                 <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>Project Icon</Text>
                                                 <IconPicker value={editingIcon} onChange={setEditingIcon} theme={theme} />
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: 16 }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Priority</Text>
+                                                    <Select value={editingPriority} onChange={setEditingPriority} style={{ width: '100%' }}>
+                                                        <Select.Option value="Low">Low</Select.Option>
+                                                        <Select.Option value="Medium">Medium</Select.Option>
+                                                        <Select.Option value="High">High</Select.Option>
+                                                        <Select.Option value="Urgent">Urgent</Select.Option>
+                                                    </Select>
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Status</Text>
+                                                    <Select value={editingStatus} onChange={setEditingStatus} style={{ width: '100%' }}>
+                                                        <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                                        <Select.Option value="Active">Active</Select.Option>
+                                                        <Select.Option value="Completed">Completed</Select.Option>
+                                                    </Select>
+                                                </div>
                                             </div>
 
                                             <Divider style={{ margin: '8px 0' }} />

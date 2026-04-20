@@ -116,16 +116,16 @@ const GetProjectById = async (req, res) => {
 const CreateProject = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { name, description, background_type, background_value, is_hidden, is_private, pm_project_id, icon } = req.body;
+    const { name, description, background_type, background_value, is_hidden, is_private, pm_project_id, icon, priority, status } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows } = await client.query(`
-            INSERT INTO kb_project (owner_u_code, pm_project_id, name, description, background_type, background_value, is_hidden, is_private, icon)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
-        `, [uCode, pm_project_id || null, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null]);
+            INSERT INTO kb_project (owner_u_code, pm_project_id, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
+        `, [uCode, pm_project_id || null, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active']);
 
         const project = rows[0];
 
@@ -153,7 +153,7 @@ const UpdateProject = async (req, res) => {
     if (!(await canManageProject(req, id)))
         return res.status(403).json({ error: 'Only project owners or admins can update' });
 
-    const { name, description, background_type, background_value, is_hidden, is_private, icon } = req.body;
+    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status } = req.body;
     try {
         const { rows } = await engPool.query(`
             UPDATE kb_project SET
@@ -163,9 +163,11 @@ const UpdateProject = async (req, res) => {
                 background_value = COALESCE($4, background_value),
                 is_hidden        = COALESCE($5, is_hidden),
                 icon             = COALESCE($6, icon),
-                is_private       = COALESCE($7, is_private)
-            WHERE id = $8 RETURNING *
-        `, [name, description, background_type, background_value, is_hidden, icon, is_private, id]);
+                is_private       = COALESCE($7, is_private),
+                priority         = COALESCE($8, priority),
+                status           = COALESCE($9, status)
+            WHERE id = $10 RETURNING *
+        `, [name, description, background_type, background_value, is_hidden, icon, is_private, priority, status, id]);
         res.json({ data: rows[0] });
     } catch (err) {
         console.error(err);

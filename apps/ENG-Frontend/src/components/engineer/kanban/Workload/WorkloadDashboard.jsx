@@ -3,6 +3,7 @@ import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, 
 import { useKanbanStore } from '../store/kanbanStore';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
+import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import {
     MdOutlinePerson,
     MdOutlineWorkOutline,
@@ -69,6 +70,9 @@ const WorkloadDashboard = ({ theme }) => {
     const { teamWorkload, fetchTeamWorkload, users, projects, isLoading } = useKanbanStore();
     const { user } = useAuthStore();
     const myUCode = user?.empno;
+
+    const { isManagerOrCoord, isSuperAdmin } = useKanbanPermissions();
+    const canViewTeam = isManagerOrCoord || isSuperAdmin;
 
     const [activeTab, setActiveTab] = useState('my_workload');
     const [dateRange, setDateRange] = useState(null); // null = show ALL active cards (no date filter)
@@ -389,12 +393,12 @@ const WorkloadDashboard = ({ theme }) => {
                             label: <span><MdOutlinePerson /> My Workload</span>,
                             children: isLoading ? <div style={{ textAlign: 'center', padding: '100px 0' }}><Progress type="circle" percent={30} status="active" /></div> : renderMyWorkload(myWorkload)
                         },
-                        {
+                        canViewTeam && {
                             key: 'team_workload',
                             label: <span><MdOutlineGroup /> Team Workload</span>,
                             children: isLoading ? <div style={{ textAlign: 'center', padding: '100px 0' }}><Progress type="circle" percent={30} status="active" /></div> : renderTeamWorkload()
                         }
-                    ]}
+                    ].filter(Boolean)}
                 />
             </div>
 
