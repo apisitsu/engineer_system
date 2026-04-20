@@ -60,7 +60,8 @@ export const system = createMenu([
         ]
     },
     { label: "User Management", path: "/eng/system_eng/user_management", key: "4" },
-    { label: "Setting", path: "/eng/system_eng/setting", key: "5" }
+    { label: "Setting", path: "/eng/system_eng/setting", key: "5" },
+    { label: "Gallery", path: "/eng/system_eng/tool/gallery", key: "6" }
 ]);
 
 export const process = createMenu([

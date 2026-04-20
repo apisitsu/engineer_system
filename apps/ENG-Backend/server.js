@@ -19,7 +19,8 @@ app.use(express.static(path.join(__dirname, "./files")));
 app.use(jsonParser);
 app.use(urlencodedParser);
 app.use(cors()); //ทำให้ FrontEnd ต่อ server ได้
-app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+app.use(express.static("files"));
+
 app.use(express.static("files"));
 
 // Port & HTTP Server with WebSocket
@@ -116,6 +117,13 @@ app.use('/api', (req, res, next) => {
 
   return verifyToken(req, res, next);
 });
+
+//--------------------System Engineer (PDF Converter)---------------------//
+const pdfConverter = require('./api/engineer/system/pdfConverter');
+app.use('/api/engineer/system', pdfConverter);
+
+// Global File Upload Middleware (for routes not using multer)
+app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
 
 
 

@@ -9,7 +9,7 @@ import MainLayout from "./layout/MainLayout";
 import Swal from "sweetalert2";
 import { useIdleTimer } from 'react-idle-timer';
 import axios from "axios";
-import { server, key_constance } from "./constance/constance";
+import { server } from "./constance/constance";
 import { MTC_PATHS } from "./constance/mtc_constance";
 
 // Import theme system
@@ -29,6 +29,9 @@ import TodoPoroject from './components/engineer/system_eng/todo/todo_project';
 import ProjectDashboard from './components/engineer/system_eng/todo/ProjectDashboard';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
 import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
+import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
+
 
 import KanbanMain from './components/engineer/kanban/KanbanMain';
 
@@ -38,7 +41,7 @@ import EcntDashboard from './components/engineer/process_eng/ecnt/Dashboard';
 import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
-import Home_ecnt from './components/engineer/process_eng/ecnt/home_ecnt';
+
 import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
@@ -93,10 +96,9 @@ const AppContent = () => {
   const { theme } = useTheme();  // Access current theme
   const { isAuthenticated, logout } = useAuthStore();
 
-  const publicPaths = ['/sign_in', '/job_check_tracker'];
 
   // --- Auto Renewal & Expiration System ---
-  const { getRemainingTime, getLastActiveTime } = useIdleTimer({
+  const { getLastActiveTime } = useIdleTimer({
     timeout: 30 * 60 * 1000, // 30 minutes
     throttle: 500,
     events: [
@@ -112,6 +114,7 @@ const AppContent = () => {
     if (isAuthenticated) {
 
       const doCheckToken = async () => {
+        const publicPaths = ['/sign_in', '/job_check_tracker'];
         const currentPath = window.location.pathname;
         console.log("Checking token for path:", currentPath)
         const isPublicPath = publicPaths.includes(currentPath);
@@ -297,6 +300,9 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/setting" element={<SystemEngSetting />} />
                   <Route path="/eng/system_eng/todo_project" element={<TodoPoroject />} />
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
+                  <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
+                  <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
+
 
                   {/* ------ For Test Only ------ */}
 
