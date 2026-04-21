@@ -332,12 +332,15 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   }
 
   // Apply header row background (all A–I cells of the row)
-  for (const [rowNum, isHeader] of Object.entries(headerRows)) {
-    if (!isHeader) continue;
-    const n = parseInt(rowNum);
-    if (n < 16 || n > 55) continue;
+  // And explicitly CLEAR the background for non-header rows to fix messy templates
+  const NO_FILL = { type: 'pattern', pattern: 'none' };
+  for (let n = 16; n <= 55; n++) {
+    // Skip known spacer rows (matching frontend EXCLUDED_ROWS)
+    if (n === 17 || n === 27 || n === 37 || n === 47) continue;
+    
+    const isHeader = headerRows[n] === true;
     for (const c of COL_LETTERS_RANGE) {
-      ws.getCell(`${c}${n}`).fill = GRAY_FILL;
+      ws.getCell(`${c}${n}`).fill = isHeader ? GRAY_FILL : NO_FILL;
     }
   }
 

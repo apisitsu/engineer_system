@@ -190,6 +190,7 @@ const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
 app.get('/api/mtc/formulas/:machineName', verifyToken, formulaController.getFormulasByMachine);
 app.post('/api/mtc/formulas', verifyToken, mtcIsAdmin, formulaController.createFormula);
 app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.testFormula);
+app.put('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.updateFormula);
 app.delete('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.deleteFormula);
 
 const sdsController = require('./api/engineer/mtc/controllers/sdsController');

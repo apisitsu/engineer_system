@@ -20,9 +20,18 @@ class FormulaService {
     });
 
     // Add standard Excel/JS math functions to the parser
-    this.parser.functions.ceil = (x) => Math.ceil(x);
-    this.parser.functions.floor = (x) => Math.floor(x);
-    this.parser.functions.round = (x) => Math.round(x);
+    this.parser.functions.ceil = (x, n) => {
+      if (n === undefined || n === null) return Math.ceil(x);
+      const f = Math.pow(10, n); return Math.ceil(x * f) / f;
+    };
+    this.parser.functions.floor = (x, n) => {
+      if (n === undefined || n === null) return Math.floor(x);
+      const f = Math.pow(10, n); return Math.floor(x * f) / f;
+    };
+    this.parser.functions.round = (x, n) => {
+      if (n === undefined || n === null) return Math.round(x);
+      const f = Math.pow(10, n); return Math.round(x * f) / f;
+    };
     this.parser.functions.sqrt = (x) => Math.sqrt(x);
     this.parser.functions.abs = (x) => Math.abs(x);
     this.parser.functions.max = Math.max;

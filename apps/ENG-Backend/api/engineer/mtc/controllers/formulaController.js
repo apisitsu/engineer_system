@@ -58,6 +58,38 @@ const testFormula = async (req, res) => {
   }
 };
 
+// PUT /api/mtc/formulas/:id
+const updateFormula = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tool_category, param_key, formula, description } = req.body;
+
+    if (formula) {
+      const validation = FormulaService.validateFormula(formula);
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, error: 'Invalid formula syntax: ' + validation.error });
+      }
+    }
+
+    const query = `
+      UPDATE mtc_formulas
+      SET tool_category = COALESCE($1, tool_category),
+          param_key     = COALESCE($2, param_key),
+          formula       = COALESCE($3, formula),
+          description   = COALESCE($4, description),
+          updated_at    = NOW()
+      WHERE id = $5
+      RETURNING *
+    `;
+    const result = await engPool.query(query, [tool_category, param_key, formula, description, id]);
+    if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Formula not found' });
+    res.json({ success: true, formula: result.rows[0] });
+  } catch (err) {
+    console.error('updateFormula error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
 // DELETE /api/mtc/formulas/:id
 const deleteFormula = async (req, res) => {
   try {
@@ -72,6 +104,7 @@ const deleteFormula = async (req, res) => {
 module.exports = {
   getFormulasByMachine,
   createFormula,
+  updateFormula,
   testFormula,
   deleteFormula
 };
