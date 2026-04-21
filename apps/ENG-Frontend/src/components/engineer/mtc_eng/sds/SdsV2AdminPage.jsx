@@ -676,6 +676,7 @@ const MachineConfigTab = ({ theme }) => {
       dataIndex: 'rowNum',
       width: 50,
       fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: rowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
       render: v => <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text>,
     },
     {
@@ -683,6 +684,7 @@ const MachineConfigTab = ({ theme }) => {
       key: 'hdr',
       width: 44,
       fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: rowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
       render: (_, record) => (
         <Checkbox
           checked={!!rowHeaders[record.rowNum]}
@@ -694,6 +696,7 @@ const MachineConfigTab = ({ theme }) => {
       title: c,
       key: c,
       width: 130,
+      onCell: (record) => ({ style: { backgroundColor: rowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
       render: (_, record) => {
         const cellKey = `row_${record.rowNum}_${c}`;
         const isValue = cellTypes[cellKey] === 'value';
@@ -702,7 +705,7 @@ const MachineConfigTab = ({ theme }) => {
             size="small"
             value={cellData[cellKey] || ''}
             onChange={e => handleCellChange(record.rowNum, c, e.target.value)}
-            style={{ fontSize: 11, color: isValue ? '#ff4d4f' : undefined }}
+            style={{ fontSize: 11, color: isValue ? '#ff4d4f' : undefined, backgroundColor: rowHeaders[record.rowNum] ? '#f5f5f5' : undefined }}
             suffix={
               <span
                 title="Toggle: Label / Value"
@@ -711,7 +714,7 @@ const MachineConfigTab = ({ theme }) => {
                   cursor: 'pointer',
                   fontSize: 10,
                   fontWeight: 'bold',
-                  color: isValue ? '#ff4d4f' : '#d9d9d9',
+                  color: isValue ? '#ff4d4f' : '#bfbfbf',
                   userSelect: 'none',
                 }}
               >V</span>

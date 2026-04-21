@@ -1,139 +1,154 @@
-# MTC Engineer Module Documentation
+# MTC Module — SDS V2 Progress
 
-## Overview
-
-MTC (Maintenance & Tooling Control) module จัดการข้อมูลด้านวิศวกรรมที่เกี่ยวกับ tooling, setup data sheet, และ DWG request workflow
-
-**Base URL:** `http://localhost:2005`
-
-**Authentication:** ทุก endpoint ใต้ `/api` ต้องใช้ JWT Token ยกเว้นที่ระบุไว้
+## สถานะล่าสุด: 2026-04-18
 
 ---
 
-## Sub-modules
+## สิ่งที่ทำเสร็จแล้ว ✅
 
-| Sub-module | Base Path | ไฟล์ | คำอธิบาย |
-|------------|-----------|------|----------|
-| Tooling Inspection | `/api/tooling_inspect/*` | `eng_mtc_model.js` | ตรวจสอบ tooling, DWG request, dashboard |
-| Tooling Selection | `/api/tooling-select/*` | `tooling_select.js` | เลือก tooling ตาม process/spec |
-| SDS v1 | `/api/sds/*` | `sds.js` | Setup Data Sheet (engPool) |
-| SDS v2 | `/api/sds/v2/*` | `sds_v2.js` | Setup Data Sheet (maqdb/rodpc) — ดู `SDS_V2_DOCUMENTATION.md` |
-| General DWG Request | `/api/engineer/mtc/tool-requests/*` | `tool_req.js` | Workflow ขอ DWG — ดู `API_DOCUMENTATION.md` |
-| Work Centers | `/api/master/wc` | `eng_mtc_model.js` | รายการ Work Center |
+### 1. Fix 404 — `/api/sds/counts`
+- `sdsController.js` ถูก mount ใน `server.js` แล้ว (`app.use('/api/sds', sdsController)`)
+- `sdsV2Controller.js` ถูก mount แล้วเช่นกัน (`app.use('/api/sds/v2', sdsV2Controller)`)
 
----
+### 2. Database Schema (Migration Files)
 
-## Tooling Inspection
+| File | Tables |
+|------|--------|
+| `db_migrations/sds_v2_core_tables.up.sql` | `sds_machine_type_code`, `sds_excel_mapping`, `sds_parameter` |
+| `db_migrations/sds_v2_images_and_template.up.sql` | `sds_v2_template_config`, `sds_v2_tooling_image`, `sds_v2_grinding_image` |
+| `db_migrations/sds_v2_core_tables.down.sql` | DROP ย้อนกลับ |
+| `db_migrations/sds_v2_images_and_template.down.sql` | DROP ย้อนกลับ |
 
-### GET `/api/tooling_inspect/getlist`
-ดึงรายการ tooling inspect ทั้งหมด
+**หมายเหตุ migration:** ยังไม่ได้ run กับ DB จริง
 
-### GET `/api/tooling_inspect/dashboard_stats`
-สถิติ dashboard ของ tooling inspection
+### 3. Constants (`mtcConstants.js`)
+เพิ่ม table constants ใหม่:
+```
+SDS_MACHINE_TYPE_CODE, SDS_EXCEL_MAPPING, SDS_PARAMETER,
+SDS_V2_TOOLING_IMAGE, SDS_V2_GRINDING_IMAGE
+```
 
-### GET `/api/tooling_inspect/dwg_require_getlist`
-รายการ DWG request ของ tooling
+### 4. Backend Controllers / Services (ทั้งหมดสร้างใหม่)
 
-### POST `/api/tooling_inspect/dwg_require_add`
-เพิ่ม DWG request ใหม่
+| File | Mount Path | หน้าที่ |
+|------|-----------|---------|
+| `instance/maq_db.js` | — | Shared maqPool instance |
+| `services/sdsV2SearchService.js` | — | searchByCn() function |
+| `controllers/sdsV2Controller.js` | `/api/sds/v2` | Search (refactored ใช้ service) |
+| `controllers/sdsV2ImageController.js` | `/api/sds/v2/images` | CRUD tooling + grinding images |
+| `controllers/sdsV2AdminController.js` | `/api/sds/v2/admin` | Admin CRUD: mappings, parameters, machine-types |
+| `controllers/sdsV2PdfController.js` | `/api/sds/v2` | Generate PDF (ExcelJS → LibreOffice) |
 
-### PUT `/api/tooling_inspect/dwg_require_update`
-อัปเดต DWG request
+### 5. API Endpoints ที่พร้อมใช้งาน
 
-### POST `/api/tooling_inspect/return_add`
-บันทึกการคืน tooling
+**Search:**
+- `GET /api/sds/v2/search?cn=C31-01234`
 
-### POST `/api/tooling_inspect/inspect_update`
-อัปเดตผลการตรวจสอบ
+**Images:**
+- `GET  /api/sds/v2/images/tooling` — list metadata
+- `GET  /api/sds/v2/images/tooling/:tool_dwg_no` — serve binary
+- `POST /api/sds/v2/images/tooling` — upload (multipart field: `image`, body: `tool_dwg_no`)
+- `DELETE /api/sds/v2/images/tooling/:tool_dwg_no`
+- `GET  /api/sds/v2/images/grinding` — list metadata
+- `GET  /api/sds/v2/images/grinding/:cn_prefix?process_code=` — serve binary
+- `POST /api/sds/v2/images/grinding` — upload (fields: `cn_prefix`, `label`, optional `process_code`)
+- `DELETE /api/sds/v2/images/grinding/:id`
 
-### POST `/api/tooling_inspect/sync_csv`
-Sync ข้อมูล tooling จาก CSV
+**Admin:**
+- `GET /api/sds/v2/admin/machine-types?search=`
+- `PUT /api/sds/v2/admin/machine-types/:id` — แก้ไข grinding_area_label
+- `GET /api/sds/v2/admin/mappings?machine_type_name=`
+- `POST/PUT/DELETE /api/sds/v2/admin/mappings[/:id]`
+- `GET /api/sds/v2/admin/parameters?cn=&machine_type_name=`
+- `PUT /api/sds/v2/admin/parameters` — upsert single
+- `PUT /api/sds/v2/admin/parameters/bulk` — upsert หลายตัวพร้อมกัน
+- `DELETE /api/sds/v2/admin/parameters/:id`
 
-### GET `/api/master/wc`
-ดึงรายการ Work Center code ทั้งหมด
-
----
-
-## Tumble Condition (ผ่าน engProcess)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/tumble/getAllCondition` | ดึง condition ทั้งหมด |
-| POST | `/api/tumble/createCondition` | เพิ่ม condition |
-| PUT | `/api/tumble/updateCondition/:id` | แก้ไข condition |
-| DELETE | `/api/tumble/deleteCondition/:id` | ลบ condition |
-| GET | `/api/tumble/getAllModel` | ดึง model ทั้งหมด |
-| POST | `/api/tumble/createModel` | เพิ่ม model |
-| PUT | `/api/tumble/updateModel/:id` | แก้ไข model |
-| DELETE | `/api/tumble/deleteModel/:id` | ลบ model |
-
----
-
-## SDS v2
-
-ดูรายละเอียดเต็มใน [`SDS_V2_DOCUMENTATION.md`](./SDS_V2_DOCUMENTATION.md)
-
-**Endpoint:** `GET /api/sds/v2/search?cn=<CN or ItemNo>`
-
-**ข้อมูลที่ได้:**
-- Part type & dimension (ball/race/body/sleeve/spherical)
-- Material grade จาก `lpb.eng_bom` → `lpb.eng_mcode` (`as400name`, `mate_code`, `procument_spec`)
-- DWG revision (normalize เป็น A–Z หรือ NC)
-- Process info & process plan พร้อมชื่อ process (TH/EN)
-- Production info (customer, model, approval type)
+**PDF:**
+- `GET /api/sds/v2/pdf?cn=C31-01234&machine_type_name=KS-B22G&process_code=IDG001`
+- `DELETE /api/sds/v2/pdf/cache?cn=&machine_type_name=` — clear cache
 
 ---
 
-## General DWG Request
+## สิ่งที่ยังไม่ได้ทำ ❌
 
-ดูรายละเอียดเต็มใน [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md)
+### Priority 1 — ต้องทำก่อนใช้งานได้
+1. **Run DB Migrations** (ต้องทำด้วยตัวเอง):
+   ```bash
+   # ใน psql หรือ DBeaver เปิด eng_system DB แล้วรัน:
+   db_migrations/sds_v2_core_tables.up.sql
+   db_migrations/sds_v2_images_and_template.up.sql
+   ```
+2. **Seed machine type codes** (ต้องทำด้วยตัวเอง):
+   ```bash
+   node apps/ENG-Backend/db_migrations/seed_machine_type_code.js
+   ```
+3. **ตั้งค่า `grinding_area_label`** per machine type เช่น:
+   ```sql
+   UPDATE sds_machine_type_code SET grinding_area_label = 'ID GRINDING AREA' WHERE machine_type_name = 'KS-B22G';
+   UPDATE sds_machine_type_code SET grinding_area_label = 'FACE GRINDING AREA' WHERE machine_type_name LIKE '%TSG%';
+   ```
 
-**Workflow:** Eng Check → Draft Man → DWG Check → Eng Review → Eng Approve → Eng Inform
+### Priority 2 — Frontend
+4. **`SdsV2Page.jsx`** — หน้าหลัก SDS V2
+   - Search box (input CN)
+   - ตารางผลลัพธ์แสดง: CN, Parts No, Process Code, Machine Type
+   - ปุ่ม PDF (เปิด PDF viewer)
+   - ปุ่ม Edit (เปิด modal แก้ไข sds_parameter)
+5. **Admin Form** — จัดการ sds_parameter
+   - Tab 1: Machine Config (cn=NULL) — แก้ไข A16:I55 labels/units per machine type
+   - Tab 2: Per-Record Data — program_no, program_name, sds_rev, change log (5 rows)
+   - Tab 3: Image Management — upload tooling images + grinding images
+6. **Register route** ใน `App.jsx` + เพิ่ม menu sidebar
 
----
-
-## Database Connections
-
-| Pool variable | Database | Schema หลัก | ใช้ใน |
-|---------------|----------|-------------|-------|
-| `engPool` | eng_system (local PostgreSQL port 6543) | public | SDS v1, Tooling Inspect, Tool Request |
-| `maqPool` | maqdb (`PG_MAQ_HOST`) | lpb | SDS v2 — dimension, BOM, material |
-| `rodpcPool` | rodpc (`instance.js`) | rodpc | SDS v2 — production, process name |
-
----
-
-## Key Tables (maqdb / lpb schema)
-
-| Table | Description |
-|-------|-------------|
-| `lpb.eng_item` | Master item (control_no, parts_no, gnk, old_control_no) |
-| `lpb.eng_bom` | BOM — เชื่อม parent_cn → child_cn (PM raw material) |
-| `lpb.eng_mcode` | Material code master (as400name, mate_code, procument_spec, mate_class_code4) |
-| `lpb.eng_ball/body/race/sleeve/sph` | Dimension ตามประเภทชิ้นงาน |
-| `lpb.eng_process_info` | Process cycle time, WC, batch size |
-| `lpb.eng_r_pi_item` | Process plan ↔ item mapping |
-| `lpb.eng_r_pi_tool` | Tooling per process |
-| `lpb.eng_tooling` | Tooling master |
-| `lpb.eng_cad_rev_data` | CAD drawing revision |
-| `lpb.eng_temp_parts_name` | Part type name mapping |
-
----
-
-## Environment Variables (.env)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | 2005 | Backend port |
-| `PG_MAQ_HOST` | plbmp00 | maqdb host |
-| `PG_MAQ_PORT` | 5432 | maqdb port |
-| `PG_MAQ_DB` | maqdb | maqdb database name |
-| `PG_MAQ_USER` | — | maqdb username (required) |
-| `PG_MAQ_PASSWORD` | — | maqdb password (required) |
+### Priority 3 — Fine-tuning
+7. **ตรวจสอบ cell addresses** ใน `IMAGE_EXTENTS` ใน `sdsV2PdfController.js` ว่าตรงกับ template จริง
+8. **`sds_v2_template_config`** table — ยังไม่ได้ใช้งาน (overlap กับ `sds_excel_mapping`) ควรตัดสินใจว่าจะ deprecate หรือ merge
+9. **Seed Excel Mapping** — ตรวจสอบว่า `sds_v2_core_tables.up.sql` INSERT ถูกต้องกับ cell addresses ใน `sds_template.xlsx` จริง
 
 ---
 
-## Version History
+## Design Decisions ที่ตัดสินใจแล้ว
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2026-04-17 | เพิ่ม SDS v2 (maqdb/rodpc), BOM material lookup, eng_mcode integration |
+| หัวข้อ | การตัดสินใจ |
+|--------|-------------|
+| Excel Template | ใช้ไฟล์เดียว `sds_template.xlsx` (ไม่มี multi-template) |
+| PDF Generator | LibreOffice (Portable) — ไม่เปลี่ยนก่อน |
+| Cell colors in template | RED=Search API, BLUE=sds_parameter, GREEN=stamps (TODO), WHITE/BLACK=static |
+| A16:I55 section | เก็บใน `sds_parameter` cn=NULL (machine-type config) |
+| Image storage | BYTEA ใน PostgreSQL (ไม่ใช้ filesystem) |
+| `sds_parameter` dual-role | cn=NULL → machine config, cn=specific → per-record data |
+| UNIQUE constraint ที่มี NULL | COALESCE(cn, '__machine_config__') |
+| Grinding image lookup | cn_prefix (2 chars) + optional process_code fallback |
+
+---
+
+## โครงสร้างไฟล์ที่เกี่ยวข้อง
+
+```
+apps/ENG-Backend/
+├── instance/
+│   ├── eng_db.js          — engPool (eng_system local DB)
+│   ├── instance.js        — rodpcPool (rodpc schema)
+│   └── maq_db.js          — maqPool (lpb schema) ← ใหม่
+├── api/engineer/mtc/
+│   ├── mtcConstants.js    — table name constants
+│   ├── controllers/
+│   │   ├── sdsController.js          — old SDS (setup_sheet)
+│   │   ├── sdsV2Controller.js        — /api/sds/v2/search
+│   │   ├── sdsV2ImageController.js   — /api/sds/v2/images ← ใหม่
+│   │   ├── sdsV2AdminController.js   — /api/sds/v2/admin ← ใหม่
+│   │   └── sdsV2PdfController.js     — /api/sds/v2/pdf   ← ใหม่
+│   ├── services/
+│   │   └── sdsV2SearchService.js     — searchByCn() ← ใหม่
+│   └── templates/
+│       ├── sds_template.xlsx         — template หลัก
+│       └── machine_type_code.xlsx    — 446 machine codes
+├── db_migrations/
+│   ├── sds_v2_core_tables.up.sql
+│   ├── sds_v2_core_tables.down.sql
+│   ├── sds_v2_images_and_template.up.sql
+│   ├── sds_v2_images_and_template.down.sql
+│   └── seed_machine_type_code.js
+└── server.js
+```

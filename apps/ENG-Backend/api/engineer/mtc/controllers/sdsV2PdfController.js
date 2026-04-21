@@ -297,25 +297,40 @@ async function fillTemplate(workbook, mappings, valueMap) {
 
 async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   const rows = await engPool.query(
-    `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+    `SELECT cn, param_key, param_value FROM ${TABLES.SDS_PARAMETER}
      WHERE (cn IS NULL OR cn = $2) AND machine_type_name = $1
      ORDER BY (cn IS NULL) DESC`,
     [machine_type_name, cn || null]
   );
+  console.log(`[PDF fillMachineConfigSection] machine=${machine_type_name}, cn=${cn}, rows returned=${rows.rows.length}`);
 
   const config = {};      // row_N_X → value
   const headerRows = {};  // rowNum → true
   const valueTypes = {};  // 'row_N_X' → 'value'
 
   rows.rows.forEach(r => {
+    const val = r.param_value !== null ? String(r.param_value).trim().toLowerCase() : '';
+    
     const hdrMatch = r.param_key.match(/^row_(\d+)_is_header$/);
-    if (hdrMatch) { headerRows[parseInt(hdrMatch[1])] = r.param_value === '1'; return; }
+    if (hdrMatch) { 
+      console.log(`[HDR ROW] cn=${JSON.stringify(r.cn)}, key=${r.param_key}, val='${val}', cn!==null=${r.cn !== null}`);
+      if (r.cn !== null) return;
+      const parsedHdr = parseInt(hdrMatch[1]);
+      headerRows[parsedHdr] = (val === '1' || val === 'true'); 
+      console.log(`[HDR SET] headerRows[${parsedHdr}] = ${headerRows[parsedHdr]}`);
+      return; 
+    }
 
     const typeMatch = r.param_key.match(/^row_(\d+)_([A-I])_type$/i);
-    if (typeMatch) { valueTypes[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value; return; }
+    if (typeMatch) { 
+      if (r.cn !== null) return;
+      valueTypes[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value; 
+      return; 
+    }
 
     config[r.param_key] = r.param_value || '';
   });
+  console.log('[HEADER ROWS FINAL]', JSON.stringify(headerRows));
 
   const COL_LETTERS_RANGE = ['A','B','C','D','E','F','G','H','I'];
   const GRAY_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' }, bgColor: { argb: 'FFD9D9D9' } };
@@ -331,18 +346,31 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
     ws.getCell(`${colLetter}${rowNum}`).value = val;
   }
 
-  // Apply header row background (all A–I cells of the row)
-  // And explicitly CLEAR the background for non-header rows to fix messy templates
-  const NO_FILL = { type: 'pattern', pattern: 'none' };
-  for (let n = 16; n <= 55; n++) {
-    // Skip known spacer rows (matching frontend EXCLUDED_ROWS)
-    if (n === 17 || n === 27 || n === 37 || n === 47) continue;
-    
-    const isHeader = headerRows[n] === true;
+  // Apply header row gray fill.
+  // IMPORTANT: use `cell.style = {...}` (full style setter) instead of `cell.fill = ...`
+  // to force ExcelJS to create a NEW independent XF entry per cell.
+  // Setting only `cell.fill` mutates the shared XF table entry, causing cascade
+  // changes to ALL cells that share the same XF — making unrelated rows go gray.
+  // We also do NOT set NO_FILL on non-header rows; the template handles those.
+  for (const [rowNumStr, isHdr] of Object.entries(headerRows)) {
+    if (!isHdr) continue;
+    const n = parseInt(rowNumStr);
+    if (n < 16 || n > 55) continue;
     for (const c of COL_LETTERS_RANGE) {
-      ws.getCell(`${c}${n}`).fill = isHeader ? GRAY_FILL : NO_FILL;
+      const cell = ws.getCell(`${c}${n}`);
+      // Read current style and rebuild as a fresh plain object (breaks shared-XF reference)
+      const s = cell.style || {};
+      cell.style = {
+        numFmt:     s.numFmt     || '',
+        font:       s.font       ? JSON.parse(JSON.stringify(s.font))       : {},
+        alignment:  s.alignment  ? JSON.parse(JSON.stringify(s.alignment))  : {},
+        border:     s.border     ? JSON.parse(JSON.stringify(s.border))     : {},
+        protection: s.protection ? JSON.parse(JSON.stringify(s.protection)) : {},
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' }, bgColor: { argb: 'FFD9D9D9' } },
+      };
     }
   }
+  console.log('[POST-HDR-FILL] A24:', ws.getCell('A24').fill?.pattern, '| A16:', ws.getCell('A16').fill?.pattern, '| A18:', ws.getCell('A18').fill?.pattern);
 
   // Apply red font to value-type cells
   for (const [cellKey, type] of Object.entries(valueTypes)) {
@@ -353,7 +381,16 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
     const colLetter = m[2].toUpperCase();
     if (rowNum < 16 || rowNum > 55) continue;
     const cell = ws.getCell(`${colLetter}${rowNum}`);
-    cell.font = { ...cell.font, ...RED_FONT };
+    // Also use full style setter here to avoid mutating shared XF
+    const s = cell.style || {};
+    cell.style = {
+      numFmt:     s.numFmt     || '',
+      font:       { ...(s.font ? JSON.parse(JSON.stringify(s.font)) : {}), ...RED_FONT },
+      alignment:  s.alignment  ? JSON.parse(JSON.stringify(s.alignment))  : {},
+      border:     s.border     ? JSON.parse(JSON.stringify(s.border))     : {},
+      protection: s.protection ? JSON.parse(JSON.stringify(s.protection)) : {},
+      fill:       s.fill       ? JSON.parse(JSON.stringify(s.fill))       : {},
+    };
   }
 }
 
@@ -412,6 +449,11 @@ router.get('/pdf', async (req, res) => {
 
     await fillTemplate(workbook, mappings, valueMap);
     await fillMachineConfigSection(workbook.worksheets[0], machine_type_name.trim(), searchData.cn, engPool);
+    console.log(`[PDF] Fill done: cn=${searchData.cn}, machine=${machine_type_name.trim()}`);
+    // Verify row 24/29 fill after apply
+    const _ws = workbook.worksheets[0];
+    console.log('[PDF] A24 fill after:', JSON.stringify(_ws.getCell('A24').fill));
+    console.log('[PDF] A29 fill after:', JSON.stringify(_ws.getCell('A29').fill));
 
     // Direct writes — fields that may not yet be in sds_excel_mapping
     const ws0 = workbook.worksheets[0];

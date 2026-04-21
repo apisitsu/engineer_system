@@ -81,21 +81,25 @@ const SdsV2Page = () => {
         cn: data.cn,
         machine_type_name: selectedMachine,
         process_code: selectedProcess?.process_code || '',
+        _t: Date.now(),
+        token: localStorage.getItem('token') || '',
       };
-      const res = await axios.get(server.MTC_SDS_V2_PDF, {
-        params,
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      window.open(url, '_blank');
+      
+      // Construct the get URL natively so Chrome opens it as a standard PDF tab.
+      // This completely avoids Blob URL 'cross-partition' blocks.
+      const queryParams = new URLSearchParams(params).toString();
+      const fullUrl = `${server.MTC_SDS_V2_PDF}?${queryParams}`;
+
+      const a = document.createElement('a');
+      a.href = fullUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       setPdfModal(false);
     } catch (err) {
-      if (err.response?.data instanceof Blob) {
-        const text = await err.response.data.text();
-        try { message.error(JSON.parse(text).error); } catch { message.error('PDF generation failed'); }
-      } else {
-        message.error(err.response?.data?.error || 'PDF generation failed');
-      }
+      message.error(err.message || 'Failed to open PDF');
     } finally {
       setPdfLoading(false);
     }

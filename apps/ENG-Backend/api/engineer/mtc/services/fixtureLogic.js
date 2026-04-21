@@ -35,6 +35,16 @@ const h = name => name;
 // Naming convention: param_key in DB uses abbreviated prefix (e.g. cpx_A, rs_A, lp_A)
 // which the adapter strips to get the sub-property name (A, C, etc.)
 
+function adaptDynamicCalcCommon(dynamic, partData) {
+  const base = calculateToolingParams(partData);
+  if (dynamic.error) return base;
+  const patch = {};
+  for (const [k, v] of Object.entries(dynamic)) {
+    if (k !== '_raw') patch[k] = v;
+  }
+  return { ...base, ...patch };
+}
+
 function adaptDynamicKS03A(dynamic, partData) {
   const base = calculateKS03A_Params(partData);
   if (dynamic.error || base.error) return base;
@@ -246,10 +256,13 @@ async function findFixtures(cnNumber) {
     partData.isYBall     = partData.yBall === 'Y' ? 1 : 0;
     partData.isBallInner = (partData.type.includes('ABR') || partData.type.includes('BALL_INNER')) ? 1 : 0;
     partData.isABR       = (partData.type.includes('ABR') || partData.yBall === 'Y' || partData.yBall === 'B') ? 1 : 0;
-    partData.isInner     = (partData.type.includes('INNER') || partData.yBall === 'Y') ? 1 : 0;
+    partData.isInner         = (partData.type.includes('INNER') || partData.yBall === 'Y') ? 1 : 0;
+    partData.isIDtoOD        = partData.process === 'ID→OD' ? 1 : 0;
+    partData.isNormalOrOther = (partData.type.includes('NORMAL') || partData.type.includes('OTHER')) ? 1 : 0;
 
     // --- NEW: Try Dynamic Formulas First ---
-    const [dynamicKS400B, dynamicKS03A, dynamicKS500RD, dynamicKS400B5, dynamicKS400B6] = await Promise.all([
+    const [dynamicCalcCommon, dynamicKS400B, dynamicKS03A, dynamicKS500RD, dynamicKS400B5, dynamicKS400B6] = await Promise.all([
+      FormulaService.calculateMachineParams('CALC_COMMON', partData),
       FormulaService.calculateMachineParams('KS400B', partData),
       FormulaService.calculateMachineParams('KS03A', partData),
       FormulaService.calculateMachineParams('KS500RD', partData),
@@ -258,7 +271,7 @@ async function findFixtures(cnNumber) {
     ]);
 
     // Apply dynamic DB formulas onto legacy calc base (legacy handles limit checks)
-    const calc         = calculateToolingParams(partData);
+    const calc         = adaptDynamicCalcCommon(dynamicCalcCommon, partData);
     const ks400b_calc  = adaptDynamicKS400B(dynamicKS400B, partData);
     const ks03a_calc   = adaptDynamicKS03A(dynamicKS03A, partData);
     const ks500rd_calc = adaptDynamicKS500RD(dynamicKS500RD, partData);
