@@ -5,6 +5,7 @@
  */
 const { engPool } = require('../../instance/eng_db');
 const { isSuperAdmin, canSeeAllProjects } = require('./kanban_acl');
+const { enhanceWorkloadDataWithFeasibility } = require('./kanban_workload_calculator');
 
 /**
  * GET /api/kanban/workload/team-workload
@@ -39,27 +40,18 @@ const GetTeamWorkload = async (req, res) => {
         const params = [];
         let paramIdx = 1;
 
-        // Privacy Filter:
-        // - Admins see everything.
-        // - Managers/Coords see all non-private + private projects they are in.
-        // - Regular users see only projects they are members of.
-        // Using LOWER() for u_code to be safe with case sensitivity.
+        // Privacy Filter
+        // Privacy Filter
         if (isAdmin) {
             // Admins see all
         } else if (seeAll) {
             // Managers/Coords: (Public OR Member)
-            conditions.push(`(p.is_private IS NOT TRUE OR EXISTS (
-                SELECT 1 FROM kb_project_membership pm_priv 
-                WHERE pm_priv.project_id = p.id AND LOWER(pm_priv.u_code) = LOWER($${paramIdx})
-            ))`);
+            conditions.push(`(p.is_private IS NOT TRUE OR LOWER($${paramIdx}) = ANY(pm.members))`);
             params.push(requestingUCode);
             paramIdx++;
         } else {
             // Regular User: MUST be a member of the project
-            conditions.push(`EXISTS (
-                SELECT 1 FROM kb_project_membership pm_priv 
-                WHERE pm_priv.project_id = p.id AND LOWER(pm_priv.u_code) = LOWER($${paramIdx})
-            )`);
+            conditions.push(`(LOWER($${paramIdx}) = ANY(pm.members))`);
             params.push(requestingUCode);
             paramIdx++;
         }
@@ -67,35 +59,34 @@ const GetTeamWorkload = async (req, res) => {
         // Exclude cards in archive/trash lists
         conditions.push("(l.list_type IS NULL OR l.list_type NOT IN ('archive', 'trash'))");
 
-        // Date range filter (ONLY if explicitly provided)
+        // Date range filter
         if (week_start && week_start !== 'null' && week_end && week_end !== 'null') {
             conditions.push(`(c.due_date IS NULL OR (c.due_date >= $${paramIdx}::date AND c.due_date < ($${paramIdx + 1}::date + interval '1 day')))`);
             params.push(week_start, week_end);
             paramIdx += 2;
         }
 
-        // Project filter (ONLY if explicitly provided)
+        // Project filter
         if (project_id && project_id !== 'null' && project_id !== 'undefined') {
             conditions.push(`p.id = $${paramIdx}`);
             params.push(parseInt(project_id, 10));
             paramIdx++;
         }
 
-        // User filter (Team view drill-down or specific user lookup)
-        if (u_code && u_code !== 'null' && u_code !== 'undefined') {
-            conditions.push(`LOWER(cm.u_code) = LOWER($${paramIdx})`);
-            params.push(u_code);
-            paramIdx++;
-        }
-
         const whereClause = 'WHERE ' + conditions.join(' AND ');
 
         const query = `
+            WITH CardMembers AS (
+                SELECT card_id, ARRAY_AGG(LOWER(u_code)) as members, COUNT(u_code) as member_count
+                FROM kb_card_membership
+                GROUP BY card_id
+            ),
+            ProjectMembers AS (
+                SELECT project_id, ARRAY_AGG(LOWER(u_code)) as members, COUNT(u_code) as member_count
+                FROM kb_project_membership
+                GROUP BY project_id
+            )
             SELECT 
-                cm.u_code AS user_code,
-                u.u_name,
-                u.u_nickname,
-                u.profile_img_b64,
                 c.id AS card_id,
                 c.name AS card_name,
                 COALESCE(c.estimated_hours, 0) AS estimated_hours,
@@ -107,58 +98,102 @@ const GetTeamWorkload = async (req, res) => {
                 b.id AS board_id,
                 b.name AS board_name,
                 p.id AS project_id,
-                p.name AS project_name
+                p.name AS project_name,
+                COALESCE(cm.members, ARRAY[]::text[]) AS card_members,
+                COALESCE(cm.member_count, 0) AS card_member_count,
+                COALESCE(pm.members, ARRAY[]::text[]) AS project_members,
+                COALESCE(pm.member_count, 0) AS project_member_count
             FROM kb_card c
-            INNER JOIN kb_card_membership cm ON cm.card_id = c.id
-            LEFT JOIN m_user_profile u ON u.u_code = cm.u_code
             LEFT JOIN kb_list l ON l.id = c.list_id
             LEFT JOIN kb_board b ON b.id = c.board_id
             LEFT JOIN kb_project p ON p.id = b.project_id
+            LEFT JOIN CardMembers cm ON cm.card_id = c.id
+            LEFT JOIN ProjectMembers pm ON pm.project_id = p.id
             ${whereClause}
-            ORDER BY cm.u_code ASC, c.due_date ASC NULLS LAST
+            ORDER BY c.due_date ASC NULLS LAST
         `;
 
-        // Debug log (remove or comment out later)
-        // console.log('Workload Query Params:', params);
+        const { rows: workloadDataRaw } = await engPool.query(query, params);
 
-        const { rows: workloadData } = await engPool.query(query, params);
+        // Fallback 3-Month Due Date for display and calculation
+        const dayjs = require('dayjs');
+        workloadDataRaw.forEach(card => {
+            if (!card.due_date) {
+                card.due_date = dayjs(card.card_created_at).add(3, 'month').format('YYYY-MM-DD');
+            }
+        });
+
+        // Apply Feasibility and Expected Hours Algorithm
+        const enhancedCards = await enhanceWorkloadDataWithFeasibility(workloadDataRaw);
 
         // Group data by user
         const userWorkloadsArr = [];
         const userMap = new Map();
 
-        workloadData.forEach(row => {
-            const uCodeKey = (row.user_code || '').toLowerCase();
-            if (!userMap.has(uCodeKey)) {
-                const newUser = {
-                    u_code: row.user_code,
-                    u_name: row.u_name || row.user_code,
-                    u_nickname: row.u_nickname || '',
-                    profile_img_b64: row.profile_img_b64 || null,
-                    total_estimated_hours: 0,
-                    cards: []
-                };
-                userMap.set(uCodeKey, newUser);
-                userWorkloadsArr.push(newUser);
+        // Need user profile info since we removed it from JOIN
+        const { rows: usersRaw } = await engPool.query('SELECT u_code, u_name, u_nickname, profile_img_b64 FROM m_user_profile');
+        const userProfiles = {};
+        usersRaw.forEach(u => userProfiles[(u.u_code || '').toLowerCase()] = u);
+
+        enhancedCards.forEach(card => {
+            // Determine who gets this card
+            let targetUsers = [];
+            let divisor = 1;
+            let allocatedHours = parseFloat(card.estimated_hours) || 0;
+
+            if (card.card_member_count > 0 && Array.isArray(card.card_members)) {
+                targetUsers = card.card_members;
+                divisor = card.card_member_count;
+                allocatedHours = allocatedHours / divisor;
+            } else if (card.project_member_count > 0 && Array.isArray(card.project_members)) {
+                targetUsers = card.project_members;
+                divisor = card.project_member_count;
+                // Rule: If unassigned to specific card, use 50% and divide by project members
+                allocatedHours = (allocatedHours * 0.5) / divisor;
             }
 
-            const userEntry = userMap.get(uCodeKey);
-            const estHours = parseFloat(row.estimated_hours) || 0;
-            userEntry.total_estimated_hours += estHours;
+            if (!Array.isArray(targetUsers)) targetUsers = [];
 
-            userEntry.cards.push({
-                card_id: row.card_id,
-                card_name: row.card_name,
-                estimated_hours: estHours,
-                due_date: row.due_date,
-                card_created_at: row.card_created_at,
-                list_id: row.list_id,
-                list_name: row.list_name || 'No List',
-                list_type: row.list_type || 'active',
-                board_id: row.board_id,
-                board_name: row.board_name || 'No Board',
-                project_id: row.project_id,
-                project_name: row.project_name || 'No Project'
+            targetUsers.forEach(u_code => {
+                const uCodeKey = (u_code || '').toLowerCase();
+                
+                // If specific user filter is requested, skip others
+                if (u_code && req.query.u_code && req.query.u_code !== 'null' && req.query.u_code !== 'undefined') {
+                    if (uCodeKey !== req.query.u_code.toLowerCase()) return;
+                }
+
+                if (!userMap.has(uCodeKey)) {
+                    const prof = userProfiles[uCodeKey] || {};
+                    const newUser = {
+                        u_code: u_code,
+                        u_name: prof.u_name || u_code,
+                        u_nickname: prof.u_nickname || '',
+                        profile_img_b64: prof.profile_img_b64 || null,
+                        total_estimated_hours: 0,
+                        cards: []
+                    };
+                    userMap.set(uCodeKey, newUser);
+                    userWorkloadsArr.push(newUser);
+                }
+
+                const userEntry = userMap.get(uCodeKey);
+                userEntry.total_estimated_hours += allocatedHours;
+
+                userEntry.cards.push({
+                    card_id: card.card_id,
+                    card_name: card.card_name,
+                    estimated_hours: Math.round(allocatedHours * 100) / 100,
+                    due_date: card.due_date,
+                    card_created_at: card.card_created_at,
+                    list_id: card.list_id,
+                    list_name: card.list_name || 'No List',
+                    list_type: card.list_type || 'active',
+                    board_id: card.board_id,
+                    board_name: card.board_name || 'No Board',
+                    project_id: card.project_id,
+                    project_name: card.project_name || 'No Project',
+                    is_unfeasible: card.is_unfeasible || false
+                });
             });
         });
 

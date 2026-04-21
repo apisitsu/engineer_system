@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, Tabs, Drawer, DatePicker, Select, Button, Space } from 'antd';
+import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, Tabs, Drawer, DatePicker, Select, Button, Space, Calendar, Badge, Tooltip } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
@@ -10,7 +10,11 @@ import {
     MdOutlineTrendingUp,
     MdOutlineAssignment,
     MdOutlineGroup,
-    MdEventAvailable
+    MdEventAvailable,
+    MdCalendarToday,
+    MdWarning,
+    MdTimer,
+    MdOutlineSnooze
 } from 'react-icons/md';
 import { IoSearchOutline, IoTimeOutline, IoFilterOutline } from 'react-icons/io5';
 import dayjs from 'dayjs';
@@ -64,8 +68,6 @@ const verticalBaselinePlugin = {
 };
 ChartJS.register(verticalBaselinePlugin);
 
-const CAPACITY_HOURS = 30; // Weekly capacity
-
 const WorkloadDashboard = ({ theme }) => {
     const { teamWorkload, fetchTeamWorkload, users, projects, isLoading } = useKanbanStore();
     const { user } = useAuthStore();
@@ -75,16 +77,23 @@ const WorkloadDashboard = ({ theme }) => {
     const canViewTeam = isManagerOrCoord || isSuperAdmin;
 
     const [activeTab, setActiveTab] = useState('my_workload');
-    const [dateRange, setDateRange] = useState(null); // null = show ALL active cards (no date filter)
+    const [dateRange, setDateRange] = useState(null);
     const [selectedProjectId, setSelectedProjectId] = useState(null);
     const [search, setSearch] = useState('');
+    
+    // Timeframe selector
+    const [timeframe, setTimeframe] = useState('week'); // 'day', 'week', 'month'
+    
+    // Calendar filters
+    const [calendarUserFilter, setCalendarUserFilter] = useState('all'); // 'all', 'me', or u_code
 
     // Team View Drill-down
     const [drawerVisible, setDrawerVisible] = useState(false);
     const [drawerUserCode, setDrawerUserCode] = useState(null);
 
+    const CAPACITY_HOURS = timeframe === 'day' ? 6 : timeframe === 'month' ? 120 : 30;
+
     useEffect(() => {
-        // Build params — only include filters that are explicitly set
         const params = {};
         if (dateRange && dateRange[0] && dateRange[1]) {
             params.week_start = dateRange[0].format('YYYY-MM-DD');
@@ -116,7 +125,26 @@ const WorkloadDashboard = ({ theme }) => {
             ...w,
             utilization: Math.min((parseFloat(w.total_estimated_hours || 0) / CAPACITY_HOURS) * 100, 100)
         }));
-    }, [teamWorkload, search]);
+    }, [teamWorkload, search, CAPACITY_HOURS]);
+
+    const getTaskStats = (cards) => {
+        const now = dayjs();
+        let nearDeadline = 0;
+        let overdue = 0;
+        let longPending = 0;
+        
+        cards.forEach(c => {
+            const due = dayjs(c.due_date);
+            const diffDays = due.diff(now, 'day', true);
+            if (diffDays < 0) overdue++;
+            else if (diffDays <= 3) nearDeadline++;
+            
+            if (c.card_created_at && now.diff(dayjs(c.card_created_at), 'day') > 14) {
+                longPending++;
+            }
+        });
+        return { total: cards.length, nearDeadline, overdue, longPending };
+    };
 
     // =========================================================
     // MY WORKLOAD VIEW
@@ -127,29 +155,21 @@ const WorkloadDashboard = ({ theme }) => {
         const isOverloaded = estHours > CAPACITY_HOURS;
         const gaugeColor = isOverloaded ? theme.colors.error : (utilPercent > 80 ? theme.colors.warning : theme.colors.success);
 
-        // console.log(isDrawer);
-
         const pendingCards = workloadData.cards?.filter(c => c.list_type !== 'closed') || [];
+        const stats = getTaskStats(pendingCards);
 
-        // Daily Workload Chart Data (Mon-Fri simple distribution)
-        // Note: Real distribution requires analyzing each card's duration. 
-        // For now, we group cards by due_date day.
+        // Daily Workload Chart Data
         const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
         const dailyHours = [0, 0, 0, 0, 0];
 
         pendingCards.forEach(c => {
             if (c.due_date) {
-                const dueDay = dayjs(c.due_date).day(); // 0 = Sun, 1 = Mon ... 5 = Fri
+                const dueDay = dayjs(c.due_date).day();
                 if (dueDay >= 1 && dueDay <= 5) {
                     dailyHours[dueDay - 1] += parseFloat(c.estimated_hours || 0);
                 }
             } else {
-                // If no due date, spread evenly or just put on Monday for lack of better logic
-                dailyHours[0] += parseFloat(c.estimated_hours || 0) / 5;
-                dailyHours[1] += parseFloat(c.estimated_hours || 0) / 5;
-                dailyHours[2] += parseFloat(c.estimated_hours || 0) / 5;
-                dailyHours[3] += parseFloat(c.estimated_hours || 0) / 5;
-                dailyHours[4] += parseFloat(c.estimated_hours || 0) / 5;
+                dailyHours.forEach((_, i) => dailyHours[i] += parseFloat(c.estimated_hours || 0) / 5);
             }
         });
 
@@ -175,6 +195,33 @@ const WorkloadDashboard = ({ theme }) => {
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: isDrawer ? 0 : '0 16px' }}>
+                <Row gutter={[16, 16]}>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.info}15`, border: 'none' }}>
+                            <Text type="secondary"><MdOutlineAssignment /> Total Tasks</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.info }}>{stats.total}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.warning}15`, border: 'none' }}>
+                            <Text type="secondary"><MdTimer /> Near Deadline</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.warning }}>{stats.nearDeadline}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.error}15`, border: 'none' }}>
+                            <Text type="secondary"><MdWarning /> Overdue</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.error }}>{stats.overdue}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.textSecondary}15`, border: 'none' }}>
+                            <Text type="secondary"><MdOutlineSnooze /> Long Pending</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.textSecondary }}>{stats.longPending}</Title>
+                        </Card>
+                    </Col>
+                </Row>
+
                 <Row gutter={[24, 24]}>
                     <Col xs={24} md={12}>
                         <Card size="small" style={{ borderRadius: theme.borderRadius.lg, height: '100%' }}>
@@ -190,7 +237,7 @@ const WorkloadDashboard = ({ theme }) => {
                                 </Col>
                                 <Col span={12}>
                                     <Title level={5}><MdOutlineTrendingUp /> Capacity Utilization</Title>
-                                    <Text type="secondary">You are at <b>{utilPercent}%</b> of your weekly capacity.</Text>
+                                    <Text type="secondary">You are at <b>{utilPercent}%</b> of your {timeframe} capacity.</Text>
                                     <div style={{ marginTop: 16 }}>
                                         <Text strong style={{ fontSize: 24, color: theme.colors.primary }}>{pendingCards.length}</Text>
                                         <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>Pending Tasks</Text>
@@ -220,26 +267,35 @@ const WorkloadDashboard = ({ theme }) => {
                     <List
                         dataSource={pendingCards}
                         locale={{ emptyText: <Empty description="No pending tasks for this period" /> }}
-                        renderItem={card => (
-                            <List.Item style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.colors.borderLight}` }}>
-                                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                                            <Tag color="geekblue" style={{ fontSize: 11, border: 'none' }}>{card.project_name}</Tag>
-                                            <Tag style={{ fontSize: 11, border: 'none', backgroundColor: theme.colors.bgSecondary }}>{card.board_name}</Tag>
+                        renderItem={card => {
+                            const isOverdue = card.due_date && dayjs(card.due_date).isBefore(dayjs(), 'day');
+                            return (
+                                <List.Item style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.colors.borderLight}` }}>
+                                    <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <Tag color="geekblue" style={{ fontSize: 11, border: 'none' }}>{card.project_name}</Tag>
+                                                <Tag style={{ fontSize: 11, border: 'none', backgroundColor: theme.colors.bgSecondary }}>{card.board_name}</Tag>
+                                                {card.is_unfeasible && (
+                                                    <Tag color="error" style={{ fontSize: 11, border: 'none' }}>Unfeasible Workload</Tag>
+                                                )}
+                                                {isOverdue && (
+                                                    <Tag color="error" style={{ fontSize: 11, border: 'none' }}>Overdue</Tag>
+                                                )}
+                                            </div>
+                                            <Text strong style={{ fontSize: 14 }}>{card.card_name}</Text>
+                                            {card.due_date && <Text type={isOverdue ? "danger" : "secondary"} style={{ fontSize: 12, display: 'block', marginTop: 4 }}>Due: {dayjs(card.due_date).format('DD MMM YYYY')}</Text>}
                                         </div>
-                                        <Text strong style={{ fontSize: 14 }}>{card.card_name}</Text>
-                                        {card.due_date && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>Due: {dayjs(card.due_date).format('DD MMM')}</Text>}
+                                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                            <Tag color={card.list_type === 'active' ? 'processing' : 'default'}>{card.list_name}</Tag>
+                                            <Tag icon={<IoTimeOutline />} color="orange" style={{ margin: 0, padding: '4px 8px', fontSize: 13 }}>
+                                                {card.estimated_hours}h
+                                            </Tag>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                        <Tag color={card.list_type === 'active' ? 'processing' : 'default'}>{card.list_name}</Tag>
-                                        <Tag icon={<IoTimeOutline />} color="orange" style={{ margin: 0, padding: '4px 8px', fontSize: 13 }}>
-                                            {card.estimated_hours}h
-                                        </Tag>
-                                    </div>
-                                </div>
-                            </List.Item>
-                        )}
+                                </List.Item>
+                            );
+                        }}
                     />
                 </Card>
             </div>
@@ -254,7 +310,10 @@ const WorkloadDashboard = ({ theme }) => {
         const totalAllocated = teamWorkloadFiltered.reduce((sum, w) => sum + parseFloat(w.total_estimated_hours || 0), 0);
         const overloadedMembers = teamWorkloadFiltered.filter(w => parseFloat(w.total_estimated_hours || 0) > CAPACITY_HOURS);
 
-        // Chart Data
+        let totalCards = [];
+        teamWorkloadFiltered.forEach(w => totalCards = totalCards.concat(w.cards));
+        const stats = getTaskStats(totalCards);
+
         teamWorkloadFiltered.sort((a, b) => parseFloat(b.total_estimated_hours) - parseFloat(a.total_estimated_hours));
 
         const barData = {
@@ -266,7 +325,7 @@ const WorkloadDashboard = ({ theme }) => {
                     const h = parseFloat(w.total_estimated_hours);
                     if (h > CAPACITY_HOURS) return theme.colors.error;
                     if (h >= CAPACITY_HOURS * 0.85) return theme.colors.warning;
-                    return theme.colors.success; // Default green
+                    return theme.colors.success;
                 }),
                 borderRadius: 4
             }]
@@ -301,6 +360,33 @@ const WorkloadDashboard = ({ theme }) => {
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '0 16px' }}>
+                <Row gutter={[16, 16]}>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.info}15`, border: 'none' }}>
+                            <Text type="secondary"><MdOutlineAssignment /> Team Tasks</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.info }}>{stats.total}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.warning}15`, border: 'none' }}>
+                            <Text type="secondary"><MdTimer /> Near Deadline</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.warning }}>{stats.nearDeadline}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.error}15`, border: 'none' }}>
+                            <Text type="secondary"><MdWarning /> Overdue</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.error }}>{stats.overdue}</Title>
+                        </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: `${theme.colors.textSecondary}15`, border: 'none' }}>
+                            <Text type="secondary"><MdOutlineSnooze /> Long Pending</Text>
+                            <Title level={3} style={{ margin: 0, color: theme.colors.textSecondary }}>{stats.longPending}</Title>
+                        </Card>
+                    </Col>
+                </Row>
+
                 <Row gutter={[24, 24]}>
                     <Col xs={24} md={8}>
                         <Card size="small" style={{ borderRadius: theme.borderRadius.lg, borderLeft: `4px solid ${theme.colors.error}` }}>
@@ -320,11 +406,11 @@ const WorkloadDashboard = ({ theme }) => {
                     </Col>
                     <Col xs={24} md={8}>
                         <Card size="small" style={{ borderRadius: theme.borderRadius.lg, borderLeft: `4px solid ${theme.colors.success}` }}>
-                            <Text type="secondary"><MdEventAvailable /> Available Capacity</Text>
+                            <Text type="secondary"><MdEventAvailable /> Available Capacity ({timeframe})</Text>
                             <Title level={2} style={{ margin: '8px 0 0', color: theme.colors.success }}>
                                 {Math.max(totalCapacity - totalAllocated, 0)}h
                             </Title>
-                            <Text type="secondary" style={{ fontSize: 12 }}>Remaining this week</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>Remaining this {timeframe}</Text>
                         </Card>
                     </Col>
                 </Row>
@@ -336,6 +422,90 @@ const WorkloadDashboard = ({ theme }) => {
                     <div style={{ height: Math.max(300, teamWorkloadFiltered.length * 40) }}>
                         <Bar data={barData} options={barOptions} />
                     </div>
+                </Card>
+            </div>
+        );
+    };
+
+    // =========================================================
+    // CALENDAR VIEW
+    // =========================================================
+    const renderCalendarView = () => {
+        const getListData = (value) => {
+            const dateStr = value.format('YYYY-MM-DD');
+            let listData = [];
+            
+            let sourceWorkloads = teamWorkload;
+            if (calendarUserFilter === 'me') {
+                sourceWorkloads = [myWorkload];
+            } else if (calendarUserFilter !== 'all') {
+                const target = teamWorkload.find(w => w.u_code === calendarUserFilter);
+                if (target) sourceWorkloads = [target];
+            }
+
+            sourceWorkloads.forEach(w => {
+                if (!w || !w.cards) return;
+                w.cards.forEach(c => {
+                    if (c.list_type !== 'closed' && dayjs(c.due_date).format('YYYY-MM-DD') === dateStr) {
+                        listData.push({
+                            type: c.is_unfeasible ? 'error' : dayjs(c.due_date).isBefore(dayjs(), 'day') ? 'warning' : 'processing',
+                            content: `${c.card_name} (${w.u_name || w.u_code})`
+                        });
+                    }
+                });
+            });
+            
+            // Remove duplicates (since same card might be assigned to multiple people)
+            const uniqueData = [];
+            const seen = new Set();
+            listData.forEach(item => {
+                if (!seen.has(item.content)) {
+                    seen.add(item.content);
+                    uniqueData.push(item);
+                }
+            });
+            
+            return uniqueData;
+        };
+
+        const dateCellRender = (value) => {
+            const listData = getListData(value);
+            return (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {listData.map((item, index) => (
+                        <li key={index} style={{ marginBottom: 2 }}>
+                            <Tooltip title={item.content}>
+                                <Badge status={item.type} text={
+                                    <span style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: '100%' }}>
+                                        {item.content}
+                                    </span>
+                                } />
+                            </Tooltip>
+                        </li>
+                    ))}
+                </ul>
+            );
+        };
+
+        return (
+            <div style={{ padding: '0 16px' }}>
+                <Card size="small" style={{ borderRadius: theme.borderRadius.lg }}>
+                    <div style={{ marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
+                        <Text strong>Filter Timeline For:</Text>
+                        <Select
+                            value={calendarUserFilter}
+                            onChange={setCalendarUserFilter}
+                            style={{ width: 250 }}
+                            showSearch
+                            optionFilterProp="label"
+                            options={[
+                                { value: 'all', label: 'Entire Team' },
+                                { value: 'me', label: 'My Workload' },
+                                ...teamWorkload.map(w => ({ value: w.u_code, label: `${w.u_code} - ${w.u_name}` }))
+                            ]}
+                        />
+                    </div>
+                    <Calendar dateCellRender={dateCellRender} />
                 </Card>
             </div>
         );
@@ -353,6 +523,16 @@ const WorkloadDashboard = ({ theme }) => {
                     </Col>
                     <Col>
                         <Space wrap>
+                            <Select
+                                value={timeframe}
+                                onChange={setTimeframe}
+                                style={{ width: 120 }}
+                                options={[
+                                    { value: 'day', label: 'Daily (6h)' },
+                                    { value: 'week', label: 'Weekly (30h)' },
+                                    { value: 'month', label: 'Monthly (120h)' },
+                                ]}
+                            />
                             <Select
                                 placeholder="All Projects"
                                 allowClear
@@ -397,6 +577,11 @@ const WorkloadDashboard = ({ theme }) => {
                             key: 'team_workload',
                             label: <span><MdOutlineGroup /> Team Workload</span>,
                             children: isLoading ? <div style={{ textAlign: 'center', padding: '100px 0' }}><Progress type="circle" percent={30} status="active" /></div> : renderTeamWorkload()
+                        },
+                        {
+                            key: 'calendar_view',
+                            label: <span><MdCalendarToday /> Schedule</span>,
+                            children: isLoading ? <div style={{ textAlign: 'center', padding: '100px 0' }}><Progress type="circle" percent={30} status="active" /></div> : renderCalendarView()
                         }
                     ].filter(Boolean)}
                 />
