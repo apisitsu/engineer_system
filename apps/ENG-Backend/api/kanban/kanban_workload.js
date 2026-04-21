@@ -115,13 +115,7 @@ const GetTeamWorkload = async (req, res) => {
 
         const { rows: workloadDataRaw } = await engPool.query(query, params);
 
-        // Fallback 3-Month Due Date for display and calculation
-        const dayjs = require('dayjs');
-        workloadDataRaw.forEach(card => {
-            if (!card.due_date) {
-                card.due_date = dayjs(card.card_created_at).add(3, 'month').format('YYYY-MM-DD');
-            }
-        });
+        // Pass the raw data to be enhanced by the calculator (which will assign estimated due dates)
 
         // Apply Feasibility and Expected Hours Algorithm
         const enhancedCards = await enhanceWorkloadDataWithFeasibility(workloadDataRaw);
@@ -182,8 +176,9 @@ const GetTeamWorkload = async (req, res) => {
                 userEntry.cards.push({
                     card_id: card.card_id,
                     card_name: card.card_name,
-                    estimated_hours: Math.round(allocatedHours * 100) / 100,
+                    estimated_hours: allocatedHours.toFixed(2),
                     due_date: card.due_date,
+                    is_estimated_due_date: card.is_estimated_due_date || false,
                     card_created_at: card.card_created_at,
                     list_id: card.list_id,
                     list_name: card.list_name || 'No List',

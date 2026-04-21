@@ -145,6 +145,16 @@ async function enhanceWorkloadDataWithFeasibility(workloadData) {
         
         // Always enforce the clamped calculation
         card.estimated_hours = card.calculated_estimated_hours;
+
+        // Dynamic Due Date Estimation
+        if (!card.due_date) {
+            card.is_estimated_due_date = true;
+            // Determine how many days it takes based on 6 hours/day
+            const daysToComplete = Math.ceil(card.estimated_hours / 6);
+            card.due_date = dayjs(card.card_created_at).add(daysToComplete, 'day').format('YYYY-MM-DD');
+        } else {
+            card.is_estimated_due_date = false;
+        }
     }
 
     return workloadData;
