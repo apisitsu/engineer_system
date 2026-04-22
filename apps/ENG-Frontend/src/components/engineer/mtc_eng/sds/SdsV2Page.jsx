@@ -52,7 +52,7 @@ const SdsV2Page = () => {
         allMachineTypes.length ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES),
       ]);
       setData(searchRes.data);
-      if (mtRes) setAllMachineTypes(mtRes.data.filter(m => m.is_active));
+      if (mtRes) setAllMachineTypes(mtRes.data.filter(m => m.is_active && m.machine_type_name));
     } catch (err) {
       message.error(err.response?.data?.error || 'Can not find');
     } finally {
@@ -84,7 +84,7 @@ const SdsV2Page = () => {
         _t: Date.now(),
         token: localStorage.getItem('token') || '',
       };
-      
+
       // Construct the get URL natively so Chrome opens it as a standard PDF tab.
       // This completely avoids Blob URL 'cross-partition' blocks.
       const queryParams = new URLSearchParams(params).toString();
@@ -111,7 +111,7 @@ const SdsV2Page = () => {
     return (
       <Descriptions size="small" bordered column={4}>
         {entries.map(([key, val]) => (
-          <Descriptions.Item key={key} label={key}>{val || '-'}</Descriptions.Item>
+          <Descriptions.Item key={key} label={key.charAt(0).toUpperCase() + key.slice(1)}>{val || '-'}</Descriptions.Item>
         ))}
       </Descriptions>
     );
@@ -125,7 +125,6 @@ const SdsV2Page = () => {
     { title: 'WC', dataIndex: 'wc', width: 80 },
     { title: 'CT', dataIndex: 'ct', width: 80 },
     { title: 'ST', dataIndex: 'st', width: 80 },
-    { title: 'Batch', dataIndex: 'batch_size', width: 80 },
     {
       title: 'PDF',
       key: 'pdf',
@@ -149,7 +148,7 @@ const SdsV2Page = () => {
         <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto' }}>
           <Spin spinning={loading}>
             <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-              SDS v2 — Test
+              Setup Data Sheet v2
             </Title>
 
             <Card style={{ marginBottom: 16, background: theme.colors.cardBackground }}>
@@ -220,51 +219,42 @@ const SdsV2Page = () => {
                   {renderDimension()}
                 </Card>
 
-                {/* Process Plan */}
-                <Card
-                  title={<Text strong style={{ color: theme.colors.text }}>Process Plan</Text>}
-                  style={{ marginBottom: 16, background: theme.colors.cardBackground }}
-                >
-                  <Table
-                    dataSource={data.process_info.map((r, i) => ({ ...r, key: i }))}
-                    columns={processInfoCols}
-                    pagination={false}
-                    size="small"
-                    scroll={{ x: 'max-content' }}
-                  />
-                </Card>
-
-                {/* Tooling */}
-                <Card
-                  title={<Text strong style={{ color: theme.colors.text }}>Tooling</Text>}
-                  style={{ background: theme.colors.cardBackground }}
-                >
-                  {data.process_plan.length > 0 ? (() => {
-                    const groups = data.process_plan.reduce((acc, r) => {
-                      const key = r.process_code;
-                      if (!acc[key]) acc[key] = { code: key, eng: r.process_eng, rows: [] };
-                      acc[key].rows.push(r);
-                      return acc;
-                    }, {});
-                    return Object.values(groups).map((g, gi) => (
-                      <div key={g.code} style={{ marginBottom: gi < Object.values(groups).length - 1 ? 16 : 0 }}>
-                        <Text strong style={{ color: theme.colors.text }}>
-                          {g.code} — {g.eng}
-                        </Text>
-                        <Table
-                          dataSource={g.rows.map((r, i) => ({ ...r, key: `${r.process_code}_${r.tool_dwg_no}_${i}` }))}
-                          columns={toolCols}
-                          pagination={false}
-                          size="small"
-                          style={{ marginTop: 8 }}
-                          scroll={{ x: 'max-content' }}
-                        />
-                      </div>
-                    ));
-                  })() : (
-                    <Text type="secondary">No Tooling Data</Text>
-                  )}
-                </Card>
+                {/* Process Plan + Tooling (expandable) */}
+                {(() => {
+                  const toolingByCode = data.process_plan.reduce((acc, r) => {
+                    if (!acc[r.process_code]) acc[r.process_code] = [];
+                    acc[r.process_code].push(r);
+                    return acc;
+                  }, {});
+                  return (
+                    <Card
+                      title={<Text strong style={{ color: theme.colors.text }}>Process Info</Text>}
+                      style={{ marginBottom: 16, background: theme.colors.cardBackground }}
+                    >
+                      <Table
+                        dataSource={data.process_info.map((r, i) => ({ ...r, key: i }))}
+                        columns={processInfoCols}
+                        pagination={false}
+                        size="small"
+                        scroll={{ x: 'max-content' }}
+                        expandable={{
+                          rowExpandable: (row) => (toolingByCode[row.process_code]?.length > 0),
+                          expandedRowRender: (row) => (
+                            <Table
+                              dataSource={toolingByCode[row.process_code].map((r, i) => ({
+                                ...r, key: `${r.process_code}_${r.tool_dwg_no}_${i}`
+                              }))}
+                              columns={toolCols}
+                              pagination={false}
+                              size="small"
+                              scroll={{ x: 'max-content' }}
+                            />
+                          ),
+                        }}
+                      />
+                    </Card>
+                  );
+                })()}
               </>
             )}
           </Spin>
@@ -286,14 +276,6 @@ const SdsV2Page = () => {
         okButtonProps={{ loading: pdfLoading, icon: <FilePdfOutlined /> }}
         destroyOnClose
       >
-        <div style={{ marginBottom: 4 }}>
-          <Text>Machine Type</Text>
-          {filteredMachineTypes.length > 0 && filteredMachineTypes.length < allMachineTypes.length && (
-            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-              (กรองจาก tool_dwg_no — {filteredMachineTypes.length} รายการ)
-            </Text>
-          )}
-        </div>
         <Select
           showSearch
           placeholder="Select machine type"
@@ -305,7 +287,7 @@ const SdsV2Page = () => {
           }
           options={filteredMachineTypes.map(m => ({
             value: m.machine_type_name,
-            label: `${m.machine_type_code} — ${m.machine_type_name || '(no name)'}`,
+            label: m.machine_type_name,
           }))}
         />
       </Modal>

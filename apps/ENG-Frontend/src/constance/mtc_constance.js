@@ -12,6 +12,8 @@ export const MTC_PATHS = {
   SDS: '/eng/mtc_eng/sds',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
+  EMAIL_CONFIG: '/eng/mtc/email-config',
+  FORMULA_CONFIG: '/eng/mtc/formulas',
 };
 
 export const WORKFLOW_STATUS = {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Table, Card, Typography, Button, Space, Tag, Modal, Form, Input, message, App, Layout 
+    Table, Card, Typography, Button, Space, Tag, Modal, Form, Input, message, Layout
 } from 'antd';
 import { 
     MailOutlined, EditOutlined, PlusOutlined, DeleteOutlined, 
@@ -10,6 +10,7 @@ import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import ScrollbarStyle from '../../../common/scrollbar';
 
 const { Title, Text } = Typography;
@@ -152,7 +153,9 @@ const EmailConfigManager = () => {
     ];
 
     return (
-        <Layout style={{ backgroundColor: theme.colors.background }}>
+        <Layout style={{ height: '100%' }}>
+            <MenuTemplate type="MTC" defaultSelectedKeys="admin-email" defaultOpenKeys="admin-config" />
+            <Layout style={{ backgroundColor: theme.colors.background }}>
             <ScrollbarStyle primary={theme.colors.primary} />
             <Content className="kb-vscroll" style={{
                 height: 'calc(100vh - 64px)',
@@ -216,6 +219,7 @@ const EmailConfigManager = () => {
                     </Modal>
                 </Card>
             </Content>
+            </Layout>
         </Layout>
     );
 };

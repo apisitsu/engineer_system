@@ -10,6 +10,7 @@ import {
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -141,5 +142,12 @@ const FormulaManagerContent = () => {
   );
 };
 
-const FormulaManager = () => (<App><FormulaManagerContent /></App>);
+const FormulaManager = () => (
+  <App>
+    <Layout style={{ height: '100%' }}>
+      <MenuTemplate type="MTC" defaultSelectedKeys="admin-formula" defaultOpenKeys="admin-config" />
+      <FormulaManagerContent />
+    </Layout>
+  </App>
+);
 export default FormulaManager;

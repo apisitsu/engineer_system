@@ -86,13 +86,19 @@ export const newprod = createMenu([
 
 export const mtc = createMenu([
     { label: "Home", path: MTC_PATHS.HOME },
-    { label: "Tooling Inspect", path: MTC_PATHS.TOOLING_INSPECT },
     { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST },
+    { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT },
-    { label: "Setup Data Sheet", path: MTC_PATHS.SDS },
     { label: "Setup Data Sheet v2", path: MTC_PATHS.SDS_V2 },
-    { label: "SDS v2 Admin", path: MTC_PATHS.SDS_V2_ADMIN },
-    { label: "Email Config", path: "/eng/mtc/email-config" },
+    {
+        label: "Admin config",
+        key: "admin-config",
+        children: [
+            { label: "Email config", path: MTC_PATHS.EMAIL_CONFIG, key: "admin-email" },
+            { label: "Formula config", path: MTC_PATHS.FORMULA_CONFIG, key: "admin-formula" },
+            { label: "Machine template config", path: MTC_PATHS.SDS_V2_ADMIN, key: "admin-sds-template" },
+        ]
+    },
 ]);
 
 export const all = createMenu([

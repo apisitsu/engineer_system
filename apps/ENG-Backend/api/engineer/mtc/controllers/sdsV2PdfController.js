@@ -8,6 +8,7 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { searchByCn } = require('../services/sdsV2SearchService');
 const { TABLES, PATHS } = require('../mtcConstants');
+const { colLetterToIndex, cellAddressToRC, cellAddressTo0Based } = require('../utils/excelHelpers');
 
 const router = express.Router();
 
@@ -17,29 +18,6 @@ const SOFFICE       = path.resolve('./tools/LibreOfficePortable/App/libreoffice/
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
-
-// ── Column letter helper ──────────────────────────────────────────────────────
-
-/** 'A' → 1, 'Z' → 26, 'AA' → 27, 'AO' → 41 (1-based) */
-function colLetterToIndex(letters) {
-  let n = 0;
-  for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
-  return n;
-}
-
-/** 'B3' → { col: 2, row: 3 } (1-based, matches ExcelJS getCell) */
-function cellAddressToRC(addr) {
-  const m = addr.match(/^([A-Z]+)(\d+)$/i);
-  if (!m) return null;
-  return { col: colLetterToIndex(m[1]), row: parseInt(m[2]) };
-}
-
-/** 'B3' → { col: 1, row: 2 } (0-based for ExcelJS addImage tl/br) */
-function cellAddressTo0Based(addr) {
-  const rc = cellAddressToRC(addr);
-  if (!rc) return null;
-  return { col: rc.col - 1, row: rc.row - 1 };
-}
 
 // ── Image extent map: param_key → { tl_cell, br_cell } ─────────────────────
 // These define where each image is anchored in the template.
@@ -103,7 +81,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   // 1. Static fields from Search API
   const firstProcessInfo = process_code
-    ? searchData.process_info.find(r => r.process_code === process_code) || searchData.process_info[0]
+    ? searchData.process_info.find(r => String(r.process_code) === String(process_code)) || searchData.process_info[0]
     : searchData.process_info[0];
 
   map['cn']               = searchData.cn || '';
@@ -127,7 +105,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   // Tooling slots T01–T20 — filtered by process_code and machine_type_code
   let tools = searchData.process_plan || [];
-  if (process_code) tools = tools.filter(t => t.process_code === process_code);
+  if (process_code) tools = tools.filter(t => String(t.process_code) === String(process_code));
   if (machineTypeCode) tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
 
   for (let i = 0; i < 20; i++) {
@@ -148,13 +126,18 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // Default sds_rev to 'NC' if not provided
   if (!map['sds_rev']) map['sds_rev'] = 'NC';
 
-  // 3. sds_machine_type_code — grinding_area_label
-  const mtcRow = await engPool.query(
-    `SELECT grinding_area_label FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
-     WHERE machine_type_name = $1 LIMIT 1`,
-    [machine_type_name]
-  );
-  map['grinding_area_label'] = mtcRow.rows[0]?.grinding_area_label || 'GRINDING AREA';
+  // 3. grinding_area_label — derived from process_name, fallback to DB value
+  const grindMatch = (map['process_name'] || '').match(/^(.*?)\s*grind/i);
+  if (grindMatch && grindMatch[1].trim()) {
+    map['grinding_area_label'] = `${grindMatch[1].trim().toUpperCase()} GRINDING AREA`;
+  } else {
+    const mtcRow = await engPool.query(
+      `SELECT grinding_area_label FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+       WHERE machine_type_name = $1 LIMIT 1`,
+      [machine_type_name]
+    );
+    map['grinding_area_label'] = mtcRow.rows[0]?.grinding_area_label || 'GRINDING AREA';
+  }
 
   // 4. Tooling images (Buffer) — uses already-filtered tools list
   const dwgNos = tools.slice(0, 20).map(t => t?.tool_dwg_no).filter(Boolean);

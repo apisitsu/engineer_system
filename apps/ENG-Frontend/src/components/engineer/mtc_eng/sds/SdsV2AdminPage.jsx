@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout, Typography, Card, Tabs, App,
-  Table, Input, Button, Space, Popconfirm,
+  Table, Input, Button, Popconfirm,
   Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox,
 } from 'antd';
 import {
@@ -27,8 +27,6 @@ const ParamsTab = ({ theme }) => {
   const [cn, setCn] = useState('');
   const [cnSearched, setCnSearched] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [selectedMachineId, setSelectedMachineId] = useState(null);
-  const [grindingLabel, setGrindingLabel] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
@@ -43,9 +41,7 @@ const ParamsTab = ({ theme }) => {
     if (!cn.trim()) { message.warning('Enter C/N'); return; }
     setLoading(true);
     setSelectedMachine(null);
-    setSelectedMachineId(null);
-    setGrindingLabel('');
-    setFilteredMachineTypes([]);
+        setFilteredMachineTypes([]);
     setCnSearched(false);
     form.resetFields();
     try {
@@ -59,9 +55,7 @@ const ParamsTab = ({ theme }) => {
       setFilteredMachineTypes(filtered.length ? filtered : allMachineTypes);
       if (filtered.length === 1) {
         setSelectedMachine(filtered[0].machine_type_name);
-        setSelectedMachineId(filtered[0].id);
-        setGrindingLabel(filtered[0].grinding_area_label || '');
-      }
+              }
       setCnSearched(true);
       if (!filtered.length) message.info('ไม่พบ machine type ที่ match — แสดงทั้งหมด');
     } catch (err) {
@@ -74,9 +68,6 @@ const ParamsTab = ({ theme }) => {
   const handleMachineSelect = (v) => {
     setSelectedMachine(v);
     form.resetFields();
-    const mt = (filteredMachineTypes.length ? filteredMachineTypes : allMachineTypes).find(m => m.machine_type_name === v);
-    setSelectedMachineId(mt?.id || null);
-    setGrindingLabel(mt?.grinding_area_label || '');
   };
 
   const loadParams = async () => {
@@ -100,16 +91,9 @@ const ParamsTab = ({ theme }) => {
     if (!cn.trim() || !selectedMachine) { message.warning('Enter C/N and select machine type first'); return; }
     setSaving(true);
     try {
-      const calls = [];
-      // Per-CN params
       const vals = form.getFieldsValue();
       const params = Object.entries(vals).map(([param_key, param_value]) => ({ param_key, param_value: param_value || null }));
-      calls.push(axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, { cn: cn.trim(), machine_type_name: selectedMachine, params }));
-      // Grinding area label (machine-type level)
-      if (selectedMachineId) {
-        calls.push(axios.put(`${server.MTC_SDS_V2_ADMIN_MACHINE_TYPES}/${selectedMachineId}`, { grinding_area_label: grindingLabel }));
-      }
-      await Promise.all(calls);
+      await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, { cn: cn.trim(), machine_type_name: selectedMachine, params });
       message.success('Saved');
     } catch (err) {
       message.error(err.response?.data?.error || 'Save failed');
@@ -128,7 +112,7 @@ const ParamsTab = ({ theme }) => {
       <Row gutter={8} style={{ marginBottom: 16 }} align="middle">
         <Col>
           <Input placeholder="C/N Number" value={cn}
-            onChange={e => { setCn(e.target.value); setCnSearched(false); setFilteredMachineTypes([]); setSelectedMachine(null); setSelectedMachineId(null); setGrindingLabel(''); }}
+            onChange={e => { setCn(e.target.value); setCnSearched(false); setFilteredMachineTypes([]); setSelectedMachine(null); }}
             onPressEnter={searchCn} style={{ width: 200 }} allowClear />
         </Col>
         <Col>
@@ -157,18 +141,6 @@ const ParamsTab = ({ theme }) => {
               </Form.Item>
             </Col>
           ))}
-          <Col span={8}>
-            <Form.Item
-              label={<span>Grinding Area Label</span>}
-            >
-              <Input
-                value={grindingLabel}
-                onChange={e => setGrindingLabel(e.target.value)}
-                disabled={!selectedMachine}
-                placeholder="GRINDING AREA"
-              />
-            </Form.Item>
-          </Col>
         </Row>
 
         <Divider orientation="left" plain>Revision Log</Divider>
@@ -547,7 +519,7 @@ const MachineConfigTab = ({ theme }) => {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, {
         params: search ? { search } : {},
       });
-      setAllMachineTypes(res.data.filter(m => m.is_active));
+      setAllMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name));
     } catch (err) {
       message.error(err.response?.data?.error || 'Load failed');
     } finally {
