@@ -251,6 +251,25 @@ const KanbanCard = ({ card, isOverlay }) => {
                         gap: 6,
                         marginTop: 4,
                     }}>
+                        {/* Priority Badge */}
+                        <Tooltip title={`Priority: ${card.priority || 'medium'}`}>
+                            <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: card.priority === 'high' ? '#fff1f0' : (card.priority === 'low' ? '#e6f7ff' : '#fff7e6'),
+                                color: card.priority === 'high' ? '#cf1322' : (card.priority === 'low' ? '#096dd9' : '#d46b08'),
+                                border: `1px solid ${card.priority === 'high' ? '#ffa39e' : (card.priority === 'low' ? '#91d5ff' : '#ffd591')}`,
+                                fontSize: 10,
+                                fontWeight: 600,
+                                textTransform: 'uppercase'
+                            }}>
+                                {card.priority || 'Medium'}
+                            </div>
+                        </Tooltip>
+
                         {/* Due Date Badge */}
                         {dueDateInfo && (
                             <Tooltip title={`Due: ${dueDateInfo.fullDate}`}>

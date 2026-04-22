@@ -175,6 +175,8 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             { key: 'sort-due-desc', label: 'Due Date ↓', onClick: () => sortListCards(list.id, 'due_date', 'desc') },
             { key: 'sort-created', label: 'Created ↑', onClick: () => sortListCards(list.id, 'created_at', 'asc') },
             { key: 'sort-created-desc', label: 'Created ↓', onClick: () => sortListCards(list.id, 'created_at', 'desc') },
+            { key: 'sort-priority', label: 'Priority (High-Low)', onClick: () => sortListCards(list.id, 'priority', 'asc') },
+            { key: 'sort-priority-desc', label: 'Priority (Low-High)', onClick: () => sortListCards(list.id, 'priority', 'desc') },
         ]
     });
 

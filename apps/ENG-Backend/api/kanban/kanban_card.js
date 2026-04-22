@@ -114,7 +114,7 @@ const CreateCard = async (req, res) => {
     if (!(await canEditBoard(req, list.board_id)))
         return res.status(403).json({ error: 'Editor permission required' });
 
-    const { name, card_type, description, due_date, is_private, estimated_hours } = req.body;
+    const { name, card_type, description, due_date, is_private, estimated_hours, priority } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // Next position
@@ -127,9 +127,9 @@ const CreateCard = async (req, res) => {
     try {
         await client.query('BEGIN');
         const { rows: [card] } = await client.query(`
-            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10) RETURNING *
-        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false, estimated_hours || 0]);
+            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours, priority)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$11) RETURNING *
+        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false, estimated_hours || 0, priority || 'medium']);
 
         await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [card.id, uCode]);
         await autoSubscribe(client, card.id, uCode);
@@ -221,7 +221,7 @@ const UpdateCard = async (req, res) => {
     }
 
     const { name, description, due_date, is_due_completed, card_type, is_closed,
-        list_id, stopwatch, memo, is_private, estimated_hours } = req.body;
+        list_id, stopwatch, memo, is_private, estimated_hours, priority } = req.body;
 
     const client = await engPool.connect();
     try {
@@ -245,6 +245,7 @@ const UpdateCard = async (req, res) => {
         if (memo !== undefined) { updateFields.push(`memo = $${paramIdx++}`); updateValues.push(memo); }
         if (is_private !== undefined) { updateFields.push(`is_private = $${paramIdx++}`); updateValues.push(is_private); }
         if (estimated_hours !== undefined) { updateFields.push(`estimated_hours = $${paramIdx++}`); updateValues.push(estimated_hours); }
+        if (priority !== undefined) { updateFields.push(`priority = $${paramIdx++}`); updateValues.push(priority); }
 
         if (listChanged) {
             updateFields.push(`list_changed_at = NOW()`);

@@ -6,7 +6,7 @@ import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
 import { server } from '../../../../constance/constance';
 
-import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, } from 'react-icons/md';
+import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
@@ -155,6 +155,7 @@ const CardDetailDrawer = () => {
     const [linkName, setLinkName] = useState('');
     const [customFieldValues, setCustomFieldValues] = useState([]);
     const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+    const [showPrioritySelect, setShowPrioritySelect] = useState(false);
     const [showEstimatedHours, setShowEstimatedHours] = useState(false);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
@@ -765,6 +766,16 @@ const CardDetailDrawer = () => {
                                                 </Tag>
                                             </div>
                                         )}
+
+                                        {/* Priority */}
+                                        <div>
+                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                                                Priority
+                                            </Text>
+                                            <Tag color={card.priority === 'high' ? 'red' : card.priority === 'low' ? 'blue' : 'orange'} style={{ borderRadius: 4, textTransform: 'capitalize' }}>
+                                                {card.priority || 'Medium'}
+                                            </Tag>
+                                        </div>
 
                                         {/* Estimated Hours Badge */}
                                         {card.estimated_hours > 0 && (
@@ -1832,6 +1843,29 @@ const CardDetailDrawer = () => {
                                                                     Remove Due Date
                                                                 </Button>
                                                             )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Priority Sidebar */}
+                                                    <SidebarButton
+                                                        icon={<MdLowPriority size={16} />}
+                                                        label="Priority"
+                                                        active={showPrioritySelect}
+                                                        onClick={() => setShowPrioritySelect(!showPrioritySelect)}
+                                                        theme={theme}
+                                                    />
+                                                    {showPrioritySelect && (
+                                                        <div style={{ marginTop: 8, marginBottom: 8 }}>
+                                                            <Select
+                                                                value={card.priority || 'medium'}
+                                                                onChange={(value) => updateCard(card.id, { priority: value })}
+                                                                style={{ width: '100%' }}
+                                                                options={[
+                                                                    { label: 'Low', value: 'low' },
+                                                                    { label: 'Medium', value: 'medium' },
+                                                                    { label: 'High', value: 'high' }
+                                                                ]}
+                                                            />
                                                         </div>
                                                     )}
 

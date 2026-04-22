@@ -558,7 +558,7 @@ const SortListCards = async (req, res) => {
     const { id } = req.params;
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { sort_by } = req.body; // 'name', 'due_date', 'created_at'
+    const { sort_by, sort_order } = req.body; // 'name', 'due_date', 'created_at', 'priority'
 
     const { rows: [list] } = await engPool.query('SELECT board_id FROM kb_list WHERE id=$1', [id]);
     if (!list) return res.status(404).json({ error: 'List not found' });
@@ -567,13 +567,31 @@ const SortListCards = async (req, res) => {
         return res.status(403).json({ error: 'Editor permission required' });
     }
 
-    const orderCol = sort_by === 'due_date' ? 'due_date' : sort_by === 'created_at' ? 'created_at' : 'name';
+    const orderDir = (sort_order || 'asc').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    let orderClause = '';
+    if (sort_by === 'due_date') {
+        orderClause = `due_date ${orderDir} NULLS LAST`;
+    } else if (sort_by === 'created_at') {
+        orderClause = `created_at ${orderDir}`;
+    } else if (sort_by === 'priority') {
+        orderClause = `
+            CASE 
+                WHEN priority = 'high' THEN 1
+                WHEN priority = 'medium' THEN 2
+                WHEN priority = 'low' THEN 3
+                ELSE 4
+            END ${orderDir}
+        `;
+    } else {
+        orderClause = `name ${orderDir}`;
+    }
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows: cards } = await client.query(
-            `SELECT id FROM kb_card WHERE list_id=$1 ORDER BY ${orderCol} ASC NULLS LAST`, [id]
+            `SELECT id FROM kb_card WHERE list_id=$1 ORDER BY ${orderClause}`, [id]
         );
         // Reassign positions with GAP spacing
         for (let i = 0; i < cards.length; i++) {
