@@ -148,12 +148,22 @@ const ProjectSettingsDrawer = () => {
     const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
 
+    // Role Editing State
+    const [editingRoleUcode, setEditingRoleUcode] = useState(null);
+
     const targetId = projectSettingsTargetId || activeProject?.id;
     const activeProjectForPermissions = projects.find(p => String(p.id) === String(targetId));
     const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions({
         isPrivateProject: activeProjectForPermissions?.is_private,
         projectRole: activeProjectForPermissions?.role,
     });
+
+    const userInfo = useAuthStore(state => state.userInfo) || {};
+    const userDepartment = useAuthStore(state => state.userDepartment);
+    const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
+    const isOwner = activeProjectForPermissions?.role === 'owner';
+    const canChangeRole = isADorMgr || isOwner;
 
     useEffect(() => {
         if (isProjectSettingsOpen) fetchUserPreferences();
@@ -434,12 +444,40 @@ const ProjectSettingsDrawer = () => {
                                                                     )}
                                                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                                         <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{userObj?.u_name || userObj?.u_nickname || userObj?.u_code}</Text>
-                                                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{userObj?.u_code} ({mgr.role})</Text>
+                                                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{userObj?.u_code}</Text>
                                                                     </div>
                                                                 </Space>
-                                                                {mgr.role !== 'owner' && (
-                                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => removeProjectManager(proj.id, mgr.u_code)} />
-                                                                )}
+                                                                <Space>
+                                                                    {editingRoleUcode === mgr.u_code ? (
+                                                                        <>
+                                                                            <Select
+                                                                                size="small"
+                                                                                value={mgr.role}
+                                                                                onChange={(newRole) => {
+                                                                                    addProjectManager(proj.id, mgr.u_code, newRole);
+                                                                                    setEditingRoleUcode(null);
+                                                                                }}
+                                                                                options={[
+                                                                                    { label: 'Viewer', value: 'viewer' },
+                                                                                    { label: 'Editor', value: 'editor' },
+                                                                                    { label: 'Owner', value: 'owner' }
+                                                                                ]}
+                                                                                style={{ width: 85, fontSize: 11 }}
+                                                                            />
+                                                                            <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Text type="secondary" style={{ fontSize: 11 }}>{mgr.role}</Text>
+                                                                            {canChangeRole && mgr.role !== 'owner' && (
+                                                                                <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(mgr.u_code)} />
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {mgr.role !== 'owner' && (
+                                                                        <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => removeProjectManager(proj.id, mgr.u_code)} />
+                                                                    )}
+                                                                </Space>
                                                             </div>
                                                         );
                                                     })}

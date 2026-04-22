@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Card, Row, Col, Typography, Tag, Button, Input, Tabs, Badge, Layout, Spin } from 'antd';
-import { 
-  CalculatorOutlined, 
-  FileSearchOutlined, 
-  BarChartOutlined, 
+import {
+  CalculatorOutlined,
+  FileSearchOutlined,
+  BarChartOutlined,
   SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../menu_sidebar/menu_template';
 import { useTheme } from '../../../theme';
 import ScrollbarStyle from '../../common/scrollbar';
+import { useAuthStore } from '../../../stores/authStore';
 
 const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
@@ -23,6 +24,8 @@ const HomeNewProd = () => {
   const { theme } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [loading] = useState(false);
+  const { userDepartment } = useAuthStore();
+  const hasRestrictedAccess = userDepartment === 'AD'
 
   const tools = [
     {
@@ -63,25 +66,28 @@ const HomeNewProd = () => {
       path: '/eng/fea_simulation',
       category: 'Analysis',
       status: 'Active',
-      tags: ['Simulation', 'FEA', 'Swage']
+      tags: ['Simulation', 'FEA', 'Swage'],
+      restricted: true
     }
   ];
 
-  const filteredTools = tools.filter(tool => 
+  const accessibleTools = tools.filter(tool => !tool.restricted || hasRestrictedAccess);
+
+  const filteredTools = accessibleTools.filter(tool =>
     tool.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     tool.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     tool.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const categories = ['All', ...new Set(tools.map(t => t.category))];
+  const categories = ['All', ...new Set(accessibleTools.map(t => t.category))];
 
   const ToolCard = ({ tool }) => (
     <Col xs={24} sm={12} lg={8} xl={6}>
-      <Card 
-        hoverable 
-        style={{ 
-          height: '100%', 
-          borderRadius: '16px', 
+      <Card
+        hoverable
+        style={{
+          height: '100%',
+          borderRadius: '16px',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -92,18 +98,18 @@ const HomeNewProd = () => {
         }}
         bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' }}
         onClick={() => {
-            if (tool.path.startsWith('http')) {
-                window.open(tool.path, '_blank');
-            } else {
-                navigate(tool.path);
-            }
+          if (tool.path.startsWith('http')) {
+            window.open(tool.path, '_blank');
+          } else {
+            navigate(tool.path);
+          }
         }}
         className="tool-card-hover"
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-          <div style={{ 
-            padding: '12px', 
-            borderRadius: '14px', 
+          <div style={{
+            padding: '12px',
+            borderRadius: '14px',
             background: `${theme.colors.primary}15`,
             display: 'flex',
             alignItems: 'center',
@@ -115,18 +121,18 @@ const HomeNewProd = () => {
             {tool.category}
           </Tag>
         </div>
-        
+
         <Title level={4} style={{ marginTop: 0, marginBottom: '12px', color: theme.colors.textPrimary }}>{tool.title}</Title>
         <Paragraph type="secondary" ellipsis={{ rows: 3 }} style={{ flex: 1, marginBottom: '16px', color: theme.colors.textSecondary }}>
           {tool.description}
         </Paragraph>
-        
+
         <div style={{ marginBottom: '20px' }}>
           {tool.tags.map(tag => (
             <Tag key={tag} style={{ borderRadius: '6px', fontSize: '11px', background: `${theme.colors.border}44`, border: 'none' }}>{tag}</Tag>
           ))}
         </div>
-        
+
         <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
           <Button type="link" icon={<ArrowRightOutlined />} style={{ padding: 0, color: theme.colors.primary, fontWeight: 600 }}>
             Open Tool
@@ -169,12 +175,12 @@ const HomeNewProd = () => {
             position: 'relative'
           }}>
             <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-              <div style={{ 
-                marginBottom: '40px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                flexWrap: 'wrap', 
+              <div style={{
+                marginBottom: '40px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
                 gap: '24px',
                 padding: '24px',
                 background: theme.colors.surface,
@@ -183,15 +189,15 @@ const HomeNewProd = () => {
               }}>
                 <div>
                   <Title level={2} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '16px', color: theme.colors.textPrimary }}>
-                    <div style={{ 
-                      background: theme.colors.primary, 
-                      color: 'white', 
-                      width: '48px', 
-                      height: '48px', 
-                      borderRadius: '12px', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center' 
+                    <div style={{
+                      background: theme.colors.primary,
+                      color: 'white',
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}>
                       <ToolOutlined style={{ fontSize: '24px' }} />
                     </div>
@@ -201,18 +207,18 @@ const HomeNewProd = () => {
                     Specialized tools for drawing verification and parametric design
                   </Text>
                 </div>
-                <Search 
-                  placeholder="Search tools, categories, or tags..." 
-                  allowClear 
+                <Search
+                  placeholder="Search tools, categories, or tags..."
+                  allowClear
                   onChange={e => setSearchTerm(e.target.value)}
-                  style={{ width: '100%', maxWidth: '400px' }} 
+                  style={{ width: '100%', maxWidth: '400px' }}
                   size="large"
                   enterButton
                 />
               </div>
 
               <div className="gallery-tabs-container">
-                <Tabs 
+                <Tabs
                   defaultActiveKey="All"
                   type="card"
                   items={categories.map(cat => ({
@@ -220,16 +226,16 @@ const HomeNewProd = () => {
                     label: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 8px' }}>
                         {cat}
-                        <Badge 
-                          count={cat === 'All' ? tools.length : tools.filter(t => t.category === cat).length} 
-                          style={{ 
-                            backgroundColor: theme.colors.primary, 
-                            color: 'white', 
+                        <Badge
+                          count={cat === 'All' ? accessibleTools.length : accessibleTools.filter(t => t.category === cat).length}
+                          style={{
+                            backgroundColor: theme.colors.primary,
+                            color: 'white',
                             fontSize: '10px',
                             minWidth: '18px',
                             height: '18px',
                             lineHeight: '18px'
-                          }} 
+                          }}
                         />
                       </span>
                     ),

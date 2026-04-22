@@ -96,6 +96,9 @@ const BoardSettingsDrawer = () => {
     const [editLabelName, setEditLabelName] = useState('');
     const [editLabelColor, setEditLabelColor] = useState(LABEL_COLORS[0]);
 
+    // Role Editing State
+    const [editingRoleUcode, setEditingRoleUcode] = useState(null);
+
     // Webhook
     const [webhookName, setWebhookName] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
@@ -126,6 +129,13 @@ const BoardSettingsDrawer = () => {
         projectRole: activeProject?.role,
         boardRole: useKanbanStore(s => s.activeBoardMembers?.find(m => m.u_code === currentUserCode)?.role)
     });
+
+    const userInfo = useAuthStore(state => state.userInfo) || {};
+    const userDepartment = useAuthStore(state => state.userDepartment);
+    const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
+    const isOwner = activeProject?.role === 'owner' || useKanbanStore.getState().projectManagers?.find(m => m.u_code === currentUserCode)?.role === 'owner';
+    const canChangeRole = isADorMgr || isOwner;
 
     useEffect(() => {
         if (activeBoard?.id) {
@@ -326,12 +336,40 @@ const BoardSettingsDrawer = () => {
                                                 )}
                                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                     <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{u.u_name || u.u_nickname || u.u_code}</Text>
-                                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code} ({member.role})</Text>
+                                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code}</Text>
                                                 </div>
                                             </Space>
-                                            {canManageBoardMembers && member.u_code !== user?.u_code && (
-                                                <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code)} />
-                                            )}
+                                            <Space>
+                                                {editingRoleUcode === member.u_code ? (
+                                                    <>
+                                                        <Select
+                                                            size="small"
+                                                            value={member.role}
+                                                            onChange={(newRole) => {
+                                                                useKanbanStore.getState().addBoardMember(activeBoard.id, member.u_code, newRole);
+                                                                setEditingRoleUcode(null);
+                                                            }}
+                                                            options={[
+                                                                { label: 'Viewer', value: 'viewer' },
+                                                                { label: 'Editor', value: 'editor' },
+                                                                { label: 'Owner', value: 'owner' }
+                                                            ]}
+                                                            style={{ width: 85, fontSize: 11 }}
+                                                        />
+                                                        <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Text type="secondary" style={{ fontSize: 11 }}>{member.role}</Text>
+                                                        {canChangeRole && member.u_code !== user?.u_code && (
+                                                            <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(member.u_code)} />
+                                                        )}
+                                                    </>
+                                                )}
+                                                {canManageBoardMembers && member.u_code !== user?.u_code && (
+                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code)} />
+                                                )}
+                                            </Space>
                                         </div>
                                     );
                                 })}
