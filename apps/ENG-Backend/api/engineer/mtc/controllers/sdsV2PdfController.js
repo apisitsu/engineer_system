@@ -103,10 +103,47 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     map['cust_dwg_no']  = searchData.production.cust_dwg_no || '';
   }
 
-  // Tooling slots T01–T20 — filtered by process_code and machine_type_code
+  // Tooling slots T01–T20
+  // When sds_v2_machine_tool has entries for this machine+process, use them as the
+  // authoritative whitelist+order. Otherwise fall back to machineTypeCode prefix filter.
   let tools = searchData.process_plan || [];
   if (process_code) tools = tools.filter(t => String(t.process_code) === String(process_code));
-  if (machineTypeCode) tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
+
+  let mtRows = [];
+  if (machine_type_name && process_code) {
+    const mtResult = await engPool.query(
+      `SELECT tool_number, tool_drawing_no FROM ${TABLES.SDS_V2_MACHINE_TOOL}
+       WHERE machine_type = $1 AND process_code = $2
+       ORDER BY LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`,
+      [machine_type_name, String(process_code)]
+    );
+    mtRows = mtResult.rows;
+  }
+
+  if (mtRows.length > 0) {
+    // Whitelist filter: keep only tools whose tool_dwg_no matches an entry in sds_v2_machine_tool
+    // (supports prefix matching: '4664-01' in table matches '4664-01-0001' in process_plan)
+    const allowedKeys = mtRows.map(r => r.tool_drawing_no);
+    const matchesAllowed = (dwgNo) => {
+      if (!dwgNo) return false;
+      return allowedKeys.some(k => dwgNo === k || dwgNo.startsWith(k + '-') || k.startsWith(dwgNo + '-'));
+    };
+    tools = tools.filter(t => matchesAllowed(t.tool_dwg_no));
+
+    // Sort by tool_number (numeric: T1 < T2 < ... < T10)
+    const orderMap = {};
+    mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
+    const getOrder = (dwgNo) => {
+      if (!dwgNo) return 9999;
+      if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
+      const k = allowedKeys.find(key => dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
+      return k !== undefined ? orderMap[k] : 9999;
+    };
+    tools.sort((a, b) => getOrder(a.tool_dwg_no) - getOrder(b.tool_dwg_no));
+  } else if (machineTypeCode) {
+    // Fallback: filter by machine_type_code prefix (digits 2–4 of tool_dwg_no)
+    tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
+  }
 
   for (let i = 0; i < 20; i++) {
     const slot = `T${String(i + 1).padStart(2, '0')}`;

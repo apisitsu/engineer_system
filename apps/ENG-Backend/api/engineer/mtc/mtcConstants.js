@@ -50,6 +50,7 @@ const TABLES = {
   SDS_PARAMETER:          'sds_parameter',           // manual params per (cn, machine_type_name)
   SDS_V2_TOOLING_IMAGE:   'sds_v2_tooling_image',   // tooling images by tool_dwg_no
   SDS_V2_GRINDING_IMAGE:  'sds_v2_grinding_image',  // grinding diagrams by cn_prefix
+  SDS_V2_MACHINE_TOOL:    'sds_v2_machine_tool',    // tool ordering per (machine_type, process_code)
 
   // Tooling Selection & Rules
   MTC_SELECTION_RULES: 'mtc_selection_rules',

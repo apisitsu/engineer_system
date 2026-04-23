@@ -30,7 +30,7 @@ router.get('/tooling/search', async (req, res) => {
 router.get('/tooling', async (_req, res) => {
   try {
     const imgResult = await engPool.query(
-      `SELECT id, tool_dwg_no, mime_type, file_name, created_by, updated_by, created_at, updated_at
+      `SELECT id, tool_dwg_no, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
        FROM ${TABLES.SDS_V2_TOOLING_IMAGE} ORDER BY tool_dwg_no`
     );
     const rows = imgResult.rows;
@@ -44,7 +44,7 @@ router.get('/tooling', async (_req, res) => {
     const toolMap = {};
     toolResult.rows.forEach(r => { toolMap[r.tool_dwg_no] = r.tool_name; });
 
-    res.json(rows.map(r => ({ ...r, tool_name: toolMap[r.tool_dwg_no] || null })));
+    res.json(rows.map(r => ({ ...r, tool_name: toolMap[r.tool_dwg_no] || r.description || null })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

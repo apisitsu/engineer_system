@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout, Typography, Card, Tabs, App,
-  Table, Input, Button, Popconfirm,
+  Table, Input, Button, Popconfirm, AutoComplete,
   Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox,
 } from 'antd';
 import {
@@ -232,6 +232,7 @@ const ToolingImagesTab = ({ theme }) => {
   const [dwgNo, setDwgNo] = useState('');
   const [selectedTool, setSelectedTool] = useState(null); // { tool_dwg_no, tool_name, machine_type }
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [options, setOptions] = useState([]);
   const [fileList, setFileList] = useState([]);
   const [allMachineTypes, setAllMachineTypes] = useState([]);
 
@@ -255,16 +256,27 @@ const ToolingImagesTab = ({ theme }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleLookup = async () => {
-    if (!dwgNo.trim()) return;
+  const handleLookup = async (value) => {
+    if (!value || !value.trim()) {
+      setOptions([]);
+      return;
+    }
     setLookupLoading(true);
-    setSelectedTool(null);
     try {
-      const res = await axios.get(server.MTC_SDS_V2_IMAGES_TOOLING_SEARCH, { params: { q: dwgNo.trim() } });
-      if (!res.data.length) { message.warning('ไม่พบ tool DWG No นี้ใน database'); return; }
-      const tool = res.data[0];
-      setSelectedTool(tool);
-      setDwgNo(tool.tool_dwg_no);
+      const res = await axios.get(server.MTC_SDS_V2_IMAGES_TOOLING_SEARCH, { params: { q: value.trim() } });
+      const grouped = {};
+      res.data.forEach(t => {
+        const match = t.tool_dwg_no.match(/([A-Z]?\d{4}-\d{2})/i);
+        const baseDwg = match ? match[1] : t.tool_dwg_no;
+        if (!grouped[baseDwg]) {
+          grouped[baseDwg] = {
+            value: baseDwg,
+            label: `${baseDwg} — ${t.tool_name || '(No Name)'}`,
+            tool: { ...t, tool_dwg_no: baseDwg }
+          };
+        }
+      });
+      setOptions(Object.values(grouped));
     } catch (err) {
       message.error(err.response?.data?.error || 'Lookup failed');
     } finally {
@@ -279,12 +291,15 @@ const ToolingImagesTab = ({ theme }) => {
     try {
       const fd = new FormData();
       fd.append('tool_dwg_no', dwgNo.trim());
+      if (selectedTool?.tool_name) {
+        fd.append('description', selectedTool.tool_name);
+      }
       fd.append('image', fileList[0].originFileObj);
       await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       message.success('Uploaded');
-      setDwgNo(''); setFileList([]); setSelectedTool(null);
+      setDwgNo(''); setOptions([]); setFileList([]); setSelectedTool(null);
       load();
     } catch (err) {
       message.error(err.response?.data?.error || 'Upload failed');
@@ -304,7 +319,11 @@ const ToolingImagesTab = ({ theme }) => {
   };
 
   const inferredMachineTag = (tool_dwg_no) => {
-    const code = tool_dwg_no?.substring(1, 4);
+    if (!tool_dwg_no) return <Tag>-</Tag>;
+    let code = tool_dwg_no.substring(1, 4);
+    if (/^\d/.test(tool_dwg_no)) {
+      code = tool_dwg_no.substring(0, 3);
+    }
     const mt = allMachineTypes.find(m => m.machine_type_code === code);
     return mt ? <Tag color="blue">{mt.machine_type_code} — {mt.machine_type_name || '(no name)'}</Tag> : <Tag>{code}</Tag>;
   };
@@ -333,18 +352,29 @@ const ToolingImagesTab = ({ theme }) => {
         <Row gutter={8} align="bottom">
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool DWG No</Text></div>
-            <Input.Search
+            <AutoComplete
               value={dwgNo}
-              onChange={e => { setDwgNo(e.target.value); setSelectedTool(null); }}
+              options={options}
+              onSelect={(val, opt) => {
+                setDwgNo(val);
+                setSelectedTool(opt.tool);
+              }}
+              onChange={(val) => {
+                setDwgNo(val);
+                setSelectedTool(null);
+              }}
               onSearch={handleLookup}
-              onPressEnter={handleLookup}
-              placeholder="e.g. 4866-01"
-              style={{ width: 260 }}
-              loading={lookupLoading}
-              enterButton={<SearchOutlined />}
-              allowClear
-              onClear={() => { setDwgNo(''); setSelectedTool(null); }}
-            />
+              style={{ width: 280 }}
+            >
+              <Input.Search
+                placeholder="e.g. 4866-01 (Type to search)"
+                loading={lookupLoading}
+                enterButton={<SearchOutlined />}
+                onSearch={handleLookup}
+                allowClear
+                onClear={() => { setDwgNo(''); setSelectedTool(null); setOptions([]); }}
+              />
+            </AutoComplete>
             {selectedTool && (
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>{selectedTool.tool_name}</Text>
@@ -794,3 +824,5 @@ const SdsV2AdminPage = () => {
 };
 
 export default SdsV2AdminPage;
+
+
