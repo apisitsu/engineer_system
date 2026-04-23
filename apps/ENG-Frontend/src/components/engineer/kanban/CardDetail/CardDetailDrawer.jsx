@@ -6,7 +6,7 @@ import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
 import { server } from '../../../../constance/constance';
 
-import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, } from 'react-icons/md';
+import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, MdLockOutline } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
@@ -111,7 +111,7 @@ const renderCommentContent = (content) => {
 const CardDetailDrawer = () => {
     const {
         isCardDetailOpen, activeCardId, activeCardDetail, closeCardDetail,
-        lists, labels, updateCard, deleteCard, moveCard,
+        lists, cards, labels, updateCard, deleteCard, moveCard,
         addComment, deleteComment,
         createTaskList, updateTaskList, deleteTaskList, createTask, updateTask, deleteTask,
 
@@ -167,6 +167,9 @@ const CardDetailDrawer = () => {
     const [editSolution, setEditSolution] = useState('');
     const [showProblemSection, setShowProblemSection] = useState(false);
 
+    const [showDependencySelect, setShowDependencySelect] = useState(false);
+    const [editSuspendReason, setEditSuspendReason] = useState('');
+
     const fileInputRef = useRef(null);
     const [isEditingMemo, setIsEditingMemo] = useState(false);
     const [editMemo, setEditMemo] = useState('');
@@ -189,7 +192,7 @@ const CardDetailDrawer = () => {
     const {
         canManageCard,
         canEditCard,
-        isReadOnly,
+        isReadOnly: baseIsReadOnly,
         isCardMember,
         isSuperAdmin,
         isManagerOrCoord,
@@ -200,6 +203,14 @@ const CardDetailDrawer = () => {
         boardRole: activeBoardMembers?.find(m => m.u_code === currentUserCode)?.role,
         cardRole: tempCardMembers.find(m => m.u_code === currentUserCode)?.role,
     });
+
+    const parentCard = useMemo(() => {
+        if (!card?.parent_id) return null;
+        return Object.values(cards || {}).flat().find(c => String(c.id) === String(card.parent_id));
+    }, [card?.parent_id, cards]);
+
+    const isEffectivelySuspended = card?.is_suspended || parentCard?.is_suspended;
+    const isReadOnly = baseIsReadOnly || isEffectivelySuspended;
 
     const canEditEstimatedHours = isSuperAdmin || isManagerOrCoord;
 
@@ -317,6 +328,7 @@ const CardDetailDrawer = () => {
             setShowProblemSection((card.issues && card.issues.length > 0) || !!card.problem_detail || !!card.solution_detail);
             setShowMemoSection(!!card.memo);
             setEditEstimatedHours(card.estimated_hours || 0);
+            setEditSuspendReason(card.suspended_reason || '');
 
             fetchCardActions(card.id).then(actions => setActivityLog(actions));
             fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
@@ -646,6 +658,30 @@ const CardDetailDrawer = () => {
                             <Row gutter={24}>
                                 {/* ─── LEFT COLUMN ─── */}
                                 <Col span={16}>
+                                    {/* Suspended Banner */}
+                                    {isEffectivelySuspended && (
+                                        <div style={{
+                                            padding: theme.spacing.md,
+                                            background: '#fff1f0',
+                                            border: '1px solid #ffa39e',
+                                            borderRadius: theme.borderRadius.md,
+                                            marginBottom: theme.spacing.xl,
+                                            display: 'flex', gap: 12, alignItems: 'center'
+                                        }}>
+                                            <div style={{ width: 24, height: 24, background: '#cf1322', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                <MdLockOutline size={14} color="#fff" />
+                                            </div>
+                                            <div>
+                                                <Text strong style={{ color: '#cf1322', display: 'block', fontSize: 14 }}>
+                                                    {card.is_suspended ? 'This card is Suspended.' : 'This card is Suspended (Inherited from Parent).'}
+                                                </Text>
+                                                <Text style={{ color: '#cf1322', fontSize: 13 }}>
+                                                    Reason: {(card.is_suspended ? card.suspended_reason : parentCard?.suspended_reason) || 'No reason provided.'}
+                                                </Text>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Card Title */}
                                     <div style={{ marginBottom: theme.spacing.xl }}>
                                         <Space align="start" size={8} style={{ width: '100%' }}>
@@ -2061,7 +2097,7 @@ const CardDetailDrawer = () => {
                                         <Divider style={{ margin: `${theme.spacing.sm} 0` }} />
 
                                         {/* Actions */}
-                                        {!isReadOnly && (
+                                        {!baseIsReadOnly && (
                                             <div style={{ marginBottom: theme.spacing.lg }}>
                                                 <Text strong style={{
                                                     fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
@@ -2070,6 +2106,38 @@ const CardDetailDrawer = () => {
                                                     Actions
                                                 </Text>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                    {/* Dependency */}
+                                                    <SidebarButton
+                                                        icon={<BiLinkExternal size={16} />}
+                                                        label="Dependency"
+                                                        active={showDependencySelect}
+                                                        onClick={() => setShowDependencySelect(!showDependencySelect)}
+                                                        theme={theme}
+                                                    />
+                                                    {showDependencySelect && (
+                                                        <div style={{ marginTop: 4, marginBottom: 8, background: theme.colors.surface, padding: theme.spacing.sm, borderRadius: theme.borderRadius.md, border: `1px solid ${theme.colors.border}` }}>
+                                                            <Text style={{ fontSize: 11, color: theme.colors.textTertiary, marginBottom: 4, display: 'block' }}>Select Parent Card</Text>
+                                                            <Select
+                                                                allowClear
+                                                                showSearch
+                                                                placeholder="Search for a parent..."
+                                                                style={{ width: '100%' }}
+                                                                value={card.parent_id ? String(card.parent_id) : null}
+                                                                onChange={async (val) => {
+                                                                    try {
+                                                                        await updateCard(card.id, { parent_id: val || null });
+                                                                        message.success('Dependency updated');
+                                                                    } catch (err) {
+                                                                        // Error is already handled by sweetalert in store, but we can do a toast
+                                                                    }
+                                                                }}
+                                                                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                                                                options={Object.values(cards || {}).flat().filter(c => String(c.id) !== String(card.id)).map(c => ({ label: c.name, value: String(c.id) }))}
+                                                                disabled={isEffectivelySuspended}
+                                                            />
+                                                        </div>
+                                                    )}
+
                                                     {/* Move */}
                                                     <SidebarButton
                                                         icon={<BiMove size={16} />}
@@ -2122,7 +2190,6 @@ const CardDetailDrawer = () => {
                                                         </Button>
                                                     </Popconfirm>
 
-                                                    {/* Delete */}
                                                     {canManageCard && (
                                                         <Popconfirm
                                                             title="Delete this card?"
@@ -2140,6 +2207,56 @@ const CardDetailDrawer = () => {
                                                                 Delete Card
                                                             </Button>
                                                         </Popconfirm>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Suspend Action (always visible if canManageCard so they can resume) */}
+                                        {canManageCard && (
+                                            <div style={{ marginBottom: theme.spacing.lg }}>
+                                                <Text strong style={{
+                                                    fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
+                                                    color: theme.colors.textTertiary, display: 'block', marginBottom: 8
+                                                }}>
+                                                    Card Status
+                                                </Text>
+                                                <div style={{
+                                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                                    background: card.is_suspended ? '#fff1f0' : theme.colors.surface,
+                                                    border: `1px solid ${card.is_suspended ? '#ffa39e' : theme.colors.border}`,
+                                                    borderRadius: theme.borderRadius.md, padding: '8px 12px'
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            <Text strong style={{ fontSize: 13, lineHeight: '1.2', color: card.is_suspended ? '#cf1322' : 'inherit' }}>Suspend Card</Text>
+                                                            <Text type="secondary" style={{ fontSize: 11 }}>Lock card & block actions</Text>
+                                                        </div>
+                                                        <Switch
+                                                            size="small"
+                                                            checked={card.is_suspended}
+                                                            onChange={async (val) => {
+                                                                if (!val) {
+                                                                    await updateCard(card.id, { is_suspended: false, suspended_reason: null });
+                                                                    setEditSuspendReason('');
+                                                                } else {
+                                                                    await updateCard(card.id, { is_suspended: true, suspended_reason: editSuspendReason });
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {card.is_suspended && (
+                                                        <div style={{ display: 'flex', gap: 4 }}>
+                                                            <Input
+                                                                size="small"
+                                                                placeholder="Reason for suspension..."
+                                                                value={editSuspendReason}
+                                                                onChange={e => setEditSuspendReason(e.target.value)}
+                                                                onPressEnter={() => updateCard(card.id, { suspended_reason: editSuspendReason })}
+                                                                onBlur={() => updateCard(card.id, { suspended_reason: editSuspendReason })}
+                                                                style={{ borderRadius: theme.borderRadius.sm }}
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

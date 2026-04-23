@@ -85,7 +85,12 @@ const GetCards = async (req, res) => {
                          AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')
                        ORDER BY a.created_at DESC LIMIT 1
                    ) AS action_done_at,
-                   c.estimated_hours
+                   c.estimated_hours,
+                   c.parent_id,
+                   c.is_suspended,
+                   c.suspended_reason,
+                   (SELECT COUNT(*) FROM kb_card c2 WHERE c2.parent_id=c.id) AS total_children_count,
+                   (SELECT COUNT(*) FROM kb_card c2 JOIN kb_list l2 ON l2.id=c2.list_id WHERE c2.parent_id=c.id AND (lower(l2.name) LIKE '%done%' OR lower(l2.name) LIKE '%completed%' OR lower(l2.name) LIKE '%finish%' OR lower(l2.name) LIKE '%เสร็จ%')) AS completed_children_count
             FROM kb_card c
             WHERE c.list_id=$1
               AND (
@@ -114,7 +119,7 @@ const CreateCard = async (req, res) => {
     if (!(await canEditBoard(req, list.board_id)))
         return res.status(403).json({ error: 'Editor permission required' });
 
-    const { name, card_type, description, due_date, is_private, estimated_hours, priority } = req.body;
+    const { name, card_type, description, due_date, is_private, estimated_hours, priority, parent_id } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // Next position
@@ -127,9 +132,9 @@ const CreateCard = async (req, res) => {
     try {
         await client.query('BEGIN');
         const { rows: [card] } = await client.query(`
-            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours, priority)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$11) RETURNING *
-        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false, estimated_hours || 0, priority || 'medium']);
+            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours, priority, parent_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$11,$12) RETURNING *
+        `, [list.board_id, listId, uCode, card_type || 'task', position, name, description || null, due_date || null, is_private || false, estimated_hours || 0, priority || 'medium', parent_id || null]);
 
         await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [card.id, uCode]);
         await autoSubscribe(client, card.id, uCode);
@@ -150,7 +155,12 @@ const GetCard = async (req, res) => {
     const { id } = req.params;
     const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
     try {
-        const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
+        const { rows: [card] } = await engPool.query(`
+            SELECT c.*,
+                   (SELECT COUNT(*) FROM kb_card c2 WHERE c2.parent_id=c.id) AS total_children_count,
+                   (SELECT COUNT(*) FROM kb_card c2 JOIN kb_list l2 ON l2.id=c2.list_id WHERE c2.parent_id=c.id AND (lower(l2.name) LIKE '%done%' OR lower(l2.name) LIKE '%completed%' OR lower(l2.name) LIKE '%finish%' OR lower(l2.name) LIKE '%เสร็จ%')) AS completed_children_count
+            FROM kb_card c WHERE c.id=$1
+        `, [id]);
         if (!card) return res.status(404).json({ error: 'Card not found' });
 
         if (!(await canViewCard(req, id))) {
@@ -204,6 +214,84 @@ const UpdateCard = async (req, res) => {
     const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
+    const { is_suspended, suspended_reason, parent_id } = req.body;
+
+    // Helper to check if card or its ancestors are suspended
+    const checkCascadingSuspension = async (cardId) => {
+        const { rows } = await engPool.query(`
+            WITH RECURSIVE Ancestors AS (
+                SELECT id, parent_id, is_suspended, 1 as depth FROM kb_card WHERE id = $1
+                UNION ALL
+                SELECT c.id, c.parent_id, c.is_suspended, a.depth + 1
+                FROM kb_card c
+                INNER JOIN Ancestors a ON c.id = a.parent_id
+            )
+            SELECT id FROM Ancestors WHERE is_suspended = TRUE LIMIT 1;
+        `, [cardId]);
+        return rows.length > 0;
+    };
+
+    // Helper to check if any descendant is not in Done list
+    const checkDescendantsDone = async (cardId) => {
+        const { rows } = await engPool.query(`
+            WITH RECURSIVE Descendants AS (
+                SELECT c.id, c.list_id FROM kb_card c WHERE c.parent_id = $1
+                UNION ALL
+                SELECT c.id, c.list_id
+                FROM kb_card c
+                INNER JOIN Descendants d ON c.parent_id = d.id
+            )
+            SELECT d.id FROM Descendants d
+            JOIN kb_list l ON l.id = d.list_id
+            WHERE lower(l.name) NOT LIKE '%done%' AND lower(l.name) NOT LIKE '%completed%' AND lower(l.name) NOT LIKE '%finish%' AND lower(l.name) NOT LIKE '%เสร็จ%'
+            LIMIT 1;
+        `, [cardId]);
+        return rows.length === 0; // True if all descendants are Done (or no descendants)
+    };
+
+    // Helper to check for circular dependency
+    const checkCircularDependency = async (cardId, newParentId) => {
+        if (!newParentId) return false;
+        if (cardId === newParentId) return true;
+        const { rows } = await engPool.query(`
+            WITH RECURSIVE Descendants AS (
+                SELECT id FROM kb_card WHERE parent_id = $1
+                UNION ALL
+                SELECT c.id
+                FROM kb_card c
+                INNER JOIN Descendants d ON c.parent_id = d.id
+            )
+            SELECT id FROM Descendants WHERE id = $2 LIMIT 1;
+        `, [cardId, newParentId]);
+        return rows.length > 0; // True if circular dependency exists
+    };
+
+    // 1. Suspension Toggle
+    if (is_suspended !== undefined) {
+        if (!(await canManageCard(req, id)) && !(await canEditBoard(req, card.board_id))) {
+             return res.status(403).json({ error: 'Manager or Board Editor permission required to suspend card' });
+        }
+        await engPool.query('UPDATE kb_card SET is_suspended=$1, suspended_reason=$2 WHERE id=$3', [is_suspended, suspended_reason || null, id]);
+        
+        // Log action
+        const client = await engPool.connect();
+        try {
+            await logAction(client, id, uCode, is_suspended ? 'card_suspended' : 'card_resumed', { reason: suspended_reason });
+        } finally {
+            client.release();
+        }
+        
+        // If the request only contained suspension update, return early
+        if (Object.keys(req.body).filter(k => k !== 'is_suspended' && k !== 'suspended_reason' && k !== 'owner_u_code').length === 0) {
+            return res.json({ message: 'Suspension status updated' });
+        }
+    }
+
+    // Check if card is locked due to suspension (itself or ancestor) before allowing other updates
+    if (await checkCascadingSuspension(id)) {
+        return res.status(403).json({ error: 'Action denied. This card (or its Parent) is currently Suspended.' });
+    }
+
     // Subscription toggle — available to all active board members (which we loosely verify)
     // Actually letting any logged in user hit this endpoint is fine since we record their explicit uCode.
     if (Object.keys(req.body).length === 1 && req.body.hasOwnProperty('is_subscribed')) {
@@ -230,9 +318,74 @@ const UpdateCard = async (req, res) => {
         let newListId = list_id || card.list_id;
         const listChanged = list_id && list_id !== card.list_id;
 
+        // Validation Rules for List Change
+        if (listChanged) {
+            const { rows: [destList] } = await client.query('SELECT name FROM kb_list WHERE id=$1', [newListId]);
+            const destName = destList?.name?.toLowerCase() || '';
+            const isDestDone = destName.includes('done') || destName.includes('completed') || destName.includes('finish') || destName.includes('เสร็จ');
+            const isDestInProgress = destName.includes('in progress') || destName.includes('working') || destName.includes('check');
+
+            // Rule A: Parent-to-Done Constraint
+            if (isDestDone) {
+                const allDone = await checkDescendantsDone(id);
+                if (!allDone) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: 'Cannot move to Done. One or more Child cards are still incomplete.' });
+                }
+            }
+
+            // Rule B: Child-to-Start Constraint
+            if (isDestInProgress || isDestDone) {
+                const currentParentId = parent_id !== undefined ? parent_id : card.parent_id;
+                if (currentParentId) {
+                    const { rows: [parentListInfo] } = await client.query(`
+                        SELECT l.name FROM kb_card c 
+                        JOIN kb_list l ON l.id = c.list_id 
+                        WHERE c.id = $1
+                    `, [currentParentId]);
+                    if (parentListInfo) {
+                        const parentListName = parentListInfo.name.toLowerCase();
+                        if (parentListName.includes('to do') || parentListName.includes('backlog')) {
+                            await client.query('ROLLBACK');
+                            return res.status(400).json({ error: 'Cannot start this task. The Parent card has not been started yet.' });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Rule C: Integrity of "Done" Parents (Check when updating parent_id)
+        if (parent_id !== undefined && parent_id !== card.parent_id) {
+            // Check Circular Dependency
+            if (await checkCircularDependency(id, parent_id)) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Cannot link Parent card. This creates a circular dependency.' });
+            }
+
+            // Check if new parent is "Done"
+            if (parent_id) {
+                const { rows: [parentListInfo] } = await client.query(`
+                    SELECT l.name FROM kb_card c 
+                    JOIN kb_list l ON l.id = c.list_id 
+                    WHERE c.id = $1
+                `, [parent_id]);
+                
+                if (parentListInfo) {
+                    const parentListName = parentListInfo.name.toLowerCase();
+                    const isParentDone = parentListName.includes('done') || parentListName.includes('completed') || parentListName.includes('finish') || parentListName.includes('เสร็จ');
+                    if (isParentDone) {
+                        await client.query('ROLLBACK');
+                        return res.status(400).json({ error: 'Cannot modify children of a completed Parent card. Reopen the Parent card first.' });
+                    }
+                }
+            }
+        }
+
         const updateFields = [];
         const updateValues = [];
         let paramIdx = 1;
+
+        if (parent_id !== undefined) { updateFields.push(`parent_id = $${paramIdx++}`); updateValues.push(parent_id); }
 
         if (name !== undefined) { updateFields.push(`name = $${paramIdx++}`); updateValues.push(name); }
         if (description !== undefined) { updateFields.push(`description = $${paramIdx++}`); updateValues.push(description); }

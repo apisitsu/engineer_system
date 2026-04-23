@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Typography, Avatar, Tooltip, Progress } from 'antd';
-import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles } from 'react-icons/md';
+import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdAccountTree } from 'react-icons/md';
 import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useTheme } from '../../../../theme';
@@ -9,10 +9,19 @@ const { Text } = Typography;
 
 // ─── KanbanCard Component ──────────────────────────────────────────
 const KanbanCard = ({ card, isOverlay }) => {
-    const { openCardDetail, labels: boardLabels, users } = useKanbanStore();
+    const { openCardDetail, labels: boardLabels, users, lists, cards } = useKanbanStore();
     const { theme } = useTheme();
     const [isHovered, setIsHovered] = useState(false);
     const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
+
+    const parentCard = useMemo(() => {
+        if (!card.parent_id) return null;
+        return Object.values(cards || {}).flat().find(c => String(c.id) === String(card.parent_id));
+    }, [card.parent_id, cards]);
+    const isEffectivelySuspended = card.is_suspended || parentCard?.is_suspended;
+
+    const totalChildren = Number(card.total_children) || 0;
+    const doneChildren = Number(card.done_children) || 0;
 
     // Resolve label colors from board labels
     const resolvedLabels = useMemo(() => {
@@ -130,17 +139,26 @@ const KanbanCard = ({ card, isOverlay }) => {
             <div style={{ padding: `${theme.spacing.sm} ${theme.spacing.sm}` }}>
 
                 {/* Card Name */}
-                <Text style={{
-                    color: theme.colors.textPrimary,
-                    fontSize: theme.typography.fontSize.sm,
-                    fontWeight: theme.typography.fontWeight.normal,
-                    display: 'block',
-                    lineHeight: 1.4,
-                    marginBottom: resolvedLabels.length > 0 ? 6 : 8,
-                    wordBreak: 'break-word',
-                }}>
-                    {card.name}
-                </Text>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: resolvedLabels.length > 0 ? 6 : 8 }}>
+                    {isEffectivelySuspended && (
+                        <Tooltip title={card.is_suspended ? "Suspended" : "Suspended (Inherited from Parent)"}>
+                            <div style={{ marginTop: 2, background: '#fff1f0', borderRadius: '50%', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <MdLockOutline size={14} color="#cf1322" />
+                            </div>
+                        </Tooltip>
+                    )}
+                    <Text style={{
+                        color: isEffectivelySuspended ? theme.colors.textSecondary : theme.colors.textPrimary,
+                        fontSize: theme.typography.fontSize.sm,
+                        fontWeight: theme.typography.fontWeight.normal,
+                        display: 'block',
+                        lineHeight: 1.4,
+                        wordBreak: 'break-word',
+                        flex: 1
+                    }}>
+                        {card.name}
+                    </Text>
+                </div>
 
                 {/* Label Bars */}
                 {resolvedLabels.length > 0 && (
@@ -243,7 +261,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                 )}
 
                 {/* Badges Row — Due date, description, attachments, comments, members */}
-                {(dueDateInfo || hasDescription || hasProblemOrSolution || hasMemo || commentCount > 0 || attachmentCount > 0 || assignees.length > 0) && (
+                {(dueDateInfo || hasDescription || hasProblemOrSolution || hasMemo || commentCount > 0 || attachmentCount > 0 || assignees.length > 0 || totalChildren > 0) && (
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -251,6 +269,22 @@ const KanbanCard = ({ card, isOverlay }) => {
                         gap: 6,
                         marginTop: 4,
                     }}>
+                        {/* Child Progress Badge */}
+                        {totalChildren > 0 && (
+                            <Tooltip title={`${doneChildren}/${totalChildren} Child Cards Done`}>
+                                <div style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                                    color: doneChildren === totalChildren ? '#61bd4f' : theme.colors.textTertiary, 
+                                    fontSize: 12,
+                                    background: doneChildren === totalChildren ? '#e6f4ea' : 'transparent',
+                                    padding: doneChildren === totalChildren ? '1px 4px' : '0',
+                                    borderRadius: 4
+                                }}>
+                                    <MdAccountTree size={14} />
+                                    <span style={{ fontWeight: 600 }}>{doneChildren}/{totalChildren}</span>
+                                </div>
+                            </Tooltip>
+                        )}
                         {/* Priority Badge */}
                         <Tooltip title={`Priority: ${card.priority || 'medium'}`}>
                             <div style={{
