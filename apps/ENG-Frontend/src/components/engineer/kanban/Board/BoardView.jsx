@@ -2,7 +2,8 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Typography, Input, Button, Space, Tag, Avatar, Tooltip, Progress } from 'antd';
 import { IoCloseOutline, IoChevronDown, IoChevronUp } from 'react-icons/io5';
 import { FiPlus } from 'react-icons/fi';
-import { MdOutlineSubtitles, MdOutlineDescription, MdOutlineComment } from 'react-icons/md';
+import { MdOutlineSubtitles, MdOutlineDescription, MdOutlineComment, MdAccessTime } from 'react-icons/md';
+import { CiMemoPad } from 'react-icons/ci';
 import { AiOutlinePaperClip } from 'react-icons/ai';
 import dayjs from 'dayjs';
 import {
@@ -59,6 +60,7 @@ const SortableList = ({ list }) => {
 const ListViewCard = ({ card, theme }) => {
     const { openCardDetail, labels: boardLabels, users } = useKanbanStore();
     const [hovered, setHovered] = useState(false);
+    const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
 
     // Resolve labels exactly like KanbanCard
     const resolvedLabels = useMemo(() => {
@@ -84,9 +86,12 @@ const ListViewCard = ({ card, theme }) => {
         return { total, completed, percent: total > 0 ? Math.round((completed / total) * 100) : 0 };
     }, [card.task_lists, card.total_tasks, card.completed_tasks]);
 
-    const assignees = card.assignees || card.memberships || card.members || [];
+    const hasDescription = !!card.description;
     const commentCount = card.comments?.length || card.comment_count || 0;
     const attachmentCount = card.attachments?.length || card.attachment_count || 0;
+    const assignees = card.assignees || card.memberships || card.members || [];
+    const hasProblemOrSolution = !!card.problem_detail || !!card.solution_detail || Number(card.issue_count) > 0 || (card.issues && card.issues.length > 0);
+    const hasMemo = !!card.memo;
 
     // Due date exactly like KanbanCard
     const dueDateInfo = useMemo(() => {
@@ -99,8 +104,39 @@ const ListViewCard = ({ card, theme }) => {
         if (diffHours < 0) { bgColor = '#eb5a46'; }
         else if (diffHours < 24) { bgColor = '#f2d600'; textColor = '#333'; }
         const dateStr = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        return { bgColor, textColor, dateStr };
+        return { bgColor, textColor, dateStr, fullDate: due.toLocaleString() };
     }, [card.due_date]);
+
+    // Current State Time — exactly like KanbanCard
+    const currentStateTimeInfo = useMemo(() => {
+        let startMs, endMs, tooltipStr;
+
+        if (card.action_done_at) {
+            startMs = card.action_in_progress_at ? new Date(card.action_in_progress_at).getTime() : new Date(card.created_at).getTime();
+            endMs = new Date(card.action_done_at).getTime();
+            tooltipStr = 'Total Lead Time (In Progress -> Done)';
+        } else {
+            startMs = new Date(card.list_changed_at || card.created_at).getTime();
+            endMs = new Date().getTime();
+            tooltipStr = 'Time spent in current state';
+        }
+
+        let ms = endMs - startMs;
+        if (ms < 0) ms = 0;
+
+        const totalMins = Math.floor(ms / 60000);
+        const totalHours = Math.floor(totalMins / 60);
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+        const mins = totalMins % 60;
+
+        let displayStr = '';
+        if (days > 0) displayStr = `${days}d ${hours}h`;
+        else if (hours > 0) displayStr = `${hours}h ${mins}m`;
+        else displayStr = `${mins}m`;
+
+        return { displayStr, tooltip: tooltipStr };
+    }, [card.list_changed_at, card.created_at, card.action_in_progress_at, card.action_done_at]);
 
     return (
         <div
@@ -109,7 +145,7 @@ const ListViewCard = ({ card, theme }) => {
             onMouseLeave={() => setHovered(false)}
             style={{
                 display: 'grid',
-                gridTemplateColumns: '2fr 1fr 120px 90px 90px',
+                gridTemplateColumns: '1.6fr 0.8fr 200px 90px 80px 90px',
                 alignItems: 'center',
                 gap: 8,
                 padding: '8px 14px',
@@ -120,7 +156,7 @@ const ListViewCard = ({ card, theme }) => {
                 borderBottom: `1px solid ${theme.colors.border}22`,
             }}
         >
-            {/* Name + icons */}
+            {/* Name + indicator icons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <Text style={{
                     fontSize: 13, color: theme.colors.textPrimary,
@@ -128,11 +164,14 @@ const ListViewCard = ({ card, theme }) => {
                 }}>
                     {card.name}
                 </Text>
-                {(card.problem_detail || card.solution_detail || Number(card.issue_count) > 0 || (card.issues && card.issues.length > 0)) && (
-                    <Tooltip title="Problem/Solution"><MdOutlineSubtitles size={13} color="#f59e0b" style={{ flexShrink: 0 }} /></Tooltip>
+                {hasDescription && (
+                    <Tooltip title="Has description"><MdOutlineDescription size={13} color={theme.colors.textTertiary} style={{ flexShrink: 0 }} /></Tooltip>
                 )}
-                {card.memo && (
-                    <Tooltip title="Memo"><MdOutlineDescription size={13} color="#8b5cf6" style={{ flexShrink: 0 }} /></Tooltip>
+                {hasProblemOrSolution && (
+                    <Tooltip title="Has Problem/Solution"><MdOutlineSubtitles size={13} color="#f59e0b" style={{ flexShrink: 0 }} /></Tooltip>
+                )}
+                {hasMemo && (
+                    <Tooltip title="Has Memo"><CiMemoPad size={14} color={theme.colors.textTertiary} style={{ flexShrink: 0 }} /></Tooltip>
                 )}
                 {attachmentCount > 0 && (
                     <Tooltip title={`${attachmentCount} attachments`}><AiOutlinePaperClip size={13} color={theme.colors.textTertiary} style={{ flexShrink: 0 }} /></Tooltip>
@@ -159,21 +198,89 @@ const ListViewCard = ({ card, theme }) => {
                 ))}
             </div>
 
-            {/* Task Progress */}
+            {/* Task Progress — with expandable checklist */}
             <div>
                 {taskProgress.total > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Progress
-                            percent={taskProgress.percent}
-                            size="small"
-                            showInfo={false}
-                            strokeColor={taskProgress.completed === taskProgress.total ? '#61bd4f' : theme.colors.primary}
-                            trailColor={`${theme.colors.textTertiary}30`}
-                            style={{ flex: 1, margin: 0 }}
-                        />
-                        <Text style={{ fontSize: 11, color: theme.colors.textTertiary, flexShrink: 0 }}>
-                            {taskProgress.completed}/{taskProgress.total}
-                        </Text>
+                    <div>
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '2px 4px',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                                transition: 'background 0.15s ease',
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsChecklistExpanded(prev => !prev);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                            <Progress
+                                percent={taskProgress.percent}
+                                size="small"
+                                showInfo={false}
+                                strokeColor={taskProgress.completed === taskProgress.total ? '#61bd4f' : theme.colors.primary}
+                                trailColor={`${theme.colors.textTertiary}30`}
+                                style={{ flex: 1, margin: 0 }}
+                            />
+                            <Text style={{ fontSize: 11, color: theme.colors.textTertiary, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {taskProgress.completed}/{taskProgress.total}
+                                <span style={{ fontSize: 9 }}>{isChecklistExpanded ? '▲' : '▼'}</span>
+                            </Text>
+                        </div>
+
+                        {/* Expanded Checklist Items */}
+                        {isChecklistExpanded && card.tasks && card.tasks.length > 0 && (
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 1,
+                                    marginTop: 4,
+                                    padding: '4px 6px',
+                                    background: `${theme.colors.surfaceHover}`,
+                                    borderRadius: 4,
+                                    border: `1px solid ${theme.colors.border}44`,
+                                    maxHeight: 160,
+                                    overflowY: 'auto',
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {card.tasks.map(t => (
+                                    <div
+                                        key={t.id}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            gap: 5,
+                                            padding: '2px 0',
+                                        }}
+                                    >
+                                        <span style={{
+                                            fontSize: 11,
+                                            lineHeight: '16px',
+                                            color: t.is_completed ? '#61bd4f' : theme.colors.textTertiary,
+                                            flexShrink: 0,
+                                        }}>
+                                            {t.is_completed ? '✓' : '○'}
+                                        </span>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            lineHeight: 1.4,
+                                            color: t.is_completed ? theme.colors.textTertiary : theme.colors.textSecondary,
+                                            textDecoration: t.is_completed ? 'line-through' : 'none',
+                                            wordBreak: 'break-word',
+                                        }}>
+                                            {t.name}
+                                        </Text>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ) : <Text style={{ fontSize: 12, color: theme.colors.textTertiary }}>—</Text>}
             </div>
@@ -181,15 +288,36 @@ const ListViewCard = ({ card, theme }) => {
             {/* Due date — color-coded like KanbanCard */}
             <div>
                 {dueDateInfo ? (
-                    <div style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 3,
-                        padding: '1px 6px', borderRadius: 4,
-                        background: dueDateInfo.bgColor, color: dueDateInfo.textColor,
-                        fontSize: 11, fontWeight: 600,
-                    }}>
-                        {dueDateInfo.dateStr}
-                    </div>
+                    <Tooltip title={`Due: ${dueDateInfo.fullDate}`}>
+                        <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: dueDateInfo.bgColor, color: dueDateInfo.textColor,
+                            fontSize: 11, fontWeight: 600,
+                        }}>
+                            <MdAccessTime size={12} />
+                            {dueDateInfo.dateStr}
+                        </div>
+                    </Tooltip>
                 ) : <Text style={{ fontSize: 12, color: theme.colors.textTertiary }}>—</Text>}
+            </div>
+
+            {/* State Time — exactly like KanbanCard */}
+            <div>
+                {currentStateTimeInfo && (
+                    <Tooltip title={currentStateTimeInfo.tooltip}>
+                        <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: `${theme.colors.primary}15`,
+                            color: theme.colors.primary,
+                            fontSize: 11, fontWeight: 600,
+                        }}>
+                            <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="12" width="12" xmlns="http://www.w3.org/2000/svg"><path fill="none" d="M0 0h24v24H0V0z"></path><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.962 8.962 0 0012 4c-4.97 0-9 4.03-9 9s4.02 9 9 9a8.994 8.994 0 007.53-14.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"></path></svg>
+                            {currentStateTimeInfo.displayStr}
+                        </div>
+                    </Tooltip>
+                )}
             </div>
 
             {/* Assignees — profile photos or initials like KanbanCard */}
@@ -272,13 +400,13 @@ const ListViewSection = ({ list, cards, theme }) => {
                 <>
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '2fr 1fr 120px 90px 90px',
+                        gridTemplateColumns: '1.6fr 0.8fr 200px 90px 80px 90px',
                         gap: 8,
                         padding: '6px 14px',
                         borderBottom: `1px solid ${theme.colors.border}`,
                         background: `${theme.colors.surfaceHover}88`,
                     }}>
-                        {['Card Name', 'Labels', 'Checklist', 'Due Date', 'Assignees'].map(h => (
+                        {['Card Name', 'Labels', 'Checklist', 'Due Date', 'State Time', 'Assignees'].map(h => (
                             <Text key={h} style={{ fontSize: 11, color: theme.colors.textTertiary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 {h}
                             </Text>

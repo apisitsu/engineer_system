@@ -10,6 +10,8 @@ import Filter7Icon from '@mui/icons-material/Filter7';
 
 import { MTC_PATHS } from "../../constance/mtc_constance";
 
+import { MTC_PATHS } from "../../constance/mtc_constance";
+
 const iconStyle = { fontSize: '24px' };
 
 const numberIcons = [
@@ -53,16 +55,8 @@ export const master = createMenu([
 
 export const system = createMenu([
     { label: "Home", path: "/eng/system_eng", key: "1" },
-    {
-        label: "Project",
-        key: "sub1",
-        children: [
-            { label: "Dashboard", path: "/eng/system_eng/project_dashboard", key: "2" },
-            { label: "Task", path: "/eng/system_eng/todo_project", key: "3" }
-        ]
-    },
-    { label: "User Management", path: "/eng/system_eng/user_management", key: "4" },
-    { label: "Setting", path: "/eng/system_eng/setting", key: "5" }
+    { label: "User Management", path: "/eng/system_eng/user_management", key: "2" },
+    { label: "Tools", path: "/eng/system_eng/tool/gallery", key: "3" }
 ]);
 
 export const process = createMenu([

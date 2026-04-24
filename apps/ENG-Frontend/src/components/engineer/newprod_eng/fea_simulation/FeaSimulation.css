@@ -1,0 +1,116 @@
+.fea-simulation-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #121212;
+  color: #fff;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.fea-header {
+  height: 48px;
+  background-color: #1a1a1a;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 10;
+}
+
+.header-title {
+  margin: 0 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.5px;
+  flex: 1;
+}
+
+/* View Mode Toggle in Header */
+.view-mode-toggle {
+  margin-left: auto;
+}
+
+.view-mode-toggle .ant-radio-button-wrapper {
+  background: #222 !important;
+  border-color: #555 !important;
+  color: #aaa !important;
+  font-size: 12px;
+}
+
+.view-mode-toggle .ant-radio-button-wrapper-checked {
+  background: #1890ff !important;
+  border-color: #1890ff !important;
+  color: #fff !important;
+}
+
+.fea-main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Sidebar - Controls */
+.fea-sider-left {
+  width: 320px;
+  background-color: #1a1a1a;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+/* Center Viewer */
+.fea-viewer-container {
+  flex: 1;
+  position: relative;
+  background-color: #0a0a0a;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Right Sidebar - Results */
+.fea-sider-right {
+  width: 300px;
+  background-color: #1a1a1a;
+  border-left: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+/* Common UI Elements */
+.param-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.result-card {
+  background-color: #222 !important;
+  border-color: #333 !important;
+}
+
+.result-card .ant-statistic-title {
+  color: #888 !important;
+}
+
+.result-card .ant-statistic-content {
+  color: #fff !important;
+}
+
+/* Viewer Overlay controls */
+.fea-viewer-overlay {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  z-index: 10;
+}

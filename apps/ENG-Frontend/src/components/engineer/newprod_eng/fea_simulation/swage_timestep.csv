@@ -1,0 +1,5 @@
+Parameter,Value
+TotalTime,1.0
+InitialTimeIncrement,0.1
+MinTimeIncrement,0.01
+MaxTimeIncrement,0.2
