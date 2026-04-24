@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
 import CacheBuster from 'react-cache-buster';
 import { ConfigProvider } from 'antd';
 import { App as AntdApp } from 'antd';
@@ -60,14 +60,14 @@ import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaS
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
   const { isAuthenticated, userDepartment } = useAuthStore();
+  const location = useLocation();
 
   if (!isAuthenticated) {
-    if (window.location.pathname === '/job_check_tracker') {
+    if (location.pathname === '/job_check_tracker') {
       return <Navigate to="/job_check_tracker" replace />;
-      // } else if (window.location.pathname === '/eng/bushing_configurator') {
-      //   return <Navigate to="/eng/bushing_configurator" replace />;
     } else {
-      return <Navigate to="/sign_in" replace />;
+      // Save the current location to redirect back after login
+      return <Navigate to="/sign_in" state={{ from: location }} replace />;
     }
   }
 
@@ -86,6 +86,33 @@ const ProtectedRoute = ({ allowedRoles }) => {
   }
 
   return <Outlet />;
+};
+
+// --- Auth Redirect Wrapper ---
+// Redirects authenticated users away from login/root if they have a valid token
+const AuthRedirectWrapper = ({ children }) => {
+  const { isAuthenticated, userDepartment } = useAuthStore();
+
+  const token = localStorage.getItem("token");
+  const expiresAt = localStorage.getItem("tokenExpiresAt");
+
+  let isTokenValid = false;
+  if (token && expiresAt) {
+    const remaining = new Date(expiresAt).getTime() - Date.now();
+    // Check if token has more than 5 minutes remaining
+    if (remaining > 5 * 60 * 1000) {
+      isTokenValid = true;
+    }
+  }
+
+  if (isAuthenticated && isTokenValid) {
+    const homePath = (userDepartment === 'ENG' || userDepartment === 'SYSTEM_ENG' || userDepartment === 'AD')
+      ? '/eng/home'
+      : '/home';
+    return <Navigate to={homePath} replace />;
+  }
+
+  return children;
 };
 
 // Inner App component that uses theme
@@ -228,8 +255,8 @@ const AppContent = () => {
         <Router>
           <Routes>
             <Route path="/job_check_tracker" element={<JobCheckTracker />} />
-            <Route path="/sign_in" element={<SignIn />} />
-            <Route path="/" element={<Navigate replace to="/sign_in" />} />
+            <Route path="/sign_in" element={<AuthRedirectWrapper><SignIn /></AuthRedirectWrapper>} />
+            <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
             <Route element={<ProtectedRoute />}>
 
