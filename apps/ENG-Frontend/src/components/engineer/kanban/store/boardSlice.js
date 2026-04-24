@@ -163,9 +163,11 @@ export const createBoardSlice = (set, get) => ({
     //  BOARD MEMBERSHIPS
     // ====================================================================
 
-    addBoardMember: async (boardId, uCode) => {
+    addBoardMember: async (boardId, uCode, role) => {
         try {
-            await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, { target_u_code: uCode });
+            const payload = { target_u_code: uCode };
+            if (role) payload.role = role;
+            await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, payload);
             get().fetchBoardMembers(boardId);
             get().checkAndAutoJoin('board', boardId);
         } catch (err) {

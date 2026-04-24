@@ -1,0 +1,6 @@
+Setting,Value
+BoundaryType,FixedInnerBore
+LoadType,RadialDisplacement
+DisplacementMagnitude,1.5
+FrictionCoefficient,0.15
+ContactType,SurfaceToSurface

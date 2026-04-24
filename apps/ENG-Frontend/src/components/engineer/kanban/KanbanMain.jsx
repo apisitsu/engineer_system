@@ -163,6 +163,17 @@ const IconPicker = ({ value, onChange, theme }) => (
     </div>
 );
 
+// ─── Priority Color Helper ─────────────────────────────────────────
+const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+        case 'low': return 'blue';
+        case 'high': return 'volcano';
+        case 'urgent': return 'red';
+        case 'medium':
+        default: return 'green';
+    }
+};
+
 // ─── Project Stat Card ─────────────────────────────────────────────
 const StatCard = ({ icon, label, value, color, theme }) => (
     <div style={{
@@ -318,6 +329,18 @@ const ProjectGridCard = ({ project, onClick, onToggleFavorite, onOpenSettings, t
                 }}>
                     {project.description || 'No description'}
                 </Text>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <IoLayersOutline size={13} color={theme.colors.textTertiary} />
@@ -382,6 +405,16 @@ const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, th
                             <IoLockClosedOutline size={10} /> Private
                         </Tag>
                     )}
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
                 </div>
                 <Text style={{ fontSize: 12, color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {project.description || 'No description'}
@@ -438,16 +471,20 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
 
     const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
     const [selectedIcon, setSelectedIcon] = useState('rocket');
-
     const [isPrivate, setIsPrivate] = useState(false);
+    const [selectedPriority, setSelectedPriority] = useState('Medium');
+    const [selectedStatus, setSelectedStatus] = useState('Active');
 
-    const handleCreate = async (values) => {
+    const handleCreate = async (values) =>
+        {
         const result = await createProject({
             ...values,
             background_type: 'gradient',
             background_value: selectedGradient,
             icon: selectedIcon,
             is_private: isPrivate,
+            priority: selectedPriority,
+            status: selectedStatus,
         });
         if (result) {
             setShowCreateModal(false);
@@ -455,6 +492,8 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             setSelectedGradient(GRADIENTS[0]);
             setSelectedIcon('rocket');
             setIsPrivate(false);
+            setSelectedPriority('Medium');
+            setSelectedStatus('Active');
             fetchProjects();
         }
     };
@@ -467,7 +506,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const stats = useMemo(() => ({
         total: projects.length,
         totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-        owned: projects.filter(p => p.is_owner).length,
+        owned: projects.filter(p => p.role === 'owner').length,
         favorites: projects.filter(p => p.is_favorite).length,
         recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
     }), [projects]);
@@ -479,8 +518,9 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
+        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
+        if (filterOwner === 'pool') list = list.filter(p => p.status === 'Waiting' || p.status === 'waiting');
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         else if (sortBy === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -727,6 +767,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                         { value: 'all', label: 'All Projects' },
                                         { value: 'mine', label: 'Owned by Me' },
                                         { value: 'favorites', label: '⭐ Favorites' },
+                                        { value: 'pool', label: '⏳ Waiting Pool' },
                                     ]}
                                 />
                                 <Select
@@ -872,6 +913,23 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                             </Text>
                         </div>
                     </Form.Item>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <Form.Item label="Priority" style={{ flex: 1 }}>
+                            <Select value={selectedPriority} onChange={setSelectedPriority}>
+                                <Select.Option value="Low">Low</Select.Option>
+                                <Select.Option value="Medium">Medium</Select.Option>
+                                <Select.Option value="High">High</Select.Option>
+                                <Select.Option value="Urgent">Urgent</Select.Option>
+                            </Select>
+                        </Form.Item>
+                        <Form.Item label="Status" style={{ flex: 1 }}>
+                            <Select value={selectedStatus} onChange={setSelectedStatus}>
+                                <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                <Select.Option value="Active">Active</Select.Option>
+                                <Select.Option value="Completed">Completed</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </div>
                     <Form.Item>
                         <Button type="primary" htmlType="submit" block
                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, height: 40 }}

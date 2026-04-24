@@ -19,7 +19,8 @@ app.use(express.static(path.join(__dirname, "./files")));
 app.use(jsonParser);
 app.use(urlencodedParser);
 app.use(cors()); //ทำให้ FrontEnd ต่อ server ได้
-app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+app.use(express.static("files"));
+
 app.use(express.static("files"));
 
 // Port & HTTP Server with WebSocket
@@ -116,6 +117,13 @@ app.use('/api', (req, res, next) => {
 
   return verifyToken(req, res, next);
 });
+
+//--------------------System Engineer (PDF Converter)---------------------//
+const pdfConverter = require('./api/engineer/system/pdfConverter');
+app.use('/api/engineer/system', pdfConverter);
+
+// Global File Upload Middleware (for routes not using multer)
+app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
 
 
 
@@ -231,75 +239,6 @@ app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
 // 4. See API_DOCUMENTATION.md for authentication details
 
 
-//--------------------System Engineer (TODO/Project Management v2)---------------------//
-const system = require('./api/engineer/system/todoModel_v2');
-const { resolveEffectiveUser } = require('./api/engineer/system/rbacMiddleware');
-
-// Middleware to attach user info + admin simulation support
-app.use('/api/system', (req, res, next) => {
-  // Parse user from body or headers if present, otherwise keep decoded JWT user
-  let specifiedUser = null;
-  if (req.body && req.body.user) {
-    specifiedUser = req.body.user;
-  } else if (req.headers && req.headers.user) {
-    try {
-      specifiedUser = JSON.parse(req.headers.user);
-    } catch (e) {
-      specifiedUser = null;
-    }
-  }
-
-  // Only override if explicitly provided
-  if (specifiedUser) {
-    req.user = { ...req.user, ...specifiedUser };
-  } else if (!req.user) {
-    req.user = {};
-  }
-
-  // Apply admin simulation if x-simulate-user header is present
-  req.user = resolveEffectiveUser(req);
-
-  try {
-    req.db = require('./instance/todo_v2')?.db; // Attach database safely
-  } catch (e) {
-    // Ignore if todo_v2 doesn't exist yet
-  }
-  next();
-});
-
-// Projects
-app.get('/api/system/get_project', system.GetProjects);
-app.get('/api/system/get_project/:id', system.GetProjectById);
-app.post('/api/system/create_project', system.CreateProject);
-app.put('/api/system/update_project/:id', system.UpdateProject);
-app.delete('/api/system/delete_project/:id', system.DeleteProject);
-app.put('/api/system/close_project/:id', system.CloseProject);
-app.get('/api/system/get_project_stats/:id', system.GetProjectStats);
-app.get('/api/system/get_dashboard_data', system.GetDashboardData);
-app.get('/api/system/get_dashboard_detail', system.GetDashboardDetailData);
-
-// Project Members
-app.get('/api/system/get_project_members/:id', system.GetProjectMembers);
-app.post('/api/system/add_project_member/:id', system.AddProjectMember);
-app.delete('/api/system/remove_project_member/:id', system.RemoveProjectMember);
-
-// Tasks (updated endpoint names for consistency)
-app.get('/api/system/get_todolist/:id', system.GetTasksByProject);
-app.get('/api/system/get_tasks/:id', system.GetTasksByProject); // Alias
-app.post('/api/system/create_todolist', system.CreateTask);
-app.post('/api/system/create_task', system.CreateTask); // Alias
-app.put('/api/system/update_todolist/:id', system.UpdateTask);
-app.put('/api/system/update_task/:id', system.UpdateTask); // Alias
-app.delete('/api/system/delete_todolist/:id', system.DeleteTask);
-app.delete('/api/system/delete_task/:id', system.DeleteTask); // Alias
-app.put('/api/system/reorder_todolist', system.ReorderTasks);
-app.put('/api/system/reorder_tasks', system.ReorderTasks); // Alias
-
-// Templates
-app.get('/api/system/get_templates', system.GetTemplates);
-app.get('/api/system/get_template_items/:id', system.GetTemplateItems);
-app.post('/api/system/create_template', system.CreateTemplate);
-app.post('/api/system/apply_template', system.ApplyTemplate);
 
 
 //--------------------Kanban Board Module (/api/kanban)---------------------//
