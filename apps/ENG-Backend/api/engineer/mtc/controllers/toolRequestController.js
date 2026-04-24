@@ -1,8 +1,8 @@
-const { engPool } = require('../../../instance/eng_db'); // Use new schema
+const { engPool } = require('../../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
-const { sendEmailWithFallback } = require('../../system/emailService');
+const { sendEmailWithFallback } = require('../../../system/emailService');
 const path = require('path');
-const { TABLES, PATHS } = require('./mtcConstants');
+const { TABLES, PATHS } = require('../mtcConstants');
 
 // Load email renderer from templates folder (at ENG-Backend root)
 const { renderEmail, generateSubject } = require(PATHS.EMAIL_RENDERER);
@@ -13,9 +13,9 @@ const {
   STAGE_LABELS,
   DUE_DATE_CONFIG,
   REQUEST_TYPES,
-} = require('./workflow');
-const { verifyToken, optionalAuth, checkStagePermission } = require('./toolRequestAuth');
-const { validateFileUpload, sanitizeFilename } = require('./fileUpload');
+} = require('../services/workflow');
+const { verifyToken, optionalAuth, checkStagePermission } = require('../utils/toolRequestAuth');
+const { validateFileUpload, sanitizeFilename } = require('../utils/fileUpload');
 const fs = require('fs');
 
 // ── Logger utility ───────────────────────────────────────────────────────────
@@ -25,18 +25,43 @@ const logger = {
   error: (msg, data = {}) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
 };
 
-// ── Email recipient config — อ่านจาก environment variables ──────────────────
-const splitEmails = (key) =>
-  (process.env[key] || '').split(',').map(e => e.trim()).filter(Boolean);
+// ── Email recipient config — อ่านจากฐานข้อมูล (tr_email_config) ────────────────
+async function getEmailRecipients(stage) {
+    try {
+        // ดึงทั้งรายชื่อหลัก (stage) และรายชื่อ CC (CC_stage)
+        const res = await engPool.query(
+            `SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG} WHERE stage = $1 OR stage = $2`,
+            [stage, `CC_${stage}`]
+        );
+        
+        let allEmails = [];
+        res.rows.forEach(row => {
+            if (row.emails) {
+                const list = row.emails.split(',').map(e => e.trim()).filter(Boolean);
+                allEmails = [...allEmails, ...list];
+            }
+        });
 
-const EMAIL_CONFIG = {
-  [WORKFLOW_STAGES.ENG_CHECK]: splitEmails('EMAIL_MTC_ENG_CHECK'),
-  [WORKFLOW_STAGES.DRAFT_MAN]: splitEmails('EMAIL_MTC_DRAFTMAN'),
-  [WORKFLOW_STAGES.DWG_CHECK]: splitEmails('EMAIL_MTC_DWG_CHECK'),
-  [WORKFLOW_STAGES.ENG_REVIEW]: splitEmails('EMAIL_MTC_ENG_REVIEW'),
-  [WORKFLOW_STAGES.ENG_APPROVE]: splitEmails('EMAIL_MTC_ENG_APPROVE'),
-  [WORKFLOW_STAGES.ENG_INFORM]: splitEmails('EMAIL_MTC_ENG_INFORM'),
-};
+        if (allEmails.length > 0) {
+            return [...new Set(allEmails)]; // ลบตัวซ้ำออก
+        }
+        
+        // Fallback: ถ้าไม่เจอใน DB ให้ไปอ่านจาก .env เหมือนเดิม (เฉพาะรายชื่อหลัก)
+        const envMap = {
+            [WORKFLOW_STAGES.ENG_CHECK]: 'EMAIL_MTC_ENG_CHECK',
+            [WORKFLOW_STAGES.DRAFT_MAN]: 'EMAIL_MTC_DRAFTMAN',
+            [WORKFLOW_STAGES.DWG_CHECK]: 'EMAIL_MTC_DWG_CHECK',
+            [WORKFLOW_STAGES.ENG_REVIEW]: 'EMAIL_MTC_ENG_REVIEW',
+            [WORKFLOW_STAGES.ENG_APPROVE]: 'EMAIL_MTC_ENG_APPROVE',
+            [WORKFLOW_STAGES.ENG_INFORM]: 'EMAIL_MTC_ENG_INFORM',
+        };
+        const envKey = envMap[stage];
+        return envKey ? (process.env[envKey] || '').split(',').map(e => e.trim()).filter(Boolean) : [];
+    } catch (error) {
+        logger.error('Error fetching email recipients from DB', { stage, error: error.message });
+        return [];
+    }
+}
 
 // ── Due date by request type ──────────────────────────────────────────────────
 function calcDueDate(typeOfRequest) {
@@ -45,20 +70,26 @@ function calcDueDate(typeOfRequest) {
   let added = 0;
   while (added < days) {
     due.add(1, 'days');
-    if (due.day() !== 0 && due.day() !== 6) added++;
+    if (due.day() !== 0) added++; // Only skip Sunday
   }
   return due.format('YYYY-MM-DD HH:mm:ss');
 }
 
-// ── Stage → allowed emails (ใช้ EMAIL_CONFIG เดิม) ───────────────────────────
-const STAGE_ALLOWED = EMAIL_CONFIG;
-
 /**
  * GET /api/engineer/mtc/tool-requests/permissions
- * คืน allowed emails ของแต่ละ stage
+ * คืน allowed emails ของแต่ละ stage (ดึงจาก DB ทั้งหมด)
  */
-const getStagePermissions = (req, res) => {
-  res.json({ data: STAGE_ALLOWED });
+const getStagePermissions = async (req, res) => {
+    try {
+        const configRes = await engPool.query(`SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG}`);
+        const permissions = {};
+        configRes.rows.forEach(row => {
+            permissions[row.stage] = row.emails.split(',').map(e => e.trim()).filter(Boolean);
+        });
+        res.json({ data: permissions });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 };
 
 // ── Workflow stage map ────────────────────────────────────────────────────────
@@ -143,7 +174,6 @@ const getToolRequestById = async (req, res) => {
         }
 
         // Then get workflow history
-        // Use created_at for ordering as it is the standard in the new migration
         const workflowRes = await engPool.query(`SELECT * FROM ${TABLES.TR_WORKFLOW} WHERE req_id = $1 ORDER BY created_at ASC`, [id]);
 
         res.json({
@@ -159,13 +189,12 @@ const getToolRequestById = async (req, res) => {
 };
 
 const createToolRequest = async (req, res) => {
+    const client = await engPool.connect();
     try {
         const {
             department,
             work_center,
             work_center_name,
-            requester,
-            requester_email,
             type_of_request,
             category,
             drawing_required,
@@ -176,6 +205,10 @@ const createToolRequest = async (req, res) => {
             machine_name
         } = req.body;
 
+        // Use verified user data from req.user (from JWT token)
+        const requester = req.user?.userName || req.body.requester;
+        const requester_email = req.user?.gmail_email || req.body.requester_email;
+
         // Validation
         if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
             return res.status(400).json({
@@ -184,36 +217,38 @@ const createToolRequest = async (req, res) => {
             });
         }
 
-        // Handle File Upload with sanitized filename
-        let file_path = null;
-        if (req.files && req.files.attachment) {
-            const file = req.files.attachment;
-            const sanitizedFileName = sanitizeFilename(file.name, 'attachment');
-            const uploadDir = path.join(__dirname, '../../../files/tool_requests');
-            
-            // Ensure directory exists
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            
-            const uploadPath = path.join(uploadDir, sanitizedFileName);
-
-            // Move file to directory
-            await file.mv(uploadPath);
-            file_path = `/tool_requests/${sanitizedFileName}`;
-            logger.info('File uploaded successfully', { originalName: file.name, savedPath: file_path });
-        }
+        // --- Start Transaction for Atomic ID Generation ---
+        await client.query('BEGIN');
+        
+        // Lock the table for writing during this transaction to prevent race conditions
+        await client.query(`LOCK TABLE ${TABLES.TR_REQUEST} IN EXCLUSIVE MODE`);
 
         // Generate request_item: ITEM-YYYYMMDD-XXX
         const now = moment();
         const dateStr = now.format('YYYYMMDD');
-
-        const countRes = await engPool.query(`SELECT COUNT(*) as count FROM ${TABLES.TR_REQUEST} WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
+        const countRes = await client.query(`SELECT COUNT(*) as count FROM ${TABLES.TR_REQUEST} WHERE request_item LIKE $1`, [`ITEM-${dateStr}-%`]);
         const count = parseInt(countRes.rows[0].count);
         const seq = String((count || 0) + 1).padStart(3, '0');
         const request_item = `ITEM-${dateStr}-${seq}`;
 
         const req_due_date = calcDueDate(type_of_request);
+
+        // Handle File Upload with sanitized filename
+        let file_path = null;
+        if (req.files && req.files.attachment) {
+            const file = req.files.attachment;
+            const sanitizedFileName = sanitizeFilename(file.name, 'attachment');
+            const uploadDir = path.join(__dirname, '../../../../files/tool_requests');
+            
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            
+            const uploadPath = path.join(uploadDir, sanitizedFileName);
+            await file.mv(uploadPath);
+            file_path = `/tool_requests/${sanitizedFileName}`;
+            logger.info('File uploaded successfully', { originalName: file.name, savedPath: file_path });
+        }
 
         const sql = `
             INSERT INTO ${TABLES.TR_REQUEST} (
@@ -222,7 +257,7 @@ const createToolRequest = async (req, res) => {
                 drawing_required, type_of_drawing, title, detail,
                 machine_no, machine_name, req_due_date, req_no,
                 status, current_stage, file_path, req_by, req_date
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $5, NOW()) RETURNING id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()) RETURNING id
         `;
 
         const params = [
@@ -230,20 +265,45 @@ const createToolRequest = async (req, res) => {
             requester, requester_email, type_of_request, category,
             drawing_required, type_of_drawing, title, detail,
             machine_no, machine_name, req_due_date, request_item,
-            WORKFLOW_STATUS.PENDING_ENG_CHECK, 'Eng Check', file_path
+            WORKFLOW_STATUS.PENDING_ENG_CHECK, 'Eng Check', file_path,
+            requester
         ];
 
-        try {
-            const insertRes = await engPool.query(sql, params);
-            logger.info('Tool request created successfully', { id: insertRes.rows[0].id, request_item });
-            res.json({ result: 'true', message: 'บันทึกคำขอเรียบร้อยแล้ว', id: insertRes.rows[0].id });
-        } catch (dbErr) {
-            logger.error('Database Insert Error', { error: dbErr.message });
-            res.status(500).json({ result: 'false', message: dbErr.message });
-        }
+        const insertRes = await client.query(sql, params);
+        const requestId = insertRes.rows[0].id;
+
+        // Commit the transaction after successful insert
+        await client.query('COMMIT');
+        
+        logger.info('Tool request created successfully', { id: requestId, request_item });
+
+        // --- ส่งอีเมลแจ้งเตือน (Async - Non blocking) ---
+        (async () => {
+            try {
+                const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
+                if (recipients.length > 0) {
+                    const subject = `[New Request] ${request_item}: ${title}`;
+                    const html = renderEmail({
+                        stage: 'New Request',
+                        decision: 'submitted',
+                        request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category },
+                        extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
+                        actionBy: requester,
+                    });
+                    await sendEmailWithFallback(recipients.join(','), subject, html);
+                }
+            } catch (emailErr) {
+                logger.warn('Initial email notification failed', { error: emailErr.message });
+            }
+        })();
+
+        res.json({ result: 'true', message: 'บันทึกคำขอเรียบร้อยแล้ว', id: requestId });
     } catch (error) {
-        logger.error('Server Error', { error: error.message });
-        res.status(500).json({ result: 'false', message: 'Server Error' });
+        await client.query('ROLLBACK');
+        logger.error('Server Error during creation', { error: error.message });
+        res.status(500).json({ result: 'false', message: 'Server Error: ' + error.message });
+    } finally {
+        client.release();
     }
 };
 
@@ -267,7 +327,7 @@ const updateToolRequest = async (req, res) => {
         machine_name,
         status,
         current_stage,
-        request_no // Note: old code sends request_no, we map to req_no below
+        request_no
     } = req.body;
 
     const sql = `
@@ -299,95 +359,59 @@ const updateToolRequest = async (req, res) => {
 
     try {
         const result = await engPool.query(sql, params);
-
         if (result.rowCount === 0) {
-            return res.status(404).json({
-                result: 'false',
-                message: 'ไม่พบข้อมูลที่ต้องการแก้ไข'
-            });
+            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการแก้ไข' });
         }
-
-        res.json({
-            result: 'true',
-            message: 'อัพเดทข้อมูลเรียบร้อยแล้ว',
-            changes: result.rowCount
-        });
+        res.json({ result: 'true', message: 'อัพเดทข้อมูลเรียบร้อยแล้ว', changes: result.rowCount });
     } catch (err) {
         console.error('Error updating tool request:', err.message);
-        return res.status(500).json({
-            result: 'false',
-            message: err.message
-        });
+        return res.status(500).json({ result: 'false', message: err.message });
     }
 };
 
 /**
  * DELETE /api/engineer/mtc/tool-requests/:id
- * Soft-delete tool request (ตั้ง deleted_at แทนการลบจริง เพื่อรักษา audit trail)
  */
 const deleteToolRequest = async (req, res) => {
     const { id } = req.params;
-
     try {
         const result = await engPool.query(
             `UPDATE ${TABLES.TR_REQUEST} SET deleted_at = NOW(), updated_at = NOW()
              WHERE id = $1 AND deleted_at IS NULL`,
             [id]
         );
-
         if (result.rowCount === 0) {
-            return res.status(404).json({
-                result: 'false',
-                message: 'ไม่พบข้อมูลที่ต้องการลบ'
-            });
+            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการลบ' });
         }
-
-        res.json({
-            result: 'true',
-            message: 'ลบข้อมูลเรียบร้อยแล้ว'
-        });
+        res.json({ result: 'true', message: 'ลบข้อมูลเรียบร้อยแล้ว' });
     } catch (err) {
         console.error('Error deleting tool request:', err.message);
-        return res.status(500).json({
-            result: 'false',
-            message: err.message
-        });
+        return res.status(500).json({ result: 'false', message: err.message });
     }
 };
 
 /**
  * GET /api/engineer/mtc/tool-requests/dashboard
- * Get dashboard statistics
  */
 const getToolRequestDashboard = async (req, res) => {
     const stats = {};
-
     try {
-        // Get total counts by status
         const statusCountsRes = await engPool.query(`
-            SELECT
-                status,
-                COUNT(*) as count
-            FROM ${TABLES.TR_REQUEST}
-            WHERE deleted_at IS NULL
-            GROUP BY status
+            SELECT status, COUNT(*) as count FROM ${TABLES.TR_REQUEST}
+            WHERE deleted_at IS NULL GROUP BY status
         `);
-
         stats.byStatus = statusCountsRes.rows.reduce((acc, row) => {
             acc[row.status] = parseInt(row.count);
             return acc;
         }, {});
 
-        // Get total count
         const totalRes = await engPool.query(`SELECT COUNT(*) as total FROM ${TABLES.TR_REQUEST} WHERE deleted_at IS NULL`);
         stats.total = parseInt(totalRes.rows[0].total);
 
-        // Get requests created in last 30 days
         const thirtyDaysAgo = moment().subtract(30, 'days').format('YYYY-MM-DD');
         const recentRes = await engPool.query(`SELECT COUNT(*) as recent FROM ${TABLES.TR_REQUEST} WHERE deleted_at IS NULL AND DATE(created_at) >= $1`, [thirtyDaysAgo]);
         stats.last30Days = parseInt(recentRes.rows[0].recent);
 
-        // Get overdue count
         const today = moment().format('YYYY-MM-DD');
         const overdueRes = await engPool.query(`
              SELECT COUNT(*) as overdue FROM ${TABLES.TR_REQUEST}
@@ -397,6 +421,16 @@ const getToolRequestDashboard = async (req, res) => {
         `, [today]);
         stats.overdue = parseInt(overdueRes.rows[0].overdue);
 
+        const performanceRes = await engPool.query(`
+            SELECT completion_status, COUNT(*) as count FROM ${TABLES.TR_REQUEST}
+            WHERE deleted_at IS NULL AND completion_status IN ('On time', 'Delay')
+            GROUP BY completion_status
+        `);
+        stats.performance = performanceRes.rows.reduce((acc, row) => {
+            acc[row.completion_status] = parseInt(row.count);
+            return acc;
+        }, { 'On time': 0, 'Delay': 0 });
+
         res.json({ data: stats });
     } catch (err) {
         console.error('Error fetching dashboard stats:', err.message);
@@ -404,28 +438,53 @@ const getToolRequestDashboard = async (req, res) => {
     }
 };
 
+// ── Performance calculation helper ──────────────────────────────────────────
+async function calculateRequestPerformance(dueDateVal, actualDateVal) {
+    if (!dueDateVal || !actualDateVal) {
+        return { diff: 0, status: 'Pending' };
+    }
+    try {
+        const plan = moment(dueDateVal).startOf('day');
+        const actual = moment(actualDateVal).startOf('day');
+        const holidayQuery = await engPool.query(`SELECT ${TABLES.HOLIDAY_COLUMN} as holiday_date FROM ${TABLES.HOLIDAYS}`);
+        const holidays = holidayQuery.rows.map(row => moment(row.holiday_date).format('YYYY-MM-DD'));
+
+        let diffDays = 0;
+        let status = 'On time';
+        if (actual.isSameOrBefore(plan)) {
+            status = 'On time';
+            diffDays = 0; 
+        } else {
+            status = 'Delay';
+            let current = plan.clone().add(1, 'days');
+            while (current.isSameOrBefore(actual)) {
+                const isWeekend = current.day() === 0; // Only Sunday is weekend
+                const isHoliday = holidays.includes(current.format('YYYY-MM-DD'));
+                if (!isWeekend && !isHoliday) diffDays++;
+                current.add(1, 'days');
+            }
+        }
+        return { diff: diffDays, status: status };
+    } catch (error) {
+        console.error('Error calculating request performance:', error.message);
+        return { diff: 0, status: 'On time' };
+    }
+}
+
 /**
  * POST /api/engineer/mtc/tool-requests/:id/action
- * Submit a workflow stage action (approve/deny/submit)
  */
 const submitAction = async (req, res) => {
     const { id } = req.params;
     const { stage, decision, comment, action_by } = req.body;
-
-    // extra อาจมาเป็น JSON string (กรณี FormData) หรือ object (กรณี JSON)
     let extra = req.body.extra;
     if (typeof extra === 'string') {
         try { extra = JSON.parse(extra); } catch { extra = {}; }
     }
     extra = extra || {};
 
-    // จัดการไฟล์แนบ (Draft Man → dwg_files, Eng Review → review_files)
-    const uploadDir = path.join(__dirname, '../../../files/tool_requests');
-    
-    // Ensure directory exists
-    if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-    }
+    const uploadDir = path.join(__dirname, '../../../../files/tool_requests');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
     const saveFiles = async (fieldName, pathKey, nameKey) => {
         if (!req.files?.[fieldName]) return;
@@ -439,133 +498,157 @@ const submitAction = async (req, res) => {
         }
         extra[pathKey] = savedPaths;
         extra[nameKey] = savedNames;
-        logger.info('Files saved for workflow action', { fieldName, count: savedPaths.length });
     };
 
-    await saveFiles('dwg_files',    'dwg_file_paths',    'dwg_file_names');
+    await saveFiles('dwg_files', 'dwg_file_paths', 'dwg_file_names');
     await saveFiles('review_files', 'review_file_paths', 'review_file_names');
 
-    if (!stage || !decision) {
-        return res.status(400).json({ error: 'stage and decision are required' });
-    }
+    if (!stage || !decision) return res.status(400).json({ error: 'stage and decision are required' });
 
-    // ── ตรวจสิทธิ์ — AD department bypass, เช็ค u_code หรือ email ─────────────
-    const allowedEmails = STAGE_ALLOWED[stage] || [];
-    const userDept = (req.body.user_department || '').toUpperCase();
-    if (allowedEmails.length > 0 && userDept !== 'AD') {
-        const allowedCodes = allowedEmails.map(e => e.split('@')[0].toLowerCase());
-        const userCode = (req.body.user_code || '').toLowerCase();
-        const userEmailVal = (req.body.action_by_email || '').toLowerCase();
-        const isAllowed = allowedCodes.includes(userCode)
-            || allowedEmails.map(e => e.toLowerCase()).includes(userEmailVal);
-        if (!isAllowed) {
-            logger.warn('Permission denied', { stage, userDept, userCode });
-            return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
+    // ── ตรวจสิทธิ์ ──
+    try {
+        const recipientsAllowed = await getEmailRecipients(stage);
+        const userDept = (req.body.user_department || '').toUpperCase();
+        if (recipientsAllowed.length > 0 && userDept !== 'AD') {
+            const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
+            const userCode = (req.body.user_code || '').toLowerCase();
+            const userEmailVal = (req.body.action_by_email || '').toLowerCase();
+            const isAllowed = allowedCodes.includes(userCode) || 
+                              recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
+            if (!isAllowed) return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
         }
+    } catch (err) {
+        logger.warn('Permission check failed', { error: err.message });
     }
 
     const stageConfig = STAGE_MAP[stage];
-    if (!stageConfig) {
-        return res.status(400).json({ error: `Unknown stage: ${stage}` });
-    }
+    if (!stageConfig) return res.status(400).json({ error: `Unknown stage: ${stage}` });
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
-        logger.info('Starting action submit', { id, stage, decision });
-
-        // Get current request
         const reqRes = await client.query(`SELECT * FROM ${TABLES.TR_REQUEST} WHERE id = $1 AND deleted_at IS NULL`, [id]);
         const request = reqRes.rows[0];
         if (!request) {
-            logger.error('Request not found', { id });
             await client.query('ROLLBACK');
             return res.status(404).json({ error: 'Request not found' });
         }
 
         const isApprove = decision === 'approve' || decision === 'submit';
         const nextStatus = isApprove ? stageConfig.approveStatus : stageConfig.denyStatus;
-        const nextStage  = isApprove ? stageConfig.approveStage  : stageConfig.denyStage;
+        const nextStage = isApprove ? stageConfig.approveStage : stageConfig.denyStage;
 
         if (!nextStatus) {
-            logger.error('Stage does not support decision', { stage, decision });
             await client.query('ROLLBACK');
             return res.status(400).json({ error: `Stage "${stage}" does not support decision "${decision}"` });
         }
 
-        // Update request status + stage
-        const newReqNo = (stage === WORKFLOW_STAGES.ENG_CHECK && isApprove && extra?.request_no)
-            ? extra.request_no : null;
+        let completionStatus = request.completion_status || 'Pending';
+        let diffDays = request.diff_days || null;
+        if (stage === WORKFLOW_STAGES.ENG_INFORM && isApprove) {
+            const perf = await calculateRequestPerformance(request.req_due_date, moment());
+            completionStatus = perf.status;
+            diffDays = perf.diff;
+        }
 
-        logger.info('Updating tr_request', { nextStatus, nextStage, newReqNo });
         await client.query(
-            `UPDATE ${TABLES.TR_REQUEST} SET
-                status = $1,
-                current_stage = $2,
-                req_no = COALESCE($3, req_no),
-                updated_at = NOW()
-             WHERE id = $4`,
-            [nextStatus, nextStage, newReqNo, id]
+            `UPDATE ${TABLES.TR_REQUEST} SET status = $1, current_stage = $2, req_no = COALESCE($3, req_no), 
+             completion_status = $4, diff_days = $5, updated_at = NOW() WHERE id = $6`,
+            [nextStatus, nextStage, (stage === WORKFLOW_STAGES.ENG_CHECK && isApprove && extra?.request_no) ? extra.request_no : null,
+             completionStatus, diffDays, id]
         );
 
-        // Insert workflow record
-        logger.info('Inserting tr_workflow record', { stepNo: stageConfig.stepNo });
         await client.query(
             `INSERT INTO ${TABLES.TR_WORKFLOW} (req_id, step_no, action_by, action_type, comment, status, stage_name, extra_data)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [id, stageConfig.stepNo, action_by || 'system', decision,
-             comment || '', nextStatus, stage, JSON.stringify(extra || {})]
+            [id, stageConfig.stepNo, action_by || 'system', decision, comment || '', nextStatus, stage, JSON.stringify(extra || {})]
         );
 
         await client.query('COMMIT');
-        logger.info('Action submitted and committed successfully', { id, nextStatus });
 
-        // Send email (fire-and-forget — don't block response)
+        // Send Email notification (Dynamic)
         try {
             const emailKey = isApprove ? stageConfig.emailApprove : stageConfig.emailDeny;
-            let recipients = emailKey ? EMAIL_CONFIG[emailKey] : [];
-
-            // For deny, also CC the requester
-            if (!isApprove && request.requester_email) {
-                recipients = [request.requester_email, ...recipients];
-            }
-            // For eng_inform completed, notify requester
-            if (stage === WORKFLOW_STAGES.ENG_INFORM && request.requester_email) {
-                recipients = [request.requester_email, ...recipients];
-            }
+            let recipients = emailKey ? await getEmailRecipients(emailKey) : [];
+            if (!isApprove && request.requester_email) recipients = [request.requester_email, ...recipients];
+            if (stage === WORKFLOW_STAGES.ENG_INFORM && request.requester_email) recipients = [request.requester_email, ...recipients];
 
             if (recipients.length > 0) {
                 const subject = generateSubject(stage, decision, request);
-                const html = renderEmail({
-                    stage,
-                    decision,
-                    request,
-                    extra: { ...extra, comment },
-                    actionBy: action_by || 'System',
-                });
-                logger.info('Sending email notification', { recipients, subject });
-                sendEmailWithFallback(recipients.join(','), subject, html).catch((err) => {
-                    logger.error('Email sending failed', { error: err.message });
-                });
+                const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
+                sendEmailWithFallback(recipients.join(','), subject, html).catch(err => logger.error('Email failed', { error: err.message }));
             }
         } catch (emailErr) {
-            logger.warn('Email notification failed', { error: emailErr.message });
-            // Email failure should not affect response
+            logger.warn('Email failed', { error: emailErr.message });
         }
 
-        res.json({
-            success: true,
-            request_item: request.request_item,
-            status: nextStatus,
-            current_stage: nextStage,
-            message: `${stage} ${decision} submitted successfully`
-        });
+        res.json({ success: true, status: nextStatus, current_stage: nextStage });
     } catch (err) {
         await client.query('ROLLBACK');
-        logger.error('Error submitting action', { error: err.message });
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
+    }
+};
+
+/**
+ * GET /api/engineer/mtc/email-config
+ * Fetch all email configurations for admin management
+ */
+const getEmailConfigs = async (req, res) => {
+    try {
+        const result = await engPool.query(`SELECT * FROM ${TABLES.TR_EMAIL_CONFIG} ORDER BY stage ASC`);
+        res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * PUT /api/engineer/mtc/email-config/:id
+ * Update an existing email configuration
+ */
+const updateEmailConfig = async (req, res) => {
+    const { id } = req.params;
+    const { emails, stage } = req.body;
+    try {
+        await engPool.query(
+            `UPDATE ${TABLES.TR_EMAIL_CONFIG} SET emails = $1, stage = $2 WHERE id = $3`,
+            [emails, stage, id]
+        );
+        res.json({ success: true, message: 'Updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * POST /api/engineer/mtc/email-config
+ * Create a new email configuration (e.g., for new CC stages)
+ */
+const createEmailConfig = async (req, res) => {
+    const { stage, emails } = req.body;
+    try {
+        await engPool.query(
+            `INSERT INTO ${TABLES.TR_EMAIL_CONFIG} (stage, emails) VALUES ($1, $2)`,
+            [stage, emails]
+        );
+        res.json({ success: true, message: 'Created successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * DELETE /api/engineer/mtc/email-config/:id
+ */
+const deleteEmailConfig = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await engPool.query(`DELETE FROM ${TABLES.TR_EMAIL_CONFIG} WHERE id = $1`, [id]);
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 };
 
@@ -578,6 +661,8 @@ module.exports = {
     getToolRequestDashboard,
     getStagePermissions,
     submitAction,
+    getEmailConfigs,
+    updateEmailConfig,
+    createEmailConfig,
+    deleteEmailConfig,
 };
-
-

@@ -3,10 +3,10 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { engPool } = require('../../../instance/eng_db');
+const { engPool } = require('../../../../instance/eng_db');
 const puppeteer = require('puppeteer');
 const XLSX = require('xlsx');
-const { TABLES, PATHS } = require('./mtcConstants');
+const { TABLES, PATHS } = require('../mtcConstants');
 
 const router = express.Router();
 
