@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Form, Input, Button, Typography, Layout, Card, Spin } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, SettingFilled, ToolOutlined, BuildOutlined, ExperimentOutlined } from '@ant-design/icons';
 import axios from "axios";
@@ -18,6 +19,8 @@ function Sign_in() {
   const [isVisible, setIsVisible] = useState(false);
 
   const { login, logout } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const Toast = Swal.mixin({
     toast: true,
@@ -95,10 +98,16 @@ function Sign_in() {
       if (res.data.result === "true") {
         saveSession(res.data, values.empno);
         await Toast.fire({ icon: "success", title: "เข้าสู่ระบบสำเร็จ" });
+        
+        // Get the page to redirect to (from state or default based on department)
+        const from = location.state?.from?.pathname || null;
+        const isEngineer = res.data.userInfo?.u_department === "ENG" || res.data.userInfo?.u_department === "AD" || res.data.userInfo?.u_department === "SYSTEM_ENG" || res.data.userInfo?.u_department === "QA";
+        const defaultPath = isEngineer ? "/eng/home" : "/home";
+        
+        const destination = from || defaultPath;
+        
         setTimeout(() => {
-          // console.log(res.data)
-          const isEngineer = res.data.department === "ENG" || res.data.department === "AD"
-          window.location = isEngineer ? "/eng/home" : "/home";
+          navigate(destination, { replace: true });
         }, 1000);
       } else {
         Toast.fire({

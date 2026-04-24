@@ -559,7 +559,7 @@ const CardDetailDrawer = () => {
             url = url.substring(1, url.length - 1).trim();
         }
 
-        const urlPattern = /^(https?:\/\/)?([\w\d-]+\.)+[\w\d]{2,}(\/.*)?$/i;
+        const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
         const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
 
         if (!urlPattern.test(url) && !localPathPattern.test(url)) {
@@ -2043,7 +2043,7 @@ const CardDetailDrawer = () => {
                                                                         url = url.substring(1, url.length - 1).trim();
                                                                     }
 
-                                                                    const urlPattern = /^(https?:\/\/)?([\w\d-]+\.)+[\w\d]{2,}(\/.*)?$/i;
+                                                                    const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
                                                                     const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
 
                                                                     if (!urlPattern.test(url) && !localPathPattern.test(url)) {
