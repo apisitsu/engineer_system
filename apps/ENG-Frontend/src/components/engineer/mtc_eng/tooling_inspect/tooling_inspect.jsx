@@ -67,8 +67,11 @@ function InspectionReport() {
         search: searchText,
         status: filterType,
       });
-      if (filterType === 'all' || filterType === 'pending') {
+      if (filterType === 'pending') {
         params.append('currentMonth', moment().format('MM-YYYY'));
+      }
+      if (filterType === 'all') {
+        params.append('currentYear', moment().format('YYYY'));
       }
       if (filterType === 'date' && selectedDate) {
         params.append('startDate', selectedDate.format('YYYY-MM-DD'));
@@ -116,7 +119,7 @@ function InspectionReport() {
     });
     if (reason) {
       try {
-        await axios.post(`${server.TOOLING_INSPECT_GETLIST}/${id}/blacklist`, { reason });
+        await axios.post(`${server.TOOLING_INSPECT_API}/${id}/blacklist`, { reason });
         message.success('Item blacklisted and deleted');
         fetchToolingInspectData();
       } catch (e) {
@@ -125,26 +128,37 @@ function InspectionReport() {
     }
   }, [fetchToolingInspectData]);
 
+  const { displayData, duplicatePoNos } = useMemo(() => {
+    const count = {};
+    dataSource.forEach(r => { if (r.po_no) count[r.po_no] = (count[r.po_no] || 0) + 1; });
+    const dupSet = new Set(Object.keys(count).filter(k => count[k] > 1));
+    const sorted = [...dataSource].sort((a, b) => {
+      const aDup = dupSet.has(a.po_no);
+      const bDup = dupSet.has(b.po_no);
+      if (aDup !== bDup) return aDup ? -1 : 1;
+      if (aDup) return (a.po_no || '').localeCompare(b.po_no || '');
+      return 0;
+    });
+    return { displayData: sorted, duplicatePoNos: dupSet };
+  }, [dataSource]);
+
   const columns = useMemo(() => [
-    { title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date', render: (t) => t ? moment(t, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-' },
-    { title: 'Time', dataIndex: 'time', key: 'time' },
-    { title: 'W/C', dataIndex: 'w_c', key: 'w_c' },
-    { title: 'PO No.', dataIndex: 'po_no', key: 'po_no' },
-    { title: 'Item Name', dataIndex: 'item_name', key: 'item_name' },
-    { title: 'DWG No.', dataIndex: 'dwg_no', key: 'dwg_no' },
-    { title: 'Qty', dataIndex: 'qty', key: 'qty' },
-    { title: 'Issue Date', dataIndex: 'issue_date', key: 'issue_date', render: (t) => t ? moment(t, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-' },
-    { title: 'Diff.', dataIndex: 'diff', key: 'diff' },
-    { title: 'Status', dataIndex: 'status', key: 'status', align: 'center', render: (t) => t ? <Tag color={t === 'On time' ? theme.colors.success : t === 'Delay' ? theme.colors.error : theme.colors.warning}>{t}</Tag> : '' },
-    { title: 'Reason', dataIndex: 'reason', key: 'reason' },
-    { title: 'Measuring Tools', dataIndex: 'measuring_tools', key: 'measuring_tools' },
-    { title: 'Judgement', dataIndex: 'judgement', key: 'judgement', render: (t) => t ? <Tag color={t === 'Accept' ? theme.colors.success : theme.colors.error}>{t}</Tag> : '' },
-    { title: 'Remark', dataIndex: 'remark', key: 'remark' },
+    { title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date', width: 115, sorter: (a, b) => (a.receive_date || '').localeCompare(b.receive_date || ''), render: (t) => t ? moment(t, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-' },
+    { title: 'PO No.', dataIndex: 'po_no', key: 'po_no', width: 120, sorter: (a, b) => (a.po_no || '').localeCompare(b.po_no || '') },
+    { title: 'Item Name', dataIndex: 'item_name', key: 'item_name', width: 160, sorter: (a, b) => (a.item_name || '').localeCompare(b.item_name || '') },
+    { title: 'DWG No.', dataIndex: 'dwg_no', key: 'dwg_no', width: 110, sorter: (a, b) => (a.dwg_no || '').localeCompare(b.dwg_no || '') },
+    { title: 'Qty', dataIndex: 'qty', key: 'qty', width: 65, align: 'center', sorter: (a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0) },
+    { title: 'Issue Date', dataIndex: 'issue_date', key: 'issue_date', width: 105, sorter: (a, b) => (a.issue_date || '').localeCompare(b.issue_date || ''), render: (t) => t ? moment(t, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-' },
+    { title: 'Diff.', dataIndex: 'diff', key: 'diff', width: 65, align: 'center', sorter: (a, b) => (Number(a.diff) || 0) - (Number(b.diff) || 0) },
+    { title: 'Status', dataIndex: 'status', key: 'status', width: 95, align: 'center', sorter: (a, b) => (a.status || '').localeCompare(b.status || ''), render: (t) => t ? <Tag color={t === 'On time' ? theme.colors.success : t === 'Delay' ? theme.colors.error : theme.colors.warning}>{t}</Tag> : '' },
+    { title: 'Reason', dataIndex: 'reason', key: 'reason', width: 130, sorter: (a, b) => (a.reason || '').localeCompare(b.reason || '') },
+    { title: 'Measuring Tools', dataIndex: 'measuring_tools', key: 'measuring_tools', width: 140, sorter: (a, b) => (a.measuring_tools || '').localeCompare(b.measuring_tools || '') },
+    { title: 'Judgement', dataIndex: 'judgement', key: 'judgement', width: 100, align: 'center', sorter: (a, b) => (a.judgement || '').localeCompare(b.judgement || ''), render: (t) => t ? <Tag color={t === 'Accept' ? theme.colors.success : theme.colors.error}>{t}</Tag> : '' },
     {
-      title: 'Action', key: 'action', fixed: 'right', render: (_, record) => (
+      title: 'Action', key: 'action', fixed: 'right', width: 110, render: (_, record) => (
         <Space size="small">
           <Button type="primary" size="small" onClick={() => handleUpdateRecord(record)}>Update</Button>
-          <Button danger size="small" icon={<StopOutlined />} onClick={() => handleBlacklist(record.id)}>Blacklist</Button>
+          <Button danger size="small" icon={<StopOutlined />} title="Blacklist" onClick={() => handleBlacklist(record.id)} />
         </Space>
       )
     }
@@ -224,8 +238,21 @@ function InspectionReport() {
                   )}
                 </Row>
               </Card>
-              <Card title="Inspection List" style={{ marginTop: 16 }}>
-                <Table dataSource={dataSource} columns={columns} rowKey="id" pagination={{ current: currentPage, pageSize, total: totalRecords, onChange: (c, s) => { setCurrentPage(c); setPageSize(s); } }} scroll={{ x: 'max-content' }} />
+              <Card
+                title="Inspection List"
+                extra={<Text type="secondary">{totalRecords > 0 ? <><Text strong>{totalRecords}</Text> รายการ{duplicatePoNos.size > 0 && <Text type="danger" style={{ marginLeft: 8 }}>· ซ้ำ {duplicatePoNos.size} PO</Text>}</> : 'ไม่มีรายการ'}</Text>}
+                style={{ marginTop: 16 }}
+              >
+                <style>{`.dup-row td { color: #f5222d !important; font-weight: 600; }`}</style>
+                <Table
+                  dataSource={displayData}
+                  columns={columns}
+                  rowKey="id"
+                  rowClassName={(r) => duplicatePoNos.has(r.po_no) ? 'dup-row' : ''}
+                  pagination={{ current: currentPage, pageSize, total: totalRecords, onChange: (c, s) => { setCurrentPage(c); setPageSize(s); } }}
+                  scroll={{ x: 'max-content' }}
+                  size="small"
+                />
               </Card>
             </div>
           </Content>

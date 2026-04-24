@@ -23,13 +23,13 @@ const getConstants = (req, res) => {
 
 const getToolingInspectList = async (req, res) => {
     try {
-        const { page, limit, search, status, startDate, endDate, currentMonth } = req.query;
+        const { page, limit, search, status, startDate, endDate, currentMonth, currentYear } = req.query;
 
         const fetchList = mtcService.getToolingInspectListService({
             page: parseInt(page), limit: parseInt(limit),
-            search, status, startDate, endDate, currentMonth,
+            search, status, startDate, endDate, currentMonth, currentYear,
         });
-        const fetchStats = mtcService.getToolingInspectStatsService({ search, status, startDate, endDate, currentMonth });
+        const fetchStats = mtcService.getToolingInspectStatsService({ search, status, startDate, endDate, currentMonth, currentYear });
         const fetchActivity = (status === 'date' && startDate)
             ? mtcService.getDateActivityStatsService(startDate)
             : Promise.resolve(null);

@@ -81,20 +81,20 @@ print(f"\n=>=>=> Merge complete! Total {len(df_master)} rows. ===")
 # ==========================================
 # 3. Save to CSV (Backup)
 # ==========================================
-# print("\n=== Saving to CSV ===")
-# output_filename = "ToolingInspection.csv"
-# path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
+print("\n=== Saving to CSV ===")
+output_filename = "ToolingInspection.csv"
+path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 # Save to local directory
-# df_master.to_csv(output_filename, index=False, encoding='utf-8-sig')
-# print(f"CSV saved successfully! File name: {output_filename}")
+df_master.to_csv(output_filename, index=False, encoding='utf-8-sig')
+print(f"CSV saved successfully! File name: {output_filename}")
 
 # Save to Drive G (Backup)
-# try:
-#     df_master.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
-#     print(f"Backup CSV saved to Drive G! File name: {output_filename}")
-# except Exception as e:
-#     print(f"Warning: Cannot save to Drive G. Error: {e}")
+try:
+    df_master.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
+    print(f"Backup CSV saved to Drive G! File name: {output_filename}")
+except Exception as e:
+    print(f"Warning: Cannot save to Drive G. Error: {e}")
 
 # ==========================================
 # 4. Prepare data for Database

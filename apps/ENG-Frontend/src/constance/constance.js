@@ -33,6 +33,7 @@ export const server = {
   ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
+  TOOLING_INSPECT_API: `${apiUrl}api/engineer/mtc/tooling-inspect`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/inspect_update`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_SYNC_CSV: `${apiUrl}api/tooling_inspect/sync_csv`,
