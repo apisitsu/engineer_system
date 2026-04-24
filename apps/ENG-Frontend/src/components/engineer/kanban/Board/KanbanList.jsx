@@ -21,6 +21,13 @@ const { Text } = Typography;
 
 // ─── Sortable Card Wrapper ─────────────────────────────────────────
 const SortableCard = ({ card }) => {
+    const cards = useKanbanStore(state => state.cards);
+    const parentCard = useMemo(() => {
+        if (!card.parent_id) return null;
+        return Object.values(cards || {}).flat().find(c => String(c.id) === String(card.parent_id));
+    }, [card.parent_id, cards]);
+    const isEffectivelySuspended = card.is_suspended || parentCard?.is_suspended;
+
     const {
         attributes,
         listeners,
@@ -28,7 +35,7 @@ const SortableCard = ({ card }) => {
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: `card-${card.id}`, data: { type: 'card', card } });
+    } = useSortable({ id: `card-${card.id}`, data: { type: 'card', card }, disabled: isEffectivelySuspended });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -175,6 +182,8 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             { key: 'sort-due-desc', label: 'Due Date ↓', onClick: () => sortListCards(list.id, 'due_date', 'desc') },
             { key: 'sort-created', label: 'Created ↑', onClick: () => sortListCards(list.id, 'created_at', 'asc') },
             { key: 'sort-created-desc', label: 'Created ↓', onClick: () => sortListCards(list.id, 'created_at', 'desc') },
+            { key: 'sort-priority', label: 'Priority (High-Low)', onClick: () => sortListCards(list.id, 'priority', 'asc') },
+            { key: 'sort-priority-desc', label: 'Priority (Low-High)', onClick: () => sortListCards(list.id, 'priority', 'desc') },
         ]
     });
 

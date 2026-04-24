@@ -5,9 +5,8 @@
  * รับ calc objects จาก fixtureLogic แล้วค้นหา Tooling ตามกฎในฐานข้อมูล
  * รองรับการ resolve nested calc keys เช่น "rollerShoe.A", "wd_A"
  */
-
-const { engPool } = require('../../../instance/eng_db');
-const { TABLES } = require('./mtcConstants');
+const { engPool } = require('../../../../instance/eng_db');
+const { TABLES } = require('../mtcConstants');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"

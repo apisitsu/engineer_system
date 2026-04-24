@@ -5,6 +5,7 @@ import axios from "axios";
 import { SearchOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import moment from "moment";
+import dayjs from "dayjs";
 
 export const CollectionInspForm = ({ onCancel, visibleInsp, inspByDocNo }) => {
   const [form] = Form.useForm();
@@ -79,8 +80,8 @@ export const CollectionInspForm = ({ onCancel, visibleInsp, inspByDocNo }) => {
         eng_acc_qty: data[i].eng_acc_qty,
         eng_rej_qty: data[i].eng_rej_qty,
         eng_remark: data[i].eng_remark,
-        eng_insp_start: moment(values.eng_insp_start).format(),
-        eng_insp_finish: moment(values.eng_insp_finish).format(),
+        eng_insp_start: dayjs(values.eng_insp_start).format(),
+        eng_insp_finish: dayjs(values.eng_insp_finish).format(),
         eng_insp_emp: localStorage.getItem(key_constance.USER_EMPNO),
         eng_return_confirmby: localStorage.getItem(key_constance.USER_EMPNO),
         eng_status: "2",

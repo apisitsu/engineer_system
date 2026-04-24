@@ -6,6 +6,9 @@ import Looks3Icon from '@mui/icons-material/Looks3';
 import Looks4Icon from '@mui/icons-material/Looks4';
 import Looks5Icon from '@mui/icons-material/Looks5';
 import Looks6Icon from '@mui/icons-material/Looks6';
+import Filter7Icon from '@mui/icons-material/Filter7';
+
+import { MTC_PATHS } from "../../constance/mtc_constance";
 
 import { MTC_PATHS } from "../../constance/mtc_constance";
 
@@ -18,6 +21,7 @@ const numberIcons = [
     <Looks4Icon style={iconStyle} />,
     <Looks5Icon style={iconStyle} />,
     <Looks6Icon style={iconStyle} />,
+    <Filter7Icon style={iconStyle} />,
 ];
 
 const createMenu = (items) => {
@@ -51,16 +55,8 @@ export const master = createMenu([
 
 export const system = createMenu([
     { label: "Home", path: "/eng/system_eng", key: "1" },
-    {
-        label: "Project",
-        key: "sub1",
-        children: [
-            { label: "Dashboard", path: "/eng/system_eng/project_dashboard", key: "2" },
-            { label: "Task", path: "/eng/system_eng/todo_project", key: "3" }
-        ]
-    },
-    { label: "User Management", path: "/eng/system_eng/user_management", key: "4" },
-    { label: "Setting", path: "/eng/system_eng/setting", key: "5" }
+    { label: "User Management", path: "/eng/system_eng/user_management", key: "2" },
+    { label: "Tools", path: "/eng/system_eng/tool/gallery", key: "3" }
 ]);
 
 export const process = createMenu([
@@ -83,11 +79,20 @@ export const newprod = createMenu([
 ]);
 
 export const mtc = createMenu([
-    { label: "Home", path: MTC_PATHS.HOME },
-    { label: "Tooling Inspect", path: MTC_PATHS.TOOLING_INSPECT },
-    { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST },
-    { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT },
-    { label: "Setup Data Sheet", path: MTC_PATHS.SDS },
+    { label: "Home", path: MTC_PATHS.HOME, key: "home" },
+    { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST, key: "tool-request" },
+    { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
+    { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
+    { label: "Setup Data Sheet v2", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
+    {
+        label: "Admin config",
+        key: "admin-config",
+        children: [
+            { label: "Email config", path: MTC_PATHS.EMAIL_CONFIG, key: "admin-email" },
+            { label: "Formula config", path: MTC_PATHS.FORMULA_CONFIG, key: "admin-formula" },
+            { label: "Machine template config", path: MTC_PATHS.SDS_V2_ADMIN, key: "admin-sds-template" },
+        ]
+    },
 ]);
 
 export const all = createMenu([

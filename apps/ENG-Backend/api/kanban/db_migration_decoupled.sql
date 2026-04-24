@@ -20,4 +20,7 @@ ALTER TABLE kb_card ADD COLUMN is_private BOOLEAN DEFAULT FALSE;
 -- 5. Card Memberships -> add role
 ALTER TABLE kb_card_membership ADD COLUMN role VARCHAR(20) DEFAULT 'editor';
 
+-- 6. Performance Index for Kanban ACL checks
+CREATE INDEX IF NOT EXISTS idx_kb_project_status ON kb_project(status);
+
 COMMIT;

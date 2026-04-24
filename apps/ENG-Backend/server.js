@@ -19,7 +19,8 @@ app.use(express.static(path.join(__dirname, "./files")));
 app.use(jsonParser);
 app.use(urlencodedParser);
 app.use(cors()); //ทำให้ FrontEnd ต่อ server ได้
-app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+app.use(express.static("files"));
+
 app.use(express.static("files"));
 
 // Port & HTTP Server with WebSocket
@@ -117,6 +118,13 @@ app.use('/api', (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
+//--------------------System Engineer (PDF Converter)---------------------//
+const pdfConverter = require('./api/engineer/system/pdfConverter');
+app.use('/api/engineer/system', pdfConverter);
+
+// Global File Upload Middleware (for routes not using multer)
+app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+
 
 
 //--------------------User----------------------//
@@ -178,51 +186,93 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
-//------------------MTC Engineer------------------//
-const engMTC = require('./api/engineer/mtc/eng_mtc_model');
-const toolingSelect = require('./api/engineer/mtc/tooling_select');
-const sds = require('./api/engineer/mtc/sds');
+//------------------MTC Engineer (Refactored)------------------//
+const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
+app.use('/api/engineer/mtc', mtcRoutes);
 
-app.route('/api/tooling_inspect/getlist').get(engMTC.ToolingInspectGetlist)
-app.route('/api/tooling_inspect/dwg_require_getlist').get(engMTC.ToolDWGRequestGetList)
-app.route('/api/tooling_inspect/dwg_require_add').post(engMTC.ToolDWGRequestAdd)
-app.route('/api/tooling_inspect/dwg_require_update').put(engMTC.ToolDWGRequestUpdate)
-app.route('/api/tooling_inspect/dashboard_stats').get(engMTC.ToolingDashboadtGetlist)
-app.route('/api/tooling_inspect/return_add').post(engMTC.ToolingReturnAdd)
-app.route('/api/tooling_inspect/inspect_update').post(engMTC.ToolingInspectUpdate)
-app.route('/api/tooling_inspect/sync_csv').post(engMTC.ToolingSyncCSV)
-app.route('/api/master/wc').get(engMTC.GetWCCodes)
+const toolingSelectController = require('./api/engineer/mtc/controllers/toolingSelectController');
+app.use('/api/tooling-select', verifyToken, toolingSelectController);
 
-app.use('/api/tooling-select', toolingSelect);
-app.use('/api/sds', sds);
+const formulaController = require('./api/engineer/mtc/controllers/formulaController');
+const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
+app.get('/api/mtc/formulas/:machineName', verifyToken, formulaController.getFormulasByMachine);
+app.post('/api/mtc/formulas', verifyToken, mtcIsAdmin, formulaController.createFormula);
+app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.testFormula);
+app.put('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.updateFormula);
+app.delete('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.deleteFormula);
+
+const sdsController = require('./api/engineer/mtc/controllers/sdsController');
+app.use('/api/sds', sdsController);
+
+const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
+app.use('/api/sds/v2', sdsV2Controller);
+
+const sdsV2ImageController = require('./api/engineer/mtc/controllers/sdsV2ImageController');
+app.use('/api/sds/v2/images', sdsV2ImageController);
+
+const sdsV2AdminController = require('./api/engineer/mtc/controllers/sdsV2AdminController');
+app.use('/api/sds/v2/admin', sdsV2AdminController);
+
+const sdsV2PdfController = require('./api/engineer/mtc/controllers/sdsV2PdfController');
+app.use('/api/sds/v2', sdsV2PdfController);
+
+// Backward Compatibility for Tooling Inspect
+const legacyMtcController = require('./api/engineer/mtc/controllers/legacyMtcController');
+app.route('/api/tooling_inspect/getlist').get(verifyToken, legacyMtcController.ToolingInspectGetlist);
+app.route('/api/tooling_inspect/dashboard_stats').get(verifyToken, legacyMtcController.ToolingDashboadtGetlist);
+app.route('/api/tooling_inspect/dwg_require_getlist').get(verifyToken, legacyMtcController.ToolDWGRequestGetList);
+
+// Protected Modification endpoints
+app.route('/api/tooling_inspect/dwg_require_add').post(verifyToken, legacyMtcController.ToolDWGRequestAdd);
+app.route('/api/tooling_inspect/dwg_require_update').put(verifyToken, legacyMtcController.ToolDWGRequestUpdate);
+app.route('/api/tooling_inspect/return_add').post(verifyToken, legacyMtcController.ToolingReturnAdd);
+app.route('/api/tooling_inspect/inspect_update').post(verifyToken, legacyMtcController.ToolingInspectUpdate);
+app.route('/api/tooling_inspect/sync_csv').post(verifyToken, legacyMtcController.ToolingSyncCSV);
+app.route('/api/master/wc').get(verifyToken, legacyMtcController.GetWCCodes);
 
 
 // ============================================================================
 // Tool Request System (General DWG Request)
 // ============================================================================
-const toolReq = require('./api/engineer/mtc/tool_req');
+const toolReq = require('./api/engineer/mtc/controllers/toolRequestController');
 
-// Optional: Import middleware for enhanced security (uncomment to enable)
-// const { verifyToken, optionalAuth } = require('./api/engineer/mtc/middleware/toolRequestAuth');
-// const { validateFileUpload } = require('./api/engineer/mtc/middleware/fileUpload');
+// Import middleware for enhanced security
+const { verifyToken: mtcVerifyToken, optionalAuth } = require('./api/engineer/mtc/utils/toolRequestAuth');
+const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 
-// Public endpoints (no authentication required)
+// Public endpoints (no authentication required - viewing only)
 app.get('/api/engineer/mtc/tool-requests', toolReq.getToolRequests);
 app.get('/api/engineer/mtc/tool-requests/dashboard', toolReq.getToolRequestDashboard);
 app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissions);
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 
-// To enable authentication and file validation, uncomment the middleware:
-// app.post('/api/engineer/mtc/tool-requests',
-//   verifyToken,
-//   validateFileUpload({ fieldName: 'attachment', required: false }),
-//   toolReq.createToolRequest
-// );
+// Protected endpoints (require authentication)
+app.post('/api/engineer/mtc/tool-requests',
+  mtcVerifyToken,
+  validateFileUpload({ fieldName: 'attachment', required: false }),
+  toolReq.createToolRequest
+);
 
-app.post('/api/engineer/mtc/tool-requests', toolReq.createToolRequest);
-app.post('/api/engineer/mtc/tool-requests/:id/action', toolReq.submitAction);
-app.put('/api/engineer/mtc/tool-requests/:id', toolReq.updateToolRequest);
-app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
+app.post('/api/engineer/mtc/tool-requests/:id/action',
+  mtcVerifyToken,
+  toolReq.submitAction
+);
+
+app.put('/api/engineer/mtc/tool-requests/:id',
+  mtcVerifyToken,
+  toolReq.updateToolRequest
+);
+
+app.delete('/api/engineer/mtc/tool-requests/:id',
+  mtcVerifyToken,
+  toolReq.deleteToolRequest
+);
+
+// Email Configuration Management (Admin only - verified by token)
+app.get('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.getEmailConfigs);
+app.post('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.createEmailConfig);
+app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.updateEmailConfig);
+app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.deleteEmailConfig);
 
 // Note: For production deployment, enable authentication by:
 // 1. Uncomment the middleware imports above
@@ -231,75 +281,6 @@ app.delete('/api/engineer/mtc/tool-requests/:id', toolReq.deleteToolRequest);
 // 4. See API_DOCUMENTATION.md for authentication details
 
 
-//--------------------System Engineer (TODO/Project Management v2)---------------------//
-const system = require('./api/engineer/system/todoModel_v2');
-const { resolveEffectiveUser } = require('./api/engineer/system/rbacMiddleware');
-
-// Middleware to attach user info + admin simulation support
-app.use('/api/system', (req, res, next) => {
-  // Parse user from body or headers if present, otherwise keep decoded JWT user
-  let specifiedUser = null;
-  if (req.body && req.body.user) {
-    specifiedUser = req.body.user;
-  } else if (req.headers && req.headers.user) {
-    try {
-      specifiedUser = JSON.parse(req.headers.user);
-    } catch (e) {
-      specifiedUser = null;
-    }
-  }
-
-  // Only override if explicitly provided
-  if (specifiedUser) {
-    req.user = { ...req.user, ...specifiedUser };
-  } else if (!req.user) {
-    req.user = {};
-  }
-
-  // Apply admin simulation if x-simulate-user header is present
-  req.user = resolveEffectiveUser(req);
-
-  try {
-    req.db = require('./instance/todo_v2')?.db; // Attach database safely
-  } catch (e) {
-    // Ignore if todo_v2 doesn't exist yet
-  }
-  next();
-});
-
-// Projects
-app.get('/api/system/get_project', system.GetProjects);
-app.get('/api/system/get_project/:id', system.GetProjectById);
-app.post('/api/system/create_project', system.CreateProject);
-app.put('/api/system/update_project/:id', system.UpdateProject);
-app.delete('/api/system/delete_project/:id', system.DeleteProject);
-app.put('/api/system/close_project/:id', system.CloseProject);
-app.get('/api/system/get_project_stats/:id', system.GetProjectStats);
-app.get('/api/system/get_dashboard_data', system.GetDashboardData);
-app.get('/api/system/get_dashboard_detail', system.GetDashboardDetailData);
-
-// Project Members
-app.get('/api/system/get_project_members/:id', system.GetProjectMembers);
-app.post('/api/system/add_project_member/:id', system.AddProjectMember);
-app.delete('/api/system/remove_project_member/:id', system.RemoveProjectMember);
-
-// Tasks (updated endpoint names for consistency)
-app.get('/api/system/get_todolist/:id', system.GetTasksByProject);
-app.get('/api/system/get_tasks/:id', system.GetTasksByProject); // Alias
-app.post('/api/system/create_todolist', system.CreateTask);
-app.post('/api/system/create_task', system.CreateTask); // Alias
-app.put('/api/system/update_todolist/:id', system.UpdateTask);
-app.put('/api/system/update_task/:id', system.UpdateTask); // Alias
-app.delete('/api/system/delete_todolist/:id', system.DeleteTask);
-app.delete('/api/system/delete_task/:id', system.DeleteTask); // Alias
-app.put('/api/system/reorder_todolist', system.ReorderTasks);
-app.put('/api/system/reorder_tasks', system.ReorderTasks); // Alias
-
-// Templates
-app.get('/api/system/get_templates', system.GetTemplates);
-app.get('/api/system/get_template_items/:id', system.GetTemplateItems);
-app.post('/api/system/create_template', system.CreateTemplate);
-app.post('/api/system/apply_template', system.ApplyTemplate);
 
 
 //--------------------Kanban Board Module (/api/kanban)---------------------//
@@ -316,6 +297,13 @@ app.use('/api/kanban', (req, res, next) => {
 
 app.use('/api/kanban', kanbanRoutes);
 
+//--------------------FEA Simulation Module---------------------//
+const feaSimulation = require('./api/fea/fea_router');
+// Also initialize worker so it starts listening
+require('./api/fea/fea_worker');
+app.use('/api/fea', feaSimulation);
+// Expose the output directory so the frontend can fetch the generated JSON files
+app.use('/output', express.static(path.join(__dirname, 'output')));
 
 // const { HttpsProxyAgent } = require('https-proxy-agent');
 // const proxyUrl = 'http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080';

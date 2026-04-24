@@ -2,8 +2,11 @@ import React from 'react';
 import { usePdf, } from '../context/PdfContext';
 import { savePdfWithAnnotations } from '../utils/savePdf';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeftOutlined } from '@ant-design/icons';
 
 export default function TopBar() {
+    const navigate = useNavigate();
     const { state, dispatch } = usePdf();
     const { undoStack, redoStack, pdfFile, annotations, currentPage, totalPages, zoom, viewMode, stampMode } = state;
 
@@ -50,6 +53,9 @@ export default function TopBar() {
         <div className="top-bar">
             {/* Left: Undo, Redo, Download */}
             <div className="top-bar-left">
+                <button className="action-btn" onClick={() => navigate(-1)} title="Go Back" style={{ marginRight: '12px', borderRight: '1px solid var(--border-color)', borderRadius: 0, paddingRight: '12px' }}>
+                    <ArrowLeftOutlined />
+                </button>
                 <button className="action-btn" onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">
                     ↩
                 </button>

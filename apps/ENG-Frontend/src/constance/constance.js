@@ -10,7 +10,7 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-export const apiUrl = "http://plbmp130:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -48,6 +48,7 @@ export const server = {
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
+  MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
 
   // Tooling Select & SDS
@@ -56,11 +57,22 @@ export const server = {
   MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
   MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
+  MTC_FORMULAS: `${apiUrl}api/mtc/formulas`,
   MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
   MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
   MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
   MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
   MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
+  MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
+  MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
+  MTC_SDS_V2_PDF_CACHE: `${apiUrl}api/sds/v2/pdf/cache`,
+  MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,
+  MTC_SDS_V2_ADMIN_PARAMETERS: `${apiUrl}api/sds/v2/admin/parameters`,
+  MTC_SDS_V2_ADMIN_PARAMETERS_BULK: `${apiUrl}api/sds/v2/admin/parameters/bulk`,
+  MTC_SDS_V2_ADMIN_AUDIT: `${apiUrl}api/sds/v2/admin/audit/data-integrity`,
+  MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
+  MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
+  MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
@@ -77,39 +89,6 @@ export const server = {
   TUMBLE_DELETE_MODEL: `${apiUrl}api/tumble/deleteModel/`,  // with /:id
 
 
-  //--------------------System Engineer (v2 with RBAC)--------------------//
-  SYSTEM_GET_PROJECT: `${apiUrl}api/system/get_project`,
-  SYSTEM_GET_PROJECT_BY_ID: `${apiUrl}api/system/get_project`,  // with /:id
-  SYSTEM_CREATE_PROJECT: `${apiUrl}api/system/create_project`,
-  SYSTEM_UPDATE_PROJECT: `${apiUrl}api/system/update_project`,  // with /:id
-  SYSTEM_DELETE_PROJECT: `${apiUrl}api/system/delete_project`,  // with /:id
-  SYSTEM_CLOSE_PROJECT: `${apiUrl}api/system/close_project`,  // with /:id
-  SYSTEM_GET_PROJECT_STATS: `${apiUrl}api/system/get_project_stats`,  // with /:id
-  SYSTEM_GET_DASHBOARD_DATA: `${apiUrl}api/system/get_dashboard_data`,
-  SYSTEM_GET_DASHBOARD_DETAIL: `${apiUrl}api/system/get_dashboard_detail`,
-
-  // Project Members
-  SYSTEM_GET_PROJECT_MEMBERS: `${apiUrl}api/system/get_project_members`,  // with /:id
-  SYSTEM_ADD_PROJECT_MEMBER: `${apiUrl}api/system/add_project_member`,  // with /:id
-  SYSTEM_REMOVE_PROJECT_MEMBER: `${apiUrl}api/system/remove_project_member`,  // with /:id
-
-  // Tasks
-  SYSTEM_GET_TODOLIST: `${apiUrl}api/system/get_todolist`,  // with /:id
-  SYSTEM_GET_TASKS: `${apiUrl}api/system/get_tasks`,  // with /:id
-  SYSTEM_CREATE_TODOLIST: `${apiUrl}api/system/create_todolist`,
-  SYSTEM_CREATE_TASK: `${apiUrl}api/system/create_task`,
-  SYSTEM_UPDATE_TODOLIST: `${apiUrl}api/system/update_todolist`,  // with /:id
-  SYSTEM_UPDATE_TASK: `${apiUrl}api/system/update_task`,  // with /:id
-  SYSTEM_DELETE_TODOLIST: `${apiUrl}api/system/delete_todolist`,  // with /:id
-  SYSTEM_DELETE_TASK: `${apiUrl}api/system/delete_task`,  // with /:id
-  SYSTEM_REORDER_TODOLIST: `${apiUrl}api/system/reorder_todolist`,
-  SYSTEM_REORDER_TASKS: `${apiUrl}api/system/reorder_tasks`,
-
-  // Templates
-  SYSTEM_GET_TEMPLATES: `${apiUrl}api/system/get_templates`,
-  SYSTEM_GET_TEMPLATE_ITEMS: `${apiUrl}api/system/get_template_items`,  // with /:id
-  SYSTEM_CREATE_TEMPLATE: `${apiUrl}api/system/create_template`,
-  SYSTEM_APPLY_TEMPLATE: `${apiUrl}api/system/apply_template`,
 
   //--------------------System--------------------//
   USER_LOGIN: `${apiUrl}api/login-user`,

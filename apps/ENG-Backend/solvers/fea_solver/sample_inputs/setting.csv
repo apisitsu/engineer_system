@@ -1,0 +1,6 @@
+Setting,Value,Unit,Description
+BoundaryType,FixedInnerBore,,Inner surface is fully constrained
+LoadType,RadialDisplacement,,Displacement-controlled compression
+DisplacementMagnitude,0.5,mm,Max radial displacement on outer surface
+FrictionCoefficient,0.15,,Contact friction coefficient
+ContactType,SurfaceToSurface,,Contact formulation type

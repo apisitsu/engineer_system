@@ -10,6 +10,7 @@
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
+import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
 import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
 
@@ -215,6 +216,11 @@ export const createCardSlice = (set, get) => ({
             }
         } catch (err) {
             console.error('Failed to reorder card', err);
+            if (err.response?.status === 400 || err.response?.status === 403) {
+                Swal.fire('การดำเนินการถูกปฏิเสธ', err.response?.data?.error || 'Validation failed. Action not allowed.', 'error');
+            } else {
+                Swal.fire('เกิดข้อผิดพลาด', 'Failed to move card', 'error');
+            }
             get().fetchCardsForList(targetListId);
             if (sourceListId) get().fetchCardsForList(sourceListId);
         }

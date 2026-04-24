@@ -292,6 +292,26 @@ const ToolRequestContent = () => {
             }
         },
         {
+            title: 'Perf.',
+            dataIndex: 'completion_status',
+            key: 'completion_status',
+            width: 100,
+            render: (status, record) => {
+                if (!status || status === 'Pending') return '-';
+                const color = status === 'On time' ? 'success' : 'error';
+                return (
+                    <Space direction="vertical" size={0}>
+                        <Tag color={color} style={{ margin: 0 }}>{status}</Tag>
+                        {record.diff_days > 0 && (
+                            <Text type="secondary" style={{ fontSize: '10px' }}>
+                                ({record.diff_days} day{record.diff_days > 1 ? 's' : ''})
+                            </Text>
+                        )}
+                    </Space>
+                );
+            }
+        },
+        {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',

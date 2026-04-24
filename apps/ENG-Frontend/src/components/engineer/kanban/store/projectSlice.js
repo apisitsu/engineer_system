@@ -167,9 +167,11 @@ export const createProjectSlice = (set, get) => ({
         }
     },
 
-    addProjectManager: async (projectId, uCode) => {
+    addProjectManager: async (projectId, uCode, role) => {
         try {
-            await axios.post(`${server.KANBAN_PROJECTS}/${projectId}/managers`, { target_u_code: uCode });
+            const payload = { target_u_code: uCode };
+            if (role) payload.role = role;
+            await axios.post(`${server.KANBAN_PROJECTS}/${projectId}/managers`, payload);
             get().fetchProjectManagers(projectId);
         } catch (err) {
             console.error('Failed to add manager', err);

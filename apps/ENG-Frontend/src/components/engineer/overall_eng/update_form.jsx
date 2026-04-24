@@ -4,6 +4,7 @@ import { Modal, Button, Form, Input, DatePicker, Select, Row, Col, Typography, A
 import { InfoCircleFilled, FileProtectOutlined } from '@ant-design/icons';
 import { MEASURING_TOOL_OPTIONS } from './options_measuring';
 import moment from 'moment';
+import dayjs from 'dayjs';
 import { server } from '../../../constance/constance';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -34,16 +35,16 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
   // Reset Form เมื่อเปิด Modal ใหม่
   useEffect(() => {
     if (open && initialData) {
-        // แปลงวันที่ string เป็น moment object เพื่อให้ DatePicker แสดงผลถูก
+        // แปลงวันที่ string เป็น dayjs object เพื่อให้ DatePicker แสดงผลถูก (Antd 5 ใช ้ dayjs)
         const formData = { ...initialData };
         if (formData.issue_date) {
-            formData.issue_date = moment(formData.issue_date);
+            formData.issue_date = dayjs(formData.issue_date);
         }
         form.setFieldsValue(formData);
     } else {
         form.resetFields();
     }
-    if (onCancel) {
+    if (onCancel && !open) {
       form.resetFields();
     }
 
@@ -84,7 +85,8 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
       // console.log(values)
 
       if (currentValues.issue_date) {
-        currentValues.issue_date = moment(currentValues.issue_date).format('YYYY-MM-DD');
+        // Antd 5 DatePicker ส่งค่ามาเป็น dayjs object เสมอ
+        currentValues.issue_date = dayjs(currentValues.issue_date).format('YYYY-MM-DD');
       }
 
       const fieldsToCheck = ['issue_date', 'measuring_tools', 'judgement', 'reason', 'remark'];
@@ -119,10 +121,10 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
         setIsConflictModalOpen(true);
       } else {
-        // const payload = { ...initialData, ...currentValues };
+        const payload = { ...initialData, ...currentValues };
         // console.log("Final Payload:", payload);
 
-        // onSubmit(payload);
+        onSubmit(payload);
         onCancel();
       }
     });
@@ -162,7 +164,7 @@ const onSubmit = async (payload) => {
   };
 
   const handleConfirmResolution = () => {
-    const finalPayload = initialData;
+    const finalPayload = { ...initialData }; // คัดลอกข้อมูลเดิมก่อนแก้ไข เพื่อไม่ให้กระทบ prop โดยตรง
 
     conflictList.forEach((conflict) => {
       const { field, oldValue, newValue } = conflict;
@@ -184,6 +186,7 @@ const onSubmit = async (payload) => {
     setPendingValues(null);
     onCancel(); 
   };
+
 
   const sectionStyle = { border: '1px solid #d9d9d9', borderRadius: '6px', overflow: 'hidden', marginBottom: '16px' };
   const headerStyle = { backgroundColor: '#fafafa', padding: '8px 16px', borderBottom: '1px solid #d9d9d9', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' };

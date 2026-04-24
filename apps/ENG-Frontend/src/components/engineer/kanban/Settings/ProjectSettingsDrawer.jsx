@@ -144,7 +144,12 @@ const ProjectSettingsDrawer = () => {
     const [editingGradient, setEditingGradient] = useState(GRADIENTS[0]);
     const [editingIcon, setEditingIcon] = useState('rocket');
     const [editingPrivate, setEditingPrivate] = useState(false);
+    const [editingPriority, setEditingPriority] = useState('Medium');
+    const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
+
+    // Role Editing State
+    const [editingRoleUcode, setEditingRoleUcode] = useState(null);
 
     const targetId = projectSettingsTargetId || activeProject?.id;
     const activeProjectForPermissions = projects.find(p => String(p.id) === String(targetId));
@@ -152,6 +157,13 @@ const ProjectSettingsDrawer = () => {
         isPrivateProject: activeProjectForPermissions?.is_private,
         projectRole: activeProjectForPermissions?.role,
     });
+
+    const userInfo = useAuthStore(state => state.userInfo) || {};
+    const userDepartment = useAuthStore(state => state.userDepartment);
+    const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
+    const isOwner = activeProjectForPermissions?.role === 'owner';
+    const canChangeRole = isADorMgr || isOwner;
 
     useEffect(() => {
         if (isProjectSettingsOpen) fetchUserPreferences();
@@ -197,6 +209,8 @@ const ProjectSettingsDrawer = () => {
             background_value: editingGradient,
             icon: editingIcon,
             is_private: editingPrivate,
+            priority: editingPriority,
+            status: editingStatus,
         });
         setEditingId(null);
         setEditingName('');
@@ -210,6 +224,8 @@ const ProjectSettingsDrawer = () => {
         setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
         setEditingIcon(proj.icon || 'rocket');
         setEditingPrivate(proj.is_private || false);
+        setEditingPriority(proj.priority || 'Medium');
+        setEditingStatus(proj.status || 'Active');
         setMemberSearch('');
         fetchProjectManagers(proj.id);
     };
@@ -228,6 +244,37 @@ const ProjectSettingsDrawer = () => {
         if (ok) {
             Swal.fire({ icon: 'success', title: 'Project Deleted', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
         }
+    };
+
+    const handleRemoveMemberClick = (projectId, member) => {
+        if (member.role === 'owner') {
+            const owners = projectManagers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Remove Last Owner',
+                    text: 'This project must have at least one owner. Please assign another member as an owner (Transfer Ownership) before removing this user.'
+                });
+                return;
+            }
+        }
+        removeProjectManager(projectId, member.u_code);
+    };
+
+    const handleRoleChange = (projectId, member, newRole) => {
+        if (member.role === 'owner' && newRole !== 'owner') {
+            const owners = projectManagers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Change Role',
+                    text: 'This project must have at least one owner. Please assign another member as an owner before demoting this user.'
+                });
+                return;
+            }
+        }
+        addProjectManager(projectId, member.u_code, newRole);
+        setEditingRoleUcode(null);
     };
 
     // Which projects to show in the list
@@ -363,6 +410,26 @@ const ProjectSettingsDrawer = () => {
                                                 <IconPicker value={editingIcon} onChange={setEditingIcon} theme={theme} />
                                             </div>
 
+                                            <div style={{ display: 'flex', gap: 16 }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Priority</Text>
+                                                    <Select value={editingPriority} onChange={setEditingPriority} style={{ width: '100%' }}>
+                                                        <Select.Option value="Low">Low</Select.Option>
+                                                        <Select.Option value="Medium">Medium</Select.Option>
+                                                        <Select.Option value="High">High</Select.Option>
+                                                        <Select.Option value="Urgent">Urgent</Select.Option>
+                                                    </Select>
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Status</Text>
+                                                    <Select value={editingStatus} onChange={setEditingStatus} style={{ width: '100%' }}>
+                                                        <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                                        <Select.Option value="Active">Active</Select.Option>
+                                                        <Select.Option value="Completed">Completed</Select.Option>
+                                                    </Select>
+                                                </div>
+                                            </div>
+
                                             <Divider style={{ margin: '8px 0' }} />
 
                                             {/* Private Project Toggle */}
@@ -385,32 +452,60 @@ const ProjectSettingsDrawer = () => {
                                             {/* Members Section inside Edit Modal */}
                                             <div>
                                                 <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Project Members</Text>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                                                <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
                                                     {projectManagers.map(mgr => {
-                                                        const userObj = users.find(u => u.u_code === mgr.u_code);
+                                                        const userObj = users.find(u => u.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
                                                         const words = (userObj?.u_name || '').split(' ');
                                                         const initials = words.length >= 2
                                                             ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
                                                             : (userObj?.u_nickname?.[0] || mgr.u_code[0]).toUpperCase();
                                                         return (
-                                                            <div key={mgr.id} style={{
-                                                                display: 'flex', alignItems: 'center', gap: 4,
-                                                                background: theme.colors.background, padding: '2px 8px 2px 2px',
-                                                                borderRadius: 16, border: `1px solid ${theme.colors.border}`
+                                                            <div key={mgr.u_code} style={{
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                padding: '6px 8px', borderRadius: theme.borderRadius.sm,
+                                                                background: `${theme.colors.info}10`,
                                                             }}>
-                                                                {userObj?.profile_img_b64 ? (
-                                                                    <Avatar size={24} src={userObj.profile_img_b64} />
-                                                                ) : (
-                                                                    <Avatar size={24}>{initials}</Avatar>
-                                                                )}
-                                                                <Text style={{ fontSize: 12 }}>{userObj?.u_name || userObj?.u_nickname || mgr.u_code}</Text>
-                                                                {mgr.role !== 'owner' && (
-                                                                    <AiOutlineClose
-                                                                        size={12}
-                                                                        style={{ cursor: 'pointer', marginLeft: 4, color: theme.colors.textSecondary }}
-                                                                        onClick={() => removeProjectManager(proj.id, mgr.u_code)}
-                                                                    />
-                                                                )}
+                                                                <Space>
+                                                                    {userObj?.profile_img_b64 ? (
+                                                                        <Avatar size="small" src={userObj.profile_img_b64} />
+                                                                    ) : (
+                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                                            {initials}
+                                                                        </Avatar>
+                                                                    )}
+                                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                        <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{userObj?.u_name || userObj?.u_nickname || userObj?.u_code}</Text>
+                                                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{userObj?.u_code}</Text>
+                                                                    </div>
+                                                                </Space>
+                                                                <Space>
+                                                                    {editingRoleUcode === mgr.u_code ? (
+                                                                        <>
+                                                                            <Select
+                                                                                size="small"
+                                                                                value={mgr.role}
+                                                                                onChange={(newRole) => handleRoleChange(proj.id, mgr, newRole)}
+                                                                                options={[
+                                                                                    { label: 'Viewer', value: 'viewer' },
+                                                                                    { label: 'Editor', value: 'editor' },
+                                                                                    { label: 'Owner', value: 'owner' }
+                                                                                ]}
+                                                                                style={{ width: 85, fontSize: 11 }}
+                                                                            />
+                                                                            <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Text type="secondary" style={{ fontSize: 11 }}>{mgr.role}</Text>
+                                                                            {canChangeRole && (
+                                                                                <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(mgr.u_code)} />
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {canChangeRole && (
+                                                                        <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveMemberClick(proj.id, mgr)} />
+                                                                    )}
+                                                                </Space>
                                                             </div>
                                                         );
                                                     })}
@@ -431,7 +526,18 @@ const ProjectSettingsDrawer = () => {
                                                     >
                                                         {availableUsersForProject.map(u => (
                                                             <Select.Option key={u.u_code} value={u.u_code}>
-                                                                {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                                <Space>
+                                                                    {u.profile_img_b64 ? (
+                                                                        <Avatar size="small" src={u.profile_img_b64} />
+                                                                    ) : (
+                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                                            {(u.u_name || u.u_code)[0].toUpperCase()}
+                                                                        </Avatar>
+                                                                    )}
+                                                                    <Text style={{ fontSize: 13 }}>
+                                                                        {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                                    </Text>
+                                                                </Space>
                                                             </Select.Option>
                                                         ))}
                                                     </Select>

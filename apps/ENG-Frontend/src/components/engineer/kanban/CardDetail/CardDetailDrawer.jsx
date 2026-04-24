@@ -6,12 +6,12 @@ import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
 import { server } from '../../../../constance/constance';
 
-import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, } from 'react-icons/md';
+import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, MdLockOutline, MdFamilyRestroom } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
 import { GoDiscussionClosed } from 'react-icons/go';
-import { IoCloseOutline, IoSearchOutline, IoArchiveOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoSearchOutline, IoArchiveOutline, IoAddOutline } from 'react-icons/io5';
 import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy, AiOutlineEdit } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
 import { RiInputField } from 'react-icons/ri';
@@ -111,7 +111,7 @@ const renderCommentContent = (content) => {
 const CardDetailDrawer = () => {
     const {
         isCardDetailOpen, activeCardId, activeCardDetail, closeCardDetail,
-        lists, labels, updateCard, deleteCard, moveCard,
+        lists, cards, labels, updateCard, deleteCard, moveCard,
         addComment, deleteComment,
         createTaskList, updateTaskList, deleteTaskList, createTask, updateTask, deleteTask,
 
@@ -119,8 +119,8 @@ const CardDetailDrawer = () => {
         addLinkAttachment, addFileAttachment, deleteAttachment,
         fetchCustomFieldValues, upsertCustomFieldValue,
         activeBoardMembers, addCardMember, removeCardMember,
-        projectManagers, users, activeProject,
-        createCardIssue, updateCardIssue, deleteCardIssue
+        projectManagers, users, activeProject, activeBoard,
+        createCardIssue, updateCardIssue, deleteCardIssue, createLabel
     } = useKanbanStore();
     const { theme } = useTheme();
     const { user, empNo } = useAuthStore();
@@ -145,6 +145,9 @@ const CardDetailDrawer = () => {
 
     const [showMoveSelect, setShowMoveSelect] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
+    const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+    const [newLabelName, setNewLabelName] = useState('');
+    const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
     const [activityLog, setActivityLog] = useState([]);
     const [showActivityLog, setShowActivityLog] = useState(false);
     const [showLinkAttach, setShowLinkAttach] = useState(false);
@@ -152,6 +155,7 @@ const CardDetailDrawer = () => {
     const [linkName, setLinkName] = useState('');
     const [customFieldValues, setCustomFieldValues] = useState([]);
     const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+    const [showPrioritySelect, setShowPrioritySelect] = useState(false);
     const [showEstimatedHours, setShowEstimatedHours] = useState(false);
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [memberSearch, setMemberSearch] = useState('');
@@ -162,6 +166,9 @@ const CardDetailDrawer = () => {
     const [editProblem, setEditProblem] = useState('');
     const [editSolution, setEditSolution] = useState('');
     const [showProblemSection, setShowProblemSection] = useState(false);
+
+    const [showDependencySelect, setShowDependencySelect] = useState(false);
+    const [editSuspendReason, setEditSuspendReason] = useState('');
 
     const fileInputRef = useRef(null);
     const [isEditingMemo, setIsEditingMemo] = useState(false);
@@ -185,16 +192,30 @@ const CardDetailDrawer = () => {
     const {
         canManageCard,
         canEditCard,
-        isReadOnly,
+        isReadOnly: baseIsReadOnly,
         isCardMember,
         isSuperAdmin,
-        isManagerOrCoord
+        isManagerOrCoord,
+        canManageBoardStructure
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
         boardRole: activeBoardMembers?.find(m => m.u_code === currentUserCode)?.role,
         cardRole: tempCardMembers.find(m => m.u_code === currentUserCode)?.role,
     });
+
+    const parentCard = useMemo(() => {
+        if (!card?.parent_id) return null;
+        return Object.values(cards || {}).flat().find(c => String(c.id) === String(card.parent_id));
+    }, [card?.parent_id, cards]);
+
+    const childCards = useMemo(() => {
+        if (!card?.id || !cards) return [];
+        return Object.values(cards).flat().filter(c => String(c.parent_id) === String(card.id));
+    }, [card?.id, cards]);
+
+    const isEffectivelySuspended = card?.is_suspended || parentCard?.is_suspended;
+    const isReadOnly = baseIsReadOnly || isEffectivelySuspended;
 
     const canEditEstimatedHours = isSuperAdmin || isManagerOrCoord;
 
@@ -312,6 +333,7 @@ const CardDetailDrawer = () => {
             setShowProblemSection((card.issues && card.issues.length > 0) || !!card.problem_detail || !!card.solution_detail);
             setShowMemoSection(!!card.memo);
             setEditEstimatedHours(card.estimated_hours || 0);
+            setEditSuspendReason(card.suspended_reason || '');
 
             fetchCardActions(card.id).then(actions => setActivityLog(actions));
             fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
@@ -542,7 +564,7 @@ const CardDetailDrawer = () => {
             url = url.substring(1, url.length - 1).trim();
         }
 
-        const urlPattern = /^(https?:\/\/)?([\w\d-]+\.)+[\w\d]{2,}(\/.*)?$/i;
+        const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
         const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
 
         if (!urlPattern.test(url) && !localPathPattern.test(url)) {
@@ -641,6 +663,30 @@ const CardDetailDrawer = () => {
                             <Row gutter={24}>
                                 {/* ─── LEFT COLUMN ─── */}
                                 <Col span={16}>
+                                    {/* Suspended Banner */}
+                                    {isEffectivelySuspended && (
+                                        <div style={{
+                                            padding: theme.spacing.md,
+                                            background: '#fff1f0',
+                                            border: '1px solid #ffa39e',
+                                            borderRadius: theme.borderRadius.md,
+                                            marginBottom: theme.spacing.xl,
+                                            display: 'flex', gap: 12, alignItems: 'center'
+                                        }}>
+                                            <div style={{ width: 24, height: 24, background: '#cf1322', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                <MdLockOutline size={14} color="#fff" />
+                                            </div>
+                                            <div>
+                                                <Text strong style={{ color: '#cf1322', display: 'block', fontSize: 14 }}>
+                                                    {card.is_suspended ? 'This card is Suspended.' : 'This card is Suspended (Inherited from Parent).'}
+                                                </Text>
+                                                <Text style={{ color: '#cf1322', fontSize: 13 }}>
+                                                    Reason: {(card.is_suspended ? card.suspended_reason : parentCard?.suspended_reason) || 'No reason provided.'}
+                                                </Text>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Card Title */}
                                     <div style={{ marginBottom: theme.spacing.xl }}>
                                         <Space align="start" size={8} style={{ width: '100%' }}>
@@ -761,6 +807,16 @@ const CardDetailDrawer = () => {
                                                 </Tag>
                                             </div>
                                         )}
+
+                                        {/* Priority */}
+                                        <div>
+                                            <Text style={{ fontSize: 11, textTransform: 'uppercase', color: theme.colors.textTertiary, letterSpacing: 1, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                                                Priority
+                                            </Text>
+                                            <Tag color={card.priority === 'high' ? 'red' : card.priority === 'low' ? 'blue' : 'orange'} style={{ borderRadius: 4, textTransform: 'capitalize' }}>
+                                                {card.priority || 'Medium'}
+                                            </Tag>
+                                        </div>
 
                                         {/* Estimated Hours Badge */}
                                         {card.estimated_hours > 0 && (
@@ -1365,6 +1421,98 @@ const CardDetailDrawer = () => {
                                         </div>
                                     )}
 
+                                    {/* ─── Parent/Child ─── */}
+                                    {(parentCard || parseInt(card.total_children_count) > 0) && (
+                                        <div style={{ marginBottom: theme.spacing.xl }}>
+                                            <SectionHeader icon={<MdFamilyRestroom />} title="Parent/Child" theme={theme} />
+                                            <div style={{ marginLeft: 28 }}>
+                                                {/* Parent Info */}
+                                                {parentCard && (
+                                                    <div style={{
+                                                        background: theme.colors.surface,
+                                                        border: `1px solid ${theme.colors.border}`,
+                                                        borderRadius: theme.borderRadius.md,
+                                                        padding: '12px 16px',
+                                                        marginBottom: parseInt(card.total_children_count) > 0 ? 12 : 0,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease',
+                                                    }}
+                                                    onClick={() => {
+                                                        closeCardDetail();
+                                                        setTimeout(() => {
+                                                            useKanbanStore.getState().openCardDetail(parentCard.id);
+                                                        }, 100);
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.borderColor = theme.colors.primary}
+                                                    onMouseLeave={e => e.currentTarget.style.borderColor = theme.colors.border}
+                                                    >
+                                                        <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Parent Card</Text>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <FaCheckSquare style={{ color: parentCard.is_closed ? theme.colors.success : theme.colors.textTertiary }} />
+                                                            <Text strong style={{ fontSize: 14 }}>{parentCard.name}</Text>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Child Progress */}
+                                                {parseInt(card.total_children_count) > 0 && (
+                                                    <div style={{
+                                                        background: theme.colors.surface,
+                                                        border: `1px solid ${theme.colors.border}`,
+                                                        borderRadius: theme.borderRadius.md,
+                                                        padding: '12px 16px',
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                            <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Child Progress</Text>
+                                                            <Text strong style={{ fontSize: 12 }}>
+                                                                {card.completed_children_count || 0} / {card.total_children_count} Completed
+                                                            </Text>
+                                                        </div>
+                                                        <Progress 
+                                                            percent={Math.round((parseInt(card.completed_children_count || 0) / parseInt(card.total_children_count)) * 100)} 
+                                                            size="small" 
+                                                            strokeColor={theme.colors.success} 
+                                                            status={parseInt(card.completed_children_count || 0) === parseInt(card.total_children_count) ? 'success' : 'active'}
+                                                            style={{ marginBottom: 12 }}
+                                                        />
+
+                                                        {/* Child List */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                            {childCards.map(child => {
+                                                                const list = lists.find(l => String(l.id) === String(child.list_id));
+                                                                const listName = (list?.name || '').toLowerCase();
+                                                                const isDone = listName.includes('done') || listName.includes('completed') || listName.includes('finish') || listName.includes('เสร็จ');
+                                                                
+                                                                return (
+                                                                    <div key={child.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: isDone ? theme.colors.success : theme.colors.textTertiary }} />
+                                                                        <Text 
+                                                                            delete={isDone} 
+                                                                            type={isDone ? 'secondary' : 'default'}
+                                                                            style={{ 
+                                                                                fontSize: 13,
+                                                                                cursor: 'pointer',
+                                                                                flex: 1
+                                                                            }}
+                                                                            onClick={() => {
+                                                                                closeCardDetail();
+                                                                                setTimeout(() => {
+                                                                                    useKanbanStore.getState().openCardDetail(child.id);
+                                                                                }, 100);
+                                                                            }}
+                                                                        >
+                                                                            {child.name}
+                                                                        </Text>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* ─── Comments & Actions Tabs (Planka-style) ─── */}
                                     <div style={{ marginBottom: theme.spacing.xl }}>
                                         <Tabs
@@ -1744,7 +1892,59 @@ const CardDetailDrawer = () => {
                                                                     </div>
                                                                 );
                                                             }) : (
-                                                                <Text type="secondary" style={{ fontSize: 13 }}>No labels on this board yet.</Text>
+                                                                <Text type="secondary" style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>No labels on this board yet.</Text>
+                                                            )}
+                                                            {canManageBoardStructure && (
+                                                                <>
+                                                                    <Divider style={{ margin: '8px 0' }} />
+                                                                    {isCreatingLabel ? (
+                                                                        <div style={{ marginTop: 8 }}>
+                                                                            <Input
+                                                                                size="small"
+                                                                                placeholder="Label name (optional)"
+                                                                                value={newLabelName}
+                                                                                onChange={e => setNewLabelName(e.target.value)}
+                                                                                style={{ marginBottom: 8, borderRadius: theme.borderRadius.sm }}
+                                                                            />
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                                                                                {LABEL_COLORS.map(color => (
+                                                                                    <div
+                                                                                        key={color}
+                                                                                        onClick={() => setNewLabelColor(color)}
+                                                                                        style={{
+                                                                                            width: 24, height: 20,
+                                                                                            borderRadius: 4,
+                                                                                            background: color,
+                                                                                            cursor: 'pointer',
+                                                                                            border: newLabelColor === color ? '2px solid #333' : '2px solid transparent',
+                                                                                            transition: `all ${theme.transitions.fast}`,
+                                                                                        }}
+                                                                                    />
+                                                                                ))}
+                                                                            </div>
+                                                                            <Space size={4}>
+                                                                                <Button size="small" type="primary" onClick={async () => {
+                                                                                    if (activeBoard?.id) {
+                                                                                        await createLabel(activeBoard.id, newLabelName, newLabelColor);
+                                                                                        setNewLabelName('');
+                                                                                        setIsCreatingLabel(false);
+                                                                                    }
+                                                                                }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>Create</Button>
+                                                                                <Button size="small" onClick={() => setIsCreatingLabel(false)}>Cancel</Button>
+                                                                            </Space>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <Button
+                                                                            type="dashed"
+                                                                            block
+                                                                            size="small"
+                                                                            icon={<IoAddOutline />}
+                                                                            onClick={() => setIsCreatingLabel(true)}
+                                                                        >
+                                                                            Create a new label
+                                                                        </Button>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     )}
@@ -1776,6 +1976,29 @@ const CardDetailDrawer = () => {
                                                                     Remove Due Date
                                                                 </Button>
                                                             )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Priority Sidebar */}
+                                                    <SidebarButton
+                                                        icon={<MdLowPriority size={16} />}
+                                                        label="Priority"
+                                                        active={showPrioritySelect}
+                                                        onClick={() => setShowPrioritySelect(!showPrioritySelect)}
+                                                        theme={theme}
+                                                    />
+                                                    {showPrioritySelect && (
+                                                        <div style={{ marginTop: 8, marginBottom: 8 }}>
+                                                            <Select
+                                                                value={card.priority || 'medium'}
+                                                                onChange={(value) => updateCard(card.id, { priority: value })}
+                                                                style={{ width: '100%' }}
+                                                                options={[
+                                                                    { label: 'Low', value: 'low' },
+                                                                    { label: 'Medium', value: 'medium' },
+                                                                    { label: 'High', value: 'high' }
+                                                                ]}
+                                                            />
                                                         </div>
                                                     )}
 
@@ -1917,7 +2140,7 @@ const CardDetailDrawer = () => {
                                                                         url = url.substring(1, url.length - 1).trim();
                                                                     }
 
-                                                                    const urlPattern = /^(https?:\/\/)?([\w\d-]+\.)+[\w\d]{2,}(\/.*)?$/i;
+                                                                    const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
                                                                     const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
 
                                                                     if (!urlPattern.test(url) && !localPathPattern.test(url)) {
@@ -1971,7 +2194,7 @@ const CardDetailDrawer = () => {
                                         <Divider style={{ margin: `${theme.spacing.sm} 0` }} />
 
                                         {/* Actions */}
-                                        {!isReadOnly && (
+                                        {!baseIsReadOnly && (
                                             <div style={{ marginBottom: theme.spacing.lg }}>
                                                 <Text strong style={{
                                                     fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
@@ -1980,6 +2203,38 @@ const CardDetailDrawer = () => {
                                                     Actions
                                                 </Text>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                    {/* Dependency */}
+                                                    <SidebarButton
+                                                        icon={<BiLinkExternal size={16} />}
+                                                        label="Dependency"
+                                                        active={showDependencySelect}
+                                                        onClick={() => setShowDependencySelect(!showDependencySelect)}
+                                                        theme={theme}
+                                                    />
+                                                    {showDependencySelect && (
+                                                        <div style={{ marginTop: 4, marginBottom: 8, background: theme.colors.surface, padding: theme.spacing.sm, borderRadius: theme.borderRadius.md, border: `1px solid ${theme.colors.border}` }}>
+                                                            <Text style={{ fontSize: 11, color: theme.colors.textTertiary, marginBottom: 4, display: 'block' }}>Select Parent Card</Text>
+                                                            <Select
+                                                                allowClear
+                                                                showSearch
+                                                                placeholder="Search for a parent..."
+                                                                style={{ width: '100%' }}
+                                                                value={card.parent_id ? String(card.parent_id) : null}
+                                                                onChange={async (val) => {
+                                                                    try {
+                                                                        await updateCard(card.id, { parent_id: val || null });
+                                                                        message.success('Dependency updated');
+                                                                    } catch (err) {
+                                                                        // Error is already handled by sweetalert in store, but we can do a toast
+                                                                    }
+                                                                }}
+                                                                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                                                                options={Object.values(cards || {}).flat().filter(c => String(c.id) !== String(card.id)).map(c => ({ label: c.name, value: String(c.id) }))}
+                                                                disabled={isEffectivelySuspended}
+                                                            />
+                                                        </div>
+                                                    )}
+
                                                     {/* Move */}
                                                     <SidebarButton
                                                         icon={<BiMove size={16} />}
@@ -2032,7 +2287,6 @@ const CardDetailDrawer = () => {
                                                         </Button>
                                                     </Popconfirm>
 
-                                                    {/* Delete */}
                                                     {canManageCard && (
                                                         <Popconfirm
                                                             title="Delete this card?"
@@ -2050,6 +2304,56 @@ const CardDetailDrawer = () => {
                                                                 Delete Card
                                                             </Button>
                                                         </Popconfirm>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Suspend Action (always visible if canManageCard so they can resume) */}
+                                        {canManageCard && (
+                                            <div style={{ marginBottom: theme.spacing.lg }}>
+                                                <Text strong style={{
+                                                    fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
+                                                    color: theme.colors.textTertiary, display: 'block', marginBottom: 8
+                                                }}>
+                                                    Card Status
+                                                </Text>
+                                                <div style={{
+                                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                                    background: card.is_suspended ? '#fff1f0' : theme.colors.surface,
+                                                    border: `1px solid ${card.is_suspended ? '#ffa39e' : theme.colors.border}`,
+                                                    borderRadius: theme.borderRadius.md, padding: '8px 12px'
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            <Text strong style={{ fontSize: 13, lineHeight: '1.2', color: card.is_suspended ? '#cf1322' : 'inherit' }}>Suspend Card</Text>
+                                                            <Text type="secondary" style={{ fontSize: 11 }}>Lock card & block actions</Text>
+                                                        </div>
+                                                        <Switch
+                                                            size="small"
+                                                            checked={card.is_suspended}
+                                                            onChange={async (val) => {
+                                                                if (!val) {
+                                                                    await updateCard(card.id, { is_suspended: false, suspended_reason: null });
+                                                                    setEditSuspendReason('');
+                                                                } else {
+                                                                    await updateCard(card.id, { is_suspended: true, suspended_reason: editSuspendReason });
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {card.is_suspended && (
+                                                        <div style={{ display: 'flex', gap: 4 }}>
+                                                            <Input
+                                                                size="small"
+                                                                placeholder="Reason for suspension..."
+                                                                value={editSuspendReason}
+                                                                onChange={e => setEditSuspendReason(e.target.value)}
+                                                                onPressEnter={() => updateCard(card.id, { suspended_reason: editSuspendReason })}
+                                                                onBlur={() => updateCard(card.id, { suspended_reason: editSuspendReason })}
+                                                                style={{ borderRadius: theme.borderRadius.sm }}
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

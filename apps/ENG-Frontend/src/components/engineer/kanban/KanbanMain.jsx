@@ -163,6 +163,17 @@ const IconPicker = ({ value, onChange, theme }) => (
     </div>
 );
 
+// ─── Priority Color Helper ─────────────────────────────────────────
+const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+        case 'low': return 'blue';
+        case 'high': return 'volcano';
+        case 'urgent': return 'red';
+        case 'medium':
+        default: return 'green';
+    }
+};
+
 // ─── Project Stat Card ─────────────────────────────────────────────
 const StatCard = ({ icon, label, value, color, theme }) => (
     <div style={{
@@ -318,6 +329,18 @@ const ProjectGridCard = ({ project, onClick, onToggleFavorite, onOpenSettings, t
                 }}>
                     {project.description || 'No description'}
                 </Text>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <IoLayersOutline size={13} color={theme.colors.textTertiary} />
@@ -382,6 +405,16 @@ const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, th
                             <IoLockClosedOutline size={10} /> Private
                         </Tag>
                     )}
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
                 </div>
                 <Text style={{ fontSize: 12, color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {project.description || 'No description'}
@@ -430,6 +463,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const [sortBy, setSortBy] = useState('recent');
     const [viewMode, setViewMode] = useState('grid');
     const [filterOwner, setFilterOwner] = useState('all'); // 'all' | 'mine' | 'favorites'
+    const [projectStatusFilter, setProjectStatusFilter] = useState('active'); // 'active' | 'waiting' | 'suspended' | 'completed'
 
     // Global permissions
     const { canCreateProject } = useKanbanPermissions();
@@ -438,8 +472,9 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
 
     const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
     const [selectedIcon, setSelectedIcon] = useState('rocket');
-
     const [isPrivate, setIsPrivate] = useState(false);
+    const [selectedPriority, setSelectedPriority] = useState('Medium');
+    const [selectedStatus, setSelectedStatus] = useState('Active');
 
     const handleCreate = async (values) => {
         const result = await createProject({
@@ -448,6 +483,8 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             background_value: selectedGradient,
             icon: selectedIcon,
             is_private: isPrivate,
+            priority: selectedPriority,
+            status: selectedStatus,
         });
         if (result) {
             setShowCreateModal(false);
@@ -455,6 +492,8 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             setSelectedGradient(GRADIENTS[0]);
             setSelectedIcon('rocket');
             setIsPrivate(false);
+            setSelectedPriority('Medium');
+            setSelectedStatus('Active');
             fetchProjects();
         }
     };
@@ -464,22 +503,30 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     };
 
     // Computed stats for dashboard
-    const stats = useMemo(() => ({
-        total: projects.length,
-        totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-        owned: projects.filter(p => p.is_owner).length,
-        favorites: projects.filter(p => p.is_favorite).length,
-        recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
-    }), [projects]);
+    const stats = useMemo(() => {
+        const activeProjects = projects.filter(p => (p.status || 'active').toLowerCase() === 'active');
+        return {
+            total: activeProjects.length,
+            totalBoards: activeProjects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
+            owned: activeProjects.filter(p => p.role === 'owner').length,
+            favorites: activeProjects.filter(p => p.is_favorite).length,
+            recent: [...activeProjects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
+            activeProjects // Provide the filtered list for rendering distribution
+        };
+    }, [projects]);
 
     // Filtered & sorted projects for tab 2
     const filteredProjects = useMemo(() => {
         let list = [...projects];
+
+        // Status Filter
+        list = list.filter(p => (p.status || 'active').toLowerCase() === projectStatusFilter);
+
         if (search) {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
+        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -487,7 +534,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
         else if (sortBy === 'boards') list.sort((a, b) => (b.board_count || 0) - (a.board_count || 0));
 
         return list;
-    }, [projects, search, filterOwner, sortBy]);
+    }, [projects, search, filterOwner, sortBy, projectStatusFilter]);
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: theme.colors.background, overflow: 'hidden' }}>
@@ -649,7 +696,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                                 </Button>
 
                                                 <Button>Summit</Button>
-                                                {/* )} */}
                                             </div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
@@ -661,7 +707,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </div>
 
                                     {/* Board distribution */}
-                                    {projects.length > 0 && (
+                                    {stats.activeProjects.length > 0 && (
                                         <div style={{ marginTop: theme.spacing['2xl'] }}>
                                             <Text strong style={{ fontSize: 13, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: theme.spacing.md }}>
                                                 Board Distribution
@@ -672,7 +718,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                                 borderRadius: theme.borderRadius.lg,
                                                 padding: theme.spacing.lg,
                                             }}>
-                                                {projects.filter(p => parseInt(p.board_count) > 0).slice(0, 8).map(p => {
+                                                {stats.activeProjects.filter(p => parseInt(p.board_count) > 0).slice(0, 8).map(p => {
                                                     const pct = stats.totalBoards > 0 ? Math.round((parseInt(p.board_count) / stats.totalBoards) * 100) : 0;
                                                     const gradient = p.background_value || GRADIENTS[(p.id || 0) % GRADIENTS.length];
                                                     return (
@@ -786,6 +832,21 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                 )}
                             </div>
 
+                            {/* Status Sub-Tabs */}
+                            <Tabs
+                                activeKey={projectStatusFilter}
+                                onChange={setProjectStatusFilter}
+                                type="line"
+                                size="middle"
+                                style={{ marginBottom: theme.spacing.md }}
+                                items={[
+                                    { key: 'active', label: `Active (${projects.filter(p => (p.status || 'active').toLowerCase() === 'active').length})` },
+                                    { key: 'waiting', label: `Pool (${projects.filter(p => (p.status || '').toLowerCase() === 'waiting').length})` },
+                                    { key: 'suspended', label: `Suspended (${projects.filter(p => (p.status || '').toLowerCase() === 'suspended').length})` },
+                                    { key: 'completed', label: `Completed (${projects.filter(p => (p.status || '').toLowerCase() === 'completed').length})` },
+                                ]}
+                            />
+
                             {isLoading && projects.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
                             ) : filteredProjects.length === 0 ? (
@@ -872,6 +933,23 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                             </Text>
                         </div>
                     </Form.Item>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <Form.Item label="Priority" style={{ flex: 1 }}>
+                            <Select value={selectedPriority} onChange={setSelectedPriority}>
+                                <Select.Option value="Low">Low</Select.Option>
+                                <Select.Option value="Medium">Medium</Select.Option>
+                                <Select.Option value="High">High</Select.Option>
+                                <Select.Option value="Urgent">Urgent</Select.Option>
+                            </Select>
+                        </Form.Item>
+                        <Form.Item label="Status" style={{ flex: 1 }}>
+                            <Select value={selectedStatus} onChange={setSelectedStatus}>
+                                <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                <Select.Option value="Active">Active</Select.Option>
+                                <Select.Option value="Completed">Completed</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </div>
                     <Form.Item>
                         <Button type="primary" htmlType="submit" block
                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, height: 40 }}
