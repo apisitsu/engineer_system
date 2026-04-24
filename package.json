@@ -5,20 +5,27 @@
   "workspaces": [
     "apps/*"
   ],
-  "scripts": {
+    "scripts": {
+    "build": "npm run build --workspaces --if-present",
     "dev:backend": "npm run dev --workspace=apps/ENG-Backend",
     "dev:frontend": "npm run dev --workspace=apps/ENG-Frontend",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "start": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+    "start": "concurrently \"npm run start --workspace=apps/ENG-Backend\" \"npm run start --workspace=apps/ENG-Frontend\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
   },
   "dependencies": {
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@react-three/csg": "^4.0.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
     "cypress": "^15.13.0",
     "html2canvas": "^1.4.1",
-    "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "react-icons": "^5.5.0",
+    "three": "^0.183.2",
+    "three-bvh-csg": "^0.0.18",
     "uuid": "^13.0.0"
   }
 }

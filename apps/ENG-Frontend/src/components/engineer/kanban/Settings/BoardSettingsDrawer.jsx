@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Tabs, Select, Avatar } from 'antd';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineSetting, AiOutlineApi, AiOutlineBell } from 'react-icons/ai';
 import { RiInputField } from 'react-icons/ri';
 import { MdOutlineDashboard, MdOutlineLabel } from 'react-icons/md';
-import { IoSettingsOutline } from 'react-icons/io5';
+import { IoSettingsOutline, IoArchiveOutline } from 'react-icons/io5';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
@@ -79,7 +79,8 @@ const BoardSettingsDrawer = () => {
         customFields, fetchCustomFields, createCustomField, deleteCustomField,
         webhooks, fetchWebhooks, createWebhook, updateWebhook, deleteWebhook,
         notificationServices, fetchNotificationServices,
-        createNotificationService, deleteNotificationService, users
+        createNotificationService, deleteNotificationService, users,
+        archivedCards, fetchArchivedCards, moveCard, lists
     } = useKanbanStore();
 
     // Form
@@ -95,6 +96,9 @@ const BoardSettingsDrawer = () => {
     const [editLabelName, setEditLabelName] = useState('');
     const [editLabelColor, setEditLabelColor] = useState(LABEL_COLORS[0]);
 
+    // Role Editing State
+    const [editingRoleUcode, setEditingRoleUcode] = useState(null);
+
     // Webhook
     const [webhookName, setWebhookName] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
@@ -105,6 +109,10 @@ const BoardSettingsDrawer = () => {
     const [cfGroupName, setCfGroupName] = useState('');
     const [cfNewFieldName, setCfNewFieldName] = useState({});
     const [isSubscribed, setIsSubscribed] = useState(false);
+
+    // Restore UI state
+    const [restoringCardId, setRestoringCardId] = useState(null);
+    const [restoreToListId, setRestoreToListId] = useState(null);
 
     // Auth Store for Permission Checks
     const [memberSearch, setMemberSearch] = useState('');
@@ -122,6 +130,13 @@ const BoardSettingsDrawer = () => {
         boardRole: useKanbanStore(s => s.activeBoardMembers?.find(m => m.u_code === currentUserCode)?.role)
     });
 
+    const userInfo = useAuthStore(state => state.userInfo) || {};
+    const userDepartment = useAuthStore(state => state.userDepartment);
+    const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
+    const isOwner = activeProject?.role === 'owner' || useKanbanStore.getState().projectManagers?.find(m => m.u_code === currentUserCode)?.role === 'owner';
+    const canChangeRole = isADorMgr || isOwner;
+
     useEffect(() => {
         if (activeBoard?.id) {
             fetchWebhooks(activeBoard.id);
@@ -131,6 +146,37 @@ const BoardSettingsDrawer = () => {
     }, [activeBoard?.id, activeProject?.id]);
 
     // ─── Handlers ──────────────────────────────────────────────────
+    const handleRemoveBoardMemberClick = (member) => {
+        if (member.role === 'owner') {
+            const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Remove Last Owner',
+                    text: 'This board must have at least one owner. Please assign another member as an owner before removing this user.'
+                });
+                return;
+            }
+        }
+        useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code);
+    };
+
+    const handleRoleChangeBoard = (member, newRole) => {
+        if (member.role === 'owner' && newRole !== 'owner') {
+            const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Change Role',
+                    text: 'This board must have at least one owner. Please assign another member as an owner before demoting this user.'
+                });
+                return;
+            }
+        }
+        useKanbanStore.getState().addBoardMember(activeBoard.id, member.u_code, newRole);
+        setEditingRoleUcode(null);
+    };
+
     const handleCreateBoard = async (values) => {
         if (!activeProject) return;
         setIsCreatingBoard(true);
@@ -298,20 +344,64 @@ const BoardSettingsDrawer = () => {
                     <SectionLabel theme={theme}>Board Members</SectionLabel>
                     <Card style={{ padding: '8px 12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {useKanbanStore.getState().activeBoardMembers?.map(member => (
-                                <div key={member.u_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <Avatar size={24}>{member.u_code.charAt(0).toUpperCase()}</Avatar>
-                                        <Text style={{ fontSize: 13 }}>{member.u_code}</Text>
-                                        <Text type="secondary" style={{ fontSize: 10 }}>({member.role})</Text>
-                                    </div>
-                                    {canManageBoardMembers && member.u_code !== user?.u_code && (
-                                        <Button type="text" size="small" danger onClick={() => useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code)}>
-                                            <AiOutlineClose />
-                                        </Button>
-                                    )}
-                                </div>
-                            ))}
+                            <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {useKanbanStore.getState().activeBoardMembers?.map(member => {
+                                    const u = users.find(user => user.u_code?.toLowerCase() === member.u_code?.toLowerCase()) || { u_code: member.u_code, u_name: member.u_code };
+                                    const words = (u.u_name || '').split(' ');
+                                    const initials = words.length >= 2
+                                        ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+                                        : (u.u_nickname?.[0] || u.u_code[0]).toUpperCase();
+                                    return (
+                                        <div key={member.u_code} style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            padding: '6px 8px', borderRadius: theme.borderRadius.sm,
+                                            background: `${theme.colors.info}10`,
+                                        }}>
+                                            <Space>
+                                                {u.profile_img_b64 ? (
+                                                    <Avatar size="small" src={u.profile_img_b64} />
+                                                ) : (
+                                                    <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                        {initials}
+                                                    </Avatar>
+                                                )}
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{u.u_name || u.u_nickname || u.u_code}</Text>
+                                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code}</Text>
+                                                </div>
+                                            </Space>
+                                            <Space>
+                                                {editingRoleUcode === member.u_code ? (
+                                                    <>
+                                                        <Select
+                                                            size="small"
+                                                            value={member.role}
+                                                            onChange={(newRole) => handleRoleChangeBoard(member, newRole)}
+                                                            options={[
+                                                                { label: 'Viewer', value: 'viewer' },
+                                                                { label: 'Editor', value: 'editor' },
+                                                                { label: 'Owner', value: 'owner' }
+                                                            ]}
+                                                            style={{ width: 85, fontSize: 11 }}
+                                                        />
+                                                        <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Text type="secondary" style={{ fontSize: 11 }}>{member.role}</Text>
+                                                        {canChangeRole && (
+                                                            <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(member.u_code)} />
+                                                        )}
+                                                    </>
+                                                )}
+                                                {canManageBoardMembers && (
+                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveBoardMemberClick(member)} />
+                                                )}
+                                            </Space>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                             {useKanbanStore.getState().activeBoardMembers?.length === 0 && (
                                 <Text type="secondary" style={{ fontSize: 12 }}>No explicit members. Project members can view.</Text>
                             )}
@@ -340,7 +430,18 @@ const BoardSettingsDrawer = () => {
                                             (u.u_nickname || '').toLowerCase().includes((memberSearch || '').toLowerCase())
                                         ).map(u => (
                                             <Select.Option key={u.u_code} value={u.u_code}>
-                                                {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                <Space>
+                                                    {u.profile_img_b64 ? (
+                                                        <Avatar size="small" src={u.profile_img_b64} />
+                                                    ) : (
+                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
+                                                            {(u.u_name || u.u_code)[0].toUpperCase()}
+                                                        </Avatar>
+                                                    )}
+                                                    <Text style={{ fontSize: 13 }}>
+                                                        {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
+                                                    </Text>
+                                                </Space>
                                             </Select.Option>
                                         ))}
                                     </Select>
@@ -768,10 +869,101 @@ const BoardSettingsDrawer = () => {
         </div>
     );
 
+    // ─── Tab: Archived Items ───────────────────────────────────────
+    const ArchivedItemsTab = () => {
+        useEffect(() => {
+            if (activeBoard) {
+                fetchArchivedCards();
+            }
+        }, [activeBoard]);
+
+        const visibleLists = useMemo(() => {
+            return lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
+        }, [lists]);
+
+        const handleRestore = async (cardId) => {
+            if (!restoreToListId) return;
+            await moveCard(cardId, restoreToListId);
+            setRestoringCardId(null);
+            setRestoreToListId(null);
+            // Optionally, immediately re-fetch to update
+            await fetchArchivedCards();
+        };
+
+        return (
+            <div>
+                {activeBoard ? (
+                    <Card>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                            <IoArchiveOutline size={18} color={theme.colors.primary} />
+                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Archived Cards</Title>
+                        </div>
+                        
+                        {!archivedCards || archivedCards.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
+                                <Text type="secondary">No archived items found.</Text>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {archivedCards.map(card => (
+                                    <div key={card.id} style={{
+                                        padding: theme.spacing.sm,
+                                        background: theme.colors.surfaceHover,
+                                        borderRadius: theme.borderRadius.sm,
+                                        border: `1px solid ${theme.colors.border}`,
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                            <Text strong style={{ fontSize: 13, flex: 1 }}>{card.name}</Text>
+                                            <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap', marginLeft: 8 }}>
+                                                {new Date(card.updated_at).toLocaleDateString()}
+                                            </Text>
+                                        </div>
+                                        
+                                        {restoringCardId === card.id ? (
+                                            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                                                <Select 
+                                                    size="small" 
+                                                    style={{ flex: 1 }}
+                                                    placeholder="Select list..."
+                                                    options={visibleLists.map(l => ({ label: l.name, value: l.id }))}
+                                                    onChange={setRestoreToListId}
+                                                    value={restoreToListId}
+                                                />
+                                                <Button size="small" type="primary" onClick={() => handleRestore(card.id)} disabled={!restoreToListId} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>
+                                                    Confirm Restore
+                                                </Button>
+                                                <Button size="small" onClick={() => { setRestoringCardId(null); setRestoreToListId(null); }}>
+                                                    Cancel
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button 
+                                                size="small" 
+                                                onClick={() => setRestoringCardId(card.id)}
+                                                style={{ marginTop: 4, borderRadius: theme.borderRadius.sm }}
+                                            >
+                                                Restore
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
+                        <Text type="secondary">Select a board to view archived items.</Text>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const tabItems = [
         { key: 'general', label: 'General', children: <GeneralTab /> },
         { key: 'preferences', label: 'Preferences', children: <PreferencesTab /> },
         { key: 'notifications', label: 'Notifications', children: <NotificationsTab /> },
+        { key: 'archived', label: 'Archived', children: <ArchivedItemsTab /> },
     ];
 
     return (

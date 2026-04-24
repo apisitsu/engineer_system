@@ -1,0 +1,5 @@
+Parameter,Value,Unit,Description
+TotalTime,1.0,s,Total analysis time
+InitialTimeIncrement,0.1,s,Initial time step size
+MinTimeIncrement,0.01,s,Minimum time step
+MaxTimeIncrement,0.2,s,Maximum time step

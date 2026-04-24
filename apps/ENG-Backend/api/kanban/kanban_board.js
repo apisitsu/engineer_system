@@ -8,7 +8,7 @@ const { insertToPositionables } = require('./positionHelper');
 const {
     canAccessProject, canManageProject, canSeeAllProjects,
     isSuperAdmin, isManagerOrCoord,
-    canManageBoard, canEditBoard, getBoardMembership, isProjectMember,
+    canManageBoard, canEditBoard, canViewBoard, getBoardMembership, isProjectMember,
 } = require('./kanban_acl');
 
 // ─── HELPERS ───────────────────────────────────────────────────────
@@ -229,6 +229,11 @@ const DeleteBoard = async (req, res) => {
 // GET /api/kanban/boards/:id/members
 const GetBoardMembers = async (req, res) => {
     const { id } = req.params;
+
+    if (!(await canViewBoard(req, id))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     try {
         const { rows } = await engPool.query(
             'SELECT * FROM kb_board_membership WHERE board_id=$1 ORDER BY role ASC', [id]
@@ -253,14 +258,40 @@ const AddBoardMember = async (req, res) => {
     const { rows: [board] } = await engPool.query('SELECT project_id FROM kb_board WHERE id=$1', [id]);
     if (!board) return res.status(404).json({ error: 'Board not found' });
 
+    const targetRole = role || 'viewer';
+
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
+        const existingMbrRes = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, target_u_code]);
+        const existingRole = existingMbrRes.rows[0]?.role;
+
+        // Hierarchy Check
+        if (targetRole === 'owner' || existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Board Owners or Admins can manage Owner roles.' });
+                }
+            }
+            
+            // Orphan check for demotion
+            if (existingRole === 'owner' && targetRole !== 'owner') {
+                const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_board_membership WHERE board_id=$1 AND role='owner'", [id]);
+                if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                    return res.status(400).json({ error: 'Cannot demote the last owner. Please assign a new owner first.' });
+                }
+            }
+        }
+
         const { rows } = await engPool.query(`
             INSERT INTO kb_board_membership (board_id, project_id, u_code, role, can_comment)
             VALUES ($1,$2,$3,$4,$5)
             ON CONFLICT (board_id, u_code)
                 DO UPDATE SET role=EXCLUDED.role, can_comment=EXCLUDED.can_comment, updated_at=NOW()
             RETURNING *
-        `, [id, board.project_id, target_u_code, role || 'viewer', can_comment ?? null]);
+        `, [id, board.project_id, target_u_code, targetRole, can_comment ?? null]);
 
         // Auto-cascade to Project Member (as viewer) if not already explicitly in the project
         await engPool.query(`
@@ -289,6 +320,27 @@ const RemoveBoardMember = async (req, res) => {
     }
 
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
+        const existingMbrRes = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, target_u_code]);
+        const existingRole = existingMbrRes.rows[0]?.role;
+
+        if (existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Board Owners or Admins can remove an Owner.' });
+                }
+            }
+            
+            // Orphan check
+            const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_board_membership WHERE board_id=$1 AND role='owner'", [id]);
+            if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                return res.status(400).json({ error: 'Cannot remove the last owner. Please assign a new owner first.' });
+            }
+        }
+
         await engPool.query('DELETE FROM kb_board_membership WHERE board_id=$1 AND u_code=$2', [id, target_u_code]);
         res.json({ message: 'Member removed' });
     } catch (err) {
@@ -301,6 +353,11 @@ const RemoveBoardMember = async (req, res) => {
 // GET /api/kanban/boards/:boardId/lists
 const GetLists = async (req, res) => {
     const { boardId } = req.params;
+
+    if (!(await canViewBoard(req, boardId))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     try {
         const { rows } = await engPool.query(
             "SELECT * FROM kb_list WHERE board_id=$1 ORDER BY list_type ASC, position ASC", [boardId]
@@ -389,6 +446,11 @@ const DeleteList = async (req, res) => {
 // GET /api/kanban/boards/:boardId/labels
 const GetLabels = async (req, res) => {
     const { boardId } = req.params;
+
+    if (!(await canViewBoard(req, boardId))) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
     const { rows } = await engPool.query('SELECT * FROM kb_label WHERE board_id=$1 ORDER BY position ASC', [boardId]);
     res.json({ data: rows });
 };
@@ -543,7 +605,7 @@ const SortListCards = async (req, res) => {
     const { id } = req.params;
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { sort_by } = req.body; // 'name', 'due_date', 'created_at'
+    const { sort_by, sort_order } = req.body; // 'name', 'due_date', 'created_at', 'priority'
 
     const { rows: [list] } = await engPool.query('SELECT board_id FROM kb_list WHERE id=$1', [id]);
     if (!list) return res.status(404).json({ error: 'List not found' });
@@ -552,13 +614,31 @@ const SortListCards = async (req, res) => {
         return res.status(403).json({ error: 'Editor permission required' });
     }
 
-    const orderCol = sort_by === 'due_date' ? 'due_date' : sort_by === 'created_at' ? 'created_at' : 'name';
+    const orderDir = (sort_order || 'asc').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    let orderClause = '';
+    if (sort_by === 'due_date') {
+        orderClause = `due_date ${orderDir} NULLS LAST`;
+    } else if (sort_by === 'created_at') {
+        orderClause = `created_at ${orderDir}`;
+    } else if (sort_by === 'priority') {
+        orderClause = `
+            CASE 
+                WHEN priority = 'high' THEN 1
+                WHEN priority = 'medium' THEN 2
+                WHEN priority = 'low' THEN 3
+                ELSE 4
+            END ${orderDir}
+        `;
+    } else {
+        orderClause = `name ${orderDir}`;
+    }
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows: cards } = await client.query(
-            `SELECT id FROM kb_card WHERE list_id=$1 ORDER BY ${orderCol} ASC NULLS LAST`, [id]
+            `SELECT id FROM kb_card WHERE list_id=$1 ORDER BY ${orderClause}`, [id]
         );
         // Reassign positions with GAP spacing
         for (let i = 0; i < cards.length; i++) {

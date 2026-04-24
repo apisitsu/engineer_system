@@ -1,0 +1,5 @@
+Property,Value,Unit,Description
+YoungsModulus,200000,MPa,Young's Modulus (15-5PH Steel)
+PoissonRatio,0.29,,Poisson's Ratio
+YieldStrength,1000,MPa,Yield Strength (H925 condition)
+Density,7.8e-9,tonne/mm^3,Material density

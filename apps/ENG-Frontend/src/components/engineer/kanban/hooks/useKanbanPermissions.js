@@ -6,6 +6,7 @@ export const useKanbanPermissions = ({
     projectRole = null,
     boardRole = null,
     cardRole = null,
+    projectStatus = 'active',
 } = {}) => {
     const globalRole = useAuthStore(state => state.userRole);
     const globalDepartment = useAuthStore(state => state.userDepartment);
@@ -23,10 +24,12 @@ export const useKanbanPermissions = ({
         const isProjectViewer = projectRole === 'viewer';
         const isProjectMember = !!projectRole;
 
+        const isProjectInactive = ['suspended', 'completed'].includes((projectStatus || '').toLowerCase());
+
         // ── 2. Project-Level ──
         // Only AD, Owner, and MGR/COORD (in public) can manage the ROOT project settings
         const canManageProject = isSuperAdmin || isProjectOwner || (isManagerOrCoord && !isPrivateProject);
-        const canEditProject = canManageProject || isProjectEditor;
+        let canEditProject = canManageProject || isProjectEditor;
         const canViewProject = canEditProject || isProjectViewer || isSuperAdmin || (isManagerOrCoord && !isPrivateProject);
 
         // ── 3. Board-Level (CRITICAL FIXES HERE) ──
@@ -34,14 +37,14 @@ export const useKanbanPermissions = ({
         const isBoardEditor = boardRole === 'editor';
         const isBoardViewer = boardRole === 'viewer';
 
-        // 3.1 Manage Members: AD, Proj Owner, Board Owner, MGR/COORD (Public), MGR/COORD (Private + isMember)
-        const canManageBoardMembers = canManageProject || isBoardOwner || (isManagerOrCoord && isPrivateProject && isProjectMember);
+        // 3.1 Manage Members: AD, Proj Owner, Board Owner, MGR/COORD (Public). MGR/COORD in Private only if Owner
+        const canManageBoardMembers = canManageProject || isBoardOwner;
 
         // 3.2 Manage Structure (Create/Move/Delete Boards): All the above + Public Project Editors
-        const canManageBoardStructure = canManageBoardMembers || (!isPrivateProject && isProjectEditor);
+        let canManageBoardStructure = canManageBoardMembers || (!isPrivateProject && isProjectEditor);
 
         // 3.3 Edit Board Content: All the above + Explicit Board Editors + Private Project Editors
-        const canEditBoard = canManageBoardStructure || isBoardEditor || (isPrivateProject && isProjectEditor);
+        let canEditBoard = canManageBoardStructure || isBoardEditor || (isPrivateProject && isProjectEditor);
 
         const canViewBoard = canEditBoard || isBoardViewer || canViewProject;
 
@@ -52,8 +55,16 @@ export const useKanbanPermissions = ({
         const isCardMember = !!cardRole;
 
         const canManageCard = canManageBoardStructure || isCardOwner;
-        const canEditCard = canManageCard || isCardEditor || canEditBoard;
+        let canEditCard = canManageCard || isCardMember || canEditBoard || isSuperAdmin || (isManagerOrCoord && !isPrivateProject);
         const canViewCard = canEditCard || isCardViewer || canViewBoard;
+
+        // ── Inactive Project Locks ──
+        if (isProjectInactive && !isSuperAdmin) {
+            canEditProject = false;
+            canManageBoardStructure = false;
+            canEditBoard = false;
+            canEditCard = false;
+        }
 
         // ── 5. Convenience ──
         const isReadOnly = !canEditCard;
@@ -69,5 +80,5 @@ export const useKanbanPermissions = ({
             canManageCard, canEditCard, canViewCard,
             isReadOnly, canCreateProject,
         };
-    }, [globalRole, isPrivateProject, projectRole, boardRole, cardRole]);
+    }, [globalRole, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
 };

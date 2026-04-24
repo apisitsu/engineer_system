@@ -90,39 +90,6 @@ export const server = {
   TUMBLE_DELETE_MODEL: `${apiUrl}api/tumble/deleteModel/`,  // with /:id
 
 
-  //--------------------System Engineer (v2 with RBAC)--------------------//
-  SYSTEM_GET_PROJECT: `${apiUrl}api/system/get_project`,
-  SYSTEM_GET_PROJECT_BY_ID: `${apiUrl}api/system/get_project`,  // with /:id
-  SYSTEM_CREATE_PROJECT: `${apiUrl}api/system/create_project`,
-  SYSTEM_UPDATE_PROJECT: `${apiUrl}api/system/update_project`,  // with /:id
-  SYSTEM_DELETE_PROJECT: `${apiUrl}api/system/delete_project`,  // with /:id
-  SYSTEM_CLOSE_PROJECT: `${apiUrl}api/system/close_project`,  // with /:id
-  SYSTEM_GET_PROJECT_STATS: `${apiUrl}api/system/get_project_stats`,  // with /:id
-  SYSTEM_GET_DASHBOARD_DATA: `${apiUrl}api/system/get_dashboard_data`,
-  SYSTEM_GET_DASHBOARD_DETAIL: `${apiUrl}api/system/get_dashboard_detail`,
-
-  // Project Members
-  SYSTEM_GET_PROJECT_MEMBERS: `${apiUrl}api/system/get_project_members`,  // with /:id
-  SYSTEM_ADD_PROJECT_MEMBER: `${apiUrl}api/system/add_project_member`,  // with /:id
-  SYSTEM_REMOVE_PROJECT_MEMBER: `${apiUrl}api/system/remove_project_member`,  // with /:id
-
-  // Tasks
-  SYSTEM_GET_TODOLIST: `${apiUrl}api/system/get_todolist`,  // with /:id
-  SYSTEM_GET_TASKS: `${apiUrl}api/system/get_tasks`,  // with /:id
-  SYSTEM_CREATE_TODOLIST: `${apiUrl}api/system/create_todolist`,
-  SYSTEM_CREATE_TASK: `${apiUrl}api/system/create_task`,
-  SYSTEM_UPDATE_TODOLIST: `${apiUrl}api/system/update_todolist`,  // with /:id
-  SYSTEM_UPDATE_TASK: `${apiUrl}api/system/update_task`,  // with /:id
-  SYSTEM_DELETE_TODOLIST: `${apiUrl}api/system/delete_todolist`,  // with /:id
-  SYSTEM_DELETE_TASK: `${apiUrl}api/system/delete_task`,  // with /:id
-  SYSTEM_REORDER_TODOLIST: `${apiUrl}api/system/reorder_todolist`,
-  SYSTEM_REORDER_TASKS: `${apiUrl}api/system/reorder_tasks`,
-
-  // Templates
-  SYSTEM_GET_TEMPLATES: `${apiUrl}api/system/get_templates`,
-  SYSTEM_GET_TEMPLATE_ITEMS: `${apiUrl}api/system/get_template_items`,  // with /:id
-  SYSTEM_CREATE_TEMPLATE: `${apiUrl}api/system/create_template`,
-  SYSTEM_APPLY_TEMPLATE: `${apiUrl}api/system/apply_template`,
 
   //--------------------System--------------------//
   USER_LOGIN: `${apiUrl}api/login-user`,

@@ -7,7 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     IoSettingsOutline, IoSearchOutline, IoAddOutline, IoGridOutline,
     IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoStarOutline, IoStar,
-    IoCalendarOutline, IoLayersOutline, IoTimeOutline,
+    IoCalendarOutline, IoLayersOutline, IoTimeOutline, IoHelpCircleOutline,
     IoRocketOutline, IoFlashOutline, IoHeartOutline, IoDiamondOutline,
     IoLeafOutline, IoBookOutline, IoCodeSlashOutline, IoColorPaletteOutline,
     IoGameControllerOutline, IoMusicalNotesOutline, IoPlanetOutline, IoShieldCheckmarkOutline,
@@ -32,6 +32,8 @@ import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
 import ReportDashboard from './Reports/ReportDashboard';
 import WorkloadDashboard from './Workload/WorkloadDashboard';
+import UserGuideDrawer from './UserGuide/UserGuideDrawer';
+import BoardGuideDrawer from './UserGuide/BoardGuideDrawer';
 
 dayjs.extend(relativeTime);
 
@@ -160,6 +162,17 @@ const IconPicker = ({ value, onChange, theme }) => (
         ))}
     </div>
 );
+
+// ─── Priority Color Helper ─────────────────────────────────────────
+const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+        case 'low': return 'blue';
+        case 'high': return 'volcano';
+        case 'urgent': return 'red';
+        case 'medium':
+        default: return 'green';
+    }
+};
 
 // ─── Project Stat Card ─────────────────────────────────────────────
 const StatCard = ({ icon, label, value, color, theme }) => (
@@ -316,6 +329,18 @@ const ProjectGridCard = ({ project, onClick, onToggleFavorite, onOpenSettings, t
                 }}>
                     {project.description || 'No description'}
                 </Text>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <IoLayersOutline size={13} color={theme.colors.textTertiary} />
@@ -380,6 +405,16 @@ const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, th
                             <IoLockClosedOutline size={10} /> Private
                         </Tag>
                     )}
+                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
+                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            {project.priority.toUpperCase()}
+                        </Tag>
+                    )}
+                    {project.status && project.status.toLowerCase() === 'waiting' && (
+                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                            POOL
+                        </Tag>
+                    )}
                 </div>
                 <Text style={{ fontSize: 12, color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {project.description || 'No description'}
@@ -421,12 +456,14 @@ const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, th
 const ProjectListPage = ({ onSelectProject, theme }) => {
     const { projects, fetchProjects, isLoading, openProjectSettings, createProject, toggleFavorite } = useKanbanStore();
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showUserGuide, setShowUserGuide] = useState(false);
     const [form] = Form.useForm();
     const [activeTab, setActiveTab] = useState('projects');
     const [search, setSearch] = useState('');
     const [sortBy, setSortBy] = useState('recent');
     const [viewMode, setViewMode] = useState('grid');
     const [filterOwner, setFilterOwner] = useState('all'); // 'all' | 'mine' | 'favorites'
+    const [projectStatusFilter, setProjectStatusFilter] = useState('active'); // 'active' | 'waiting' | 'suspended' | 'completed'
 
     // Global permissions
     const { canCreateProject } = useKanbanPermissions();
@@ -435,8 +472,9 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
 
     const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
     const [selectedIcon, setSelectedIcon] = useState('rocket');
-
     const [isPrivate, setIsPrivate] = useState(false);
+    const [selectedPriority, setSelectedPriority] = useState('Medium');
+    const [selectedStatus, setSelectedStatus] = useState('Active');
 
     const handleCreate = async (values) => {
         const result = await createProject({
@@ -445,6 +483,8 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             background_value: selectedGradient,
             icon: selectedIcon,
             is_private: isPrivate,
+            priority: selectedPriority,
+            status: selectedStatus,
         });
         if (result) {
             setShowCreateModal(false);
@@ -452,6 +492,8 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             setSelectedGradient(GRADIENTS[0]);
             setSelectedIcon('rocket');
             setIsPrivate(false);
+            setSelectedPriority('Medium');
+            setSelectedStatus('Active');
             fetchProjects();
         }
     };
@@ -461,22 +503,30 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     };
 
     // Computed stats for dashboard
-    const stats = useMemo(() => ({
-        total: projects.length,
-        totalBoards: projects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-        owned: projects.filter(p => p.is_owner).length,
-        favorites: projects.filter(p => p.is_favorite).length,
-        recent: [...projects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
-    }), [projects]);
+    const stats = useMemo(() => {
+        const activeProjects = projects.filter(p => (p.status || 'active').toLowerCase() === 'active');
+        return {
+            total: activeProjects.length,
+            totalBoards: activeProjects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
+            owned: activeProjects.filter(p => p.role === 'owner').length,
+            favorites: activeProjects.filter(p => p.is_favorite).length,
+            recent: [...activeProjects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
+            activeProjects // Provide the filtered list for rendering distribution
+        };
+    }, [projects]);
 
     // Filtered & sorted projects for tab 2
     const filteredProjects = useMemo(() => {
         let list = [...projects];
+
+        // Status Filter
+        list = list.filter(p => (p.status || 'active').toLowerCase() === projectStatusFilter);
+
         if (search) {
             const q = search.toLowerCase();
             list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.is_owner);
+        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
         if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
 
         if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -484,7 +534,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
         else if (sortBy === 'boards') list.sort((a, b) => (b.board_count || 0) - (a.board_count || 0));
 
         return list;
-    }, [projects, search, filterOwner, sortBy]);
+    }, [projects, search, filterOwner, sortBy, projectStatusFilter]);
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: theme.colors.background, overflow: 'hidden' }}>
@@ -505,8 +555,17 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         <RiKanbanView size={22} color="#fff" />
                     </div>
                     <div>
-                        <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary, lineHeight: 1 }}>
+                        <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary, lineHeight: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                             Projects Management System
+                            <Tooltip title="User Guide">
+                                <Button
+                                    type="text"
+                                    shape="circle"
+                                    icon={<IoHelpCircleOutline size={18} />}
+                                    onClick={() => setShowUserGuide(true)}
+                                    style={{ color: theme.colors.textSecondary, marginLeft: 4 }}
+                                />
+                            </Tooltip>
                         </Title>
                         <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
                             {stats.total} project{stats.total !== 1 ? 's' : ''} · {stats.totalBoards} board{stats.totalBoards !== 1 ? 's' : ''}
@@ -637,7 +696,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                                 </Button>
 
                                                 <Button>Summit</Button>
-                                                {/* )} */}
                                             </div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
@@ -649,7 +707,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                     </div>
 
                                     {/* Board distribution */}
-                                    {projects.length > 0 && (
+                                    {stats.activeProjects.length > 0 && (
                                         <div style={{ marginTop: theme.spacing['2xl'] }}>
                                             <Text strong style={{ fontSize: 13, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: theme.spacing.md }}>
                                                 Board Distribution
@@ -660,7 +718,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                                 borderRadius: theme.borderRadius.lg,
                                                 padding: theme.spacing.lg,
                                             }}>
-                                                {projects.filter(p => parseInt(p.board_count) > 0).slice(0, 8).map(p => {
+                                                {stats.activeProjects.filter(p => parseInt(p.board_count) > 0).slice(0, 8).map(p => {
                                                     const pct = stats.totalBoards > 0 ? Math.round((parseInt(p.board_count) / stats.totalBoards) * 100) : 0;
                                                     const gradient = p.background_value || GRADIENTS[(p.id || 0) % GRADIENTS.length];
                                                     return (
@@ -774,6 +832,21 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                                 )}
                             </div>
 
+                            {/* Status Sub-Tabs */}
+                            <Tabs
+                                activeKey={projectStatusFilter}
+                                onChange={setProjectStatusFilter}
+                                type="line"
+                                size="middle"
+                                style={{ marginBottom: theme.spacing.md }}
+                                items={[
+                                    { key: 'active', label: `Active (${projects.filter(p => (p.status || 'active').toLowerCase() === 'active').length})` },
+                                    { key: 'waiting', label: `Pool (${projects.filter(p => (p.status || '').toLowerCase() === 'waiting').length})` },
+                                    { key: 'suspended', label: `Suspended (${projects.filter(p => (p.status || '').toLowerCase() === 'suspended').length})` },
+                                    { key: 'completed', label: `Completed (${projects.filter(p => (p.status || '').toLowerCase() === 'completed').length})` },
+                                ]}
+                            />
+
                             {isLoading && projects.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
                             ) : filteredProjects.length === 0 ? (
@@ -860,6 +933,23 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                             </Text>
                         </div>
                     </Form.Item>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <Form.Item label="Priority" style={{ flex: 1 }}>
+                            <Select value={selectedPriority} onChange={setSelectedPriority}>
+                                <Select.Option value="Low">Low</Select.Option>
+                                <Select.Option value="Medium">Medium</Select.Option>
+                                <Select.Option value="High">High</Select.Option>
+                                <Select.Option value="Urgent">Urgent</Select.Option>
+                            </Select>
+                        </Form.Item>
+                        <Form.Item label="Status" style={{ flex: 1 }}>
+                            <Select value={selectedStatus} onChange={setSelectedStatus}>
+                                <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                <Select.Option value="Active">Active</Select.Option>
+                                <Select.Option value="Completed">Completed</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </div>
                     <Form.Item>
                         <Button type="primary" htmlType="submit" block
                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, height: 40 }}
@@ -870,6 +960,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 </Form>
             </Modal>
             <ProjectSettingsDrawer />
+            <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} />
         </div >
     );
 };
@@ -889,6 +980,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
     const [showSearch, setShowSearch] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
+    const [showBoardGuide, setShowBoardGuide] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [showMemberFilter, setShowMemberFilter] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
@@ -940,7 +1032,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 2 }}>Board</Typography.Text>
                         <Avatar.Group max={{ count: 3, style: { color: '#1677ff', backgroundColor: '#e6f4ff' } }} size="small">
                             {activeBoardMembers.map(mgr => {
-                                const userObj = users.find(u => u.u_code === mgr.u_code);
+                                const userObj = users.find(u => u.u_code?.toLowerCase() === mgr.u_code?.toLowerCase());
                                 const name = userObj?.u_name || userObj?.u_nickname || mgr.u_code;
                                 const words = (userObj?.u_name || '').split(' ');
                                 const initials = words.length >= 2
@@ -998,7 +1090,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     </Select>
                                     <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                                         {activeBoardMembers.map(mgr => {
-                                            const u = users.find(user => user.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
+                                            const u = users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code, u_name: mgr.u_code };
                                             const words = (u.u_name || '').split(' ');
                                             const initials = words.length >= 2
                                                 ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
@@ -1057,11 +1149,11 @@ const BoardToolbar = ({ theme, activeProject }) => {
                                     .filter(uCode => {
                                         if (!memberFilterSearch) return true;
                                         const q = memberFilterSearch.toLowerCase();
-                                        const u = users.find(user => user.u_code === uCode);
+                                        const u = users.find(user => user.u_code?.toLowerCase() === uCode?.toLowerCase());
                                         const name = u?.u_name || u?.u_nickname || uCode || '';
                                         return name.toLowerCase().includes(q) || uCode.toLowerCase().includes(q);
                                     }).map(uCode => {
-                                        const u = users.find(user => user.u_code === uCode);
+                                        const u = users.find(user => user.u_code?.toLowerCase() === uCode?.toLowerCase());
                                         const name = u?.u_name || u?.u_nickname || uCode || 'User';
                                         const initials = name.charAt(0).toUpperCase();
                                         const isChecked = filterMembers.includes(uCode);
@@ -1283,10 +1375,17 @@ const BoardToolbar = ({ theme, activeProject }) => {
                     </Badge>
                 </Dropdown>
 
+                <Tooltip title="Board Interface Guide">
+                    <Button type="text" size="small" icon={<IoHelpCircleOutline size={18} />}
+                        onClick={() => setShowBoardGuide(true)} style={{ color: theme.colors.textSecondary }} />
+                </Tooltip>
+
                 {/* Board Settings */}
                 <Button type="text" size="small" icon={<IoSettingsOutline size={16} />}
                     onClick={openBoardSettings} style={{ color: theme.colors.textSecondary }} />
             </Space>
+
+            <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
         </div >
     );
 };
@@ -1483,7 +1582,7 @@ const KanbanMain = () => {
 
                                             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                                                 {useKanbanStore.getState().projectManagers.map(mgr => {
-                                                    const u = useKanbanStore.getState().users.find(user => user.u_code === mgr.u_code) || { u_code: mgr.u_code };
+                                                    const u = useKanbanStore.getState().users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code };
                                                     return (
                                                         <div key={mgr.u_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${theme.colors.border}` }}>
                                                             <Space>

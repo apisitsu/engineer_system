@@ -12,7 +12,7 @@ const { Header } = Layout;
 
 const HeaderBar = () => {
     const { userDepartment, userName, empNo } = useAuthStore();
-    const { theme, isPastelTheme } = useTheme();  // Get current theme and pastel status
+    const { theme } = useTheme();  // Get current theme
 
     // Dynamic header styles based on theme
     const headerStyle = useMemo(() => ({

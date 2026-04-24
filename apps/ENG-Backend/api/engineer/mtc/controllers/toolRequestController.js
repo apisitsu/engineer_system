@@ -8,11 +8,11 @@ const { TABLES, PATHS } = require('../mtcConstants');
 const { renderEmail, generateSubject } = require(PATHS.EMAIL_RENDERER);
 
 const {
-  WORKFLOW_STAGES,
-  WORKFLOW_STATUS,
-  STAGE_LABELS,
-  DUE_DATE_CONFIG,
-  REQUEST_TYPES,
+    WORKFLOW_STAGES,
+    WORKFLOW_STATUS,
+    STAGE_LABELS,
+    DUE_DATE_CONFIG,
+    REQUEST_TYPES,
 } = require('../services/workflow');
 const { verifyToken, optionalAuth, checkStagePermission } = require('../utils/toolRequestAuth');
 const { validateFileUpload, sanitizeFilename } = require('../utils/fileUpload');
@@ -20,9 +20,9 @@ const fs = require('fs');
 
 // ── Logger utility ───────────────────────────────────────────────────────────
 const logger = {
-  info: (msg, data = {}) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
-  warn: (msg, data = {}) => console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
-  error: (msg, data = {}) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+    info: (msg, data = {}) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+    warn: (msg, data = {}) => console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
+    error: (msg, data = {}) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`, JSON.stringify(data)),
 };
 
 // ── Email recipient config — อ่านจากฐานข้อมูล (tr_email_config) ────────────────
@@ -33,7 +33,7 @@ async function getEmailRecipients(stage) {
             `SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG} WHERE stage = $1 OR stage = $2`,
             [stage, `CC_${stage}`]
         );
-        
+
         let allEmails = [];
         res.rows.forEach(row => {
             if (row.emails) {
@@ -45,7 +45,7 @@ async function getEmailRecipients(stage) {
         if (allEmails.length > 0) {
             return [...new Set(allEmails)]; // ลบตัวซ้ำออก
         }
-        
+
         // Fallback: ถ้าไม่เจอใน DB ให้ไปอ่านจาก .env เหมือนเดิม (เฉพาะรายชื่อหลัก)
         const envMap = {
             [WORKFLOW_STAGES.ENG_CHECK]: 'EMAIL_MTC_ENG_CHECK',
@@ -65,14 +65,14 @@ async function getEmailRecipients(stage) {
 
 // ── Due date by request type ──────────────────────────────────────────────────
 function calcDueDate(typeOfRequest) {
-  const days = DUE_DATE_CONFIG[typeOfRequest] || DUE_DATE_CONFIG.DEFAULT;
-  let due = moment();
-  let added = 0;
-  while (added < days) {
-    due.add(1, 'days');
-    if (due.day() !== 0) added++; // Only skip Sunday
-  }
-  return due.format('YYYY-MM-DD HH:mm:ss');
+    const days = DUE_DATE_CONFIG[typeOfRequest] || DUE_DATE_CONFIG.DEFAULT;
+    let due = moment();
+    let added = 0;
+    while (added < days) {
+        due.add(1, 'days');
+        if (due.day() !== 0) added++; // Only skip Sunday
+    }
+    return due.format('YYYY-MM-DD HH:mm:ss');
 }
 
 /**
@@ -94,12 +94,12 @@ const getStagePermissions = async (req, res) => {
 
 // ── Workflow stage map ────────────────────────────────────────────────────────
 const STAGE_MAP = {
-  [WORKFLOW_STAGES.ENG_CHECK]:  { stepNo: 1, approveStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN,   approveStage: 'Draft Man',   denyStatus: WORKFLOW_STATUS.DENIED,             denyStage: 'Denied',   emailApprove: WORKFLOW_STAGES.DRAFT_MAN,    emailDeny: null },
-  [WORKFLOW_STAGES.DRAFT_MAN]:  { stepNo: 2, approveStatus: WORKFLOW_STATUS.PENDING_DWG_CHECK,   approveStage: 'DWG Check',                                                             emailApprove: WORKFLOW_STAGES.DWG_CHECK },
-  [WORKFLOW_STAGES.DWG_CHECK]:  { stepNo: 3, approveStatus: WORKFLOW_STATUS.PENDING_ENG_REVIEW,  approveStage: 'Eng Review',  denyStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN,  denyStage: 'Draft Man',  emailApprove: WORKFLOW_STAGES.ENG_REVIEW,  emailDeny: WORKFLOW_STAGES.DRAFT_MAN },
-  [WORKFLOW_STAGES.ENG_REVIEW]: { stepNo: 4, approveStatus: WORKFLOW_STATUS.PENDING_ENG_APPROVE, approveStage: 'Eng Approve',                                                            emailApprove: WORKFLOW_STAGES.ENG_APPROVE },
-  [WORKFLOW_STAGES.ENG_APPROVE]:{ stepNo: 5, approveStatus: WORKFLOW_STATUS.PENDING_ENG_INFORM,  approveStage: 'Eng Inform',  denyStatus: WORKFLOW_STATUS.DENIED_BY_APPROVE,  denyStage: 'Denied',    emailApprove: WORKFLOW_STAGES.ENG_INFORM,  emailDeny: null },
-  [WORKFLOW_STAGES.ENG_INFORM]: { stepNo: 6, approveStatus: WORKFLOW_STATUS.COMPLETED_INFORMED,  approveStage: 'Completed',                                                              emailApprove: null },
+    [WORKFLOW_STAGES.ENG_CHECK]: { stepNo: 1, approveStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN, approveStage: 'Draft Man', denyStatus: WORKFLOW_STATUS.DENIED, denyStage: 'Denied', emailApprove: WORKFLOW_STAGES.DRAFT_MAN, emailDeny: null },
+    [WORKFLOW_STAGES.DRAFT_MAN]: { stepNo: 2, approveStatus: WORKFLOW_STATUS.PENDING_DWG_CHECK, approveStage: 'DWG Check', emailApprove: WORKFLOW_STAGES.DWG_CHECK },
+    [WORKFLOW_STAGES.DWG_CHECK]: { stepNo: 3, approveStatus: WORKFLOW_STATUS.PENDING_ENG_REVIEW, approveStage: 'Eng Review', denyStatus: WORKFLOW_STATUS.PENDING_DRAFT_MAN, denyStage: 'Draft Man', emailApprove: WORKFLOW_STAGES.ENG_REVIEW, emailDeny: WORKFLOW_STAGES.DRAFT_MAN },
+    [WORKFLOW_STAGES.ENG_REVIEW]: { stepNo: 4, approveStatus: WORKFLOW_STATUS.PENDING_ENG_APPROVE, approveStage: 'Eng Approve', emailApprove: WORKFLOW_STAGES.ENG_APPROVE },
+    [WORKFLOW_STAGES.ENG_APPROVE]: { stepNo: 5, approveStatus: WORKFLOW_STATUS.PENDING_ENG_INFORM, approveStage: 'Eng Inform', denyStatus: WORKFLOW_STATUS.DENIED_BY_APPROVE, denyStage: 'Denied', emailApprove: WORKFLOW_STAGES.ENG_INFORM, emailDeny: null },
+    [WORKFLOW_STAGES.ENG_INFORM]: { stepNo: 6, approveStatus: WORKFLOW_STATUS.COMPLETED_INFORMED, approveStage: 'Completed', emailApprove: null },
 };
 
 /**
@@ -109,9 +109,9 @@ const STAGE_MAP = {
 const getToolRequests = async (req, res) => {
     const { status, search, startDate, endDate, page, limit } = req.query;
 
-    const pageNum  = Math.max(1, parseInt(page)  || 1);
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
-    const offset   = (pageNum - 1) * limitNum;
+    const offset = (pageNum - 1) * limitNum;
 
     let baseWhere = `WHERE deleted_at IS NULL`;
     const params = [];
@@ -219,7 +219,7 @@ const createToolRequest = async (req, res) => {
 
         // --- Start Transaction for Atomic ID Generation ---
         await client.query('BEGIN');
-        
+
         // Lock the table for writing during this transaction to prevent race conditions
         await client.query(`LOCK TABLE ${TABLES.TR_REQUEST} IN EXCLUSIVE MODE`);
 
@@ -239,11 +239,11 @@ const createToolRequest = async (req, res) => {
             const file = req.files.attachment;
             const sanitizedFileName = sanitizeFilename(file.name, 'attachment');
             const uploadDir = path.join(__dirname, '../../../../files/tool_requests');
-            
+
             if (!fs.existsSync(uploadDir)) {
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
-            
+
             const uploadPath = path.join(uploadDir, sanitizedFileName);
             await file.mv(uploadPath);
             file_path = `/tool_requests/${sanitizedFileName}`;
@@ -274,7 +274,7 @@ const createToolRequest = async (req, res) => {
 
         // Commit the transaction after successful insert
         await client.query('COMMIT');
-        
+
         logger.info('Tool request created successfully', { id: requestId, request_item });
 
         // --- ส่งอีเมลแจ้งเตือน (Async - Non blocking) ---
@@ -453,7 +453,7 @@ async function calculateRequestPerformance(dueDateVal, actualDateVal) {
         let status = 'On time';
         if (actual.isSameOrBefore(plan)) {
             status = 'On time';
-            diffDays = 0; 
+            diffDays = 0;
         } else {
             status = 'Delay';
             let current = plan.clone().add(1, 'days');
@@ -513,8 +513,8 @@ const submitAction = async (req, res) => {
             const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
             const userCode = (req.body.user_code || '').toLowerCase();
             const userEmailVal = (req.body.action_by_email || '').toLowerCase();
-            const isAllowed = allowedCodes.includes(userCode) || 
-                              recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
+            const isAllowed = allowedCodes.includes(userCode) ||
+                recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
             if (!isAllowed) return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
         }
     } catch (err) {
@@ -555,7 +555,7 @@ const submitAction = async (req, res) => {
             `UPDATE ${TABLES.TR_REQUEST} SET status = $1, current_stage = $2, req_no = COALESCE($3, req_no), 
              completion_status = $4, diff_days = $5, updated_at = NOW() WHERE id = $6`,
             [nextStatus, nextStage, (stage === WORKFLOW_STAGES.ENG_CHECK && isApprove && extra?.request_no) ? extra.request_no : null,
-             completionStatus, diffDays, id]
+                completionStatus, diffDays, id]
         );
 
         await client.query(

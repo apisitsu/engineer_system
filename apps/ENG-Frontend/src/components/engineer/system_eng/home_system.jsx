@@ -1,23 +1,35 @@
-import React, { useState, useEffect, } from "react";
-import { Layout, DatePicker, Spin, Divider, Row, Col, Card, Progress, Button } from "antd";
+import React, { useState } from "react";
+import { Layout, Spin, Row, Col, Card, Typography } from "antd";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from '../../../theme';
-import { ProjectOutlined } from '@ant-design/icons';
+import { TeamOutlined, AppstoreOutlined } from '@ant-design/icons';
 import ScrollbarStyle from '../../common/scrollbar';
-// import { SendEmailButton } from '../../shared/SendEmailButton';
-import { SendEmailButton } from '../../shared';
+import { useNavigate } from 'react-router-dom';
 
 const { Content } = Layout;
+const { Title, Text } = Typography;
 
-function Tooling_Report() {
-  const [loading, setLoading] = useState(false);
-  const { RangePicker } = DatePicker;
+function HomeSystemEng() {
+  const [loading] = useState(false);
   const { theme } = useTheme();
-  const reload = () => window.location.reload();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-
-  }, []);
+  const cards = [
+    {
+      title: "User Management",
+      description: "จัดการผู้ใช้งาน เพิ่ม/แก้ไข/ลบข้อมูลพนักงาน และจัดการสิทธิ์การเข้าถึง",
+      icon: <TeamOutlined style={{ fontSize: 40, color: theme.colors.primary }} />,
+      path: "/eng/system_eng/user_management",
+      gradient: `linear-gradient(135deg, ${theme.colors.primary}15, ${theme.colors.primary}05)`,
+    },
+    {
+      title: "Engineering Tools",
+      description: "ชุดเครื่องมือสำหรับวิศวกร — แปลงไฟล์, คำนวณ และเครื่องมือช่วยเหลืออื่นๆ",
+      icon: <AppstoreOutlined style={{ fontSize: 40, color: theme.colors.success || '#52c41a' }} />,
+      path: "/eng/system_eng/tool/gallery",
+      gradient: `linear-gradient(135deg, ${(theme.colors.success || '#52c41a')}15, ${(theme.colors.success || '#52c41a')}05)`,
+    },
+  ];
 
   return (
     <Layout style={{ minHeight: 100, display: "flex" }}>
@@ -28,29 +40,45 @@ function Tooling_Report() {
           <Content className="kb-vscroll" style={{
             height: 'calc(100vh - 64px)',
             overflowY: 'auto',
-            padding: '15px'
+            padding: '24px'
           }}>
-            {/* Tool Request System */}
-            <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '12px' }}>
-              {/* <h2 style={{ marginBottom: '16px' }}>System Engineer Report</h2> */}
-              <div style={{ border: `1px solid ${theme.colors.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-                <Divider orientation="left" style={{ margin: '0 0 10px 0' }}>
-                  <h2><ProjectOutlined style={{ color: theme.colors.primary }} />
-                    <a href="/eng/system_eng/project_dashboard" style={{ color: theme.colors.textPrimary, marginLeft: '16px' }}>Project Report</a>
-                  </h2>
+            <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+              <Title level={2} style={{ color: theme.colors.textPrimary, marginBottom: '8px' }}>
+                System Engineer
+              </Title>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: '16px' }}>
+                ระบบจัดการกลางสำหรับวิศวกรระบบ
+              </Text>
 
-                </Divider>
-              </div>
-            </div>
-
-            {/* --- Email Notification Test --- */}
-            <div style={{ marginTop: 16 }}>
-              <SendEmailButton
-                cn="TEST-001"
-                process="Tumble"
-                rev="A"
-                onSuccess={(params) => console.log('📧 Notification sent!', params)}
-              />
+              <Row gutter={[24, 24]} style={{ marginTop: '32px' }}>
+                {cards.map((card, index) => (
+                  <Col xs={24} sm={12} key={index}>
+                    <Card
+                      hoverable
+                      onClick={() => navigate(card.path)}
+                      style={{
+                        borderRadius: '16px',
+                        border: `1px solid ${theme.colors.border}`,
+                        background: card.gradient,
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer',
+                        height: '100%',
+                      }}
+                      bodyStyle={{ padding: '32px' }}
+                    >
+                      <div style={{ marginBottom: '16px' }}>
+                        {card.icon}
+                      </div>
+                      <Title level={4} style={{ color: theme.colors.textPrimary, marginBottom: '8px' }}>
+                        {card.title}
+                      </Title>
+                      <Text style={{ color: theme.colors.textSecondary }}>
+                        {card.description}
+                      </Text>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
             </div>
           </Content>
         </Spin>
@@ -59,4 +87,4 @@ function Tooling_Report() {
   );
 }
 
-export default Tooling_Report;
+export default HomeSystemEng;

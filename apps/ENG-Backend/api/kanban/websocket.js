@@ -44,6 +44,12 @@ function setupWebSocket(server) {
             console.log(`[WS] ${socket.id} left board:${boardId}`);
         });
 
+        // Join FEA simulation room
+        socket.on('join-fea', (jobId) => {
+            socket.join(`fea_${jobId}`);
+            console.log(`[WS] ${socket.id} joined FEA job room: fea_${jobId}`);
+        });
+
         // Join user-specific room (for notifications)
         socket.on('user:join', (uCode) => {
             socket.join(`user:${uCode}`);

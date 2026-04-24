@@ -12,7 +12,7 @@ const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
 const isAdmin = (req, res, next) => {
   const dept = req.user?.department || req.user?.u_department || req.user?.userDepartment;
   const role = req.user?.role || req.user?.u_role;
-  
+
   if (dept === 'AD' || role === 'AD') {
     next();
   } else {
@@ -22,7 +22,7 @@ const isAdmin = (req, res, next) => {
 
 // ── Cache & Whitelist ──────────────────────────────────────────────────────
 const _tableCache = new Map();   // tableName → true
-const _colCache   = new Map();   // tableName → Set<string>
+const _colCache = new Map();   // tableName → Set<string>
 
 // Hardcoded whitelist of tables allowed to be accessed dynamically
 const ALLOWED_TABLES = new Set([
@@ -88,16 +88,16 @@ router.get('/rules', async (req, res) => {
       `SELECT * FROM ${TABLES.MTC_SELECTION_RULES} WHERE is_active=true ORDER BY machine_name, tool_category`
     );
     res.json({ success: true, rules: r.rows });
-  } catch (err) { 
+  } catch (err) {
     console.error('Fetch rules error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
 router.post('/rules', isAdmin, async (req, res) => {
   const { machine_name, tool_category, rule_name, source_field, operator,
-          offset_value, target_tool_table, target_tool_field,
-          tolerance_plus, tolerance_minus } = req.body;
+    offset_value, target_tool_table, target_tool_field,
+    tolerance_plus, tolerance_minus } = req.body;
   try {
     const r = await engPool.query(
       `INSERT INTO ${TABLES.MTC_SELECTION_RULES}
@@ -105,12 +105,12 @@ router.post('/rules', isAdmin, async (req, res) => {
         target_tool_table,target_tool_field,tolerance_plus,tolerance_minus)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [machine_name, tool_category, rule_name, source_field, operator,
-       offset_value, target_tool_table, target_tool_field, tolerance_plus, tolerance_minus]
+        offset_value, target_tool_table, target_tool_field, tolerance_plus, tolerance_minus]
     );
     res.json({ success: true, rule: r.rows[0] });
-  } catch (err) { 
+  } catch (err) {
     console.error('Create rule error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -118,9 +118,9 @@ router.delete('/rules/:id', isAdmin, async (req, res) => {
   try {
     await engPool.query(`UPDATE ${TABLES.MTC_SELECTION_RULES} SET is_active=false WHERE id=$1`, [req.params.id]);
     res.json({ success: true });
-  } catch (err) { 
+  } catch (err) {
     console.error('Delete rule error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -143,9 +143,9 @@ router.get('/tables', async (req, res) => {
       ORDER BY t.table_name
     `, [TABLES.TI_LIST]);
     res.json({ success: true, tables: r.rows });
-  } catch (err) { 
+  } catch (err) {
     console.error('Fetch tables error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -160,9 +160,9 @@ router.get('/tooling-names/:tableName', async (req, res) => {
        WHERE tooling_name IS NOT NULL ORDER BY tooling_name`
     );
     res.json({ success: true, names: r.rows.map(row => row.tooling_name) });
-  } catch (err) { 
+  } catch (err) {
     console.error('Fetch tooling names error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -204,9 +204,9 @@ router.post('/create-table', isAdmin, async (req, res) => {
       dimCount: count,
       lastDim: `dim_${ALPHA[count - 1]}`
     });
-  } catch (err) { 
+  } catch (err) {
     console.error('Create table error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -220,9 +220,9 @@ router.get('/inventory/:tableName', async (req, res) => {
   try {
     const r = await engPool.query(`SELECT * FROM ${tableName} ORDER BY id ASC`);
     res.json({ success: true, data: r.rows });
-  } catch (err) { 
+  } catch (err) {
     console.error('Fetch inventory error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -237,8 +237,8 @@ router.post('/inventory/:tableName', isAdmin, async (req, res) => {
     const validCols = await getValidColumns(tableName);
     const fields = Object.keys(data).filter(
       f => f !== 'id' && f !== 'created_at' && f !== 'updated_at'
-         && data[f] !== null && data[f] !== ''
-         && validCols.has(f)
+        && data[f] !== null && data[f] !== ''
+        && validCols.has(f)
     );
     if (fields.length === 0)
       return res.status(400).json({ success: false, error: 'No valid data provided' });
@@ -250,9 +250,9 @@ router.post('/inventory/:tableName', isAdmin, async (req, res) => {
       fields.map(f => data[f])
     );
     res.json({ success: true, data: r.rows[0] });
-  } catch (err) { 
+  } catch (err) {
     console.error('Insert inventory error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -279,9 +279,9 @@ router.put('/inventory/:tableName/:id', isAdmin, async (req, res) => {
       values
     );
     res.json({ success: true, data: r.rows[0] });
-  } catch (err) { 
+  } catch (err) {
     console.error('Update inventory error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
@@ -298,14 +298,10 @@ router.delete('/inventory/:tableName/:id', isAdmin, async (req, res) => {
     if (r.rowCount === 0)
       return res.status(404).json({ success: false, error: 'Record not found' });
     res.json({ success: true, deletedId: r.rows[0].id });
-  } catch (err) { 
+  } catch (err) {
     console.error('Delete inventory error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' }); 
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
 module.exports = router;
-
-module.exports = router;
-
-

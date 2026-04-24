@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
 import CacheBuster from 'react-cache-buster';
 import { ConfigProvider } from 'antd';
 import { App as AntdApp } from 'antd';
@@ -24,11 +24,11 @@ import Home from "./components/home/home";
 import HomeEng from './components/engineer/home_eng';
 
 import HomeSystemEng from './components/engineer/system_eng/home_system';
-import SystemEngSetting from './components/engineer/system_eng/setting/setting';
-import TodoPoroject from './components/engineer/system_eng/todo/todo_project';
-import ProjectDashboard from './components/engineer/system_eng/todo/ProjectDashboard';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
 import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
+import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
+
 
 import KanbanMain from './components/engineer/kanban/KanbanMain';
 
@@ -38,7 +38,7 @@ import EcntDashboard from './components/engineer/process_eng/ecnt/Dashboard';
 import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
-import Home_ecnt from './components/engineer/process_eng/ecnt/home_ecnt';
+
 import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
@@ -58,18 +58,21 @@ import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
+import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
+import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
   const { isAuthenticated, userDepartment } = useAuthStore();
+  const location = useLocation();
 
   if (!isAuthenticated) {
-    if (window.location.pathname === '/job_check_tracker') {
+    if (location.pathname === '/job_check_tracker') {
       return <Navigate to="/job_check_tracker" replace />;
     } else {
-      return <Navigate to="/sign_in" replace />;
+      // Save the current location to redirect back after login
+      return <Navigate to="/sign_in" state={{ from: location }} replace />;
     }
-    return <Navigate to="/sign_in" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(userDepartment)) {
@@ -89,15 +92,41 @@ const ProtectedRoute = ({ allowedRoles }) => {
   return <Outlet />;
 };
 
+// --- Auth Redirect Wrapper ---
+// Redirects authenticated users away from login/root if they have a valid token
+const AuthRedirectWrapper = ({ children }) => {
+  const { isAuthenticated, userDepartment } = useAuthStore();
+
+  const token = localStorage.getItem("token");
+  const expiresAt = localStorage.getItem("tokenExpiresAt");
+
+  let isTokenValid = false;
+  if (token && expiresAt) {
+    const remaining = new Date(expiresAt).getTime() - Date.now();
+    // Check if token has more than 5 minutes remaining
+    if (remaining > 5 * 60 * 1000) {
+      isTokenValid = true;
+    }
+  }
+
+  if (isAuthenticated && isTokenValid) {
+    const homePath = (userDepartment === 'ENG' || userDepartment === 'SYSTEM_ENG' || userDepartment === 'AD')
+      ? '/eng/home'
+      : '/home';
+    return <Navigate to={homePath} replace />;
+  }
+
+  return children;
+};
+
 // Inner App component that uses theme
 const AppContent = () => {
   const { theme } = useTheme();  // Access current theme
   const { isAuthenticated, logout } = useAuthStore();
 
-  const publicPaths = ['/sign_in', '/job_check_tracker'];
 
   // --- Auto Renewal & Expiration System ---
-  const { getRemainingTime, getLastActiveTime } = useIdleTimer({
+  const { getLastActiveTime } = useIdleTimer({
     timeout: 30 * 60 * 1000, // 30 minutes
     throttle: 500,
     events: [
@@ -113,6 +142,7 @@ const AppContent = () => {
     if (isAuthenticated) {
 
       const doCheckToken = async () => {
+        const publicPaths = ['/sign_in', '/job_check_tracker'];
         const currentPath = window.location.pathname;
         console.log("Checking token for path:", currentPath)
         const isPublicPath = publicPaths.includes(currentPath);
@@ -228,10 +258,9 @@ const AppContent = () => {
       <AntdApp>
         <Router>
           <Routes>
-
             <Route path="/job_check_tracker" element={<JobCheckTracker />} />
-            <Route path="/sign_in" element={<SignIn />} />
-            <Route path="/" element={<Navigate replace to="/sign_in" />} />
+            <Route path="/sign_in" element={<AuthRedirectWrapper><SignIn /></AuthRedirectWrapper>} />
+            <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
             <Route element={<ProtectedRoute />}>
 
@@ -289,7 +318,9 @@ const AppContent = () => {
 
               {/* ------ (Standalone - Full Viewport) ------ */}
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
+                <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
               </Route>
 
 
@@ -297,10 +328,10 @@ const AppContent = () => {
                 <Route element={<MainLayout />}>
                   {/* ------ System Engineer ------ */}
                   <Route path="/eng/system_eng" element={<HomeSystemEng />} />
-                  <Route path="/eng/system_eng/project_dashboard" element={<ProjectDashboard />} />
-                  <Route path="/eng/system_eng/setting" element={<SystemEngSetting />} />
-                  <Route path="/eng/system_eng/todo_project" element={<TodoPoroject />} />
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
+                  <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
+                  <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
+
 
                   {/* ------ For Test Only ------ */}
 

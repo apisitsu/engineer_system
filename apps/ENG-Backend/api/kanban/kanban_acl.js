@@ -209,14 +209,11 @@ const canManageBoard = async (req, boardId) => {
     const boardMbr = await getBoardMembership(boardId, uCode);
     if (boardMbr?.role === 'owner') return true;
 
-    // Private project: MGR/COORD can manage board IF they are a project member
     const { rows: projRows } = await engPool.query(
         'SELECT is_private FROM kb_project WHERE id=$1', [board.project_id]
     );
     const isPrivate = projRows[0]?.is_private;
-    if (isPrivate && (await isManagerOrCoord(req))) {
-        return await isProjectMember(board.project_id, uCode);
-    }
+    // MGR/COORD only have standard member rights in private projects unless they are explicitly the Owner.
 
     return false;
 };
@@ -236,11 +233,16 @@ const canEditBoard = async (req, boardId) => {
     const boardMbr = await getBoardMembership(boardId, uCode);
     if (boardMbr && ['owner', 'editor'].includes(boardMbr.role)) return true;
 
-    // 2. Fetch board → project
+    // 2. Fetch board → project (with status check)
     const { rows: [board] } = await engPool.query(
-        'SELECT project_id, is_private FROM kb_board WHERE id=$1', [boardId]
+        'SELECT b.project_id, b.is_private, p.status FROM kb_board b JOIN kb_project p ON p.id = b.project_id WHERE b.id=$1', [boardId]
     );
     if (!board) return false;
+
+    // Project Status Restriction: Suspended or Completed projects are Read-Only (except for AD)
+    if (['suspended', 'completed'].includes((board.status || '').toLowerCase()) && !(await isSuperAdmin(req))) {
+        return false;
+    }
 
     // 3. Project-level manage (handles AD, Owner, MGR/COORD + privacy)
     if (await canManageProject(req, board.project_id)) return true;
@@ -288,7 +290,7 @@ const canManageCard = async (req, cardId) => {
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id FROM kb_card WHERE id=$1', [cardId]
+        'SELECT board_id, is_private FROM kb_card WHERE id=$1', [cardId]
     );
     if (!card) return false;
 
@@ -302,28 +304,33 @@ const canManageCard = async (req, cardId) => {
 
 /**
  * Can the user EDIT a card (content, status)?
- *   Card Owner/Editor + board-level override
+ *   Any card member (regardless of role) OR any board member OR board-level override (AD/MGR/COORD/Board Owner)
  */
 const canEditCard = async (req, cardId) => {
     const uCode = req.user?.empno;
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id FROM kb_card WHERE id=$1', [cardId]
+        'SELECT c.board_id, c.is_private, p.status FROM kb_card c JOIN kb_board b ON b.id = c.board_id JOIN kb_project p ON p.id = b.project_id WHERE c.id=$1', [cardId]
     );
     if (!card) return false;
 
-    // Card Owner or Editor
-    const cardMbr = await getCardMembership(cardId, uCode);
-    if (cardMbr && ['owner', 'editor'].includes(cardMbr.role)) return true;
+    // Project Status Restriction: Suspended or Completed projects are Read-Only (except for AD)
+    if (['suspended', 'completed'].includes((card.status || '').toLowerCase()) && !(await isSuperAdmin(req))) {
+        return false;
+    }
 
-    // Board-level override
-    return await hasBoardLevelOverride(req, card.board_id);
+    // Any explicit card member can edit
+    const cardMbr = await getCardMembership(cardId, uCode);
+    if (cardMbr) return true;
+
+    // Check if the user has permission to edit the board (covers board editors, project editors, etc.)
+    return await canEditBoard(req, card.board_id);
 };
 
 /**
  * Can the user VIEW a card?
- *   Non-private cards: everyone with board access
+ *   Non-private cards: everyone with project access
  *   Private cards: explicit card member or board-level override
  */
 const canViewCard = async (req, cardId) => {
@@ -331,19 +338,44 @@ const canViewCard = async (req, cardId) => {
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id, is_private FROM kb_card WHERE id=$1', [cardId]
+        'SELECT c.board_id, c.is_private, b.project_id FROM kb_card c JOIN kb_board b ON b.id = c.board_id WHERE c.id=$1', [cardId]
     );
     if (!card) return false;
 
-    // Non-private card → visible to anyone with board access
-    if (!card.is_private) return true;
+    // Board-level override (AD, Project Owner, Board Owner)
+    if (await hasBoardLevelOverride(req, card.board_id)) return true;
 
-    // Private card → explicit member
+    // Explicit card member
     const cardMbr = await getCardMembership(cardId, uCode);
     if (cardMbr) return true;
 
-    // Board-level override
-    return await hasBoardLevelOverride(req, card.board_id);
+    // If private card, must be explicit member or have override (checked above)
+    if (card.is_private) return false;
+
+    // Non-private card → visible to anyone with PROJECT access
+    return await canAccessProject(req, card.project_id);
+};
+
+/**
+ * Can the user VIEW a board?
+ *   Non-private boards: everyone with project access
+ *   Private boards: explicit board member or project-level override
+ */
+const canViewBoard = async (req, boardId) => {
+    const uCode = req.user?.empno;
+    if (!uCode) return false;
+
+    const { rows: [board] } = await engPool.query('SELECT project_id, is_private FROM kb_board WHERE id=$1', [boardId]);
+    if (!board) return false;
+
+    const mbr = await getBoardMembership(boardId, uCode);
+    if (mbr) return true;
+
+    if (await canManageProject(req, board.project_id)) return true;
+
+    if (board.is_private) return false;
+
+    return await canAccessProject(req, board.project_id);
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -369,6 +401,7 @@ module.exports = {
     // Board-level
     canManageBoard,
     canEditBoard,
+    canViewBoard,
 
     // Card-level
     hasBoardLevelOverride,

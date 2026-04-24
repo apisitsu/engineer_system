@@ -1,0 +1,7 @@
+Parameter,Value,Unit,Description
+InnerDiameter,10.0,mm,Inner bore diameter
+OuterDiameter,20.0,mm,Outer body diameter
+Length,15.0,mm,Total bushing length (body + flange)
+FlangeDiameter,25.0,mm,Flange outer diameter
+FlangeThickness,2.5,mm,Flange thickness
+MeshSize,0.8,mm,Target element size

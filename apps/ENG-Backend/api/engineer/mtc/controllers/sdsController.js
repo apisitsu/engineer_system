@@ -54,11 +54,11 @@ router.get('/counts', async (_req, res) => {
     ORDER BY count DESC;
   `;
   try {
-      const result = await engPool.query(COUNTS_SQL);
-      const total = result.rows.reduce((s, r) => s + parseInt(r.count, 10), 0);
-      res.json({ counts: result.rows, total });
+    const result = await engPool.query(COUNTS_SQL);
+    const total = result.rows.reduce((s, r) => s + parseInt(r.count, 10), 0);
+    res.json({ counts: result.rows, total });
   } catch (err) {
-      res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -70,8 +70,8 @@ router.post('/search', async (req, res) => {
   if (!searchTerm?.trim()) return res.status(400).json({ error: 'searchTerm is required' });
 
   try {
-      const result = await engPool.query(
-        `SELECT ss.id, ss.cn, ss.part_no, ss.process_name, ss.process_code, ss.machine,
+    const result = await engPool.query(
+      `SELECT ss.id, ss.cn, ss.part_no, ss.process_name, ss.process_code, ss.machine,
                 ss.category, ss.setup_data_sheet_rev, a.prepared_by, a.checked_by, a.approved_by
          FROM ${TABLES.SETUP_SHEET} ss
          LEFT JOIN ${TABLES.APPROVAL} a ON a.setup_sheet_id = ss.id
@@ -79,25 +79,25 @@ router.post('/search', async (req, res) => {
             OR ss.category ILIKE $1 OR ss.process_code ILIKE $1 OR ss.machine ILIKE $1
          ORDER BY ss.cn, ss.process_code, ss.machine
          LIMIT 200`,
-        [`%${searchTerm.trim()}%`]
-      );
-    
-      const groups = {};
-      result.rows.forEach(row => {
-        const key = `${row.cn}|${row.process_code}|${row.machine}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(row);
-      });
-    
-      const rows = [];
-      Object.values(groups).forEach(group => {
-        group.sort((a, b) => revisionSortKey(a.setup_data_sheet_rev) - revisionSortKey(b.setup_data_sheet_rev));
-        group.forEach((row, idx) => rows.push({ ...row, isLatestRevision: idx === group.length - 1 }));
-      });
-    
-      res.json({ results: rows, total: rows.length });
+      [`%${searchTerm.trim()}%`]
+    );
+
+    const groups = {};
+    result.rows.forEach(row => {
+      const key = `${row.cn}|${row.process_code}|${row.machine}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+    });
+
+    const rows = [];
+    Object.values(groups).forEach(group => {
+      group.sort((a, b) => revisionSortKey(a.setup_data_sheet_rev) - revisionSortKey(b.setup_data_sheet_rev));
+      group.forEach((row, idx) => rows.push({ ...row, isLatestRevision: idx === group.length - 1 }));
+    });
+
+    res.json({ results: rows, total: rows.length });
   } catch (err) {
-      res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -111,74 +111,74 @@ router.get('/pdf', async (req, res) => {
   }
 
   try {
-      const setupResult = await engPool.query(
-        `SELECT ss.id, ss.cn, ss.process_code, ss.machine, ss.setup_data_sheet_rev
+    const setupResult = await engPool.query(
+      `SELECT ss.id, ss.cn, ss.process_code, ss.machine, ss.setup_data_sheet_rev
          FROM ${TABLES.SETUP_SHEET} ss WHERE ss.cn=$1 AND ss.process_code=$2 AND ss.machine=$3`,
-        [cn, process_code, machine]
-      );
-    
-      if (setupResult.rows.length === 0) return res.status(404).json({ error: 'Setup sheet not found' });
-      const setup = setupResult.rows[0];
+      [cn, process_code, machine]
+    );
 
-      const tplResult = await engPool.query(
-        `SELECT t.excel_file_name FROM ${TABLES.SETUP_SHEET} ss JOIN ${TABLES.TEMPLATE} t ON ss.template_id = t.id WHERE ss.id=$1`,
-        [setup.id]
-      );
-      const excelFileName = tplResult.rows[0]?.excel_file_name;
-      if (!excelFileName) return res.status(500).json({ error: 'Excel template not defined' });
-    
-      const templatePath = path.join(TEMPLATE_DIR, excelFileName);
-      if (!fs.existsSync(templatePath)) return res.status(500).json({ error: 'Template file not found' });
-    
-      ensureDir(CACHE_DIR);
-      const cacheKey = buildPdfCacheKey(setup, templatePath);
-      const pdfPath = path.join(CACHE_DIR, `${cacheKey}.pdf`);
-    
-      if (fs.existsSync(pdfPath)) return res.sendFile(pdfPath);
-    
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.readFile(templatePath);
-    
-      const mappingResult = await engPool.query(
-        `SELECT m.sheet_name, m.cell_address, m.param_key, COALESCE(v.param_value,'') AS param_value
+    if (setupResult.rows.length === 0) return res.status(404).json({ error: 'Setup sheet not found' });
+    const setup = setupResult.rows[0];
+
+    const tplResult = await engPool.query(
+      `SELECT t.excel_file_name FROM ${TABLES.SETUP_SHEET} ss JOIN ${TABLES.TEMPLATE} t ON ss.template_id = t.id WHERE ss.id=$1`,
+      [setup.id]
+    );
+    const excelFileName = tplResult.rows[0]?.excel_file_name;
+    if (!excelFileName) return res.status(500).json({ error: 'Excel template not defined' });
+
+    const templatePath = path.join(TEMPLATE_DIR, excelFileName);
+    if (!fs.existsSync(templatePath)) return res.status(500).json({ error: 'Template file not found' });
+
+    ensureDir(CACHE_DIR);
+    const cacheKey = buildPdfCacheKey(setup, templatePath);
+    const pdfPath = path.join(CACHE_DIR, `${cacheKey}.pdf`);
+
+    if (fs.existsSync(pdfPath)) return res.sendFile(pdfPath);
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(templatePath);
+
+    const mappingResult = await engPool.query(
+      `SELECT m.sheet_name, m.cell_address, m.param_key, COALESCE(v.param_value,'') AS param_value
          FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} m
          JOIN ${TABLES.SETUP_SHEET} ss ON ss.template_id = m.template_id
          LEFT JOIN ${TABLES.SETUP_PARAMETER_VALUE} v ON v.param_key = m.param_key AND v.setup_sheet_id = ss.id
          WHERE ss.id=$1 ORDER BY m.id`,
-        [setup.id]
-      );
-    
-      mappingResult.rows.forEach(row => {
-        const ws = row.sheet_name ? workbook.getWorksheet(row.sheet_name) : workbook.worksheets[0];
-        if (ws && row.cell_address && row.param_key) {
-          const cell = ws.getCell(row.cell_address);
-          const current = cell.value;
-          const placeholder = `{{${row.param_key}}}`;
-          if (typeof current === 'string' && current.includes(placeholder)) {
-            cell.value = current.replace(placeholder, row.param_value);
-          } else {
-            cell.value = row.param_value;
-          }
+      [setup.id]
+    );
+
+    mappingResult.rows.forEach(row => {
+      const ws = row.sheet_name ? workbook.getWorksheet(row.sheet_name) : workbook.worksheets[0];
+      if (ws && row.cell_address && row.param_key) {
+        const cell = ws.getCell(row.cell_address);
+        const current = cell.value;
+        const placeholder = `{{${row.param_key}}}`;
+        if (typeof current === 'string' && current.includes(placeholder)) {
+          cell.value = current.replace(placeholder, row.param_value);
+        } else {
+          cell.value = row.param_value;
         }
-      });
-    
-      ensureDir('./output');
-      const tempExcelPath = path.join('./output', `__temp_${Date.now()}_${cacheKey}.xlsx`);
-      await workbook.xlsx.writeFile(tempExcelPath);
-    
-      const SOFFICE = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
-      execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempExcelPath, '--outdir', CACHE_DIR], (error) => {
-        safeUnlink(tempExcelPath);
-        if (error) {
-          return res.status(500).json({ error: 'PDF conversion failed' });
-        }
-        const generatedPdfPath = path.join(CACHE_DIR, path.basename(tempExcelPath).replace(/\.xlsx$/, '.pdf'));
-        if (!fs.existsSync(generatedPdfPath)) return res.status(500).json({ error: 'Generated PDF not found' });
-        fs.renameSync(generatedPdfPath, pdfPath);
-        return res.sendFile(pdfPath);
-      });
+      }
+    });
+
+    ensureDir('./output');
+    const tempExcelPath = path.join('./output', `__temp_${Date.now()}_${cacheKey}.xlsx`);
+    await workbook.xlsx.writeFile(tempExcelPath);
+
+    const SOFFICE = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+    execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempExcelPath, '--outdir', CACHE_DIR], (error) => {
+      safeUnlink(tempExcelPath);
+      if (error) {
+        return res.status(500).json({ error: 'PDF conversion failed' });
+      }
+      const generatedPdfPath = path.join(CACHE_DIR, path.basename(tempExcelPath).replace(/\.xlsx$/, '.pdf'));
+      if (!fs.existsSync(generatedPdfPath)) return res.status(500).json({ error: 'Generated PDF not found' });
+      fs.renameSync(generatedPdfPath, pdfPath);
+      return res.sendFile(pdfPath);
+    });
   } catch (err) {
-      res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -226,7 +226,7 @@ router.get('/test-puppeteer', async (req, res) => {
     });
     const page = await browser.newPage();
     await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
-    
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       landscape: true,
@@ -252,62 +252,60 @@ router.get('/test-puppeteer', async (req, res) => {
  * Manage Templates & Mappings
  */
 router.get('/templates', async (req, res) => {
-    try {
-        const result = await engPool.query(`SELECT * FROM ${TABLES.TEMPLATE} ORDER BY id DESC`);
-        res.json(result.rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const result = await engPool.query(`SELECT * FROM ${TABLES.TEMPLATE} ORDER BY id DESC`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/template', async (req, res) => {
-    const { template_name, excel_file_name } = req.body;
-    try {
-        const result = await engPool.query(
-            `INSERT INTO ${TABLES.TEMPLATE} (template_name, excel_file_name) VALUES ($1, $2) RETURNING *`,
-            [template_name, excel_file_name]
-        );
-        res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  const { template_name, excel_file_name } = req.body;
+  try {
+    const result = await engPool.query(
+      `INSERT INTO ${TABLES.TEMPLATE} (template_name, excel_file_name) VALUES ($1, $2) RETURNING *`,
+      [template_name, excel_file_name]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/mapping/:templateId', async (req, res) => {
-    try {
-        const result = await engPool.query(
-            `SELECT * FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE template_id = $1 ORDER BY id`,
-            [req.params.templateId]
-        );
-        res.json(result.rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const result = await engPool.query(
+      `SELECT * FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE template_id = $1 ORDER BY id`,
+      [req.params.templateId]
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/mapping', async (req, res) => {
-    const { template_id, sheet_name, cell_address, param_key } = req.body;
-    try {
-        const result = await engPool.query(
-            `INSERT INTO ${TABLES.TEMPLATE_EXCEL_MAPPING} (template_id, sheet_name, cell_address, param_key) VALUES ($1, $2, $3, $4) RETURNING *`,
-            [template_id, sheet_name, cell_address, param_key]
-        );
-        res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  const { template_id, sheet_name, cell_address, param_key } = req.body;
+  try {
+    const result = await engPool.query(
+      `INSERT INTO ${TABLES.TEMPLATE_EXCEL_MAPPING} (template_id, sheet_name, cell_address, param_key) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [template_id, sheet_name, cell_address, param_key]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/mapping/:id', async (req, res) => {
-    try {
-        await engPool.query(`DELETE FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE id = $1`, [req.params.id]);
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    await engPool.query(`DELETE FROM ${TABLES.TEMPLATE_EXCEL_MAPPING} WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/template/:id', async (req, res) => {
-    const { template_name, excel_file_name } = req.body;
-    try {
-        const result = await engPool.query(
-            `UPDATE ${TABLES.TEMPLATE} SET template_name = $1, excel_file_name = $2 WHERE id = $3 RETURNING *`,
-            [template_name, excel_file_name, req.params.id]
-        );
-        res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  const { template_name, excel_file_name } = req.body;
+  try {
+    const result = await engPool.query(
+      `UPDATE ${TABLES.TEMPLATE} SET template_name = $1, excel_file_name = $2 WHERE id = $3 RETURNING *`,
+      [template_name, excel_file_name, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
-
-
