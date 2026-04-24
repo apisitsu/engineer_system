@@ -246,6 +246,37 @@ const ProjectSettingsDrawer = () => {
         }
     };
 
+    const handleRemoveMemberClick = (projectId, member) => {
+        if (member.role === 'owner') {
+            const owners = projectManagers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Remove Last Owner',
+                    text: 'This project must have at least one owner. Please assign another member as an owner (Transfer Ownership) before removing this user.'
+                });
+                return;
+            }
+        }
+        removeProjectManager(projectId, member.u_code);
+    };
+
+    const handleRoleChange = (projectId, member, newRole) => {
+        if (member.role === 'owner' && newRole !== 'owner') {
+            const owners = projectManagers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Change Role',
+                    text: 'This project must have at least one owner. Please assign another member as an owner before demoting this user.'
+                });
+                return;
+            }
+        }
+        addProjectManager(projectId, member.u_code, newRole);
+        setEditingRoleUcode(null);
+    };
+
     // Which projects to show in the list
     const displayProjects = isSingleProjectMode && targetProject
         ? [targetProject]
@@ -453,10 +484,7 @@ const ProjectSettingsDrawer = () => {
                                                                             <Select
                                                                                 size="small"
                                                                                 value={mgr.role}
-                                                                                onChange={(newRole) => {
-                                                                                    addProjectManager(proj.id, mgr.u_code, newRole);
-                                                                                    setEditingRoleUcode(null);
-                                                                                }}
+                                                                                onChange={(newRole) => handleRoleChange(proj.id, mgr, newRole)}
                                                                                 options={[
                                                                                     { label: 'Viewer', value: 'viewer' },
                                                                                     { label: 'Editor', value: 'editor' },
@@ -469,13 +497,13 @@ const ProjectSettingsDrawer = () => {
                                                                     ) : (
                                                                         <>
                                                                             <Text type="secondary" style={{ fontSize: 11 }}>{mgr.role}</Text>
-                                                                            {canChangeRole && mgr.role !== 'owner' && (
+                                                                            {canChangeRole && (
                                                                                 <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(mgr.u_code)} />
                                                                             )}
                                                                         </>
                                                                     )}
-                                                                    {mgr.role !== 'owner' && (
-                                                                        <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => removeProjectManager(proj.id, mgr.u_code)} />
+                                                                    {canChangeRole && (
+                                                                        <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveMemberClick(proj.id, mgr)} />
                                                                     )}
                                                                 </Space>
                                                             </div>

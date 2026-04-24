@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Typography, Avatar, Tooltip, Progress } from 'antd';
-import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdAccountTree } from 'react-icons/md';
+import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdAccountTree, MdFamilyRestroom } from 'react-icons/md';
 import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useTheme } from '../../../../theme';
@@ -20,8 +20,8 @@ const KanbanCard = ({ card, isOverlay }) => {
     }, [card.parent_id, cards]);
     const isEffectivelySuspended = card.is_suspended || parentCard?.is_suspended;
 
-    const totalChildren = Number(card.total_children) || 0;
-    const doneChildren = Number(card.done_children) || 0;
+    const totalChildren = Number(card.total_children_count || card.total_children) || 0;
+    const doneChildren = Number(card.completed_children_count || card.done_children) || 0;
 
     // Resolve label colors from board labels
     const resolvedLabels = useMemo(() => {
@@ -95,18 +95,18 @@ const KanbanCard = ({ card, isOverlay }) => {
 
         let ms = endMs - startMs;
         if (ms < 0) ms = 0;
-        
+
         const totalMins = Math.floor(ms / 60000);
         const totalHours = Math.floor(totalMins / 60);
         const days = Math.floor(totalHours / 24);
         const hours = totalHours % 24;
         const mins = totalMins % 60;
-        
+
         let displayStr = '';
         if (days > 0) displayStr = `${days}d ${hours}h`;
         else if (hours > 0) displayStr = `${hours}h ${mins}m`;
         else displayStr = `${mins}m`;
-        
+
         return { displayStr, tooltip: tooltipStr };
     }, [card.list_changed_at, card.created_at, card.action_in_progress_at, card.action_done_at]);
 
@@ -261,7 +261,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                 )}
 
                 {/* Badges Row — Due date, description, attachments, comments, members */}
-                {(dueDateInfo || hasDescription || hasProblemOrSolution || hasMemo || commentCount > 0 || attachmentCount > 0 || assignees.length > 0 || totalChildren > 0) && (
+                {(dueDateInfo || hasDescription || hasProblemOrSolution || hasMemo || commentCount > 0 || attachmentCount > 0 || assignees.length > 0 || totalChildren > 0 || card.parent_id) && (
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -269,22 +269,6 @@ const KanbanCard = ({ card, isOverlay }) => {
                         gap: 6,
                         marginTop: 4,
                     }}>
-                        {/* Child Progress Badge */}
-                        {totalChildren > 0 && (
-                            <Tooltip title={`${doneChildren}/${totalChildren} Child Cards Done`}>
-                                <div style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: 3,
-                                    color: doneChildren === totalChildren ? '#61bd4f' : theme.colors.textTertiary, 
-                                    fontSize: 12,
-                                    background: doneChildren === totalChildren ? '#e6f4ea' : 'transparent',
-                                    padding: doneChildren === totalChildren ? '1px 4px' : '0',
-                                    borderRadius: 4
-                                }}>
-                                    <MdAccountTree size={14} />
-                                    <span style={{ fontWeight: 600 }}>{doneChildren}/{totalChildren}</span>
-                                </div>
-                            </Tooltip>
-                        )}
                         {/* Priority Badge */}
                         <Tooltip title={`Priority: ${card.priority || 'medium'}`}>
                             <div style={{
@@ -389,6 +373,37 @@ const KanbanCard = ({ card, isOverlay }) => {
                                 }}>
                                     <MdOutlineComment size={14} />
                                     <span>{commentCount}</span>
+                                </div>
+                            </Tooltip>
+                        )}
+
+                        {/* Parent Indicator Badge */}
+                        {!!card.parent_id && (
+                            <Tooltip title={`Parent: ${parentCard?.name || '...'}`}>
+                                <div style={{
+                                    display: 'inline-flex', alignItems: 'center',
+                                    color: theme.colors.textTertiary,
+                                    fontSize: 12,
+                                }}>
+                                    <MdFamilyRestroom size={14} />
+                                </div>
+                            </Tooltip>
+                        )}
+
+                        {/* Child Progress Badge */}
+                        {totalChildren > 0 && (
+                            <Tooltip title={`${doneChildren}/${totalChildren} Child Cards Done`}>
+                                <div style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                                    color: theme.colors.textTertiary,
+                                    // color: doneChildren === totalChildren ? '#61bd4f' : theme.colors.textTertiary,
+                                    fontSize: 12,
+                                    background: doneChildren === totalChildren ? '#e6f4ea' : 'transparent',
+                                    padding: doneChildren === totalChildren ? '1px 4px' : '0',
+                                    borderRadius: 4
+                                }}>
+                                    <MdFamilyRestroom size={14} />
+                                    <span style={{ fontWeight: 600 }}>{doneChildren}/{totalChildren}</span>
                                 </div>
                             </Tooltip>
                         )}

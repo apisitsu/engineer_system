@@ -6,7 +6,7 @@ import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
 import { server } from '../../../../constance/constance';
 
-import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, MdLockOutline } from 'react-icons/md';
+import { MdOutlineSubtitles, MdOutlineDescription, MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdOutlineTimer, MdOutlineAttachFile, MdLowPriority, MdLockOutline, MdFamilyRestroom } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { CiMemoPad } from "react-icons/ci";
 import { FiPaperclip, FiUpload } from 'react-icons/fi';
@@ -208,6 +208,11 @@ const CardDetailDrawer = () => {
         if (!card?.parent_id) return null;
         return Object.values(cards || {}).flat().find(c => String(c.id) === String(card.parent_id));
     }, [card?.parent_id, cards]);
+
+    const childCards = useMemo(() => {
+        if (!card?.id || !cards) return [];
+        return Object.values(cards).flat().filter(c => String(c.parent_id) === String(card.id));
+    }, [card?.id, cards]);
 
     const isEffectivelySuspended = card?.is_suspended || parentCard?.is_suspended;
     const isReadOnly = baseIsReadOnly || isEffectivelySuspended;
@@ -1412,6 +1417,98 @@ const CardDetailDrawer = () => {
                                                         />
                                                     </div>
                                                 ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ─── Parent/Child ─── */}
+                                    {(parentCard || parseInt(card.total_children_count) > 0) && (
+                                        <div style={{ marginBottom: theme.spacing.xl }}>
+                                            <SectionHeader icon={<MdFamilyRestroom />} title="Parent/Child" theme={theme} />
+                                            <div style={{ marginLeft: 28 }}>
+                                                {/* Parent Info */}
+                                                {parentCard && (
+                                                    <div style={{
+                                                        background: theme.colors.surface,
+                                                        border: `1px solid ${theme.colors.border}`,
+                                                        borderRadius: theme.borderRadius.md,
+                                                        padding: '12px 16px',
+                                                        marginBottom: parseInt(card.total_children_count) > 0 ? 12 : 0,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease',
+                                                    }}
+                                                    onClick={() => {
+                                                        closeCardDetail();
+                                                        setTimeout(() => {
+                                                            useKanbanStore.getState().openCardDetail(parentCard.id);
+                                                        }, 100);
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.borderColor = theme.colors.primary}
+                                                    onMouseLeave={e => e.currentTarget.style.borderColor = theme.colors.border}
+                                                    >
+                                                        <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Parent Card</Text>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <FaCheckSquare style={{ color: parentCard.is_closed ? theme.colors.success : theme.colors.textTertiary }} />
+                                                            <Text strong style={{ fontSize: 14 }}>{parentCard.name}</Text>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Child Progress */}
+                                                {parseInt(card.total_children_count) > 0 && (
+                                                    <div style={{
+                                                        background: theme.colors.surface,
+                                                        border: `1px solid ${theme.colors.border}`,
+                                                        borderRadius: theme.borderRadius.md,
+                                                        padding: '12px 16px',
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                            <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Child Progress</Text>
+                                                            <Text strong style={{ fontSize: 12 }}>
+                                                                {card.completed_children_count || 0} / {card.total_children_count} Completed
+                                                            </Text>
+                                                        </div>
+                                                        <Progress 
+                                                            percent={Math.round((parseInt(card.completed_children_count || 0) / parseInt(card.total_children_count)) * 100)} 
+                                                            size="small" 
+                                                            strokeColor={theme.colors.success} 
+                                                            status={parseInt(card.completed_children_count || 0) === parseInt(card.total_children_count) ? 'success' : 'active'}
+                                                            style={{ marginBottom: 12 }}
+                                                        />
+
+                                                        {/* Child List */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                            {childCards.map(child => {
+                                                                const list = lists.find(l => String(l.id) === String(child.list_id));
+                                                                const listName = (list?.name || '').toLowerCase();
+                                                                const isDone = listName.includes('done') || listName.includes('completed') || listName.includes('finish') || listName.includes('เสร็จ');
+                                                                
+                                                                return (
+                                                                    <div key={child.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: isDone ? theme.colors.success : theme.colors.textTertiary }} />
+                                                                        <Text 
+                                                                            delete={isDone} 
+                                                                            type={isDone ? 'secondary' : 'default'}
+                                                                            style={{ 
+                                                                                fontSize: 13,
+                                                                                cursor: 'pointer',
+                                                                                flex: 1
+                                                                            }}
+                                                                            onClick={() => {
+                                                                                closeCardDetail();
+                                                                                setTimeout(() => {
+                                                                                    useKanbanStore.getState().openCardDetail(child.id);
+                                                                                }, 100);
+                                                                            }}
+                                                                        >
+                                                                            {child.name}
+                                                                        </Text>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}

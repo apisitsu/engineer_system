@@ -217,9 +217,9 @@ export const createCardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to reorder card', err);
             if (err.response?.status === 400 || err.response?.status === 403) {
-                message.error(err.response?.data?.error || 'Validation failed. Action not allowed.');
+                Swal.fire('การดำเนินการถูกปฏิเสธ', err.response?.data?.error || 'Validation failed. Action not allowed.', 'error');
             } else {
-                message.error('Failed to move card');
+                Swal.fire('เกิดข้อผิดพลาด', 'Failed to move card', 'error');
             }
             get().fetchCardsForList(targetListId);
             if (sourceListId) get().fetchCardsForList(sourceListId);
