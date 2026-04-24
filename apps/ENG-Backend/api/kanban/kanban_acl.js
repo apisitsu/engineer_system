@@ -209,14 +209,11 @@ const canManageBoard = async (req, boardId) => {
     const boardMbr = await getBoardMembership(boardId, uCode);
     if (boardMbr?.role === 'owner') return true;
 
-    // Private project: MGR/COORD can manage board IF they are a project member
     const { rows: projRows } = await engPool.query(
         'SELECT is_private FROM kb_project WHERE id=$1', [board.project_id]
     );
     const isPrivate = projRows[0]?.is_private;
-    if (isPrivate && (await isManagerOrCoord(req))) {
-        return await isProjectMember(board.project_id, uCode);
-    }
+    // MGR/COORD only have standard member rights in private projects unless they are explicitly the Owner.
 
     return false;
 };
@@ -236,11 +233,16 @@ const canEditBoard = async (req, boardId) => {
     const boardMbr = await getBoardMembership(boardId, uCode);
     if (boardMbr && ['owner', 'editor'].includes(boardMbr.role)) return true;
 
-    // 2. Fetch board → project
+    // 2. Fetch board → project (with status check)
     const { rows: [board] } = await engPool.query(
-        'SELECT project_id, is_private FROM kb_board WHERE id=$1', [boardId]
+        'SELECT b.project_id, b.is_private, p.status FROM kb_board b JOIN kb_project p ON p.id = b.project_id WHERE b.id=$1', [boardId]
     );
     if (!board) return false;
+
+    // Project Status Restriction: Suspended or Completed projects are Read-Only (except for AD)
+    if (['suspended', 'completed'].includes((board.status || '').toLowerCase()) && !(await isSuperAdmin(req))) {
+        return false;
+    }
 
     // 3. Project-level manage (handles AD, Owner, MGR/COORD + privacy)
     if (await canManageProject(req, board.project_id)) return true;
@@ -309,9 +311,14 @@ const canEditCard = async (req, cardId) => {
     if (!uCode) return false;
 
     const { rows: [card] } = await engPool.query(
-        'SELECT board_id, is_private FROM kb_card WHERE id=$1', [cardId]
+        'SELECT c.board_id, c.is_private, p.status FROM kb_card c JOIN kb_board b ON b.id = c.board_id JOIN kb_project p ON p.id = b.project_id WHERE c.id=$1', [cardId]
     );
     if (!card) return false;
+
+    // Project Status Restriction: Suspended or Completed projects are Read-Only (except for AD)
+    if (['suspended', 'completed'].includes((card.status || '').toLowerCase()) && !(await isSuperAdmin(req))) {
+        return false;
+    }
 
     // Any explicit card member can edit
     const cardMbr = await getCardMembership(cardId, uCode);

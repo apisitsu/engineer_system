@@ -30,6 +30,56 @@ const autoSubscribe = async (client, cardId, uCode) => {
     `, [cardId, uCode]);
 };
 
+// Helper to check if card or its ancestors are suspended
+const checkCascadingSuspension = async (client, cardId) => {
+    const { rows } = await client.query(`
+        WITH RECURSIVE Ancestors AS (
+            SELECT id, parent_id, is_suspended, 1 as depth FROM kb_card WHERE id = $1
+            UNION ALL
+            SELECT c.id, c.parent_id, c.is_suspended, a.depth + 1
+            FROM kb_card c
+            INNER JOIN Ancestors a ON c.id = a.parent_id
+        )
+        SELECT id FROM Ancestors WHERE is_suspended = TRUE LIMIT 1;
+    `, [cardId]);
+    return rows.length > 0;
+};
+
+// Helper to check if any descendant is not in Done list
+const checkDescendantsDone = async (client, cardId) => {
+    const { rows } = await client.query(`
+        WITH RECURSIVE Descendants AS (
+            SELECT c.id, c.list_id FROM kb_card c WHERE c.parent_id = $1
+            UNION ALL
+            SELECT c.id, c.list_id
+            FROM kb_card c
+            INNER JOIN Descendants d ON c.parent_id = d.id
+        )
+        SELECT d.id FROM Descendants d
+        JOIN kb_list l ON l.id = d.list_id
+        WHERE lower(l.name) NOT LIKE '%done%' AND lower(l.name) NOT LIKE '%completed%' AND lower(l.name) NOT LIKE '%finish%' AND lower(l.name) NOT LIKE '%เสร็จ%'
+        LIMIT 1;
+    `, [cardId]);
+    return rows.length === 0; // True if all descendants are Done (or no descendants)
+};
+
+// Helper to check for circular dependency
+const checkCircularDependency = async (client, cardId, newParentId) => {
+    if (!newParentId) return false;
+    if (cardId === newParentId) return true;
+    const { rows } = await client.query(`
+        WITH RECURSIVE Descendants AS (
+            SELECT id FROM kb_card WHERE parent_id = $1
+            UNION ALL
+            SELECT c.id
+            FROM kb_card c
+            INNER JOIN Descendants d ON c.parent_id = d.id
+        )
+        SELECT id FROM Descendants WHERE id = $2 LIMIT 1;
+    `, [cardId, newParentId]);
+    return rows.length > 0; // True if circular dependency exists
+};
+
 // ─── CARD CRUD ─────────────────────────────────────────────────────
 
 // GET /api/kanban/lists/:listId/cards
@@ -216,56 +266,6 @@ const UpdateCard = async (req, res) => {
 
     const { is_suspended, suspended_reason, parent_id } = req.body;
 
-    // Helper to check if card or its ancestors are suspended
-    const checkCascadingSuspension = async (cardId) => {
-        const { rows } = await engPool.query(`
-            WITH RECURSIVE Ancestors AS (
-                SELECT id, parent_id, is_suspended, 1 as depth FROM kb_card WHERE id = $1
-                UNION ALL
-                SELECT c.id, c.parent_id, c.is_suspended, a.depth + 1
-                FROM kb_card c
-                INNER JOIN Ancestors a ON c.id = a.parent_id
-            )
-            SELECT id FROM Ancestors WHERE is_suspended = TRUE LIMIT 1;
-        `, [cardId]);
-        return rows.length > 0;
-    };
-
-    // Helper to check if any descendant is not in Done list
-    const checkDescendantsDone = async (cardId) => {
-        const { rows } = await engPool.query(`
-            WITH RECURSIVE Descendants AS (
-                SELECT c.id, c.list_id FROM kb_card c WHERE c.parent_id = $1
-                UNION ALL
-                SELECT c.id, c.list_id
-                FROM kb_card c
-                INNER JOIN Descendants d ON c.parent_id = d.id
-            )
-            SELECT d.id FROM Descendants d
-            JOIN kb_list l ON l.id = d.list_id
-            WHERE lower(l.name) NOT LIKE '%done%' AND lower(l.name) NOT LIKE '%completed%' AND lower(l.name) NOT LIKE '%finish%' AND lower(l.name) NOT LIKE '%เสร็จ%'
-            LIMIT 1;
-        `, [cardId]);
-        return rows.length === 0; // True if all descendants are Done (or no descendants)
-    };
-
-    // Helper to check for circular dependency
-    const checkCircularDependency = async (cardId, newParentId) => {
-        if (!newParentId) return false;
-        if (cardId === newParentId) return true;
-        const { rows } = await engPool.query(`
-            WITH RECURSIVE Descendants AS (
-                SELECT id FROM kb_card WHERE parent_id = $1
-                UNION ALL
-                SELECT c.id
-                FROM kb_card c
-                INNER JOIN Descendants d ON c.parent_id = d.id
-            )
-            SELECT id FROM Descendants WHERE id = $2 LIMIT 1;
-        `, [cardId, newParentId]);
-        return rows.length > 0; // True if circular dependency exists
-    };
-
     // 1. Suspension Toggle
     if (is_suspended !== undefined) {
         if (!(await canManageCard(req, id)) && !(await canEditBoard(req, card.board_id))) {
@@ -283,12 +283,13 @@ const UpdateCard = async (req, res) => {
         
         // If the request only contained suspension update, return early
         if (Object.keys(req.body).filter(k => k !== 'is_suspended' && k !== 'suspended_reason' && k !== 'owner_u_code').length === 0) {
-            return res.json({ message: 'Suspension status updated' });
+            const { rows: [updated] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
+            return res.json({ message: 'Suspension status updated', data: updated });
         }
     }
 
     // Check if card is locked due to suspension (itself or ancestor) before allowing other updates
-    if (await checkCascadingSuspension(id)) {
+    if (await checkCascadingSuspension(engPool, id)) {
         return res.status(403).json({ error: 'Action denied. This card (or its Parent) is currently Suspended.' });
     }
 
@@ -327,7 +328,7 @@ const UpdateCard = async (req, res) => {
 
             // Rule A: Parent-to-Done Constraint
             if (isDestDone) {
-                const allDone = await checkDescendantsDone(id);
+                const allDone = await checkDescendantsDone(client, id);
                 if (!allDone) {
                     await client.query('ROLLBACK');
                     return res.status(400).json({ error: 'Cannot move to Done. One or more Child cards are still incomplete.' });
@@ -357,7 +358,7 @@ const UpdateCard = async (req, res) => {
         // Rule C: Integrity of "Done" Parents (Check when updating parent_id)
         if (parent_id !== undefined && parent_id !== card.parent_id) {
             // Check Circular Dependency
-            if (await checkCircularDependency(id, parent_id)) {
+            if (await checkCircularDependency(client, id, parent_id)) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ error: 'Cannot link Parent card. This creates a circular dependency.' });
             }
@@ -1209,6 +1210,43 @@ const ReorderCard = async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        const listChanged = String(list_id) !== String(card.list_id);
+
+        if (listChanged) {
+            const { rows: [destList] } = await client.query('SELECT name FROM kb_list WHERE id=$1', [list_id]);
+            const destName = destList?.name?.toLowerCase() || '';
+            const isDestDone = destName.includes('done') || destName.includes('completed') || destName.includes('finish') || destName.includes('เสร็จ');
+            const isDestInProgress = destName.includes('in progress') || destName.includes('working') || destName.includes('check');
+
+            // Rule A: Parent-to-Done Constraint
+            if (isDestDone) {
+                const allDone = await checkDescendantsDone(client, id);
+                if (!allDone) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: 'Cannot move to Done. One or more Child cards are still incomplete.' });
+                }
+            }
+
+            // Rule B: Child-to-Start Constraint
+            if (isDestInProgress || isDestDone) {
+                const currentParentId = card.parent_id;
+                if (currentParentId) {
+                    const { rows: [parentListInfo] } = await client.query(`
+                        SELECT l.name FROM kb_card c 
+                        JOIN kb_list l ON l.id = c.list_id 
+                        WHERE c.id = $1
+                    `, [currentParentId]);
+                    if (parentListInfo) {
+                        const parentListName = parentListInfo.name.toLowerCase();
+                        if (parentListName.includes('to do') || parentListName.includes('backlog')) {
+                            await client.query('ROLLBACK');
+                            return res.status(400).json({ error: 'Cannot start this task. The Parent card has not been started yet.' });
+                        }
+                    }
+                }
+            }
+        }
+
         // Get all sibling cards in the target list (excluding the card being moved)
         const { rows: siblings } = await client.query(
             `SELECT id, position FROM kb_card
@@ -1226,8 +1264,6 @@ const ReorderCard = async (req, res) => {
                 [repo.position, repo.record.id]
             );
         }
-
-        const listChanged = String(list_id) !== String(card.list_id);
 
         // Update the card's position and optionally the list
         const { rows: [updated] } = await client.query(`

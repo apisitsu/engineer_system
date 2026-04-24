@@ -155,11 +155,27 @@ const UpdateProject = async (req, res) => {
     if (!(await canManageProject(req, id)))
         return res.status(403).json({ error: 'Only project owners or admins can update' });
 
-    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status } = req.body;
+    let { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status } = req.body;
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
         // Get old status to detect transition
-        const oldProjectRes = await engPool.query('SELECT status FROM kb_project WHERE id = $1', [id]);
+        const oldProjectRes = await engPool.query('SELECT status, name FROM kb_project WHERE id = $1', [id]);
         const oldStatus = oldProjectRes.rows[0]?.status;
+        const projectName = oldProjectRes.rows[0]?.name;
+
+        // Inactive status edit restrictions
+        if (['suspended', 'completed'].includes((oldStatus || '').toLowerCase()) && !admin) {
+            name = undefined;
+            description = undefined;
+            background_type = undefined;
+            background_value = undefined;
+            is_hidden = undefined;
+            icon = undefined;
+            is_private = undefined;
+            priority = undefined;
+        }
 
         const { rows } = await engPool.query(`
             UPDATE kb_project SET
@@ -177,19 +193,18 @@ const UpdateProject = async (req, res) => {
         
         const updatedProject = rows[0];
 
-        // Check if transition to active from waiting
-        if (status && status.toLowerCase() === 'active' && oldStatus && oldStatus.toLowerCase() === 'waiting') {
+        // Check for status change log/notification
+        if (status && status.toLowerCase() !== (oldStatus || '').toLowerCase()) {
             const members = await engPool.query("SELECT u_code FROM kb_project_membership WHERE project_id=$1", [id]);
             for (const member of members.rows) {
-                // Avoid notifying the actor themselves if they are the one changing it, though sometimes it's good to notify anyway.
                 if (member.u_code !== uCode) {
                     await engPool.query(`
                         INSERT INTO kb_notification (recipient_u_code, actor_u_code, notif_type, notif_data)
-                        VALUES ($1, $2, 'project_activated', $3)
+                        VALUES ($1, $2, 'project_status_changed', $3)
                     `, [
                         member.u_code, 
                         uCode, 
-                        JSON.stringify({ project_id: id, project_name: updatedProject.name, message: 'Project moved from Waiting Pool to Active.' })
+                        JSON.stringify({ project_id: id, project_name: updatedProject.name, message: `Project status changed to ${status}.` })
                     ]);
                 }
             }
@@ -282,11 +297,42 @@ const AddManager = async (req, res) => {
         return res.status(403).json({ error: 'Only project owners or admins can manage members' });
 
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
+        // Hierarchy Check: Only AD or existing Project Owner can grant/modify the 'owner' role
+        const existingRoleRes = await engPool.query("SELECT role FROM kb_project_membership WHERE project_id=$1 AND u_code=$2", [id, target_u_code]);
+        const existingRole = existingRoleRes.rows[0]?.role;
+        const targetRole = role || 'viewer';
+
+        if (targetRole === 'owner' || existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_project_membership WHERE project_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Project Owners or Admins can manage Owner roles.' });
+                }
+            }
+            
+            // Orphan check for demotion
+            if (existingRole === 'owner' && targetRole !== 'owner') {
+                const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_project_membership WHERE project_id=$1 AND role='owner'", [id]);
+                if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                    return res.status(400).json({ error: 'Cannot demote the last owner. Please assign a new owner first.' });
+                }
+            }
+        }
         await engPool.query(
             `INSERT INTO kb_project_membership (project_id, u_code, role) VALUES ($1,$2,$3) 
              ON CONFLICT (project_id, u_code) DO UPDATE SET role = EXCLUDED.role`,
-            [id, target_u_code, role || 'viewer']
+            [id, target_u_code, targetRole]
         );
+        
+        // Audit log for owner change
+        if (targetRole === 'owner' && existingRole !== 'owner') {
+            await engPool.query(`INSERT INTO kb_notification (recipient_u_code, actor_u_code, notif_type, notif_data) VALUES ($1, $2, 'project_owner_assigned', $3)`, 
+                [target_u_code, uCode, JSON.stringify({ project_id: id, message: 'You have been assigned as Project Owner.' })]);
+        }
+        
         res.json({ message: 'Manager added' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -299,16 +345,30 @@ const RemoveManager = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
     const { target_u_code, force } = req.body;
-    // Cannot remove owner
     const ownerCheck = await engPool.query(
         "SELECT role FROM kb_project_membership WHERE project_id=$1 AND u_code=$2", [id, target_u_code]
     );
-    if (ownerCheck.rows[0]?.role === 'owner') return res.status(400).json({ error: 'Cannot remove project owner' });
-
-    if (!(await canManageProject(req, id)))
-        return res.status(403).json({ error: 'Only project owners or admins can remove members' });
+    const existingRole = ownerCheck.rows[0]?.role;
 
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+
+        // Hierarchy Check: Only AD or existing Project Owner can remove an 'owner'
+        if (existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_project_membership WHERE project_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Project Owners or Admins can remove an Owner.' });
+                }
+            }
+            
+            // Orphan check: Prevent removing the last owner
+            const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_project_membership WHERE project_id=$1 AND role='owner'", [id]);
+            if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                return res.status(400).json({ error: 'Cannot remove the last owner. Please assign a new owner first.' });
+            }
+        }
         if (!force) {
             const boardsRes = await engPool.query(`
                 SELECT b.id, b.name 

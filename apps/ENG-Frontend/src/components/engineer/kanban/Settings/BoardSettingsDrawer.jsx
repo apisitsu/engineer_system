@@ -146,6 +146,37 @@ const BoardSettingsDrawer = () => {
     }, [activeBoard?.id, activeProject?.id]);
 
     // ─── Handlers ──────────────────────────────────────────────────
+    const handleRemoveBoardMemberClick = (member) => {
+        if (member.role === 'owner') {
+            const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Remove Last Owner',
+                    text: 'This board must have at least one owner. Please assign another member as an owner before removing this user.'
+                });
+                return;
+            }
+        }
+        useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code);
+    };
+
+    const handleRoleChangeBoard = (member, newRole) => {
+        if (member.role === 'owner' && newRole !== 'owner') {
+            const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
+            if (owners.length <= 1) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot Change Role',
+                    text: 'This board must have at least one owner. Please assign another member as an owner before demoting this user.'
+                });
+                return;
+            }
+        }
+        useKanbanStore.getState().addBoardMember(activeBoard.id, member.u_code, newRole);
+        setEditingRoleUcode(null);
+    };
+
     const handleCreateBoard = async (values) => {
         if (!activeProject) return;
         setIsCreatingBoard(true);
@@ -345,10 +376,7 @@ const BoardSettingsDrawer = () => {
                                                         <Select
                                                             size="small"
                                                             value={member.role}
-                                                            onChange={(newRole) => {
-                                                                useKanbanStore.getState().addBoardMember(activeBoard.id, member.u_code, newRole);
-                                                                setEditingRoleUcode(null);
-                                                            }}
+                                                            onChange={(newRole) => handleRoleChangeBoard(member, newRole)}
                                                             options={[
                                                                 { label: 'Viewer', value: 'viewer' },
                                                                 { label: 'Editor', value: 'editor' },
@@ -361,13 +389,13 @@ const BoardSettingsDrawer = () => {
                                                 ) : (
                                                     <>
                                                         <Text type="secondary" style={{ fontSize: 11 }}>{member.role}</Text>
-                                                        {canChangeRole && member.u_code !== user?.u_code && (
+                                                        {canChangeRole && (
                                                             <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(member.u_code)} />
                                                         )}
                                                     </>
                                                 )}
-                                                {canManageBoardMembers && member.u_code !== user?.u_code && (
-                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => useKanbanStore.getState().removeBoardMember(activeBoard.id, member.u_code)} />
+                                                {canManageBoardMembers && (
+                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveBoardMemberClick(member)} />
                                                 )}
                                             </Space>
                                         </div>

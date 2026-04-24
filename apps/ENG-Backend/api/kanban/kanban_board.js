@@ -258,14 +258,40 @@ const AddBoardMember = async (req, res) => {
     const { rows: [board] } = await engPool.query('SELECT project_id FROM kb_board WHERE id=$1', [id]);
     if (!board) return res.status(404).json({ error: 'Board not found' });
 
+    const targetRole = role || 'viewer';
+
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
+        const existingMbrRes = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, target_u_code]);
+        const existingRole = existingMbrRes.rows[0]?.role;
+
+        // Hierarchy Check
+        if (targetRole === 'owner' || existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Board Owners or Admins can manage Owner roles.' });
+                }
+            }
+            
+            // Orphan check for demotion
+            if (existingRole === 'owner' && targetRole !== 'owner') {
+                const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_board_membership WHERE board_id=$1 AND role='owner'", [id]);
+                if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                    return res.status(400).json({ error: 'Cannot demote the last owner. Please assign a new owner first.' });
+                }
+            }
+        }
+
         const { rows } = await engPool.query(`
             INSERT INTO kb_board_membership (board_id, project_id, u_code, role, can_comment)
             VALUES ($1,$2,$3,$4,$5)
             ON CONFLICT (board_id, u_code)
                 DO UPDATE SET role=EXCLUDED.role, can_comment=EXCLUDED.can_comment, updated_at=NOW()
             RETURNING *
-        `, [id, board.project_id, target_u_code, role || 'viewer', can_comment ?? null]);
+        `, [id, board.project_id, target_u_code, targetRole, can_comment ?? null]);
 
         // Auto-cascade to Project Member (as viewer) if not already explicitly in the project
         await engPool.query(`
@@ -294,6 +320,27 @@ const RemoveBoardMember = async (req, res) => {
     }
 
     try {
+        const { isSuperAdmin } = require('./kanban_acl');
+        const admin = await isSuperAdmin(req);
+        
+        const existingMbrRes = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, target_u_code]);
+        const existingRole = existingMbrRes.rows[0]?.role;
+
+        if (existingRole === 'owner') {
+            if (!admin) {
+                const membership = await engPool.query("SELECT role FROM kb_board_membership WHERE board_id=$1 AND u_code=$2", [id, uCode]);
+                if (membership.rows[0]?.role !== 'owner') {
+                    return res.status(403).json({ error: 'Only Board Owners or Admins can remove an Owner.' });
+                }
+            }
+            
+            // Orphan check
+            const ownerCountRes = await engPool.query("SELECT COUNT(*) as count FROM kb_board_membership WHERE board_id=$1 AND role='owner'", [id]);
+            if (parseInt(ownerCountRes.rows[0].count) <= 1) {
+                return res.status(400).json({ error: 'Cannot remove the last owner. Please assign a new owner first.' });
+            }
+        }
+
         await engPool.query('DELETE FROM kb_board_membership WHERE board_id=$1 AND u_code=$2', [id, target_u_code]);
         res.json({ message: 'Member removed' });
     } catch (err) {

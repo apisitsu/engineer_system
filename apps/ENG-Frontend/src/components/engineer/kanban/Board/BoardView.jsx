@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Typography, Input, Button, Space, Tag, Avatar, Tooltip, Progress } from 'antd';
+import { Typography, Input, Button, Space, Tag, Avatar, Tooltip, Progress, Alert } from 'antd';
 import { IoCloseOutline, IoChevronDown, IoChevronUp } from 'react-icons/io5';
 import { FiPlus } from 'react-icons/fi';
 import { MdOutlineSubtitles, MdOutlineDescription, MdOutlineComment, MdAccessTime } from 'react-icons/md';
@@ -592,10 +592,23 @@ const BoardView = () => {
         setIsAddingList(false);
     };
 
+    const isInactive = ['suspended', 'completed'].includes((activeProject?.status || '').toLowerCase());
+    
+    const banner = isInactive && (
+        <Alert 
+            message={`Project is ${activeProject.status}`}
+            description="This project is currently inactive. You are viewing it in Read-Only mode."
+            type="warning"
+            showIcon
+            style={{ marginBottom: theme.spacing.lg, borderRadius: theme.borderRadius.md, flexShrink: 0 }}
+        />
+    );
+
     // ─── LIST / ROW VIEW ────────────────────────────────────────────
     if (viewMode === 'list') {
         return (
-            <div style={{ width: '100%', paddingBottom: 24 }}>
+            <div style={{ width: '100%', paddingBottom: 24, display: 'flex', flexDirection: 'column' }}>
+                {banner}
                 {visibleLists.length === 0 ? (
                     <div style={{
                         padding: 32, textAlign: 'center',
@@ -626,17 +639,15 @@ const BoardView = () => {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            {/*
-             * display: flex → matches parent's flex layout
-             * height: 100% → fills the scroll area vertically so lists know their bounds
-             */}
-            <div style={{
-                display: 'flex',
-                height: '100%',
-                alignItems: 'flex-start', /* Lists grow based on content but don't stretch to full height if they don't need to */
-                gap: theme.spacing.lg,
-                paddingBottom: theme.spacing.lg,
-            }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {banner}
+                <div style={{
+                    display: 'flex',
+                    flex: 1,
+                    alignItems: 'flex-start', /* Lists grow based on content but don't stretch to full height if they don't need to */
+                    gap: theme.spacing.lg,
+                    paddingBottom: theme.spacing.lg,
+                }}>
                 <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
                     {visibleLists.length > 0 ? (
                         visibleLists.map(list => (
@@ -724,6 +735,7 @@ const BoardView = () => {
                         </div>
                     )}
                 </DragOverlay>
+                </div>
             </div>
         </DndContext>
     );
