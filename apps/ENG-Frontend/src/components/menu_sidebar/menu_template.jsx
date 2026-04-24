@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Layout, Menu } from "antd";
 import { master, system, process, newprod, mtc, all } from "./menu_sidebar";
+import { useAuthStore } from "../../stores/authStore";
 
 const { Sider } = Layout;
 
@@ -15,10 +16,16 @@ const menuItemsMap = {
 
 export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys }) => {
     const [collapsed, setCollapsed] = useState(false);
+    const { userRole, userDepartment } = useAuthStore();
 
-    const currentItems = menuItemsMap[type];
+    const isAdmin = userRole === 'AD' || userDepartment === 'AD';
 
-    if (!currentItems) return null;
+    const baseItems = menuItemsMap[type];
+    if (!baseItems) return null;
+
+    const currentItems = type === 'MTC' && !isAdmin
+        ? baseItems.filter(item => item.key !== 'admin-config')
+        : baseItems;
 
     return (
         <Sider

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Layout, Typography, Card, Table, Space, Button,
-  Form, Input, Select, Modal, App
+  Form, Input, Select, Modal, App, Tag, Collapse, Alert
 } from 'antd';
 import {
   CalculatorOutlined, PlusOutlined, EditOutlined,
-  DeleteOutlined
+  DeleteOutlined, PlayCircleOutlined, InfoCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
@@ -15,17 +15,45 @@ import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
+const FORMULA_VARS = [
+  { key: 'odBf', desc: 'OD Before (nom)' }, { key: 'odAft', desc: 'OD After (nom)' },
+  { key: 'odBfTolPlus', desc: 'OD Bf tol+' }, { key: 'odBfTolMinus', desc: 'OD Bf tol-' },
+  { key: 'odAftTolPlus', desc: 'OD Aft tol+' }, { key: 'odAftTolMinus', desc: 'OD Aft tol-' },
+  { key: 'idBf', desc: 'ID Before (nom)' }, { key: 'idAft', desc: 'ID After (nom)' },
+  { key: 'idBfTolPlus', desc: 'ID Bf tol+' }, { key: 'idBfTolMinus', desc: 'ID Bf tol-' },
+  { key: 'idAftTolPlus', desc: 'ID Aft tol+' }, { key: 'idAftTolMinus', desc: 'ID Aft tol-' },
+  { key: 'wBf', desc: 'Width Before' }, { key: 'wAft', desc: 'Width After' },
+  { key: 'wBfTolPlus', desc: 'W Bf tol+' }, { key: 'wBfTolMinus', desc: 'W Bf tol-' },
+  { key: 'wAftTolPlus', desc: 'W Aft tol+' }, { key: 'wAftTolMinus', desc: 'W Aft tol-' },
+  { key: 'sd', desc: 'SD (Ball Diam Bf)' }, { key: 'sdAft', desc: 'SD After' },
+  { key: 'isYBall', desc: '1 if Y-Ball' }, { key: 'isBallInner', desc: '1 if Ball Inner' },
+  { key: 'isABR', desc: '1 if ABR type' }, { key: 'isInner', desc: '1 if Inner' },
+  { key: 'isIDtoOD', desc: '1 if ID-OD process' },
+];
+
 const FormulaManagerContent = () => {
   const { message, modal } = App.useApp();
   const { theme } = useTheme();
-  const [machines] = useState(['KS400B', 'KS03A', 'KS500RD', 'KS400B5', 'KS400B6', 'TSG300']);
-  const [selectedMachine, setSelectedMachine] = useState('KS400B');
+  const [machines, setMachines] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState(null);
   const [formulas, setFormulas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { } })
+      .then(r => {
+        const names = r.data.filter(m => m.is_active && m.machine_type_name).map(m => m.machine_type_name);
+        setMachines(names);
+        if (names.length > 0) setSelectedMachine(prev => prev || names[0]);
+      })
+      .catch(() => message.error('Failed to load machine types'));
+  }, [message]);
 
   const fetchFormulas = useCallback(async (machine) => {
     setLoading(true);
@@ -62,8 +90,12 @@ const FormulaManagerContent = () => {
              modal.confirm({
                 title: 'Are you sure?',
                 onOk: async () => {
-                  await axios.delete(`${server.MTC_FORMULAS}/${record.id}`);
-                  fetchFormulas(selectedMachine);
+                  try {
+                    await axios.delete(`${server.MTC_FORMULAS}/${record.id}`);
+                    fetchFormulas(selectedMachine);
+                  } catch (err) {
+                    message.error(err.response?.data?.error || 'Delete failed');
+                  }
                 }
              });
           }} />
@@ -71,6 +103,37 @@ const FormulaManagerContent = () => {
       ),
     },
   ];
+
+  const handleTestFormula = async () => {
+    const formula = form.getFieldValue('formula');
+    if (!formula) { message.warning('กรอก formula ก่อน'); return; }
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await axios.post(`${server.MTC_FORMULAS}/test`, {
+        formula,
+        context: {
+          odBf: 30, odAft: 29.5,
+          odBfTolPlus: 0.05, odBfTolMinus: -0.05,
+          odAftTolPlus: 0.05, odAftTolMinus: -0.05,
+          idBf: 20, idAft: 19.8,
+          idBfTolPlus: 0.05, idBfTolMinus: -0.05,
+          idAftTolPlus: 0.05, idAftTolMinus: -0.05,
+          wBf: 12, wAft: 11.5,
+          wBfTolPlus: 0.05, wBfTolMinus: -0.05,
+          wAftTolPlus: 0.05, wAftTolMinus: -0.05,
+          sd: 10, sdAft: 9.8,
+          isYBall: 0, isBallInner: 0, isABR: 0, isInner: 0, isIDtoOD: 0,
+        },
+      });
+      if (res.data?.valid) setTestResult({ ok: true, value: res.data.result });
+      else setTestResult({ ok: false, value: res.data?.error || 'Invalid formula' });
+    } catch (err) {
+      setTestResult({ ok: false, value: err.response?.data?.error || 'Request failed' });
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -118,11 +181,38 @@ const FormulaManagerContent = () => {
         title={editingRecord ? 'Edit Formula' : 'Add Formula'}
         open={isModalOpen}
         onOk={handleSave}
-        onCancel={() => setIsModalOpen(false)}
+        onCancel={() => { setIsModalOpen(false); setTestResult(null); }}
         okText="Save"
         okButtonProps={{ loading: saving }}
+        width={640}
         destroyOnClose
       >
+        <Collapse ghost size="small" style={{ marginBottom: 12, background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6 }}>
+          <Collapse.Panel
+            header={<span style={{ fontSize: 12 }}><InfoCircleOutlined /> ตัวแปรที่ใช้ได้ในสูตร (คลิกเพื่อแทรก)</span>}
+            key="vars"
+          >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {FORMULA_VARS.map(v => (
+                <Tag
+                  key={v.key}
+                  style={{ cursor: 'pointer', marginBottom: 2 }}
+                  title={v.desc}
+                  onClick={() => {
+                    const cur = form.getFieldValue('formula') || '';
+                    form.setFieldValue('formula', cur + (cur && !cur.endsWith(' ') ? ' ' : '') + v.key);
+                  }}
+                >
+                  {v.key}
+                </Tag>
+              ))}
+            </div>
+            <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block' }}>
+              ตัวเลขทศนิยม: ใช้ round(x * 10^2) / 10^2 แทน round(x, 2) | ตรรกะ: and / or | เงื่อนไข: isYBall ? val1 : val2
+            </Text>
+          </Collapse.Panel>
+        </Collapse>
+
         <Form form={form} layout="vertical">
           <Form.Item name="tool_category" label="Category">
             <Input placeholder="e.g. GRINDING" />
@@ -130,9 +220,30 @@ const FormulaManagerContent = () => {
           <Form.Item name="param_key" label="Parameter" rules={[{ required: true }]}>
             <Input placeholder="e.g. speed_rpm" />
           </Form.Item>
-          <Form.Item name="formula" label="Formula" rules={[{ required: true }]}>
-            <Input.TextArea rows={3} placeholder="e.g. diameter * 3.14 * rpm / 1000" />
+          <Form.Item
+            name="formula"
+            label={
+              <Space>
+                <span>Formula</span>
+                <Button size="small" type="link" icon={<PlayCircleOutlined />} loading={testLoading} onClick={handleTestFormula} style={{ padding: '0 4px' }}>
+                  Test (sample data)
+                </Button>
+              </Space>
+            }
+            rules={[{ required: true }]}
+          >
+            <Input.TextArea rows={3} placeholder="e.g. odAft * 3.14 / 2" style={{ fontFamily: 'monospace' }} />
           </Form.Item>
+          {testResult && (
+            <Alert
+              message={testResult.ok ? `ผลลัพธ์: ${testResult.value}` : `Error: ${testResult.value}`}
+              type={testResult.ok ? 'success' : 'error'}
+              showIcon
+              style={{ marginBottom: 8 }}
+              closable
+              onClose={() => setTestResult(null)}
+            />
+          )}
           <Form.Item name="description" label="Description">
             <Input />
           </Form.Item>

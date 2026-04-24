@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Layout, Typography, Card, Tabs, App,
+  Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
   Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox,
 } from 'antd';
@@ -783,6 +783,122 @@ const MachineConfigTab = ({ theme }) => {
   );
 };
 
+// ── Tab 4: Audit (Data Integrity) ─────────────────────────────────────────────
+
+const AuditTab = ({ theme }) => {
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
+  const [activeCategory, setActiveCategory] = useState(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT);
+      setData(res.data);
+    } catch (err) {
+      message.error('Load audit data failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const noPlanCols = [
+    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
+    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
+    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
+  ];
+
+  const toolingCols = [
+    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
+    { title: 'Proc Code', dataIndex: 'process_code', key: 'process_code', width: 100 },
+    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
+    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
+    { title: 'WC', dataIndex: 'wc', key: 'wc', width: 80 },
+  ];
+
+  return (
+    <div style={{ minHeight: 600 }}>
+      <Row gutter={24}>
+        <Col span={6}>
+          <Title level={5}><SearchOutlined /> Item Counts</Title>
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Text type="secondary">Grand Total (Enable)</Text>
+            <div style={{ fontSize: 32, fontWeight: 'bold', color: theme.colors.primary, lineHeight: 1.2, margin: '4px 0 8px' }}>
+              {data.totals?.grandTotal?.toLocaleString() || 0}
+            </div>
+            <Divider style={{ margin: '8px 0' }} />
+            <Space>
+              <Button
+                type={activeCategory === 'ball' ? 'primary' : 'default'}
+                onClick={() => setActiveCategory(activeCategory === 'ball' ? null : 'ball')}
+                size="small"
+              >
+                Ball: {data.totals?.ballTotal?.toLocaleString() || 0}
+              </Button>
+              <Button
+                type={activeCategory === 'race' ? 'primary' : 'default'}
+                onClick={() => setActiveCategory(activeCategory === 'race' ? null : 'race')}
+                size="small"
+              >
+                Race: {data.totals?.raceTotal?.toLocaleString() || 0}
+              </Button>
+            </Space>
+            {activeCategory && (
+              <div style={{ marginTop: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCategory === 'ball' ? '#1677ff' : '#52c41a' }}>
+                  {(activeCategory === 'ball' ? data.totals?.ballTotal : data.totals?.raceTotal)?.toLocaleString() || 0}
+                </div>
+                <Text type="secondary">{activeCategory === 'ball' ? 'Ball (C3x)' : 'Race (C2x)'}</Text>
+              </div>
+            )}
+          </Card>
+        </Col>
+
+        <Col span={18}>
+          <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+            <Col><Title level={5}><ReloadOutlined /> Data Consistency Audit</Title></Col>
+            <Col><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>Refresh All</Button></Col>
+          </Row>
+
+          <Tabs
+            type="card"
+            size="small"
+            items={[
+              {
+                key: 'no-plan',
+                label: <Tag color="error">Critical: No Process Plan ({data.noProcessPlan?.length})</Tag>,
+                children: (
+                  <>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                      รายการที่ยังไม่มีการลงทะเบียน Routing (Process Plan) ในระบบ LPB — จะไม่สามารถออก SDS ได้
+                    </Text>
+                    <Table dataSource={data.noProcessPlan} columns={noPlanCols} size="small" loading={loading} bordered rowKey="control_no" pagination={{ pageSize: 15 }} />
+                  </>
+                )
+              },
+              {
+                key: 'missing-tool',
+                label: <Tag color="warning">Warning: Missing Tooling ({data.missingTooling?.length})</Tag>,
+                children: (
+                  <>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                      มี Process Plan แล้วแต่ยังไม่ได้ผูกรายการ Tooling (แสดงเฉพาะ Process Code: 1011, 1012, 1021, 1022, 1041, 1042, 1061, 1062, 1181, 1182, 1241)
+                    </Text>
+                    <Table dataSource={data.missingTooling} columns={toolingCols} size="small" loading={loading} bordered rowKey={(r, i) => `${r.control_no}_${r.process_code}_${i}`} pagination={{ pageSize: 15 }} />
+                  </>
+                )
+              }
+            ]}
+          />
+        </Col>
+      </Row>
+    </div>
+  );
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const SdsV2AdminPage = () => {
@@ -804,6 +920,7 @@ const SdsV2AdminPage = () => {
         />
       ),
     },
+    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
   ];
 
   return (

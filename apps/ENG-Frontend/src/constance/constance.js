@@ -69,6 +69,7 @@ export const server = {
   MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,
   MTC_SDS_V2_ADMIN_PARAMETERS: `${apiUrl}api/sds/v2/admin/parameters`,
   MTC_SDS_V2_ADMIN_PARAMETERS_BULK: `${apiUrl}api/sds/v2/admin/parameters/bulk`,
+  MTC_SDS_V2_ADMIN_AUDIT: `${apiUrl}api/sds/v2/admin/audit/data-integrity`,
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,

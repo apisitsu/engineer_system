@@ -24,18 +24,44 @@ const getConstants = (req, res) => {
 const getToolingInspectList = async (req, res) => {
     try {
         const { page, limit, search, status, startDate, endDate, currentMonth } = req.query;
-        const result = await mtcService.getToolingInspectListService({
-            page: parseInt(page),
-            limit: parseInt(limit),
-            search,
-            status,
-            startDate,
-            endDate,
-            currentMonth
+
+        const fetchList = mtcService.getToolingInspectListService({
+            page: parseInt(page), limit: parseInt(limit),
+            search, status, startDate, endDate, currentMonth,
         });
-        res.json(result);
+        const fetchStats = mtcService.getToolingInspectStatsService({ search, status, startDate, endDate, currentMonth });
+        const fetchActivity = (status === 'date' && startDate)
+            ? mtcService.getDateActivityStatsService(startDate)
+            : Promise.resolve(null);
+
+        const [result, stats, dateActivity] = await Promise.all([fetchList, fetchStats, fetchActivity]);
+
+        res.json({ ...result, stats, dateActivity });
     } catch (err) {
         console.error('Error in mtcController.getToolingInspectList:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const deleteToolingInspect = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deletedBy = req.user?.empno || req.user?.name || 'system';
+        await mtcService.deleteToolingInspectService(id, deletedBy);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const blacklistToolingInspect = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const blacklistedBy = req.user?.empno || req.user?.name || 'system';
+        await mtcService.blacklistToolingInspectService(id, reason, blacklistedBy);
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
@@ -73,6 +99,8 @@ const generateSdsPdf = async (req, res) => {
 module.exports = {
     getConstants,
     getToolingInspectList,
+    deleteToolingInspect,
+    blacklistToolingInspect,
     getToolDWGRequest,
     generateSdsPdf
 };

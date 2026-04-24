@@ -12,24 +12,24 @@ base_dir = pathlib.Path(r"\\sanlb01\MPA-DIV\03-Purchase\02-Budget\INSP REC\2026"
 
 # Ignore temporary Excel files (~$) that are currently open
 all_files = [f for f in base_dir.rglob("*.xlsx") if not f.name.startswith("~$")]
-print(f"Found {len(all_files)} files:")
+print(f"\n=== Found excel file {len(all_files)} files: ===")
 
-for file in all_files:
-    print("-", file.name)
+# for file in all_files:
+    # print("-", file.name)
 
 if len(all_files) > 0:
     first_file = all_files[0]
-    print(f"\nTest reading file: {first_file.name}...")
+#    print(f"\n=== Reading file: {first_file.name} ===")
     df = pd.read_excel(first_file, header=1)
-    print(df.head())
+#    print(df.head())
 else:
-    print("\nCannot find any excel files in the folder. Please check the path again.")
+    print("\nxxx Cannot find any excel files in the folder. Please check the path again. xxx")
 
-print("\n=== Starting to merge all Excel files ===")
+print("\n=== Starting to merge all Excel files =>=>=>")
 
 all_data = []
 for file in all_files:
-    print(f"Reading and merging file: {file.name}")
+#    print(f"Reading and merging file: {file.name}")
     df_temp = pd.read_excel(file, header=1)
     all_data.append(df_temp)
 
@@ -76,25 +76,25 @@ if 'W/C' in df_master.columns:
 # NOTE: Removed the line `df_master = df_master.loc[:, :"Q'ty"]` 
 # to keep all trailing columns for the Web Application.
 
-print(f"\nMerge complete! Total {len(df_master)} rows.")
+print(f"\n=>=>=> Merge complete! Total {len(df_master)} rows. ===")
 
 # ==========================================
 # 3. Save to CSV (Backup)
 # ==========================================
-print("\n=== Saving to CSV ===")
-output_filename = "ToolingInspection.csv"
-path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
+# print("\n=== Saving to CSV ===")
+# output_filename = "ToolingInspection.csv"
+# path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 # Save to local directory
 # df_master.to_csv(output_filename, index=False, encoding='utf-8-sig')
 # print(f"CSV saved successfully! File name: {output_filename}")
 
 # Save to Drive G (Backup)
-try:
-    df_master.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
-    print(f"Backup CSV saved to Drive G! File name: {output_filename}")
-except Exception as e:
-    print(f"Warning: Cannot save to Drive G. Error: {e}")
+# try:
+#     df_master.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
+#     print(f"Backup CSV saved to Drive G! File name: {output_filename}")
+# except Exception as e:
+#     print(f"Warning: Cannot save to Drive G. Error: {e}")
 
 # ==========================================
 # 4. Prepare data for Database
@@ -128,10 +128,10 @@ first_day_this_month = today.replace(day=1)
 first_day_last_month = first_day_this_month - pd.DateOffset(months=1)
 target_date_str = first_day_last_month.strftime('%Y-%m-%d')
 
-print(f"🎯 Filtering data from: {target_date_str} to present")
+print(f"=== Filtering data from: {target_date_str} to present ===")
 
 df_master = df_master[df_master['receive_date'] >= target_date_str].copy()
-print(f"Records to check (Last 2 months): {len(df_master)} rows")
+print(f"=== Records to check (Last 2 months): {len(df_master)} rows ===")
 
 # Load DB configuration
 load_dotenv()
@@ -165,27 +165,28 @@ try:
         
         existing_data['uid'] = generate_robust_uid(existing_data)
         existing_uid_list = existing_data['uid'].tolist()
-        print(f"Existing records in database (Last 2 months): {len(existing_uid_list)}")
+        print(f"=== Existing records in database (Last 2 months): {len(existing_uid_list)} ===")
     except Exception:
         existing_uid_list = []
-        print("Table not found or empty (First run).")
+        print("xxx Table not found or empty (First run). xxx")
 
     # --- Step 5.2: Create UID to filter new records ---
     df_master['uid'] = generate_robust_uid(df_master)
     
     # [Debug] Print the first pair of UIDs to verify exact match
     if len(existing_uid_list) > 0 and len(df_master) > 0:
-        print("\n🔍 [Debug] Comparing the first UID:")
-        print(f"   Database : {existing_uid_list[0]}")
-        print(f"   Excel    : {df_master['uid'].iloc[0]}\n")
+        print("\n[Debug] Comparing the first UID:")
+        print(f"=== Database : {existing_uid_list[0]} ===")
+        print(f"=== Excel    : {df_master['uid'].iloc[0]} ===")
+        print("\n")
 
     # Anti-join to keep only records that are NOT in the database
     df_new_records = df_master[~df_master['uid'].isin(existing_uid_list)].copy()
-    print(f"New records found to update: {len(df_new_records)}")
+    print(f"=== New records found to update: {len(df_new_records)} ===")
 
     # --- Step 5.3: Insert only new records into the Database ---
     if len(df_new_records) > 0:
-        print("Saving new records to the database...")
+        #print("Saving new records to the database...")
         df_new_records = df_new_records.drop(columns=['uid'])
 
         db_columns = ['receive_date', 'time', 'w_c', 'po_no', 'item_name', 'dwg_no', 'qty']
@@ -200,15 +201,38 @@ try:
                 """)
                 connection.execute(sync_seq_query)
                 connection.commit()
-                print("🔄 Synced sequence ID successfully.")
+                #print("Synced sequence ID successfully.")
         except Exception as sync_e:
-            print(f"⚠️ Could not sync sequence: {sync_e}")
+            print(f"xxx Could not sync sequence: {sync_e} xxx")
 
         # Insert to DB
         df_new_records.to_sql(name='ti_list', con=engine, if_exists='append', index=False)
-        print("✅ Successfully saved new records!")
+        #print("Successfully saved new records!")
     else:
-        print("✅ No new records to update (Database is already up to date).")
+        print("=== No new records to update (Database is already up to date). ===")
 
 except Exception as e:
-    print(f"❌ Database connection error:\n{e}")
+    print(f"xxx Database connection error:\n{e} xxx")
+
+# ==========================================
+# 6. Export Data FROM Database to CSV for Google Sheets
+# ==========================================
+print("\n=== Exporting Data FROM Database to CSV in Drive G =>=>=>")
+
+output_filename = "ToolingInspection_LookerStudio.csv"
+path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
+
+try:
+    path_csv.mkdir(parents=True, exist_ok=True)
+
+    query_export = "SELECT * FROM ti_list ORDER BY id ASC"
+    df_export = pd.read_sql(query_export, con=engine)
+
+    cols_to_exclude = ['id', 'updated_at']
+    df_export = df_export.drop(columns=cols_to_exclude, errors='ignore')
+
+    df_export.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
+    print(f"=>=>=> Successfully exported {len(df_export)} rows from Database to Drive G! ===")
+
+except Exception as e:
+    print(f"xxx Warning: Cannot export from Database. Error: {e} xxx")

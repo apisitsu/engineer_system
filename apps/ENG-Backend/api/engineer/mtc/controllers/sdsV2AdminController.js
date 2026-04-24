@@ -1,6 +1,9 @@
 const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
+const { maqPool } = require('../../../../instance/maq_db');
+const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
+const { isAdmin } = require('../../../../middleware/mtcAuth');
 
 const router = express.Router();
 
@@ -26,7 +29,7 @@ router.get('/machine-types', async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/machine-types/:id */
-router.put('/machine-types/:id', async (req, res) => {
+router.put('/machine-types/:id', isAdmin, async (req, res) => {
   const { machine_type_name, grinding_area_label, tool_code_filter, is_active } = req.body;
   try {
     const sets = [];
@@ -74,7 +77,7 @@ router.get('/mappings', async (req, res) => {
 });
 
 /** POST /api/sds/v2/admin/mappings */
-router.post('/mappings', async (req, res) => {
+router.post('/mappings', isAdmin, async (req, res) => {
   const { machine_type_name, cell_address, param_key, description, sort_order } = req.body;
   if (!cell_address?.trim() || !param_key?.trim()) {
     return res.status(400).json({ error: 'cell_address and param_key are required' });
@@ -93,7 +96,7 @@ router.post('/mappings', async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/mappings/:id */
-router.put('/mappings/:id', async (req, res) => {
+router.put('/mappings/:id', isAdmin, async (req, res) => {
   const { machine_type_name, cell_address, param_key, description, sort_order, is_active } = req.body;
   try {
     const result = await engPool.query(
@@ -111,7 +114,7 @@ router.put('/mappings/:id', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/admin/mappings/:id */
-router.delete('/mappings/:id', async (req, res) => {
+router.delete('/mappings/:id', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_EXCEL_MAPPING} WHERE id=$1 RETURNING id`, [req.params.id]
@@ -164,7 +167,7 @@ router.get('/parameters', async (req, res) => {
  * Body: { cn, machine_type_name, param_key, param_value }
  * cn null/omitted → machine config row
  */
-router.put('/parameters', async (req, res) => {
+router.put('/parameters', isAdmin, async (req, res) => {
   const { cn, machine_type_name, param_key, param_value } = req.body;
   if (!machine_type_name?.trim() || !param_key?.trim()) {
     return res.status(400).json({ error: 'machine_type_name and param_key are required' });
@@ -191,7 +194,7 @@ router.put('/parameters', async (req, res) => {
  * PUT /api/sds/v2/admin/parameters/bulk — upsert multiple parameters at once
  * Body: { cn, machine_type_name, params: [{ param_key, param_value }, ...] }
  */
-router.put('/parameters/bulk', async (req, res) => {
+router.put('/parameters/bulk', isAdmin, async (req, res) => {
   const { cn, machine_type_name, params } = req.body;
   if (!machine_type_name?.trim()) return res.status(400).json({ error: 'machine_type_name is required' });
   if (!Array.isArray(params) || !params.length) return res.status(400).json({ error: 'params array is required' });
@@ -228,7 +231,7 @@ router.put('/parameters/bulk', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/admin/parameters/:id */
-router.delete('/parameters/:id', async (req, res) => {
+router.delete('/parameters/:id', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_PARAMETER} WHERE id=$1 RETURNING id`, [req.params.id]
@@ -236,6 +239,102 @@ router.delete('/parameters/:id', async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Parameter not found' });
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Audit: Data Integrity ────────────────────────────────────────────────────
+
+/** GET /api/sds/v2/admin/audit/data-integrity */
+router.get('/audit/data-integrity', isAdmin, async (req, res) => {
+  try {
+    // 1. Count C2x/C3x Enabled Items
+    const countsResult = await maqPool.query(`
+      SELECT sub_class, COUNT(*) 
+      FROM lpb.eng_item 
+      WHERE (sub_class LIKE 'C2%' OR sub_class LIKE 'C3%') AND condition = 'Enable'
+      GROUP BY sub_class ORDER BY sub_class
+    `);
+
+    const itemCounts = countsResult.rows.map(r => ({ sub_class: r.sub_class, count: parseInt(r.count) }));
+    const raceTotal = itemCounts.filter(r => r.sub_class.startsWith('C2')).reduce((sum, r) => sum + r.count, 0);
+    const ballTotal = itemCounts.filter(r => r.sub_class.startsWith('C3')).reduce((sum, r) => sum + r.count, 0);
+
+    // 2. Critical: No Process Plan (Routing missing entirely)
+    // In LPB, process_plan_no is usually equal to control_no
+    const noProcessPlanResult = await maqPool.query(`
+      SELECT i.control_no, i.sub_class
+      FROM lpb.eng_item i
+      WHERE (i.sub_class LIKE 'C2%' OR i.sub_class LIKE 'C3%') 
+        AND i.condition = 'Enable'
+        AND NOT EXISTS (
+          SELECT 1 FROM lpb.eng_process_info pi 
+          WHERE pi.process_plan_no = i.control_no
+        )
+      ORDER BY i.control_no
+    `);
+
+    // 3. Warning: Missing Tooling in specific Process Codes
+    const targetProcessCodes = ['1011', '1012', '1021', '1022', '1041', '1042', '1061', '1062', '1181', '1182', '1241'];
+    
+    const missingToolingResult = await maqPool.query(`
+      SELECT i.control_no, i.sub_class, pi.process_code, pi.wc
+      FROM lpb.eng_item i
+      JOIN lpb.eng_process_info pi ON pi.process_plan_no = i.control_no
+      LEFT JOIN lpb.eng_r_pi_tool rpt ON (rpt.process_plan_no = pi.process_plan_no AND rpt.process_code = pi.process_code)
+      WHERE (i.sub_class LIKE 'C2%' OR i.sub_class LIKE 'C3%') 
+        AND i.condition = 'Enable'
+        AND pi.process_code = ANY($1)
+        AND rpt.tool_dwg_no IS NULL
+      ORDER BY i.control_no, pi.seq_no
+    `, [targetProcessCodes]);
+
+    const missingRows = missingToolingResult.rows;
+    
+    // Enrich both groups with Machine Model from rodpcPool
+    const { pool: rodpcPool } = require('../../../../instance/instance');
+    const allCns = [...new Set([...noProcessPlanResult.rows.map(r => r.control_no), ...missingRows.map(r => r.control_no)])];
+    
+    let modelMap = {};
+    let mtcMap = {};
+
+    if (allCns.length > 0) {
+      const prodRes = await rodpcPool.query(`
+        SELECT control_no, model FROM rodpc.kzwmaq_eng_production 
+        WHERE control_no = ANY($1)
+      `, [allCns]);
+      
+      modelMap = prodRes.rows.reduce((acc, row) => {
+        acc[row.control_no] = row.model;
+        return acc;
+      }, {});
+
+      const models = [...new Set(prodRes.rows.map(r => r.model))];
+      const mtcRes = await engPool.query(`
+        SELECT machine_type_name, machine_type_code FROM sds_machine_type_code
+        WHERE machine_type_name = ANY($1)
+      `, [models]);
+
+      mtcMap = mtcRes.rows.reduce((acc, row) => {
+        acc[row.machine_type_name] = row.machine_type_code;
+        return acc;
+      }, {});
+    }
+
+    const enrich = (row) => ({
+      ...row,
+      machine_name: modelMap[row.control_no] || null,
+      machine_type_code: mtcMap[modelMap[row.control_no]] || null
+    });
+
+    res.json({
+      itemCounts,
+      totals: { raceTotal, ballTotal, grandTotal: raceTotal + ballTotal },
+      noProcessPlan: noProcessPlanResult.rows.map(enrich),
+      missingTooling: missingRows.map(enrich),
+    });
+  } catch (err) {
+    console.error('[Audit API Error]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

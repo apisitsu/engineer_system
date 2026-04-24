@@ -519,7 +519,7 @@ const ToolingSelectPage = () => {
                     <Col span={24}>
                       <Title level={5} style={{ margin: 0 }}>
                         C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
-                        <Tag color="green">{result.part.process}</Tag>
+                        <Tag color="green">{(result.part.process || '').replace('→', '-').replace('—', '-')}</Tag>
                         <Tag color="purple">{result.part.type}</Tag>
                         <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
                       </Title>
