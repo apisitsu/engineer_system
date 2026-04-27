@@ -86,8 +86,8 @@ output_filename = "ToolingInspection.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 # Save to local directory
-df_master.to_csv(output_filename, index=False, encoding='utf-8-sig')
-print(f"CSV saved successfully! File name: {output_filename}")
+#df_master.to_csv(output_filename, index=False, encoding='utf-8-sig')
+#print(f"CSV saved successfully! File name: {output_filename}")
 
 # Save to Drive G (Backup)
 try:
