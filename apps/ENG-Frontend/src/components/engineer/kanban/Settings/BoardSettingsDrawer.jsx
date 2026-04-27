@@ -101,8 +101,13 @@ const BoardSettingsDrawer = () => {
         notificationServices, fetchNotificationServices,
         createNotificationService, deleteNotificationService, users,
         archivedCards, fetchArchivedCards, moveCard, lists,
-        kanbanTabOrder, setKanbanTabOrder
+        kanbanTabOrder, setKanbanTabOrder,
+        boardTabOrders, setBoardTabOrder,
+        cfGroupPreferences, setCfGroupPreference,
+        boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup
     } = useKanbanStore();
+
+    const projectBoardGroups = activeProject ? (boardGroups?.[activeProject.id] || []) : [];
 
     // Form
     const [boardForm] = Form.useForm();
@@ -110,6 +115,7 @@ const BoardSettingsDrawer = () => {
     const [isCreatingBoard, setIsCreatingBoard] = useState(false);
     const [editingBoardId, setEditingBoardId] = useState(null);
     const [editingBoardName, setEditingBoardName] = useState('');
+    const [showCreateBoardForm, setShowCreateBoardForm] = useState(false);
     const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
 
     // Label Editing State
@@ -267,95 +273,97 @@ const BoardSettingsDrawer = () => {
         <div>
             {/* Create Board (Only Project Owner or Global Admin can create Private boards) */}
             <Card>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                    <MdOutlineDashboard size={18} color={theme.colors.primary} />
-                    <Title level={5} style={{ margin: 0, fontSize: 15 }}>Create New Board</Title>
+                <div 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                    onClick={() => setShowCreateBoardForm(!showCreateBoardForm)}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <MdOutlineDashboard size={18} color={theme.colors.primary} />
+                        <Title level={5} style={{ margin: 0, fontSize: 15 }}>Create New Board</Title>
+                    </div>
+                    <Button type="text" size="small" style={{ color: theme.colors.primary }}>
+                        {showCreateBoardForm ? 'Hide' : 'Show'}
+                    </Button>
                 </div>
-                <Form form={boardForm} layout="vertical" onFinish={handleCreateBoard}>
-                    <Form.Item name="boardName" rules={[{ required: true, message: 'Please input board name!' }]} style={{ marginBottom: theme.spacing.md }}>
-                        <Input placeholder="E.g., Sprint 1, Maintenance Tasks" style={{ borderRadius: theme.borderRadius.sm }} />
-                    </Form.Item>
-                    {canManageProject && (
-                        <Form.Item name="is_private" valuePropName="checked" style={{ marginBottom: theme.spacing.md }}>
-                            <ToggleRow
-                                title="Private Board"
-                                description="Only explicitly added members can view."
-                                theme={theme}
-                                checked={boardForm.getFieldValue('is_private')}
-                                onChange={(val) => boardForm.setFieldValue('is_private', val)}
-                            />
+                {showCreateBoardForm && (
+                    <Form form={boardForm} layout="vertical" onFinish={handleCreateBoard} style={{ marginTop: theme.spacing.md }}>
+                        <Form.Item name="boardName" rules={[{ required: true, message: 'Please input board name!' }]} style={{ marginBottom: theme.spacing.md }}>
+                            <Input placeholder="E.g., Sprint 1, Maintenance Tasks" style={{ borderRadius: theme.borderRadius.sm }} />
                         </Form.Item>
-                    )}
-                    <Button type="primary" htmlType="submit" loading={isCreatingBoard} block
-                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm, height: 38 }}
-                    >Create Board</Button>
-                </Form>
+                        {canManageProject && (
+                            <Form.Item name="is_private" valuePropName="checked" style={{ marginBottom: theme.spacing.md }}>
+                                <ToggleRow
+                                    title="Private Board"
+                                    description="Only explicitly added members can view."
+                                    theme={theme}
+                                    checked={boardForm.getFieldValue('is_private')}
+                                    onChange={(val) => boardForm.setFieldValue('is_private', val)}
+                                />
+                            </Form.Item>
+                        )}
+                        <Button type="primary" htmlType="submit" loading={isCreatingBoard} block
+                            style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm, height: 38 }}
+                        >Create Board</Button>
+                    </Form>
+                )}
             </Card>
 
-            {/* Boards List */}
-            <SectionLabel theme={theme}>Boards</SectionLabel>
-            {boards.length === 0 ? (
+            {/* Current Board Settings */}
+            <SectionLabel theme={theme}>Current Board Settings</SectionLabel>
+            {!activeBoard ? (
                 <div style={{ textAlign: 'center', padding: theme.spacing.lg, background: theme.colors.surface, borderRadius: theme.borderRadius.md, border: `1px dashed ${theme.colors.border}` }}>
-                    <Text type="secondary">No boards yet. Create one above!</Text>
+                    <Text type="secondary">No board selected.</Text>
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.xl }}>
-                    {boards.map(board => (
-                        <div key={board.id} style={{
-                            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                            background: activeBoard?.id === board.id
-                                ? `${theme.colors.primary}12`
-                                : theme.colors.surfaceHover,
-                            borderRadius: theme.borderRadius.md,
-                            border: `1px solid ${activeBoard?.id === board.id ? `${theme.colors.primary}40` : theme.colors.border}`,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            transition: `all ${theme.transitions.fast}`,
-                        }}>
-                            {editingBoardId === board.id ? (
-                                <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-                                    <Input size="small" value={editingBoardName}
-                                        onChange={(e) => setEditingBoardName(e.target.value)}
-                                        onPressEnter={() => handleEditBoard(board.id)} autoFocus
-                                        style={{ borderRadius: theme.borderRadius.sm }}
-                                    />
-                                    <Button size="small" type="primary" icon={<AiOutlineCheck />}
-                                        onClick={() => handleEditBoard(board.id)}
-                                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                    />
-                                    <Button size="small" icon={<AiOutlineClose />}
-                                        onClick={() => { setEditingBoardId(null); setEditingBoardName(''); }}
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    <Text
-                                        strong
-                                        style={{ cursor: 'pointer', fontSize: 14 }}
-                                        onClick={() => { setActiveBoard(board); closeBoardSettings(); }}
-                                    >
-                                        {board.name}
-                                        {activeBoard?.id === board.id && (
-                                            <Text type="secondary" style={{ fontSize: 11 }}> (active)</Text>
-                                        )}
-                                    </Text>
-                                    <Space size={2}>
-                                        {canManageBoardStructure && (
-                                            <>
-                                                <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />}
-                                                    onClick={() => { setEditingBoardId(board.id); setEditingBoardName(board.name); }}
-                                                />
-                                                <Popconfirm title="Delete this board?" description="All lists and cards will be deleted."
-                                                    onConfirm={() => handleDeleteBoard(board.id)} okText="Delete" okType="danger"
-                                                >
-                                                    <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
-                                                </Popconfirm>
-                                            </>
-                                        )}
-                                    </Space>
-                                </>
-                            )}
-                        </div>
-                    ))}
+                    <div style={{
+                        padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                        background: `${theme.colors.primary}12`,
+                        borderRadius: theme.borderRadius.md,
+                        border: `1px solid ${theme.colors.primary}40`,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        transition: `all ${theme.transitions.fast}`,
+                    }}>
+                        {editingBoardId === activeBoard.id ? (
+                            <div style={{ display: 'flex', gap: 4, flex: 1 }}>
+                                <Input size="small" value={editingBoardName}
+                                    onChange={(e) => setEditingBoardName(e.target.value)}
+                                    onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
+                                    style={{ borderRadius: theme.borderRadius.sm }}
+                                />
+                                <Button size="small" type="primary" icon={<AiOutlineCheck />}
+                                    onClick={() => handleEditBoard(activeBoard.id)}
+                                    style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
+                                />
+                                <Button size="small" icon={<AiOutlineClose />}
+                                    onClick={() => { setEditingBoardId(null); setEditingBoardName(''); }}
+                                />
+                            </div>
+                        ) : (
+                            <>
+                                <Text strong style={{ fontSize: 14 }}>
+                                    {activeBoard.name}
+                                </Text>
+                                <Space size={2}>
+                                    {canManageBoardStructure && (
+                                        <>
+                                            <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />}
+                                                onClick={() => { setEditingBoardId(activeBoard.id); setEditingBoardName(activeBoard.name); }}
+                                            />
+                                            <Popconfirm title="Delete this board?" description="All lists and cards will be deleted."
+                                                onConfirm={() => {
+                                                    handleDeleteBoard(activeBoard.id);
+                                                    closeBoardSettings();
+                                                }} okText="Delete" okType="danger"
+                                            >
+                                                <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
+                                            </Popconfirm>
+                                        </>
+                                    )}
+                                </Space>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -711,61 +719,42 @@ const BoardSettingsDrawer = () => {
                         />
                     </Card>
 
-                    {/* Custom Fields */}
+                    {/* Board Groups */}
                     {activeProject && (
                         <>
-                            <SectionLabel theme={theme}>Custom Field Groups</SectionLabel>
-                            {baseCustomFieldGroups.length > 0 && (
+                            <SectionLabel theme={theme}>Board Groups</SectionLabel>
+                            {projectBoardGroups.length > 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
-                                    {baseCustomFieldGroups.map(g => {
-                                        const fields = customFields[g.id] || [];
-                                        return (
-                                            <Card key={g.id} style={{ padding: theme.spacing.md }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                                    <Text strong style={{ fontSize: 14 }}>{g.name}</Text>
-                                                    <Space size={4}>
-                                                        <Button type="link" size="small" onClick={() => fetchCustomFields(g.id)} style={{ fontSize: 12 }}>Load Fields</Button>
-                                                        <Popconfirm title="Delete group?" onConfirm={() => deleteBaseCustomFieldGroup(g.id)} okText="Yes">
-                                                            <Button type="text" size="small" danger icon={<AiOutlineDelete size={12} />} />
-                                                        </Popconfirm>
-                                                    </Space>
-                                                </div>
-                                                {fields.length > 0 && fields.map(f => (
-                                                    <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', marginLeft: 12 }}>
-                                                        <Text style={{ fontSize: 12 }}>{f.name}</Text>
-                                                        <Popconfirm title="Delete field?" onConfirm={() => deleteCustomField(f.id, g.id)} okText="Yes">
-                                                            <Button type="text" size="small" danger icon={<AiOutlineDelete size={10} />} />
-                                                        </Popconfirm>
+                                    {projectBoardGroups.map(g => (
+                                        <Card key={g.id} style={{ padding: theme.spacing.md }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                                <Text strong style={{ fontSize: 14 }}>{g.name}</Text>
+                                                <Space size={4}>
+                                                    <Popconfirm title="Delete group?" onConfirm={() => {
+                                                        const newGroups = projectBoardGroups.filter(gr => gr.id !== g.id);
+                                                        setBoardGroups(activeProject.id, newGroups);
+                                                        if (activeBoardGroup?.[activeProject.id] === g.id) {
+                                                            setActiveBoardGroup(activeProject.id, null);
+                                                        }
+                                                    }} okText="Yes">
+                                                        <Button type="text" size="small" danger icon={<AiOutlineDelete size={12} />} />
+                                                    </Popconfirm>
+                                                </Space>
+                                            </div>
+                                            <div style={{ marginLeft: 12 }}>
+                                                {boards.filter(b => (g.boardIds || []).includes(b.id)).map(b => (
+                                                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', padding: '3px 0' }}>
+                                                        <Text style={{ fontSize: 12 }}>• {b.name}</Text>
                                                     </div>
                                                 ))}
-                                                <div style={{ display: 'flex', gap: 4, marginTop: 6, marginLeft: 12 }}>
-                                                    <Input placeholder="New field name" size="small" style={{ flex: 1, borderRadius: theme.borderRadius.sm }}
-                                                        value={cfNewFieldName[g.id] || ''}
-                                                        onChange={e => setCfNewFieldName(prev => ({ ...prev, [g.id]: e.target.value }))}
-                                                    />
-                                                    <Button size="small" type="primary" onClick={async () => {
-                                                        const name = (cfNewFieldName[g.id] || '').trim();
-                                                        if (!name) return;
-                                                        await createCustomField(g.id, { name });
-                                                        setCfNewFieldName(prev => ({ ...prev, [g.id]: '' }));
-                                                    }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>+</Button>
-                                                </div>
-                                            </Card>
-                                        );
-                                    })}
+                                            </div>
+                                        </Card>
+                                    ))}
                                 </div>
                             )}
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <Input placeholder="New field group name" size="small"
-                                    value={cfGroupName} onChange={e => setCfGroupName(e.target.value)}
-                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                />
-                                <Button size="small" type="primary" onClick={async () => {
-                                    if (!cfGroupName.trim()) return;
-                                    await createBaseCustomFieldGroup(activeProject.id, cfGroupName.trim());
-                                    setCfGroupName('');
-                                }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>Add Group</Button>
-                            </div>
+                            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                                You can create and edit Board Groups from the filter dropdown next to the '+ Create Board' button on the top bar.
+                            </Text>
                         </>
                     )}
                 </>
@@ -1030,6 +1019,64 @@ const BoardSettingsDrawer = () => {
         );
     };
 
+    const SortableCfGroupItem = ({ id, label, isHidden, onToggleHide, theme }) => {
+        const {
+            attributes,
+            listeners,
+            setNodeRef,
+            transform,
+            transition,
+            isDragging,
+        } = useSortable({ id });
+
+        const style = {
+            transform: CSS.Transform.toString(transform),
+            transition,
+            opacity: isDragging ? 0.5 : (isHidden ? 0.6 : 1),
+            zIndex: isDragging ? 10 : 1,
+            marginBottom: 8,
+        };
+
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...attributes}
+            >
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 16px',
+                    background: isHidden ? theme.colors.background : theme.colors.surface,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: theme.borderRadius.lg,
+                    boxShadow: theme.shadows.sm,
+                }}>
+                    <div {...listeners} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+                        <MdDragIndicator size={20} color={theme.colors.textTertiary} />
+                    </div>
+                    <div style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        background: isHidden ? theme.colors.surfaceHover : `${theme.colors.primary}15`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: isHidden ? theme.colors.textSecondary : theme.colors.primary
+                    }}>
+                        <RiInputField size={18} />
+                    </div>
+                    <Text strong style={{ fontSize: 14, flex: 1, textDecoration: isHidden ? 'line-through' : 'none', color: isHidden ? theme.colors.textSecondary : theme.colors.textPrimary }}>{label}</Text>
+                    
+                    <Button type="text" size="small" 
+                        onClick={(e) => { e.stopPropagation(); onToggleHide(); }}
+                        icon={isHidden ? <IoRocketOutline size={16} /> : <AiOutlineCheck size={16} />} 
+                        style={{ color: isHidden ? theme.colors.textTertiary : theme.colors.primary }}
+                    >
+                        {isHidden ? 'Show' : 'Hide'}
+                    </Button>
+                </div>
+            </div>
+        );
+    };
+
+
     const ModuleUITab = () => {
         const sensors = useSensors(
             useSensor(PointerSensor),
@@ -1045,28 +1092,83 @@ const BoardSettingsDrawer = () => {
             workload: { label: 'Workload', icon: BsGrid1X2 },
         };
 
+        const orderedBoards = useMemo(() => {
+            if (!boards || !activeProject) return [];
+            const order = boardTabOrders?.[activeProject.id];
+            if (!order || order.length === 0) return boards;
+            return [...boards].sort((a, b) => {
+                const idxA = order.indexOf(a.id);
+                const idxB = order.indexOf(b.id);
+                if (idxA === -1 && idxB === -1) return 0;
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+            });
+        }, [boards, boardTabOrders, activeProject]);
+
+        const boardIds = orderedBoards.map(b => `board-${b.id}`);
+
+        const cfPrefs = activeProject ? (cfGroupPreferences?.[activeProject.id] || { order: [], hidden: [] }) : { order: [], hidden: [] };
+        
+        const orderedCfGroups = useMemo(() => {
+            if (!baseCustomFieldGroups || !activeProject) return [];
+            const order = cfPrefs.order || [];
+            return [...baseCustomFieldGroups].sort((a, b) => {
+                const idxA = order.indexOf(a.id);
+                const idxB = order.indexOf(b.id);
+                if (idxA === -1 && idxB === -1) return 0;
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+            });
+        }, [baseCustomFieldGroups, cfPrefs.order, activeProject]);
+
+        const cfGroupIds = orderedCfGroups.map(g => `cfgroup-${g.id}`);
+
         const handleDragEnd = (event) => {
             const { active, over } = event;
+            if (!over) return;
             if (active.id !== over.id) {
-                const oldIndex = kanbanTabOrder.indexOf(active.id);
-                const newIndex = kanbanTabOrder.indexOf(over.id);
-                const newOrder = arrayMove(kanbanTabOrder, oldIndex, newIndex);
-                setKanbanTabOrder(newOrder);
+                if (String(active.id).startsWith('board-')) {
+                    const oldIndex = boardIds.indexOf(active.id);
+                    const newIndex = boardIds.indexOf(over.id);
+                    const newOrder = arrayMove(boardIds, oldIndex, newIndex).map(id => parseInt(id.replace('board-', '')));
+                    setBoardTabOrder(activeProject.id, newOrder);
+                } else if (String(active.id).startsWith('cfgroup-')) {
+                    const oldIndex = cfGroupIds.indexOf(active.id);
+                    const newIndex = cfGroupIds.indexOf(over.id);
+                    const newOrder = arrayMove(cfGroupIds, oldIndex, newIndex).map(id => parseInt(id.replace('cfgroup-', '')));
+                    setCfGroupPreference(activeProject.id, { order: newOrder });
+                } else {
+                    const oldIndex = kanbanTabOrder.indexOf(active.id);
+                    const newIndex = kanbanTabOrder.indexOf(over.id);
+                    const newOrder = arrayMove(kanbanTabOrder, oldIndex, newIndex);
+                    setKanbanTabOrder(newOrder);
+                }
+            }
+        };
+
+        const toggleHideCfGroup = (groupId) => {
+            const hidden = cfPrefs.hidden || [];
+            if (hidden.includes(groupId)) {
+                setCfGroupPreference(activeProject.id, { hidden: hidden.filter(id => id !== groupId) });
+            } else {
+                setCfGroupPreference(activeProject.id, { hidden: [...hidden, groupId] });
             }
         };
 
         return (
             <div style={{ padding: '8px 0' }}>
-                <SectionLabel theme={theme}>Navigation Tabs Order</SectionLabel>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
-                    Drag and drop to reorder the main tabs of the Kanban module. This setting is shared across your sessions.
-                </Text>
-
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                 >
+                    <SectionLabel theme={theme}>Navigation Tabs Order</SectionLabel>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
+                        Drag and drop to reorder the main tabs of the Kanban module. This setting is shared across your sessions.
+                    </Text>
+
                     <SortableContext
                         items={kanbanTabOrder}
                         strategy={verticalListSortingStrategy}
@@ -1081,6 +1183,29 @@ const BoardSettingsDrawer = () => {
                             />
                         ))}
                     </SortableContext>
+
+                    <Divider style={{ margin: '24px 0' }} />
+
+                    <SectionLabel theme={theme}>Board Tabs Order</SectionLabel>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
+                        Drag and drop to reorder the boards within this project. This is saved to your preferences.
+                    </Text>
+
+                    <SortableContext
+                        items={boardIds}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        {orderedBoards.map((board) => (
+                            <SortableTabItem
+                                key={`board-${board.id}`}
+                                id={`board-${board.id}`}
+                                label={board.name}
+                                icon={MdOutlineViewQuilt}
+                                theme={theme}
+                            />
+                        ))}
+                    </SortableContext>
+
                 </DndContext>
 
                 <Alert
@@ -1094,13 +1219,14 @@ const BoardSettingsDrawer = () => {
         );
     };
 
+
     const tabItems = [
-        { key: 'general', label: 'General', children: <GeneralTab /> },
-        { key: 'preferences', label: 'Preferences', children: <PreferencesTab /> },
-        { key: 'ui', label: 'Module UI', children: <ModuleUITab /> },
-        { key: 'notifications', label: 'Notifications', children: <NotificationsTab /> },
-        { key: 'archived', label: 'Archived', children: <ArchivedItemsTab /> },
+        { key: 'general', label: 'General', children: GeneralTab() },
+        { key: 'preferences', label: 'Preferences', children: PreferencesTab() },
+        { key: 'ui', label: 'Module UI', children: ModuleUITab() },
+        { key: 'archived', label: 'Archived', children: ArchivedItemsTab() },
     ];
+
 
     return (
         <Drawer

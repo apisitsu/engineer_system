@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Input, Select, Tooltip, Button, Row, Col, Typography } from 'antd';
+import { Input, Select, Tooltip, Button, Row, Col, Typography, Tabs } from 'antd';
 import { IoSearchOutline } from 'react-icons/io5';
 import { FiPlus } from 'react-icons/fi';
 import ProjectGridCard from './components/ProjectGridCard';
@@ -7,13 +7,13 @@ import ProjectListRow from './components/ProjectListRow';
 
 const { Text } = Typography;
 
-const ProjectsTab = ({ 
-    projects, 
-    onSelectProject, 
-    onToggleFavorite, 
-    onOpenProjectSettings, 
+const ProjectsTab = ({
+    projects,
+    onSelectProject,
+    onToggleFavorite,
+    onOpenProjectSettings,
     onShowCreateModal,
-    theme 
+    theme
 }) => {
     const [search, setSearch] = useState('');
     const [filterOwner, setFilterOwner] = useState('all');
@@ -80,17 +80,6 @@ const ProjectsTab = ({
                         { value: 'boards', label: '📋 Most Boards' },
                     ]}
                 />
-                <Select
-                    value={projectStatusFilter}
-                    onChange={setProjectStatusFilter}
-                    style={{ width: 130 }}
-                    options={[
-                        { value: 'active', label: '✅ Active' },
-                        { value: 'waiting', label: '⏳ Waiting' },
-                        { value: 'suspended', label: '🚫 Suspended' },
-                        { value: 'completed', label: '🏁 Completed' },
-                    ]}
-                />
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                     <Tooltip title="Create Project">
                         <Button
@@ -102,6 +91,28 @@ const ProjectsTab = ({
                     </Tooltip>
                 </div>
             </div>
+            {/* <Tabs
+                activeKey={projectStatusFilter}
+                onChange={setProjectStatusFilter}
+                items={[
+                    { key: 'active', label: '✅ Active' },
+                    { key: 'waiting', label: '⏳ Waiting(Pool)' },
+                    { key: 'suspended', label: '🚫 Suspend' },
+                    { key: 'completed', label: '🏁 Completed' },
+                ]}
+                style={{ marginBottom: theme.spacing.md }}
+            /> */}
+            <Tabs
+                activeKey={projectStatusFilter}
+                onChange={setProjectStatusFilter}
+                items={[
+                    { key: 'active', label: 'Active' },
+                    { key: 'waiting', label: 'Waiting(Pool)' },
+                    { key: 'suspended', label: 'Suspend' },
+                    { key: 'completed', label: 'Completed' },
+                ]}
+                style={{ marginBottom: theme.spacing.md }}
+            />
 
             {/* Projects Grid/List */}
             {filteredProjects.length === 0 ? (
@@ -112,12 +123,12 @@ const ProjectsTab = ({
                 <Row gutter={[24, 24]}>
                     {filteredProjects.map(p => (
                         <Col xs={24} sm={12} md={8} lg={6} key={p.id}>
-                            <ProjectGridCard 
-                                project={p} 
-                                onClick={() => onSelectProject(p)} 
-                                onToggleFavorite={onToggleFavorite} 
-                                onOpenSettings={onOpenProjectSettings} 
-                                theme={theme} 
+                            <ProjectGridCard
+                                project={p}
+                                onClick={() => onSelectProject(p)}
+                                onToggleFavorite={onToggleFavorite}
+                                onOpenSettings={onOpenProjectSettings}
+                                theme={theme}
                             />
                         </Col>
                     ))}
@@ -125,13 +136,13 @@ const ProjectsTab = ({
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
                     {filteredProjects.map(p => (
-                        <ProjectListRow 
-                            key={p.id} 
-                            project={p} 
-                            onClick={() => onSelectProject(p)} 
-                            onToggleFavorite={onToggleFavorite} 
-                            onOpenSettings={onOpenProjectSettings} 
-                            theme={theme} 
+                        <ProjectListRow
+                            key={p.id}
+                            project={p}
+                            onClick={() => onSelectProject(p)}
+                            onToggleFavorite={onToggleFavorite}
+                            onOpenSettings={onOpenProjectSettings}
+                            theme={theme}
                         />
                     ))}
                 </div>

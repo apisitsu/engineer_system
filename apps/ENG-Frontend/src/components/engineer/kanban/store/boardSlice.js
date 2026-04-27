@@ -26,6 +26,12 @@ export const createBoardSlice = (set, get) => ({
     // --- User Preferences (Feature 9) ---
     userPreferences: null,
     kanbanTabOrder: ['dashboard', 'projects', 'reports', 'workload'],
+    boardTabOrders: {}, // { [projectId]: [boardId1, boardId2] }
+    cfGroupPreferences: {}, // { [projectId]: { order: [], hidden: [] } }
+    boardGroups: {}, // { [projectId]: [{ id: string, name: string, boardIds: number[] }] }
+    activeBoardGroup: {}, // { [projectId]: groupId | null }
+
+
 
     // --- Custom Field Groups (Board-level, Feature 12) ---
     customFieldGroups: [],
@@ -353,6 +359,18 @@ export const createBoardSlice = (set, get) => ({
                 if (prefs.kanban_tab_order) {
                     set({ kanbanTabOrder: prefs.kanban_tab_order });
                 }
+                if (prefs.board_tab_orders) {
+                    set({ boardTabOrders: prefs.board_tab_orders });
+                }
+                if (prefs.cf_group_preferences) {
+                    set({ cfGroupPreferences: prefs.cf_group_preferences });
+                }
+                if (prefs.board_groups) {
+                    set({ boardGroups: prefs.board_groups });
+                }
+                if (prefs.active_board_group) {
+                    set({ activeBoardGroup: prefs.active_board_group });
+                }
             }
             return res.data?.data;
         } catch (err) {
@@ -370,6 +388,19 @@ export const createBoardSlice = (set, get) => ({
                 if (prefs.kanban_tab_order) {
                     set({ kanbanTabOrder: prefs.kanban_tab_order });
                 }
+                if (prefs.board_tab_orders) {
+                    set({ boardTabOrders: prefs.board_tab_orders });
+                }
+                if (prefs.cf_group_preferences) {
+                    set({ cfGroupPreferences: prefs.cf_group_preferences });
+                }
+                if (prefs.board_groups) {
+                    set({ boardGroups: prefs.board_groups });
+                }
+                if (prefs.active_board_group) {
+                    set({ activeBoardGroup: prefs.active_board_group });
+                }
+
             }
             return res.data?.data;
         } catch (err) {
@@ -383,6 +414,37 @@ export const createBoardSlice = (set, get) => ({
         set({ kanbanTabOrder: newOrder });
         await get().updateUserPreferences({ kanban_tab_order: newOrder });
     },
+
+    setBoardTabOrder: async (projectId, newOrder) => {
+        const current = get().boardTabOrders;
+        const updated = { ...current, [projectId]: newOrder };
+        set({ boardTabOrders: updated });
+        await get().updateUserPreferences({ board_tab_orders: updated });
+    },
+
+    setCfGroupPreference: async (projectId, data) => {
+        const current = get().cfGroupPreferences || {};
+        const updated = { ...current, [projectId]: { ...(current[projectId] || {}), ...data } };
+        set({ cfGroupPreferences: updated });
+        await get().updateUserPreferences({ cf_group_preferences: updated });
+    },
+
+    setBoardGroups: async (projectId, groups) => {
+        const current = get().boardGroups || {};
+        const updated = { ...current, [projectId]: groups };
+        set({ boardGroups: updated });
+        await get().updateUserPreferences({ board_groups: updated });
+    },
+
+    setActiveBoardGroup: async (projectId, groupId) => {
+        const current = get().activeBoardGroup || {};
+        const updated = { ...current, [projectId]: groupId };
+        set({ activeBoardGroup: updated });
+        await get().updateUserPreferences({ active_board_group: updated });
+    },
+
+
+
 
     // ====================================================================
     //  CUSTOM FIELD GROUPS (Board-level, Feature 12)

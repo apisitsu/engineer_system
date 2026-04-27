@@ -703,15 +703,27 @@ const GetUserPreferences = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
     try {
-        const { rows } = await engPool.query(`
+        const { rows: profileRows } = await engPool.query(`
             SELECT subscribe_to_own_cards, subscribe_to_card_when_commenting,
                    turn_off_recent_card_highlighting, enable_favorites_by_default,
                    default_editor_mode, default_home_view, default_projects_order,
                    is_notification_off, pref_language
             FROM m_user_profile WHERE u_code=$1
         `, [uCode]);
-        if (!rows.length) return res.status(404).json({ error: 'User profile not found' });
-        res.json({ data: rows[0] });
+
+        if (!profileRows.length) return res.status(404).json({ error: 'User profile not found' });
+
+        const { rows: kbPrefsRows } = await engPool.query(`
+            SELECT kanban_tab_order, board_tab_orders, cf_group_preferences,
+                   board_groups, active_board_group
+            FROM kb_user_preferences WHERE u_code=$1
+        `, [uCode]);
+
+        const data = {
+            ...profileRows[0],
+            ...(kbPrefsRows[0] || {})
+        };
+        res.json({ data });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -725,10 +737,17 @@ const UpdateUserPreferences = async (req, res) => {
         subscribe_to_own_cards, subscribe_to_card_when_commenting,
         turn_off_recent_card_highlighting, enable_favorites_by_default,
         default_editor_mode, default_home_view, default_projects_order,
-        is_notification_off, pref_language
+        is_notification_off, pref_language,
+        kanban_tab_order, board_tab_orders, cf_group_preferences,
+        board_groups, active_board_group
     } = req.body;
+    
+    const client = await engPool.connect();
     try {
-        const { rows } = await engPool.query(`
+        await client.query('BEGIN');
+        let mergedData = {};
+
+        const { rows: profileRows } = await client.query(`
             UPDATE m_user_profile SET
                 subscribe_to_own_cards            = COALESCE($1, subscribe_to_own_cards),
                 subscribe_to_card_when_commenting = COALESCE($2, subscribe_to_card_when_commenting),
@@ -744,10 +763,41 @@ const UpdateUserPreferences = async (req, res) => {
             turn_off_recent_card_highlighting, enable_favorites_by_default,
             default_editor_mode, default_home_view, default_projects_order,
             is_notification_off, pref_language, uCode]);
-        if (!rows.length) return res.status(404).json({ error: 'User profile not found' });
-        res.json({ data: rows[0] });
+        
+        if (!profileRows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'User profile not found' });
+        }
+        Object.assign(mergedData, profileRows[0]);
+
+        const { rows: kbPrefsRows } = await client.query(`
+            INSERT INTO kb_user_preferences (u_code, kanban_tab_order, board_tab_orders, cf_group_preferences, board_groups, active_board_group)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (u_code) DO UPDATE SET
+                kanban_tab_order = COALESCE(EXCLUDED.kanban_tab_order, kb_user_preferences.kanban_tab_order),
+                board_tab_orders = COALESCE(EXCLUDED.board_tab_orders, kb_user_preferences.board_tab_orders),
+                cf_group_preferences = COALESCE(EXCLUDED.cf_group_preferences, kb_user_preferences.cf_group_preferences),
+                board_groups = COALESCE(EXCLUDED.board_groups, kb_user_preferences.board_groups),
+                active_board_group = COALESCE(EXCLUDED.active_board_group, kb_user_preferences.active_board_group),
+                updated_at = NOW()
+            RETURNING *
+        `, [
+            uCode,
+            kanban_tab_order !== undefined ? JSON.stringify(kanban_tab_order) : null,
+            board_tab_orders !== undefined ? JSON.stringify(board_tab_orders) : null,
+            cf_group_preferences !== undefined ? JSON.stringify(cf_group_preferences) : null,
+            board_groups !== undefined ? JSON.stringify(board_groups) : null,
+            active_board_group !== undefined ? JSON.stringify(active_board_group) : null
+        ]);
+        Object.assign(mergedData, kbPrefsRows[0]);
+
+        await client.query('COMMIT');
+        res.json({ data: mergedData });
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 

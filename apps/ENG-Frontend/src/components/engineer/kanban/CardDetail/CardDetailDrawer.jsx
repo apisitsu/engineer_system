@@ -120,7 +120,8 @@ const CardDetailDrawer = () => {
         fetchCustomFieldValues, upsertCustomFieldValue,
         activeBoardMembers, addCardMember, removeCardMember,
         projectManagers, users, activeProject, activeBoard,
-        createCardIssue, updateCardIssue, deleteCardIssue, createLabel
+        createCardIssue, updateCardIssue, deleteCardIssue, createLabel,
+        baseCustomFieldGroups, customFields, fetchCustomFields, cfGroupPreferences
     } = useKanbanStore();
     const { theme } = useTheme();
     const { user, empNo } = useAuthStore();
@@ -339,6 +340,17 @@ const CardDetailDrawer = () => {
             fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
         }
     }, [card]);
+
+    useEffect(() => {
+        if (isCardDetailOpen && baseCustomFieldGroups) {
+            baseCustomFieldGroups.forEach(g => {
+                if (!customFields || !customFields[g.id]) {
+                    fetchCustomFields(g.id);
+                }
+            });
+        }
+    }, [isCardDetailOpen, baseCustomFieldGroups]);
+
 
     useEffect(() => {
         if (!isCardDetailOpen) {
@@ -1390,36 +1402,112 @@ const CardDetailDrawer = () => {
                                     )}
 
                                     {/* ─── Custom Fields ─── */}
-                                    {customFieldValues.length > 0 && (
-                                        <div style={{ marginBottom: theme.spacing.xl }}>
-                                            <SectionHeader icon={<RiInputField />} title="Custom Fields" theme={theme} />
-                                            <div style={{ marginLeft: 28 }}>
-                                                {customFieldValues.map(cfv => (
-                                                    <div key={cfv.id} style={{
-                                                        display: 'flex', alignItems: 'center', gap: 8,
-                                                        marginBottom: 6
-                                                    }}>
-                                                        <Text strong style={{ minWidth: 100, fontSize: 13 }}>{cfv.field_name}:</Text>
-                                                        <Input
-                                                            size="small"
-                                                            defaultValue={cfv.content || ''}
-                                                            disabled={isReadOnly}
-                                                            onBlur={(e) => {
-                                                                if (e.target.value !== (cfv.content || '')) {
-                                                                    upsertCustomFieldValue(card.id, {
-                                                                        custom_field_id: cfv.custom_field_id,
-                                                                        content: e.target.value
-                                                                    });
-                                                                }
-                                                            }}
-                                                            onPressEnter={(e) => e.target.blur()}
-                                                            style={{ borderRadius: theme.borderRadius.sm }}
-                                                        />
-                                                    </div>
-                                                ))}
+                                    {customFieldValues.length > 0 && (() => {
+                                        const cfPrefs = activeProject ? (cfGroupPreferences?.[activeProject.id] || { order: [], hidden: [] }) : { order: [], hidden: [] };
+                                        
+                                        const orderedCfGroups = (baseCustomFieldGroups || []).slice().sort((a, b) => {
+                                            const order = cfPrefs.order || [];
+                                            const idxA = order.indexOf(a.id);
+                                            const idxB = order.indexOf(b.id);
+                                            if (idxA === -1 && idxB === -1) return 0;
+                                            if (idxA === -1) return 1;
+                                            if (idxB === -1) return -1;
+                                            return idxA - idxB;
+                                        }).filter(g => !(cfPrefs.hidden || []).includes(g.id));
+
+                                        // Map each value to its group
+                                        const groupedValues = {};
+                                        const unassignedValues = [];
+                                        
+                                        customFieldValues.forEach(cfv => {
+                                            let foundGroupId = null;
+                                            if (customFields) {
+                                                for (const [gId, fields] of Object.entries(customFields)) {
+                                                    if (fields.some(f => String(f.id) === String(cfv.custom_field_id))) {
+                                                        foundGroupId = gId;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if (foundGroupId) {
+                                                if (!groupedValues[foundGroupId]) groupedValues[foundGroupId] = [];
+                                                groupedValues[foundGroupId].push(cfv);
+                                            } else {
+                                                unassignedValues.push(cfv);
+                                            }
+                                        });
+
+                                        const hasVisibleGroups = orderedCfGroups.some(g => groupedValues[g.id]?.length > 0);
+                                        if (!hasVisibleGroups && unassignedValues.length === 0) return null;
+
+                                        return (
+                                            <div style={{ marginBottom: theme.spacing.xl }}>
+                                                <SectionHeader icon={<RiInputField />} title="Custom Fields" theme={theme} />
+                                                <div style={{ marginLeft: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                                    {orderedCfGroups.map(g => {
+                                                        const groupValues = groupedValues[g.id];
+                                                        if (!groupValues || groupValues.length === 0) return null;
+                                                        return (
+                                                            <div key={g.id}>
+                                                                <Text type="secondary" strong style={{ fontSize: 12, textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>{g.name}</Text>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                                    {groupValues.map(cfv => (
+                                                                        <div key={cfv.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                            <Text strong style={{ minWidth: 100, fontSize: 13 }}>{cfv.field_name}:</Text>
+                                                                            <Input
+                                                                                size="small"
+                                                                                defaultValue={cfv.content || ''}
+                                                                                disabled={isReadOnly}
+                                                                                onBlur={(e) => {
+                                                                                    if (e.target.value !== (cfv.content || '')) {
+                                                                                        upsertCustomFieldValue(card.id, {
+                                                                                            custom_field_id: cfv.custom_field_id,
+                                                                                            content: e.target.value
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                                onPressEnter={(e) => e.target.blur()}
+                                                                                style={{ borderRadius: theme.borderRadius.sm }}
+                                                                            />
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {unassignedValues.length > 0 && (
+                                                        <div>
+                                                            <Text type="secondary" strong style={{ fontSize: 12, textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>Other Fields</Text>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                                {unassignedValues.map(cfv => (
+                                                                    <div key={cfv.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                        <Text strong style={{ minWidth: 100, fontSize: 13 }}>{cfv.field_name}:</Text>
+                                                                        <Input
+                                                                            size="small"
+                                                                            defaultValue={cfv.content || ''}
+                                                                            disabled={isReadOnly}
+                                                                            onBlur={(e) => {
+                                                                                if (e.target.value !== (cfv.content || '')) {
+                                                                                    upsertCustomFieldValue(card.id, {
+                                                                                        custom_field_id: cfv.custom_field_id,
+                                                                                        content: e.target.value
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                            onPressEnter={(e) => e.target.blur()}
+                                                                            style={{ borderRadius: theme.borderRadius.sm }}
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
+
 
                                     {/* ─── Parent/Child ─── */}
                                     {(parentCard || parseInt(card.total_children_count) > 0) && (

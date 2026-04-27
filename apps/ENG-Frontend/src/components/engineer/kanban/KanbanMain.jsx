@@ -1,9 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { Typography, Spin, Alert, Select, Button, Space, Input, Avatar, Tooltip, Badge, Dropdown, Modal, Form, Tag, Popover, Tabs, Row, Col, Progress, Statistic, Layout, Switch } from 'antd';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Typography, Spin, Alert, Select, Button, Space, Input, Avatar, Tooltip, Badge, Dropdown, Form, Tag, Popover, Tabs, Row, Col, Progress, Statistic, Layout, Switch, Menu, Checkbox, Modal } from 'antd';
 import { useKanbanStore } from './store/kanbanStore';
 import { useTheme } from '../../../theme';
 import { useAuthStore } from '../../../stores/authStore';
 import { useNavigate, useParams } from 'react-router-dom';
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
     IoSettingsOutline, IoSearchOutline, IoAddOutline, IoGridOutline,
     IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoStarOutline, IoStar,
@@ -20,7 +23,7 @@ import {
 import { useKanbanPermissions } from './hooks/useKanbanPermissions';
 import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1, MdOutlineAssessment } from 'react-icons/md';
 import { BsKanban, BsThreeDots, BsGrid3X3Gap, BsList } from 'react-icons/bs';
-import { FiPlus, FiEdit2 } from 'react-icons/fi';
+import { FiPlus, FiMoreVertical, FiEdit2, FiTrash2, FiSearch, FiMessageSquare, FiPaperclip, FiFilter } from 'react-icons/fi';
 import { AiOutlineCheck, AiOutlineClose, AiOutlineEdit, AiOutlineStar, AiFillStar } from 'react-icons/ai';
 import { RiKanbanView } from 'react-icons/ri';
 import dayjs from 'dayjs';
@@ -823,11 +826,14 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         </div>
                     )}
                 >
-                    <Badge count={unreadNotificationCount} size="small" offset={[-2, 2]}>
-                        <Button type="text" size="small" icon={<IoNotificationsOutline size={18} />}
-                            style={{ color: theme.colors.textSecondary }} />
-                    </Badge>
+                    <span style={{ display: 'none' }}>
+                        <Badge count={unreadNotificationCount} size="small" offset={[-2, 2]}>
+                            <Button type="text" size="small" icon={<IoNotificationsOutline size={18} />}
+                                style={{ color: theme.colors.textSecondary }} />
+                        </Badge>
+                    </span>
                 </Dropdown>
+
 
                 <Tooltip title="Board Interface Guide">
                     <Button type="text" size="small" icon={<IoHelpCircleOutline size={18} />}
@@ -840,6 +846,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
             </Space>
 
             <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
+
         </div >
     );
 };
@@ -855,8 +862,143 @@ const KanbanMain = () => {
         projects, activeProject, boards, activeBoard, isLoading, error,
         fetchProjects, setActiveProject, fetchBoards, setActiveBoard,
         lists, openProjectSettings, openBoardSettings,
-        connectWebSocket, disconnectWebSocket, viewMode
+        connectWebSocket, disconnectWebSocket, viewMode, boardTabOrders,
+        boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup, setBoardTabOrder,
+        fetchUserPreferences
     } = useKanbanStore();
+
+    const orderedBoards = useMemo(() => {
+        if (!boards || !activeProject) return [];
+        const order = boardTabOrders?.[activeProject.id];
+        if (!order || order.length === 0) return boards;
+
+        return [...boards].sort((a, b) => {
+            const idxA = order.indexOf(a.id);
+            const idxB = order.indexOf(b.id);
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+        });
+    }, [boards, boardTabOrders, activeProject]);
+
+    const projectBoardGroups = activeProject ? (boardGroups?.[activeProject.id] || []) : [];
+    const currentBoardGroupId = activeProject ? activeBoardGroup?.[activeProject.id] : null;
+
+    const filteredOrderedBoards = useMemo(() => {
+        if (!currentBoardGroupId) return orderedBoards;
+        const group = projectBoardGroups.find(g => g.id === currentBoardGroupId);
+        if (!group) return orderedBoards;
+        return orderedBoards.filter(b => group.boardIds.includes(b.id));
+    }, [orderedBoards, currentBoardGroupId, projectBoardGroups]);
+
+    // ─── Drag and Drop Setup for Board Tabs ───
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const handleDragEndBoards = (event) => {
+        const { active, over } = event;
+        if (!over) return;
+        if (active.id !== over.id) {
+            const oldIndex = filteredOrderedBoards.findIndex(b => b.id === active.id);
+            const newIndex = filteredOrderedBoards.findIndex(b => b.id === over.id);
+            const newArray = arrayMove(filteredOrderedBoards, oldIndex, newIndex);
+
+            // To preserve the order of hidden boards, we just get the current overall order
+            // and replace the filtered ones in their new relative positions.
+            const currentFullOrder = boardTabOrders?.[activeProject?.id] || boards.map(b => b.id);
+            const allBoardsDict = currentFullOrder.filter(id => !filteredOrderedBoards.find(b => b.id === id));
+
+            // Simple approach: just take the newly sorted visible boards, and append the hidden ones at the end
+            // This is safe because usually they just sort what they see.
+            const newFullOrder = [...newArray.map(b => b.id), ...allBoardsDict];
+            setBoardTabOrder(activeProject.id, newFullOrder);
+        }
+    };
+
+    const SortableBoardTab = ({ board, isActive, setActiveBoard, theme }) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: board.id });
+        const style = {
+            transform: CSS.Transform.toString(transform),
+            transition,
+            opacity: isDragging ? 0.5 : 1,
+            zIndex: isDragging ? 10 : 1,
+            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
+            cursor: 'grab',
+            borderBottom: isActive ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+            color: isActive ? theme.colors.primary : theme.colors.textSecondary,
+            fontWeight: isActive ? theme.typography.fontWeight.semibold : theme.typography.fontWeight.normal,
+            fontSize: theme.typography.fontSize.sm,
+            whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: 6,
+        };
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...attributes}
+                {...listeners}
+                onClick={() => setActiveBoard(board)}
+                onMouseOver={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.primary; }}
+                onMouseOut={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.textSecondary; }}
+            >
+                <BsKanban size={14} />
+                {board.name}
+            </div>
+        );
+    };
+
+    // Board Group Modal State
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [groupFormName, setGroupFormName] = useState('');
+    const [groupFormBoards, setGroupFormBoards] = useState([]);
+    const [groupFormAutoOpen, setGroupFormAutoOpen] = useState(false);
+    const [editingGroupId, setEditingGroupId] = useState(null);
+
+    const handleOpenGroupModal = (group = null) => {
+        if (group) {
+            setEditingGroupId(group.id);
+            setGroupFormName(group.name);
+            setGroupFormBoards(group.boardIds || []);
+            setGroupFormAutoOpen(group.auto_open || false);
+        } else {
+            setEditingGroupId(null);
+            setGroupFormName('');
+            setGroupFormBoards([]);
+            setGroupFormAutoOpen(false);
+        }
+        setIsGroupModalOpen(true);
+    };
+
+    const handleSaveGroup = () => {
+        if (!groupFormName.trim()) return;
+        const newGroups = [...projectBoardGroups];
+
+        if (groupFormAutoOpen) {
+            newGroups.forEach(g => g.auto_open = false);
+        }
+
+        if (editingGroupId) {
+            const idx = newGroups.findIndex(g => g.id === editingGroupId);
+            if (idx >= 0) newGroups[idx] = { ...newGroups[idx], name: groupFormName, boardIds: groupFormBoards, auto_open: groupFormAutoOpen };
+        } else {
+            const newId = `bg-${Date.now()}`;
+            newGroups.push({ id: newId, name: groupFormName, boardIds: groupFormBoards, auto_open: groupFormAutoOpen });
+            setActiveBoardGroup(activeProject.id, newId);
+        }
+        setBoardGroups(activeProject.id, newGroups);
+        setIsGroupModalOpen(false);
+    };
+
+    const handleDeleteGroup = (groupId) => {
+        const newGroups = projectBoardGroups.filter(g => g.id !== groupId);
+        setBoardGroups(activeProject.id, newGroups);
+        if (currentBoardGroupId === groupId) {
+            setActiveBoardGroup(activeProject.id, null);
+        }
+    };
 
     // Global permissions
     const { canManageProject } = useKanbanPermissions({
@@ -865,11 +1007,37 @@ const KanbanMain = () => {
     });
 
     const [isInitLoading, setIsInitLoading] = useState(true);
+    const initializedProjects = useRef(new Set());
 
-    // On mount: fetch all projects
+    // Auto-select Board Group based on auto_open configuration when entering project
+    useEffect(() => {
+        if (!isInitLoading && activeProject?.id && projectBoardGroups) {
+            if (!initializedProjects.current.has(activeProject.id)) {
+                initializedProjects.current.add(activeProject.id);
+                const autoGroup = projectBoardGroups.find(g => g.auto_open);
+                if (autoGroup) {
+                    setActiveBoardGroup(activeProject.id, autoGroup.id);
+                } else {
+                    setActiveBoardGroup(activeProject.id, null);
+                }
+            }
+        }
+    }, [isInitLoading, activeProject?.id, projectBoardGroups, setActiveBoardGroup]);
+
+    // Auto-select first board in filtered list if current activeBoard is not in the list
+    useEffect(() => {
+        if (!isInitLoading && filteredOrderedBoards.length > 0) {
+            if (!activeBoard || !filteredOrderedBoards.find(b => b.id === activeBoard.id)) {
+                setActiveBoard(filteredOrderedBoards[0]);
+            }
+        }
+    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading]);
+
+    // On mount: fetch all projects and user preferences
     useEffect(() => {
         let isMounted = true;
         const initKanban = async () => {
+            await fetchUserPreferences();
             await fetchProjects();
             // Give the URL param effect a moment to process before dropping the shade
             setTimeout(() => {
@@ -981,7 +1149,7 @@ const KanbanMain = () => {
                                         }
                                     }}
                                     style={{ minWidth: 220 }}
-                                    options={projects.map(p => ({ label: p.name, value: p.id }))}
+                                    options={projects.filter(p => !p.status || p.status.toLowerCase() === 'active').map(p => ({ label: p.name, value: p.id }))}
                                     popupMatchSelectWidth={false}
                                     variant="borderless"
                                     className="kanban-project-title"
@@ -1093,31 +1261,86 @@ const KanbanMain = () => {
                             gap: 0,
                             overflowX: 'auto',
                         }}>
-                            {(boards || []).map((board) => {
-                                const isActive = activeBoard?.id === board.id;
-                                return (
+                            {canManageProject && (
+                                <Tooltip title="Create New Board">
                                     <div
-                                        key={board.id}
-                                        onClick={() => setActiveBoard(board)}
+                                        onClick={openBoardSettings}
                                         style={{
-                                            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
+                                            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
                                             cursor: 'pointer',
-                                            borderBottom: isActive ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-                                            color: isActive ? theme.colors.primary : theme.colors.textSecondary,
-                                            fontWeight: isActive ? theme.typography.fontWeight.semibold : theme.typography.fontWeight.normal,
-                                            fontSize: theme.typography.fontSize.sm,
-                                            transition: `all ${theme.transitions.fast}`,
-                                            whiteSpace: 'nowrap',
-                                            display: 'flex', alignItems: 'center', gap: 6,
+                                            color: theme.colors.textSecondary,
+                                            display: 'flex', alignItems: 'center', gap: 4,
+                                            borderRight: `1px solid ${theme.colors.border}`,
+                                            marginRight: 4
                                         }}
-                                        onMouseOver={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.primary; }}
-                                        onMouseOut={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.textSecondary; }}
+                                        onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.primary; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.textSecondary; }}
                                     >
-                                        <BsKanban size={14} />
-                                        {board.name}
+                                        <FiPlus size={18} />
                                     </div>
-                                );
-                            })}
+                                </Tooltip>
+                            )}
+
+                            <Dropdown
+                                menu={{
+                                    items: [
+                                        {
+                                            key: 'all',
+                                            onClick: () => setActiveBoardGroup(activeProject.id, null),
+                                            label: <div style={{ fontWeight: !currentBoardGroupId ? 'bold' : 'normal' }}>All Boards</div>
+                                        },
+                                        { type: 'divider' },
+                                        ...projectBoardGroups.map(g => ({
+                                            key: g.id,
+                                            label: (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                                                    <span
+                                                        onClick={() => setActiveBoardGroup(activeProject.id, g.id)}
+                                                        style={{ flex: 1, fontWeight: currentBoardGroupId === g.id ? 'bold' : 'normal' }}
+                                                    >
+                                                        {g.name}
+                                                    </span>
+                                                    <Button type="text" size="small" icon={<FiEdit2 size={12} />} onClick={(e) => { e.stopPropagation(); handleOpenGroupModal(g); }} />
+                                                </div>
+                                            )
+                                        })),
+                                        { type: 'divider' },
+                                        {
+                                            key: 'create',
+                                            onClick: () => handleOpenGroupModal(),
+                                            label: '+ Create Board Group'
+                                        }
+                                    ]
+                                }}
+                                trigger={['click']}
+                            >
+                                <div style={{
+                                    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                                    cursor: 'pointer',
+                                    color: currentBoardGroupId ? theme.colors.primary : theme.colors.textSecondary,
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    borderRight: `1px solid ${theme.colors.border}`,
+                                    marginRight: 4,
+                                    fontWeight: currentBoardGroupId ? 'bold' : 'normal'
+                                }}>
+                                    <FiFilter size={16} />
+                                    {currentBoardGroupId ? projectBoardGroups.find(g => g.id === currentBoardGroupId)?.name : 'All Boards'}
+                                </div>
+                            </Dropdown>
+
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndBoards}>
+                                <SortableContext items={filteredOrderedBoards.map(b => b.id)} strategy={horizontalListSortingStrategy}>
+                                    {filteredOrderedBoards.map((board) => (
+                                        <SortableBoardTab
+                                            key={board.id}
+                                            board={board}
+                                            isActive={activeBoard?.id === board.id}
+                                            setActiveBoard={setActiveBoard}
+                                            theme={theme}
+                                        />
+                                    ))}
+                                </SortableContext>
+                            </DndContext>
                         </div>
                     )}
                 </div>
@@ -1180,6 +1403,67 @@ const KanbanMain = () => {
                 <ProjectSettingsDrawer />
                 <BoardSettingsDrawer />
             </div>
+
+            <Modal
+                title={editingGroupId ? "Edit Board Group" : "Create Board Group"}
+                open={isGroupModalOpen}
+                onCancel={() => setIsGroupModalOpen(false)}
+                onOk={handleSaveGroup}
+                okText="Save Group"
+                okButtonProps={{ disabled: !groupFormName.trim() }}
+                styles={{ body: { padding: '24px 0' } }}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 24px' }}>
+                    <div>
+                        <Typography.Text strong>Group Name</Typography.Text>
+                        <Input
+                            placeholder="e.g. My Custom View"
+                            value={groupFormName}
+                            onChange={(e) => setGroupFormName(e.target.value)}
+                            style={{ marginTop: 8 }}
+                        />
+                    </div>
+                    <div>
+                        <Typography.Text strong>Select Boards to include</Typography.Text>
+                        <div style={{
+                            marginTop: 8,
+                            maxHeight: 200,
+                            overflowY: 'auto',
+                            border: `1px solid ${theme.colors.border}`,
+                            borderRadius: theme.borderRadius.sm,
+                            padding: 12,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8
+                        }}>
+                            {orderedBoards.map(b => (
+                                <Checkbox
+                                    key={b.id}
+                                    checked={groupFormBoards.includes(b.id)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setGroupFormBoards(prev => [...prev, b.id]);
+                                        else setGroupFormBoards(prev => prev.filter(id => id !== b.id));
+                                    }}
+                                >
+                                    {b.name}
+                                </Checkbox>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.sm }}>
+                        <div>
+                            <Typography.Text strong style={{ display: 'block' }}>Auto Open</Typography.Text>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>Automatically select this group when opening the project.</Typography.Text>
+                        </div>
+                        <Switch checked={groupFormAutoOpen} onChange={setGroupFormAutoOpen} />
+                    </div>
+                    {editingGroupId && (
+                        <Button danger onClick={() => { handleDeleteGroup(editingGroupId); setIsGroupModalOpen(false); }}>
+                            Delete this Group
+                        </Button>
+                    )}
+                </div>
+            </Modal>
         </>
     );
 };
