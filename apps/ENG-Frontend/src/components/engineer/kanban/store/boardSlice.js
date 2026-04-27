@@ -25,6 +25,7 @@ export const createBoardSlice = (set, get) => ({
 
     // --- User Preferences (Feature 9) ---
     userPreferences: null,
+    kanbanTabOrder: ['dashboard', 'projects', 'reports', 'workload'],
 
     // --- Custom Field Groups (Board-level, Feature 12) ---
     customFieldGroups: [],
@@ -346,7 +347,13 @@ export const createBoardSlice = (set, get) => ({
     fetchUserPreferences: async () => {
         try {
             const res = await axios.get(server.KANBAN_USER_PREFERENCES);
-            if (res.data?.data) set({ userPreferences: res.data.data });
+            if (res.data?.data) {
+                const prefs = res.data.data;
+                set({ userPreferences: prefs });
+                if (prefs.kanban_tab_order) {
+                    set({ kanbanTabOrder: prefs.kanban_tab_order });
+                }
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to fetch user preferences', err);
@@ -357,13 +364,24 @@ export const createBoardSlice = (set, get) => ({
     updateUserPreferences: async (data) => {
         try {
             const res = await axios.patch(server.KANBAN_USER_PREFERENCES, data);
-            if (res.data?.data) set({ userPreferences: res.data.data });
+            if (res.data?.data) {
+                const prefs = res.data.data;
+                set({ userPreferences: prefs });
+                if (prefs.kanban_tab_order) {
+                    set({ kanbanTabOrder: prefs.kanban_tab_order });
+                }
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to update user preferences', err);
             Swal.fire('Error', 'ไม่สามารถบันทึกการตั้งค่าได้', 'error');
             return null;
         }
+    },
+
+    setKanbanTabOrder: async (newOrder) => {
+        set({ kanbanTabOrder: newOrder });
+        await get().updateUserPreferences({ kanban_tab_order: newOrder });
     },
 
     // ====================================================================

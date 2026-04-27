@@ -25,13 +25,18 @@ import { AiOutlineCheck, AiOutlineClose, AiOutlineEdit, AiOutlineStar, AiFillSta
 import { RiKanbanView } from 'react-icons/ri';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+
+// Extracted Tab Components
+import DashboardTab from './Tabs/DashboardTab';
+import ProjectsTab from './Tabs/ProjectsTab';
+import ReportsTab from './Tabs/ReportsTab';
+import WorkloadTab from './Tabs/WorkloadTab';
+
 import BoardView from './Board/BoardView';
 import CardDetailDrawer from './CardDetail/CardDetailDrawer';
 import ProjectSettingsDrawer from './Settings/ProjectSettingsDrawer';
 import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
 import ScrollbarStyle from '../../common/scrollbar';
-import ReportDashboard from './Reports/ReportDashboard';
-import WorkloadDashboard from './Workload/WorkloadDashboard';
 import UserGuideDrawer from './UserGuide/UserGuideDrawer';
 import BoardGuideDrawer from './UserGuide/BoardGuideDrawer';
 
@@ -39,29 +44,6 @@ dayjs.extend(relativeTime);
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
-
-// ─── Scrollbar CSS injection ────────────────────────────────────────
-// const ScrollbarStyle = ({ primary }) => (
-//     <style>{`
-//         .kb-hscroll::-webkit-scrollbar, .kb-vscroll::-webkit-scrollbar { width: 10px; height: 10px; }
-//         .kb-hscroll::-webkit-scrollbar-track, .kb-vscroll::-webkit-scrollbar-track { background: transparent; }
-//         .kb-hscroll::-webkit-scrollbar-thumb, .kb-vscroll::-webkit-scrollbar-thumb {
-//             background: ${primary}44; border-radius: 4px;
-//         }
-//         .kb-hscroll::-webkit-scrollbar-thumb:hover, .kb-vscroll::-webkit-scrollbar-thumb:hover {
-//             background: ${primary}88;
-//         }
-//         .kanban-project-title .ant-select-selector {
-//             font-size: 17px !important;
-//             font-weight: 700 !important;
-//             color: inherit !important;
-//         }
-//         .kanban-project-title .ant-select-selection-item {
-//             font-size: 17px !important;
-//             font-weight: 700 !important;
-//         }
-//     `}</style>
-// );
 
 // ─── Gradient colors for project cards ────────────────────────────
 const GRADIENTS = [
@@ -120,356 +102,69 @@ const getProjectIcon = (iconKey) => {
     return found ? found.icon : null;
 };
 
-// ─── Gradient Picker Component ─────────────────────────────────────
+// ─── Helper Components for Project Creation ────────────────────────
 const GradientPicker = ({ value, onChange, theme }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0' }}>
         {GRADIENTS.map((g, i) => (
             <div
                 key={i}
                 onClick={() => onChange(g)}
                 style={{
-                    width: 28, height: 28, borderRadius: 6,
-                    background: g, cursor: 'pointer',
-                    border: value === g ? '2px solid #fff' : '2px solid transparent',
-                    boxShadow: value === g ? `0 0 0 2px ${theme.colors.primary}` : 'none',
-                    transition: 'all 0.15s ease',
+                    width: 28, height: 28, borderRadius: '50%', background: g,
+                    cursor: 'pointer', border: value === g ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+                    boxShadow: value === g ? '0 0 0 1px #fff' : 'none',
+                    transition: 'all 0.2s ease', transform: value === g ? 'scale(1.1)' : 'none',
                 }}
             />
         ))}
     </div>
 );
 
-// ─── Icon Picker Component ──────────────────────────────────────────
 const IconPicker = ({ value, onChange, theme }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {PROJECT_ICONS.map(({ key, icon: Icon, label }) => (
-            <Tooltip title={label} key={key}>
-                <div
-                    onClick={() => onChange(key)}
-                    style={{
-                        width: 32, height: 32, borderRadius: 6,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer',
-                        background: value === key ? `${theme.colors.primary}20` : 'transparent',
-                        border: value === key ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-                        color: value === key ? theme.colors.primary : theme.colors.textSecondary,
-                        transition: 'all 0.15s ease',
-                    }}
-                >
-                    <Icon size={18} />
-                </div>
-            </Tooltip>
-        ))}
-    </div>
-);
-
-// ─── Priority Color Helper ─────────────────────────────────────────
-const getPriorityColor = (priority) => {
-    switch (priority?.toLowerCase()) {
-        case 'low': return 'blue';
-        case 'high': return 'volcano';
-        case 'urgent': return 'red';
-        case 'medium':
-        default: return 'green';
-    }
-};
-
-// ─── Project Stat Card ─────────────────────────────────────────────
-const StatCard = ({ icon, label, value, color, theme }) => (
-    <div style={{
-        background: theme.colors.surface,
-        border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.borderRadius.lg,
-        padding: `${theme.spacing.lg} ${theme.spacing.xl}`,
-        display: 'flex', alignItems: 'center', gap: theme.spacing.lg,
-        boxShadow: theme.shadows.sm,
-        flex: 1, minWidth: 140,
-    }}>
-        <div style={{
-            width: 48, height: 48, borderRadius: theme.borderRadius.md,
-            background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-        }}>
-            <span style={{ color, fontSize: 22 }}>{icon}</span>
-        </div>
-        <div>
-            <Text style={{ fontSize: 26, fontWeight: 800, color: theme.colors.textPrimary, lineHeight: 1.1 }}>{value}</Text>
-            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, display: 'block', marginTop: 2 }}>{label}</Text>
-        </div>
-    </div>
-);
-
-// ─── Project Grid Card ─────────────────────────────────────────────
-const ProjectGridCard = ({ project, onClick, onToggleFavorite, onOpenSettings, theme }) => {
-    const [hovered, setHovered] = useState(false);
-    const gradient = project.background_value || GRADIENTS[(project.id || 0) % GRADIENTS.length];
-    const ProjectIcon = getProjectIcon(project.icon);
-
-    // Evaluate permissions
-    const { canManageProject } = useKanbanPermissions({
-        isPrivateProject: project.is_private,
-        projectRole: project.role
-    });
-
-    return (
-        <div
-            onClick={onClick}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-                background: theme.colors.surface,
-                border: `1px solid ${hovered ? theme.colors.primary + '60' : theme.colors.border}`,
-                borderRadius: theme.borderRadius.xl,
-                overflow: 'hidden',
-                cursor: 'pointer',
-                boxShadow: hovered ? theme.shadows.lg : theme.shadows.sm,
-                transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
-                transition: 'all 0.2s ease',
-            }}
-        >
-            {/* Top gradient banner */}
-            <div style={{
-                height: 80, background: gradient,
-                position: 'relative', display: 'flex', alignItems: 'center', padding: theme.spacing.lg,
-            }}>
-                <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'radial-gradient(circle at 85% 20%, rgba(255,255,255,0.18) 0%, transparent 65%)',
-                }} />
-                <div style={{
-                    width: 44, height: 44, borderRadius: theme.borderRadius.md,
-                    background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(8px)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 18, fontWeight: 800, flexShrink: 0,
-                    border: '1px solid rgba(255,255,255,0.3)',
-                }}>
-                    {ProjectIcon ? <ProjectIcon size={22} /> : (project.name || 'P').slice(0, 2).toUpperCase()}
-                </div>
-                <Text strong style={{
-                    fontSize: 16, color: '#fff',
-                    display: 'block', margin: 4, marginLeft: 12,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                    {project.name}
-                </Text>
-                {/* {project.is_private && (
-                    <Tooltip title="Private Project">
-                        <div style={{
-                            position: 'absolute', bottom: 8, right: 10,
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)',
-                            padding: '2px 8px', borderRadius: 12,
-                            color: '#fff', fontSize: 11, fontWeight: 600,
-                        }}>
-                            <IoLockClosedOutline size={11} />
-                            Private
-                        </div>
-                    </Tooltip>
-                )} */}
-                {/* Top-right action buttons */}
-                <div style={{
-                    position: 'absolute', top: 8, right: 10,
-                    display: 'flex', gap: 4,
-                    opacity: hovered || project.is_favorite ? 1 : 0,
-                    transition: 'all 0.15s ease',
-                }}>
-                    {/* Settings */}
-                    {canManageProject && (
-                        <div
-                            onClick={(e) => { e.stopPropagation(); onOpenSettings?.(project.id); }}
-                            style={{
-                                width: 24, height: 24, borderRadius: '50%',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                background: 'rgba(0,0,0,0.2)', cursor: 'pointer',
-                                opacity: hovered ? 1 : 0, transition: 'all 0.15s ease',
-                            }}
-                        >
-                            <IoSettingsOutline size={14} color="#fff" />
-                        </div>
-                    )}
-
-                    {/* Private */}
-                    {project.is_private && (
-                        <Tooltip title="Private Project">
-                            <div
-                                // onClick={(e) => { e.stopPropagation(); onOpenSettings?.(project.id); }}
-                                style={{
-                                    width: 24, height: 24, borderRadius: '50%',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    background: 'rgba(0,0,0,0.2)', cursor: 'pointer',
-                                }}
-                            >
-                                <IoLockClosedOutline size={14} color="#fff" />
-                            </div>
-                        </Tooltip>
-                    )}
-                    {/* Favorite */}
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '4px 0' }}>
+        {PROJECT_ICONS.map((item) => {
+            const Icon = item.icon;
+            return (
+                <Tooltip key={item.key} title={item.label}>
                     <div
-                        onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(project.id); }}
+                        onClick={() => onChange(item.key)}
                         style={{
-                            width: 24, height: 24, borderRadius: '50%',
+                            width: 32, height: 32, borderRadius: 6,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: 'rgba(0,0,0,0.2)', cursor: 'pointer',
+                            cursor: 'pointer', background: value === item.key ? theme.colors.primary : theme.colors.surface,
+                            color: value === item.key ? '#fff' : theme.colors.textSecondary,
+                            border: `1px solid ${value === item.key ? theme.colors.primary : theme.colors.border}`,
+                            transition: 'all 0.2s ease',
                         }}
                     >
-                        {project.is_favorite
-                            ? <AiFillStar size={16} color="#fbbf24" />
-                            : <AiOutlineStar size={16} color="#fff" />
-                        }
+                        <Icon size={16} />
                     </div>
-                </div>
-            </div>
-            {/* Card Body */}
-            <div style={{ padding: `${theme.spacing.md} ${theme.spacing.lg}` }}>
-                <Text style={{
-                    fontSize: 12, color: theme.colors.textSecondary,
-                    display: 'block', marginBottom: theme.spacing.md,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    minHeight: 18,
-                }}>
-                    {project.description || 'No description'}
-                </Text>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
-                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
-                            {project.priority.toUpperCase()}
-                        </Tag>
-                    )}
-                    {project.status && project.status.toLowerCase() === 'waiting' && (
-                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
-                            POOL
-                        </Tag>
-                    )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <IoLayersOutline size={13} color={theme.colors.textTertiary} />
-                        <Text style={{ fontSize: 12, color: theme.colors.textTertiary }}>
-                            {project.board_count || 0} board{project.board_count !== 1 ? 's' : ''}
-                        </Text>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <IoCalendarOutline size={12} color={theme.colors.textTertiary} />
-                        <Text style={{ fontSize: 11, color: theme.colors.textTertiary }}>
-                            {dayjs(project.created_at).fromNow()}
-                        </Text>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ─── Project List Row ──────────────────────────────────────────────
-const ProjectListRow = ({ project, onClick, onToggleFavorite, onOpenSettings, theme }) => {
-    const gradient = project.background_value || GRADIENTS[(project.id || 0) % GRADIENTS.length];
-    const ProjectIcon = getProjectIcon(project.icon);
-    const [hovered, setHovered] = useState(false);
-
-    // Evaluate permissions
-    const { canManageProject } = useKanbanPermissions({
-        isPrivateProject: project.is_private,
-        projectRole: project.role
-    });
-
-    return (
-        <div
-            onClick={onClick}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-                display: 'flex', alignItems: 'center', gap: theme.spacing.md,
-                padding: `${theme.spacing.md} ${theme.spacing.lg}`,
-                background: hovered ? theme.colors.surfaceHover : theme.colors.surface,
-                border: `1px solid ${hovered ? theme.colors.primary + '40' : theme.colors.border}`,
-                borderRadius: theme.borderRadius.lg,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                boxShadow: hovered ? theme.shadows.sm : 'none',
-            }}
-        >
-            <div style={{
-                width: 40, height: 40, borderRadius: theme.borderRadius.md,
-                background: gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 14, fontWeight: 800, flexShrink: 0,
-            }}>
-                {ProjectIcon ? <ProjectIcon size={20} /> : (project.name || 'P').slice(0, 2).toUpperCase()}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Text strong style={{ fontSize: 13, color: theme.colors.textPrimary }}>
-                        {project.name}
-                    </Text>
-                    {project.is_private && (
-                        <Tag color="default" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <IoLockClosedOutline size={10} /> Private
-                        </Tag>
-                    )}
-                    {project.priority && project.priority.toLowerCase() !== 'medium' && (
-                        <Tag color={getPriorityColor(project.priority)} style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
-                            {project.priority.toUpperCase()}
-                        </Tag>
-                    )}
-                    {project.status && project.status.toLowerCase() === 'waiting' && (
-                        <Tag color="warning" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
-                            POOL
-                        </Tag>
-                    )}
-                </div>
-                <Text style={{ fontSize: 12, color: theme.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {project.description || 'No description'}
-                </Text>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.lg, flexShrink: 0 }}>
-                <div style={{ textAlign: 'center' }}>
-                    <Text style={{ fontSize: 18, fontWeight: 700, color: theme.colors.primary, display: 'block', lineHeight: 1 }}>{project.board_count || 0}</Text>
-                    <Text style={{ fontSize: 11, color: theme.colors.textTertiary }}>Boards</Text>
-                </div>
-                <Text style={{ fontSize: 12, color: theme.colors.textTertiary }}>
-                    {dayjs(project.created_at).format('DD MMM YY')}
-                </Text>
-                {/* Settings */}
-                {canManageProject && (
-                    <div
-                        onClick={(e) => { e.stopPropagation(); onOpenSettings?.(project.id); }}
-                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                    >
-                        <IoSettingsOutline size={15} color={theme.colors.textTertiary} />
-                    </div>
-                )}
-                {/* Favorite toggle */}
-                <div
-                    onClick={(e) => { e.stopPropagation(); onToggleFavorite?.(project.id); }}
-                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                >
-                    {project.is_favorite
-                        ? <AiFillStar size={16} color="#fbbf24" />
-                        : <AiOutlineStar size={16} color={theme.colors.textTertiary} />
-                    }
-                </div>
-            </div>
-        </div>
-    );
-};
+                </Tooltip>
+            );
+        })}
+    </div>
+);
 
 // ─── Project List Page ─────────────────────────────────────────────
 const ProjectListPage = ({ onSelectProject, theme }) => {
-    const { projects, fetchProjects, isLoading, openProjectSettings, createProject, toggleFavorite } = useKanbanStore();
+    const {
+        projects, fetchProjects, isLoading, openProjectSettings,
+        createProject, toggleFavorite, kanbanTabOrder
+    } = useKanbanStore();
+
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUserGuide, setShowUserGuide] = useState(false);
     const [form] = Form.useForm();
-    const [activeTab, setActiveTab] = useState('projects');
-    const [search, setSearch] = useState('');
-    const [sortBy, setSortBy] = useState('recent');
-    const [viewMode, setViewMode] = useState('grid');
-    const [filterOwner, setFilterOwner] = useState('all'); // 'all' | 'mine' | 'favorites'
-    const [projectStatusFilter, setProjectStatusFilter] = useState('active'); // 'active' | 'waiting' | 'suspended' | 'completed'
+
+    // Default active tab to the first item in the preferred order
+    const [activeTab, setActiveTab] = useState(kanbanTabOrder?.[0] || 'dashboard');
 
     // Global permissions
     const { canCreateProject } = useKanbanPermissions();
 
     useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
+    // Creation State
     const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
     const [selectedIcon, setSelectedIcon] = useState('rocket');
     const [isPrivate, setIsPrivate] = useState(false);
@@ -502,39 +197,77 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
         await toggleFavorite(projectId);
     };
 
-    // Computed stats for dashboard
-    const stats = useMemo(() => {
-        const activeProjects = projects.filter(p => (p.status || 'active').toLowerCase() === 'active');
-        return {
-            total: activeProjects.length,
-            totalBoards: activeProjects.reduce((s, p) => s + (parseInt(p.board_count) || 0), 0),
-            owned: activeProjects.filter(p => p.role === 'owner').length,
-            favorites: activeProjects.filter(p => p.is_favorite).length,
-            recent: [...activeProjects].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
-            activeProjects // Provide the filtered list for rendering distribution
-        };
-    }, [projects]);
-
-    // Filtered & sorted projects for tab 2
-    const filteredProjects = useMemo(() => {
-        let list = [...projects];
-
-        // Status Filter
-        list = list.filter(p => (p.status || 'active').toLowerCase() === projectStatusFilter);
-
-        if (search) {
-            const q = search.toLowerCase();
-            list = list.filter(p => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
+    // Tab items configuration
+    const tabConfig = {
+        dashboard: {
+            key: 'dashboard',
+            label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
+                    <MdOutlineDashboard size={15} /> Dashboard
+                </span>
+            ),
+            content: (
+                <DashboardTab
+                    projects={projects}
+                    isLoading={isLoading}
+                    onSelectProject={onSelectProject}
+                    onToggleFavorite={handleToggleFavorite}
+                    onOpenProjectSettings={openProjectSettings}
+                    onShowCreateModal={() => setShowCreateModal(true)}
+                    theme={theme}
+                />
+            )
+        },
+        projects: {
+            key: 'projects',
+            label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
+                    <BsKanban size={14} /> Projects
+                    {projects.length > 0 && <Badge count={projects.length} size="small" style={{ backgroundColor: theme.colors.primary, fontSize: 10 }} />}
+                </span>
+            ),
+            content: (
+                <ProjectsTab
+                    projects={projects}
+                    onSelectProject={onSelectProject}
+                    onToggleFavorite={handleToggleFavorite}
+                    onOpenProjectSettings={openProjectSettings}
+                    onShowCreateModal={() => setShowCreateModal(true)}
+                    theme={theme}
+                />
+            )
+        },
+        reports: {
+            key: 'reports',
+            label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
+                    <MdOutlineAssessment size={15} /> Reports
+                </span>
+            ),
+            content: <ReportsTab theme={theme} />
+        },
+        workload: {
+            key: 'workload',
+            label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
+                    <IoTimeOutline size={15} /> Workload
+                </span>
+            ),
+            content: <WorkloadTab theme={theme} />
         }
-        if (filterOwner === 'mine') list = list.filter(p => p.role === 'owner');
-        if (filterOwner === 'favorites') list = list.filter(p => p.is_favorite);
+    };
 
-        if (sortBy === 'recent') list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        else if (sortBy === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        else if (sortBy === 'boards') list.sort((a, b) => (b.board_count || 0) - (a.board_count || 0));
+    // Build tabs based on preferred order
+    const orderedTabs = useMemo(() => {
+        return kanbanTabOrder.map(key => tabConfig[key]).filter(Boolean);
+    }, [kanbanTabOrder, projects, theme]);
 
-        return list;
-    }, [projects, search, filterOwner, sortBy, projectStatusFilter]);
+    // Ensure activeTab is still valid after order changes
+    useEffect(() => {
+        if (kanbanTabOrder && !kanbanTabOrder.includes(activeTab)) {
+            setActiveTab(kanbanTabOrder[0]);
+        }
+    }, [kanbanTabOrder, activeTab]);
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: theme.colors.background, overflow: 'hidden' }}>
@@ -568,7 +301,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                             </Tooltip>
                         </Title>
                         <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                            {stats.total} project{stats.total !== 1 ? 's' : ''} · {stats.totalBoards} board{stats.totalBoards !== 1 ? 's' : ''}
+                            {projects.length} projects total
                         </Text>
                     </div>
                 </div>
@@ -588,7 +321,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 )}
             </div>
 
-            {/* Tabs — equal-width labels so switching doesn't shift layout */}
+            {/* Main Content Area with Dynamic Tabs */}
             <div style={{
                 flex: 1,
                 display: 'flex',
@@ -605,56 +338,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         onChange={setActiveTab}
                         size="default"
                         style={{ marginBottom: 0 }}
-                        items={[
-                            {
-                                key: 'dashboard',
-                                label: (
-                                    <span style={{
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        gap: 6, minWidth: 140,
-                                    }}>
-                                        <MdOutlineDashboard size={15} /> Dashboard
-                                    </span>
-                                ),
-                            },
-                            {
-                                key: 'projects',
-                                label: (
-                                    <span style={{
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        gap: 6, minWidth: 140,
-                                    }}>
-                                        <BsKanban size={14} /> Projects
-                                        {projects.length > 0 && (
-                                            <Badge count={projects.length} size="small"
-                                                style={{ backgroundColor: theme.colors.primary, fontSize: 10 }} />
-                                        )}
-                                    </span>
-                                ),
-                            },
-                            {
-                                key: 'reports',
-                                label: (
-                                    <span style={{
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        gap: 6, minWidth: 140,
-                                    }}>
-                                        <MdOutlineAssessment size={15} /> Reports
-                                    </span>
-                                ),
-                            },
-                            {
-                                key: 'workload',
-                                label: (
-                                    <span style={{
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        gap: 6, minWidth: 140,
-                                    }}>
-                                        <IoTimeOutline size={15} /> Workload
-                                    </span>
-                                ),
-                            },
-                        ]}
+                        items={orderedTabs.map(t => ({ key: t.key, label: t.label }))}
                     />
                 </div>
 
@@ -664,237 +348,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                     overflowY: activeTab === 'reports' ? 'hidden' : 'auto',
                     padding: activeTab === 'reports' ? '16px 16px 0 16px' : '16px'
                 }}>
-
-                    {/* ═══ DASHBOARD TAB ═══ */}
-                    {activeTab === 'dashboard' && (
-                        <div>
-                            {isLoading && projects.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
-                            ) : (
-                                <>
-                                    {/* Stat Row */}
-                                    <div style={{ display: 'flex', gap: theme.spacing.lg, flexWrap: 'wrap', marginBottom: theme.spacing['2xl'] }}>
-                                        <StatCard icon={<BsKanban />} label="Total Projects" value={stats.total} color={theme.colors.primary} theme={theme} />
-                                        <StatCard icon={<IoLayersOutline />} label="Total Boards" value={stats.totalBoards} color="#10b981" theme={theme} />
-                                        <StatCard icon={<MdOutlinePeople />} label="Owned by Me" value={stats.owned} color="#f59e0b" theme={theme} />
-                                        <StatCard icon={<AiFillStar />} label="Favorites" value={stats.favorites} color="#ef4444" theme={theme} />
-                                    </div>
-
-                                    {/* Recent Projects */}
-                                    <div>
-                                        <Text strong style={{ fontSize: 13, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: theme.spacing.md }}>
-                                            Recent Projects
-                                        </Text>
-                                        {stats.recent.length === 0 ? (
-                                            <div style={{ textAlign: 'center', padding: '40px 0', color: theme.colors.textTertiary }}>
-                                                <BsKanban size={40} style={{ opacity: 0.3 }} />
-                                                <Text type="secondary" style={{ display: 'block', marginTop: 16 }}>No projects yet. Create your first project!</Text>
-                                                {/* {canCreateProject && ( */}
-                                                <Button type="primary" style={{ marginTop: 12, background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                                    onClick={() => { setShowCreateModal(true); }}>
-                                                    Create Project
-                                                </Button>
-
-                                                <Button>Summit</Button>
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-                                                {stats.recent.map(p => (
-                                                    <ProjectListRow key={p.id} project={p} onClick={() => onSelectProject(p)} onToggleFavorite={handleToggleFavorite} onOpenSettings={(id) => openProjectSettings(id)} theme={theme} />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Board distribution */}
-                                    {stats.activeProjects.length > 0 && (
-                                        <div style={{ marginTop: theme.spacing['2xl'] }}>
-                                            <Text strong style={{ fontSize: 13, color: theme.colors.textSecondary, textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: theme.spacing.md }}>
-                                                Board Distribution
-                                            </Text>
-                                            <div style={{
-                                                background: theme.colors.surface,
-                                                border: `1px solid ${theme.colors.border}`,
-                                                borderRadius: theme.borderRadius.lg,
-                                                padding: theme.spacing.lg,
-                                            }}>
-                                                {stats.activeProjects.filter(p => parseInt(p.board_count) > 0).slice(0, 8).map(p => {
-                                                    const pct = stats.totalBoards > 0 ? Math.round((parseInt(p.board_count) / stats.totalBoards) * 100) : 0;
-                                                    const gradient = p.background_value || GRADIENTS[(p.id || 0) % GRADIENTS.length];
-                                                    return (
-                                                        <div key={p.id} style={{ marginBottom: 12 }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                                                <Text style={{ fontSize: 13, color: theme.colors.textPrimary }}>{p.name}</Text>
-                                                                <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>{p.board_count} boards</Text>
-                                                            </div>
-                                                            <div style={{ height: 6, background: theme.colors.surfaceHover, borderRadius: 3, overflow: 'hidden' }}>
-                                                                <div style={{
-                                                                    height: '100%', width: `${pct}%`,
-                                                                    background: gradient, borderRadius: 3,
-                                                                    transition: 'width 0.6s ease',
-                                                                }} />
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ═══ PROJECTS TAB ═══ */}
-                    {activeTab === 'projects' && (
-                        <div>
-                            {/* Filter Bar */}
-                            <div style={{
-                                display: 'flex', alignItems: 'center', gap: theme.spacing.md,
-                                flexWrap: 'wrap', marginBottom: theme.spacing.xl,
-                                padding: `${theme.spacing.md} ${theme.spacing.lg}`,
-                                background: theme.colors.surface,
-                                border: `1px solid ${theme.colors.border}`,
-                                borderRadius: theme.borderRadius.lg,
-                            }}>
-                                <Input
-                                    placeholder="Search projects..."
-                                    prefix={<IoSearchOutline color={theme.colors.textTertiary} />}
-                                    value={search}
-                                    onChange={e => setSearch(e.target.value)}
-                                    allowClear
-                                    style={{ width: 260, borderRadius: theme.borderRadius.sm }}
-                                />
-                                <Select
-                                    value={filterOwner}
-                                    onChange={setFilterOwner}
-                                    style={{ width: 140 }}
-                                    options={[
-                                        { value: 'all', label: 'All Projects' },
-                                        { value: 'mine', label: 'Owned by Me' },
-                                        { value: 'favorites', label: '⭐ Favorites' },
-                                    ]}
-                                />
-                                <Select
-                                    value={sortBy}
-                                    onChange={setSortBy}
-                                    style={{ width: 150 }}
-                                    options={[
-                                        { value: 'recent', label: '🕒 Most Recent' },
-                                        { value: 'name', label: '🔤 Name A→Z' },
-                                        { value: 'boards', label: '📋 Most Boards' },
-                                    ]}
-                                />
-                                <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                                    {/* <Tooltip title="Grid view">
-                                        <Button type="primary" style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                            onClick={() => { setShowCreateModal(true); }}>
-                                            Create Project
-                                        </Button>
-                                    </Tooltip> */}
-                                    <Tooltip title="Create Project">
-                                        <Button
-                                            type="text"
-                                            icon={<FiPlus size={16} />}
-                                            onClick={() => { setShowCreateModal(true); }}
-                                            style={{ color: theme.colors.textSecondary }}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip title="Grid view">
-                                        <Button
-                                            type={viewMode === 'grid' ? 'primary' : 'text'}
-                                            icon={<BsGrid3X3Gap size={16} />}
-                                            onClick={() => setViewMode('grid')}
-                                            style={viewMode === 'grid' ? { background: theme.colors.primary, borderColor: theme.colors.primary } : {}}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip title="List view">
-                                        <Button
-                                            type={viewMode === 'list' ? 'primary' : 'text'}
-                                            icon={<BsList size={16} />}
-                                            onClick={() => setViewMode('list')}
-                                            style={viewMode === 'list' ? { background: theme.colors.primary, borderColor: theme.colors.primary } : {}}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip title="Project Settings">
-                                        <Button
-                                            type="text"
-                                            icon={<IoSettingsOutline size={16} />}
-                                            onClick={openProjectSettings}
-                                            style={{ color: theme.colors.textSecondary }}
-                                        />
-                                    </Tooltip>
-                                </div>
-                                {filteredProjects.length !== projects.length && (
-                                    <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-                                        Showing {filteredProjects.length} of {projects.length}
-                                    </Text>
-                                )}
-                            </div>
-
-                            {/* Status Sub-Tabs */}
-                            <Tabs
-                                activeKey={projectStatusFilter}
-                                onChange={setProjectStatusFilter}
-                                type="line"
-                                size="middle"
-                                style={{ marginBottom: theme.spacing.md }}
-                                items={[
-                                    { key: 'active', label: `Active (${projects.filter(p => (p.status || 'active').toLowerCase() === 'active').length})` },
-                                    { key: 'waiting', label: `Pool (${projects.filter(p => (p.status || '').toLowerCase() === 'waiting').length})` },
-                                    { key: 'suspended', label: `Suspended (${projects.filter(p => (p.status || '').toLowerCase() === 'suspended').length})` },
-                                    { key: 'completed', label: `Completed (${projects.filter(p => (p.status || '').toLowerCase() === 'completed').length})` },
-                                ]}
-                            />
-
-                            {isLoading && projects.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
-                            ) : filteredProjects.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '60px 0', color: theme.colors.textTertiary }}>
-                                    <BsKanban size={40} style={{ opacity: 0.3 }} />
-                                    <Text type="secondary" style={{ display: 'block', marginTop: 16 }}>
-                                        {projects.length === 0 ? 'No projects yet.' : 'No projects match the filter.'}
-                                    </Text>
-                                    {projects.length === 0 && (
-                                        <Button type="primary" style={{ marginTop: 12, background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                            onClick={() => setShowCreateModal(true)}>
-                                            Create Project
-                                        </Button>
-                                    )}
-                                </div>
-                            ) : viewMode === 'grid' ? (
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                                    gap: theme.spacing.lg,
-                                }}>
-                                    {filteredProjects.map(p => (
-                                        <ProjectGridCard key={p.id} project={p} onClick={() => onSelectProject(p)} onToggleFavorite={handleToggleFavorite} onOpenSettings={(id) => openProjectSettings(id)} theme={theme} />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-                                    {filteredProjects.map(p => (
-                                        <ProjectListRow key={p.id} project={p} onClick={() => onSelectProject(p)} onToggleFavorite={handleToggleFavorite} onOpenSettings={(id) => openProjectSettings(id)} theme={theme} />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ═══ REPORTS TAB ═══ */}
-                    {activeTab === 'reports' && (
-                        <div style={{ height: '100%', overflow: 'hidden' }}>
-                            <ReportDashboard theme={theme} />
-                        </div>
-                    )}
-
-                    {/* ═══ WORKLOAD TAB ═══ */}
-                    {activeTab === 'workload' && (
-                        <div style={{ height: '100%', overflow: 'hidden' }}>
-                            <WorkloadDashboard theme={theme} />
-                        </div>
-                    )}
+                    {tabConfig[activeTab]?.content}
                 </div>
             </div>
 
@@ -961,7 +415,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             </Modal>
             <ProjectSettingsDrawer />
             <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} />
-        </div >
+        </div>
     );
 };
 
@@ -1697,7 +1151,7 @@ const KanbanMain = () => {
                                 <Spin size="large" />
                             </div>
                         ) : viewMode === 'report' ? (
-                            <ReportDashboard theme={theme} />
+                            <ReportsTab theme={theme} />
                         ) : activeBoard ? (
                             <BoardView />
                         ) : (

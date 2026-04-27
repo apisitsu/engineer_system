@@ -11,6 +11,26 @@ import { useTheme } from '../../../../theme';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragOverlay,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { MdDragIndicator, MdOutlineAnalytics, MdOutlineViewQuilt, MdOutlineAssessment } from 'react-icons/md';
+import { BsGrid1X2 } from 'react-icons/bs';
+import { IoRocketOutline, IoLayersOutline } from 'react-icons/io5';
 
 const { Title, Text } = Typography;
 
@@ -80,7 +100,8 @@ const BoardSettingsDrawer = () => {
         webhooks, fetchWebhooks, createWebhook, updateWebhook, deleteWebhook,
         notificationServices, fetchNotificationServices,
         createNotificationService, deleteNotificationService, users,
-        archivedCards, fetchArchivedCards, moveCard, lists
+        archivedCards, fetchArchivedCards, moveCard, lists,
+        kanbanTabOrder, setKanbanTabOrder
     } = useKanbanStore();
 
     // Form
@@ -898,7 +919,7 @@ const BoardSettingsDrawer = () => {
                             <IoArchiveOutline size={18} color={theme.colors.primary} />
                             <Title level={5} style={{ margin: 0, fontSize: 15 }}>Archived Cards</Title>
                         </div>
-                        
+
                         {!archivedCards || archivedCards.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
                                 <Text type="secondary">No archived items found.</Text>
@@ -918,11 +939,11 @@ const BoardSettingsDrawer = () => {
                                                 {new Date(card.updated_at).toLocaleDateString()}
                                             </Text>
                                         </div>
-                                        
+
                                         {restoringCardId === card.id ? (
                                             <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                                                <Select 
-                                                    size="small" 
+                                                <Select
+                                                    size="small"
                                                     style={{ flex: 1 }}
                                                     placeholder="Select list..."
                                                     options={visibleLists.map(l => ({ label: l.name, value: l.id }))}
@@ -937,8 +958,8 @@ const BoardSettingsDrawer = () => {
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <Button 
-                                                size="small" 
+                                            <Button
+                                                size="small"
                                                 onClick={() => setRestoringCardId(card.id)}
                                                 style={{ marginTop: 4, borderRadius: theme.borderRadius.sm }}
                                             >
@@ -959,9 +980,124 @@ const BoardSettingsDrawer = () => {
         );
     };
 
+    // ─── Tab: Module UI (Reorder Tabs) ──────────────────────────────
+    const SortableTabItem = ({ id, label, icon: Icon, theme }) => {
+        const {
+            attributes,
+            listeners,
+            setNodeRef,
+            transform,
+            transition,
+            isDragging
+        } = useSortable({ id });
+
+        const style = {
+            transform: CSS.Transform.toString(transform),
+            transition,
+            opacity: isDragging ? 0.5 : 1,
+            zIndex: isDragging ? 10 : 1,
+            marginBottom: 8,
+        };
+
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...attributes}
+            >
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 16px',
+                    background: theme.colors.surface,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: theme.borderRadius.lg,
+                    boxShadow: theme.shadows.sm,
+                }}>
+                    <div {...listeners} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+                        <MdDragIndicator size={20} color={theme.colors.textTertiary} />
+                    </div>
+                    <div style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        background: `${theme.colors.primary}15`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: theme.colors.primary
+                    }}>
+                        <Icon size={18} />
+                    </div>
+                    <Text strong style={{ fontSize: 14, flex: 1 }}>{label}</Text>
+                </div>
+            </div>
+        );
+    };
+
+    const ModuleUITab = () => {
+        const sensors = useSensors(
+            useSensor(PointerSensor),
+            useSensor(KeyboardSensor, {
+                coordinateGetter: sortableKeyboardCoordinates,
+            })
+        );
+
+        const tabConfig = {
+            dashboard: { label: 'Dashboard', icon: MdOutlineDashboard },
+            projects: { label: 'Projects', icon: IoRocketOutline },
+            reports: { label: 'Reports', icon: MdOutlineAssessment },
+            workload: { label: 'Workload', icon: BsGrid1X2 },
+        };
+
+        const handleDragEnd = (event) => {
+            const { active, over } = event;
+            if (active.id !== over.id) {
+                const oldIndex = kanbanTabOrder.indexOf(active.id);
+                const newIndex = kanbanTabOrder.indexOf(over.id);
+                const newOrder = arrayMove(kanbanTabOrder, oldIndex, newIndex);
+                setKanbanTabOrder(newOrder);
+            }
+        };
+
+        return (
+            <div style={{ padding: '8px 0' }}>
+                <SectionLabel theme={theme}>Navigation Tabs Order</SectionLabel>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
+                    Drag and drop to reorder the main tabs of the Kanban module. This setting is shared across your sessions.
+                </Text>
+
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={kanbanTabOrder}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        {kanbanTabOrder.map((id) => (
+                            <SortableTabItem
+                                key={id}
+                                id={id}
+                                label={tabConfig[id]?.label || id}
+                                icon={tabConfig[id]?.icon || MdOutlineDashboard}
+                                theme={theme}
+                            />
+                        ))}
+                    </SortableContext>
+                </DndContext>
+
+                <Alert
+                    message="Automatic Save"
+                    description="Your changes are saved automatically and will be applied to the main navigation."
+                    type="info"
+                    showIcon
+                    style={{ marginTop: 24, borderRadius: theme.borderRadius.md }}
+                />
+            </div>
+        );
+    };
+
     const tabItems = [
         { key: 'general', label: 'General', children: <GeneralTab /> },
         { key: 'preferences', label: 'Preferences', children: <PreferencesTab /> },
+        { key: 'ui', label: 'Module UI', children: <ModuleUITab /> },
         { key: 'notifications', label: 'Notifications', children: <NotificationsTab /> },
         { key: 'archived', label: 'Archived', children: <ArchivedItemsTab /> },
     ];
