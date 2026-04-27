@@ -170,9 +170,21 @@ try:
         existing_uid_list = []
         print("xxx Table not found or empty (First run). xxx")
 
+    # --- Step 5.1b: Load blacklisted UIDs to prevent re-importing ---
+    try:
+        blacklist_query = "SELECT po_no, receive_date, time, item_name FROM ti_list_blacklist"
+        blacklist_data = pd.read_sql(blacklist_query, con=engine)
+        blacklist_data['receive_date'] = blacklist_data['receive_date'].fillna('').astype(str).str[:10]
+        blacklist_data['uid'] = generate_robust_uid(blacklist_data)
+        blacklisted_uid_list = blacklist_data['uid'].tolist()
+        print(f"=== Blacklisted records (will be skipped): {len(blacklisted_uid_list)} ===")
+    except Exception as bl_e:
+        blacklisted_uid_list = []
+        print(f"xxx Could not load blacklist (skipping blacklist check): {bl_e} xxx")
+
     # --- Step 5.2: Create UID to filter new records ---
     df_master['uid'] = generate_robust_uid(df_master)
-    
+
     # [Debug] Print the first pair of UIDs to verify exact match
     if len(existing_uid_list) > 0 and len(df_master) > 0:
         print("\n[Debug] Comparing the first UID:")
@@ -180,8 +192,11 @@ try:
         print(f"=== Excel    : {df_master['uid'].iloc[0]} ===")
         print("\n")
 
-    # Anti-join to keep only records that are NOT in the database
-    df_new_records = df_master[~df_master['uid'].isin(existing_uid_list)].copy()
+    # Anti-join: skip records already in DB or blacklisted
+    df_new_records = df_master[
+        ~df_master['uid'].isin(existing_uid_list) &
+        ~df_master['uid'].isin(blacklisted_uid_list)
+    ].copy()
     print(f"=== New records found to update: {len(df_new_records)} ===")
 
     # --- Step 5.3: Insert only new records into the Database ---

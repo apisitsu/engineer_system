@@ -109,17 +109,17 @@ function InspectionReport() {
 
 
   const handleBlacklist = useCallback(async (id) => {
-    const { value: reason } = await Swal.fire({
+    const { isConfirmed } = await Swal.fire({
       title: 'Blacklist Item',
-      input: 'text',
-      inputLabel: 'Reason',
-      inputPlaceholder: 'Enter reason for blacklisting',
+      text: 'ยืนยันการ Blacklist รายการนี้?',
+      icon: 'warning',
       showCancelButton: true,
-      inputValidator: (value) => !value && 'You need to write a reason!'
+      confirmButtonText: 'Confirm',
+      cancelButtonText: 'Cancel',
     });
-    if (reason) {
+    if (isConfirmed) {
       try {
-        await axios.post(`${server.TOOLING_INSPECT_API}/${id}/blacklist`, { reason });
+        await axios.post(`${server.TOOLING_INSPECT_API}/${id}/blacklist`, { reason: '' });
         message.success('Item blacklisted and deleted');
         fetchToolingInspectData();
       } catch (e) {
@@ -209,7 +209,7 @@ function InspectionReport() {
                   <Col xs={24} md={16} style={{ textAlign: 'right' }}>
                     <Space wrap>
                       <Button icon={<SyncOutlined />} onClick={handleSyncCSV}>Update data</Button>
-                      <Radio.Group onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); if(e.target.value !== 'date') setSelectedDate(null); }} value={filterType}>
+                      <Radio.Group onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); if (e.target.value !== 'date') setSelectedDate(null); }} value={filterType}>
                         <Radio.Button value="pending">Pending</Radio.Button>
                         <Radio.Button value="pendingAll">Pending All</Radio.Button>
                         <Radio.Button value="all">All Jobs</Radio.Button>
@@ -221,7 +221,7 @@ function InspectionReport() {
                     <Col span={24}>
                       <Space align="center">
                         <DatePicker style={{ width: 220 }} onChange={(d) => { setSelectedDate(d); setCurrentPage(1); }} value={selectedDate} />
-                        {!selectedDate && <Text type="secondary">เลือกวันที่เพื่อดูรายการ</Text>}
+                        {!selectedDate && <Text type="secondary">Select Date</Text>}
                       </Space>
                     </Col>
                   )}
@@ -229,9 +229,9 @@ function InspectionReport() {
                     <Col span={24}>
                       <Card size="small" style={{ background: theme.colors.blueLight || '#e6f7ff', border: `1px solid ${theme.colors.blue}` }}>
                         <Space size="large">
-                          <span><AuditOutlined style={{ color: theme.colors.blue }} /> <Text strong>Activity วันที่ {selectedDate.format('DD/MM/YYYY')}</Text></span>
-                          <span><ClockCircleOutlined style={{ color: theme.colors.warning }} /> <Text type="secondary">Received: </Text><Text strong style={{ color: theme.colors.warning }}>{dateStats.received ?? 0}</Text> <Text type="secondary" style={{ fontSize: 11 }}>รายการ</Text></span>
-                          <span><CheckCircleOutlined style={{ color: theme.colors.success }} /> <Text type="secondary">Issued: </Text><Text strong style={{ color: theme.colors.success }}>{dateStats.issued ?? 0}</Text> <Text type="secondary" style={{ fontSize: 11 }}>รายการ</Text></span>
+                          <span><AuditOutlined style={{ color: theme.colors.blue }} /> <Text strong>Activity Date {selectedDate.format('DD/MM/YYYY')}</Text></span>
+                          <span><ClockCircleOutlined style={{ color: theme.colors.warning }} /> <Text type="secondary">Received: </Text><Text strong style={{ color: theme.colors.warning }}>{dateStats.received ?? 0}</Text> <Text type="secondary" style={{ fontSize: 11 }}>Items</Text></span>
+                          <span><CheckCircleOutlined style={{ color: theme.colors.success }} /> <Text type="secondary">Issued: </Text><Text strong style={{ color: theme.colors.success }}>{dateStats.issued ?? 0}</Text> <Text type="secondary" style={{ fontSize: 11 }}>Items</Text></span>
                         </Space>
                       </Card>
                     </Col>
@@ -240,7 +240,7 @@ function InspectionReport() {
               </Card>
               <Card
                 title="Inspection List"
-                extra={<Text type="secondary">{totalRecords > 0 ? <><Text strong>{totalRecords}</Text> รายการ{duplicatePoNos.size > 0 && <Text type="danger" style={{ marginLeft: 8 }}>· ซ้ำ {duplicatePoNos.size} PO</Text>}</> : 'ไม่มีรายการ'}</Text>}
+                extra={<Text type="secondary">{totalRecords > 0 ? <><Text strong>{totalRecords}</Text> Item{duplicatePoNos.size > 0 && <Text type="danger" style={{ marginLeft: 8 }}>· Duplicate {duplicatePoNos.size} PO</Text>}</> : 'No records'}</Text>}
                 style={{ marginTop: 16 }}
               >
                 <style>{`.dup-row td { color: #f5222d !important; font-weight: 600; }`}</style>
