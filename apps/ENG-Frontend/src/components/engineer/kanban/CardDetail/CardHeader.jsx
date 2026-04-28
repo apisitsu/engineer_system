@@ -29,6 +29,7 @@ const CardHeader = () => {
         parentCard, cardLabels, cardMembers,
         users, timeTrackingData,
         listName,
+        markDirty,
     } = useCardDetailState();
 
     if (!card) return null;
@@ -76,6 +77,7 @@ const CardHeader = () => {
                         ) : (
                             <h2 style={{ margin: 0, fontSize: 20, color: theme.colors.textPrimary, fontWeight: 600, wordBreak: 'break-word', cursor: 'pointer' }} onClick={async () => {
                                 if (await checkCanEdit()) {
+                                    markDirty('name');
                                     setIsEditingName(true);
                                 }
                             }}>

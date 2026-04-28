@@ -217,6 +217,8 @@ const KanbanMain = () => {
             const socket = useKanbanStore.getState().wsSocket;
             if (socket) {
                 socket.off('cardUpdate');
+                socket.off('cardCreate');
+                socket.off('cardDelete');
                 socket.off('listUpdate');
                 socket.off('commentCreate');
                 socket.off('commentUpdate');

@@ -50,6 +50,7 @@ const CardBody = () => {
         customFieldValues, upsertCustomFieldValue,
         baseCustomFieldGroups, customFields, cfGroupPreferences, activeProject,
         parentCard, childCards, lists, cards, closeCardDetail,
+        markDirty, clearDirty,
     } = ctx;
 
     if (!card) return null;
@@ -73,13 +74,13 @@ const CardBody = () => {
                             <Space style={{ marginTop: 8 }}>
                                 <Button type="primary" size="small" onClick={handleSaveDesc}
                                     style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Save</Button>
-                                <Button size="small" onClick={() => { setIsEditingDesc(false); setEditDesc(card.description || ''); }}
+                                <Button size="small" onClick={() => { clearDirty('description'); setIsEditingDesc(false); setEditDesc(card.description || ''); }}
                                     style={{ borderRadius: theme.borderRadius.sm }}>Cancel</Button>
                             </Space>
                         </div>
                     ) : (
                         <div style={{ padding: theme.spacing.sm, borderRadius: theme.borderRadius.md, cursor: 'pointer', minHeight: 50, transition: `background ${theme.transitions.fast}` }}
-                            onClick={async () => { if (await checkCanEdit()) setIsEditingDesc(true); }}
+                            onClick={async () => { if (await checkCanEdit()) { markDirty('description'); setIsEditingDesc(true); } }}
                             onMouseOver={(e) => e.currentTarget.style.background = `${theme.colors.surfaceHover}CC`}
                             onMouseOut={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}>
                             <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: theme.colors.textPrimary, cursor: 'pointer', minHeight: 40 }}>
@@ -180,15 +181,15 @@ const CardBody = () => {
                                 <TextArea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} autoSize={{ minRows: 3, maxRows: 10 }} autoFocus placeholder="Add any additional notes or comments..." style={{ borderRadius: theme.borderRadius.sm }} />
                                 <Space style={{ marginTop: 8 }}>
                                     <Button type="primary" size="small" onClick={handleSaveMemo} style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Save</Button>
-                                    <Button size="small" onClick={() => { setIsEditingMemo(false); setEditMemo(card.memo || ''); }} style={{ borderRadius: theme.borderRadius.sm }}>Cancel</Button>
+                                    <Button size="small" onClick={() => { clearDirty('memo'); setIsEditingMemo(false); setEditMemo(card.memo || ''); }} style={{ borderRadius: theme.borderRadius.sm }}>Cancel</Button>
                                 </Space>
                             </div>
                         ) : (
                             <div style={{ background: theme.colors.surfaceHover, padding: theme.spacing.md, borderRadius: theme.borderRadius.md, border: `1px solid ${theme.colors.border}`, cursor: isReadOnly ? 'default' : 'pointer', minHeight: 50, transition: `background ${theme.transitions.fast}` }}
-                                onClick={() => !isReadOnly && setIsEditingMemo(true)}
+                                onClick={() => !isReadOnly && (markDirty('memo'), setIsEditingMemo(true))}
                                 onMouseOver={(e) => e.currentTarget.style.background = `${theme.colors.surfaceHover}CC`}
                                 onMouseOut={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}>
-                                <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: theme.colors.textPrimary, cursor: isReadOnly ? 'default' : 'pointer', minHeight: 40 }} onClick={() => !isReadOnly && setIsEditingMemo(true)}>
+                                <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: theme.colors.textPrimary, cursor: isReadOnly ? 'default' : 'pointer', minHeight: 40 }} onClick={() => !isReadOnly && (markDirty('memo'), setIsEditingMemo(true))}>
                                     {card.memo || <span style={{ color: theme.colors.textTertiary }}>Add any additional notes or comments...</span>}
                                 </Paragraph>
                             </div>

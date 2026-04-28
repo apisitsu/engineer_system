@@ -742,18 +742,69 @@ export const createBoardSlice = (set, get) => ({
             });
 
             set({ wsBoardId: boardId, wsUserCode: uCode });
+
+            // ── Reconnection Awareness ──
+            let isFirstConnect = true;
+
             socket.on('connect', () => {
-                socket.emit('board:join', boardId);
-                if (uCode) socket.emit('user:join', uCode);
+                socket.emit('board:join', get().wsBoardId || boardId);
+                const currentUCode = get().wsUserCode || uCode;
+                if (currentUCode) socket.emit('user:join', currentUCode);
+
+                if (!isFirstConnect) {
+                    // ── Stale-While-Revalidate on Reconnect ──
+                    console.log('[WS] Reconnected — revalidating board state');
+                    const activeBoardId = get().activeBoard?.id;
+                    if (activeBoardId) {
+                        get().fetchBoardDetails(activeBoardId);
+                        get().fetchBoardMembers(activeBoardId);
+                    }
+                    // Refresh the open card detail drawer
+                    const openCardId = get().activeCardDetail?.id;
+                    if (openCardId) get().fetchCardDetail(openCardId);
+                    // Refresh notifications
+                    get().fetchNotifications();
+                }
+                isFirstConnect = false;
             });
 
+            socket.on('disconnect', (reason) => {
+                console.warn(`[WS] Disconnected: ${reason}`);
+            });
+
+            // ── Echo Cancellation Helper ──
+            const isOwnEvent = (data) => {
+                const myUCode = get().wsUserCode;
+                return data?.actorUCode && data.actorUCode === myUCode;
+            };
+
             // ── F3-03: Surgical real-time card updates ──
-            // cardUpdate payload from backend: { item: <fullCard>, repositions, fromListId }
-            // Membership-only payloads:         { id, board_id, member_added/removed }
+            // cardUpdate payload from backend: { item: <deltaOrFull>, repositions, fromListId, actorUCode }
+            // Membership-only payloads:         { id, board_id, member_added/removed, actorUCode }
+            // Signal payloads:                  { id, board_id, labels_changed/attachments_changed, actorUCode }
             socket.on('cardUpdate', (data) => {
-                const cardData = data?.item;    // Full card object (UpdateCard path)
+                // ── Echo Cancellation: skip our own events ──
+                if (isOwnEvent(data)) {
+                    console.debug('[WS] Skipping own cardUpdate echo');
+                    return;
+                }
+
+                const cardData = data?.item;    // Card object — delta or full (UpdateCard/ReorderCard path)
                 const cardId = cardData?.id || data?.id;
                 if (!cardId) return;
+
+                // ── Signal payloads: labels or attachments changed → surgical fetch ──
+                if (data?.labels_changed || data?.attachments_changed) {
+                    if (get().activeCardDetail?.id === cardId) {
+                        get().fetchCardDetail(cardId);
+                    }
+                    // Also refresh the board card (label_ids, attachment_count)
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        get().fetchCardDetail(cardId);
+                    }
+                    return;
+                }
 
                 if (cardData) {
                     // ── Rich payload: merge the card data inline via O(1) index ──
@@ -780,7 +831,7 @@ export const createBoardSlice = (set, get) => ({
                             };
                         });
                     } else if (loc) {
-                        // Same-list update — merge in place
+                        // Same-list update — merge in place (supports delta payloads)
                         set(state => {
                             const newCards = { ...state.cards };
                             newCards[loc.listId] = [...newCards[loc.listId]];
@@ -807,15 +858,58 @@ export const createBoardSlice = (set, get) => ({
                 }
             });
 
-            // NOTE: cardCreate and cardDelete are NOT emitted by the backend.
-            // The frontend previously had dead listeners for these events.
-            // Card creation is handled optimistically by cardSlice.createCard.
-            // Card deletion is handled optimistically by cardSlice.deleteCard.
+            // ── Real-time card creation (from other users) ──
+            socket.on('cardCreate', (data) => {
+                if (isOwnEvent(data)) return;  // Already handled optimistically
+                const newCard = data?.item;
+                const targetListId = data?.listId || newCard?.list_id;
+                if (!newCard || !targetListId) return;
+
+                set(state => {
+                    const listKey = String(targetListId);
+                    const newCards = { ...state.cards };
+                    const existing = (newCards[listKey] || []);
+                    // Avoid duplicates
+                    if (existing.some(c => c.id === newCard.id)) return state;
+                    newCards[listKey] = [...existing, newCard];
+                    const newIndex = new Map(state.cardIndex);
+                    newIndex.set(String(newCard.id), listKey);
+                    return { cards: newCards, cardIndex: newIndex };
+                });
+            });
+
+            // ── Real-time card deletion (from other users) ──
+            socket.on('cardDelete', (data) => {
+                if (isOwnEvent(data)) return;  // Already handled optimistically
+                const deletedId = data?.id;
+                const listId = data?.listId;
+                if (!deletedId) return;
+
+                set(state => {
+                    const newCards = { ...state.cards };
+                    const newIndex = new Map(state.cardIndex);
+                    const loc = listId ? { listId: String(listId) } : get()._findCardList(deletedId);
+                    if (loc) {
+                        newCards[loc.listId] = (newCards[loc.listId] || []).filter(c => c.id !== deletedId);
+                    }
+                    newIndex.delete(String(deletedId));
+                    // Close the detail drawer if the deleted card was open
+                    const closeDetail = state.activeCardDetail?.id === deletedId;
+                    return {
+                        cards: newCards,
+                        cardIndex: newIndex,
+                        ...(closeDetail ? { activeCardDetail: null, isCardDetailOpen: false, activeCardId: null } : {}),
+                    };
+                });
+            });
+
             socket.on('listUpdate', (data) => {
                 if (data?.lists) set({ lists: data.lists });
             });
-            // Comment WebSockets
+
+            // ── Comment WebSockets (with echo cancellation) ──
             socket.on('commentCreate', (data) => {
+                if (isOwnEvent(data)) return;
                 if (data?.item?.card_id) {
                     if (get().activeCardDetail?.id === data.item.card_id) {
                         get().fetchCardDetail(data.item.card_id);
@@ -823,17 +917,20 @@ export const createBoardSlice = (set, get) => ({
                 }
             });
             socket.on('commentUpdate', (data) => {
+                if (isOwnEvent(data)) return;
                 if (data?.item?.card_id) {
                     if (get().activeCardDetail?.id === data.item.card_id) {
                         get().fetchCardDetail(data.item.card_id);
                     }
                 }
             });
-            socket.on('commentDelete', () => {
+            socket.on('commentDelete', (data) => {
+                if (isOwnEvent(data)) return;
                 if (get().activeCardDetail) {
                     get().fetchCardDetail(get().activeCardDetail.id);
                 }
             });
+
             // Notification WebSockets
             socket.on('notificationCreate', (notif) => {
                 set(state => {

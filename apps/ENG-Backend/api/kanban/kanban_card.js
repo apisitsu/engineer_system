@@ -205,6 +205,17 @@ const CreateCard = async (req, res) => {
         await autoSubscribe(client, card.id, uCode);
         await logAction(client, card.id, uCode, 'card_created', { name, list_id: listId });
         await client.query('COMMIT');
+
+        // ── Broadcast new card via WebSocket ──
+        const io = req.app.get('io');
+        if (io && list.board_id) {
+            io.to(`board:${list.board_id}`).emit('cardCreate', {
+                item: card,
+                listId: parseInt(listId),
+                actorUCode: uCode,
+            });
+        }
+
         res.status(201).json({ data: card });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -299,6 +310,16 @@ const UpdateCard = async (req, res) => {
         // If the request only contained suspension update, return early
         if (Object.keys(req.body).filter(k => k !== 'is_suspended' && k !== 'suspended_reason' && k !== 'owner_u_code').length === 0) {
             const { rows: [updated] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
+
+            // ── Broadcast suspension change via WebSocket ──
+            const io = req.app.get('io');
+            if (io && card.board_id) {
+                io.to(`board:${card.board_id}`).emit('cardUpdate', {
+                    item: { id: parseInt(id), board_id: card.board_id, is_suspended: updated.is_suspended, suspended_reason: updated.suspended_reason },
+                    actorUCode: uCode,
+                });
+            }
+
             return res.json({ message: 'Suspension status updated', data: updated });
         }
     }
@@ -447,6 +468,32 @@ const UpdateCard = async (req, res) => {
         }
         await logAction(client, id, uCode, 'card_updated', { name, description, is_closed });
         await client.query('COMMIT');
+
+        // ── Broadcast card update via WebSocket (delta payload) ──
+        const io = req.app.get('io');
+        if (io && card.board_id) {
+            const delta = { id: parseInt(id), board_id: card.board_id };
+            if (name !== undefined)            delta.name = updated.name;
+            if (description !== undefined)     delta.description = updated.description;
+            if (due_date !== undefined)        delta.due_date = updated.due_date;
+            if (is_due_completed !== undefined) delta.is_due_completed = updated.is_due_completed;
+            if (card_type !== undefined)       delta.card_type = updated.card_type;
+            if (is_closed !== undefined)       delta.is_closed = updated.is_closed;
+            if (list_id !== undefined)         delta.list_id = updated.list_id;
+            if (stopwatch !== undefined)       delta.stopwatch = updated.stopwatch;
+            if (memo !== undefined)            delta.memo = updated.memo;
+            if (is_private !== undefined)      delta.is_private = updated.is_private;
+            if (estimated_hours !== undefined) delta.estimated_hours = updated.estimated_hours;
+            if (priority !== undefined)        delta.priority = updated.priority;
+            if (parent_id !== undefined)       delta.parent_id = updated.parent_id;
+
+            io.to(`board:${card.board_id}`).emit('cardUpdate', {
+                item: delta,
+                fromListId: listChanged ? card.list_id : null,
+                actorUCode: uCode,
+            });
+        }
+
         res.json({ data: updated });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -475,6 +522,17 @@ const DeleteCard = async (req, res) => {
             const fullPath = path.join(__dirname, '../../../', a.file_path);
             if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
         });
+
+        // ── Broadcast card deletion via WebSocket ──
+        const io = req.app.get('io');
+        if (io && card.board_id) {
+            io.to(`board:${card.board_id}`).emit('cardDelete', {
+                id: parseInt(id),
+                listId: card.list_id,
+                actorUCode: uCode,
+            });
+        }
+
         res.json({ message: 'Card deleted' });
     } catch (err) {
         console.error(err);
@@ -661,7 +719,7 @@ const AddCardMember = async (req, res) => {
 
         // Emit card member update to board
         if (req.app.get('io') && card.board_id) {
-            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_added: target_u_code });
+            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_added: target_u_code, actorUCode: uCode });
         }
         res.json({ message: 'Member added' });
     } catch (err) {
@@ -699,7 +757,7 @@ const RemoveCardMember = async (req, res) => {
 
         // Emit card member update to board
         if (req.app.get('io') && card.board_id) {
-            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_removed: target_u_code });
+            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_removed: target_u_code, actorUCode: uCode });
         }
         res.json({ message: 'Member removed' });
     } catch (err) {
@@ -734,6 +792,15 @@ const AddCardLabel = async (req, res) => {
         }
     }
 
+    // ── Broadcast label change via WebSocket (surgical fetch signal) ──
+    const { rows: [labelCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const io = req.app.get('io');
+    if (io && labelCard?.board_id) {
+        io.to(`board:${labelCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: labelCard.board_id, labels_changed: true, actorUCode: uCode,
+        });
+    }
+
     res.json({ message: 'Label added' });
 };
 
@@ -754,6 +821,15 @@ const RemoveCardLabel = async (req, res) => {
         } finally {
             client.release();
         }
+    }
+
+    // ── Broadcast label change via WebSocket (surgical fetch signal) ──
+    const { rows: [labelCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const io = req.app.get('io');
+    if (io && labelCard?.board_id) {
+        io.to(`board:${labelCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: labelCard.board_id, labels_changed: true, actorUCode: uCode,
+        });
     }
 
     res.json({ message: 'Label removed' });
@@ -1007,7 +1083,8 @@ const AddComment = async (req, res) => {
             const io = req.app.get('io');
             if (io) {
                 io.to(`board:${card.board_id}`).emit('commentCreate', {
-                    item: comment
+                    item: comment,
+                    actorUCode: uCode,
                 });
             }
         } catch (err) {
@@ -1044,7 +1121,8 @@ const UpdateComment = async (req, res) => {
         const { rows: [card] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [comment.card_id]);
         if (card) {
             io.to(`board:${card.board_id}`).emit('commentUpdate', {
-                item: rows[0]
+                item: rows[0],
+                actorUCode: uCode,
             });
         }
     }
@@ -1074,7 +1152,8 @@ const DeleteComment = async (req, res) => {
         const io = req.app.get('io');
         if (io) {
             io.to(`board:${card.board_id}`).emit('commentDelete', {
-                item: { id }
+                item: { id },
+                actorUCode: uCode,
             });
         }
 
@@ -1105,6 +1184,15 @@ const UploadAttachment = async (req, res) => {
             INSERT INTO kb_attachment (card_id, creator_u_code, attachment_type, file_name, file_path, link_data)
             VALUES ($1,$2,'link',$3,$4,$5) RETURNING *
         `, [id, uCode, name || url, url, JSON.stringify(linkData)]);
+        // ── Broadcast attachment change via WebSocket ──
+        const { rows: [linkCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+        const linkIo = req.app.get('io');
+        if (linkIo && linkCard?.board_id) {
+            linkIo.to(`board:${linkCard.board_id}`).emit('cardUpdate', {
+                id: parseInt(id), board_id: linkCard.board_id, attachments_changed: true, actorUCode: uCode,
+            });
+        }
+
         return res.status(201).json({ data: rows[0] });
     }
 
@@ -1136,6 +1224,15 @@ const UploadAttachment = async (req, res) => {
         client.release();
     }
 
+    // ── Broadcast attachment change via WebSocket (surgical fetch signal) ──
+    const { rows: [fileCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const fileIo = req.app.get('io');
+    if (fileIo && fileCard?.board_id) {
+        fileIo.to(`board:${fileCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: fileCard.board_id, attachments_changed: true, actorUCode: uCode,
+        });
+    }
+
     res.status(201).json({ data: rows[0] });
 };
 
@@ -1155,6 +1252,15 @@ const DeleteAttachment = async (req, res) => {
         const fullPath = path.join(__dirname, '../../', att.file_path);
         if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
     }
+
+    // ── Broadcast attachment removal via WebSocket (surgical fetch signal) ──
+    const delIo = req.app.get('io');
+    if (delIo && card?.board_id) {
+        delIo.to(`board:${card.board_id}`).emit('cardUpdate', {
+            id: parseInt(att.card_id), board_id: card.board_id, attachments_changed: true, actorUCode: uCode,
+        });
+    }
+
     res.json({ message: 'Attachment deleted' });
 };
 
@@ -1330,6 +1436,7 @@ const ReorderCard = async (req, res) => {
                 item: updated,
                 repositions: repositions.map(r => ({ id: r.record.id, position: r.position })),
                 fromListId: listChanged ? card.list_id : null,
+                actorUCode: uCode,
             });
         }
 

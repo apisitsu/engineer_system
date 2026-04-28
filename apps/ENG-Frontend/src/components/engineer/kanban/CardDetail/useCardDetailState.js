@@ -154,6 +154,17 @@ export const CardDetailProvider = ({ children }) => {
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [isPreviewVisible, setIsPreviewVisible] = useState(false);
 
+    // ── Dirty Field Tracking (AP1: Active Edit Overwrite Protection) ──
+    // Tracks which fields have unsaved user edits so WebSocket updates
+    // skip those fields instead of clobbering the user's typing.
+    const dirtyFieldsRef = useRef(new Set());
+    const markDirty = useCallback((field) => {
+        dirtyFieldsRef.current.add(field);
+    }, []);
+    const clearDirty = useCallback((field) => {
+        dirtyFieldsRef.current.delete(field);
+    }, []);
+
     // ── Permissions ──
     const currentUserCode = empNo || '';
     const tempCardMembers = card?.memberships || card?.assignees || card?.members || [];
@@ -301,13 +312,17 @@ export const CardDetailProvider = ({ children }) => {
     // ── Effects ──
     useEffect(() => {
         if (card) {
-            setEditName(card.name || '');
-            setEditDesc(card.description || '');
-            setEditMemo(card.memo || '');
+            // ── Smart Sync: only update fields NOT actively being edited ──
+            const dirty = dirtyFieldsRef.current;
+            if (!dirty.has('name'))            setEditName(card.name || '');
+            if (!dirty.has('description'))     setEditDesc(card.description || '');
+            if (!dirty.has('memo'))            setEditMemo(card.memo || '');
+            if (!dirty.has('estimated_hours')) setEditEstimatedHours(card.estimated_hours || 0);
+            if (!dirty.has('suspended_reason'))setEditSuspendReason(card.suspended_reason || '');
+
+            // These are display-only — always sync:
             setShowProblemSection((card.issues && card.issues.length > 0) || !!card.problem_detail || !!card.solution_detail);
             setShowMemoSection(!!card.memo);
-            setEditEstimatedHours(card.estimated_hours || 0);
-            setEditSuspendReason(card.suspended_reason || '');
 
             fetchCardActions(card.id).then(actions => setActivityLog(actions));
             fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
@@ -373,6 +388,7 @@ export const CardDetailProvider = ({ children }) => {
         if (editName.trim() && editName !== card.name) {
             await updateCard(card.id, { name: editName.trim() });
         }
+        clearDirty('name');
         setIsEditingName(false);
     };
 
@@ -381,6 +397,7 @@ export const CardDetailProvider = ({ children }) => {
         if (editDesc !== (card.description || '')) {
             await updateCard(card.id, { description: editDesc });
         }
+        clearDirty('description');
         setIsEditingDesc(false);
     };
 
@@ -413,6 +430,7 @@ export const CardDetailProvider = ({ children }) => {
         if (editMemo !== (card.memo || '')) {
             await updateCard(card.id, { memo: editMemo });
         }
+        clearDirty('memo');
         setIsEditingMemo(false);
     };
 
@@ -641,6 +659,9 @@ export const CardDetailProvider = ({ children }) => {
         previewAttachment, setPreviewAttachment,
         isPreviewVisible, setIsPreviewVisible,
 
+        // Dirty-field tracking (AP1: Active Edit Overwrite Protection)
+        markDirty, clearDirty,
+
         // Handlers
         checkCanEdit,
         handleSaveName, handleSaveDesc,
@@ -681,6 +702,7 @@ export const CardDetailProvider = ({ children }) => {
         showDependencySelect, editSuspendReason,
         isEditingMemo, editMemo, showMemoSection, editEstimatedHours,
         previewAttachment, isPreviewVisible,
+        markDirty, clearDirty,
         // Store action refs (stable, but included for completeness)
         closeCardDetail, updateCard, deleteCard, moveCard,
         addComment, deleteComment,
