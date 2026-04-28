@@ -340,7 +340,7 @@ const ListViewCard = ({ card, theme }) => {
                         const words = (userObj?.u_name || '').split(' ');
                         const initials = words.length >= 2 ? (words[0][0] + words[words.length - 1][0]).toUpperCase() : name.charAt(0).toUpperCase();
                         return (
-                            <Tooltip key={idx} title={name}>
+                            <Tooltip key={uCode} title={name}>
                                 {userObj?.profile_img_b64 ? (
                                     <Avatar size={24} src={userObj.profile_img_b64}
                                         style={{ border: `2px solid ${theme.colors.surface}` }} />

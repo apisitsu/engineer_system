@@ -435,7 +435,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                                         ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
                                         : name.charAt(0).toUpperCase();
                                     return (
-                                        <Tooltip key={idx} title={name}>
+                                        <Tooltip key={uCode} title={name}>
                                             {userObj?.profile_img_b64 ? (
                                                 <Avatar
                                                     size={26}

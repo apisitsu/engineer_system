@@ -187,6 +187,7 @@ const CardComments = () => {
                                             }
 
                                             return {
+                                                key: action.id,
                                                 children: (
                                                     <div>
                                                         <Text strong style={{ fontSize: 13 }}>{action.user_display_name || action.u_code || 'User'}</Text>
@@ -257,6 +258,7 @@ const CardComments = () => {
                                         </Text>
                                         <Timeline
                                             items={timeTrackingData.segments.map((seg, i) => ({
+                                                key: `seg-${i}-${seg.listId}`,
                                                 color: seg.isCurrent ? theme.colors.primary : 'gray',
                                                 children: (
                                                     <div>

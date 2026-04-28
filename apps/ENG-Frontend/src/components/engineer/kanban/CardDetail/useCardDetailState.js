@@ -20,8 +20,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
+import { useCardDetailHandlers } from './useCardDetailHandlers';
 import dayjs from 'dayjs';
-import Swal from 'sweetalert2';
 
 // ─── Context ────────────────────────────────────────────────────────
 const CardDetailContext = createContext(null);
@@ -124,7 +124,7 @@ export const CardDetailProvider = ({ children }) => {
     const [newLabelName, setNewLabelName] = useState('');
     const [newLabelColor, setNewLabelColor] = useState('#ef5350');
     const [activityLog, setActivityLog] = useState([]);
-    const [showActivityLog, setShowActivityLog] = useState(false);
+
     const [showLinkAttach, setShowLinkAttach] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
     const [linkName, setLinkName] = useState('');
@@ -291,7 +291,7 @@ export const CardDetailProvider = ({ children }) => {
             doneBy: null,
             done_at: doneAt ? doneAt.toISOString() : null,
         };
-    }, [card, activityLog, lists, users]);
+    }, [card, activityLog, lists]);
 
     // ── Derived card data ──
     const listName = useMemo(() => {
@@ -310,9 +310,9 @@ export const CardDetailProvider = ({ children }) => {
     const cardIssues = card?.issues || [];
 
     // ── Effects ──
+    // ── Effect: Sync local editing state from card (Dirty-Field Guard) ──
     useEffect(() => {
         if (card) {
-            // ── Smart Sync: only update fields NOT actively being edited ──
             const dirty = dirtyFieldsRef.current;
             if (!dirty.has('name'))            setEditName(card.name || '');
             if (!dirty.has('description'))     setEditDesc(card.description || '');
@@ -323,12 +323,22 @@ export const CardDetailProvider = ({ children }) => {
             // These are display-only — always sync:
             setShowProblemSection((card.issues && card.issues.length > 0) || !!card.problem_detail || !!card.solution_detail);
             setShowMemoSection(!!card.memo);
-
-            fetchCardActions(card.id).then(actions => setActivityLog(actions));
-            fetchCustomFieldValues(card.id).then(vals => setCustomFieldValues(vals || []));
         }
     }, [card]);
 
+    // ── Effect: Fetch card actions & custom field values only on card ID change ──
+    useEffect(() => {
+        if (card?.id) {
+            fetchCardActions(card.id)
+                .then(actions => setActivityLog(actions))
+                .catch(err => console.error('[CardDetail] fetchCardActions failed:', err));
+            fetchCustomFieldValues(card.id)
+                .then(vals => setCustomFieldValues(vals || []))
+                .catch(err => console.error('[CardDetail] fetchCustomFieldValues failed:', err));
+        }
+    }, [card?.id, fetchCardActions, fetchCustomFieldValues]);
+
+    // ── Effect: Load custom field definitions per group ──
     useEffect(() => {
         if (isCardDetailOpen && baseCustomFieldGroups) {
             baseCustomFieldGroups.forEach(g => {
@@ -337,7 +347,7 @@ export const CardDetailProvider = ({ children }) => {
                 }
             });
         }
-    }, [isCardDetailOpen, baseCustomFieldGroups]);
+    }, [isCardDetailOpen, baseCustomFieldGroups, customFields, fetchCustomFields]);
 
     useEffect(() => {
         if (!isCardDetailOpen) {
@@ -362,229 +372,46 @@ export const CardDetailProvider = ({ children }) => {
         }
     }, [isCardDetailOpen]);
 
-    // ── Handlers ──
-    const checkCanEdit = async (showWarning = true) => {
-        if (!isCardMember) {
-            if (canEditCard) {
-                await addCardMember(card.id, currentUserCode, empNo);
-                return true;
-            } else {
-                if (showWarning) {
-                    Swal.fire({
-                        title: 'แจ้งเตือน',
-                        text: 'กรุณากด Join เพื่อเข้าร่วมการ์ดก่อนทำการแก้ไข',
-                        icon: 'warning',
-                        confirmButtonColor: theme.colors.primary
-                    });
-                }
-                return false;
-            }
-        }
-        return true;
-    };
+    // ── Handlers (extracted to useCardDetailHandlers for stable refs) ──
+    const handlers = useCardDetailHandlers({
+        card, isReadOnly, isCardMember, canEditCard,
+        addCardMember, currentUserCode, empNo, theme,
+        updateCard, deleteCard, moveCard,
+        addComment, createTaskList, updateTaskList, createTask, updateTask,
+        addCardLabel, removeCardLabel, addFileAttachment,
+        createCardIssue, updateCardIssue,
+        editName, setEditName, setIsEditingName,
+        editDesc, setIsEditingDesc,
+        editProblem, editSolution, editingIssueId,
+        setEditingIssueId, setEditProblem, setEditSolution,
+        editMemo, setIsEditingMemo,
+        editEstimatedHours,
+        commentText, setCommentText,
+        cardMembers, users, projectManagers,
+        newTaskListName, setNewTaskListName, setShowAddTaskList,
+        editTaskListName, setEditingTaskListId, taskLists,
+        newTaskNames, setNewTaskNames,
+        editTaskName, setEditingTaskId,
+        editLinkUrl, editLinkName, setEditingLinkId,
+        cardLabelIds,
+        setShowDueDatePicker, setShowMoveSelect,
+        closeCardDetail,
+        setIsUploadingFile, fileInputRef,
+        setPreviewAttachment, setIsPreviewVisible,
+        clearDirty,
+    });
 
-    const handleSaveName = async () => {
-        if (!(await checkCanEdit(false))) return;
-        if (editName.trim() && editName !== card.name) {
-            await updateCard(card.id, { name: editName.trim() });
-        }
-        clearDirty('name');
-        setIsEditingName(false);
-    };
-
-    const handleSaveDesc = async () => {
-        if (isReadOnly) return;
-        if (editDesc !== (card.description || '')) {
-            await updateCard(card.id, { description: editDesc });
-        }
-        clearDirty('description');
-        setIsEditingDesc(false);
-    };
-
-    const handleSaveIssue = async () => {
-        if (isReadOnly) return;
-        if (editingIssueId === 'new') {
-            await createCardIssue(card.id, {
-                problem_detail: editProblem,
-                solution_detail: editSolution
-            });
-        } else if (editingIssueId) {
-            await updateCardIssue(editingIssueId, {
-                problem_detail: editProblem,
-                solution_detail: editSolution
-            }, card.id);
-        }
-        setEditingIssueId(null);
-        setEditProblem('');
-        setEditSolution('');
-    };
-
-    const handleCancelIssue = () => {
-        setEditingIssueId(null);
-        setEditProblem('');
-        setEditSolution('');
-    };
-
-    const handleSaveMemo = async () => {
-        if (isReadOnly) return;
-        if (editMemo !== (card.memo || '')) {
-            await updateCard(card.id, { memo: editMemo });
-        }
-        clearDirty('memo');
-        setIsEditingMemo(false);
-    };
-
-    const handleSaveEstimatedHours = async () => {
-        if (isReadOnly) return;
-        const val = parseFloat(editEstimatedHours);
-        if (!isNaN(val) && val !== (card.estimated_hours || 0)) {
-            await updateCard(card.id, { estimated_hours: val });
-        }
-    };
-
-    const handleAddComment = async () => {
-        if (!commentText.trim()) return;
-
-        let formattedComment = commentText.trim();
-        const mentionMatches = formattedComment.match(/@([\w]+)/g) || [];
-        const mentionedCodes = [];
-
-        for (const match of mentionMatches) {
-            const nameOrCode = match.slice(1);
-            const uObj = users.find(u =>
-                (u.u_name && u.u_name.replace(/\s+/g, '') === nameOrCode) ||
-                (u.u_code === nameOrCode) ||
-                (u.u_nickname === nameOrCode)
-            );
-            if (uObj) {
-                mentionedCodes.push(uObj.u_code);
-                const regex = new RegExp(`@${nameOrCode}\\b`, 'g');
-                formattedComment = formattedComment.replace(regex, `@[${uObj.u_name || uObj.u_nickname || uObj.u_code}](${uObj.u_code})`);
-            }
-        }
-
-        await addComment(card.id, formattedComment, empNo);
-
-        for (const code of mentionedCodes) {
-            const alreadyMember = cardMembers.some(cm => cm.u_code === code);
-            const isProjectMember = projectManagers.some(pm => pm.u_code === code);
-            if (!alreadyMember && isProjectMember) {
-                await addCardMember(card.id, code, empNo);
-            }
-        }
-        setCommentText('');
-    };
-
-    const handleDeleteCard = async () => {
-        await deleteCard(card.id);
-    };
-
-    const handleMoveCard = async (newListId) => {
-        await moveCard(card.id, newListId);
-        setShowMoveSelect(false);
-        closeCardDetail();
-    };
-
-    const handleAddTaskList = async () => {
-        if (!newTaskListName.trim()) return;
-        await createTaskList(card.id, newTaskListName.trim());
-        setNewTaskListName('');
-        setShowAddTaskList(false);
-    };
-
-    const handleSaveTaskListName = async (tlId) => {
-        if (isReadOnly) return;
-        const oldName = taskLists.find(t => t.id === tlId)?.name;
-        if (editTaskListName.trim() && editTaskListName !== oldName) {
-            await updateTaskList(tlId, { name: editTaskListName.trim() }, card.id);
-        }
-        setEditingTaskListId(null);
-    };
-
-    const handleAddTask = async (taskListId) => {
-        const name = newTaskNames[taskListId]?.trim();
-        if (!name) return;
-        await createTask(taskListId, name, card.id);
-        setNewTaskNames(prev => ({ ...prev, [taskListId]: '' }));
-    };
-
-    const handleToggleTask = async (task) => {
-        await updateTask(task.id, { is_completed: !task.is_completed }, card.id);
-    };
-
-    const handleEditTaskSave = async (taskId) => {
-        if (!editTaskName.trim()) {
-            setEditingTaskId(null);
-            return;
-        }
-        await updateTask(taskId, { name: editTaskName.trim() }, card.id);
-        setEditingTaskId(null);
-    };
-
-    const handleEditLinkSave = async (linkId) => {
-        let url = editLinkUrl.trim();
-        if (!url) {
-            Swal.fire('Error', 'URL cannot be empty', 'error');
-            return;
-        }
-
-        if ((url.startsWith('"') && url.endsWith('"')) || (url.startsWith("'") && url.endsWith("'"))) {
-            url = url.substring(1, url.length - 1).trim();
-        }
-
-        const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
-        const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
-
-        if (!urlPattern.test(url) && !localPathPattern.test(url)) {
-            Swal.fire('Error', 'Invalid link format. Must be a URL or a direct file path (e.g. H:\\...)', 'error');
-            return;
-        }
-
-        let finalUrl = url;
-        if (urlPattern.test(url) && !/^https?:\/\//i.test(finalUrl) && !localPathPattern.test(finalUrl)) {
-            finalUrl = 'http://' + finalUrl;
-        }
-
-        await useKanbanStore.getState().updateAttachment(linkId, {
-            url: finalUrl,
-            name: editLinkName.trim() || finalUrl
-        }, card.id);
-        setEditingLinkId(null);
-    };
-
-    const handleToggleLabel = async (labelId) => {
-        const strId = String(labelId);
-        if (cardLabelIds.includes(strId)) {
-            await removeCardLabel(card.id, labelId);
-        } else {
-            await addCardLabel(card.id, labelId);
-        }
-    };
-
-    const handleSetDueDate = async (date) => {
-        await updateCard(card.id, { due_date: date ? date.toISOString() : null });
-        setShowDueDatePicker(false);
-    };
-
-    const handleFileUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setIsUploadingFile(true);
-        try {
-            await addFileAttachment(card.id, file);
-            // message.success handled at call site
-        } catch {
-            // message.error handled at call site
-        } finally {
-            setIsUploadingFile(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    };
-
-    const handleAttachmentClick = (att) => {
-        setPreviewAttachment(att);
-        setIsPreviewVisible(true);
-    };
+    const {
+        checkCanEdit,
+        handleSaveName, handleSaveDesc,
+        handleSaveIssue, handleCancelIssue,
+        handleSaveMemo, handleSaveEstimatedHours,
+        handleAddComment, handleDeleteCard, handleMoveCard,
+        handleAddTaskList, handleSaveTaskListName,
+        handleAddTask, handleToggleTask, handleEditTaskSave,
+        handleEditLinkSave, handleToggleLabel, handleSetDueDate,
+        handleFileUpload, handleAttachmentClick,
+    } = handlers;
 
     // ── Assembled context value (memoized to prevent cascading re-renders) ──
     const value = useMemo(() => ({
@@ -641,7 +468,7 @@ export const CardDetailProvider = ({ children }) => {
         showMoveSelect, setShowMoveSelect,
         showLabelPicker, setShowLabelPicker,
         isCreatingLabel, setIsCreatingLabel, newLabelName, setNewLabelName, newLabelColor, setNewLabelColor,
-        showActivityLog, setShowActivityLog,
+
         showLinkAttach, setShowLinkAttach, linkUrl, setLinkUrl, linkName, setLinkName,
         showDueDatePicker, setShowDueDatePicker,
         showPrioritySelect, setShowPrioritySelect,
@@ -695,7 +522,7 @@ export const CardDetailProvider = ({ children }) => {
         commentText, newTaskListName, showAddTaskList, newTaskNames,
         editingTaskId, editTaskName, editingTaskListId, editTaskListName,
         showMoveSelect, showLabelPicker, isCreatingLabel, newLabelName, newLabelColor,
-        showActivityLog, showLinkAttach, linkUrl, linkName,
+        showLinkAttach, linkUrl, linkName,
         showDueDatePicker, showPrioritySelect, showEstimatedHours,
         showMemberPicker, memberSearch, isUploadingFile,
         editingIssueId, editProblem, editSolution, showProblemSection,

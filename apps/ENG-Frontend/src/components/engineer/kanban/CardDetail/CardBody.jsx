@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Typography, Row, Col, Space, Divider, Tag, Button, Input, Popconfirm, Progress, Tooltip } from 'antd';
+import { Typography, Row, Col, Space, Button, Input, Popconfirm, Progress, Tooltip } from 'antd';
 import { useCardDetailState } from './useCardDetailState';
 import { server } from '../../../../constance/constance';
 import { useKanbanStore } from '../store/kanbanStore';
@@ -79,7 +79,7 @@ const CardBody = () => {
                             </Space>
                         </div>
                     ) : (
-                        <div style={{ padding: theme.spacing.sm, borderRadius: theme.borderRadius.md, cursor: 'pointer', minHeight: 50, transition: `background ${theme.transitions.fast}` }}
+                        <div style={{ padding: theme.spacing.sm, borderRadius: theme.borderRadius.md, cursor: 'pointer', minHeight: 50, transition: `background ${theme.transitions.fast}`, background: theme.colors.surfaceHover }}
                             onClick={async () => { if (await checkCanEdit()) { markDirty('description'); setIsEditingDesc(true); } }}
                             onMouseOver={(e) => e.currentTarget.style.background = `${theme.colors.surfaceHover}CC`}
                             onMouseOut={(e) => e.currentTarget.style.background = theme.colors.surfaceHover}>
@@ -310,7 +310,7 @@ const CardBody = () => {
                     <div style={{ marginLeft: 28 }}>
                         {parentCard && (
                             <div style={{ background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.md, padding: '12px 16px', marginBottom: parseInt(card.total_children_count) > 0 ? 12 : 0, cursor: 'pointer', transition: 'all 0.2s ease' }}
-                                onClick={() => { closeCardDetail(); setTimeout(() => { useKanbanStore.getState().openCardDetail(parentCard.id); }, 100); }}
+                                onClick={() => { closeCardDetail(); setTimeout(() => { try { useKanbanStore.getState().openCardDetail(parentCard.id); } catch (err) { console.error('[CardBody] Failed to open parent card:', err); } }, 100); }}
                                 onMouseEnter={e => e.currentTarget.style.borderColor = theme.colors.primary}
                                 onMouseLeave={e => e.currentTarget.style.borderColor = theme.colors.border}>
                                 <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Parent Card</Text>
@@ -337,7 +337,7 @@ const CardBody = () => {
                                             <div key={child.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: isDone ? theme.colors.success : theme.colors.textTertiary }} />
                                                 <Text delete={isDone} type={isDone ? 'secondary' : 'default'} style={{ fontSize: 13, cursor: 'pointer', flex: 1 }}
-                                                    onClick={() => { closeCardDetail(); setTimeout(() => { useKanbanStore.getState().openCardDetail(child.id); }, 100); }}>
+                                                    onClick={() => { closeCardDetail(); setTimeout(() => { try { useKanbanStore.getState().openCardDetail(child.id); } catch (err) { console.error('[CardBody] Failed to open child card:', err); } }, 100); }}>
                                                     {child.name}
                                                 </Text>
                                             </div>

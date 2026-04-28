@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Typography, Space, Divider, Tag, Button, Input, Select, DatePicker, Avatar, Popover, Popconfirm, Tooltip, Switch, message } from 'antd';
+import { Typography, Space, Divider, Button, Input, Select, DatePicker, Avatar, Popconfirm, Tooltip, Switch, message } from 'antd';
 import { useCardDetailState } from './useCardDetailState';
 import { useKanbanStore } from '../store/kanbanStore';
 import Swal from 'sweetalert2';
@@ -19,11 +19,9 @@ import dayjs from 'dayjs';
 import { MdOutlinePeople, MdOutlineOutput, MdAccessTime, MdLowPriority, MdOutlineTimer, MdOutlineSubtitles, MdOutlineDescription } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { FiUpload } from 'react-icons/fi';
-import { GoDiscussionClosed } from 'react-icons/go';
-import { IoCloseOutline, IoSearchOutline, IoArchiveOutline, IoAddOutline } from 'react-icons/io5';
-import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy } from 'react-icons/ai';
+import { IoSearchOutline, IoArchiveOutline } from 'react-icons/io5';
+import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy, AiOutlineCheck } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
-import { AiOutlineCheck } from 'react-icons/ai';
 
 const { Text } = Typography;
 
@@ -95,11 +93,15 @@ const CardSidebar = () => {
                     icon={isCardMember ? <MdOutlineOutput size={16} /> : <MdOutlinePeople size={16} />}
                     label={isCardMember ? "Leave" : "Join"}
                     onClick={async () => {
-                        if (isCardMember) {
-                            await removeCardMember(card.id, currentUserCode);
-                        } else {
-                            await addCardMember(card.id, currentUserCode, empNo);
-                            message.success('You have joined this card');
+                        try {
+                            if (isCardMember) {
+                                await removeCardMember(card.id, currentUserCode);
+                            } else {
+                                await addCardMember(card.id, currentUserCode, empNo);
+                                message.success('You have joined this card');
+                            }
+                        } catch (err) {
+                            console.error('[CardSidebar] Membership toggle failed:', err);
                         }
                     }}
                     theme={theme}
@@ -157,7 +159,7 @@ const CardSidebar = () => {
                                             ))}
                                         </div>
                                         <Button size="small" type="primary" disabled={!newLabelName.trim()}
-                                            onClick={async () => { await createLabel({ name: newLabelName.trim(), color: newLabelColor }); setIsCreatingLabel(false); setNewLabelName(''); }}
+                                            onClick={async () => { try { await createLabel({ name: newLabelName.trim(), color: newLabelColor }); } catch (err) { console.error('[CardSidebar] Create label failed:', err); } setIsCreatingLabel(false); setNewLabelName(''); }}
                                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Create</Button>
                                     </div>
                                 ) : (
@@ -335,7 +337,7 @@ const CardSidebar = () => {
                                 <Text style={{ fontSize: 11, color: theme.colors.textTertiary, marginBottom: 4, display: 'block' }}>Select Parent Card</Text>
                                 <Select allowClear showSearch placeholder="Search for a parent..." style={{ width: '100%' }}
                                     value={card.parent_id ? String(card.parent_id) : null}
-                                    onChange={async (val) => { try { await updateCard(card.id, { parent_id: val || null }); message.success('Dependency updated'); } catch (err) { } }}
+                                    onChange={async (val) => { try { await updateCard(card.id, { parent_id: val || null }); message.success('Dependency updated'); } catch (err) { console.error('[CardSidebar] Dependency update failed:', err); } }}
                                     filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                                     options={Object.values(cards || {}).flat().filter(c => String(c.id) !== String(card.id)).map(c => ({ label: c.name, value: String(c.id) }))}
                                     disabled={isEffectivelySuspended} />
@@ -353,12 +355,12 @@ const CardSidebar = () => {
                         {/* Duplicate */}
                         {canEditBoard && (
                             <SidebarButton icon={<AiOutlineCopy size={16} />} label="Duplicate"
-                                onClick={async () => { await useKanbanStore.getState().duplicateCard(card.id, card.list_id); closeCardDetail(); }} theme={theme} />
+                                onClick={async () => { try { await useKanbanStore.getState().duplicateCard(card.id, card.list_id); closeCardDetail(); } catch (err) { console.error('[CardSidebar] Duplicate failed:', err); } }} theme={theme} />
                         )}
 
                         {/* Archive */}
                         <Popconfirm title="Archive this card?" description="Card will be hidden from the board."
-                            onConfirm={async () => { await useKanbanStore.getState().archiveCard(card.id); closeCardDetail(); }}
+                            onConfirm={async () => { try { await useKanbanStore.getState().archiveCard(card.id); closeCardDetail(); } catch (err) { console.error('[CardSidebar] Archive failed:', err); } }}
                             okText="Archive" cancelText="Cancel">
                             {/* <Button block style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, height: 36, borderRadius: theme.borderRadius.sm, background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, color: theme.colors.textPrimary }}> */}
                             <Button block style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, height: 36, borderRadius: theme.borderRadius.sm }}>
