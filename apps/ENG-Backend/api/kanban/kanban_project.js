@@ -116,16 +116,16 @@ const GetProjectById = async (req, res) => {
 const CreateProject = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { name, description, background_type, background_value, is_hidden, is_private, pm_project_id, icon, priority, status } = req.body;
+    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows } = await client.query(`
-            INSERT INTO kb_project (owner_u_code, pm_project_id, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
-        `, [uCode, pm_project_id || null, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active']);
+            INSERT INTO kb_project (owner_u_code, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active']);
 
         const project = rows[0];
 
@@ -196,11 +196,10 @@ const UpdateProject = async (req, res) => {
             
             const updatedProject = rows[0];
 
-            // Batch-insert notifications for all members atomically (skip actor)
             if (status && status.toLowerCase() !== (oldStatus || '').toLowerCase()) {
                 await client.query(`
                     INSERT INTO kb_notification (recipient_u_code, actor_u_code, notif_type, notif_data)
-                    SELECT pm.u_code, $1, 'project_status_changed', $2
+                    SELECT pm.u_code, $1::varchar, 'project_status_changed', $2::jsonb
                     FROM kb_project_membership pm
                     WHERE pm.project_id = $3 AND pm.u_code != $1
                 `, [

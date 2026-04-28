@@ -106,10 +106,10 @@ const ProjectsTab = ({
                 activeKey={projectStatusFilter}
                 onChange={setProjectStatusFilter}
                 items={[
-                    { key: 'active', label: 'Active' },
-                    { key: 'waiting', label: 'Waiting(Pool)' },
-                    { key: 'suspended', label: 'Suspend' },
-                    { key: 'completed', label: 'Completed' },
+                    { key: 'active', label: `Active (${projects.filter(p => (p.status || 'active').toLowerCase() === 'active').length})` },
+                    { key: 'waiting', label: `Waiting(Pool) (${projects.filter(p => (p.status || '').toLowerCase() === 'waiting').length})` },
+                    { key: 'suspended', label: `Suspend (${projects.filter(p => (p.status || '').toLowerCase() === 'suspended').length})` },
+                    { key: 'completed', label: `Completed (${projects.filter(p => (p.status || '').toLowerCase() === 'completed').length})` },
                 ]}
                 style={{ marginBottom: theme.spacing.md }}
             />

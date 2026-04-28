@@ -560,9 +560,42 @@ const ProjectSettingsDrawer = () => {
                                                 )}
                                             </div>
 
-                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                                                <Button onClick={() => setEditingId(null)}>Cancel</Button>
-                                                <Button type="primary" onClick={() => handleEditProject(proj.id)}>Save Changes</Button>
+                                            <div style={{ display: 'flex', marginTop: theme.spacing.sm }}>
+                                                <Space style={{ width: '100%' }}>
+                                                    <Button
+                                                        block
+                                                        type="primary"
+                                                        onClick={() => handleEditProject(proj.id)}
+                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
+                                                    >
+                                                        Save Changes
+                                                    </Button>
+                                                    <Button
+                                                        block
+                                                        onClick={() => setEditingId(null)}
+                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </Space>
+                                            </div>
+                                            {/* marginTop: theme.spacing.xl, */}
+                                            <div style={{ paddingTop: theme.spacing.lg, borderTop: `1px solid ${theme.colors.border}` }}>
+                                                <Text strong style={{ color: theme.colors.error, display: 'block', marginBottom: theme.spacing.sm }}>Danger Zone</Text>
+                                                <div>
+                                                    {canManageProject && (
+                                                        <Popconfirm
+                                                            title="Delete this project?"
+                                                            description="All boards and cards will be deleted."
+                                                            onConfirm={() => handleDeleteProject(proj.id)}
+                                                            okText="Delete"
+                                                            okType="danger"
+                                                            placement="topLeft"
+                                                        >
+                                                            <Button danger block icon={<AiOutlineDelete />} >Delete Project</Button>
+                                                        </Popconfirm>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
