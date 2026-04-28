@@ -584,18 +584,35 @@ const AddCardMember = async (req, res) => {
     if (!target_u_code) return res.status(400).json({ error: 'target_u_code is required' });
 
     const { rows: [card] } = await engPool.query(`
-        SELECT c.board_id, b.project_id 
-        FROM kb_card c JOIN kb_board b ON b.id = c.board_id 
+        SELECT c.board_id, b.project_id, p.is_private as project_private
+        FROM kb_card c 
+        JOIN kb_board b ON b.id = c.board_id 
+        JOIN kb_project p ON p.id = b.project_id
         WHERE c.id=$1
     `, [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    // Allow: caller is self-joining (for standard boards?), OR caller has manage powers
     const selfJoin = target_u_code === uCode;
-    // For private boards, we shouldn't allow self-join unless they are already a board member (which GetCards filters anyway).
-    // Let's rely on canManageCard for adding other users.
-    if (!selfJoin && !(await canManageCard(req, id)))
-        return res.status(403).json({ error: 'Card manager permission required' });
+    
+    if (!selfJoin) {
+        const hasManagePower = await canManageCard(req, id);
+        if (!hasManagePower) {
+            const hasEditPower = await canEditCard(req, id);
+            if (!hasEditPower) {
+                return res.status(403).json({ error: 'Card editor permission required' });
+            }
+
+            if (card.project_private) {
+                const { rows: projMembers } = await engPool.query(
+                    'SELECT u_code FROM kb_project_membership WHERE project_id=$1 AND u_code=$2', 
+                    [card.project_id, target_u_code]
+                );
+                if (projMembers.length === 0) {
+                    return res.status(403).json({ error: 'Card manager permission required to add non-members to a private project' });
+                }
+            }
+        }
+    }
 
     const client = await engPool.connect();
     try {

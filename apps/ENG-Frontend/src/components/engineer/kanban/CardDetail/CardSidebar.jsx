@@ -59,7 +59,7 @@ const CardSidebar = () => {
     const {
         card, theme, empNo, currentUserCode, closeCardDetail,
         isReadOnly, baseIsReadOnly, isEffectivelySuspended,
-        canManageCard, canEditCard, isCardMember,
+        canManageCard, canEditCard, isCardMember, canEditBoard,
         canEditEstimatedHours,
         cardMembers, activeBoardMembers, users, labels,
         cardLabelIds, handleToggleLabel,
@@ -351,8 +351,10 @@ const CardSidebar = () => {
                         )}
 
                         {/* Duplicate */}
-                        <SidebarButton icon={<AiOutlineCopy size={16} />} label="Duplicate"
-                            onClick={async () => { await useKanbanStore.getState().duplicateCard(card.id, card.list_id); closeCardDetail(); }} theme={theme} />
+                        {canEditBoard && (
+                            <SidebarButton icon={<AiOutlineCopy size={16} />} label="Duplicate"
+                                onClick={async () => { await useKanbanStore.getState().duplicateCard(card.id, card.list_id); closeCardDetail(); }} theme={theme} />
+                        )}
 
                         {/* Archive */}
                         <Popconfirm title="Archive this card?" description="Card will be hidden from the board."
