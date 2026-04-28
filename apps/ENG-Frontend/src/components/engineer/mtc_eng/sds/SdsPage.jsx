@@ -188,7 +188,7 @@ const SdsPage = () => {
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"5"} defaultOpenKeys={"sub1"} />
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto' }}>
+        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <Title level={4} style={{ margin: 0, color: colors.primary }}>

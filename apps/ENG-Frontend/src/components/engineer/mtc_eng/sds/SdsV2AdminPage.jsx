@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
@@ -790,6 +790,8 @@ const AuditTab = ({ theme }) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
   const [activeCategory, setActiveCategory] = useState(null);
+  const [showNoPlan, setShowNoPlan] = useState(false);
+  const [showMissingTooling, setShowMissingTooling] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -805,19 +807,82 @@ const AuditTab = ({ theme }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Build dynamic category list from itemCounts
+  const categories = useMemo(() => {
+    const cats = [];
+    const ballTotal = data.totals?.ballTotal || 0;
+    const raceTotal = data.totals?.raceTotal || 0;
+    if (data.itemCounts.some(r => r.sub_class?.startsWith('C3')))
+      cats.push({ key: 'ball', label: 'Ball', prefix: 'C3', total: ballTotal, color: '#1677ff' });
+    if (data.itemCounts.some(r => r.sub_class?.startsWith('C2')))
+      cats.push({ key: 'race', label: 'Race', prefix: 'C2', total: raceTotal, color: '#52c41a' });
+    // Any other sub_class prefixes beyond C2/C3
+    const otherPrefixes = [...new Set(
+      data.itemCounts
+        .filter(r => r.sub_class && !r.sub_class.startsWith('C2') && !r.sub_class.startsWith('C3'))
+        .map(r => r.sub_class.substring(0, 2))
+    )];
+    otherPrefixes.forEach(prefix => {
+      const total = data.itemCounts.filter(r => r.sub_class?.startsWith(prefix)).reduce((s, r) => s + r.count, 0);
+      cats.push({ key: prefix, label: prefix, prefix, total, color: '#722ed1' });
+    });
+    return cats;
+  }, [data]);
+
+  const getCategoryPrefix = (catKey) => {
+    const cat = categories.find(c => c.key === catKey);
+    return cat?.prefix || catKey;
+  };
+
+  const handleCategoryClick = (key) => {
+    setActiveCategory(prev => prev === key ? null : key);
+    setShowNoPlan(false);
+    setShowMissingTooling(false);
+  };
+
+  const filteredNoPlan = useMemo(() => {
+    if (!activeCategory) return data.noProcessPlan;
+    const prefix = getCategoryPrefix(activeCategory);
+    return data.noProcessPlan.filter(r => r.sub_class?.startsWith(prefix));
+  }, [data.noProcessPlan, activeCategory, categories]);
+
+  const filteredMissingTooling = useMemo(() => {
+    if (!activeCategory) return data.missingTooling;
+    const prefix = getCategoryPrefix(activeCategory);
+    return data.missingTooling.filter(r => r.sub_class?.startsWith(prefix));
+  }, [data.missingTooling, activeCategory, categories]);
+
+  // Group missingTooling by CN for rowSpan display
+  const groupedMissingTooling = useMemo(() => {
+    const result = [];
+    const groups = {};
+    filteredMissingTooling.forEach(row => {
+      if (!groups[row.control_no]) groups[row.control_no] = [];
+      groups[row.control_no].push(row);
+    });
+    Object.values(groups).forEach(rows => {
+      rows.forEach((row, idx) => {
+        result.push({ ...row, _rowSpan: idx === 0 ? rows.length : 0, _key: `${row.control_no}_${row.process_code}` });
+      });
+    });
+    return result;
+  }, [filteredMissingTooling]);
+
   const noPlanCols = [
-    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
-    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
+    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
   ];
 
-  const toolingCols = [
-    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
-    { title: 'Proc Code', dataIndex: 'process_code', key: 'process_code', width: 100 },
-    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
-    { title: 'WC', dataIndex: 'wc', key: 'wc', width: 80 },
+  const missingCols = [
+    {
+      title: 'CN',
+      dataIndex: 'control_no',
+      key: 'control_no',
+      render: (val, row) => ({ children: <Text strong>{val}</Text>, props: { rowSpan: row._rowSpan } }),
+    },
+    { title: 'Process Code', dataIndex: 'process_code', key: 'process_code', width: 120 },
   ];
+
+  const activeCat = categories.find(c => c.key === activeCategory);
 
   return (
     <div style={{ minHeight: 600 }}>
@@ -830,28 +895,31 @@ const AuditTab = ({ theme }) => {
               {data.totals?.grandTotal?.toLocaleString() || 0}
             </div>
             <Divider style={{ margin: '8px 0' }} />
-            <Space>
+            <Space wrap>
               <Button
-                type={activeCategory === 'ball' ? 'primary' : 'default'}
-                onClick={() => setActiveCategory(activeCategory === 'ball' ? null : 'ball')}
                 size="small"
+                type={activeCategory === null ? 'primary' : 'default'}
+                onClick={() => { setActiveCategory(null); setShowNoPlan(false); setShowMissingTooling(false); }}
               >
-                Ball: {data.totals?.ballTotal?.toLocaleString() || 0}
+                All
               </Button>
-              <Button
-                type={activeCategory === 'race' ? 'primary' : 'default'}
-                onClick={() => setActiveCategory(activeCategory === 'race' ? null : 'race')}
-                size="small"
-              >
-                Race: {data.totals?.raceTotal?.toLocaleString() || 0}
-              </Button>
+              {categories.map(cat => (
+                <Button
+                  key={cat.key}
+                  type={activeCategory === cat.key ? 'primary' : 'default'}
+                  onClick={() => handleCategoryClick(cat.key)}
+                  size="small"
+                >
+                  {cat.label}
+                </Button>
+              ))}
             </Space>
-            {activeCategory && (
+            {activeCat && (
               <div style={{ marginTop: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCategory === 'ball' ? '#1677ff' : '#52c41a' }}>
-                  {(activeCategory === 'ball' ? data.totals?.ballTotal : data.totals?.raceTotal)?.toLocaleString() || 0}
+                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCat.color }}>
+                  {activeCat.total.toLocaleString()}
                 </div>
-                <Text type="secondary">{activeCategory === 'ball' ? 'Ball (C3x)' : 'Race (C2x)'}</Text>
+                <Text type="secondary">{activeCat.label} ({activeCat.prefix}x)</Text>
               </div>
             )}
           </Card>
@@ -869,28 +937,66 @@ const AuditTab = ({ theme }) => {
             items={[
               {
                 key: 'no-plan',
-                label: <Tag color="error">Critical: No Process Plan ({data.noProcessPlan?.length})</Tag>,
+                label: <Tag color="error">Critical: No Process Plan ({filteredNoPlan.length})</Tag>,
                 children: (
                   <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                       รายการที่ยังไม่มีการลงทะเบียน Routing (Process Plan) ในระบบ LPB — จะไม่สามารถออก SDS ได้
                     </Text>
-                    <Table dataSource={data.noProcessPlan} columns={noPlanCols} size="small" loading={loading} bordered rowKey="control_no" pagination={{ pageSize: 15 }} />
+                    <Button
+                      size="small"
+                      type={showNoPlan ? 'primary' : 'default'}
+                      onClick={() => setShowNoPlan(v => !v)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {showNoPlan ? 'ซ่อนรายการ' : `แสดงรายการ (${filteredNoPlan.length} CN)`}
+                    </Button>
+                    {showNoPlan && (
+                      <Table
+                        dataSource={filteredNoPlan}
+                        columns={noPlanCols}
+                        size="small"
+                        loading={loading}
+                        bordered
+                        rowKey="control_no"
+                        pagination={{ pageSize: 20, showSizeChanger: false }}
+                      />
+                    )}
                   </>
-                )
+                ),
               },
               {
                 key: 'missing-tool',
-                label: <Tag color="warning">Warning: Missing Tooling ({data.missingTooling?.length})</Tag>,
+                label: <Tag color="warning">Warning: Missing Tooling ({filteredMissingTooling.length})</Tag>,
                 children: (
                   <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                      มี Process Plan แล้วแต่ยังไม่ได้ผูกรายการ Tooling (แสดงเฉพาะ Process Code: 1011, 1012, 1021, 1022, 1041, 1042, 1061, 1062, 1181, 1182, 1241)
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                      มี Process Plan แล้วแต่ยังไม่ได้ผูกรายการ Tooling (Process Code: 1011, 1012, 1021, 1022, 1041, 1042, 1061, 1062, 1101, 1102, 1181, 1182, 1241)
                     </Text>
-                    <Table dataSource={data.missingTooling} columns={toolingCols} size="small" loading={loading} bordered rowKey={(r, i) => `${r.control_no}_${r.process_code}_${i}`} pagination={{ pageSize: 15 }} />
+                    <Button
+                      size="small"
+                      type={showMissingTooling ? 'primary' : 'default'}
+                      onClick={() => setShowMissingTooling(v => !v)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {showMissingTooling
+                        ? 'ซ่อนรายการ'
+                        : `แสดงรายการ (${new Set(filteredMissingTooling.map(r => r.control_no)).size} CN, ${filteredMissingTooling.length} rows)`}
+                    </Button>
+                    {showMissingTooling && (
+                      <Table
+                        dataSource={groupedMissingTooling}
+                        columns={missingCols}
+                        size="small"
+                        loading={loading}
+                        bordered
+                        rowKey="_key"
+                        pagination={{ pageSize: 30, showSizeChanger: false }}
+                      />
+                    )}
                   </>
-                )
-              }
+                ),
+              },
             ]}
           />
         </Col>
@@ -927,7 +1033,7 @@ const SdsV2AdminPage = () => {
     <Layout style={{ height: '100%' }}>
       <MenuTemplate type="MTC" />
       <Layout style={{ backgroundColor: theme.colors.background }}>
-        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto' }}>
+        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
           <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
             SDS v2 — Admin
           </Title>

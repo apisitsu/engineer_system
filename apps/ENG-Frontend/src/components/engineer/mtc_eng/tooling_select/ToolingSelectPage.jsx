@@ -125,6 +125,16 @@ const ToolingSelectPage = () => {
   const [invToolingName, setInvToolingName] = useState(null);
   const [invForm] = Form.useForm();
 
+  // ── Formula Setting state ────────────────────────────────────────────────
+  const [isFormulaSettingOpen, setIsFormulaSettingOpen] = useState(false);
+  const [formulaAllData, setFormulaAllData] = useState([]);
+  const [formulaSettingLoading, setFormulaSettingLoading] = useState(false);
+  const [formulaEdits, setFormulaEdits] = useState({});
+  const [formulaSaving, setFormulaSaving] = useState(false);
+  const [formulaMachine, setFormulaMachine] = useState(null);
+  const [formulaToolingName, setFormulaToolingName] = useState(null);
+  const [formulaCategoryFilter, setFormulaCategoryFilter] = useState(null);
+
   // ── Add Tool state ───────────────────────────────────────────────────────
   const [isAddToolOpen, setIsAddToolOpen] = useState(false);
   const [addMode, setAddMode] = useState('existing');
@@ -139,16 +149,18 @@ const ToolingSelectPage = () => {
   const [createTableLoading, setCreateTableLoading] = useState(false);
 
   const toolingTables = [
-    { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W') },
-    { key: 'tsg300w', label: 'TSG300W', table: 'tooling_tsg300', mf: r => String(r.machine || '').toUpperCase().includes('W') },
-    { key: 'ksb22g', label: 'KS-B22G', table: 'tooling_ksb22g' },
-    { key: 'ksb80', label: 'KS-B80', table: 'tooling_ksb80' },
-    { key: 'ks03a', label: 'KS-03A', table: 'tooling_ks03a' },
-    { key: 'ksb22rd', label: 'KS-B22RD', table: 'tooling_ks03a' },
-    { key: 'ks400b', label: 'KS400B', table: 'tooling_ks400b' },
-    { key: 'ks500rd', label: 'KS500RD', table: 'tooling_ks500rd' },
-    { key: 'ks400b5', label: 'KS400B5', table: 'tooling_ks400b5' },
-    { key: 'ks400b6', label: 'KS400B6', table: 'tooling_ks400b6' },
+    // formulaFilter = ค่า tooling_type ใน DB ที่ใช้แยก CALC_COMMON ตาม physical machine
+    // null = ไม่ต้อง filter เพิ่ม (machine_name ระบุครบแล้ว)
+    { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W'), formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG-300ZNC' },
+    { key: 'tsg300w',   label: 'TSG300W',    table: 'tooling_tsg300', mf: r => String(r.machine || '').toUpperCase().includes('W'),  formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG300W' },
+    { key: 'ksb22g',   label: 'KS-B22G',    table: 'tooling_ksb22g',  formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B22G' },
+    { key: 'ksb80',    label: 'KS-B80',     table: 'tooling_ksb80',   formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B80' },
+    { key: 'ks03a',    label: 'KS-03A',     table: 'tooling_ks03a',   formulaMachine: 'KS03A',   formulaFilter: null },
+    { key: 'ksb22rd',  label: 'KS-B22RD',   table: 'tooling_ks03a',   formulaMachine: 'KS03A',   formulaFilter: null },
+    { key: 'ks400b',   label: 'KS400B',     table: 'tooling_ks400b',  formulaMachine: 'KS400B',  formulaFilter: null },
+    { key: 'ks500rd',  label: 'KS500RD',    table: 'tooling_ks500rd', formulaMachine: 'KS500RD', formulaFilter: null },
+    { key: 'ks400b5',  label: 'KS400B5',    table: 'tooling_ks400b5', formulaMachine: 'KS400B5', formulaFilter: null },
+    { key: 'ks400b6',  label: 'KS400B6',    table: 'tooling_ks400b6', formulaMachine: 'KS400B6', formulaFilter: null },
   ];
   const invTableConfig = toolingTables.find(t => t.key === invKey);
 
@@ -218,7 +230,7 @@ const ToolingSelectPage = () => {
       render: (_, record) => invIsEditing(record) ? (
         <Space>
           <Typography.Link onClick={() => invSave(record.id)}><SaveOutlined /> Save</Typography.Link>
-          <Popconfirm title="Cancel?" onConfirm={invCancel}><a style={{ color: '#ff4d4f' }}><CloseOutlined /></a></Popconfirm>
+          <Popconfirm title="Cancel?" onConfirm={invCancel}><Button type="link" danger size="small" style={{ padding: 0 }}><CloseOutlined /></Button></Popconfirm>
         </Space>
       ) : (
         <Button type="text" size="small" disabled={invEditingKey !== ''} onClick={() => invEdit(record)} icon={<EditOutlined style={{ color: colors.primary }} />} />
@@ -304,6 +316,50 @@ const ToolingSelectPage = () => {
     } catch (err) {
       if (err?.response) message.error(err.response.data.error || 'Failed to add tool');
     } finally { setAddToolLoading(false); }
+  };
+
+  // ── Formula Setting helpers ──────────────────────────────────────────────
+
+  const openFormulaSettings = async () => {
+    const cfg = toolingTables.find(t => t.key === invKey);
+    if (!cfg?.formulaMachine) {
+      message.warning('ไม่พบ formula config สำหรับเครื่องนี้');
+      return;
+    }
+    setFormulaEdits({});
+    setFormulaAllData([]);
+    setFormulaCategoryFilter(null);
+    setFormulaMachine(cfg.formulaMachine);
+    setFormulaToolingName(cfg.formulaFilter || cfg.label);
+    setIsFormulaSettingOpen(true);
+    setFormulaSettingLoading(true);
+    try {
+      const params = {};
+      if (cfg.formulaFilter) params.tooling_type = cfg.formulaFilter;
+      const res = await axios.get(`${server.MTC_FORMULAS}/${cfg.formulaMachine}`, { params });
+      setFormulaAllData(res.data.formulas || []);
+    } catch {
+      message.error('Failed to load formula settings');
+    } finally {
+      setFormulaSettingLoading(false);
+    }
+  };
+
+  const saveFormulaSettings = async () => {
+    const edits = Object.entries(formulaEdits);
+    if (!edits.length) { message.info('No changes'); return; }
+    setFormulaSaving(true);
+    try {
+      await Promise.all(edits.map(([id, changes]) =>
+        axios.put(`${server.MTC_FORMULAS}/${id}`, changes)
+      ));
+      message.success('Saved');
+      setFormulaEdits({});
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setFormulaSaving(false);
+    }
   };
 
   const openAddTool = async () => {
@@ -468,7 +524,7 @@ const ToolingSelectPage = () => {
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"4"} defaultOpenKeys={"sub1"} />
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto' }}>
+        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Title level={4} style={{ margin: 0, color: colors.primary }}>
@@ -635,6 +691,14 @@ const ToolingSelectPage = () => {
               {invToolingNames.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
             </Select>
             <Button onClick={() => fetchToolList(invKey)}>Reload</Button>
+            {invKey && invToolingName && (
+              <Button
+                icon={<SettingOutlined />}
+                onClick={openFormulaSettings}
+              >
+                Formula Setting
+              </Button>
+            )}
           </Space>
           <Input
             placeholder="Search..."
@@ -768,6 +832,131 @@ const ToolingSelectPage = () => {
             )}
           </Form>
         )}
+      </Modal>
+      {/* ── Formula Setting Modal ──────────────────────────────────────── */}
+      <Modal
+        title={
+          <Space>
+            <SettingOutlined />
+            <span>Formula Setting</span>
+            <Tag color="blue">{formulaToolingName || formulaMachine}</Tag>
+          </Space>
+        }
+        open={isFormulaSettingOpen}
+        onCancel={() => setIsFormulaSettingOpen(false)}
+        width={820}
+        destroyOnHidden
+        footer={[
+          <Button key="close" onClick={() => setIsFormulaSettingOpen(false)}>
+            Close
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={formulaSaving}
+            disabled={!Object.keys(formulaEdits).length}
+            onClick={saveFormulaSettings}
+          >
+            Save Changes ({Object.keys(formulaEdits).length})
+          </Button>,
+        ]}
+      >
+        {(() => {
+          const categories = [...new Set(formulaAllData.map(f => f.tool_category).filter(Boolean))];
+          return (
+            <Space style={{ marginBottom: 12 }} wrap>
+              {categories.length > 0 && (
+                <>
+                  <Text type="secondary">Category:</Text>
+                  <Select
+                    value={formulaCategoryFilter}
+                    onChange={setFormulaCategoryFilter}
+                    allowClear
+                    placeholder="All"
+                    style={{ minWidth: 180 }}
+                    size="small"
+                  >
+                    {categories.map(cat => (
+                      <Select.Option key={cat} value={cat}>{cat}</Select.Option>
+                    ))}
+                  </Select>
+                </>
+              )}
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                {formulaAllData.length} formula{formulaAllData.length !== 1 ? 's' : ''}
+              </Text>
+            </Space>
+          );
+        })()}
+        <Spin spinning={formulaSettingLoading}>
+          {!formulaSettingLoading && formulaAllData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+              <SettingOutlined style={{ fontSize: 40, marginBottom: 12, display: 'block' }} />
+              ไม่พบ formula config สำหรับ <strong>{formulaMachine}</strong>
+            </div>
+          ) : (
+            <Table
+              dataSource={(formulaCategoryFilter
+                ? formulaAllData.filter(f => f.tool_category === formulaCategoryFilter)
+                : formulaAllData
+              ).map(r => ({ ...r, key: r.id }))}
+              size="small"
+              pagination={false}
+              bordered
+              scroll={{ y: 460 }}
+              columns={[
+                {
+                  title: 'Category',
+                  dataIndex: 'tool_category',
+                  width: 110,
+                  render: v => v ? <Tag>{v}</Tag> : <Text type="secondary">-</Text>,
+                },
+                {
+                  title: 'Parameter',
+                  dataIndex: 'param_key',
+                  width: 160,
+                  render: v => <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>,
+                },
+                {
+                  title: 'Formula',
+                  dataIndex: 'formula',
+                  render: (text, record) => (
+                    <Input.TextArea
+                      size="small"
+                      rows={2}
+                      style={{ fontFamily: 'monospace', fontSize: 11 }}
+                      defaultValue={text}
+                      onChange={e =>
+                        setFormulaEdits(prev => ({
+                          ...prev,
+                          [record.id]: { ...prev[record.id], formula: e.target.value },
+                        }))
+                      }
+                    />
+                  ),
+                },
+                {
+                  title: 'Description',
+                  dataIndex: 'description',
+                  width: 160,
+                  render: (text, record) => (
+                    <Input
+                      size="small"
+                      defaultValue={text || ''}
+                      onChange={e =>
+                        setFormulaEdits(prev => ({
+                          ...prev,
+                          [record.id]: { ...prev[record.id], description: e.target.value },
+                        }))
+                      }
+                    />
+                  ),
+                },
+              ]}
+            />
+          )}
+        </Spin>
       </Modal>
     </Layout>
   );

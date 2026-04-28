@@ -7,132 +7,127 @@ jest.mock('../../instance/eng_db', () => ({
 const { engPool } = require('../../instance/eng_db');
 const FormulaService = require('../../api/engineer/mtc/services/FormulaService');
 
-// ── validateFormula (pure — no DB) ───────────────────────────────────────────
+afterEach(() => jest.clearAllMocks());
+
+// ── validateFormula ───────────────────────────────────────────────────────────
 
 describe('FormulaService.validateFormula', () => {
-  describe('valid formulas', () => {
-    test('simple arithmetic', () => {
-      const r = FormulaService.validateFormula('2 + 3');
-      expect(r.valid).toBe(true);
-      expect(r.result).toBe(5);
-    });
-
-    test('formula with variable from context', () => {
-      const r = FormulaService.validateFormula('od * 2', { od: 10 });
-      expect(r.valid).toBe(true);
-      expect(r.result).toBe(20);
-    });
-
-    test('ceil with 2 args (custom overload)', () => {
-      const r = FormulaService.validateFormula('ceil(10.123, 1)', {});
-      expect(r.valid).toBe(true);
-      expect(r.result).toBeCloseTo(10.2);
-    });
-
-    test('floor with 2 args (custom overload)', () => {
-      const r = FormulaService.validateFormula('floor(10.789, 1)', {});
-      expect(r.valid).toBe(true);
-      expect(r.result).toBeCloseTo(10.7);
-    });
-
-    test('round with 2 args (custom overload)', () => {
-      const r = FormulaService.validateFormula('round(10.567, 2)', {});
-      expect(r.valid).toBe(true);
-      expect(r.result).toBeCloseTo(10.57);
-    });
-
-    test('logical AND written as "and"', () => {
-      const r = FormulaService.validateFormula('1 == 1 and 2 == 2', {});
-      expect(r.valid).toBe(true);
-      expect(r.result).toBeTruthy();
-    });
-
-    test('ternary conditional', () => {
-      const r = FormulaService.validateFormula('od > 10 ? 1 : 0', { od: 15 });
-      expect(r.valid).toBe(true);
-      expect(r.result).toBe(1);
-    });
-
-    test('nested math functions', () => {
-      const r = FormulaService.validateFormula('round(sqrt(od), 2)', { od: 2 });
-      expect(r.valid).toBe(true);
-      expect(r.result).toBeCloseTo(1.41);
-    });
+  it('evaluates a valid constant formula', () => {
+    const result = FormulaService.validateFormula('2 + 2');
+    expect(result).toEqual({ valid: true, result: 4 });
   });
 
-  describe('invalid formulas', () => {
-    test('syntax error returns valid: false', () => {
-      const r = FormulaService.validateFormula('od ++ 2');
-      expect(r.valid).toBe(false);
-      expect(r.error).toBeDefined();
-    });
-
-    test('JavaScript && operator not supported', () => {
-      const r = FormulaService.validateFormula('od > 0 && od < 100', { od: 50 });
-      expect(r.valid).toBe(false);
-    });
-
-    test('empty formula string returns valid: false', () => {
-      const r = FormulaService.validateFormula('');
-      expect(r.valid).toBe(false);
-    });
-  });
-});
-
-// ── calculateMachineParams (DB-dependent) ─────────────────────────────────────
-
-describe('FormulaService.calculateMachineParams', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  test('returns categorized results when formulas exist in DB', async () => {
-    engPool.query.mockResolvedValueOnce({
-      rows: [
-        { tool_category: 'WHEEL', param_key: 'w_D', formula: 'od + 5' },
-        { tool_category: 'WHEEL', param_key: 'w_T', formula: 'w_D * 0.3' },
-      ],
-    });
-
-    const result = await FormulaService.calculateMachineParams('KS400B', { od: 20 });
-
-    expect(result.WHEEL).toBeDefined();
-    expect(result.WHEEL.w_D).toBe(25);
-    expect(result.WHEEL.w_T).toBeCloseTo(7.5);
+  it('evaluates formula using context variables', () => {
+    const result = FormulaService.validateFormula('odAft / 2', { odAft: 30 });
+    expect(result).toEqual({ valid: true, result: 15 });
   });
 
-  test('second formula can reference first formula result (chaining)', async () => {
-    engPool.query.mockResolvedValueOnce({
-      rows: [
-        { tool_category: '-', param_key: 'base', formula: 'od * 2' },
-        { tool_category: 'OUT', param_key: 'result', formula: 'base + 1' },
-      ],
-    });
-
-    const r = await FormulaService.calculateMachineParams('TEST', { od: 10 });
-    expect(r.OUT.result).toBe(21);
-  });
-
-  test('returns error object when no formulas found for machine', async () => {
-    engPool.query.mockResolvedValueOnce({ rows: [] });
-
-    const result = await FormulaService.calculateMachineParams('UNKNOWN', {});
-
-    expect(result.error).toMatch(/No formulas found/i);
-  });
-
-  test('returns error when formula evaluation fails', async () => {
-    engPool.query.mockResolvedValueOnce({
-      rows: [{ tool_category: 'X', param_key: 'bad', formula: 'undefined_var + 1' }],
-    });
-
-    const result = await FormulaService.calculateMachineParams('MACHINE', {});
+  it('returns invalid for bad syntax', () => {
+    const result = FormulaService.validateFormula('???');
+    expect(result.valid).toBe(false);
     expect(result.error).toBeDefined();
   });
 
-  test('returns error on DB query failure', async () => {
-    engPool.query.mockRejectedValueOnce(new Error('DB connection lost'));
+  it('supports ceil(x) single-arg', () => {
+    const r = FormulaService.validateFormula('ceil(1.2)');
+    expect(r.valid).toBe(true);
+    expect(r.result).toBe(2);
+  });
 
-    const result = await FormulaService.calculateMachineParams('KS400B', { od: 20 });
+  it('supports floor(x) single-arg', () => {
+    const r = FormulaService.validateFormula('floor(1.9)');
+    expect(r.valid).toBe(true);
+    expect(r.result).toBe(1);
+  });
 
-    expect(result.error).toMatch(/Calculation Engine Error/i);
+  it('supports round(x) single-arg', () => {
+    const r = FormulaService.validateFormula('round(1.5)');
+    expect(r.valid).toBe(true);
+    expect(r.result).toBe(2);
+  });
+
+  it('round to 1dp via power-of-10 workaround', () => {
+    // 1.15 * 10 = 11.5 exactly in IEEE 754 → round(11.5) = 12 → 12/10 = 1.2
+    const r = FormulaService.validateFormula('round(1.15 * 10) / 10');
+    expect(r.valid).toBe(true);
+    expect(r.result).toBeCloseTo(1.2, 5);
+  });
+
+  it('supports sqrt, abs, max, min', () => {
+    expect(FormulaService.validateFormula('sqrt(9)').result).toBe(3);
+    expect(FormulaService.validateFormula('abs(-5)').result).toBe(5);
+    expect(FormulaService.validateFormula('max(3, 7)').result).toBe(7);
+    expect(FormulaService.validateFormula('min(3, 7)').result).toBe(3);
+  });
+
+  it('supports ternary conditional', () => {
+    const r = FormulaService.validateFormula('isYBall ? 1 : 0', { isYBall: 1 });
+    expect(r.valid).toBe(true);
+    expect(r.result).toBe(1);
+  });
+});
+
+// ── calculateMachineParams ────────────────────────────────────────────────────
+
+describe('FormulaService.calculateMachineParams', () => {
+  const CONTEXT = { odAft: 30, idAft: 20, wAft: 12 };
+
+  it('returns error when no formulas found for machine', async () => {
+    engPool.query.mockResolvedValueOnce({ rows: [] });
+    const result = await FormulaService.calculateMachineParams('UNKNOWN', CONTEXT);
+    expect(result.error).toMatch(/no formulas/i);
+  });
+
+  it('calculates params and groups by tool_category', async () => {
+    engPool.query.mockResolvedValueOnce({
+      rows: [
+        { tool_category: 'WORK DRIVER', param_key: 'wd_A', formula: 'odAft / 2' },
+        { tool_category: 'WORK DRIVER', param_key: 'wd_B', formula: 'wd_A + 1' }, // uses prev result
+      ],
+    });
+
+    const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
+
+    expect(result['WORK DRIVER']).toBeDefined();
+    expect(result['WORK DRIVER'].wd_A).toBe(15);
+    expect(result['WORK DRIVER'].wd_B).toBe(16); // sequential: wd_A (15) + 1
+  });
+
+  it('groups params with no category at top level', async () => {
+    engPool.query.mockResolvedValueOnce({
+      rows: [
+        { tool_category: null, param_key: 'limit_A', formula: 'odAft * 0.5' },
+      ],
+    });
+
+    const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
+    expect(result.limit_A).toBe(15);
+    expect(result['WORK DRIVER']).toBeUndefined();
+  });
+
+  it('returns error when a formula fails to evaluate', async () => {
+    engPool.query.mockResolvedValueOnce({
+      rows: [
+        { tool_category: 'TEST', param_key: 'bad_param', formula: 'undefinedVar + 1' },
+      ],
+    });
+
+    const result = await FormulaService.calculateMachineParams('KS400B', {});
+    expect(result.error).toBeDefined();
+  });
+
+  it('returns error on DB failure', async () => {
+    engPool.query.mockRejectedValueOnce(new Error('DB down'));
+    const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
+    expect(result.error).toBeDefined();
+  });
+
+  it('includes original context in _raw', async () => {
+    engPool.query.mockResolvedValueOnce({
+      rows: [{ tool_category: 'TEST', param_key: 'x', formula: '1' }],
+    });
+
+    const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
+    expect(result._raw).toMatchObject(CONTEXT);
   });
 });

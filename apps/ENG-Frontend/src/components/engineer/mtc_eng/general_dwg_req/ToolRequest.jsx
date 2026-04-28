@@ -345,12 +345,12 @@ const ToolRequestContent = () => {
     ];
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
+        <Layout style={{ height: '100%' }}>
             <MenuTemplate type="MTC" defaultSelectedKeys="3" defaultOpenKeys="sub1" />
             <Layout style={{ backgroundColor: theme.colors.background }}>
                 <Spin tip="Loading" size="large" spinning={loading}>
                     <Content style={{
-                        height: '90vh',
+                        height: 'calc(100vh - 64px)',
                         overflowY: 'auto',
                         padding: '15px'
                     }}>

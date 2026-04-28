@@ -195,6 +195,7 @@ app.use('/api/tooling-select', verifyToken, toolingSelectController);
 
 const formulaController = require('./api/engineer/mtc/controllers/formulaController');
 const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
+app.get('/api/mtc/formulas', verifyToken, formulaController.getMachineNames);
 app.get('/api/mtc/formulas/:machineName', verifyToken, formulaController.getFormulasByMachine);
 app.post('/api/mtc/formulas', verifyToken, mtcIsAdmin, formulaController.createFormula);
 app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.testFormula);

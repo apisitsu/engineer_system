@@ -178,7 +178,7 @@ function InspectionReport() {
   }, [fetchToolingInspectData]);
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100%' }}>
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"tooling-inspect"} />
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <Spin tip="Loading" size="large" spinning={loading}>

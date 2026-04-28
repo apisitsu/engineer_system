@@ -145,7 +145,7 @@ const SdsV2Page = () => {
     <Layout style={{ height: '100%' }}>
       <MenuTemplate type="MTC" />
       <Layout style={{ backgroundColor: theme.colors.background }}>
-        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto' }}>
+        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
           <Spin spinning={loading}>
             <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
               Setup Data Sheet v2

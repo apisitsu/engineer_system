@@ -46,9 +46,9 @@ const FormulaManagerContent = () => {
   const [form] = Form.useForm();
 
   useEffect(() => {
-    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { } })
+    axios.get(server.MTC_FORMULAS)
       .then(r => {
-        const names = r.data.filter(m => m.is_active && m.machine_type_name).map(m => m.machine_type_name);
+        const names = r.data.machines || [];
         setMachines(names);
         if (names.length > 0) setSelectedMachine(prev => prev || names[0]);
       })
@@ -73,6 +73,7 @@ const FormulaManagerContent = () => {
 
   const columns = [
     { title: 'Category', dataIndex: 'tool_category', key: 'tool_category', render: (cat) => <span>{cat || '-'}</span> },
+    { title: 'Machine', dataIndex: 'tooling_type', key: 'tooling_type', render: (v) => v ? <Tag color="cyan">{v}</Tag> : <Text type="secondary">-</Text> },
     { title: 'Parameter', dataIndex: 'param_key', key: 'param_key', render: (key) => <Text strong>{key || ''}</Text> },
     { title: 'Formula', dataIndex: 'formula', key: 'formula', render: (f) => <Text code>{f || ''}</Text> },
     { title: 'Description', dataIndex: 'description', key: 'description' },
@@ -143,7 +144,7 @@ const FormulaManagerContent = () => {
         await axios.put(`${server.MTC_FORMULAS}/${editingRecord.id}`, values);
         message.success('Updated');
       } else {
-        await axios.post(server.MTC_FORMULAS, { ...values, machine_type: selectedMachine });
+        await axios.post(server.MTC_FORMULAS, { ...values, machine_name: selectedMachine });
         message.success('Created');
       }
       setIsModalOpen(false);
@@ -157,8 +158,8 @@ const FormulaManagerContent = () => {
   };
 
   return (
-    <Layout style={{ padding: '24px', backgroundColor: theme.colors.background }}>
-      <Content>
+    <Layout style={{ backgroundColor: theme.colors.background }}>
+      <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <Title level={4}><CalculatorOutlined /> MTC Formula Manager</Title>
           <Space>
@@ -216,6 +217,9 @@ const FormulaManagerContent = () => {
         <Form form={form} layout="vertical">
           <Form.Item name="tool_category" label="Category">
             <Input placeholder="e.g. GRINDING" />
+          </Form.Item>
+          <Form.Item name="tooling_type" label="Machine" extra="สำหรับ CALC_COMMON: ระบุ physical machine ที่ formula นี้ใช้ เช่น KS-B22G, KS-B80, TSG-300ZNC, TSG300W">
+            <Input placeholder="e.g. KS-B22G, KS-B80, TSG-300ZNC, TSG300W" />
           </Form.Item>
           <Form.Item name="param_key" label="Parameter" rules={[{ required: true }]}>
             <Input placeholder="e.g. speed_rpm" />

@@ -7,12 +7,54 @@ const { engPool } = require('../../../../instance/eng_db');
  * Controller for managing MTC Calculation Formulas
  */
 
-// GET /api/mtc/formulas/:machineName
+// GET /api/mtc/formulas  (distinct machine names)
+const getMachineNames = async (req, res) => {
+  try {
+    const result = await engPool.query(
+      `SELECT DISTINCT machine_name FROM mtc_formulas WHERE is_active = true ORDER BY machine_name ASC`
+    );
+    res.json({ success: true, machines: result.rows.map(r => r.machine_name) });
+  } catch (err) {
+    console.error('getMachineNames error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
+// GET /api/mtc/formulas/:machineName?tooling_type=
 const getFormulasByMachine = async (req, res) => {
   try {
     const { machineName } = req.params;
-    const query = `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true ORDER BY id ASC`;
-    const result = await engPool.query(query, [machineName]);
+    const { tooling_type } = req.query;
+    const needle = tooling_type?.trim();
+
+    let result;
+    if (needle) {
+      // COALESCE: prefer tooling_type column, fall back to tool_category (case-insensitive)
+      // If tooling_type column does not exist yet (migration pending), catch 42703 and use tool_category
+      try {
+        result = await engPool.query(
+          `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true
+           AND COALESCE(tooling_type, tool_category) ILIKE $2 ORDER BY id ASC`,
+          [machineName, needle]
+        );
+      } catch (colErr) {
+        if (colErr.code === '42703') {
+          result = await engPool.query(
+            `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true
+             AND tool_category ILIKE $2 ORDER BY id ASC`,
+            [machineName, needle]
+          );
+        } else {
+          throw colErr;
+        }
+      }
+    } else {
+      result = await engPool.query(
+        `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true ORDER BY id ASC`,
+        [machineName]
+      );
+    }
+
     res.json({ success: true, formulas: result.rows });
   } catch (err) {
     console.error('getFormulasByMachine error:', err.message);
@@ -23,23 +65,23 @@ const getFormulasByMachine = async (req, res) => {
 // POST /api/mtc/formulas
 const createFormula = async (req, res) => {
   try {
-    const { machine_name, tool_category, param_key, formula, description } = req.body;
-    
-    // 1. Validate syntax
+    const { machine_name, tool_category, tooling_type, param_key, formula, description } = req.body;
+
     const validation = FormulaService.validateFormula(formula);
     if (!validation.valid) {
       return res.status(400).json({ success: false, error: 'Invalid formula syntax: ' + validation.error });
     }
 
-    // 2. Save to DB
     const query = `
-      INSERT INTO mtc_formulas (machine_name, tool_category, param_key, formula, description)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (machine_name, tool_category, param_key) 
-      DO UPDATE SET formula = EXCLUDED.formula, description = EXCLUDED.description, updated_at = NOW()
+      INSERT INTO mtc_formulas (machine_name, tool_category, tooling_type, param_key, formula, description)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (machine_name, tool_category, param_key)
+      DO UPDATE SET formula = EXCLUDED.formula, description = EXCLUDED.description,
+                    tooling_type = EXCLUDED.tooling_type, updated_at = NOW()
       RETURNING *
     `;
-    const result = await engPool.query(query, [machine_name, tool_category, param_key, formula, description]);
+    const ttVal = tooling_type || tool_category || null;
+    const result = await engPool.query(query, [machine_name, tool_category, ttVal, param_key, formula, description]);
     res.json({ success: true, formula: result.rows[0] });
   } catch (err) {
     console.error('createFormula error:', err.message);
@@ -62,7 +104,7 @@ const testFormula = async (req, res) => {
 const updateFormula = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tool_category, param_key, formula, description } = req.body;
+    const { tool_category, tooling_type, param_key, formula, description } = req.body;
 
     if (formula) {
       const validation = FormulaService.validateFormula(formula);
@@ -74,14 +116,15 @@ const updateFormula = async (req, res) => {
     const query = `
       UPDATE mtc_formulas
       SET tool_category = COALESCE($1, tool_category),
-          param_key     = COALESCE($2, param_key),
-          formula       = COALESCE($3, formula),
-          description   = COALESCE($4, description),
+          tooling_type  = COALESCE($2, tooling_type),
+          param_key     = COALESCE($3, param_key),
+          formula       = COALESCE($4, formula),
+          description   = COALESCE($5, description),
           updated_at    = NOW()
-      WHERE id = $5
+      WHERE id = $6
       RETURNING *
     `;
-    const result = await engPool.query(query, [tool_category, param_key, formula, description, id]);
+    const result = await engPool.query(query, [tool_category, tooling_type, param_key, formula, description, id]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Formula not found' });
     res.json({ success: true, formula: result.rows[0] });
   } catch (err) {
@@ -102,6 +145,7 @@ const deleteFormula = async (req, res) => {
 };
 
 module.exports = {
+  getMachineNames,
   getFormulasByMachine,
   createFormula,
   updateFormula,

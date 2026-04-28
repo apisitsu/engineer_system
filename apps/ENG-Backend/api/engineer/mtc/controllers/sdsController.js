@@ -166,7 +166,7 @@ router.get('/pdf', async (req, res) => {
     const tempExcelPath = path.join('./output', `__temp_${Date.now()}_${cacheKey}.xlsx`);
     await workbook.xlsx.writeFile(tempExcelPath);
 
-    const SOFFICE = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+    const SOFFICE = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
     execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempExcelPath, '--outdir', CACHE_DIR], (error) => {
       safeUnlink(tempExcelPath);
       if (error) {

@@ -14,7 +14,7 @@ const router = express.Router();
 
 const TEMPLATE_PATH = path.join(__dirname, '../templates/sds_template.xlsx');
 const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
-const SOFFICE       = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+const SOFFICE       = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
