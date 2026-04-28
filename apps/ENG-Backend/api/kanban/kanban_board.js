@@ -13,10 +13,19 @@ const {
 
 // ─── HELPERS ───────────────────────────────────────────────────────
 
+// Whitelist of allowed table/column pairs for position queries
+const ALLOWED_TABLES = {
+    kb_board: { table: 'kb_board', filterCol: 'project_id' },
+    kb_list:  { table: 'kb_list',  filterCol: 'board_id' },
+    kb_label: { table: 'kb_label', filterCol: 'board_id' },
+};
+
 // Compute next float position (insert at end)
-const getNextPosition = async (table, filterCol, filterVal) => {
+const getNextPosition = async (tableKey, _filterCol, filterVal) => {
+    const entry = ALLOWED_TABLES[tableKey];
+    if (!entry) throw new Error(`getNextPosition: unknown table key "${tableKey}"`);
     const r = await engPool.query(
-        `SELECT COALESCE(MAX(position), 0) + 65536 AS next_pos FROM ${table} WHERE ${filterCol} = $1`,
+        `SELECT COALESCE(MAX(position), 0) + 65536 AS next_pos FROM ${entry.table} WHERE ${entry.filterCol} = $1`,
         [filterVal]
     );
     return r.rows[0].next_pos;

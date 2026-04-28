@@ -8,6 +8,13 @@ const { engPool } = require('../../instance/eng_db');
 // Import the proper helper from kanban_card
 const { canEditCard, canViewCard } = require('./kanban_card');
 
+/** Auth guard: returns null + sends 401 if unauthenticated */
+const getAuthUser = (req, res) => {
+    const uCode = req.user?.empno;
+    if (!uCode) { res.status(401).json({ error: 'Authentication required' }); return null; }
+    return uCode;
+};
+
 // GET /api/kanban/cards/:cardId/issues
 const getCardIssues = async (req, res) => {
     const { cardId } = req.params;
@@ -29,7 +36,7 @@ const getCardIssues = async (req, res) => {
 // POST /api/kanban/cards/:cardId/issues
 const createCardIssue = async (req, res) => {
     const { cardId } = req.params;
-    const uCode = req.user?.empno || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { problem_detail, solution_detail } = req.body;
 
     if (!problem_detail) {
@@ -63,7 +70,7 @@ const createCardIssue = async (req, res) => {
 // PATCH /api/kanban/issues/:issueId
 const updateCardIssue = async (req, res) => {
     const { issueId } = req.params;
-    const uCode = req.user?.empno || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { problem_detail, solution_detail } = req.body;
 
     try {
@@ -102,7 +109,7 @@ const updateCardIssue = async (req, res) => {
 // DELETE /api/kanban/issues/:issueId
 const deleteCardIssue = async (req, res) => {
     const { issueId } = req.params;
-    const uCode = req.user?.empno || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     try {
         const { rows: [issue] } = await engPool.query('SELECT * FROM kb_card_issue WHERE id = $1', [issueId]);

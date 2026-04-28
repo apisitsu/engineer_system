@@ -13,6 +13,21 @@ const {
 } = require('./kanban_acl');
 const { insertToPositionables } = require('./positionHelper');
 
+// ─── AUTH HELPER ──────────────────────────────────────────────────
+/**
+ * Extracts the authenticated user code from the request.
+ * Returns null and sends a 401 response if authentication is missing.
+ * Usage:  const uCode = getAuthUser(req, res); if (!uCode) return;
+ */
+const getAuthUser = (req, res) => {
+    const uCode = req.user?.empno;
+    if (!uCode) {
+        res.status(401).json({ error: 'Authentication required' });
+        return null;
+    }
+    return uCode;
+};
+
 // ─── HELPERS ───────────────────────────────────────────────────────
 
 const logAction = async (client, cardId, uCode, actionType, actionData = {}, boardId = null) => {
@@ -160,7 +175,7 @@ const GetCards = async (req, res) => {
 // POST /api/kanban/lists/:listId/cards
 const CreateCard = async (req, res) => {
     const { listId } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [list] } = await engPool.query(
         'SELECT l.*, b.project_id FROM kb_list l JOIN kb_board b ON b.id=l.board_id WHERE l.id=$1', [listId]
@@ -203,7 +218,7 @@ const CreateCard = async (req, res) => {
 // GET /api/kanban/cards/:id
 const GetCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     try {
         const { rows: [card] } = await engPool.query(`
             SELECT c.*,
@@ -259,7 +274,7 @@ const GetCard = async (req, res) => {
 // PATCH /api/kanban/cards/:id
 const UpdateCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
@@ -407,7 +422,7 @@ const UpdateCard = async (req, res) => {
 
         if (updateFields.length === 0) {
             await client.query('ROLLBACK');
-            client.release();
+            // Let the finally block handle client.release() — no early release
             return res.json({ data: card });
         }
 
@@ -445,7 +460,7 @@ const UpdateCard = async (req, res) => {
 // DELETE /api/kanban/cards/:id
 const DeleteCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
     if (!(await canManageCard(req, id)))
@@ -470,7 +485,7 @@ const DeleteCard = async (req, res) => {
 // POST /api/kanban/cards/:id/duplicate
 const DuplicateCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const client = await engPool.connect();
     try {
@@ -563,7 +578,7 @@ const DuplicateCard = async (req, res) => {
 // POST /api/kanban/cards/:id/memberships
 const AddCardMember = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`AddCardMember called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { target_u_code } = req.body;
     if (!target_u_code) return res.status(400).json({ error: 'target_u_code is required' });
@@ -645,7 +660,7 @@ const AddCardMember = async (req, res) => {
 // DELETE /api/kanban/cards/:id/memberships
 const RemoveCardMember = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`RemoveCardMember called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { target_u_code } = req.body;
     if (!target_u_code) return res.status(400).json({ error: 'target_u_code is required' });
@@ -686,7 +701,7 @@ const RemoveCardMember = async (req, res) => {
 const AddCardLabel = async (req, res) => {
     const { id } = req.params;
     const { label_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
@@ -695,8 +710,11 @@ const AddCardLabel = async (req, res) => {
 
     if (label) {
         const client = await engPool.connect();
-        await logAction(client, id, uCode, 'label_added', { label_id, name: label.name });
-        client.release();
+        try {
+            await logAction(client, id, uCode, 'label_added', { label_id, name: label.name });
+        } finally {
+            client.release();
+        }
     }
 
     res.json({ message: 'Label added' });
@@ -705,7 +723,7 @@ const AddCardLabel = async (req, res) => {
 // DELETE /api/kanban/cards/:id/labels/:labelId
 const RemoveCardLabel = async (req, res) => {
     const { id, labelId } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
@@ -714,8 +732,11 @@ const RemoveCardLabel = async (req, res) => {
 
     if (label) {
         const client = await engPool.connect();
-        await logAction(client, id, uCode, 'label_removed', { label_id: labelId, name: label.name });
-        client.release();
+        try {
+            await logAction(client, id, uCode, 'label_removed', { label_id: labelId, name: label.name });
+        } finally {
+            client.release();
+        }
     }
 
     res.json({ message: 'Label removed' });
@@ -747,7 +768,7 @@ const GetTaskLists = async (req, res) => {
 const CreateTaskList = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     if (!name) return res.status(400).json({ error: 'name is required' });
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
     const posRes = await engPool.query('SELECT COALESCE(MAX(position),0)+65536 AS pos FROM kb_task_list WHERE card_id=$1', [id]);
@@ -798,7 +819,7 @@ const UpdateTaskList = async (req, res) => {
 const CreateTask = async (req, res) => {
     const { id } = req.params;
     const { name, assignee_u_code, linked_card_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!name) return res.status(400).json({ error: 'name is required' });
 
@@ -826,7 +847,7 @@ const CreateTask = async (req, res) => {
 const UpdateTask = async (req, res) => {
     const { id } = req.params;
     const { name, is_completed, position, assignee_u_code, linked_card_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [oldTask] } = await engPool.query(`
         SELECT t.*, tl.card_id 
@@ -897,7 +918,7 @@ const DeleteTaskList = async (req, res) => {
 // POST /api/kanban/cards/:id/comments
 const AddComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`AddComment called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
@@ -991,7 +1012,7 @@ const AddComment = async (req, res) => {
 // PATCH /api/kanban/comments/:id
 const UpdateComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { content } = req.body;
     const { rows: [comment] } = await engPool.query('SELECT * FROM kb_comment WHERE id=$1', [id]);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
@@ -1017,7 +1038,7 @@ const UpdateComment = async (req, res) => {
 // DELETE /api/kanban/comments/:id
 const DeleteComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [comment] } = await engPool.query('SELECT * FROM kb_comment WHERE id=$1', [id]);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
@@ -1054,7 +1075,7 @@ const DeleteComment = async (req, res) => {
 // POST /api/kanban/cards/:id/attachments  (uses express-fileupload or link)
 const UploadAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
@@ -1092,8 +1113,11 @@ const UploadAttachment = async (req, res) => {
     `, [id, uCode, file.name, relPath, file.size, file.mimetype, isImage]);
 
     const client = await engPool.connect();
-    await logAction(client, id, uCode, 'attachment_added', { file_name: file.name });
-    client.release();
+    try {
+        await logAction(client, id, uCode, 'attachment_added', { file_name: file.name });
+    } finally {
+        client.release();
+    }
 
     res.status(201).json({ data: rows[0] });
 };
@@ -1101,7 +1125,7 @@ const UploadAttachment = async (req, res) => {
 // DELETE /api/kanban/attachments/:id
 const DeleteAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [att] } = await engPool.query('SELECT * FROM kb_attachment WHERE id=$1', [id]);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
 
@@ -1120,7 +1144,7 @@ const DeleteAttachment = async (req, res) => {
 // PATCH /api/kanban/attachments/:id
 const UpdateAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { name, url } = req.body;
 
     const { rows: [att] } = await engPool.query('SELECT * FROM kb_attachment WHERE id=$1', [id]);
@@ -1159,7 +1183,7 @@ const SetCoverImage = async (req, res) => {
 
 // GET /api/kanban/notifications
 const GetNotifications = async (req, res) => {
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows } = await engPool.query(`
         SELECT n.*, ka.action_type, ka.action_data
         FROM kb_notification n
@@ -1172,7 +1196,7 @@ const GetNotifications = async (req, res) => {
 
 // PATCH /api/kanban/notifications/read-all
 const MarkAllRead = async (req, res) => {
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     await engPool.query('UPDATE kb_notification SET is_read=TRUE WHERE recipient_u_code=$1', [uCode]);
     res.json({ message: 'All notifications marked as read' });
 };
@@ -1180,7 +1204,7 @@ const MarkAllRead = async (req, res) => {
 // PATCH /api/kanban/notifications/:id/read
 const MarkRead = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows } = await engPool.query(
         'UPDATE kb_notification SET is_read=TRUE WHERE id=$1 AND recipient_u_code=$2 RETURNING *',
         [id, uCode]
@@ -1194,7 +1218,7 @@ const MarkRead = async (req, res) => {
 // PATCH /api/kanban/cards/:id/reorder
 const ReorderCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { list_id, position } = req.body;
 
     if (!list_id || position === undefined) {

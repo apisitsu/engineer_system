@@ -5,6 +5,7 @@ import { RiInputField } from 'react-icons/ri';
 import { MdOutlineDashboard, MdOutlineLabel } from 'react-icons/md';
 import { IoSettingsOutline, IoArchiveOutline } from 'react-icons/io5';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
@@ -105,7 +106,31 @@ const BoardSettingsDrawer = () => {
         boardTabOrders, setBoardTabOrder,
         cfGroupPreferences, setCfGroupPreference,
         boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            isBoardSettingsOpen: state.isBoardSettingsOpen, closeBoardSettings: state.closeBoardSettings,
+            activeProject: state.activeProject, activeBoard: state.activeBoard, boards: state.boards,
+            fetchBoards: state.fetchBoards, setActiveBoard: state.setActiveBoard,
+            updateBoard: state.updateBoard, deleteBoard: state.deleteBoard,
+            labels: state.labels, createLabel: state.createLabel, updateLabel: state.updateLabel, deleteLabel: state.deleteLabel,
+            toggleBoardSubscription: state.toggleBoardSubscription,
+            baseCustomFieldGroups: state.baseCustomFieldGroups, fetchBaseCustomFieldGroups: state.fetchBaseCustomFieldGroups,
+            createBaseCustomFieldGroup: state.createBaseCustomFieldGroup, deleteBaseCustomFieldGroup: state.deleteBaseCustomFieldGroup,
+            customFields: state.customFields, fetchCustomFields: state.fetchCustomFields,
+            createCustomField: state.createCustomField, deleteCustomField: state.deleteCustomField,
+            webhooks: state.webhooks, fetchWebhooks: state.fetchWebhooks,
+            createWebhook: state.createWebhook, updateWebhook: state.updateWebhook, deleteWebhook: state.deleteWebhook,
+            notificationServices: state.notificationServices, fetchNotificationServices: state.fetchNotificationServices,
+            createNotificationService: state.createNotificationService, deleteNotificationService: state.deleteNotificationService,
+            users: state.users, archivedCards: state.archivedCards, fetchArchivedCards: state.fetchArchivedCards,
+            moveCard: state.moveCard, lists: state.lists,
+            kanbanTabOrder: state.kanbanTabOrder, setKanbanTabOrder: state.setKanbanTabOrder,
+            boardTabOrders: state.boardTabOrders, setBoardTabOrder: state.setBoardTabOrder,
+            cfGroupPreferences: state.cfGroupPreferences, setCfGroupPreference: state.setCfGroupPreference,
+            boardGroups: state.boardGroups, activeBoardGroup: state.activeBoardGroup,
+            setBoardGroups: state.setBoardGroups, setActiveBoardGroup: state.setActiveBoardGroup
+        }))
+    );
 
     const projectBoardGroups = activeProject ? (boardGroups?.[activeProject.id] || []) : [];
 
@@ -144,7 +169,7 @@ const BoardSettingsDrawer = () => {
     // Auth Store for Permission Checks
     const [memberSearch, setMemberSearch] = useState('');
     const { user, empNo } = useAuthStore();
-    const currentUserCode = empNo || user?.u_code || 'LE131';
+    const currentUserCode = empNo || user?.u_code || '';
 
     // Evaluate permissions
     const {
@@ -1094,6 +1119,20 @@ const BoardSettingsDrawer = () => {
 
         const orderedBoards = useMemo(() => {
             if (!boards || !activeProject) return [];
+            
+            const currentBoardGroupId = activeBoardGroup?.[activeProject.id];
+            const projectBoardGroups = boardGroups?.[activeProject.id] || [];
+            const group = projectBoardGroups.find(g => g.id === currentBoardGroupId);
+            
+            if (group && group.boardIds) {
+                const groupBoards = [];
+                group.boardIds.forEach(id => {
+                    const b = boards.find(board => board.id === id);
+                    if (b) groupBoards.push(b);
+                });
+                return groupBoards;
+            }
+
             const order = boardTabOrders?.[activeProject.id];
             if (!order || order.length === 0) return boards;
             return [...boards].sort((a, b) => {
@@ -1104,7 +1143,7 @@ const BoardSettingsDrawer = () => {
                 if (idxB === -1) return -1;
                 return idxA - idxB;
             });
-        }, [boards, boardTabOrders, activeProject]);
+        }, [boards, boardTabOrders, activeProject, activeBoardGroup, boardGroups]);
 
         const boardIds = orderedBoards.map(b => `board-${b.id}`);
 
@@ -1132,8 +1171,24 @@ const BoardSettingsDrawer = () => {
                 if (String(active.id).startsWith('board-')) {
                     const oldIndex = boardIds.indexOf(active.id);
                     const newIndex = boardIds.indexOf(over.id);
-                    const newOrder = arrayMove(boardIds, oldIndex, newIndex).map(id => parseInt(id.replace('board-', '')));
-                    setBoardTabOrder(activeProject.id, newOrder);
+                    const newArray = arrayMove(boardIds, oldIndex, newIndex).map(id => parseInt(id.replace('board-', '')));
+                    
+                    const currentBoardGroupId = activeBoardGroup?.[activeProject.id];
+                    if (currentBoardGroupId) {
+                        const projectBoardGroups = boardGroups?.[activeProject.id] || [];
+                        const groupIndex = projectBoardGroups.findIndex(g => g.id === currentBoardGroupId);
+                        if (groupIndex >= 0) {
+                            const newGroups = [...projectBoardGroups];
+                            newGroups[groupIndex] = { ...newGroups[groupIndex], boardIds: newArray };
+                            setBoardGroups(activeProject.id, newGroups);
+                        }
+                    } else {
+                        const currentFullOrder = boardTabOrders?.[activeProject?.id] || boards.map(b => b.id);
+                        const filteredIds = orderedBoards.map(b => b.id);
+                        const allBoardsDict = currentFullOrder.filter(id => !filteredIds.includes(id));
+                        const newFullOrder = [...newArray, ...allBoardsDict];
+                        setBoardTabOrder(activeProject.id, newFullOrder);
+                    }
                 } else if (String(active.id).startsWith('cfgroup-')) {
                     const oldIndex = cfGroupIds.indexOf(active.id);
                     const newIndex = cfGroupIds.indexOf(over.id);

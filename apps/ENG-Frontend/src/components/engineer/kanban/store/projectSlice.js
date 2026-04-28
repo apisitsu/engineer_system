@@ -62,6 +62,9 @@ export const createProjectSlice = (set, get) => ({
             return;
         }
 
+        // Disconnect WebSocket before clearing state to prevent stale event injection
+        get().disconnectWebSocket();
+
         set({
             activeProject: project,
             activeBoard: null,

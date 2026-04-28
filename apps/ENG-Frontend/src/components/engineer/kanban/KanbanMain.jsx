@@ -1,33 +1,27 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Typography, Spin, Alert, Select, Button, Space, Input, Avatar, Tooltip, Badge, Dropdown, Form, Tag, Popover, Tabs, Row, Col, Progress, Statistic, Layout, Switch, Menu, Checkbox, Modal } from 'antd';
 import { useKanbanStore } from './store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../theme';
 import { useAuthStore } from '../../../stores/authStore';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
     IoSettingsOutline, IoSearchOutline, IoAddOutline, IoGridOutline,
-    IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoStarOutline, IoStar,
-    IoCalendarOutline, IoLayersOutline, IoTimeOutline, IoHelpCircleOutline,
-    IoRocketOutline, IoFlashOutline, IoHeartOutline, IoDiamondOutline,
-    IoLeafOutline, IoBookOutline, IoCodeSlashOutline, IoColorPaletteOutline,
-    IoGameControllerOutline, IoMusicalNotesOutline, IoPlanetOutline, IoShieldCheckmarkOutline,
-    IoTrophyOutline, IoBulbOutline, IoConstructOutline, IoCubeOutline,
-    IoFlagOutline, IoGlobeOutline, IoHammerOutline, IoPizzaOutline,
-    IoPulseOutline, IoSchoolOutline, IoTerminalOutline, IoThunderstormOutline,
-    IoWaterOutline, IoAirplaneOutline, IoBicycleOutline, IoCafeOutline,
-    IoFitnessOutline, IoHomeOutline, IoLockClosedOutline
+    IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoTimeOutline, IoHelpCircleOutline,
+    IoLockClosedOutline
 } from 'react-icons/io5';
 import { useKanbanPermissions } from './hooks/useKanbanPermissions';
-import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdPersonAddAlt1, MdOutlineAssessment } from 'react-icons/md';
-import { BsKanban, BsThreeDots, BsGrid3X3Gap, BsList } from 'react-icons/bs';
-import { FiPlus, FiMoreVertical, FiEdit2, FiTrash2, FiSearch, FiMessageSquare, FiPaperclip, FiFilter } from 'react-icons/fi';
-import { AiOutlineCheck, AiOutlineClose, AiOutlineEdit, AiOutlineStar, AiFillStar } from 'react-icons/ai';
+import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
+import { BsKanban } from 'react-icons/bs';
+import { FiPlus, FiEdit2, FiFilter } from 'react-icons/fi';
+import { AiOutlineCheck, AiOutlineClose } from 'react-icons/ai';
 import { RiKanbanView } from 'react-icons/ri';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { GRADIENTS, PROJECT_ICONS, getProjectIcon } from './constants/kanbanConstants';
 
 // Extracted Tab Components
 import DashboardTab from './Tabs/DashboardTab';
@@ -36,6 +30,7 @@ import ReportsTab from './Tabs/ReportsTab';
 import WorkloadTab from './Tabs/WorkloadTab';
 
 import BoardView from './Board/BoardView';
+import SortableBoardTab from './Board/SortableBoardTab';
 import CardDetailDrawer from './CardDetail/CardDetailDrawer';
 import ProjectSettingsDrawer from './Settings/ProjectSettingsDrawer';
 import BoardSettingsDrawer from './Settings/BoardSettingsDrawer';
@@ -48,62 +43,6 @@ dayjs.extend(relativeTime);
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
-// ─── Gradient colors for project cards ────────────────────────────
-const GRADIENTS = [
-    'linear-gradient(135deg,#6366f1,#8b5cf6)',
-    'linear-gradient(135deg,#0ea5e9,#3b82f6)',
-    'linear-gradient(135deg,#10b981,#059669)',
-    'linear-gradient(135deg,#f59e0b,#ef4444)',
-    'linear-gradient(135deg,#ec4899,#f43f5e)',
-    'linear-gradient(135deg,#14b8a6,#06b6d4)',
-    'linear-gradient(135deg,#8b5cf6,#ec4899)',
-    'linear-gradient(135deg,#f97316,#fb923c)',
-];
-
-// ─── Selectable project icons ─────────────────────────────────────
-const PROJECT_ICONS = [
-    { key: 'rocket', icon: IoRocketOutline, label: 'Rocket' },
-    { key: 'flash', icon: IoFlashOutline, label: 'Flash' },
-    { key: 'heart', icon: IoHeartOutline, label: 'Heart' },
-    { key: 'diamond', icon: IoDiamondOutline, label: 'Diamond' },
-    { key: 'leaf', icon: IoLeafOutline, label: 'Leaf' },
-    { key: 'book', icon: IoBookOutline, label: 'Book' },
-    { key: 'code', icon: IoCodeSlashOutline, label: 'Code' },
-    { key: 'palette', icon: IoColorPaletteOutline, label: 'Palette' },
-    { key: 'game', icon: IoGameControllerOutline, label: 'Game' },
-    { key: 'music', icon: IoMusicalNotesOutline, label: 'Music' },
-    { key: 'planet', icon: IoPlanetOutline, label: 'Planet' },
-    { key: 'shield', icon: IoShieldCheckmarkOutline, label: 'Shield' },
-    { key: 'trophy', icon: IoTrophyOutline, label: 'Trophy' },
-    { key: 'bulb', icon: IoBulbOutline, label: 'Bulb' },
-    { key: 'construct', icon: IoConstructOutline, label: 'Tools' },
-    { key: 'cube', icon: IoCubeOutline, label: 'Cube' },
-    { key: 'flag', icon: IoFlagOutline, label: 'Flag' },
-    { key: 'globe', icon: IoGlobeOutline, label: 'Globe' },
-    { key: 'hammer', icon: IoHammerOutline, label: 'Hammer' },
-    { key: 'pizza', icon: IoPizzaOutline, label: 'Pizza' },
-    { key: 'pulse', icon: IoPulseOutline, label: 'Pulse' },
-    { key: 'school', icon: IoSchoolOutline, label: 'School' },
-    { key: 'terminal', icon: IoTerminalOutline, label: 'Terminal' },
-    { key: 'storm', icon: IoThunderstormOutline, label: 'Storm' },
-    { key: 'water', icon: IoWaterOutline, label: 'Water' },
-    { key: 'airplane', icon: IoAirplaneOutline, label: 'Airplane' },
-    { key: 'bicycle', icon: IoBicycleOutline, label: 'Bicycle' },
-    { key: 'cafe', icon: IoCafeOutline, label: 'Cafe' },
-    { key: 'fitness', icon: IoFitnessOutline, label: 'Fitness' },
-    { key: 'home', icon: IoHomeOutline, label: 'Home' },
-    { key: 'kanban', icon: BsKanban, label: 'Kanban' },
-    { key: 'layers', icon: IoLayersOutline, label: 'Layers' },
-    { key: 'settings', icon: IoSettingsOutline, label: 'Settings' },
-    { key: 'star', icon: IoStarOutline, label: 'Star' },
-    { key: 'time', icon: IoTimeOutline, label: 'Time' },
-    { key: 'calendar', icon: IoCalendarOutline, label: 'Calendar' },
-];
-
-const getProjectIcon = (iconKey) => {
-    const found = PROJECT_ICONS.find(i => i.key === iconKey);
-    return found ? found.icon : null;
-};
 
 // ─── Helper Components for Project Creation ────────────────────────
 const GradientPicker = ({ value, onChange, theme }) => (
@@ -153,7 +92,14 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     const {
         projects, fetchProjects, isLoading, openProjectSettings,
         createProject, toggleFavorite, kanbanTabOrder
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            projects: state.projects, fetchProjects: state.fetchProjects,
+            isLoading: state.isLoading, openProjectSettings: state.openProjectSettings,
+            createProject: state.createProject, toggleFavorite: state.toggleFavorite,
+            kanbanTabOrder: state.kanbanTabOrder
+        }))
+    );
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showUserGuide, setShowUserGuide] = useState(false);
@@ -431,7 +377,23 @@ const BoardToolbar = ({ theme, activeProject }) => {
         notifications, unreadNotificationCount, fetchNotifications, markAllNotificationsRead, markNotificationRead, openCardDetail,
         projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager,
         users, fetchUsers
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            activeBoard: state.activeBoard, activeBoardMembers: state.activeBoardMembers,
+            labels: state.labels, searchQuery: state.searchQuery,
+            filterMembers: state.filterMembers, filterLabels: state.filterLabels,
+            setSearchQuery: state.setSearchQuery, toggleFilterMember: state.toggleFilterMember,
+            toggleFilterLabel: state.toggleFilterLabel, viewMode: state.viewMode,
+            setViewMode: state.setViewMode, clearFilters: state.clearFilters,
+            openBoardSettings: state.openBoardSettings,
+            notifications: state.notifications, unreadNotificationCount: state.unreadNotificationCount,
+            fetchNotifications: state.fetchNotifications, markAllNotificationsRead: state.markAllNotificationsRead,
+            markNotificationRead: state.markNotificationRead, openCardDetail: state.openCardDetail,
+            projectManagers: state.projectManagers, fetchProjectManagers: state.fetchProjectManagers,
+            addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
+            users: state.users, fetchUsers: state.fetchUsers
+        }))
+    );
 
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -851,6 +813,31 @@ const BoardToolbar = ({ theme, activeProject }) => {
     );
 };
 
+// ─── Modal Checkbox List Item ───────────────────────────────────────
+const SortableModalBoardItem = ({ id, board, isChecked, onChange, theme }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 12px', border: `1px solid ${theme.colors.border}`,
+        borderRadius: theme.borderRadius.sm, background: theme.colors.surface,
+        marginBottom: 8,
+        zIndex: isDragging ? 1 : 0, position: isDragging ? 'relative' : 'static',
+    };
+    return (
+        <div ref={setNodeRef} style={style}>
+            <div {...attributes} {...listeners} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+                <MdDragIndicator size={18} color={theme.colors.textTertiary} />
+            </div>
+            <Checkbox checked={isChecked} onChange={(e) => onChange(e.target.checked)}>
+                {board.name}
+            </Checkbox>
+        </div>
+    );
+};
+
 // ─── Main Kanban Component ─────────────────────────────────────────
 const KanbanMain = () => {
     const { theme } = useTheme();
@@ -864,8 +851,28 @@ const KanbanMain = () => {
         lists, openProjectSettings, openBoardSettings,
         connectWebSocket, disconnectWebSocket, viewMode, boardTabOrders,
         boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup, setBoardTabOrder,
-        fetchUserPreferences
-    } = useKanbanStore();
+        resetBoardTabOrder, fetchUserPreferences,
+        projectManagers, users, addProjectManager, removeProjectManager, fetchProjectManagers, fetchUsers
+    } = useKanbanStore(
+        useShallow(state => ({
+            projects: state.projects, activeProject: state.activeProject,
+            boards: state.boards, activeBoard: state.activeBoard,
+            isLoading: state.isLoading, error: state.error,
+            fetchProjects: state.fetchProjects, setActiveProject: state.setActiveProject,
+            fetchBoards: state.fetchBoards, setActiveBoard: state.setActiveBoard,
+            lists: state.lists, openProjectSettings: state.openProjectSettings,
+            openBoardSettings: state.openBoardSettings,
+            connectWebSocket: state.connectWebSocket, disconnectWebSocket: state.disconnectWebSocket,
+            viewMode: state.viewMode, boardTabOrders: state.boardTabOrders,
+            boardGroups: state.boardGroups, activeBoardGroup: state.activeBoardGroup,
+            setBoardGroups: state.setBoardGroups, setActiveBoardGroup: state.setActiveBoardGroup,
+            setBoardTabOrder: state.setBoardTabOrder, resetBoardTabOrder: state.resetBoardTabOrder,
+            fetchUserPreferences: state.fetchUserPreferences,
+            projectManagers: state.projectManagers, users: state.users,
+            addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
+            fetchProjectManagers: state.fetchProjectManagers, fetchUsers: state.fetchUsers
+        }))
+    );
 
     const orderedBoards = useMemo(() => {
         if (!boards || !activeProject) return [];
@@ -886,11 +893,19 @@ const KanbanMain = () => {
     const currentBoardGroupId = activeProject ? activeBoardGroup?.[activeProject.id] : null;
 
     const filteredOrderedBoards = useMemo(() => {
+        if (!boards || !activeProject) return [];
         if (!currentBoardGroupId) return orderedBoards;
+
         const group = projectBoardGroups.find(g => g.id === currentBoardGroupId);
-        if (!group) return orderedBoards;
-        return orderedBoards.filter(b => group.boardIds.includes(b.id));
-    }, [orderedBoards, currentBoardGroupId, projectBoardGroups]);
+        if (!group || !group.boardIds) return orderedBoards;
+
+        const groupBoards = [];
+        group.boardIds.forEach(id => {
+            const b = boards.find(board => board.id === id);
+            if (b) groupBoards.push(b);
+        });
+        return groupBoards;
+    }, [boards, orderedBoards, currentBoardGroupId, projectBoardGroups, activeProject]);
 
     // ─── Drag and Drop Setup for Board Tabs ───
     const sensors = useSensors(
@@ -906,56 +921,31 @@ const KanbanMain = () => {
             const newIndex = filteredOrderedBoards.findIndex(b => b.id === over.id);
             const newArray = arrayMove(filteredOrderedBoards, oldIndex, newIndex);
 
-            // To preserve the order of hidden boards, we just get the current overall order
-            // and replace the filtered ones in their new relative positions.
-            const currentFullOrder = boardTabOrders?.[activeProject?.id] || boards.map(b => b.id);
-            const allBoardsDict = currentFullOrder.filter(id => !filteredOrderedBoards.find(b => b.id === id));
-
-            // Simple approach: just take the newly sorted visible boards, and append the hidden ones at the end
-            // This is safe because usually they just sort what they see.
-            const newFullOrder = [...newArray.map(b => b.id), ...allBoardsDict];
-            setBoardTabOrder(activeProject.id, newFullOrder);
+            if (currentBoardGroupId) {
+                const groupIndex = projectBoardGroups.findIndex(g => g.id === currentBoardGroupId);
+                if (groupIndex >= 0) {
+                    const newGroups = [...projectBoardGroups];
+                    newGroups[groupIndex] = { ...newGroups[groupIndex], boardIds: newArray.map(b => b.id) };
+                    setBoardGroups(activeProject.id, newGroups);
+                }
+            } else {
+                const currentFullOrder = boardTabOrders?.[activeProject?.id] || boards.map(b => b.id);
+                const allBoardsDict = currentFullOrder.filter(id => !filteredOrderedBoards.find(b => b.id === id));
+                const newFullOrder = [...newArray.map(b => b.id), ...allBoardsDict];
+                setBoardTabOrder(activeProject.id, newFullOrder);
+            }
         }
     };
 
-    const SortableBoardTab = ({ board, isActive, setActiveBoard, theme }) => {
-        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: board.id });
-        const style = {
-            transform: CSS.Transform.toString(transform),
-            transition,
-            opacity: isDragging ? 0.5 : 1,
-            zIndex: isDragging ? 10 : 1,
-            padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
-            cursor: 'grab',
-            borderBottom: isActive ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-            color: isActive ? theme.colors.primary : theme.colors.textSecondary,
-            fontWeight: isActive ? theme.typography.fontWeight.semibold : theme.typography.fontWeight.normal,
-            fontSize: theme.typography.fontSize.sm,
-            whiteSpace: 'nowrap',
-            display: 'flex', alignItems: 'center', gap: 6,
-        };
-        return (
-            <div
-                ref={setNodeRef}
-                style={style}
-                {...attributes}
-                {...listeners}
-                onClick={() => setActiveBoard(board)}
-                onMouseOver={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.primary; }}
-                onMouseOut={(e) => { if (!isActive) e.currentTarget.style.color = theme.colors.textSecondary; }}
-            >
-                <BsKanban size={14} />
-                {board.name}
-            </div>
-        );
-    };
+
 
     // Board Group Modal State
     const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [editingGroupId, setEditingGroupId] = useState(null);
     const [groupFormName, setGroupFormName] = useState('');
     const [groupFormBoards, setGroupFormBoards] = useState([]);
     const [groupFormAutoOpen, setGroupFormAutoOpen] = useState(false);
-    const [editingGroupId, setEditingGroupId] = useState(null);
+    const [modalBoardOrder, setModalBoardOrder] = useState([]);
 
     const handleOpenGroupModal = (group = null) => {
         if (group) {
@@ -963,11 +953,16 @@ const KanbanMain = () => {
             setGroupFormName(group.name);
             setGroupFormBoards(group.boardIds || []);
             setGroupFormAutoOpen(group.auto_open || false);
+
+            const groupBoardIds = group.boardIds || [];
+            const otherBoards = orderedBoards.filter(b => !groupBoardIds.includes(b.id)).map(b => b.id);
+            setModalBoardOrder([...groupBoardIds, ...otherBoards]);
         } else {
             setEditingGroupId(null);
             setGroupFormName('');
             setGroupFormBoards([]);
             setGroupFormAutoOpen(false);
+            setModalBoardOrder(orderedBoards.map(b => b.id));
         }
         setIsGroupModalOpen(true);
     };
@@ -980,16 +975,29 @@ const KanbanMain = () => {
             newGroups.forEach(g => g.auto_open = false);
         }
 
+        const finalBoardIds = modalBoardOrder.filter(id => groupFormBoards.includes(id));
+
         if (editingGroupId) {
             const idx = newGroups.findIndex(g => g.id === editingGroupId);
-            if (idx >= 0) newGroups[idx] = { ...newGroups[idx], name: groupFormName, boardIds: groupFormBoards, auto_open: groupFormAutoOpen };
+            if (idx >= 0) {
+                newGroups[idx] = { ...newGroups[idx], name: groupFormName, boardIds: finalBoardIds, auto_open: groupFormAutoOpen };
+            }
         } else {
             const newId = `bg-${Date.now()}`;
-            newGroups.push({ id: newId, name: groupFormName, boardIds: groupFormBoards, auto_open: groupFormAutoOpen });
+            newGroups.push({ id: newId, name: groupFormName, boardIds: finalBoardIds, auto_open: groupFormAutoOpen });
             setActiveBoardGroup(activeProject.id, newId);
         }
         setBoardGroups(activeProject.id, newGroups);
         setIsGroupModalOpen(false);
+    };
+
+    const handleDragEndGroupForm = (event) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        const oldIndex = modalBoardOrder.indexOf(active.id);
+        const newIndex = modalBoardOrder.indexOf(over.id);
+        const newArray = arrayMove(modalBoardOrder, oldIndex, newIndex);
+        setModalBoardOrder(newArray);
     };
 
     const handleDeleteGroup = (groupId) => {
@@ -1007,6 +1015,7 @@ const KanbanMain = () => {
     });
 
     const [isInitLoading, setIsInitLoading] = useState(true);
+    const [isGroupInitialized, setIsGroupInitialized] = useState(false);
     const initializedProjects = useRef(new Set());
 
     // Auto-select Board Group based on auto_open configuration when entering project
@@ -1017,21 +1026,20 @@ const KanbanMain = () => {
                 const autoGroup = projectBoardGroups.find(g => g.auto_open);
                 if (autoGroup) {
                     setActiveBoardGroup(activeProject.id, autoGroup.id);
-                } else {
-                    setActiveBoardGroup(activeProject.id, null);
                 }
             }
+            setIsGroupInitialized(true);
         }
     }, [isInitLoading, activeProject?.id, projectBoardGroups, setActiveBoardGroup]);
 
     // Auto-select first board in filtered list if current activeBoard is not in the list
     useEffect(() => {
-        if (!isInitLoading && filteredOrderedBoards.length > 0) {
+        if (!isInitLoading && isGroupInitialized && filteredOrderedBoards.length > 0) {
             if (!activeBoard || !filteredOrderedBoards.find(b => b.id === activeBoard.id)) {
                 setActiveBoard(filteredOrderedBoards[0]);
             }
         }
-    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading]);
+    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized]);
 
     // On mount: fetch all projects and user preferences
     useEffect(() => {
@@ -1061,12 +1069,24 @@ const KanbanMain = () => {
         }
     }, [projectIdParam, projects, activeProject, setActiveProject, isLoading]);
 
-    // WebSocket lifecycle
+    // WebSocket lifecycle — connect on board change, cleanup listeners on transition
     useEffect(() => {
         if (activeBoard?.id) { connectWebSocket(activeBoard.id, empNo); }
-        return () => { };
+        return () => {
+            // Clean up all event listeners from the previous board to prevent stale handler accumulation
+            const socket = useKanbanStore.getState().wsSocket;
+            if (socket) {
+                socket.off('cardUpdate');
+                socket.off('listUpdate');
+                socket.off('commentCreate');
+                socket.off('commentUpdate');
+                socket.off('commentDelete');
+                socket.off('notificationCreate');
+            }
+        };
     }, [activeBoard?.id, empNo, connectWebSocket]);
 
+    // Disconnect WebSocket fully only on component unmount
     useEffect(() => {
         return () => disconnectWebSocket();
     }, [disconnectWebSocket]);
@@ -1163,19 +1183,15 @@ const KanbanMain = () => {
                                     popupRender={() => (
                                         <div style={{ width: 300, padding: 16, background: theme.colors.surface, borderRadius: theme.borderRadius.lg, boxShadow: theme.shadows.lg }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                                <Typography.Text strong>Project Members ({useKanbanStore.getState().projectManagers.length})</Typography.Text>
+                                                <Typography.Text strong>Project Members ({projectManagers.length})</Typography.Text>
                                             </div>
                                             <Select
                                                 showSearch
                                                 placeholder="Add member to project..."
                                                 style={{ width: '100%', marginBottom: 12 }}
                                                 optionFilterProp="children"
-                                                onSearch={(val) => {
-                                                    // useKanbanStore exposes state directly here is tricky, we can use local state if needed
-                                                    // For now, let's keep search basic or omit it in the popover if we use the store's users
-                                                }}
                                                 onChange={(val) => {
-                                                    if (val) useKanbanStore.getState().addProjectManager(activeProject?.id, val);
+                                                    if (val) addProjectManager(activeProject?.id, val);
                                                 }}
                                                 value={null}
                                                 filterOption={(input, option) =>
@@ -1183,7 +1199,7 @@ const KanbanMain = () => {
                                                     (option?.value ?? '').toString().toLowerCase().includes(input.toLowerCase())
                                                 }
                                             >
-                                                {useKanbanStore.getState().users.map(u => (
+                                                {users.map(u => (
                                                     <Select.Option key={u.u_code} value={u.u_code}>
                                                         <Space>
                                                             {u.profile_img_b64 ? (
@@ -1203,8 +1219,8 @@ const KanbanMain = () => {
                                             </Select>
 
                                             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                                                {useKanbanStore.getState().projectManagers.map(mgr => {
-                                                    const u = useKanbanStore.getState().users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code };
+                                                {projectManagers.map(mgr => {
+                                                    const u = users.find(user => user.u_code?.toLowerCase() === mgr.u_code?.toLowerCase()) || { u_code: mgr.u_code };
                                                     return (
                                                         <div key={mgr.u_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${theme.colors.border}` }}>
                                                             <Space>
@@ -1221,7 +1237,7 @@ const KanbanMain = () => {
                                                                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>{u.u_code}</Typography.Text>
                                                                 </div>
                                                             </Space>
-                                                            <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => useKanbanStore.getState().removeProjectManager(activeProject?.id, mgr.u_code)} />
+                                                            <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => removeProjectManager(activeProject?.id, mgr.u_code)} />
                                                         </div>
                                                     )
                                                 })}
@@ -1424,30 +1440,37 @@ const KanbanMain = () => {
                         />
                     </div>
                     <div>
-                        <Typography.Text strong>Select Boards to include</Typography.Text>
+                        <Typography.Text strong>Select Boards to include (Drag to reorder)</Typography.Text>
                         <div style={{
                             marginTop: 8,
-                            maxHeight: 200,
+                            maxHeight: 250,
                             overflowY: 'auto',
                             border: `1px solid ${theme.colors.border}`,
                             borderRadius: theme.borderRadius.sm,
                             padding: 12,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 8
+                            background: theme.colors.background,
                         }}>
-                            {orderedBoards.map(b => (
-                                <Checkbox
-                                    key={b.id}
-                                    checked={groupFormBoards.includes(b.id)}
-                                    onChange={(e) => {
-                                        if (e.target.checked) setGroupFormBoards(prev => [...prev, b.id]);
-                                        else setGroupFormBoards(prev => prev.filter(id => id !== b.id));
-                                    }}
-                                >
-                                    {b.name}
-                                </Checkbox>
-                            ))}
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndGroupForm}>
+                                <SortableContext items={modalBoardOrder} strategy={verticalListSortingStrategy}>
+                                    {modalBoardOrder.map(id => {
+                                        const board = boards.find(b => b.id === id);
+                                        if (!board) return null;
+                                        return (
+                                            <SortableModalBoardItem
+                                                key={board.id}
+                                                id={board.id}
+                                                board={board}
+                                                isChecked={groupFormBoards.includes(board.id)}
+                                                onChange={(checked) => {
+                                                    if (checked) setGroupFormBoards(prev => [...prev, board.id]);
+                                                    else setGroupFormBoards(prev => prev.filter(bId => bId !== board.id));
+                                                }}
+                                                theme={theme}
+                                            />
+                                        );
+                                    })}
+                                </SortableContext>
+                            </DndContext>
                         </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.sm }}>

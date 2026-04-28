@@ -21,6 +21,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import KanbanList from './KanbanList';
 import KanbanCard from './KanbanCard';
 import { useTheme } from '../../../../theme';
@@ -58,7 +59,13 @@ const SortableList = ({ list }) => {
 
 // ─── List View Row — mirrors KanbanCard data resolution ───────────
 const ListViewCard = ({ card, theme }) => {
-    const { openCardDetail, labels: boardLabels, users } = useKanbanStore();
+    const { openCardDetail, labels: boardLabels, users } = useKanbanStore(
+        useShallow(state => ({
+            openCardDetail: state.openCardDetail,
+            labels: state.labels,
+            users: state.users,
+        }))
+    );
     const [hovered, setHovered] = useState(false);
     const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
 
@@ -435,7 +442,23 @@ const BoardView = () => {
         searchQuery, filterMembers, filterLabels,
         viewMode, createList, reorderList, reorderCard,
         activeProject, activeBoardMembers
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            activeBoard: state.activeBoard,
+            lists: state.lists,
+            cards: state.cards,
+            moveCard: state.moveCard,
+            searchQuery: state.searchQuery,
+            filterMembers: state.filterMembers,
+            filterLabels: state.filterLabels,
+            viewMode: state.viewMode,
+            createList: state.createList,
+            reorderList: state.reorderList,
+            reorderCard: state.reorderCard,
+            activeProject: state.activeProject,
+            activeBoardMembers: state.activeBoardMembers,
+        }))
+    );
     const { theme } = useTheme();
     const { empNo } = useAuthStore();
 

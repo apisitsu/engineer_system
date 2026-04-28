@@ -16,6 +16,7 @@ import { IoLockClosedOutline } from 'react-icons/io5';
 import { MdOutlineDashboard } from 'react-icons/md';
 import { BsKanban } from 'react-icons/bs';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
@@ -132,7 +133,22 @@ const ProjectSettingsDrawer = () => {
         userPreferences, fetchUserPreferences, updateUserPreferences,
         projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager,
         users
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            isProjectSettingsOpen: state.isProjectSettingsOpen,
+            closeProjectSettings: state.closeProjectSettings,
+            projectSettingsTargetId: state.projectSettingsTargetId,
+            fetchProjects: state.fetchProjects,
+            setActiveProject: state.setActiveProject,
+            updateProject: state.updateProject,
+            deleteProject: state.deleteProject,
+            userPreferences: state.userPreferences, fetchUserPreferences: state.fetchUserPreferences,
+            updateUserPreferences: state.updateUserPreferences,
+            projectManagers: state.projectManagers, fetchProjectManagers: state.fetchProjectManagers,
+            addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
+            users: state.users
+        }))
+    );
 
     const [form] = Form.useForm();
     const [isCreating, setIsCreating] = useState(false);

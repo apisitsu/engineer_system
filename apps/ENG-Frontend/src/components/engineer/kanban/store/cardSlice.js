@@ -39,6 +39,8 @@ export const createCardSlice = (set, get) => ({
             set((state) => ({
                 cards: { ...state.cards, [listId]: cardsData }
             }));
+            // F3-13: Rebuild index after bulk card replacement
+            get()._rebuildCardIndex();
         } catch (err) {
             console.error(`Failed to fetch cards for list ${listId}`, err);
         }
@@ -74,13 +76,11 @@ export const createCardSlice = (set, get) => ({
 
                 set(state => {
                     const newCards = { ...state.cards };
-                    for (const listId in newCards) {
-                        const idx = newCards[listId].findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            newCards[listId] = [...newCards[listId]];
-                            newCards[listId][idx] = { ...newCards[listId][idx], ...refreshedCard };
-                            break;
-                        }
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], ...refreshedCard };
                     }
                     return { activeCardDetail: refreshedCard, cards: newCards };
                 });
@@ -99,13 +99,11 @@ export const createCardSlice = (set, get) => ({
                 const updatedCard = res.data.data;
                 set(state => {
                     const newCards = { ...state.cards };
-                    for (const [listId, listCards] of Object.entries(newCards)) {
-                        const idx = listCards.findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            newCards[listId] = [...listCards];
-                            newCards[listId][idx] = { ...newCards[listId][idx], ...updatedCard };
-                            break;
-                        }
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], ...updatedCard };
                     }
                     return {
                         cards: newCards,
@@ -130,19 +128,20 @@ export const createCardSlice = (set, get) => ({
             if (res.data?.data) {
                 set(state => {
                     const newCards = { ...state.cards };
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
                     let movedCard = null;
-                    for (const [listId, listCards] of Object.entries(newCards)) {
-                        const idx = listCards.findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            movedCard = { ...listCards[idx], ...res.data.data };
-                            newCards[listId] = listCards.filter(c => c.id !== cardId);
-                            break;
-                        }
+                    if (loc) {
+                        movedCard = { ...newCards[loc.listId][loc.idx], ...res.data.data };
+                        newCards[loc.listId] = newCards[loc.listId].filter(c => c.id !== cardId);
                     }
                     if (movedCard) {
                         newCards[newListId] = [...(newCards[newListId] || []), movedCard];
                     }
-                    return { cards: newCards };
+                    // F3-13: Update index — old listId removed, new listId added
+                    const newIndex = new Map(state.cardIndex);
+                    newIndex.set(String(cardId), String(newListId));
+                    return { cards: newCards, cardIndex: newIndex };
                 });
                 get().checkAndAutoJoin('card', cardId);
                 return true;
@@ -179,15 +178,17 @@ export const createCardSlice = (set, get) => ({
             await axios.delete(`${server.KANBAN_CARDS}/${cardId}`);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const [listId, listCards] of Object.entries(newCards)) {
-                    const idx = listCards.findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        newCards[listId] = listCards.filter(c => c.id !== cardId);
-                        break;
-                    }
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    newCards[loc.listId] = newCards[loc.listId].filter(c => c.id !== cardId);
                 }
+                // F3-13: Remove from index
+                const newIndex = new Map(state.cardIndex);
+                newIndex.delete(String(cardId));
                 return {
                     cards: newCards,
+                    cardIndex: newIndex,
                     isCardDetailOpen: state.activeCardId === cardId ? false : state.isCardDetailOpen,
                     activeCardId: state.activeCardId === cardId ? null : state.activeCardId,
                     activeCardDetail: state.activeCardDetail?.id === cardId ? null : state.activeCardDetail
@@ -298,16 +299,13 @@ export const createCardSlice = (set, get) => ({
             get().fetchCardDetail(cardId);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const listId in newCards) {
-                    const idx = newCards[listId].findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        const ids = newCards[listId][idx].label_ids || [];
-                        if (!ids.includes(labelId) && !ids.includes(String(labelId))) {
-                            const updatedCard = { ...newCards[listId][idx], label_ids: [...ids, labelId] };
-                            newCards[listId] = [...newCards[listId]];
-                            newCards[listId][idx] = updatedCard;
-                        }
-                        break;
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    const ids = newCards[loc.listId][loc.idx].label_ids || [];
+                    if (!ids.includes(labelId) && !ids.includes(String(labelId))) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], label_ids: [...ids, labelId] };
                     }
                 }
                 return { cards: newCards };
@@ -327,18 +325,15 @@ export const createCardSlice = (set, get) => ({
             get().fetchCardDetail(cardId);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const listId in newCards) {
-                    const idx = newCards[listId].findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        const ids = newCards[listId][idx].label_ids || [];
-                        const updatedCard = {
-                            ...newCards[listId][idx],
-                            label_ids: ids.filter(id => id !== labelId && String(id) !== String(labelId))
-                        };
-                        newCards[listId] = [...newCards[listId]];
-                        newCards[listId][idx] = updatedCard;
-                        break;
-                    }
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    const ids = newCards[loc.listId][loc.idx].label_ids || [];
+                    newCards[loc.listId] = [...newCards[loc.listId]];
+                    newCards[loc.listId][loc.idx] = {
+                        ...newCards[loc.listId][loc.idx],
+                        label_ids: ids.filter(id => id !== labelId && String(id) !== String(labelId))
+                    };
                 }
                 return { cards: newCards };
             });
@@ -664,7 +659,11 @@ export const createCardSlice = (set, get) => ({
 
     fetchNotifications: async () => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo) {
+                console.warn('[Auth] No authenticated user — skipping notification fetch');
+                return [];
+            }
             const res = await axios.get(server.KANBAN_NOTIFICATIONS, {
                 params: { owner_u_code: empNo }
             });
@@ -680,7 +679,11 @@ export const createCardSlice = (set, get) => ({
 
     markAllNotificationsRead: async () => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo) {
+                console.warn('[Auth] No authenticated user — skipping mark-all-read');
+                return false;
+            }
             await axios.patch(`${server.KANBAN_NOTIFICATIONS}/read-all`, { owner_u_code: empNo });
             set(state => ({
                 notifications: state.notifications.map(n => ({ ...n, is_read: true })),
@@ -695,7 +698,11 @@ export const createCardSlice = (set, get) => ({
 
     markNotificationRead: async (id) => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo) {
+                console.warn('[Auth] No authenticated user — skipping mark-read');
+                return false;
+            }
             const res = await axios.patch(`${server.KANBAN_NOTIFICATIONS}/${id}/read`, { owner_u_code: empNo });
             if (res.data?.data) {
                 set(state => {
