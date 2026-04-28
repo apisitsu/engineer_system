@@ -454,7 +454,7 @@ export const createCardSlice = (set, get) => ({
         try {
             const res = await axios.post(`${server.KANBAN_TASK_LISTS}/${taskListId}/tasks`, { name });
             if (res.data?.data) {
-                if (cardId) get().fetchCardDetail(cardId);
+                if (cardId) await get().fetchCardDetail(cardId);
                 get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
@@ -469,7 +469,7 @@ export const createCardSlice = (set, get) => ({
         try {
             const res = await axios.patch(`${server.KANBAN_TASKS}/${taskId}`, data);
             if (res.data?.data) {
-                if (cardId) get().fetchCardDetail(cardId);
+                if (cardId) await get().fetchCardDetail(cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -482,7 +482,7 @@ export const createCardSlice = (set, get) => ({
     deleteTask: async (taskId, cardId) => {
         try {
             await axios.delete(`${server.KANBAN_TASKS}/${taskId}`);
-            if (cardId) get().fetchCardDetail(cardId);
+            if (cardId) await get().fetchCardDetail(cardId);
             return true;
         } catch (err) {
             console.error('Failed to delete task', err);
@@ -631,6 +631,9 @@ export const createCardSlice = (set, get) => ({
     upsertCustomFieldValue: async (cardId, data) => {
         try {
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/custom-field-values`, data);
+            if (res.data?.data) {
+                await get().fetchCardDetail(cardId);
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to upsert custom field value', err);

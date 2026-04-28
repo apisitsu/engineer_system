@@ -176,7 +176,13 @@ export const createBoardSlice = (set, get) => ({
             const payload = { target_u_code: uCode };
             if (role) payload.role = role;
             await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, payload);
-            get().fetchBoardMembers(boardId);
+            await get().fetchBoardMembers(boardId);
+            
+            // Check if user exists in global dictionary to avoid 25MB payload if not needed
+            if (!get().users.find(u => u.u_code === uCode)) {
+                await get().fetchUsers();
+            }
+
             get().checkAndAutoJoin('board', boardId);
         } catch (err) {
             console.error('Failed to add board member', err);
@@ -276,10 +282,34 @@ export const createBoardSlice = (set, get) => ({
         try {
             const res = await axios.patch(`${server.KANBAN_LABELS}/${labelId}`, data);
             if (res.data?.data) {
-                set(state => ({
-                    labels: state.labels.map(l => l.id === labelId ? { ...l, ...res.data.data } : l)
-                }));
-                return res.data.data;
+                const updatedLabel = res.data.data;
+                set(state => {
+                    const nextLabels = state.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l);
+                    
+                    let nextActiveDetail = state.activeCardDetail;
+                    if (nextActiveDetail && nextActiveDetail.labels) {
+                        nextActiveDetail = {
+                            ...nextActiveDetail,
+                            labels: nextActiveDetail.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l)
+                        };
+                    }
+
+                    const nextCards = { ...state.cards };
+                    for (const listId in nextCards) {
+                        nextCards[listId] = nextCards[listId].map(card => {
+                            if (card.labels && card.labels.some(l => l.id === labelId)) {
+                                return {
+                                    ...card,
+                                    labels: card.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l)
+                                };
+                            }
+                            return card;
+                        });
+                    }
+
+                    return { labels: nextLabels, activeCardDetail: nextActiveDetail, cards: nextCards };
+                });
+                return updatedLabel;
             }
         } catch (err) {
             console.error('Failed to update label', err);
@@ -291,9 +321,34 @@ export const createBoardSlice = (set, get) => ({
     deleteLabel: async (labelId) => {
         try {
             await axios.delete(`${server.KANBAN_LABELS}/${labelId}`);
-            set(state => ({
-                labels: state.labels.filter(l => l.id !== labelId)
-            }));
+            set(state => {
+                const nextLabels = state.labels.filter(l => l.id !== labelId);
+                
+                let nextActiveDetail = state.activeCardDetail;
+                if (nextActiveDetail && nextActiveDetail.labels) {
+                    nextActiveDetail = {
+                        ...nextActiveDetail,
+                        labels: nextActiveDetail.labels.filter(l => l.id !== labelId),
+                        label_ids: (nextActiveDetail.label_ids || []).filter(id => id !== labelId && String(id) !== String(labelId))
+                    };
+                }
+
+                const nextCards = { ...state.cards };
+                for (const listId in nextCards) {
+                    nextCards[listId] = nextCards[listId].map(card => {
+                        if (card.labels && card.labels.some(l => l.id === labelId)) {
+                            return {
+                                ...card,
+                                labels: card.labels.filter(l => l.id !== labelId),
+                                label_ids: (card.label_ids || []).filter(id => id !== labelId && String(id) !== String(labelId))
+                            };
+                        }
+                        return card;
+                    });
+                }
+
+                return { labels: nextLabels, activeCardDetail: nextActiveDetail, cards: nextCards };
+            });
             return true;
         } catch (err) {
             console.error('Failed to delete label', err);
@@ -511,7 +566,17 @@ export const createBoardSlice = (set, get) => ({
     updateCustomField: async (fieldId, data) => {
         try {
             const res = await axios.patch(`${server.KANBAN_CUSTOM_FIELDS}/${fieldId}`, data);
-            return res.data?.data;
+            if (res.data?.data) {
+                const updatedField = res.data.data;
+                set(state => {
+                    const nextFields = { ...state.customFields };
+                    for (const groupId in nextFields) {
+                        nextFields[groupId] = nextFields[groupId].map(f => f.id === fieldId ? { ...f, ...updatedField } : f);
+                    }
+                    return { customFields: nextFields };
+                });
+                return updatedField;
+            }
         } catch (err) {
             console.error('Failed to update custom field', err);
             Swal.fire('Error', 'ไม่สามารถแก้ไข custom field ได้', 'error');

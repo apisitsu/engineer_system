@@ -271,6 +271,8 @@ const GetUsers = async (req, res) => {
         const { rows } = await engPool.query(
             `SELECT u_code, u_name, u_nickname, profile_img_b64
              FROM m_user_profile
+             WHERE LOWER(u_code) NOT LIKE '%admin'
+               AND (LOWER(u_nickname) != 'admin' OR u_nickname IS NULL)
              ORDER BY u_name NULLS LAST`
         );
         res.json({ data: rows });
