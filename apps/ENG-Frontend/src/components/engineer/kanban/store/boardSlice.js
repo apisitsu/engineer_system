@@ -61,7 +61,8 @@ export const createBoardSlice = (set, get) => ({
             if (boards.length > 0) {
                 const currentActive = get().activeBoard;
                 if (!currentActive || !boards.find(b => b.id === currentActive.id)) {
-                    get().setActiveBoard(boards[0]);
+                    // Let KanbanMain handle auto-selection based on tab orders and board groups
+                    set({ activeBoard: null, activeBoardMembers: [], lists: [], cards: {}, cardIndex: new Map() });
                 } else {
                     get().fetchBoardMembers(currentActive.id);
                 }
