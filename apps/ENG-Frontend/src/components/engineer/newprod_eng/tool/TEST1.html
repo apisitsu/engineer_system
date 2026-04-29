@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รวมไฟล์ PDF</title>
+    <!-- โหลด Tailwind CSS สำหรับการจัดสไตล์ UI ที่เรียบง่ายและสวยงาม -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- โหลดไลบรารี pdf-lib สำหรับจัดการไฟล์ PDF บนเบราว์เซอร์ -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <!-- โหลด SortableJS สำหรับระบบลากเพื่อเรียงลำดับ -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        /* CSS เพิ่มเติมสำหรับการทำ Animation และการปรับแต่งเล็กน้อย */
+        .drop-zone {
+            transition: all 0.2s ease-in-out;
+        }
+        .drop-zone.dragover {
+            background-color: #eff6ff; /* blue-50 */
+            border-color: #3b82f6; /* blue-500 */
+        }
+        .file-item {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* ซ่อน Scrollbar แต่ยังเลื่อนได้ */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 md:p-8 font-sans text-slate-800">
+
+    <div id="main-container" class="max-w-2xl transition-all duration-300 w-full bg-white rounded-3xl shadow-lg p-6 md:p-10">
+        <!-- ส่วนหัว -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900 mb-2">รวมไฟล์ PDF</h1>
+            <p class="text-slate-500">ลากไฟล์มาวางและรวมเป็นไฟล์เดียวได้อย่างง่ายดาย ปลอดภัย 100%</p>
+        </div>
+
+        <!-- พื้นที่สำหรับลาก-วางไฟล์ -->
+        <div id="drop-zone" class="drop-zone border-2 border-dashed border-slate-300 rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer bg-slate-50 hover:bg-slate-100 group mb-6 relative">
+            <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" multiple accept=".pdf">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-slate-400 group-hover:text-blue-500 mb-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p class="text-lg font-medium text-slate-700">ลากไฟล์ PDF มาวางที่นี่</p>
+            <p class="text-sm text-slate-500 mt-1">หรือ คลิกเพื่อเลือกไฟล์</p>
+        </div>
+
+        <!-- รายการไฟล์ที่เลือก -->
+        <div id="file-list-container" class="hidden mb-6">
+            <div class="flex justify-between items-end mb-3">
+                <h3 class="font-semibold text-slate-800">ไฟล์ที่เลือก:</h3>
+                <span class="text-xs text-slate-500">ไฟล์จะถูกรวมตามลำดับนี้</span>
+            </div>
+            <ul id="file-list" class="max-h-60 overflow-y-auto no-scrollbar space-y-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                <!-- รายการไฟล์จะถูกเพิ่มที่นี่ผ่าน JavaScript -->
+            </ul>
+        </div>
+
+        <!-- ปุ่มรวมไฟล์ -->
+        <button id="merge-btn" disabled class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl shadow-sm transition-all flex justify-center items-center gap-2 text-lg">
+            <span>ดูตัวอย่าง & รวมไฟล์ PDF</span>
+            <svg id="loading-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </button>
+
+        <!-- พื้นที่แสดงผลลัพธ์และ Preview -->
+        <div id="result-container" class="hidden mt-6 flex flex-col items-center w-full">
+            <div class="flex items-center gap-2 text-green-600 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 class="text-xl font-bold text-green-800">รวมไฟล์สำเร็จ! ดูตัวอย่างด้านล่าง</h3>
+            </div>
+            
+            <!-- Iframe สำหรับพรีวิว PDF -->
+            <iframe id="pdf-preview" class="w-full h-[60vh] min-h-[400px] border-2 border-slate-200 rounded-xl mb-6 bg-slate-50" src=""></iframe>
+            
+            <div class="flex flex-col sm:flex-row gap-4 w-full">
+                <a id="download-link" href="#" class="flex-1 flex justify-center items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-xl shadow-sm transition-colors text-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ดาวน์โหลด PDF
+                </a>
+                <button id="reset-btn" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-4 px-6 rounded-xl shadow-sm transition-colors text-lg">
+                    ทำรายการใหม่ / แก้ไข
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // กำหนดตัวแปรสำหรับเก็บไฟล์และ Element ต่างๆ
+        let selectedFiles = [];
+        let sortableInstance = null; // เพิ่มตัวแปรสำหรับ Sortable
+        const mainContainer = document.getElementById('main-container');
+        const fileInput = document.getElementById('file-input');
+        const dropZone = document.getElementById('drop-zone');
+        const fileListContainer = document.getElementById('file-list-container');
+        const fileList = document.getElementById('file-list');
+        const mergeBtn = document.getElementById('merge-btn');
+        const resultContainer = document.getElementById('result-container');
+        const pdfPreview = document.getElementById('pdf-preview'); // Iframe สำหรับพรีวิว
+        const downloadLink = document.getElementById('download-link');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // ฟังก์ชันอัปเดต UI (ปุ่มและรายการไฟล์)
+        function updateUI() {
+            fileList.innerHTML = ''; // ล้างรายการเดิม
+            
+            if (selectedFiles.length > 0) {
+                fileListContainer.classList.remove('hidden');
+                mergeBtn.disabled = selectedFiles.length < 2; // ต้องมี 2 ไฟล์ขึ้นไปถึงจะรวมได้
+                if(selectedFiles.length < 2) {
+                    mergeBtn.title = "กรุณาเลือกไฟล์อย่างน้อย 2 ไฟล์";
+                } else {
+                    mergeBtn.title = "";
+                }
+                
+                selectedFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'file-item flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg shadow-sm group';
+                    li.dataset.index = index;
+                    
+                    // แปลงขนาดไฟล์ให้อ่านง่าย
+                    const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                    
+                    li.innerHTML = `
+                        <div class="flex items-center gap-3 overflow-hidden flex-1">
+                            <!-- ปุ่มจับลาก (Drag Handle) -->
+                            <div class="drag-handle cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-500 transition-colors" title="ลากเพื่อเปลี่ยนลำดับ">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+                                </svg>
+                            </div>
+                            <svg class="w-8 h-8 text-red-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-sm font-medium text-slate-700 truncate" title="${file.name}">${file.name}</span>
+                                <span class="text-xs text-slate-400">${fileSize} MB</span>
+                            </div>
+                        </div>
+                        <button onclick="removeFile(${index})" class="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors flex-shrink-0" title="ลบไฟล์">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    `;
+                    fileList.appendChild(li);
+                });
+
+                // เริ่มต้นระบบลากเพื่อเรียงลำดับด้วย SortableJS
+                if(sortableInstance) sortableInstance.destroy();
+                sortableInstance = new Sortable(fileList, {
+                    animation: 150,
+                    handle: '.drag-handle', // ให้จับลากได้เฉพาะตรงไอคอนจับ
+                    ghostClass: 'opacity-50', // ทำให้โปร่งใสเวลากำลังลาก
+                    onEnd: function (evt) {
+                        // อัปเดต Array selectedFiles เมื่อมีการเปลี่ยนตำแหน่งการลาก
+                        const movedItem = selectedFiles.splice(evt.oldIndex, 1)[0];
+                        selectedFiles.splice(evt.newIndex, 0, movedItem);
+                        updateUI(); // วาด UI ใหม่เพื่อให้ index ของปุ่มลบตรงกัน
+                    }
+                });
+
+            } else {
+                fileListContainer.classList.add('hidden');
+                mergeBtn.disabled = true;
+            }
+        }
+
+        // ฟังก์ชันลบไฟล์ออกจาก Array
+        window.removeFile = function(index) {
+            selectedFiles.splice(index, 1);
+            updateUI();
+            // รีเซ็ต input เผื่อผู้ใช้ต้องการอัปโหลดไฟล์เดิมซ้ำ
+            fileInput.value = '';
+        }
+
+        // จัดการเหตุการณ์ Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
+            if(files.length > 0) {
+                selectedFiles = [...selectedFiles, ...files];
+                updateUI();
+            } else {
+                alert('กรุณาเลือกไฟล์ PDF เท่านั้น');
+            }
+        });
+
+        // จัดการเมื่อเลือกไฟล์ผ่าน Input
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files).filter(file => file.type === 'application/pdf');
+            if(files.length > 0) {
+                selectedFiles = [...selectedFiles, ...files];
+                updateUI();
+            }
+        });
+
+        // ตรรกะการรวมไฟล์ PDF (ด้วย pdf-lib)
+        mergeBtn.addEventListener('click', async () => {
+            if (selectedFiles.length < 2) return;
+
+            try {
+                // เปลี่ยนสถานะปุ่มเป็นกำลังโหลด
+                mergeBtn.disabled = true;
+                mergeBtn.querySelector('span').textContent = 'กำลังรวมไฟล์...';
+                loadingSpinner.classList.remove('hidden');
+
+                // นำเข้า PDFDocument จากไลบรารี
+                const { PDFDocument } = PDFLib;
+                
+                // สร้างเอกสาร PDF ใหม่
+                const mergedPdf = await PDFDocument.create();
+
+                // วนลูปอ่านไฟล์ที่ถูกเลือกทั้งหมด
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    // อ่านไฟล์เป็น ArrayBuffer
+                    const arrayBuffer = await file.arrayBuffer();
+                    // โหลดไฟล์ PDF
+                    const pdf = await PDFDocument.load(arrayBuffer);
+                    // คัดลอกทุกหน้าจากไฟล์เดิม
+                    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    // นำหน้าที่คัดลอกมาใส่ในไฟล์ใหม่
+                    copiedPages.forEach((page) => mergedPdf.addPage(page));
+                }
+
+                // บันทึกไฟล์ที่รวมเสร็จแล้วเป็น Uint8Array
+                const mergedPdfBytes = await mergedPdf.save();
+
+                // สร้าง Blob เพื่อใช้ดาวน์โหลด
+                const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+
+                // แสดงผลลัพธ์ในปุ่มดาวน์โหลด
+                downloadLink.href = url;
+                downloadLink.download = `merged_${new Date().getTime()}.pdf`;
+                
+                // แสดง Preview ใน iframe
+                pdfPreview.src = url;
+
+                // ขยายขนาดกล่องให้กว้างขึ้นเพื่อแสดง Preview ให้ชัดเจน
+                mainContainer.classList.replace('max-w-2xl', 'max-w-4xl');
+                
+                dropZone.classList.add('hidden');
+                fileListContainer.classList.add('hidden');
+                mergeBtn.classList.add('hidden');
+                resultContainer.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("เกิดข้อผิดพลาดในการรวมไฟล์:", error);
+                alert("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง หรือตรวจสอบไฟล์ของคุณว่าไม่ได้ติดรหัสผ่าน");
+            } finally {
+                // คืนค่าสถานะปุ่มกลับ
+                mergeBtn.querySelector('span').textContent = 'รวมไฟล์ PDF';
+                loadingSpinner.classList.add('hidden');
+                mergeBtn.disabled = false;
+            }
+        });
+
+        // ปุ่ม Reset กลับสู่หน้าแรก
+        resetBtn.addEventListener('click', () => {
+            // ไม่ต้องเคลียร์ selectedFiles เพื่อให้ผู้ใช้จัดเรียงใหม่ได้หากยังไม่พอใจ
+            
+            // ปรับขนาดกล่องกลับไปเท่าเดิม
+            mainContainer.classList.replace('max-w-4xl', 'max-w-2xl');
+            
+            // สลับสถานะ UI กลับหน้าแก้ไข
+            resultContainer.classList.add('hidden');
+            dropZone.classList.remove('hidden');
+            mergeBtn.classList.remove('hidden');
+            
+            // ล้าง URL object ออกจาก Memory และ iframe
+            if(downloadLink.href) {
+                URL.revokeObjectURL(downloadLink.href);
+                downloadLink.href = '#';
+                pdfPreview.src = '';
+            }
+            
+            updateUI();
+        });
+
+    </script>
+</body>
+</html>
