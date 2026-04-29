@@ -202,6 +202,13 @@ app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.te
 app.put('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.updateFormula);
 app.delete('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.deleteFormula);
 
+const toolingFormulaController = require('./api/engineer/mtc/controllers/toolingFormulaController');
+app.get('/api/mtc/tooling-formula/machines', verifyToken, toolingFormulaController.getMachines);
+app.get('/api/mtc/tooling-formula/:machineName', verifyToken, toolingFormulaController.getFormulas);
+app.post('/api/mtc/tooling-formula', verifyToken, mtcIsAdmin, toolingFormulaController.create);
+app.put('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.update);
+app.delete('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.remove);
+
 const sdsController = require('./api/engineer/mtc/controllers/sdsController');
 app.use('/api/sds', sdsController);
 

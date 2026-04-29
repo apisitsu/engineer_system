@@ -59,6 +59,7 @@ export const server = {
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
   MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
   MTC_FORMULAS: `${apiUrl}api/mtc/formulas`,
+  MTC_TOOLING_FORMULA: `${apiUrl}api/mtc/tooling-formula`,
   MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
   MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
   MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,

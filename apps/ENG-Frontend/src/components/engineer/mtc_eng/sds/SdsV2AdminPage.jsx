@@ -41,7 +41,7 @@ const ParamsTab = ({ theme }) => {
     if (!cn.trim()) { message.warning('Enter C/N'); return; }
     setLoading(true);
     setSelectedMachine(null);
-        setFilteredMachineTypes([]);
+    setFilteredMachineTypes([]);
     setCnSearched(false);
     form.resetFields();
     try {
@@ -55,7 +55,7 @@ const ParamsTab = ({ theme }) => {
       setFilteredMachineTypes(filtered.length ? filtered : allMachineTypes);
       if (filtered.length === 1) {
         setSelectedMachine(filtered[0].machine_type_name);
-              }
+      }
       setCnSearched(true);
       if (!filtered.length) message.info('ไม่พบ machine type ที่ match — แสดงทั้งหมด');
     } catch (err) {
@@ -758,7 +758,7 @@ const MachineConfigTab = ({ theme }) => {
           <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
             <Col><Text strong>{selectedMachine}</Text></Col>
             <Col flex="auto" />
-            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>มีการแก้ไขที่ยังไม่ได้ Save</Text></Col>}
+            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
             <Col>
               <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
                 Save
@@ -941,7 +941,7 @@ const AuditTab = ({ theme }) => {
                 children: (
                   <>
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      รายการที่ยังไม่มีการลงทะเบียน Routing (Process Plan) ในระบบ LPB — จะไม่สามารถออก SDS ได้
+                      Incomplete Routing (Process Plan) from LPB — Can't generate SDS
                     </Text>
                     <Button
                       size="small"
@@ -949,7 +949,7 @@ const AuditTab = ({ theme }) => {
                       onClick={() => setShowNoPlan(v => !v)}
                       style={{ marginBottom: 12 }}
                     >
-                      {showNoPlan ? 'ซ่อนรายการ' : `แสดงรายการ (${filteredNoPlan.length} CN)`}
+                      {showNoPlan ? 'Hide List' : `Show List (${filteredNoPlan.length} CN)`}
                     </Button>
                     {showNoPlan && (
                       <Table
@@ -971,7 +971,7 @@ const AuditTab = ({ theme }) => {
                 children: (
                   <>
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      มี Process Plan แล้วแต่ยังไม่ได้ผูกรายการ Tooling (Process Code: 1011, 1012, 1021, 1022, 1041, 1042, 1061, 1062, 1101, 1102, 1181, 1182, 1241)
+                      Process Plan exists but missing Tooling
                     </Text>
                     <Button
                       size="small"
@@ -980,8 +980,8 @@ const AuditTab = ({ theme }) => {
                       style={{ marginBottom: 12 }}
                     >
                       {showMissingTooling
-                        ? 'ซ่อนรายการ'
-                        : `แสดงรายการ (${new Set(filteredMissingTooling.map(r => r.control_no)).size} CN, ${filteredMissingTooling.length} rows)`}
+                        ? 'Hide List'
+                        : `Show List (${new Set(filteredMissingTooling.map(r => r.control_no)).size} CN, ${filteredMissingTooling.length} rows)`}
                     </Button>
                     {showMissingTooling && (
                       <Table

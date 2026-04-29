@@ -18,7 +18,8 @@ import {
   SaveOutlined,
   CloseOutlined,
   EditOutlined,
-  PlusOutlined
+  PlusOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
@@ -133,7 +134,9 @@ const ToolingSelectPage = () => {
   const [formulaSaving, setFormulaSaving] = useState(false);
   const [formulaMachine, setFormulaMachine] = useState(null);
   const [formulaToolingName, setFormulaToolingName] = useState(null);
-  const [formulaCategoryFilter, setFormulaCategoryFilter] = useState(null);
+  const [isTfAddOpen, setIsTfAddOpen] = useState(false);
+  const [tfAddLoading, setTfAddLoading] = useState(false);
+  const [tfAddForm] = Form.useForm();
 
   // ── Add Tool state ───────────────────────────────────────────────────────
   const [isAddToolOpen, setIsAddToolOpen] = useState(false);
@@ -149,18 +152,17 @@ const ToolingSelectPage = () => {
   const [createTableLoading, setCreateTableLoading] = useState(false);
 
   const toolingTables = [
-    // formulaFilter = ค่า tooling_type ใน DB ที่ใช้แยก CALC_COMMON ตาม physical machine
-    // null = ไม่ต้อง filter เพิ่ม (machine_name ระบุครบแล้ว)
-    { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W'), formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG-300ZNC' },
-    { key: 'tsg300w',   label: 'TSG300W',    table: 'tooling_tsg300', mf: r => String(r.machine || '').toUpperCase().includes('W'),  formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG300W' },
-    { key: 'ksb22g',   label: 'KS-B22G',    table: 'tooling_ksb22g',  formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B22G' },
-    { key: 'ksb80',    label: 'KS-B80',     table: 'tooling_ksb80',   formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B80' },
-    { key: 'ks03a',    label: 'KS-03A',     table: 'tooling_ks03a',   formulaMachine: 'KS03A',   formulaFilter: null },
-    { key: 'ksb22rd',  label: 'KS-B22RD',   table: 'tooling_ks03a',   formulaMachine: 'KS03A',   formulaFilter: null },
-    { key: 'ks400b',   label: 'KS400B',     table: 'tooling_ks400b',  formulaMachine: 'KS400B',  formulaFilter: null },
-    { key: 'ks500rd',  label: 'KS500RD',    table: 'tooling_ks500rd', formulaMachine: 'KS500RD', formulaFilter: null },
-    { key: 'ks400b5',  label: 'KS400B5',    table: 'tooling_ks400b5', formulaMachine: 'KS400B5', formulaFilter: null },
-    { key: 'ks400b6',  label: 'KS400B6',    table: 'tooling_ks400b6', formulaMachine: 'KS400B6', formulaFilter: null },
+    // tfMachine = machine_name ใน tooling_formula table
+    { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W'), formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG-300ZNC', tfMachine: 'TSG-300ZNC' },
+    { key: 'tsg300w', label: 'TSG300W', table: 'tooling_tsg300', mf: r => String(r.machine || '').toUpperCase().includes('W'), formulaMachine: 'CALC_COMMON', formulaFilter: 'TSG300W', tfMachine: 'TSG300W' },
+    { key: 'ksb22g', label: 'KS-B22G', table: 'tooling_ksb22g', formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B22G', tfMachine: 'KS-B22G' },
+    { key: 'ksb80', label: 'KS-B80', table: 'tooling_ksb80', formulaMachine: 'CALC_COMMON', formulaFilter: 'KS-B80', tfMachine: 'KS-B80' },
+    { key: 'ks03a', label: 'KS-03A', table: 'tooling_ks03a', formulaMachine: 'KS03A', formulaFilter: null, tfMachine: 'KS-03A' },
+    { key: 'ksb22rd', label: 'KS-B22RD', table: 'tooling_ks03a', formulaMachine: 'KS03A', formulaFilter: null, tfMachine: 'KS-B22RD' },
+    { key: 'ks400b', label: 'KS400B', table: 'tooling_ks400b', formulaMachine: 'KS400B', formulaFilter: null, tfMachine: 'KS400B' },
+    { key: 'ks500rd', label: 'KS500RD', table: 'tooling_ks500rd', formulaMachine: 'KS500RD', formulaFilter: null, tfMachine: 'KS500RD' },
+    { key: 'ks400b5', label: 'KS400B5', table: 'tooling_ks400b5', formulaMachine: 'KS400B5', formulaFilter: null, tfMachine: 'KS-400B5' },
+    { key: 'ks400b6', label: 'KS400B6', table: 'tooling_ks400b6', formulaMachine: 'KS400B6', formulaFilter: null, tfMachine: 'KS400B6' },
   ];
   const invTableConfig = toolingTables.find(t => t.key === invKey);
 
@@ -322,21 +324,21 @@ const ToolingSelectPage = () => {
 
   const openFormulaSettings = async () => {
     const cfg = toolingTables.find(t => t.key === invKey);
-    if (!cfg?.formulaMachine) {
-      message.warning('ไม่พบ formula config สำหรับเครื่องนี้');
+    if (!cfg?.tfMachine || !invToolingName) {
+      message.warning('กรุณาเลือก Machine และ Tool Name ก่อน');
       return;
     }
     setFormulaEdits({});
     setFormulaAllData([]);
-    setFormulaCategoryFilter(null);
-    setFormulaMachine(cfg.formulaMachine);
-    setFormulaToolingName(cfg.formulaFilter || cfg.label);
+    setIsTfAddOpen(false);
+    setFormulaMachine(cfg.tfMachine);
+    setFormulaToolingName(invToolingName);
     setIsFormulaSettingOpen(true);
     setFormulaSettingLoading(true);
     try {
-      const params = {};
-      if (cfg.formulaFilter) params.tooling_type = cfg.formulaFilter;
-      const res = await axios.get(`${server.MTC_FORMULAS}/${cfg.formulaMachine}`, { params });
+      const res = await axios.get(`${server.MTC_TOOLING_FORMULA}/${cfg.tfMachine}`, {
+        params: { tooling_name: invToolingName },
+      });
       setFormulaAllData(res.data.formulas || []);
     } catch {
       message.error('Failed to load formula settings');
@@ -351,7 +353,7 @@ const ToolingSelectPage = () => {
     setFormulaSaving(true);
     try {
       await Promise.all(edits.map(([id, changes]) =>
-        axios.put(`${server.MTC_FORMULAS}/${id}`, changes)
+        axios.put(`${server.MTC_TOOLING_FORMULA}/${id}`, changes)
       ));
       message.success('Saved');
       setFormulaEdits({});
@@ -359,6 +361,39 @@ const ToolingSelectPage = () => {
       message.error(err.response?.data?.error || 'Save failed');
     } finally {
       setFormulaSaving(false);
+    }
+  };
+
+  const addToolingFormula = async () => {
+    const cfg = toolingTables.find(t => t.key === invKey);
+    if (!cfg) return;
+    try {
+      const vals = await tfAddForm.validateFields();
+      setTfAddLoading(true);
+      const res = await axios.post(server.MTC_TOOLING_FORMULA, {
+        machine_name: cfg.tfMachine,
+        tooling_name: invToolingName,
+        ...vals,
+      });
+      setFormulaAllData(prev => [...prev, res.data.formula]);
+      tfAddForm.resetFields();
+      setIsTfAddOpen(false);
+      message.success('Added');
+    } catch (err) {
+      if (err?.response) message.error(err.response.data?.error || 'Failed to add');
+    } finally {
+      setTfAddLoading(false);
+    }
+  };
+
+  const deleteToolingFormula = async (id) => {
+    try {
+      await axios.delete(`${server.MTC_TOOLING_FORMULA}/${id}`);
+      setFormulaAllData(prev => prev.filter(f => f.id !== id));
+      setFormulaEdits(prev => { const n = { ...prev }; delete n[id]; return n; });
+      message.success('Deleted');
+    } catch {
+      message.error('Delete failed');
     }
   };
 
@@ -385,7 +420,7 @@ const ToolingSelectPage = () => {
       const res = await axios.post(server.MTC_TOOLING_SELECT_SEARCH, { cnNumber: cn });
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'ไม่พบ C/N หรือเกิดข้อผิดพลาดในการดึงข้อมูล');
+      setError(err.response?.data?.error || 'Can not find C/N');
     } finally {
       setLoading(false);
     }
@@ -839,14 +874,18 @@ const ToolingSelectPage = () => {
           <Space>
             <SettingOutlined />
             <span>Formula Setting</span>
-            <Tag color="blue">{formulaToolingName || formulaMachine}</Tag>
+            <Tag color="blue">{formulaMachine}</Tag>
+            <Tag color="green">{formulaToolingName}</Tag>
           </Space>
         }
         open={isFormulaSettingOpen}
         onCancel={() => setIsFormulaSettingOpen(false)}
-        width={820}
+        width={940}
         destroyOnHidden
         footer={[
+          <Button key="add" icon={<PlusOutlined />} onClick={() => { setIsTfAddOpen(v => !v); tfAddForm.resetFields(); }}>
+            Add Formula
+          </Button>,
           <Button key="close" onClick={() => setIsFormulaSettingOpen(false)}>
             Close
           </Button>,
@@ -862,95 +901,151 @@ const ToolingSelectPage = () => {
           </Button>,
         ]}
       >
-        {(() => {
-          const categories = [...new Set(formulaAllData.map(f => f.tool_category).filter(Boolean))];
-          return (
-            <Space style={{ marginBottom: 12 }} wrap>
-              {categories.length > 0 && (
-                <>
-                  <Text type="secondary">Category:</Text>
-                  <Select
-                    value={formulaCategoryFilter}
-                    onChange={setFormulaCategoryFilter}
-                    allowClear
-                    placeholder="All"
-                    style={{ minWidth: 180 }}
-                    size="small"
-                  >
-                    {categories.map(cat => (
-                      <Select.Option key={cat} value={cat}>{cat}</Select.Option>
-                    ))}
-                  </Select>
-                </>
-              )}
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                {formulaAllData.length} formula{formulaAllData.length !== 1 ? 's' : ''}
-              </Text>
-            </Space>
-          );
-        })()}
+        {isTfAddOpen && (
+          <Card
+            size="small"
+            style={{ marginBottom: 12, background: '#fafafa', borderStyle: 'dashed' }}
+            title={<Text type="secondary" style={{ fontSize: 12 }}>New Formula — {formulaMachine} / {formulaToolingName}</Text>}
+          >
+            <Form form={tfAddForm} layout="inline" size="small">
+              <Form.Item name="parameter_name" label="Param" rules={[{ required: true, message: 'Required' }]}>
+                <Input placeholder="A, B, C..." style={{ width: 80 }} />
+              </Form.Item>
+              <Form.Item name="formula_type" label="Type" initialValue="expression">
+                <Select style={{ width: 110 }}>
+                  <Select.Option value="expression">expression</Select.Option>
+                  <Select.Option value="condition">condition</Select.Option>
+                  <Select.Option value="limit">limit</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="formula_value" label="Formula" rules={[{ required: true, message: 'Required' }]}>
+                <Input placeholder="e.g. part.odAft + 0.2" style={{ width: 240, fontFamily: 'monospace', fontSize: 12 }} />
+              </Form.Item>
+              <Form.Item name="rounding_rule" label="Round" initialValue="none">
+                <Select style={{ width: 80 }}>
+                  <Select.Option value="none">none</Select.Option>
+                  <Select.Option value="ceil">ceil</Select.Option>
+                  <Select.Option value="floor">floor</Select.Option>
+                  <Select.Option value="round">round</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="rounding_precision" label="Prec" initialValue={2}>
+                <InputNumber min={0} max={6} style={{ width: 60 }} />
+              </Form.Item>
+              <Form.Item name="remark" label="Remark">
+                <Input placeholder="optional" style={{ width: 140 }} />
+              </Form.Item>
+              <Form.Item>
+                <Button type="primary" icon={<SaveOutlined />} loading={tfAddLoading} onClick={addToolingFormula}>
+                  Add
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
+        )}
+
         <Spin spinning={formulaSettingLoading}>
           {!formulaSettingLoading && formulaAllData.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
               <SettingOutlined style={{ fontSize: 40, marginBottom: 12, display: 'block' }} />
-              ไม่พบ formula config สำหรับ <strong>{formulaMachine}</strong>
+              ไม่พบ formula config สำหรับ <strong>{formulaMachine}</strong> / <strong>{formulaToolingName}</strong>
             </div>
           ) : (
             <Table
-              dataSource={(formulaCategoryFilter
-                ? formulaAllData.filter(f => f.tool_category === formulaCategoryFilter)
-                : formulaAllData
-              ).map(r => ({ ...r, key: r.id }))}
+              dataSource={formulaAllData.map(r => ({ ...r, key: r.id }))}
               size="small"
               pagination={false}
               bordered
-              scroll={{ y: 460 }}
+              scroll={{ y: 420 }}
               columns={[
                 {
-                  title: 'Category',
-                  dataIndex: 'tool_category',
-                  width: 110,
-                  render: v => v ? <Tag>{v}</Tag> : <Text type="secondary">-</Text>,
-                },
-                {
-                  title: 'Parameter',
-                  dataIndex: 'param_key',
-                  width: 160,
+                  title: 'Param',
+                  dataIndex: 'parameter_name',
+                  width: 70,
                   render: v => <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>,
                 },
                 {
+                  title: 'Type',
+                  dataIndex: 'formula_type',
+                  width: 110,
+                  render: (v, record) => (
+                    <Select
+                      size="small"
+                      style={{ width: 100 }}
+                      value={formulaEdits[record.id]?.formula_type ?? v}
+                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_type: val } }))}
+                    >
+                      <Select.Option value="expression">expression</Select.Option>
+                      <Select.Option value="condition">condition</Select.Option>
+                      <Select.Option value="limit">limit</Select.Option>
+                    </Select>
+                  ),
+                },
+                {
                   title: 'Formula',
-                  dataIndex: 'formula',
-                  render: (text, record) => (
+                  dataIndex: 'formula_value',
+                  render: (v, record) => (
                     <Input.TextArea
                       size="small"
                       rows={2}
                       style={{ fontFamily: 'monospace', fontSize: 11 }}
-                      defaultValue={text}
-                      onChange={e =>
-                        setFormulaEdits(prev => ({
-                          ...prev,
-                          [record.id]: { ...prev[record.id], formula: e.target.value },
-                        }))
-                      }
+                      value={formulaEdits[record.id]?.formula_value ?? v}
+                      onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_value: e.target.value } }))}
                     />
                   ),
                 },
                 {
-                  title: 'Description',
-                  dataIndex: 'description',
-                  width: 160,
-                  render: (text, record) => (
+                  title: 'Round',
+                  dataIndex: 'rounding_rule',
+                  width: 90,
+                  render: (v, record) => (
+                    <Select
+                      size="small"
+                      style={{ width: 80 }}
+                      value={formulaEdits[record.id]?.rounding_rule ?? v}
+                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_rule: val } }))}
+                    >
+                      <Select.Option value="none">none</Select.Option>
+                      <Select.Option value="ceil">ceil</Select.Option>
+                      <Select.Option value="floor">floor</Select.Option>
+                      <Select.Option value="round">round</Select.Option>
+                    </Select>
+                  ),
+                },
+                {
+                  title: 'Prec',
+                  dataIndex: 'rounding_precision',
+                  width: 65,
+                  render: (v, record) => (
+                    <InputNumber
+                      size="small"
+                      min={0} max={6}
+                      style={{ width: 55 }}
+                      value={formulaEdits[record.id]?.rounding_precision ?? v}
+                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_precision: val } }))}
+                    />
+                  ),
+                },
+                {
+                  title: 'Remark',
+                  dataIndex: 'remark',
+                  width: 140,
+                  render: (v, record) => (
                     <Input
                       size="small"
-                      defaultValue={text || ''}
-                      onChange={e =>
-                        setFormulaEdits(prev => ({
-                          ...prev,
-                          [record.id]: { ...prev[record.id], description: e.target.value },
-                        }))
-                      }
+                      value={formulaEdits[record.id]?.remark ?? (v || '')}
+                      onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], remark: e.target.value } }))}
                     />
+                  ),
+                },
+                {
+                  title: '',
+                  dataIndex: 'action',
+                  width: 40,
+                  render: (_, record) => (
+                    <Popconfirm title="ลบ formula นี้?" onConfirm={() => deleteToolingFormula(record.id)} okText="ลบ" cancelText="ยกเลิก">
+                      <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
                   ),
                 },
               ]}

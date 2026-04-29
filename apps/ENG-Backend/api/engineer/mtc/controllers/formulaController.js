@@ -29,19 +29,22 @@ const getFormulasByMachine = async (req, res) => {
 
     let result;
     if (needle) {
-      // COALESCE: prefer tooling_type column, fall back to tool_category (case-insensitive)
-      // If tooling_type column does not exist yet (migration pending), catch 42703 and use tool_category
+      // Match rows where needle contains the formula's category/tooling_type as substring.
+      // Direction: $2 ILIKE '%' || col || '%'  (needle contains col, not col contains needle)
+      // This handles inventory names that are more specific than formula categories,
+      // e.g. needle='WORK DRIVER TYPE-A' matches tool_category='WORK DRIVER'.
+      // Also handles CALC_COMMON: needle='KS-B22G' matches tooling_type='KS-B22G'.
       try {
         result = await engPool.query(
           `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true
-           AND COALESCE(tooling_type, tool_category) ILIKE $2 ORDER BY id ASC`,
+           AND $2 ILIKE '%' || COALESCE(tooling_type, tool_category) || '%' ORDER BY id ASC`,
           [machineName, needle]
         );
       } catch (colErr) {
         if (colErr.code === '42703') {
           result = await engPool.query(
             `SELECT * FROM mtc_formulas WHERE machine_name = $1 AND is_active = true
-             AND tool_category ILIKE $2 ORDER BY id ASC`,
+             AND $2 ILIKE '%' || tool_category || '%' ORDER BY id ASC`,
             [machineName, needle]
           );
         } else {

@@ -84,7 +84,7 @@ describe('getFormulasByMachine', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true, formulas: [FORMULA_ROW] });
   });
 
-  it('filters by COALESCE(tooling_type, tool_category) ILIKE when tooling_type given', async () => {
+  it('filters using needle ILIKE containing COALESCE(tooling_type, tool_category) when tooling_type given', async () => {
     engPool.query.mockResolvedValueOnce({ rows: [FORMULA_ROW] });
     const req = mockReq({
       params: { machineName: 'KS400B' },
@@ -95,7 +95,8 @@ describe('getFormulasByMachine', () => {
     await getFormulasByMachine(req, res);
 
     const [sql, params] = engPool.query.mock.calls[0];
-    expect(sql).toContain('COALESCE(tooling_type, tool_category) ILIKE');
+    expect(sql).toContain('ILIKE');
+    expect(sql).toContain('COALESCE(tooling_type, tool_category)');
     expect(params).toEqual(['KS400B', 'WORK DRIVER']);
     expect(res.json).toHaveBeenCalledWith({ success: true, formulas: [FORMULA_ROW] });
   });
@@ -131,7 +132,8 @@ describe('getFormulasByMachine', () => {
 
     expect(engPool.query).toHaveBeenCalledTimes(2);
     const [fallbackSql, fallbackParams] = engPool.query.mock.calls[1];
-    expect(fallbackSql).toContain('tool_category ILIKE');
+    expect(fallbackSql).toContain('ILIKE');
+    expect(fallbackSql).toContain('tool_category');
     expect(fallbackSql).not.toContain('COALESCE');
     expect(fallbackParams).toEqual(['KS400B', 'WORK DRIVER']);
     expect(res.json).toHaveBeenCalledWith({ success: true, formulas: [FORMULA_ROW] });

@@ -27,11 +27,25 @@ const logger = {
 
 // ── Email recipient config — อ่านจากฐานข้อมูล (tr_email_config) ────────────────
 async function getEmailRecipients(stage) {
+    const envMap = {
+        [WORKFLOW_STAGES.ENG_CHECK]: 'EMAIL_MTC_ENG_CHECK',
+        [WORKFLOW_STAGES.DRAFT_MAN]: 'EMAIL_MTC_DRAFTMAN',
+        [WORKFLOW_STAGES.DWG_CHECK]: 'EMAIL_MTC_DWG_CHECK',
+        [WORKFLOW_STAGES.ENG_REVIEW]: 'EMAIL_MTC_ENG_REVIEW',
+        [WORKFLOW_STAGES.ENG_APPROVE]: 'EMAIL_MTC_ENG_APPROVE',
+        [WORKFLOW_STAGES.ENG_INFORM]: 'EMAIL_MTC_ENG_INFORM',
+    };
+
     try {
-        // ดึงทั้งรายชื่อหลัก (stage) และรายชื่อ CC (CC_stage)
+        // Normalize stage name to match DB (Uppercase and handle DRAFTMAN vs DRAFT_MAN)
+        const lookupStage = stage.toUpperCase().replace('DRAFT_MAN', 'DRAFTMAN');
+        const lookupCC = `CC_${lookupStage}`;
+
+        // ดึงทั้งรายชื่อหลัก (stage) และรายชื่อ CC (CC_stage) แบบ Case-insensitive
         const res = await engPool.query(
-            `SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG} WHERE stage = $1 OR stage = $2`,
-            [stage, `CC_${stage}`]
+            `SELECT stage, emails FROM ${TABLES.TR_EMAIL_CONFIG} 
+             WHERE UPPER(stage) = $1 OR UPPER(stage) = $2`,
+            [lookupStage, lookupCC]
         );
 
         let allEmails = [];
@@ -46,20 +60,13 @@ async function getEmailRecipients(stage) {
             return [...new Set(allEmails)]; // ลบตัวซ้ำออก
         }
 
-        // Fallback: ถ้าไม่เจอใน DB ให้ไปอ่านจาก .env เหมือนเดิม (เฉพาะรายชื่อหลัก)
-        const envMap = {
-            [WORKFLOW_STAGES.ENG_CHECK]: 'EMAIL_MTC_ENG_CHECK',
-            [WORKFLOW_STAGES.DRAFT_MAN]: 'EMAIL_MTC_DRAFTMAN',
-            [WORKFLOW_STAGES.DWG_CHECK]: 'EMAIL_MTC_DWG_CHECK',
-            [WORKFLOW_STAGES.ENG_REVIEW]: 'EMAIL_MTC_ENG_REVIEW',
-            [WORKFLOW_STAGES.ENG_APPROVE]: 'EMAIL_MTC_ENG_APPROVE',
-            [WORKFLOW_STAGES.ENG_INFORM]: 'EMAIL_MTC_ENG_INFORM',
-        };
+        // Fallback: ถ้าไม่เจอใน DB ให้ไปอ่านจาก .env เหมือนเดิม
         const envKey = envMap[stage];
         return envKey ? (process.env[envKey] || '').split(',').map(e => e.trim()).filter(Boolean) : [];
     } catch (error) {
-        logger.error('Error fetching email recipients from DB', { stage, error: error.message });
-        return [];
+        logger.error('Error fetching email recipients from DB, trying .env fallback', { stage, error: error.message });
+        const envKey = envMap[stage];
+        return envKey ? (process.env[envKey] || '').split(',').map(e => e.trim()).filter(Boolean) : [];
     }
 }
 
@@ -281,6 +288,8 @@ const createToolRequest = async (req, res) => {
         (async () => {
             try {
                 const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
+                logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
+
                 if (recipients.length > 0) {
                     const subject = `[New Request] ${request_item}: ${title}`;
                     const html = renderEmail({
@@ -291,6 +300,8 @@ const createToolRequest = async (req, res) => {
                         actionBy: requester,
                     });
                     await sendEmailWithFallback(recipients.join(','), subject, html);
+                } else {
+                    logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
                 }
             } catch (emailErr) {
                 logger.warn('Initial email notification failed', { error: emailErr.message });

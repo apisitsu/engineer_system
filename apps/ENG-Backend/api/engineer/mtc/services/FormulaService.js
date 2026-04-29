@@ -39,67 +39,56 @@ class FormulaService {
   }
 
   /**
-   * Calculate all parameters for a specific machine based on part data
-   * @param {string} machineName - Name of the machine (e.g., 'KS400B')
-   * @param {Object} context - Part spec data (e.g., { odBf: 20, wAft: 15, ... })
-   * @returns {Object} Calculated results
+   * Calculate parameters for a machine using tooling_formula table.
+   * Formulas are evaluated sequentially with a shared flat context so
+   * later formulas can reference results of earlier ones by parameter_name.
+   * Output is grouped by tooling_name: { 'JAW': { A, B }, 'BACK PLATE': { A, B }, ... }
    */
   async calculateMachineParams(machineName, context) {
     try {
-      // 1. Fetch formulas for this machine from DB
-      const query = `
-        SELECT tool_category, param_key, formula 
-        FROM mtc_formulas 
-        WHERE machine_name = $1 AND is_active = true
-        ORDER BY id ASC
-      `;
-      const res = await engPool.query(query, [machineName]);
+      const res = await engPool.query(
+        `SELECT tooling_name, parameter_name, formula_value, formula_type,
+                rounding_rule, rounding_precision
+         FROM tooling_formula WHERE machine_name = $1 ORDER BY id ASC`,
+        [machineName]
+      );
       const formulas = res.rows;
 
       if (formulas.length === 0) {
         return { error: `No formulas found for machine: ${machineName}` };
       }
 
-      // 2. Initialize results with context (part specs)
-      const results = { ...context };
-      
-      // Separate results by category for the final output
-      const categorizedOutput = {
-        _raw: results // Keep original context in a raw field
-      };
-
-      // 3. Process each formula
+      const ctx = { ...context };
+      const output = { _raw: context };
       let hasFormulaError = false;
-      for (const item of formulas) {
-        const { tool_category, param_key, formula } = item;
+
+      for (const { tooling_name, parameter_name, formula_value, formula_type, rounding_rule, rounding_precision } of formulas) {
+        if (formula_type === 'limit') continue;
 
         try {
-          // Parse and evaluate formula using the current context (results)
-          const expr = this.parser.parse(formula);
-          const value = expr.evaluate(results);
+          const expr = this.parser.parse(formula_value);
+          let value = expr.evaluate(ctx);
 
-          // Update context so subsequent formulas can use this result
-          results[param_key] = value;
-
-          // Organize output by category
-          if (tool_category && tool_category !== '-') {
-            if (!categorizedOutput[tool_category]) categorizedOutput[tool_category] = {};
-            categorizedOutput[tool_category][param_key] = value;
-          } else {
-            // Global machine parameters (like limits)
-            categorizedOutput[param_key] = value;
+          if (value != null && typeof value === 'number' && rounding_rule && rounding_rule !== 'none') {
+            const prec = rounding_precision ?? 2;
+            const factor = Math.pow(10, prec);
+            if (rounding_rule === 'ceil')  value = Math.ceil(value  * factor) / factor;
+            else if (rounding_rule === 'floor') value = Math.floor(value * factor) / factor;
+            else if (rounding_rule === 'round') value = Math.round(value * factor) / factor;
           }
+
+          ctx[parameter_name] = value;
+
+          if (!output[tooling_name]) output[tooling_name] = {};
+          output[tooling_name][parameter_name] = value;
         } catch (evalErr) {
-          console.error(`Error evaluating formula for ${machineName}.${param_key}:`, evalErr.message);
+          console.error(`Formula error ${machineName}.${tooling_name}.${parameter_name}:`, evalErr.message);
           hasFormulaError = true;
         }
       }
 
-      if (hasFormulaError) {
-        return { error: `Formula evaluation failed for machine: ${machineName}` };
-      }
-
-      return categorizedOutput;
+      if (hasFormulaError) return { error: `Formula evaluation failed for machine: ${machineName}` };
+      return output;
     } catch (err) {
       console.error('FormulaService calculation error:', err.message);
       return { error: 'Calculation Engine Error' };

@@ -13,16 +13,17 @@ async function findFixtures(cnNumber) {
     const row = await fetchSpecRow(cnNumber);
     const partData = computeDerivedFlags(mapPartData(row));
 
-    const [dynCommon, dynKS400B, dynKS03A, dynKS500RD, dynKS400B5, dynKS400B6] = await Promise.all([
-      FormulaService.calculateMachineParams('CALC_COMMON', partData),
-      FormulaService.calculateMachineParams('KS400B',      partData),
-      FormulaService.calculateMachineParams('KS03A',       partData),
-      FormulaService.calculateMachineParams('KS500RD',     partData),
-      FormulaService.calculateMachineParams('KS400B5',     partData),
-      FormulaService.calculateMachineParams('KS400B6',     partData),
+    const [dynKSB22G, dynTSG300ZNC, dynKS400B, dynKS03A, dynKS500RD, dynKS400B5, dynKS400B6] = await Promise.all([
+      FormulaService.calculateMachineParams('KS-B22G',    partData),
+      FormulaService.calculateMachineParams('TSG-300ZNC', partData),
+      FormulaService.calculateMachineParams('KS400B',     partData),
+      FormulaService.calculateMachineParams('KS-03A',     partData),
+      FormulaService.calculateMachineParams('KS500RD',    partData),
+      FormulaService.calculateMachineParams('KS-400B5',   partData),
+      FormulaService.calculateMachineParams('KS400B6',    partData),
     ]);
 
-    const calcs   = buildCalcMap({ dynCommon, dynKS400B, dynKS03A, dynKS500RD, dynKS400B5, dynKS400B6 }, partData);
+    const calcs   = buildCalcMap({ dynKSB22G, dynTSG300ZNC, dynKS400B, dynKS03A, dynKS500RD, dynKS400B5, dynKS400B6 }, partData);
     const okFlags = computeOkFlags(calcs.calc, calcs, partData);
     const rows    = await fetchToolingRows(okFlags, calcs.calc);
     const results = assembleResults(rows, okFlags, calcs, partData);
