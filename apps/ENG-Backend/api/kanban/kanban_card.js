@@ -32,14 +32,33 @@ function getDriveProxyAgent() {
 async function postToGAS(payload) {
     if (!GAS_DRIVE_URL) throw new Error('GAS_DRIVE_URL is not configured in .env');
     const agent = getDriveProxyAgent();
-    const response = await axios.post(GAS_DRIVE_URL, payload, {
-        httpsAgent: agent,
-        proxy: false,
-        maxRedirects: 5,
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 120000, // 2 min for large files
-    });
-    return response.data;
+
+    // Axios natively converts POST to GET upon encountering a 302 redirect.
+    // To preserve the POST payload, we must manually handle the redirect.
+    try {
+        const response = await axios.post(GAS_DRIVE_URL, payload, {
+            httpsAgent: agent,
+            proxy: false,
+            maxRedirects: 0, // Prevent auto-follow
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 120000, // 2 min for large files
+            validateStatus: status => status >= 200 && status <= 302
+        });
+
+        if (response.status === 302 && response.headers.location) {
+            const finalRes = await axios.post(response.headers.location, payload, {
+                httpsAgent: agent,
+                proxy: false,
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 120000
+            });
+            return finalRes.data;
+        }
+
+        return response.data;
+    } catch (err) {
+        throw new Error(`GAS Communication failed: ${err.message}`);
+    }
 }
 
 // ─── AUTH HELPER ──────────────────────────────────────────────────
@@ -542,23 +561,24 @@ const DeleteCard = async (req, res) => {
     if (!(await canManageCard(req, id)))
         return res.status(403).json({ error: 'Card manager permission required to delete' });
 
+    const client = await engPool.connect();
     try {
+        await client.query('BEGIN');
+        
         // Get attachments for file cleanup (both local and Drive)
-        const { rows: attachments } = await engPool.query('SELECT file_path, drive_file_id, attachment_type FROM kb_attachment WHERE card_id=$1', [id]);
-        await engPool.query('DELETE FROM kb_card WHERE id=$1', [id]);
-        // Clean up files (non-blocking)
-        attachments.forEach(a => {
-            if (a.drive_file_id) {
-                // Trash from Google Drive via GAS (fire-and-forget)
-                postToGAS({ action: 'delete', fileId: a.drive_file_id }).catch(err => {
-                    console.error(`Failed to trash Drive file ${a.drive_file_id}:`, err.message);
-                });
-            } else if (a.attachment_type === 'file' && a.file_path) {
+        const { rows: attachments } = await client.query('SELECT file_path, drive_file_id, attachment_type FROM kb_attachment WHERE card_id=$1', [id]);
+        
+        // Clean up files synchronously before deleting the card
+        for (const a of attachments) {
+            if (a.attachment_type === 'file' && a.file_path && !a.file_path.startsWith('http')) {
                 // Legacy local file cleanup
                 const fullPath = path.join(__dirname, '../../../', a.file_path);
                 if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
             }
-        });
+        }
+
+        await client.query('DELETE FROM kb_card WHERE id=$1', [id]);
+        await client.query('COMMIT');
 
         // ── Broadcast card deletion via WebSocket ──
         const io = req.app.get('io');
@@ -572,8 +592,11 @@ const DeleteCard = async (req, res) => {
 
         res.json({ message: 'Card deleted' });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error(err);
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 
@@ -1333,26 +1356,16 @@ const DeleteAttachment = async (req, res) => {
     const canDelete = att.creator_u_code === uCode || await canEditCard(req, att.card_id);
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
-    await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
-
-    // Clean up the actual file (Drive or local)
+    // Clean up the actual file (Drive or local) BEFORE deleting from DB
     if (att.attachment_type === 'file') {
-        if (att.drive_file_id) {
-            // Trash from Google Drive via GAS
-            try {
-                const gasResult = await postToGAS({ action: 'delete', fileId: att.drive_file_id });
-                if (!gasResult.success) {
-                    console.error(`GAS trash failed for ${att.drive_file_id}:`, gasResult.error);
-                }
-            } catch (err) {
-                console.error(`GAS trash error for ${att.drive_file_id}:`, err.message);
-            }
-        } else if (att.file_path && !att.file_path.startsWith('http')) {
+        if (!att.drive_file_id && att.file_path && !att.file_path.startsWith('http')) {
             // Legacy local file cleanup
             const fullPath = path.join(__dirname, '../../', att.file_path);
             if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
         }
     }
+
+    await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
 
     // ── Broadcast attachment removal via WebSocket (surgical fetch signal) ──
     const delIo = req.app.get('io');

@@ -28,32 +28,28 @@ const HeaderBar = () => {
             boxShadow: theme.shadows.sm,
             transition: `all ${theme.transitions.normal}`,
             zIndex: 1000,
-            justifyContent: 'space-between', // <--- แก้ไขตรงนี้ เพื่อแยกซ้ายขวา
+            justifyContent: 'space-between',
         },
-        // กลุ่มฝั่งซ้าย (Menu + Tag) ให้มีขนาดพอดี ไม่ยืดขยาย
         leftSection: {
             display: 'flex',
             alignItems: 'center',
             gap: '16px',
-            // ลบ minWidth: 0 ทิ้งไปเลยครับ
         },
         menuList: {
             background: theme.colors.primary,
             borderBottom: 'none',
-            minWidth: '100px', // <--- เพิ่มบรรทัดนี้ เพื่อจองพื้นที่ให้ปุ่ม Home เสมอ
-            flexShrink: 0,     // <--- สั่งไม่ให้ Ant Design บีบขนาดกล่องนี้
+            minWidth: '100px',
+            flexShrink: 0,
         },
         menu: {
             color: theme.colors.textInverse,
             paddingTop: 0,
             paddingBottom: 0,
         },
-        // --- ส่วนที่เพิ่มใหม่ ---
-        // กลุ่มฝั่งขวา (ThemeSelector + Profile) ให้ชิดกัน
         rightSection: {
             display: 'flex',
             alignItems: 'center',
-            gap: '12px', // <--- เพิ่ม gap ระหว่าง ThemeSelector และ Profile
+            gap: '12px',
         },
         // --- (ส่วนที่เหลือเก็บไว้เหมือนเดิม) ---
         profileContainer: {

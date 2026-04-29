@@ -106,32 +106,61 @@ document.getElementById('gf').submit();
 // Deletion can remain as hidden iframe because it does not require user interaction 
 // once the script has been authorized during upload.
 export function deleteFileFromDrive(driveFileId) {
-    if (!GAS_DRIVE_URL || !driveFileId) return;
-    const iframeName = `gas-del-${Date.now()}`;
-    const iframe = document.createElement('iframe');
-    iframe.name = iframeName;
-    iframe.style.cssText = 'display:none;position:absolute;width:0;height:0;border:0;left:-9999px;';
-    
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = GAS_DRIVE_URL;
-    form.target = iframeName;
-    form.style.display = 'none';
-    
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'payload';
-    input.value = JSON.stringify({ action: 'delete', fileId: driveFileId });
-    form.appendChild(input);
-    
-    document.body.appendChild(iframe);
-    document.body.appendChild(form);
-    form.submit();
-    
-    setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch {}
-        try { document.body.removeChild(form); } catch {}
-    }, 15000);
+    return new Promise((resolve, reject) => {
+        if (!GAS_DRIVE_URL || !driveFileId) {
+            return resolve({ success: true, bypassed: true });
+        }
+        
+        const iframeName = `gas-del-${Date.now()}`;
+        const iframe = document.createElement('iframe');
+        iframe.name = iframeName;
+        iframe.style.cssText = 'display:none;position:absolute;width:0;height:0;border:0;left:-9999px;';
+        
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = GAS_DRIVE_URL;
+        form.target = iframeName;
+        form.style.display = 'none';
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify({ action: 'delete', fileId: driveFileId });
+        form.appendChild(input);
+        
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        
+        let cleanupDone = false;
+        function cleanup() {
+            if (cleanupDone) return;
+            cleanupDone = true;
+            window.removeEventListener('message', handler);
+            clearTimeout(timer);
+            try { document.body.removeChild(iframe); } catch {}
+            try { document.body.removeChild(form); } catch {}
+        }
+
+        const handler = (event) => {
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                if (data && data._gasUploadResponse) {
+                    cleanup();
+                    if (data.success) resolve(data);
+                    else reject(new Error(data.error || 'GAS delete failed'));
+                }
+            } catch { /* ignore */ }
+        };
+
+        window.addEventListener('message', handler);
+
+        const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('GAS delete timed out.'));
+        }, 30000); // 30 sec timeout for delete
+
+        form.submit();
+    });
 }
 
 export default uploadFileToDrive;

@@ -300,9 +300,22 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme }) 
                                 ghost
                                 icon={<MdFileDownload size={18} />}
                                 onClick={() => {
+                                    let downloadUrl = fileUrl;
+                                    
+                                    // If it's a Google Drive file, use the direct download URL
+                                    if (fileUrl.includes('drive.google.com') && !fileUrl.includes('export=download')) {
+                                        const fileIdMatch = fileUrl.match(/\/d\/([^\/?#]+)/) || fileUrl.match(/[?&]id=([^\/&?#]+)/);
+                                        if (fileIdMatch && fileIdMatch[1]) {
+                                            downloadUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+                                        }
+                                    }
+
                                     const link = document.createElement('a');
-                                    link.href = fileUrl;
+                                    link.href = downloadUrl;
                                     link.download = fileName;
+                                    if (downloadUrl !== fileUrl) {
+                                        link.target = '_blank';
+                                    }
                                     document.body.appendChild(link);
                                     link.click();
                                     document.body.removeChild(link);

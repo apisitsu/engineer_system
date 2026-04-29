@@ -38,12 +38,14 @@ function doPost(e) {
   try {
     // Support both raw JSON body and form-encoded payload field
     var raw;
+    var isForm = false;
     if (e.parameter && e.parameter.payload) {
       raw = e.parameter.payload;
+      isForm = true;
     } else if (e.postData && e.postData.contents) {
       raw = e.postData.contents;
     } else {
-      return postMessageResponse({ success: false, error: 'No payload received' });
+      return jsonOrHtml({ success: false, error: 'No payload received' }, isForm);
     }
 
     var payload = JSON.parse(raw);
@@ -51,14 +53,14 @@ function doPost(e) {
 
     switch (action) {
       case 'upload':
-        return handleUpload(payload);
+        return handleUpload(payload, isForm);
       case 'delete':
-        return handleDelete(payload);
+        return handleDelete(payload, isForm);
       default:
-        return postMessageResponse({ success: false, error: 'Unknown action: ' + action });
+        return jsonOrHtml({ success: false, error: 'Unknown action: ' + action }, isForm);
     }
   } catch (err) {
-    return postMessageResponse({ success: false, error: err.message, stack: err.stack });
+    return jsonOrHtml({ success: false, error: err.message, stack: err.stack }, false);
   }
 }
 
@@ -70,7 +72,7 @@ function doPost(e) {
  * Folder hierarchy:
  *   [ROOT] / [projectId] / [boardId] / [cardId] / file
  */
-function handleUpload(payload) {
+function handleUpload(payload, isForm) {
   var fileName   = payload.fileName;
   var mimeType   = payload.mimeType;
   var base64Data = payload.base64Data;
@@ -79,11 +81,11 @@ function handleUpload(payload) {
   var cardId     = payload.cardId;
 
   // Validate required fields
-  if (!fileName)   return postMessageResponse({ success: false, error: 'Missing fileName' });
-  if (!base64Data) return postMessageResponse({ success: false, error: 'Missing base64Data' });
-  if (!projectId)  return postMessageResponse({ success: false, error: 'Missing projectId' });
-  if (!boardId)    return postMessageResponse({ success: false, error: 'Missing boardId' });
-  if (!cardId)     return postMessageResponse({ success: false, error: 'Missing cardId' });
+  if (!fileName)   return jsonOrHtml({ success: false, error: 'Missing fileName' }, isForm);
+  if (!base64Data) return jsonOrHtml({ success: false, error: 'Missing base64Data' }, isForm);
+  if (!projectId)  return jsonOrHtml({ success: false, error: 'Missing projectId' }, isForm);
+  if (!boardId)    return jsonOrHtml({ success: false, error: 'Missing boardId' }, isForm);
+  if (!cardId)     return jsonOrHtml({ success: false, error: 'Missing cardId' }, isForm);
 
   // Navigate / create folder hierarchy
   var rootFolder    = DriveApp.getFolderById(ROOT_FOLDER_ID);
@@ -99,7 +101,7 @@ function handleUpload(payload) {
   // Build folder path string for DB storage
   var folderPath = '/' + [projectId, boardId, cardId].join('/');
 
-  return postMessageResponse({
+  return jsonOrHtml({
     success: true,
     fileId: file.getId(),
     fileName: file.getName(),
@@ -108,7 +110,7 @@ function handleUpload(payload) {
     folderPath: folderPath,
     webViewLink: file.getUrl(),
     webContentLink: 'https://drive.google.com/uc?id=' + file.getId() + '&export=download'
-  });
+  }, isForm);
 }
 
 // ─── DELETE HANDLER ───────────────────────────────────────────────────
@@ -118,22 +120,32 @@ function handleUpload(payload) {
  *
  * Moves the file to Trash (recoverable for 30 days).
  */
-function handleDelete(payload) {
+function handleDelete(payload, isForm) {
   var fileId = payload.fileId;
 
-  if (!fileId) return postMessageResponse({ success: false, error: 'Missing fileId' });
+  if (!fileId) return jsonOrHtml({ success: false, error: 'Missing fileId' }, isForm);
 
   try {
     var file = DriveApp.getFileById(fileId);
     file.setTrashed(true);
-    return postMessageResponse({ success: true, fileId: fileId, trashed: true });
+    return jsonOrHtml({ success: true, fileId: fileId, trashed: true }, isForm);
   } catch (err) {
     // File may already be deleted or ID is invalid
-    return postMessageResponse({
+    return jsonOrHtml({
       success: false,
       error: 'Failed to trash file: ' + err.message,
       fileId: fileId
-    });
+    }, isForm);
+  }
+}
+
+// ─── HELPER: Return JSON or HTML ──────────────────────────────────────
+function jsonOrHtml(data, isForm) {
+  if (isForm) {
+    return postMessageResponse(data);
+  } else {
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 

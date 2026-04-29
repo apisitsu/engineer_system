@@ -176,6 +176,22 @@ export const createCardSlice = (set, get) => ({
 
     deleteCard: async (cardId) => {
         try {
+            // First, delete Google Drive attachments from the frontend to ensure auth context
+            const loc = get()._findCardList(cardId);
+            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
+            if (card && card.attachments) {
+                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                for (const att of card.attachments) {
+                    if (att.drive_file_id) {
+                        try {
+                            await deleteFileFromDrive(att.drive_file_id);
+                        } catch (err) {
+                            console.warn('Failed to delete Drive file from frontend:', att.drive_file_id, err);
+                        }
+                    }
+                }
+            }
+
             await axios.delete(`${server.KANBAN_CARDS}/${cardId}`);
             set(state => {
                 const newCards = { ...state.cards };
@@ -625,7 +641,8 @@ export const createCardSlice = (set, get) => ({
     deleteAttachment: async (attachmentId, cardId) => {
         try {
             // Find the attachment to get drive_file_id
-            const card = get().cards[cardId] || get().cardDetail;
+            const loc = get()._findCardList(cardId);
+            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
             let driveFileId = null;
             if (card && card.attachments) {
                 const att = card.attachments.find(a => a.id === attachmentId);
@@ -634,17 +651,27 @@ export const createCardSlice = (set, get) => ({
                 }
             }
 
+            // Show loading state
+            Swal.fire({
+                title: 'Deleting attachment...',
+                text: 'Waiting for Google Drive confirmation',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
             // 1. Delete from Google Drive if it's a Drive file
             if (driveFileId) {
-                const { deleteFileFromDrive } = require('../../utils/uploadFileToDrive');
-                deleteFileFromDrive(driveFileId);
+                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                await deleteFileFromDrive(driveFileId);
             }
 
             // 2. Delete from Database
             await axios.delete(`${server.KANBAN_ATTACHMENTS}/${attachmentId}`);
             if (cardId) get().fetchCardDetail(cardId);
+            Swal.close();
             return true;
         } catch (err) {
+            Swal.close();
             console.error('Failed to delete attachment', err);
             const status = err.response?.status;
             const errMsg = err.response?.data?.error || 'ไม่สามารถลบ attachment ได้';
