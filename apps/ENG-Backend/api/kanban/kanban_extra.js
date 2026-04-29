@@ -10,6 +10,13 @@ const {
     canEditCard
 } = require('./kanban_acl');
 
+/** Auth guard: returns null + sends 401 if unauthenticated */
+const getAuthUser = (req, res) => {
+    const uCode = req.user?.empno;
+    if (!uCode) { res.status(401).json({ error: 'Authentication required' }); return null; }
+    return uCode;
+};
+
 // ====================================================================
 //  CUSTOM FIELDS (Feature 12)
 // ====================================================================
@@ -303,7 +310,7 @@ const DeleteWebhook = async (req, res) => {
 // ====================================================================
 
 const GetNotificationServices = async (req, res) => {
-    const uCode = req.user?.empno || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     try {
         const { rows } = await engPool.query(
             'SELECT * FROM kb_notification_service WHERE u_code=$1 ORDER BY created_at', [uCode]);
@@ -312,7 +319,7 @@ const GetNotificationServices = async (req, res) => {
 };
 
 const CreateNotificationService = async (req, res) => {
-    const uCode = req.user?.empno || req.body?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { board_id, url, format } = req.body;
     try {
         const { rows } = await engPool.query(

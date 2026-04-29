@@ -62,6 +62,9 @@ export const createProjectSlice = (set, get) => ({
             return;
         }
 
+        // Disconnect WebSocket before clearing state to prevent stale event injection
+        get().disconnectWebSocket();
+
         set({
             activeProject: project,
             activeBoard: null,
@@ -172,7 +175,11 @@ export const createProjectSlice = (set, get) => ({
             const payload = { target_u_code: uCode };
             if (role) payload.role = role;
             await axios.post(`${server.KANBAN_PROJECTS}/${projectId}/managers`, payload);
-            get().fetchProjectManagers(projectId);
+            await get().fetchProjectManagers(projectId);
+
+            if (!get().users.find(u => u.u_code === uCode)) {
+                await get().fetchUsers();
+            }
         } catch (err) {
             console.error('Failed to add manager', err);
             Swal.fire('Error', err.response?.data?.error || 'Cannot add manager', 'error');

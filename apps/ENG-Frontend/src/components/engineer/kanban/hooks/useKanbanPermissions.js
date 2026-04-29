@@ -80,5 +80,5 @@ export const useKanbanPermissions = ({
             canManageCard, canEditCard, canViewCard,
             isReadOnly, canCreateProject,
         };
-    }, [globalRole, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
+    }, [globalRole, globalDepartment, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
 };

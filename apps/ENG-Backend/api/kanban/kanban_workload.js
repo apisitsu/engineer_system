@@ -124,10 +124,22 @@ const GetTeamWorkload = async (req, res) => {
         const userWorkloadsArr = [];
         const userMap = new Map();
 
-        // Need user profile info since we removed it from JOIN
-        const { rows: usersRaw } = await engPool.query('SELECT u_code, u_name, u_nickname, profile_img_b64 FROM m_user_profile');
+        // Collect distinct member u_codes from actual card data (avoid fetching ALL profiles)
+        const memberUCodeSet = new Set();
+        enhancedCards.forEach(card => {
+            if (Array.isArray(card.card_members)) card.card_members.forEach(u => memberUCodeSet.add((u || '').toLowerCase()));
+            if (Array.isArray(card.project_members)) card.project_members.forEach(u => memberUCodeSet.add((u || '').toLowerCase()));
+        });
+        const memberUCodes = [...memberUCodeSet].filter(Boolean);
+
         const userProfiles = {};
-        usersRaw.forEach(u => userProfiles[(u.u_code || '').toLowerCase()] = u);
+        if (memberUCodes.length > 0) {
+            const { rows: usersRaw } = await engPool.query(
+                'SELECT u_code, u_name, u_nickname, profile_img_b64 FROM m_user_profile WHERE LOWER(u_code) = ANY($1)',
+                [memberUCodes]
+            );
+            usersRaw.forEach(u => userProfiles[(u.u_code || '').toLowerCase()] = u);
+        }
 
         enhancedCards.forEach(card => {
             // Determine who gets this card

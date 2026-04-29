@@ -16,6 +16,7 @@ import { IoLockClosedOutline } from 'react-icons/io5';
 import { MdOutlineDashboard } from 'react-icons/md';
 import { BsKanban } from 'react-icons/bs';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
@@ -132,7 +133,22 @@ const ProjectSettingsDrawer = () => {
         userPreferences, fetchUserPreferences, updateUserPreferences,
         projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager,
         users
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            isProjectSettingsOpen: state.isProjectSettingsOpen,
+            closeProjectSettings: state.closeProjectSettings,
+            projectSettingsTargetId: state.projectSettingsTargetId,
+            fetchProjects: state.fetchProjects,
+            setActiveProject: state.setActiveProject,
+            updateProject: state.updateProject,
+            deleteProject: state.deleteProject,
+            userPreferences: state.userPreferences, fetchUserPreferences: state.fetchUserPreferences,
+            updateUserPreferences: state.updateUserPreferences,
+            projectManagers: state.projectManagers, fetchProjectManagers: state.fetchProjectManagers,
+            addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
+            users: state.users
+        }))
+    );
 
     const [form] = Form.useForm();
     const [isCreating, setIsCreating] = useState(false);
@@ -144,6 +160,7 @@ const ProjectSettingsDrawer = () => {
     const [editingGradient, setEditingGradient] = useState(GRADIENTS[0]);
     const [editingIcon, setEditingIcon] = useState('rocket');
     const [editingPrivate, setEditingPrivate] = useState(false);
+    const [editingPermanent, setEditingPermanent] = useState(false);
     const [editingPriority, setEditingPriority] = useState('Medium');
     const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
@@ -209,6 +226,7 @@ const ProjectSettingsDrawer = () => {
             background_value: editingGradient,
             icon: editingIcon,
             is_private: editingPrivate,
+            is_permanent: editingPermanent,
             priority: editingPriority,
             status: editingStatus,
         });
@@ -224,6 +242,7 @@ const ProjectSettingsDrawer = () => {
         setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
         setEditingIcon(proj.icon || 'rocket');
         setEditingPrivate(proj.is_private || false);
+        setEditingPermanent(proj.is_permanent || false);
         setEditingPriority(proj.priority || 'Medium');
         setEditingStatus(proj.status || 'Active');
         setMemberSearch('');
@@ -449,6 +468,22 @@ const ProjectSettingsDrawer = () => {
 
                                             <Divider style={{ margin: '8px 0' }} />
 
+                                            {/* Permanent Project Toggle */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div>
+                                                        <Text strong style={{ fontSize: 13 }}>Permanent Project (โปรเจคถาวร)</Text>
+                                                        <br />
+                                                        <Text type="secondary" style={{ fontSize: 11 }}>
+                                                            Enable for continuous operations. Opens the Operations Dashboard instead of a single board.
+                                                        </Text>
+                                                    </div>
+                                                </div>
+                                                <Switch checked={editingPermanent} onChange={setEditingPermanent} />
+                                            </div>
+
+                                            <Divider style={{ margin: '8px 0' }} />
+
                                             {/* Members Section inside Edit Modal */}
                                             <div>
                                                 <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Project Members</Text>
@@ -544,9 +579,42 @@ const ProjectSettingsDrawer = () => {
                                                 )}
                                             </div>
 
-                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                                                <Button onClick={() => setEditingId(null)}>Cancel</Button>
-                                                <Button type="primary" onClick={() => handleEditProject(proj.id)}>Save Changes</Button>
+                                            <div style={{ display: 'flex', marginTop: theme.spacing.sm }}>
+                                                <Space style={{ width: '100%' }}>
+                                                    <Button
+                                                        block
+                                                        type="primary"
+                                                        onClick={() => handleEditProject(proj.id)}
+                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
+                                                    >
+                                                        Save Changes
+                                                    </Button>
+                                                    <Button
+                                                        block
+                                                        onClick={() => setEditingId(null)}
+                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </Space>
+                                            </div>
+                                            {/* marginTop: theme.spacing.xl, */}
+                                            <div style={{ paddingTop: theme.spacing.lg, borderTop: `1px solid ${theme.colors.border}` }}>
+                                                <Text strong style={{ color: theme.colors.error, display: 'block', marginBottom: theme.spacing.sm }}>Danger Zone</Text>
+                                                <div>
+                                                    {canManageProject && (
+                                                        <Popconfirm
+                                                            title="Delete this project?"
+                                                            description="All boards and cards will be deleted."
+                                                            onConfirm={() => handleDeleteProject(proj.id)}
+                                                            okText="Delete"
+                                                            okType="danger"
+                                                            placement="topLeft"
+                                                        >
+                                                            <Button danger block icon={<AiOutlineDelete />} >Delete Project</Button>
+                                                        </Popconfirm>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (

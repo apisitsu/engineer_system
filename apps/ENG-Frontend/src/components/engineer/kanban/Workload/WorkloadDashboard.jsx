@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, Tabs, Drawer, Select, Tooltip, Calendar, Badge, Space, Alert } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
@@ -76,7 +77,12 @@ const TIMEFRAMES = {
 };
 
 const WorkloadDashboard = ({ theme }) => {
-    const { teamWorkload, fetchTeamWorkload, projects, isLoading } = useKanbanStore();
+    const { teamWorkload, fetchTeamWorkload, projects, isLoading } = useKanbanStore(
+        useShallow(state => ({
+            teamWorkload: state.teamWorkload, fetchTeamWorkload: state.fetchTeamWorkload,
+            projects: state.projects, isLoading: state.isLoading
+        }))
+    );
     const { empNo } = useAuthStore();
     
     const { isManagerOrCoord, isSuperAdmin } = useKanbanPermissions();
