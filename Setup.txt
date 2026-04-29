@@ -1,5 +1,5 @@
-npm config set proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
-npm config set https-proxy http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080
+npm config set proxy http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+npm config set https-proxy http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
 npm config set proxy http://lble485:Kpx89164#4@proxyth.bp.minebea.local:8080
 npm config set https-proxy http://lble485:Kpx89164#4@proxyth.bp.minebea.local:8080
 

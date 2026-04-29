@@ -10,9 +10,12 @@ import {
     List,
     Space,
     message,
-    ConfigProvider,
     Spin
 } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { useTheme } from '../../../../theme';
+import ScrollbarStyle from '../../../common/scrollbar';
 import {
     InboxOutlined,
     FilePdfOutlined,
@@ -21,7 +24,8 @@ import {
     MergeCellsOutlined,
     CheckCircleOutlined,
     DownloadOutlined,
-    RedoOutlined
+    RedoOutlined,
+    ArrowLeftOutlined
 } from '@ant-design/icons';
 import { PDFDocument } from 'pdf-lib';
 import {
@@ -92,6 +96,8 @@ const SortableItem = ({ id, file, onRemove }) => {
 };
 
 const PdfMergerTool = () => {
+    const navigate = useNavigate();
+    const { theme } = useTheme();
     const [fileList, setFileList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mergedPdfUrl, setMergedPdfUrl] = useState(null);
@@ -195,17 +201,18 @@ const PdfMergerTool = () => {
     };
 
     return (
-        <ConfigProvider
-            theme={{
-                token: {
-                    colorPrimary: '#1677ff',
-                    borderRadius: 8,
-                    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial",
-                },
-            }}
-        >
-            <Layout style={{ minHeight: '100vh', background: '#f5f7fa' }}>
-                <Content style={{ padding: '24px 48px', maxWidth: 1000, margin: '0 auto', width: '100%' }}>
+        <>
+            <Layout style={{ minHeight: '100vh', display: 'flex' }}>
+                <MenuTemplate type={"NewProd"} defaultSelectedKeys={"1"} />
+                <Layout style={{ backgroundColor: theme.colors.background }}>
+                    <ScrollbarStyle primary={theme.colors.primary} />
+                    <Content className="kb-vscroll" style={{
+                        height: 'calc(100vh - 64px)',
+                        overflowY: 'auto',
+                        padding: '24px',
+                        position: 'relative'
+                    }}>
+                        <div style={{ padding: '24px 48px', maxWidth: 1000, margin: '0 auto', width: '100%' }}>
                     <Card
                         variant="borderless"
                         style={{
@@ -215,6 +222,7 @@ const PdfMergerTool = () => {
                         }}
                     >
                         <Space align="center" size="middle" style={{ marginBottom: 24 }}>
+                            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} style={{ fontSize: '18px' }} />
                             <div style={{ width: 4, height: 28, background: '#1677ff', borderRadius: 2 }} />
                             <Title level={3} style={{ margin: 0 }}>PDF Merger Tool</Title>
                         </Space>
@@ -321,7 +329,9 @@ const PdfMergerTool = () => {
                             </div>
                         )}
                     </Card>
-                </Content>
+                        </div>
+                    </Content>
+                </Layout>
             </Layout>
             <style>{`
                 @keyframes fadeIn {
@@ -329,7 +339,7 @@ const PdfMergerTool = () => {
                     to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
-        </ConfigProvider>
+        </>
     );
 };
 
