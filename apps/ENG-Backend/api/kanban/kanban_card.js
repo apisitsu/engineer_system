@@ -6,12 +6,41 @@
 const { engPool } = require('../../instance/eng_db');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const {
     canAccessProject, canManageProject,
     getBoardMembership, getCardMembership,
     hasBoardLevelOverride, canEditBoard, canViewBoard, canEditCard, canManageCard, canViewCard,
 } = require('./kanban_acl');
 const { insertToPositionables } = require('./positionHelper');
+
+// ─── GOOGLE DRIVE (GAS) CONFIG ────────────────────────────────────────
+const GAS_DRIVE_URL = process.env.GAS_DRIVE_URL || '';
+
+/** Corporate proxy agent for HTTPS via McAfee Web Gateway (CONNECT method) */
+function getDriveProxyAgent() {
+    if (process.env.PROXY_HOST) {
+        const proxyUrl = `http://${process.env.PROXY_USER}:${process.env.PROXY_PASS}@${process.env.PROXY_HOST}:${process.env.PROXY_PORT || 8080}`;
+        return new HttpsProxyAgent(proxyUrl);
+    }
+    return undefined;
+}
+
+/** POST to GAS Web App with proxy + redirect handling */
+async function postToGAS(payload) {
+    if (!GAS_DRIVE_URL) throw new Error('GAS_DRIVE_URL is not configured in .env');
+    const agent = getDriveProxyAgent();
+    const response = await axios.post(GAS_DRIVE_URL, payload, {
+        httpsAgent: agent,
+        proxy: false,
+        maxRedirects: 5,
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 120000, // 2 min for large files
+    });
+    return response.data;
+}
 
 // ─── AUTH HELPER ──────────────────────────────────────────────────
 /**
@@ -514,13 +543,21 @@ const DeleteCard = async (req, res) => {
         return res.status(403).json({ error: 'Card manager permission required to delete' });
 
     try {
-        // Get attachments for file cleanup
-        const { rows: attachments } = await engPool.query('SELECT file_path FROM kb_attachment WHERE card_id=$1', [id]);
+        // Get attachments for file cleanup (both local and Drive)
+        const { rows: attachments } = await engPool.query('SELECT file_path, drive_file_id, attachment_type FROM kb_attachment WHERE card_id=$1', [id]);
         await engPool.query('DELETE FROM kb_card WHERE id=$1', [id]);
         // Clean up files (non-blocking)
         attachments.forEach(a => {
-            const fullPath = path.join(__dirname, '../../../', a.file_path);
-            if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+            if (a.drive_file_id) {
+                // Trash from Google Drive via GAS (fire-and-forget)
+                postToGAS({ action: 'delete', fileId: a.drive_file_id }).catch(err => {
+                    console.error(`Failed to trash Drive file ${a.drive_file_id}:`, err.message);
+                });
+            } else if (a.attachment_type === 'file' && a.file_path) {
+                // Legacy local file cleanup
+                const fullPath = path.join(__dirname, '../../../', a.file_path);
+                if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+            }
         });
 
         // ── Broadcast card deletion via WebSocket ──
@@ -1169,13 +1206,14 @@ const DeleteComment = async (req, res) => {
 // ─── ATTACHMENTS ────────────────────────────────────────────────────
 
 // POST /api/kanban/cards/:id/attachments  (uses express-fileupload or link)
+// File uploads are sent to Google Drive via GAS Web App; link attachments stored as-is.
 const UploadAttachment = async (req, res) => {
     const { id } = req.params;
     const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
-    // Support link-type attachments
+    // Support link-type attachments (unchanged — no Drive interaction)
     if (req.body.attachment_type === 'link') {
         const { url, name } = req.body;
         if (!url) return res.status(400).json({ error: 'url is required for link attachments' });
@@ -1196,12 +1234,59 @@ const UploadAttachment = async (req, res) => {
         return res.status(201).json({ data: rows[0] });
     }
 
-    // Handle file upload
+    // ── Handle file upload (metadata from frontend after GAS Drive upload) ──
+    // Frontend already uploaded to Google Drive via iframe → GAS.
+    // It sends the resulting metadata here for DB storage.
+    if (req.body.drive_file_id) {
+        const { drive_file_id, drive_folder_path, file_name, file_size, mime_type } = req.body;
+        if (!file_name) return res.status(400).json({ error: 'file_name is required' });
+
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(file_name);
+        const driveViewUrl = `https://drive.google.com/file/d/${drive_file_id}/view`;
+
+        try {
+            const { rows: [cardInfo] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+            if (!cardInfo) return res.status(404).json({ error: 'Card not found' });
+
+            const { rows } = await engPool.query(`
+                INSERT INTO kb_attachment (
+                    card_id, creator_u_code, attachment_type, file_name, file_path,
+                    file_size, mime_type, is_image, drive_file_id, drive_folder_path
+                )
+                VALUES ($1,$2,'file',$3,$4,$5,$6,$7,$8,$9) RETURNING *
+            `, [
+                id, uCode, file_name, driveViewUrl,
+                file_size || 0, mime_type || 'application/octet-stream', isImage,
+                drive_file_id, drive_folder_path || ''
+            ]);
+
+            const client = await engPool.connect();
+            try {
+                await logAction(client, id, uCode, 'attachment_added', { file_name, drive_file_id });
+            } finally {
+                client.release();
+            }
+
+            // ── Broadcast attachment change via WebSocket (surgical fetch signal) ──
+            const fileIo = req.app.get('io');
+            if (fileIo && cardInfo.board_id) {
+                fileIo.to(`board:${cardInfo.board_id}`).emit('cardUpdate', {
+                    id: parseInt(id), board_id: cardInfo.board_id, attachments_changed: true, actorUCode: uCode,
+                });
+            }
+
+            return res.status(201).json({ data: rows[0] });
+        } catch (err) {
+            console.error('UploadAttachment (Drive metadata) error:', err.message);
+            return res.status(500).json({ error: 'Failed to save attachment: ' + err.message });
+        }
+    }
+
+    // ── Fallback: handle legacy multipart file upload (direct to local storage) ──
     if (!req.files || Object.keys(req.files).length === 0) {
-        return res.status(400).json({ error: 'No file uploaded and no link provided' });
+        return res.status(400).json({ error: 'No file uploaded, no link, and no drive_file_id provided' });
     }
     const file = req.files.file;
-    // __dirname is api/kanban. ../../public goes to ENG-Backend/public
     const uploadDir = path.join(__dirname, '../../public/kanban_attachments', id);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -1224,7 +1309,7 @@ const UploadAttachment = async (req, res) => {
         client.release();
     }
 
-    // ── Broadcast attachment change via WebSocket (surgical fetch signal) ──
+    // ── Broadcast attachment change via WebSocket ──
     const { rows: [fileCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
     const fileIo = req.app.get('io');
     if (fileIo && fileCard?.board_id) {
@@ -1237,6 +1322,7 @@ const UploadAttachment = async (req, res) => {
 };
 
 // DELETE /api/kanban/attachments/:id
+// Trashes file from Google Drive via GAS, falls back to local fs.unlink for legacy files.
 const DeleteAttachment = async (req, res) => {
     const { id } = req.params;
     const uCode = getAuthUser(req, res); if (!uCode) return;
@@ -1248,9 +1334,24 @@ const DeleteAttachment = async (req, res) => {
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
     await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
+
+    // Clean up the actual file (Drive or local)
     if (att.attachment_type === 'file') {
-        const fullPath = path.join(__dirname, '../../', att.file_path);
-        if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+        if (att.drive_file_id) {
+            // Trash from Google Drive via GAS
+            try {
+                const gasResult = await postToGAS({ action: 'delete', fileId: att.drive_file_id });
+                if (!gasResult.success) {
+                    console.error(`GAS trash failed for ${att.drive_file_id}:`, gasResult.error);
+                }
+            } catch (err) {
+                console.error(`GAS trash error for ${att.drive_file_id}:`, err.message);
+            }
+        } else if (att.file_path && !att.file_path.startsWith('http')) {
+            // Legacy local file cleanup
+            const fullPath = path.join(__dirname, '../../', att.file_path);
+            if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+        }
     }
 
     // ── Broadcast attachment removal via WebSocket (surgical fetch signal) ──
