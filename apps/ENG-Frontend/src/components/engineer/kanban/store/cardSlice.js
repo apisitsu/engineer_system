@@ -8,11 +8,12 @@
  *          archive, auto-join, card detail UI
  */
 import axios from 'axios';
-import { server } from '../../../../constance/constance';
+import { server, GAS_DRIVE_URL } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
 import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
 import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
+import { uploadFileToDrive } from '../../../../utils/uploadFileToDrive';
 
 export const createCardSlice = (set, get) => ({
     // --- Card Data State ---
@@ -558,22 +559,51 @@ export const createCardSlice = (set, get) => ({
         return null;
     },
 
-    addFileAttachment: async (cardId, file) => {
+    addFileAttachment: async (cardId, file, popup) => {
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await axios.post(
-                `${server.KANBAN_CARDS}/${cardId}/attachments`,
-                formData,
-                { headers: { 'Content-Type': 'multipart/form-data' } }
-            );
-            if (res.data?.data) {
-                get().fetchCardDetail(cardId);
-                return res.data.data;
+            // ── Step 1: Upload to Google Drive via GAS popup ──
+            if (GAS_DRIVE_URL) {
+                const { activeProject, activeBoard } = get();
+                const projectId = activeProject?.id || 0;
+                const boardId = activeBoard?.id || 0;
+
+                const gasResult = await uploadFileToDrive(file, {
+                    projectId, boardId, cardId,
+                }, { popup });
+
+                // ── Step 2: Send Drive metadata to backend for DB storage ──
+                const res = await axios.post(
+                    `${server.KANBAN_CARDS}/${cardId}/attachments`,
+                    {
+                        drive_file_id: gasResult.fileId,
+                        drive_folder_path: gasResult.folderPath,
+                        file_name: file.name,
+                        file_size: file.size,
+                        mime_type: file.type || 'application/octet-stream',
+                    },
+                    { headers: { 'Content-Type': 'application/json' } }
+                );
+                if (res.data?.data) {
+                    get().fetchCardDetail(cardId);
+                    return res.data.data;
+                }
+            } else {
+                // Fallback: legacy multipart upload to local storage
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await axios.post(
+                    `${server.KANBAN_CARDS}/${cardId}/attachments`,
+                    formData,
+                    { headers: { 'Content-Type': 'multipart/form-data' } }
+                );
+                if (res.data?.data) {
+                    get().fetchCardDetail(cardId);
+                    return res.data.data;
+                }
             }
         } catch (err) {
             console.error('Failed to upload file attachment', err);
-            Swal.fire('Error', err.response?.data?.error || 'ไม่สามารถอัปโหลดไฟล์ได้', 'error');
+            Swal.fire('Error', err?.message || err?.response?.data?.error || 'ไม่สามารถอัปโหลดไฟล์ได้', 'error');
         }
         return null;
     },
@@ -594,6 +624,23 @@ export const createCardSlice = (set, get) => ({
 
     deleteAttachment: async (attachmentId, cardId) => {
         try {
+            // Find the attachment to get drive_file_id
+            const card = get().cards[cardId] || get().cardDetail;
+            let driveFileId = null;
+            if (card && card.attachments) {
+                const att = card.attachments.find(a => a.id === attachmentId);
+                if (att && att.drive_file_id) {
+                    driveFileId = att.drive_file_id;
+                }
+            }
+
+            // 1. Delete from Google Drive if it's a Drive file
+            if (driveFileId) {
+                const { deleteFileFromDrive } = require('../../utils/uploadFileToDrive');
+                deleteFileFromDrive(driveFileId);
+            }
+
+            // 2. Delete from Database
             await axios.delete(`${server.KANBAN_ATTACHMENTS}/${attachmentId}`);
             if (cardId) get().fetchCardDetail(cardId);
             return true;

@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
-import { key_constance } from "../constance/constance";
-import { Layout, Menu, Dropdown, Avatar } from 'antd';
+import { key_constance, apiUrl } from "../constance/constance";
+import { Layout, Menu, Dropdown, Avatar, Tag } from 'antd'; // เพิ่ม Tag จาก antd
 import { useAuthStore } from "../stores/authStore";
 import { useTheme } from '../theme';
-// import ThemeSwitcher from '../components/shared/ThemeSwitcher';
 import PastelThemeSelector from '../components/shared/PastelThemeSelector';
 import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
@@ -12,9 +11,11 @@ const { Header } = Layout;
 
 const HeaderBar = () => {
     const { userDepartment, userName, empNo } = useAuthStore();
-    const { theme } = useTheme();  // Get current theme
+    const { theme } = useTheme();
 
-    // Dynamic header styles based on theme
+    // เช็คว่าเป็นเวอร์ชันทดสอบหรือไม่
+    const isTestVersion = apiUrl !== "http://plbmp130:2005/";
+
     const headerStyle = useMemo(() => ({
         header: {
             position: 'sticky',
@@ -23,22 +24,38 @@ const HeaderBar = () => {
             alignItems: 'center',
             color: theme.colors.textInverse,
             padding: '0 20px',
-            background: theme.colors.primary,  // Dynamic!
+            background: theme.colors.primary,
             boxShadow: theme.shadows.sm,
             transition: `all ${theme.transitions.normal}`,
-            zIndex: 1000
+            zIndex: 1000,
+            justifyContent: 'space-between', // <--- แก้ไขตรงนี้ เพื่อแยกซ้ายขวา
+        },
+        // กลุ่มฝั่งซ้าย (Menu + Tag) ให้มีขนาดพอดี ไม่ยืดขยาย
+        leftSection: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            // ลบ minWidth: 0 ทิ้งไปเลยครับ
         },
         menuList: {
-            flex: 1,
-            minWidth: 0,
-            background: theme.colors.primary,  // Dynamic!
-            borderBottom: 'none'
+            background: theme.colors.primary,
+            borderBottom: 'none',
+            minWidth: '100px', // <--- เพิ่มบรรทัดนี้ เพื่อจองพื้นที่ให้ปุ่ม Home เสมอ
+            flexShrink: 0,     // <--- สั่งไม่ให้ Ant Design บีบขนาดกล่องนี้
         },
         menu: {
             color: theme.colors.textInverse,
             paddingTop: 0,
             paddingBottom: 0,
         },
+        // --- ส่วนที่เพิ่มใหม่ ---
+        // กลุ่มฝั่งขวา (ThemeSelector + Profile) ให้ชิดกัน
+        rightSection: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px', // <--- เพิ่ม gap ระหว่าง ThemeSelector และ Profile
+        },
+        // --- (ส่วนที่เหลือเก็บไว้เหมือนเดิม) ---
         profileContainer: {
             display: 'flex',
             alignItems: 'center',
@@ -46,7 +63,7 @@ const HeaderBar = () => {
             padding: '5px 10px',
             borderRadius: '20px',
             transition: 'background 0.3s',
-            marginLeft: '20px'
+            // marginLeft: '20px' // เอา marginLeft ตรงนี้ออก เพราะเราใช้ gap ใน rightSection แทน
         },
         profileImage: {
             border: `2px solid ${theme.colors.surface}`,
@@ -58,7 +75,8 @@ const HeaderBar = () => {
             fontWeight: 500,
             display: 'flex',
             alignItems: 'center'
-        }
+        },
+        // ลบ testBadge ทิ้งได้เลย เพราะไม่ได้ใช้แล้ว
     }), [theme]);
 
     const user_image = useMemo(() => {
@@ -95,7 +113,6 @@ const HeaderBar = () => {
         ])
     ];
 
-    // Dropdown Menu Items
     const menuItems = [
         ...(userDepartment !== "USER" ? [{
             key: 'settings',
@@ -120,39 +137,42 @@ const HeaderBar = () => {
 
     return (
         <Header style={headerStyle.header} >
-            <Menu theme="dark" mode="horizontal" items={master} style={headerStyle.menuList} />
+            {/* จัดกลุ่มทางซ้าย: Menu และ Tag ให้อยู่ติดกันพอดี */}
+            <div style={headerStyle.leftSection}>
+                <Menu theme="dark" mode="horizontal" items={master} style={headerStyle.menuList} />
+                {isTestVersion && (
+                    <Tag color="error" style={{ fontSize: '14px', padding: '4px 12px', fontWeight: 'bold', margin: 0 }}>
+                        TEST VERSION
+                    </Tag>
+                )}
+            </div>
 
-            {/* Pastel Theme Selector (only shows for pastel themes) */}
-            {userDepartment === "AD" && <PastelThemeSelector style={{ marginRight: '12px' }} />}
+            {/* จัดกลุ่มทางขวา: ThemeSelector และ Profile ให้อยู่ชิดกันทางขวา */}
+            <div style={headerStyle.rightSection}>
+                {userDepartment === "AD" && <PastelThemeSelector style={{ marginRight: '12px' }} />}
 
-            {/* Theme Category Switcher (Pastel <-> RPG) - REMOVED as per request */}
-            {/* <ThemeSwitcher style={{ marginRight: '10px' }} /> */}
-
-            {/* User Profile Dropdown */}
-            <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-                <div style={headerStyle.profileContainer} className="profile-hover-effect">
-                    {user_image ? (
-                        <Avatar
-                            src={user_image}
-                            size="large"
-                            style={headerStyle.profileImage}
-                        />
-                    ) : (
-                        <Avatar
-                            icon={<UserOutlined />}
-                            size="large"
-                            style={{ ...headerStyle.profileImage, backgroundColor: 'rgba(255,255,255,0.2)' }}
-                        />
-                    )}
-                    <div style={headerStyle.profileText} className="d-none d-sm-flex">
-                        {empNo} : {userName}
-                        <DownOutlined style={{ fontSize: '10px', marginLeft: '5px', opacity: 0.8 }} />
+                <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+                    <div style={headerStyle.profileContainer} className="profile-hover-effect">
+                        {user_image ? (
+                            <Avatar
+                                src={user_image}
+                                size="large"
+                                style={headerStyle.profileImage}
+                            />
+                        ) : (
+                            <Avatar
+                                icon={<UserOutlined />}
+                                size="large"
+                                style={{ ...headerStyle.profileImage, backgroundColor: 'rgba(255,255,255,0.2)' }}
+                            />
+                        )}
+                        <div style={headerStyle.profileText} className="d-none d-sm-flex">
+                            {empNo} : {userName}
+                            <DownOutlined style={{ fontSize: '10px', marginLeft: '5px', opacity: 0.8 }} />
+                        </div>
                     </div>
-                </div>
-            </Dropdown>
-
-            {/* Keeping the detailed logout button logic hidden but functionally replaced by the dropdown */}
-
+                </Dropdown>
+            </div>
         </Header>
     );
 }

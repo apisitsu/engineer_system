@@ -436,7 +436,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         </div>
                     )}
                 >
-                    <span style={{ display: 'none' }}>
+                    <span>
                         <Badge count={unreadNotificationCount} size="small" offset={[-2, 2]}>
                             <Button type="text" size="small" icon={<IoNotificationsOutline size={18} />}
                                 style={{ color: theme.colors.textSecondary }} />

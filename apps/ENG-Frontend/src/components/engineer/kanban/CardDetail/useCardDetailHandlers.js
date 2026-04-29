@@ -13,6 +13,7 @@
 
 import { useCallback } from 'react';
 import { useKanbanStore } from '../store/kanbanStore';
+import { GAS_DRIVE_URL } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
 
 /**
@@ -342,16 +343,51 @@ export const useCardDetailHandlers = (deps) => {
     const handleFileUpload = useCallback(async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setIsUploadingFile(true);
-        try {
-            await addFileAttachment(card.id, file);
-        } catch (err) {
-            console.error('[CardDetail] File upload failed:', err);
-        } finally {
-            setIsUploadingFile(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+
+        // Reset file input immediately so the same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        if (GAS_DRIVE_URL) {
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            const result = await Swal.fire({
+                title: 'อัปโหลดไฟล์',
+                html: `<div style="text-align:left;font-size:14px;">
+                    <p><b>📄 ${file.name}</b></p>
+                    <p>ขนาด: ${sizeMB} MB</p>
+                    <p style="color:#888;font-size:12px;">ไฟล์จะถูกอัปโหลดไปยัง Google Drive ขององค์กร</p>
+                </div>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '📤 อัปโหลด',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: theme.colors.primary,
+            });
+
+            if (!result.isConfirmed) return;
+
+            // Open popup from Swal confirm click (fresh user gesture)
+            const popup = window.open('about:blank', 'gas_upload', 'width=480,height=520,left=300,top=100');
+
+            setIsUploadingFile(true);
+            try {
+                await addFileAttachment(card.id, file, popup);
+            } catch (err) {
+                console.error('[CardDetail] File upload failed:', err);
+                try { if (popup && !popup.closed) popup.close(); } catch {}
+            } finally {
+                setIsUploadingFile(false);
+            }
+        } else {
+            setIsUploadingFile(true);
+            try {
+                await addFileAttachment(card.id, file);
+            } catch (err) {
+                console.error('[CardDetail] File upload failed:', err);
+            } finally {
+                setIsUploadingFile(false);
+            }
         }
-    }, [addFileAttachment, card?.id, setIsUploadingFile, fileInputRef]);
+    }, [addFileAttachment, card?.id, setIsUploadingFile, fileInputRef, theme?.colors?.primary]);
 
     // ── handleAttachmentClick ──
     const handleAttachmentClick = useCallback((att) => {
