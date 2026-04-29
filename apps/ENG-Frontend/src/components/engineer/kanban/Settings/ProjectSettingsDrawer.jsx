@@ -160,6 +160,7 @@ const ProjectSettingsDrawer = () => {
     const [editingGradient, setEditingGradient] = useState(GRADIENTS[0]);
     const [editingIcon, setEditingIcon] = useState('rocket');
     const [editingPrivate, setEditingPrivate] = useState(false);
+    const [editingPermanent, setEditingPermanent] = useState(false);
     const [editingPriority, setEditingPriority] = useState('Medium');
     const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
@@ -225,6 +226,7 @@ const ProjectSettingsDrawer = () => {
             background_value: editingGradient,
             icon: editingIcon,
             is_private: editingPrivate,
+            is_permanent: editingPermanent,
             priority: editingPriority,
             status: editingStatus,
         });
@@ -240,6 +242,7 @@ const ProjectSettingsDrawer = () => {
         setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
         setEditingIcon(proj.icon || 'rocket');
         setEditingPrivate(proj.is_private || false);
+        setEditingPermanent(proj.is_permanent || false);
         setEditingPriority(proj.priority || 'Medium');
         setEditingStatus(proj.status || 'Active');
         setMemberSearch('');
@@ -461,6 +464,22 @@ const ProjectSettingsDrawer = () => {
                                                     </div>
                                                 </div>
                                                 <Switch checked={editingPrivate} onChange={setEditingPrivate} />
+                                            </div>
+
+                                            <Divider style={{ margin: '8px 0' }} />
+
+                                            {/* Permanent Project Toggle */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div>
+                                                        <Text strong style={{ fontSize: 13 }}>Permanent Project (โปรเจคถาวร)</Text>
+                                                        <br />
+                                                        <Text type="secondary" style={{ fontSize: 11 }}>
+                                                            Enable for continuous operations. Opens the Operations Dashboard instead of a single board.
+                                                        </Text>
+                                                    </div>
+                                                </div>
+                                                <Switch checked={editingPermanent} onChange={setEditingPermanent} />
                                             </div>
 
                                             <Divider style={{ margin: '8px 0' }} />

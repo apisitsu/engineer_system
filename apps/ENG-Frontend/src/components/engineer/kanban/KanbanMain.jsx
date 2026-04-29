@@ -35,6 +35,7 @@ import BoardToolbar from './Board/BoardToolbar';
 import BoardGroupModal from './Board/components/BoardGroupModal';
 import BoardView from './Board/BoardView';
 import ReportsTab from './Tabs/ReportsTab';
+import BoardDashboard from './BoardDashboard';
 
 dayjs.extend(relativeTime);
 
@@ -175,11 +176,14 @@ const KanbanMain = () => {
     // Auto-select first board in filtered list if current activeBoard is not in the list
     useEffect(() => {
         if (!isInitLoading && isGroupInitialized && filteredOrderedBoards.length > 0) {
-            if (!activeBoard || !filteredOrderedBoards.find(b => b.id === activeBoard.id)) {
-                setActiveBoard(filteredOrderedBoards[0]);
+            // ONLY auto-select if the project is not permanent!
+            if (!activeProject?.is_permanent) {
+                if (!activeBoard || !filteredOrderedBoards.find(b => b.id === activeBoard.id)) {
+                    setActiveBoard(filteredOrderedBoards[0]);
+                }
             }
         }
-    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized]);
+    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized, activeProject?.is_permanent]);
 
     // On mount: fetch all projects and user preferences
     useEffect(() => {
@@ -332,6 +336,8 @@ const KanbanMain = () => {
                             </div>
                         ) : viewMode === 'report' ? (
                             <ReportsTab theme={theme} />
+                        ) : activeProject?.is_permanent && !activeBoard ? (
+                            <BoardDashboard boards={boards} onSelectBoard={setActiveBoard} />
                         ) : activeBoard ? (
                             <BoardView />
                         ) : (

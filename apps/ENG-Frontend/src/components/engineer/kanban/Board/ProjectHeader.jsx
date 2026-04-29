@@ -29,7 +29,12 @@ const ProjectHeader = ({ theme, activeProject }) => {
     });
 
     const handleBackToProjects = () => {
-        navigate('/eng/kanban');
+        const { activeBoard, setActiveBoard } = useKanbanStore.getState();
+        if (activeProject?.is_permanent && activeBoard) {
+            setActiveBoard(null);
+        } else {
+            navigate('/eng/kanban');
+        }
     };
 
     return (

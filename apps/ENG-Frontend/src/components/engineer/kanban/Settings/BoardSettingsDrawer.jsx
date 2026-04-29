@@ -140,6 +140,7 @@ const BoardSettingsDrawer = () => {
     const [isCreatingBoard, setIsCreatingBoard] = useState(false);
     const [editingBoardId, setEditingBoardId] = useState(null);
     const [editingBoardName, setEditingBoardName] = useState('');
+    const [editingBoardStatus, setEditingBoardStatus] = useState('pool');
     const [showCreateBoardForm, setShowCreateBoardForm] = useState(false);
     const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
 
@@ -252,8 +253,8 @@ const BoardSettingsDrawer = () => {
 
     const handleEditBoard = async (boardId) => {
         if (!editingBoardName.trim()) return;
-        await updateBoard(boardId, { name: editingBoardName.trim() });
-        setEditingBoardId(null); setEditingBoardName('');
+        await updateBoard(boardId, { name: editingBoardName.trim(), status: editingBoardStatus });
+        setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool');
     };
 
     const handleDeleteBoard = async (boardId) => {
@@ -350,30 +351,43 @@ const BoardSettingsDrawer = () => {
                         transition: `all ${theme.transitions.fast}`,
                     }}>
                         {editingBoardId === activeBoard.id ? (
-                            <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-                                <Input size="small" value={editingBoardName}
-                                    onChange={(e) => setEditingBoardName(e.target.value)}
-                                    onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
-                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                />
-                                <Button size="small" type="primary" icon={<AiOutlineCheck />}
-                                    onClick={() => handleEditBoard(activeBoard.id)}
-                                    style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                />
-                                <Button size="small" icon={<AiOutlineClose />}
-                                    onClick={() => { setEditingBoardId(null); setEditingBoardName(''); }}
-                                />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, width: '100%' }}>
+                                <div style={{ display: 'flex', gap: 4, width: '100%' }}>
+                                    <Input size="small" value={editingBoardName}
+                                        onChange={(e) => setEditingBoardName(e.target.value)}
+                                        onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
+                                        style={{ borderRadius: theme.borderRadius.sm, flex: 1 }}
+                                    />
+                                    <Button size="small" type="primary" icon={<AiOutlineCheck />}
+                                        onClick={() => handleEditBoard(activeBoard.id)}
+                                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
+                                    />
+                                    <Button size="small" icon={<AiOutlineClose />}
+                                        onClick={() => { setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool'); }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>Status:</Text>
+                                    <Select size="small" value={editingBoardStatus} onChange={setEditingBoardStatus} style={{ flex: 1 }}>
+                                        <Select.Option value="pool">Waiting Pool</Select.Option>
+                                        <Select.Option value="active">Active Operations</Select.Option>
+                                        <Select.Option value="suspended">Suspended</Select.Option>
+                                        <Select.Option value="finished">Finished / Archived</Select.Option>
+                                    </Select>
+                                </div>
                             </div>
                         ) : (
                             <>
-                                <Text strong style={{ fontSize: 14 }}>
-                                    {activeBoard.name}
-                                </Text>
+                                <div>
+                                    <Text strong style={{ fontSize: 14 }}>{activeBoard.name}</Text>
+                                    <br />
+                                    <Text type="secondary" style={{ fontSize: 11, textTransform: 'capitalize' }}>Status: {activeBoard.status || 'pool'}</Text>
+                                </div>
                                 <Space size={2}>
                                     {canManageBoardStructure && (
                                         <>
                                             <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />}
-                                                onClick={() => { setEditingBoardId(activeBoard.id); setEditingBoardName(activeBoard.name); }}
+                                                onClick={() => { setEditingBoardId(activeBoard.id); setEditingBoardName(activeBoard.name); setEditingBoardStatus(activeBoard.status || 'pool'); }}
                                             />
                                             <Popconfirm title="Delete this board?" description="All lists and cards will be deleted."
                                                 onConfirm={() => {

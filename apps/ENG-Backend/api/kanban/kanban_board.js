@@ -52,7 +52,9 @@ const GetBoards = async (req, res) => {
         const query = `
             SELECT b.*,
                    mbr.role AS user_role,
-                   mbr.can_comment
+                   mbr.can_comment,
+                   (SELECT COUNT(*) FROM kb_card c JOIN kb_list l ON c.list_id = l.id WHERE l.board_id = b.id) AS total_cards,
+                   (SELECT COUNT(*) FROM kb_card c JOIN kb_list l ON c.list_id = l.id WHERE l.board_id = b.id AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')) AS done_cards
             FROM kb_board b
             LEFT JOIN kb_board_membership mbr ON mbr.board_id = b.id AND mbr.u_code = $2
             WHERE b.project_id = $1
@@ -83,7 +85,7 @@ const CreateBoard = async (req, res) => {
         return res.status(403).json({ error: 'Only project managers can create boards' });
 
     const { name, default_view, default_card_type, limit_card_types,
-        always_display_card_creator, expand_task_lists_by_default, is_private } = req.body;
+        always_display_card_creator, expand_task_lists_by_default, is_private, status } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
@@ -93,10 +95,10 @@ const CreateBoard = async (req, res) => {
         const position = await getNextPosition('kb_board', 'project_id', projectId);
         const { rows: [board] } = await client.query(`
             INSERT INTO kb_board (project_id, position, name, default_view, default_card_type, limit_card_types,
-                                  always_display_card_creator, expand_task_lists_by_default, is_private)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+                                  always_display_card_creator, expand_task_lists_by_default, is_private, status)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
         `, [projectId, position, name, default_view || 'kanban', default_card_type || 'task', limit_card_types || false,
-            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false]);
+            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false, status || 'pool']);
 
         // Add creator as owner of this board
         await client.query(`
@@ -182,7 +184,7 @@ const UpdateBoard = async (req, res) => {
     const { name, default_view, default_card_type, limit_card_types, position,
         background_type, background_value,
         always_display_card_creator, expand_task_lists_by_default, is_private,
-        allow_add_list, allow_add_card } = req.body;
+        allow_add_list, allow_add_card, status } = req.body;
 
     // Support explicit removal: frontend sends '__REMOVE__' to clear a field
     const bgType = background_type === '__REMOVE__' ? null : background_type;
@@ -204,12 +206,13 @@ const UpdateBoard = async (req, res) => {
                 expand_task_lists_by_default = COALESCE($9, expand_task_lists_by_default),
                 is_private                   = COALESCE($10, is_private),
                 allow_add_list               = COALESCE($11, allow_add_list),
-                allow_add_card               = COALESCE($12, allow_add_card)
-            WHERE id=$13 RETURNING *
+                allow_add_card               = COALESCE($12, allow_add_card),
+                status                       = COALESCE($13, status)
+            WHERE id=$14 RETURNING *
         `, [name, default_view, default_card_type, limit_card_types, position,
             bgType, bgValue,
             always_display_card_creator, expand_task_lists_by_default, is_private,
-            allow_add_list, allow_add_card, id]);
+            allow_add_list, allow_add_card, status, id]);
         res.json({ data: rows[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });

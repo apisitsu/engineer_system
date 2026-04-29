@@ -56,6 +56,7 @@ const CreateProjectModal = ({ open, onCancel, theme }) => {
     const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
     const [selectedIcon, setSelectedIcon] = useState('rocket');
     const [isPrivate, setIsPrivate] = useState(false);
+    const [isPermanent, setIsPermanent] = useState(false);
     const [selectedPriority, setSelectedPriority] = useState('Medium');
     const [selectedStatus, setSelectedStatus] = useState('Active');
 
@@ -66,6 +67,7 @@ const CreateProjectModal = ({ open, onCancel, theme }) => {
             background_value: selectedGradient,
             icon: selectedIcon,
             is_private: isPrivate,
+            is_permanent: isPermanent,
             priority: selectedPriority,
             status: selectedStatus,
         });
@@ -75,6 +77,7 @@ const CreateProjectModal = ({ open, onCancel, theme }) => {
             setSelectedGradient(GRADIENTS[0]);
             setSelectedIcon('rocket');
             setIsPrivate(false);
+            setIsPermanent(false);
             setSelectedPriority('Medium');
             setSelectedStatus('Active');
             fetchProjects();
@@ -118,6 +121,18 @@ const CreateProjectModal = ({ open, onCancel, theme }) => {
                             {isPrivate
                                 ? 'Only members can see this project'
                                 : 'Visible to managers and coordinators'}
+                        </Text>
+                    </div>
+                </Form.Item>
+                <Form.Item label={
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        Permanent Project (โปรเจคถาวร)
+                    </span>
+                }>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Switch checked={isPermanent} onChange={setIsPermanent} />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            Enable for continuous operations. Clicking this project will open the Operations Dashboard instead of a single board.
                         </Text>
                     </div>
                 </Form.Item>
