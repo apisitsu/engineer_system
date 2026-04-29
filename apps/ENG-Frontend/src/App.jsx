@@ -26,6 +26,7 @@ import HomeEng from './components/engineer/home_eng';
 import HomeSystemEng from './components/engineer/system_eng/home_system';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
 import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import PdfMergerTool from './components/engineer/newprod_eng/tool/PdfMergerTool';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
 import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
 
@@ -305,6 +306,7 @@ const AppContent = () => {
 
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
+                  <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />

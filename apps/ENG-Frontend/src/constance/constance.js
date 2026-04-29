@@ -168,4 +168,12 @@ export const mm_safety = {
 }
 
 // Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
-export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
+export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwUQrPmEcyc3olb4TTBW3XxQ9D-iykOy-Hjx63I145jcqJ6TDAp7B-qg8MRY_u48Fv_nw/exec';
+
+// Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
+// ⚠️ Paste your deployed GAS URL here after deploying Code.gs
+
+// By Everyone
+export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
+// By me
+// export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwJzagUw233ty6O8pMBAUtmRXLYXqdkdpQcrog5Wr_d5ERjPZEk4WK0pG5_OaXGLb7a/exec';

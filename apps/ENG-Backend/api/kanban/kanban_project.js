@@ -116,16 +116,16 @@ const GetProjectById = async (req, res) => {
 const CreateProject = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { name, description, background_type, background_value, is_hidden, is_private, pm_project_id, icon, priority, status } = req.body;
+    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows } = await client.query(`
-            INSERT INTO kb_project (owner_u_code, pm_project_id, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status)
+            INSERT INTO kb_project (owner_u_code, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
-        `, [uCode, pm_project_id || null, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active']);
+        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active', is_permanent || false]);
 
         const project = rows[0];
 
@@ -155,7 +155,7 @@ const UpdateProject = async (req, res) => {
     if (!(await canManageProject(req, id)))
         return res.status(403).json({ error: 'Only project owners or admins can update' });
 
-    let { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status } = req.body;
+    let { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent } = req.body;
     try {
         const { isSuperAdmin } = require('./kanban_acl');
         const admin = await isSuperAdmin(req);
@@ -163,7 +163,6 @@ const UpdateProject = async (req, res) => {
         // Get old status to detect transition
         const oldProjectRes = await engPool.query('SELECT status, name FROM kb_project WHERE id = $1', [id]);
         const oldStatus = oldProjectRes.rows[0]?.status;
-        const projectName = oldProjectRes.rows[0]?.name;
 
         // Inactive status edit restrictions
         if (['suspended', 'completed'].includes((oldStatus || '').toLowerCase()) && !admin) {
@@ -175,42 +174,51 @@ const UpdateProject = async (req, res) => {
             icon = undefined;
             is_private = undefined;
             priority = undefined;
+            is_permanent = undefined;
         }
 
-        const { rows } = await engPool.query(`
-            UPDATE kb_project SET
-                name             = COALESCE($1, name),
-                description      = COALESCE($2, description),
-                background_type  = COALESCE($3, background_type),
-                background_value = COALESCE($4, background_value),
-                is_hidden        = COALESCE($5, is_hidden),
-                icon             = COALESCE($6, icon),
-                is_private       = COALESCE($7, is_private),
-                priority         = COALESCE($8, priority),
-                status           = COALESCE($9, status)
-            WHERE id = $10 RETURNING *
-        `, [name, description, background_type, background_value, is_hidden, icon, is_private, priority, status, id]);
-        
-        const updatedProject = rows[0];
+        const client = await engPool.connect();
+        try {
+            await client.query('BEGIN');
 
-        // Check for status change log/notification
-        if (status && status.toLowerCase() !== (oldStatus || '').toLowerCase()) {
-            const members = await engPool.query("SELECT u_code FROM kb_project_membership WHERE project_id=$1", [id]);
-            for (const member of members.rows) {
-                if (member.u_code !== uCode) {
-                    await engPool.query(`
-                        INSERT INTO kb_notification (recipient_u_code, actor_u_code, notif_type, notif_data)
-                        VALUES ($1, $2, 'project_status_changed', $3)
-                    `, [
-                        member.u_code, 
-                        uCode, 
-                        JSON.stringify({ project_id: id, project_name: updatedProject.name, message: `Project status changed to ${status}.` })
-                    ]);
-                }
+            const { rows } = await client.query(`
+                UPDATE kb_project SET
+                    name             = COALESCE($1, name),
+                    description      = COALESCE($2, description),
+                    background_type  = COALESCE($3, background_type),
+                    background_value = COALESCE($4, background_value),
+                    is_hidden        = COALESCE($5, is_hidden),
+                    icon             = COALESCE($6, icon),
+                    is_private       = COALESCE($7, is_private),
+                    priority         = COALESCE($8, priority),
+                    status           = COALESCE($9, status),
+                    is_permanent     = COALESCE($10, is_permanent)
+                WHERE id = $11 RETURNING *
+            `, [name, description, background_type, background_value, is_hidden, icon, is_private, priority, status, is_permanent, id]);
+            
+            const updatedProject = rows[0];
+
+            if (status && status.toLowerCase() !== (oldStatus || '').toLowerCase()) {
+                await client.query(`
+                    INSERT INTO kb_notification (recipient_u_code, actor_u_code, notif_type, notif_data)
+                    SELECT pm.u_code, $1::varchar, 'project_status_changed', $2::jsonb
+                    FROM kb_project_membership pm
+                    WHERE pm.project_id = $3 AND pm.u_code != $1
+                `, [
+                    uCode,
+                    JSON.stringify({ project_id: id, project_name: updatedProject.name, message: `Project status changed to ${status}.` }),
+                    id
+                ]);
             }
-        }
 
-        res.json({ data: updatedProject });
+            await client.query('COMMIT');
+            res.json({ data: updatedProject });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message });
@@ -265,6 +273,8 @@ const GetUsers = async (req, res) => {
         const { rows } = await engPool.query(
             `SELECT u_code, u_name, u_nickname, profile_img_b64
              FROM m_user_profile
+             WHERE LOWER(u_code) NOT LIKE '%admin'
+               AND (LOWER(u_nickname) != 'admin' OR u_nickname IS NULL)
              ORDER BY u_name NULLS LAST`
         );
         res.json({ data: rows });

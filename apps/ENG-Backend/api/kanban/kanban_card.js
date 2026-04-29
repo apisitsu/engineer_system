@@ -6,12 +6,75 @@
 const { engPool } = require('../../instance/eng_db');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const {
     canAccessProject, canManageProject,
     getBoardMembership, getCardMembership,
     hasBoardLevelOverride, canEditBoard, canViewBoard, canEditCard, canManageCard, canViewCard,
 } = require('./kanban_acl');
 const { insertToPositionables } = require('./positionHelper');
+
+// ─── GOOGLE DRIVE (GAS) CONFIG ────────────────────────────────────────
+const GAS_DRIVE_URL = process.env.GAS_DRIVE_URL || '';
+
+/** Corporate proxy agent for HTTPS via McAfee Web Gateway (CONNECT method) */
+function getDriveProxyAgent() {
+    if (process.env.PROXY_HOST) {
+        const proxyUrl = `http://${process.env.PROXY_USER}:${process.env.PROXY_PASS}@${process.env.PROXY_HOST}:${process.env.PROXY_PORT || 8080}`;
+        return new HttpsProxyAgent(proxyUrl);
+    }
+    return undefined;
+}
+
+/** POST to GAS Web App with proxy + redirect handling */
+async function postToGAS(payload) {
+    if (!GAS_DRIVE_URL) throw new Error('GAS_DRIVE_URL is not configured in .env');
+    const agent = getDriveProxyAgent();
+
+    // Axios natively converts POST to GET upon encountering a 302 redirect.
+    // To preserve the POST payload, we must manually handle the redirect.
+    try {
+        const response = await axios.post(GAS_DRIVE_URL, payload, {
+            httpsAgent: agent,
+            proxy: false,
+            maxRedirects: 0, // Prevent auto-follow
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 120000, // 2 min for large files
+            validateStatus: status => status >= 200 && status <= 302
+        });
+
+        if (response.status === 302 && response.headers.location) {
+            const finalRes = await axios.post(response.headers.location, payload, {
+                httpsAgent: agent,
+                proxy: false,
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 120000
+            });
+            return finalRes.data;
+        }
+
+        return response.data;
+    } catch (err) {
+        throw new Error(`GAS Communication failed: ${err.message}`);
+    }
+}
+
+// ─── AUTH HELPER ──────────────────────────────────────────────────
+/**
+ * Extracts the authenticated user code from the request.
+ * Returns null and sends a 401 response if authentication is missing.
+ * Usage:  const uCode = getAuthUser(req, res); if (!uCode) return;
+ */
+const getAuthUser = (req, res) => {
+    const uCode = req.user?.empno;
+    if (!uCode) {
+        res.status(401).json({ error: 'Authentication required' });
+        return null;
+    }
+    return uCode;
+};
 
 // ─── HELPERS ───────────────────────────────────────────────────────
 
@@ -160,7 +223,7 @@ const GetCards = async (req, res) => {
 // POST /api/kanban/lists/:listId/cards
 const CreateCard = async (req, res) => {
     const { listId } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [list] } = await engPool.query(
         'SELECT l.*, b.project_id FROM kb_list l JOIN kb_board b ON b.id=l.board_id WHERE l.id=$1', [listId]
@@ -190,6 +253,17 @@ const CreateCard = async (req, res) => {
         await autoSubscribe(client, card.id, uCode);
         await logAction(client, card.id, uCode, 'card_created', { name, list_id: listId });
         await client.query('COMMIT');
+
+        // ── Broadcast new card via WebSocket ──
+        const io = req.app.get('io');
+        if (io && list.board_id) {
+            io.to(`board:${list.board_id}`).emit('cardCreate', {
+                item: card,
+                listId: parseInt(listId),
+                actorUCode: uCode,
+            });
+        }
+
         res.status(201).json({ data: card });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -203,7 +277,7 @@ const CreateCard = async (req, res) => {
 // GET /api/kanban/cards/:id
 const GetCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     try {
         const { rows: [card] } = await engPool.query(`
             SELECT c.*,
@@ -259,7 +333,7 @@ const GetCard = async (req, res) => {
 // PATCH /api/kanban/cards/:id
 const UpdateCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
@@ -284,6 +358,16 @@ const UpdateCard = async (req, res) => {
         // If the request only contained suspension update, return early
         if (Object.keys(req.body).filter(k => k !== 'is_suspended' && k !== 'suspended_reason' && k !== 'owner_u_code').length === 0) {
             const { rows: [updated] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
+
+            // ── Broadcast suspension change via WebSocket ──
+            const io = req.app.get('io');
+            if (io && card.board_id) {
+                io.to(`board:${card.board_id}`).emit('cardUpdate', {
+                    item: { id: parseInt(id), board_id: card.board_id, is_suspended: updated.is_suspended, suspended_reason: updated.suspended_reason },
+                    actorUCode: uCode,
+                });
+            }
+
             return res.json({ message: 'Suspension status updated', data: updated });
         }
     }
@@ -407,7 +491,7 @@ const UpdateCard = async (req, res) => {
 
         if (updateFields.length === 0) {
             await client.query('ROLLBACK');
-            client.release();
+            // Let the finally block handle client.release() — no early release
             return res.json({ data: card });
         }
 
@@ -432,6 +516,32 @@ const UpdateCard = async (req, res) => {
         }
         await logAction(client, id, uCode, 'card_updated', { name, description, is_closed });
         await client.query('COMMIT');
+
+        // ── Broadcast card update via WebSocket (delta payload) ──
+        const io = req.app.get('io');
+        if (io && card.board_id) {
+            const delta = { id: parseInt(id), board_id: card.board_id };
+            if (name !== undefined)            delta.name = updated.name;
+            if (description !== undefined)     delta.description = updated.description;
+            if (due_date !== undefined)        delta.due_date = updated.due_date;
+            if (is_due_completed !== undefined) delta.is_due_completed = updated.is_due_completed;
+            if (card_type !== undefined)       delta.card_type = updated.card_type;
+            if (is_closed !== undefined)       delta.is_closed = updated.is_closed;
+            if (list_id !== undefined)         delta.list_id = updated.list_id;
+            if (stopwatch !== undefined)       delta.stopwatch = updated.stopwatch;
+            if (memo !== undefined)            delta.memo = updated.memo;
+            if (is_private !== undefined)      delta.is_private = updated.is_private;
+            if (estimated_hours !== undefined) delta.estimated_hours = updated.estimated_hours;
+            if (priority !== undefined)        delta.priority = updated.priority;
+            if (parent_id !== undefined)       delta.parent_id = updated.parent_id;
+
+            io.to(`board:${card.board_id}`).emit('cardUpdate', {
+                item: delta,
+                fromListId: listChanged ? card.list_id : null,
+                actorUCode: uCode,
+            });
+        }
+
         res.json({ data: updated });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -445,32 +555,55 @@ const UpdateCard = async (req, res) => {
 // DELETE /api/kanban/cards/:id
 const DeleteCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [card] } = await engPool.query('SELECT * FROM kb_card WHERE id=$1', [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
     if (!(await canManageCard(req, id)))
         return res.status(403).json({ error: 'Card manager permission required to delete' });
 
+    const client = await engPool.connect();
     try {
-        // Get attachments for file cleanup
-        const { rows: attachments } = await engPool.query('SELECT file_path FROM kb_attachment WHERE card_id=$1', [id]);
-        await engPool.query('DELETE FROM kb_card WHERE id=$1', [id]);
-        // Clean up files (non-blocking)
-        attachments.forEach(a => {
-            const fullPath = path.join(__dirname, '../../../', a.file_path);
-            if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
-        });
+        await client.query('BEGIN');
+        
+        // Get attachments for file cleanup (both local and Drive)
+        const { rows: attachments } = await client.query('SELECT file_path, drive_file_id, attachment_type FROM kb_attachment WHERE card_id=$1', [id]);
+        
+        // Clean up files synchronously before deleting the card
+        for (const a of attachments) {
+            if (a.attachment_type === 'file' && a.file_path && !a.file_path.startsWith('http')) {
+                // Legacy local file cleanup
+                const fullPath = path.join(__dirname, '../../../', a.file_path);
+                if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+            }
+        }
+
+        await client.query('DELETE FROM kb_card WHERE id=$1', [id]);
+        await client.query('COMMIT');
+
+        // ── Broadcast card deletion via WebSocket ──
+        const io = req.app.get('io');
+        if (io && card.board_id) {
+            io.to(`board:${card.board_id}`).emit('cardDelete', {
+                id: parseInt(id),
+                listId: card.list_id,
+                actorUCode: uCode,
+            });
+        }
+
         res.json({ message: 'Card deleted' });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error(err);
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 
 // POST /api/kanban/cards/:id/duplicate
 const DuplicateCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const client = await engPool.connect();
     try {
@@ -563,24 +696,41 @@ const DuplicateCard = async (req, res) => {
 // POST /api/kanban/cards/:id/memberships
 const AddCardMember = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`AddCardMember called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { target_u_code } = req.body;
     if (!target_u_code) return res.status(400).json({ error: 'target_u_code is required' });
 
     const { rows: [card] } = await engPool.query(`
-        SELECT c.board_id, b.project_id 
-        FROM kb_card c JOIN kb_board b ON b.id = c.board_id 
+        SELECT c.board_id, b.project_id, p.is_private as project_private
+        FROM kb_card c 
+        JOIN kb_board b ON b.id = c.board_id 
+        JOIN kb_project p ON p.id = b.project_id
         WHERE c.id=$1
     `, [id]);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    // Allow: caller is self-joining (for standard boards?), OR caller has manage powers
     const selfJoin = target_u_code === uCode;
-    // For private boards, we shouldn't allow self-join unless they are already a board member (which GetCards filters anyway).
-    // Let's rely on canManageCard for adding other users.
-    if (!selfJoin && !(await canManageCard(req, id)))
-        return res.status(403).json({ error: 'Card manager permission required' });
+    
+    if (!selfJoin) {
+        const hasManagePower = await canManageCard(req, id);
+        if (!hasManagePower) {
+            const hasEditPower = await canEditCard(req, id);
+            if (!hasEditPower) {
+                return res.status(403).json({ error: 'Card editor permission required' });
+            }
+
+            if (card.project_private) {
+                const { rows: projMembers } = await engPool.query(
+                    'SELECT u_code FROM kb_project_membership WHERE project_id=$1 AND u_code=$2', 
+                    [card.project_id, target_u_code]
+                );
+                if (projMembers.length === 0) {
+                    return res.status(403).json({ error: 'Card manager permission required to add non-members to a private project' });
+                }
+            }
+        }
+    }
 
     const client = await engPool.connect();
     try {
@@ -629,7 +779,7 @@ const AddCardMember = async (req, res) => {
 
         // Emit card member update to board
         if (req.app.get('io') && card.board_id) {
-            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_added: target_u_code });
+            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_added: target_u_code, actorUCode: uCode });
         }
         res.json({ message: 'Member added' });
     } catch (err) {
@@ -645,7 +795,7 @@ const AddCardMember = async (req, res) => {
 // DELETE /api/kanban/cards/:id/memberships
 const RemoveCardMember = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`RemoveCardMember called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { target_u_code } = req.body;
     if (!target_u_code) return res.status(400).json({ error: 'target_u_code is required' });
@@ -667,7 +817,7 @@ const RemoveCardMember = async (req, res) => {
 
         // Emit card member update to board
         if (req.app.get('io') && card.board_id) {
-            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_removed: target_u_code });
+            req.app.get('io').to(`board:${card.board_id}`).emit('cardUpdate', { id, board_id: card.board_id, member_removed: target_u_code, actorUCode: uCode });
         }
         res.json({ message: 'Member removed' });
     } catch (err) {
@@ -686,7 +836,7 @@ const RemoveCardMember = async (req, res) => {
 const AddCardLabel = async (req, res) => {
     const { id } = req.params;
     const { label_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
@@ -695,8 +845,20 @@ const AddCardLabel = async (req, res) => {
 
     if (label) {
         const client = await engPool.connect();
-        await logAction(client, id, uCode, 'label_added', { label_id, name: label.name });
-        client.release();
+        try {
+            await logAction(client, id, uCode, 'label_added', { label_id, name: label.name });
+        } finally {
+            client.release();
+        }
+    }
+
+    // ── Broadcast label change via WebSocket (surgical fetch signal) ──
+    const { rows: [labelCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const io = req.app.get('io');
+    if (io && labelCard?.board_id) {
+        io.to(`board:${labelCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: labelCard.board_id, labels_changed: true, actorUCode: uCode,
+        });
     }
 
     res.json({ message: 'Label added' });
@@ -705,7 +867,7 @@ const AddCardLabel = async (req, res) => {
 // DELETE /api/kanban/cards/:id/labels/:labelId
 const RemoveCardLabel = async (req, res) => {
     const { id, labelId } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
@@ -714,8 +876,20 @@ const RemoveCardLabel = async (req, res) => {
 
     if (label) {
         const client = await engPool.connect();
-        await logAction(client, id, uCode, 'label_removed', { label_id: labelId, name: label.name });
-        client.release();
+        try {
+            await logAction(client, id, uCode, 'label_removed', { label_id: labelId, name: label.name });
+        } finally {
+            client.release();
+        }
+    }
+
+    // ── Broadcast label change via WebSocket (surgical fetch signal) ──
+    const { rows: [labelCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const io = req.app.get('io');
+    if (io && labelCard?.board_id) {
+        io.to(`board:${labelCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: labelCard.board_id, labels_changed: true, actorUCode: uCode,
+        });
     }
 
     res.json({ message: 'Label removed' });
@@ -747,7 +921,7 @@ const GetTaskLists = async (req, res) => {
 const CreateTaskList = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     if (!name) return res.status(400).json({ error: 'name is required' });
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
     const posRes = await engPool.query('SELECT COALESCE(MAX(position),0)+65536 AS pos FROM kb_task_list WHERE card_id=$1', [id]);
@@ -798,7 +972,7 @@ const UpdateTaskList = async (req, res) => {
 const CreateTask = async (req, res) => {
     const { id } = req.params;
     const { name, assignee_u_code, linked_card_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!name) return res.status(400).json({ error: 'name is required' });
 
@@ -826,7 +1000,7 @@ const CreateTask = async (req, res) => {
 const UpdateTask = async (req, res) => {
     const { id } = req.params;
     const { name, is_completed, position, assignee_u_code, linked_card_id } = req.body;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     const { rows: [oldTask] } = await engPool.query(`
         SELECT t.*, tl.card_id 
@@ -897,7 +1071,7 @@ const DeleteTaskList = async (req, res) => {
 // POST /api/kanban/cards/:id/comments
 const AddComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.body?.owner_u_code || req.user?.empno || req.query?.u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     console.log(`AddComment called for card_id=${id}, uCode=${uCode}, body=`, req.body);
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'content is required' });
@@ -969,7 +1143,8 @@ const AddComment = async (req, res) => {
             const io = req.app.get('io');
             if (io) {
                 io.to(`board:${card.board_id}`).emit('commentCreate', {
-                    item: comment
+                    item: comment,
+                    actorUCode: uCode,
                 });
             }
         } catch (err) {
@@ -991,7 +1166,7 @@ const AddComment = async (req, res) => {
 // PATCH /api/kanban/comments/:id
 const UpdateComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { content } = req.body;
     const { rows: [comment] } = await engPool.query('SELECT * FROM kb_comment WHERE id=$1', [id]);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
@@ -1006,7 +1181,8 @@ const UpdateComment = async (req, res) => {
         const { rows: [card] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [comment.card_id]);
         if (card) {
             io.to(`board:${card.board_id}`).emit('commentUpdate', {
-                item: rows[0]
+                item: rows[0],
+                actorUCode: uCode,
             });
         }
     }
@@ -1017,7 +1193,7 @@ const UpdateComment = async (req, res) => {
 // DELETE /api/kanban/comments/:id
 const DeleteComment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [comment] } = await engPool.query('SELECT * FROM kb_comment WHERE id=$1', [id]);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
@@ -1036,7 +1212,8 @@ const DeleteComment = async (req, res) => {
         const io = req.app.get('io');
         if (io) {
             io.to(`board:${card.board_id}`).emit('commentDelete', {
-                item: { id }
+                item: { id },
+                actorUCode: uCode,
             });
         }
 
@@ -1052,13 +1229,14 @@ const DeleteComment = async (req, res) => {
 // ─── ATTACHMENTS ────────────────────────────────────────────────────
 
 // POST /api/kanban/cards/:id/attachments  (uses express-fileupload or link)
+// File uploads are sent to Google Drive via GAS Web App; link attachments stored as-is.
 const UploadAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
 
     if (!(await canEditCard(req, id))) return res.status(403).json({ error: 'Card editor permission required' });
 
-    // Support link-type attachments
+    // Support link-type attachments (unchanged — no Drive interaction)
     if (req.body.attachment_type === 'link') {
         const { url, name } = req.body;
         if (!url) return res.status(400).json({ error: 'url is required for link attachments' });
@@ -1067,15 +1245,71 @@ const UploadAttachment = async (req, res) => {
             INSERT INTO kb_attachment (card_id, creator_u_code, attachment_type, file_name, file_path, link_data)
             VALUES ($1,$2,'link',$3,$4,$5) RETURNING *
         `, [id, uCode, name || url, url, JSON.stringify(linkData)]);
+        // ── Broadcast attachment change via WebSocket ──
+        const { rows: [linkCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+        const linkIo = req.app.get('io');
+        if (linkIo && linkCard?.board_id) {
+            linkIo.to(`board:${linkCard.board_id}`).emit('cardUpdate', {
+                id: parseInt(id), board_id: linkCard.board_id, attachments_changed: true, actorUCode: uCode,
+            });
+        }
+
         return res.status(201).json({ data: rows[0] });
     }
 
-    // Handle file upload
+    // ── Handle file upload (metadata from frontend after GAS Drive upload) ──
+    // Frontend already uploaded to Google Drive via iframe → GAS.
+    // It sends the resulting metadata here for DB storage.
+    if (req.body.drive_file_id) {
+        const { drive_file_id, drive_folder_path, file_name, file_size, mime_type } = req.body;
+        if (!file_name) return res.status(400).json({ error: 'file_name is required' });
+
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(file_name);
+        const driveViewUrl = `https://drive.google.com/file/d/${drive_file_id}/view`;
+
+        try {
+            const { rows: [cardInfo] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+            if (!cardInfo) return res.status(404).json({ error: 'Card not found' });
+
+            const { rows } = await engPool.query(`
+                INSERT INTO kb_attachment (
+                    card_id, creator_u_code, attachment_type, file_name, file_path,
+                    file_size, mime_type, is_image, drive_file_id, drive_folder_path
+                )
+                VALUES ($1,$2,'file',$3,$4,$5,$6,$7,$8,$9) RETURNING *
+            `, [
+                id, uCode, file_name, driveViewUrl,
+                file_size || 0, mime_type || 'application/octet-stream', isImage,
+                drive_file_id, drive_folder_path || ''
+            ]);
+
+            const client = await engPool.connect();
+            try {
+                await logAction(client, id, uCode, 'attachment_added', { file_name, drive_file_id });
+            } finally {
+                client.release();
+            }
+
+            // ── Broadcast attachment change via WebSocket (surgical fetch signal) ──
+            const fileIo = req.app.get('io');
+            if (fileIo && cardInfo.board_id) {
+                fileIo.to(`board:${cardInfo.board_id}`).emit('cardUpdate', {
+                    id: parseInt(id), board_id: cardInfo.board_id, attachments_changed: true, actorUCode: uCode,
+                });
+            }
+
+            return res.status(201).json({ data: rows[0] });
+        } catch (err) {
+            console.error('UploadAttachment (Drive metadata) error:', err.message);
+            return res.status(500).json({ error: 'Failed to save attachment: ' + err.message });
+        }
+    }
+
+    // ── Fallback: handle legacy multipart file upload (direct to local storage) ──
     if (!req.files || Object.keys(req.files).length === 0) {
-        return res.status(400).json({ error: 'No file uploaded and no link provided' });
+        return res.status(400).json({ error: 'No file uploaded, no link, and no drive_file_id provided' });
     }
     const file = req.files.file;
-    // __dirname is api/kanban. ../../public goes to ENG-Backend/public
     const uploadDir = path.join(__dirname, '../../public/kanban_attachments', id);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -1092,16 +1326,29 @@ const UploadAttachment = async (req, res) => {
     `, [id, uCode, file.name, relPath, file.size, file.mimetype, isImage]);
 
     const client = await engPool.connect();
-    await logAction(client, id, uCode, 'attachment_added', { file_name: file.name });
-    client.release();
+    try {
+        await logAction(client, id, uCode, 'attachment_added', { file_name: file.name });
+    } finally {
+        client.release();
+    }
+
+    // ── Broadcast attachment change via WebSocket ──
+    const { rows: [fileCard] } = await engPool.query('SELECT board_id FROM kb_card WHERE id=$1', [id]);
+    const fileIo = req.app.get('io');
+    if (fileIo && fileCard?.board_id) {
+        fileIo.to(`board:${fileCard.board_id}`).emit('cardUpdate', {
+            id: parseInt(id), board_id: fileCard.board_id, attachments_changed: true, actorUCode: uCode,
+        });
+    }
 
     res.status(201).json({ data: rows[0] });
 };
 
 // DELETE /api/kanban/attachments/:id
+// Trashes file from Google Drive via GAS, falls back to local fs.unlink for legacy files.
 const DeleteAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows: [att] } = await engPool.query('SELECT * FROM kb_attachment WHERE id=$1', [id]);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
 
@@ -1109,18 +1356,32 @@ const DeleteAttachment = async (req, res) => {
     const canDelete = att.creator_u_code === uCode || await canEditCard(req, att.card_id);
     if (!canDelete) return res.status(403).json({ error: 'Permission denied' });
 
-    await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
+    // Clean up the actual file (Drive or local) BEFORE deleting from DB
     if (att.attachment_type === 'file') {
-        const fullPath = path.join(__dirname, '../../', att.file_path);
-        if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+        if (!att.drive_file_id && att.file_path && !att.file_path.startsWith('http')) {
+            // Legacy local file cleanup
+            const fullPath = path.join(__dirname, '../../', att.file_path);
+            if (fs.existsSync(fullPath)) fs.unlink(fullPath, () => { });
+        }
     }
+
+    await engPool.query('DELETE FROM kb_attachment WHERE id=$1', [id]);
+
+    // ── Broadcast attachment removal via WebSocket (surgical fetch signal) ──
+    const delIo = req.app.get('io');
+    if (delIo && card?.board_id) {
+        delIo.to(`board:${card.board_id}`).emit('cardUpdate', {
+            id: parseInt(att.card_id), board_id: card.board_id, attachments_changed: true, actorUCode: uCode,
+        });
+    }
+
     res.json({ message: 'Attachment deleted' });
 };
 
 // PATCH /api/kanban/attachments/:id
 const UpdateAttachment = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { name, url } = req.body;
 
     const { rows: [att] } = await engPool.query('SELECT * FROM kb_attachment WHERE id=$1', [id]);
@@ -1159,7 +1420,7 @@ const SetCoverImage = async (req, res) => {
 
 // GET /api/kanban/notifications
 const GetNotifications = async (req, res) => {
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows } = await engPool.query(`
         SELECT n.*, ka.action_type, ka.action_data
         FROM kb_notification n
@@ -1172,7 +1433,7 @@ const GetNotifications = async (req, res) => {
 
 // PATCH /api/kanban/notifications/read-all
 const MarkAllRead = async (req, res) => {
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     await engPool.query('UPDATE kb_notification SET is_read=TRUE WHERE recipient_u_code=$1', [uCode]);
     res.json({ message: 'All notifications marked as read' });
 };
@@ -1180,7 +1441,7 @@ const MarkAllRead = async (req, res) => {
 // PATCH /api/kanban/notifications/:id/read
 const MarkRead = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { rows } = await engPool.query(
         'UPDATE kb_notification SET is_read=TRUE WHERE id=$1 AND recipient_u_code=$2 RETURNING *',
         [id, uCode]
@@ -1194,7 +1455,7 @@ const MarkRead = async (req, res) => {
 // PATCH /api/kanban/cards/:id/reorder
 const ReorderCard = async (req, res) => {
     const { id } = req.params;
-    const uCode = req.user?.empno || req.body?.owner_u_code || req.query?.owner_u_code || 'LE131';
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { list_id, position } = req.body;
 
     if (!list_id || position === undefined) {
@@ -1289,6 +1550,7 @@ const ReorderCard = async (req, res) => {
                 item: updated,
                 repositions: repositions.map(r => ({ id: r.record.id, position: r.position })),
                 fromListId: listChanged ? card.list_id : null,
+                actorUCode: uCode,
             });
         }
 

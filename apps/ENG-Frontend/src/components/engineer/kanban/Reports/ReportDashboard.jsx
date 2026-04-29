@@ -9,6 +9,7 @@ import { MdOutlineAssessment } from 'react-icons/md';
 import { IoDocumentTextOutline, IoCalendarOutline, IoFolderOpenOutline, IoImageOutline, IoDownloadOutline, IoChevronDown } from 'react-icons/io5';
 import { BsFileEarmarkBarGraph } from 'react-icons/bs';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import dayjs from 'dayjs';
 import MonthlyReport from './MonthlyReport';
 import ProjectReport from './ProjectReport';
@@ -21,7 +22,12 @@ const EXPORT_WIDTH = 1900;
 const EXPORT_HEIGHT = 900;
 
 const ReportDashboard = ({ theme }) => {
-    const { projects, users, fetchProjectReportData, fetchUsers } = useKanbanStore();
+    const { projects, users, fetchProjectReportData, fetchUsers } = useKanbanStore(
+        useShallow(state => ({
+            projects: state.projects, users: state.users,
+            fetchProjectReportData: state.fetchProjectReportData, fetchUsers: state.fetchUsers
+        }))
+    );
     const { message } = App.useApp();
 
     useEffect(() => {

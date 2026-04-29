@@ -12,6 +12,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../../theme';
 import KanbanCard from './KanbanCard';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
@@ -57,7 +58,22 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
         archiveListCards,
         searchQuery, filterMembers, filterLabels,
         activeProject, activeBoardMembers, activeBoard
-    } = useKanbanStore();
+    } = useKanbanStore(
+        useShallow(state => ({
+            cards: state.cards,
+            createCard: state.createCard,
+            updateList: state.updateList,
+            deleteList: state.deleteList,
+            sortListCards: state.sortListCards,
+            archiveListCards: state.archiveListCards,
+            searchQuery: state.searchQuery,
+            filterMembers: state.filterMembers,
+            filterLabels: state.filterLabels,
+            activeProject: state.activeProject,
+            activeBoardMembers: state.activeBoardMembers,
+            activeBoard: state.activeBoard,
+        }))
+    );
     const { theme } = useTheme();
     const { empNo } = useAuthStore();
 

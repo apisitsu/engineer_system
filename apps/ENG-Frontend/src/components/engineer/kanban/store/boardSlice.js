@@ -25,6 +25,13 @@ export const createBoardSlice = (set, get) => ({
 
     // --- User Preferences (Feature 9) ---
     userPreferences: null,
+    kanbanTabOrder: ['dashboard', 'projects', 'reports', 'workload'],
+    boardTabOrders: {}, // { [projectId]: [boardId1, boardId2] }
+    cfGroupPreferences: {}, // { [projectId]: { order: [], hidden: [] } }
+    boardGroups: {}, // { [projectId]: [{ id: string, name: string, boardIds: number[] }] }
+    activeBoardGroup: {}, // { [projectId]: groupId | null }
+
+
 
     // --- Custom Field Groups (Board-level, Feature 12) ---
     customFieldGroups: [],
@@ -38,6 +45,8 @@ export const createBoardSlice = (set, get) => ({
 
     // --- WebSocket ---
     wsSocket: null,
+    wsBoardId: null,
+    wsUserCode: null,
 
     // ====================================================================
     //  BOARD ACTIONS
@@ -52,12 +61,13 @@ export const createBoardSlice = (set, get) => ({
             if (boards.length > 0) {
                 const currentActive = get().activeBoard;
                 if (!currentActive || !boards.find(b => b.id === currentActive.id)) {
-                    get().setActiveBoard(boards[0]);
+                    // Let KanbanMain handle auto-selection based on tab orders and board groups
+                    set({ activeBoard: null, activeBoardMembers: [], lists: [], cards: {}, cardIndex: new Map() });
                 } else {
                     get().fetchBoardMembers(currentActive.id);
                 }
             } else {
-                set({ activeBoard: null, activeBoardMembers: [], lists: [], cards: {} });
+                set({ activeBoard: null, activeBoardMembers: [], lists: [], cards: {}, cardIndex: new Map() });
             }
         } catch (err) {
             set({ error: err.message });
@@ -78,7 +88,7 @@ export const createBoardSlice = (set, get) => ({
             return;
         }
 
-        set({ activeBoard: board, activeBoardMembers: [], lists: [], cards: {} });
+        set({ activeBoard: board, activeBoardMembers: [], lists: [], cards: {}, cardIndex: new Map() });
         if (board) {
             get().fetchBoardDetails(board.id);
             get().fetchBoardMembers(board.id);
@@ -139,9 +149,7 @@ export const createBoardSlice = (set, get) => ({
     fetchBoardDetails: async (boardId) => {
         set({ isLoading: true });
         try {
-            // eslint-disable-next-line no-unused-vars
-            const [_boardRes, listsRes, labelsRes] = await Promise.all([
-                axios.get(`${server.KANBAN_BOARDS}/${boardId}`),
+            const [listsRes, labelsRes] = await Promise.all([
                 axios.get(`${server.KANBAN_BOARDS}/${boardId}/lists`),
                 axios.get(`${server.KANBAN_BOARDS}/${boardId}/labels`)
             ]);
@@ -168,7 +176,13 @@ export const createBoardSlice = (set, get) => ({
             const payload = { target_u_code: uCode };
             if (role) payload.role = role;
             await axios.post(`${server.KANBAN_BOARDS}/${boardId}/members`, payload);
-            get().fetchBoardMembers(boardId);
+            await get().fetchBoardMembers(boardId);
+            
+            // Check if user exists in global dictionary to avoid 25MB payload if not needed
+            if (!get().users.find(u => u.u_code === uCode)) {
+                await get().fetchUsers();
+            }
+
             get().checkAndAutoJoin('board', boardId);
         } catch (err) {
             console.error('Failed to add board member', err);
@@ -225,10 +239,19 @@ export const createBoardSlice = (set, get) => ({
     deleteList: async (listId) => {
         try {
             await axios.delete(`${server.KANBAN_LISTS}/${listId}`);
-            set(state => ({
-                lists: state.lists.filter(l => l.id !== listId),
-                cards: (() => { const c = { ...state.cards }; delete c[listId]; return c; })()
-            }));
+            set(state => {
+                const newCards = { ...state.cards };
+                const removedCards = newCards[listId] || [];
+                delete newCards[listId];
+                // F3-13: Clean index entries for cards in the deleted list
+                const newIndex = new Map(state.cardIndex);
+                removedCards.forEach(c => newIndex.delete(String(c.id)));
+                return {
+                    lists: state.lists.filter(l => l.id !== listId),
+                    cards: newCards,
+                    cardIndex: newIndex,
+                };
+            });
             return true;
         } catch (err) {
             console.error('Failed to delete list', err);
@@ -259,10 +282,34 @@ export const createBoardSlice = (set, get) => ({
         try {
             const res = await axios.patch(`${server.KANBAN_LABELS}/${labelId}`, data);
             if (res.data?.data) {
-                set(state => ({
-                    labels: state.labels.map(l => l.id === labelId ? { ...l, ...res.data.data } : l)
-                }));
-                return res.data.data;
+                const updatedLabel = res.data.data;
+                set(state => {
+                    const nextLabels = state.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l);
+                    
+                    let nextActiveDetail = state.activeCardDetail;
+                    if (nextActiveDetail && nextActiveDetail.labels) {
+                        nextActiveDetail = {
+                            ...nextActiveDetail,
+                            labels: nextActiveDetail.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l)
+                        };
+                    }
+
+                    const nextCards = { ...state.cards };
+                    for (const listId in nextCards) {
+                        nextCards[listId] = nextCards[listId].map(card => {
+                            if (card.labels && card.labels.some(l => l.id === labelId)) {
+                                return {
+                                    ...card,
+                                    labels: card.labels.map(l => l.id === labelId ? { ...l, ...updatedLabel } : l)
+                                };
+                            }
+                            return card;
+                        });
+                    }
+
+                    return { labels: nextLabels, activeCardDetail: nextActiveDetail, cards: nextCards };
+                });
+                return updatedLabel;
             }
         } catch (err) {
             console.error('Failed to update label', err);
@@ -274,9 +321,34 @@ export const createBoardSlice = (set, get) => ({
     deleteLabel: async (labelId) => {
         try {
             await axios.delete(`${server.KANBAN_LABELS}/${labelId}`);
-            set(state => ({
-                labels: state.labels.filter(l => l.id !== labelId)
-            }));
+            set(state => {
+                const nextLabels = state.labels.filter(l => l.id !== labelId);
+                
+                let nextActiveDetail = state.activeCardDetail;
+                if (nextActiveDetail && nextActiveDetail.labels) {
+                    nextActiveDetail = {
+                        ...nextActiveDetail,
+                        labels: nextActiveDetail.labels.filter(l => l.id !== labelId),
+                        label_ids: (nextActiveDetail.label_ids || []).filter(id => id !== labelId && String(id) !== String(labelId))
+                    };
+                }
+
+                const nextCards = { ...state.cards };
+                for (const listId in nextCards) {
+                    nextCards[listId] = nextCards[listId].map(card => {
+                        if (card.labels && card.labels.some(l => l.id === labelId)) {
+                            return {
+                                ...card,
+                                labels: card.labels.filter(l => l.id !== labelId),
+                                label_ids: (card.label_ids || []).filter(id => id !== labelId && String(id) !== String(labelId))
+                            };
+                        }
+                        return card;
+                    });
+                }
+
+                return { labels: nextLabels, activeCardDetail: nextActiveDetail, cards: nextCards };
+            });
             return true;
         } catch (err) {
             console.error('Failed to delete label', err);
@@ -315,6 +387,8 @@ export const createBoardSlice = (set, get) => ({
                 set(state => ({
                     cards: { ...state.cards, [listId]: res.data.data }
                 }));
+                // F3-13: Rebuild index after bulk card replacement
+                get()._rebuildCardIndex();
             }
             return res.data?.data;
         } catch (err) {
@@ -343,10 +417,23 @@ export const createBoardSlice = (set, get) => ({
     //  USER PREFERENCES (Feature 9)
     // ====================================================================
 
+    // Shared helper: map preference object to Zustand state keys (single set() call)
+    _applyPreferences: (prefs) => {
+        const updates = { userPreferences: prefs };
+        if (prefs.kanban_tab_order) updates.kanbanTabOrder = prefs.kanban_tab_order;
+        if (prefs.board_tab_orders) updates.boardTabOrders = prefs.board_tab_orders;
+        if (prefs.cf_group_preferences) updates.cfGroupPreferences = prefs.cf_group_preferences;
+        if (prefs.board_groups) updates.boardGroups = prefs.board_groups;
+        if (prefs.active_board_group) updates.activeBoardGroup = prefs.active_board_group;
+        set(updates); // Single render instead of up to 6
+    },
+
     fetchUserPreferences: async () => {
         try {
             const res = await axios.get(server.KANBAN_USER_PREFERENCES);
-            if (res.data?.data) set({ userPreferences: res.data.data });
+            if (res.data?.data) {
+                get()._applyPreferences(res.data.data);
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to fetch user preferences', err);
@@ -357,7 +444,9 @@ export const createBoardSlice = (set, get) => ({
     updateUserPreferences: async (data) => {
         try {
             const res = await axios.patch(server.KANBAN_USER_PREFERENCES, data);
-            if (res.data?.data) set({ userPreferences: res.data.data });
+            if (res.data?.data) {
+                get()._applyPreferences(res.data.data);
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to update user preferences', err);
@@ -365,6 +454,49 @@ export const createBoardSlice = (set, get) => ({
             return null;
         }
     },
+
+    setKanbanTabOrder: async (newOrder) => {
+        set({ kanbanTabOrder: newOrder });
+        await get().updateUserPreferences({ kanban_tab_order: newOrder });
+    },
+
+    setBoardTabOrder: async (projectId, newOrder) => {
+        const current = get().boardTabOrders;
+        const updated = { ...current, [projectId]: newOrder };
+        set({ boardTabOrders: updated });
+        await get().updateUserPreferences({ board_tab_orders: updated });
+    },
+
+    resetBoardTabOrder: async (projectId) => {
+        const current = { ...get().boardTabOrders };
+        delete current[projectId];
+        set({ boardTabOrders: current });
+        await get().updateUserPreferences({ board_tab_orders: current });
+    },
+
+    setCfGroupPreference: async (projectId, data) => {
+        const current = get().cfGroupPreferences || {};
+        const updated = { ...current, [projectId]: { ...(current[projectId] || {}), ...data } };
+        set({ cfGroupPreferences: updated });
+        await get().updateUserPreferences({ cf_group_preferences: updated });
+    },
+
+    setBoardGroups: async (projectId, groups) => {
+        const current = get().boardGroups || {};
+        const updated = { ...current, [projectId]: groups };
+        set({ boardGroups: updated });
+        await get().updateUserPreferences({ board_groups: updated });
+    },
+
+    setActiveBoardGroup: async (projectId, groupId) => {
+        const current = get().activeBoardGroup || {};
+        const updated = { ...current, [projectId]: groupId };
+        set({ activeBoardGroup: updated });
+        await get().updateUserPreferences({ active_board_group: updated });
+    },
+
+
+
 
     // ====================================================================
     //  CUSTOM FIELD GROUPS (Board-level, Feature 12)
@@ -434,7 +566,17 @@ export const createBoardSlice = (set, get) => ({
     updateCustomField: async (fieldId, data) => {
         try {
             const res = await axios.patch(`${server.KANBAN_CUSTOM_FIELDS}/${fieldId}`, data);
-            return res.data?.data;
+            if (res.data?.data) {
+                const updatedField = res.data.data;
+                set(state => {
+                    const nextFields = { ...state.customFields };
+                    for (const groupId in nextFields) {
+                        nextFields[groupId] = nextFields[groupId].map(f => f.id === fieldId ? { ...f, ...updatedField } : f);
+                    }
+                    return { customFields: nextFields };
+                });
+                return updatedField;
+            }
         } catch (err) {
             console.error('Failed to update custom field', err);
             Swal.fire('Error', 'ไม่สามารถแก้ไข custom field ได้', 'error');
@@ -570,51 +712,204 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     connectWebSocket: (boardId, uCode) => {
+        // ── Auth Guard: refuse connection if no authenticated session ──
+        const empNo = useAuthStore.getState().empNo;
+        if (!empNo) {
+            console.warn('[WS] No authenticated user — refusing WebSocket connection');
+            return;
+        }
+
         const existing = get().wsSocket;
         if (existing) {
-            existing.emit('board:leave', existing._boardId);
+            existing.emit('board:leave', get().wsBoardId);
             existing.emit('board:join', boardId);
-            existing._boardId = boardId;
-            if (uCode && existing._uCode !== uCode) {
-                if (existing._uCode) existing.emit('user:leave', existing._uCode);
+            set({ wsBoardId: boardId });
+            if (uCode && get().wsUserCode !== uCode) {
+                if (get().wsUserCode) existing.emit('user:leave', get().wsUserCode);
                 existing.emit('user:join', uCode);
-                existing._uCode = uCode;
+                set({ wsUserCode: uCode });
             }
             return;
         }
 
         try {
             const wsUrl = server.KANBAN_PROJECTS.replace('/api/kanban/projects', '');
-            const socket = io(wsUrl, { path: '/ws', transports: ['websocket', 'polling'] });
-
-            socket._boardId = boardId;
-            socket._uCode = uCode;
-            socket.on('connect', () => {
-                socket.emit('board:join', boardId);
-                if (uCode) socket.emit('user:join', uCode);
+            const authToken = localStorage.getItem('token') || '';
+            const socket = io(wsUrl, {
+                path: '/ws',
+                transports: ['websocket', 'polling'],
+                auth: { token: authToken, empNo }  // ← Send credentials with handshake
             });
 
-            // Real-time event handlers
+            set({ wsBoardId: boardId, wsUserCode: uCode });
+
+            // ── Reconnection Awareness ──
+            let isFirstConnect = true;
+
+            socket.on('connect', () => {
+                socket.emit('board:join', get().wsBoardId || boardId);
+                const currentUCode = get().wsUserCode || uCode;
+                if (currentUCode) socket.emit('user:join', currentUCode);
+
+                if (!isFirstConnect) {
+                    // ── Stale-While-Revalidate on Reconnect ──
+                    console.log('[WS] Reconnected — revalidating board state');
+                    const activeBoardId = get().activeBoard?.id;
+                    if (activeBoardId) {
+                        get().fetchBoardDetails(activeBoardId);
+                        get().fetchBoardMembers(activeBoardId);
+                    }
+                    // Refresh the open card detail drawer
+                    const openCardId = get().activeCardDetail?.id;
+                    if (openCardId) get().fetchCardDetail(openCardId);
+                    // Refresh notifications
+                    get().fetchNotifications();
+                }
+                isFirstConnect = false;
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.warn(`[WS] Disconnected: ${reason}`);
+            });
+
+            // ── Echo Cancellation Helper ──
+            const isOwnEvent = (data) => {
+                const myUCode = get().wsUserCode;
+                return data?.actorUCode && data.actorUCode === myUCode;
+            };
+
+            // ── F3-03: Surgical real-time card updates ──
+            // cardUpdate payload from backend: { item: <deltaOrFull>, repositions, fromListId, actorUCode }
+            // Membership-only payloads:         { id, board_id, member_added/removed, actorUCode }
+            // Signal payloads:                  { id, board_id, labels_changed/attachments_changed, actorUCode }
             socket.on('cardUpdate', (data) => {
-                const lists = get().lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
-                lists.forEach(list => get().fetchCardsForList(list.id));
-                if (data?.id && get().activeCardDetail?.id === data.id) {
-                    get().fetchCardDetail(data.id);
+                // ── Echo Cancellation: skip our own events ──
+                if (isOwnEvent(data)) {
+                    console.debug('[WS] Skipping own cardUpdate echo');
+                    return;
+                }
+
+                const cardData = data?.item;    // Card object — delta or full (UpdateCard/ReorderCard path)
+                const cardId = cardData?.id || data?.id;
+                if (!cardId) return;
+
+                // ── Signal payloads: labels or attachments changed → surgical fetch ──
+                if (data?.labels_changed || data?.attachments_changed) {
+                    if (get().activeCardDetail?.id === cardId) {
+                        get().fetchCardDetail(cardId);
+                    }
+                    // Also refresh the board card (label_ids, attachment_count)
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        get().fetchCardDetail(cardId);
+                    }
+                    return;
+                }
+
+                if (cardData) {
+                    // ── Rich payload: merge the card data inline via O(1) index ──
+                    const loc = get()._findCardList(cardId);
+                    const fromListId = data.fromListId;
+
+                    if (fromListId && loc && String(loc.listId) !== String(cardData.list_id)) {
+                        // Card moved between lists — remove from old, add to new
+                        set(state => {
+                            const newCards = { ...state.cards };
+                            newCards[loc.listId] = (newCards[loc.listId] || []).filter(c => c.id !== cardId);
+                            newCards[String(cardData.list_id)] = [
+                                ...(newCards[String(cardData.list_id)] || []),
+                                { ...(loc ? state.cards[loc.listId][loc.idx] : {}), ...cardData }
+                            ];
+                            const newIndex = new Map(state.cardIndex);
+                            newIndex.set(String(cardId), String(cardData.list_id));
+                            return {
+                                cards: newCards,
+                                cardIndex: newIndex,
+                                activeCardDetail: state.activeCardDetail?.id === cardId
+                                    ? { ...state.activeCardDetail, ...cardData }
+                                    : state.activeCardDetail
+                            };
+                        });
+                    } else if (loc) {
+                        // Same-list update — merge in place (supports delta payloads)
+                        set(state => {
+                            const newCards = { ...state.cards };
+                            newCards[loc.listId] = [...newCards[loc.listId]];
+                            newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], ...cardData };
+                            return {
+                                cards: newCards,
+                                activeCardDetail: state.activeCardDetail?.id === cardId
+                                    ? { ...state.activeCardDetail, ...cardData }
+                                    : state.activeCardDetail
+                            };
+                        });
+                    }
+                } else {
+                    // ── Partial payload (membership changes): fall back to single fetchCardDetail ──
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        get().fetchCardDetail(cardId);
+                    }
+                }
+
+                // Refresh the open card detail drawer for full relational data
+                if (get().activeCardDetail?.id === cardId) {
+                    get().fetchCardDetail(cardId);
                 }
             });
-            socket.on('cardCreate', () => {
-                const lists = get().lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
-                lists.forEach(list => get().fetchCardsForList(list.id));
+
+            // ── Real-time card creation (from other users) ──
+            socket.on('cardCreate', (data) => {
+                if (isOwnEvent(data)) return;  // Already handled optimistically
+                const newCard = data?.item;
+                const targetListId = data?.listId || newCard?.list_id;
+                if (!newCard || !targetListId) return;
+
+                set(state => {
+                    const listKey = String(targetListId);
+                    const newCards = { ...state.cards };
+                    const existing = (newCards[listKey] || []);
+                    // Avoid duplicates
+                    if (existing.some(c => c.id === newCard.id)) return state;
+                    newCards[listKey] = [...existing, newCard];
+                    const newIndex = new Map(state.cardIndex);
+                    newIndex.set(String(newCard.id), listKey);
+                    return { cards: newCards, cardIndex: newIndex };
+                });
             });
-            socket.on('cardDelete', () => {
-                const lists = get().lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
-                lists.forEach(list => get().fetchCardsForList(list.id));
+
+            // ── Real-time card deletion (from other users) ──
+            socket.on('cardDelete', (data) => {
+                if (isOwnEvent(data)) return;  // Already handled optimistically
+                const deletedId = data?.id;
+                const listId = data?.listId;
+                if (!deletedId) return;
+
+                set(state => {
+                    const newCards = { ...state.cards };
+                    const newIndex = new Map(state.cardIndex);
+                    const loc = listId ? { listId: String(listId) } : get()._findCardList(deletedId);
+                    if (loc) {
+                        newCards[loc.listId] = (newCards[loc.listId] || []).filter(c => c.id !== deletedId);
+                    }
+                    newIndex.delete(String(deletedId));
+                    // Close the detail drawer if the deleted card was open
+                    const closeDetail = state.activeCardDetail?.id === deletedId;
+                    return {
+                        cards: newCards,
+                        cardIndex: newIndex,
+                        ...(closeDetail ? { activeCardDetail: null, isCardDetailOpen: false, activeCardId: null } : {}),
+                    };
+                });
             });
+
             socket.on('listUpdate', (data) => {
                 if (data?.lists) set({ lists: data.lists });
             });
-            // Comment WebSockets
+
+            // ── Comment WebSockets (with echo cancellation) ──
             socket.on('commentCreate', (data) => {
+                if (isOwnEvent(data)) return;
                 if (data?.item?.card_id) {
                     if (get().activeCardDetail?.id === data.item.card_id) {
                         get().fetchCardDetail(data.item.card_id);
@@ -622,17 +917,20 @@ export const createBoardSlice = (set, get) => ({
                 }
             });
             socket.on('commentUpdate', (data) => {
+                if (isOwnEvent(data)) return;
                 if (data?.item?.card_id) {
                     if (get().activeCardDetail?.id === data.item.card_id) {
                         get().fetchCardDetail(data.item.card_id);
                     }
                 }
             });
-            socket.on('commentDelete', () => {
+            socket.on('commentDelete', (data) => {
+                if (isOwnEvent(data)) return;
                 if (get().activeCardDetail) {
                     get().fetchCardDetail(get().activeCardDetail.id);
                 }
             });
+
             // Notification WebSockets
             socket.on('notificationCreate', (notif) => {
                 set(state => {
@@ -652,7 +950,7 @@ export const createBoardSlice = (set, get) => ({
         const socket = get().wsSocket;
         if (socket) {
             socket.disconnect();
-            set({ wsSocket: null });
+            set({ wsSocket: null, wsBoardId: null, wsUserCode: null });
         }
     },
 

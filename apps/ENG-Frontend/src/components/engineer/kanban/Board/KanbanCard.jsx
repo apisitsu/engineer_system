@@ -3,13 +3,22 @@ import { Typography, Avatar, Tooltip, Progress } from 'antd';
 import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdAccountTree, MdFamilyRestroom } from 'react-icons/md';
 import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../../theme';
 
 const { Text } = Typography;
 
 // ─── KanbanCard Component ──────────────────────────────────────────
 const KanbanCard = ({ card, isOverlay }) => {
-    const { openCardDetail, labels: boardLabels, users, lists, cards } = useKanbanStore();
+    const { openCardDetail, labels: boardLabels, users, lists, cards } = useKanbanStore(
+        useShallow(state => ({
+            openCardDetail: state.openCardDetail,
+            labels: state.labels,
+            users: state.users,
+            lists: state.lists,
+            cards: state.cards,
+        }))
+    );
     const { theme } = useTheme();
     const [isHovered, setIsHovered] = useState(false);
     const [isChecklistExpanded, setIsChecklistExpanded] = useState(false);
@@ -426,7 +435,7 @@ const KanbanCard = ({ card, isOverlay }) => {
                                         ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
                                         : name.charAt(0).toUpperCase();
                                     return (
-                                        <Tooltip key={idx} title={name}>
+                                        <Tooltip key={uCode} title={name}>
                                             {userObj?.profile_img_b64 ? (
                                                 <Avatar
                                                     size={26}
