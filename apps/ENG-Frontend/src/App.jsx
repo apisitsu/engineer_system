@@ -306,6 +306,7 @@ const AppContent = () => {
 
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
+                  <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
@@ -322,7 +323,6 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
-                <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
               </Route>
 
 
