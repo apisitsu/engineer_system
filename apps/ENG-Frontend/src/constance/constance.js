@@ -8,9 +8,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -112,6 +112,7 @@ export const server = {
   KANBAN_ISSUES: `${apiUrl}api/kanban/issues`,
   KANBAN_NOTIFICATIONS: `${apiUrl}api/kanban/notifications`,
   // New Feature endpoints
+  KANBAN_SETTINGS: `${apiUrl}api/kanban/settings`,
   KANBAN_USER_PREFERENCES: `${apiUrl}api/kanban/user-preferences`,
   KANBAN_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/custom-field-groups`,
   KANBAN_BASE_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/base-custom-field-groups`,

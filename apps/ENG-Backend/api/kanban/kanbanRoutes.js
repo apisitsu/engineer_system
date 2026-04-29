@@ -11,6 +11,7 @@ const Card = require('./kanban_card');
 const Extra = require('./kanban_extra');
 const Issue = require('./kanban_issue');
 const Workload = require('./kanban_workload');
+const Settings = require('./kanban_settings');
 
 // ─── PROJECT ROUTES ────────────────────────────────────────────────
 router.get('/users', Project.GetUsers);
@@ -27,6 +28,10 @@ router.get('/projects/:id/report-data', Project.GetReportData);
 
 // ─── WORKLOAD ROUTES ─────────────
 router.get('/workload/team-workload', Workload.GetTeamWorkload);
+
+// ─── ADMIN SETTINGS ────────────────────────────────────────────────
+router.get('/settings', Settings.checkAdminRole, Settings.GetSettings);
+router.patch('/settings', Settings.checkAdminRole, Settings.UpdateSettings);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);

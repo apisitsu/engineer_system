@@ -29,6 +29,9 @@ export const useKanbanStore = create((set, get) => ({
     // --- Global Users ---
     users: [],
 
+    // --- System Settings ---
+    systemSettings: [],
+
     // --- Card Index (F3-13: O(1) lookup) ---
     // Map<string(cardId), string(listId)> — maintained by card mutations
     cardIndex: new Map(),
@@ -101,6 +104,15 @@ export const useKanbanStore = create((set, get) => ({
             set({ users: res.data?.data || [] });
         } catch (err) {
             console.error("Failed to fetch users", err);
+        }
+    },
+
+    fetchSystemSettings: async () => {
+        try {
+            const res = await axios.get(server.KANBAN_SETTINGS);
+            set({ systemSettings: res.data?.data || [] });
+        } catch (err) {
+            console.error("Failed to fetch system settings", err);
         }
     },
 

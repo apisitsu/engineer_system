@@ -55,7 +55,7 @@ const KanbanMain = () => {
         connectWebSocket, disconnectWebSocket, viewMode, boardTabOrders,
         boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup, setBoardTabOrder,
         resetBoardTabOrder, fetchUserPreferences,
-        projectManagers, users, addProjectManager, removeProjectManager, fetchProjectManagers, fetchUsers
+        projectManagers, users, addProjectManager, removeProjectManager, fetchProjectManagers, fetchUsers, fetchSystemSettings
     } = useKanbanStore(
         useShallow(state => ({
             projects: state.projects, activeProject: state.activeProject,
@@ -73,7 +73,8 @@ const KanbanMain = () => {
             fetchUserPreferences: state.fetchUserPreferences,
             projectManagers: state.projectManagers, users: state.users,
             addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
-            fetchProjectManagers: state.fetchProjectManagers, fetchUsers: state.fetchUsers
+            fetchProjectManagers: state.fetchProjectManagers, fetchUsers: state.fetchUsers,
+            fetchSystemSettings: state.fetchSystemSettings
         }))
     );
 
@@ -189,8 +190,11 @@ const KanbanMain = () => {
     useEffect(() => {
         let isMounted = true;
         const initKanban = async () => {
-            await fetchUserPreferences();
-            await fetchProjects();
+            await Promise.all([
+                fetchUserPreferences(),
+                fetchProjects(),
+                fetchSystemSettings()
+            ]);
             // Give the URL param effect a moment to process before dropping the shade
             setTimeout(() => {
                 if (isMounted) setIsInitLoading(false);
