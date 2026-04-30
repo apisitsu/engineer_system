@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select,
+  Modal, Select, Space,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
+import { useAuthStore } from '../../../../stores/authStore';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 
 const { Content } = Layout;
@@ -30,6 +32,10 @@ const toolCols = [
 const SdsV2Page = () => {
   const { message } = App.useApp();
   const { theme } = useTheme();
+  const navigate = useNavigate();
+  const userRole = useAuthStore(state => state.userRole);
+  const userDepartment = useAuthStore(state => state.userDepartment);
+  const isAdmin = userRole === 'AD' || userDepartment === 'AD';
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -147,9 +153,19 @@ const SdsV2Page = () => {
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
           <Spin spinning={loading}>
-            <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-              Setup Data Sheet v2
-            </Title>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Title level={4} style={{ color: theme.colors.text, margin: 0 }}>
+                Setup Data Sheet v2
+              </Title>
+              {isAdmin && (
+                <Button
+                  icon={<SettingOutlined />}
+                  onClick={() => navigate('/eng/mtc_eng/sds-v2/admin')}
+                >
+                  Machine Template
+                </Button>
+              )}
+            </div>
 
             <Card style={{ marginBottom: 16, background: theme.colors.cardBackground }}>
               <Row gutter={12} align="middle">

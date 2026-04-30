@@ -82,15 +82,6 @@ export const mtc = createMenu([
     { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
     { label: "Setup Data Sheet v2", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
-    {
-        label: "Admin config",
-        key: "admin-config",
-        children: [
-            { label: "Email config", path: MTC_PATHS.EMAIL_CONFIG, key: "admin-email" },
-            { label: "Formula config", path: MTC_PATHS.FORMULA_CONFIG, key: "admin-formula" },
-            { label: "Machine template config", path: MTC_PATHS.SDS_V2_ADMIN, key: "admin-sds-template" },
-        ]
-    },
 ]);
 
 export const all = createMenu([

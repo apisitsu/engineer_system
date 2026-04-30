@@ -3,7 +3,7 @@ import {
   Input, Button, Typography, Card, Space, Spin, Alert,
   Collapse, Table, Tag, Row, Col, Layout, Badge,
   Select, Form, Drawer, message, Popconfirm,
-  Modal, Radio, InputNumber, AutoComplete
+  Modal, Radio, InputNumber, AutoComplete, Tooltip
 } from 'antd';
 import {
   SearchOutlined,
@@ -137,6 +137,21 @@ const ToolingSelectPage = () => {
   const [isTfAddOpen, setIsTfAddOpen] = useState(false);
   const [tfAddLoading, setTfAddLoading] = useState(false);
   const [tfAddForm] = Form.useForm();
+
+  // ── Formula Test state ───────────────────────────────────────────────────
+  const [isTestModeOpen, setIsTestModeOpen] = useState(false);
+  const [testContext, setTestContext] = useState({ 
+    odBf: 10, odBfTolPlus: 0, odBfTolMinus: 0,
+    idBf: 5,  idBfTolPlus: 0, idBfTolMinus: 0,
+    wBf:  2,  wBfTolPlus:  0, wBfTolMinus:  0,
+    odAft: 10, odAftTolPlus: 0, odAftTolMinus: 0,
+    idAft: 5,  idTolPlus: 0, idTolMinus: 0,
+    wAft: 2,   wAftTolPlus: 0, wAftTolMinus: 0,
+    type: 'NORMAL', yBall: 'N', process: 'OD→ID',
+    sd: 0, sdAft: 0
+  });
+  const [testResults, setTestResults] = useState({});
+  const [testLoading, setTestLoading] = useState(false);
 
   // ── Add Tool state ───────────────────────────────────────────────────────
   const [isAddToolOpen, setIsAddToolOpen] = useState(false);
@@ -394,6 +409,121 @@ const ToolingSelectPage = () => {
       message.success('Deleted');
     } catch {
       message.error('Delete failed');
+    }
+  };
+
+  const handleTestFormula = async () => {
+    if (!formulaAllData.length) return;
+    setTestLoading(true);
+    const results = {};
+    try {
+      const b = { ...testContext };
+      
+      // 1. Core Logic mirroring Backend's _enrichContext
+      const odAft = parseFloat(b.odAft || 0);
+      const odAftP = parseFloat(b.odAftTolPlus || 0);
+      const idAft = parseFloat(b.idAft || 0);
+      const idAftP = parseFloat(b.idTolPlus || 0);
+      const wAft = parseFloat(b.wAft || 0);
+      const wAftP = parseFloat(b.wAftTolPlus || 0);
+      const odBf = parseFloat(b.odBf || 0);
+      const odBfP = parseFloat(b.odBfTolPlus || 0);
+
+      // Legacy "Common" variables (matching calculationLogic.js)
+      const normalBaseC = 18.5 + (wAft / 2) + 3;
+      const specialBaseC = 18.5 + wAft - 2;
+      const isSpecialC = (b.yBall === 'Y' || b.yBall === 'B' || (b.type && !b.type.includes('NORMAL') && !b.type.includes('OTHER')));
+      const legacyBaseC = isSpecialC ? specialBaseC : normalBaseC;
+      const legacyJawA  = (b.process === 'ID→OD') ? odBf : odAft;
+      
+      const context = {
+        ...b,
+        // Legacy Support
+        baseC: legacyBaseC,
+        jawA:  legacyJawA,
+        jawB:  legacyJawA - 0.4,
+        ID_part: idAft + idAftP,
+
+        // --- NEW GLOBAL ALIASES (Match Backend) ---
+        odAft_max: odAft + odAftP, odAft_min: odAft + parseFloat(b.odAftTolMinus || 0),
+        idAft_max: idAft + idAftP, idAft_min: idAft + parseFloat(b.idTolMinus || 0),
+        wAft_max:  wAft + wAftP,   wAft_min:  wAft + parseFloat(b.wAftTolMinus || 0),
+        odBf_max:  odBf + odBfP,   odBf_min:  odBf + parseFloat(b.odBfTolMinus || 0),
+        
+        W_max: wAft + wAftP,
+        T1:    wAft,
+        OD:    odAft,
+        ID:    idAft,
+        
+        // --- String Props ---
+        Dwg:     b.parts_no || b.drawing_no || 'Check Dwg',
+        Type:    b.type || 'NORMAL',
+        Process: b.process || 'OD→ID',
+        YBall:   b.yBall || 'N',
+        
+        // Smart Aliases (For first-row usage)
+        A: legacyJawA,
+        B: legacyJawA - 0.4,
+        C: legacyBaseC,
+        
+        PI: Math.PI, E: Math.E,
+        isYBall: (b.yBall === 'Y') ? 1 : 0,
+        isIDtoOD: (b.process === 'ID→OD') ? 1 : 0,
+        isABR: (b.type?.includes('ABR') || b.yBall === 'Y' || b.yBall === 'B') ? 1 : 0,
+        part: { ...b }
+      };
+
+      let currentContext = { ...context };
+      // Redundant part wrapper for safety
+      currentContext.part = { ...currentContext };
+      
+      for (const formula of formulaAllData) {
+        const edit = formulaEdits[formula.id] || {};
+        const fValueRaw = edit.formula_value ?? formula.formula_value;
+        const fValue = String(fValueRaw || '').trim();
+        
+        const pNameRaw = edit.parameter_name ?? formula.parameter_name;
+        const pName = String(pNameRaw || '').trim();
+        const rRule = edit.rounding_rule ?? formula.rounding_rule;
+        const rPrec = edit.rounding_precision ?? formula.rounding_precision;
+
+        if (!fValue || !pName) continue;
+
+        const fType = edit.formula_type ?? formula.formula_type;
+        if (fType === 'limit') {
+          results[formula.id] = { success: true, value: '—' };
+          continue;
+        }
+
+        // Send to backend for "Multi-Statement" evaluation
+        const res = await axios.post(`${server.MTC_FORMULAS}/test`, {
+          formula: fValue,
+          context: currentContext
+        });
+
+        if (res.data.valid) {
+          let val = res.data.result;
+          // Apply rounding on UI side for preview
+          if (val != null && typeof val === 'number' && rRule && rRule !== 'none') {
+            const factor = Math.pow(10, rPrec ?? 2);
+            if (rRule === 'ceil') val = Math.ceil(val * factor) / factor;
+            else if (rRule === 'floor') val = Math.floor(val * factor) / factor;
+            else if (rRule === 'round') val = Math.round(val * factor) / factor;
+          }
+          results[formula.id] = { success: true, value: val };
+          currentContext[pName] = val;
+        } else {
+          results[formula.id] = { success: false, error: res.data.error };
+          currentContext[pName] = 0;
+        }
+      }
+      setTestResults(results);
+      message.success('Calculation test completed');
+    } catch (err) {
+      console.error('Test Error:', err);
+      message.error('Test execution failed');
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -883,6 +1013,9 @@ const ToolingSelectPage = () => {
         width={940}
         destroyOnHidden
         footer={[
+          <Button key="test_mode" type={isTestModeOpen ? 'primary' : 'default'} onClick={() => setIsTestModeOpen(!isTestModeOpen)}>
+            {isTestModeOpen ? 'Hide Test Mode' : 'Test Formula'}
+          </Button>,
           <Button key="add" icon={<PlusOutlined />} onClick={() => { setIsTfAddOpen(v => !v); tfAddForm.resetFields(); }}>
             Add Formula
           </Button>,
@@ -901,6 +1034,66 @@ const ToolingSelectPage = () => {
           </Button>,
         ]}
       >
+        {isTestModeOpen && (
+          <Card
+            size="small"
+            style={{ marginBottom: 12, background: '#f0f5ff', border: '1px solid #adc6ff' }}
+            title={<Space><SearchOutlined /> <Text strong>Test Simulation (part.*)</Text></Space>}
+            extra={<Button size="small" type="primary" loading={testLoading} onClick={handleTestFormula}>Run Test</Button>}
+          >
+            <Space wrap align="end">
+              <Form layout="vertical" size="small">
+                <Row gutter={12}>
+                  <Col><Form.Item label="odAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.odAft} onChange={v => setTestContext({ ...testContext, odAft: v })} style={{ width: 70 }} /></Form.Item></Col>
+                  <Col><Form.Item label="idAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.idAft} onChange={v => setTestContext({ ...testContext, idAft: v })} style={{ width: 70 }} /></Form.Item></Col>
+                  <Col><Form.Item label="wAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.wAft} onChange={v => setTestContext({ ...testContext, wAft: v })} style={{ width: 70 }} /></Form.Item></Col>
+                  <Col>
+                    <Form.Item label="Type" style={{ marginBottom: 0 }}>
+                      <Select value={testContext.type} onChange={v => setTestContext({ ...testContext, type: v })} style={{ width: 100 }}>
+                        <Select.Option value="NORMAL">NORMAL</Select.Option>
+                        <Select.Option value="ABR">ABR</Select.Option>
+                        <Select.Option value="BALL_INNER">BALL_INNER</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col>
+                    <Form.Item label="Y-Ball" style={{ marginBottom: 0 }}>
+                      <Select value={testContext.yBall} onChange={v => setTestContext({ ...testContext, yBall: v })} style={{ width: 70 }}>
+                        <Select.Option value="N">N</Select.Option>
+                        <Select.Option value="Y">Y</Select.Option>
+                        <Select.Option value="B">B</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col>
+                    <Form.Item label="Process" style={{ marginBottom: 0 }}>
+                      <Select value={testContext.process} onChange={v => setTestContext({ ...testContext, process: v })} style={{ width: 90 }}>
+                        <Select.Option value="OD→ID">OD→ID</Select.Option>
+                        <Select.Option value="ID→OD">ID→OD</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </Form>
+            </Space>
+            <div style={{ marginTop: 8, fontSize: 10, color: '#666' }}>
+              <Tooltip title={
+                <div style={{ fontSize: 11 }}>
+                  <b>Example Formulas:</b><br/>
+                  • Basic: <Text code style={{ color: '#fff' }}>odAft + 0.5</Text><br/>
+                  • Conditional: <Text code style={{ color: '#fff' }}>type == NORMAL ? odAft : 30</Text><br/>
+                  • Rounding: <Text code style={{ color: '#fff' }}>round05(baseC)</Text> (round to nearest 0.5)<br/>
+                  • Sequential: <Text code style={{ color: '#fff' }}>(A * 2) / 2</Text> (Use Param from prev row)
+                </div>
+              }>
+                <AuditOutlined /> <u>Formula Guide & Variables</u>
+              </Tooltip>
+              <span style={{ marginLeft: 12 }}>
+                Vars: <Tag color="default" style={{ fontSize: 9 }}>odAft</Tag> <Tag color="default" style={{ fontSize: 9 }}>baseC</Tag> <Tag color="orange" style={{ fontSize: 9 }}>isYBall</Tag> <Tag color="orange" style={{ fontSize: 9 }}>isIDtoOD</Tag>
+              </span>
+            </div>
+          </Card>
+        )}
         {isTfAddOpen && (
           <Card
             size="small"
@@ -993,6 +1186,22 @@ const ToolingSelectPage = () => {
                       onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_value: e.target.value } }))}
                     />
                   ),
+                },
+                {
+                  title: 'Result',
+                  width: 100,
+                  hidden: !isTestModeOpen,
+                  render: (_, record) => {
+                    const res = testResults[record.id];
+                    if (!res) return null;
+                    return res.success ? (
+                      <Tag color="blue" style={{ fontFamily: 'monospace' }}>{res.value}</Tag>
+                    ) : (
+                      <Tooltip title={res.error}>
+                        <Tag color="error">Error</Tag>
+                      </Tooltip>
+                    );
+                  }
                 },
                 {
                   title: 'Round',

@@ -78,42 +78,47 @@ describe('FormulaService.calculateMachineParams', () => {
     expect(result.error).toMatch(/no formulas/i);
   });
 
-  it('calculates params and groups by tool_category', async () => {
+  const mkRow = (tooling_name, parameter_name, formula_value, formula_type = 'expression') => ({
+    tooling_name, parameter_name, formula_value, formula_type, rounding_rule: 'none', rounding_precision: 2,
+  });
+
+  it('calculates params and groups by tooling_name', async () => {
     engPool.query.mockResolvedValueOnce({
       rows: [
-        { tool_category: 'WORK DRIVER', param_key: 'wd_A', formula: 'odAft / 2' },
-        { tool_category: 'WORK DRIVER', param_key: 'wd_B', formula: 'wd_A + 1' }, // uses prev result
+        mkRow('WORK DRIVER', 'A', 'odAft / 2'),
+        mkRow('WORK DRIVER', 'B', 'A + 1'), // uses prev result via shared ctx
       ],
     });
 
     const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
 
     expect(result['WORK DRIVER']).toBeDefined();
-    expect(result['WORK DRIVER'].wd_A).toBe(15);
-    expect(result['WORK DRIVER'].wd_B).toBe(16); // sequential: wd_A (15) + 1
+    expect(result['WORK DRIVER'].A).toBe(15);
+    expect(result['WORK DRIVER'].B).toBe(16); // sequential: A (15) + 1
   });
 
-  it('groups params with no category at top level', async () => {
+  it('skips limit-type rows and does not include them in output', async () => {
     engPool.query.mockResolvedValueOnce({
       rows: [
-        { tool_category: null, param_key: 'limit_A', formula: 'odAft * 0.5' },
+        mkRow('JAW', 'A', 'odAft / 2'),
+        mkRow('JAW', 'limit_max', 'odAft * 0.5', 'limit'),
       ],
     });
 
     const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
-    expect(result.limit_A).toBe(15);
-    expect(result['WORK DRIVER']).toBeUndefined();
+    expect(result['JAW'].A).toBe(15);
+    expect(result['JAW'].limit_max).toBeUndefined();
   });
 
-  it('returns error when a formula fails to evaluate', async () => {
+  it('sets _error flag when a formula has invalid syntax', async () => {
     engPool.query.mockResolvedValueOnce({
       rows: [
-        { tool_category: 'TEST', param_key: 'bad_param', formula: 'undefinedVar + 1' },
+        mkRow('TEST', 'bad_param', '('),  // syntax error — parse throws
       ],
     });
 
     const result = await FormulaService.calculateMachineParams('KS400B', {});
-    expect(result.error).toBeDefined();
+    expect(result._error).toBeDefined();
   });
 
   it('returns error on DB failure', async () => {
@@ -124,7 +129,7 @@ describe('FormulaService.calculateMachineParams', () => {
 
   it('includes original context in _raw', async () => {
     engPool.query.mockResolvedValueOnce({
-      rows: [{ tool_category: 'TEST', param_key: 'x', formula: '1' }],
+      rows: [mkRow('TEST', 'x', '1')],
     });
 
     const result = await FormulaService.calculateMachineParams('KS400B', CONTEXT);
