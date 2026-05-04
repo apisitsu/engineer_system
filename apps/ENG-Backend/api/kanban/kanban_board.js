@@ -508,11 +508,24 @@ const UpdateLabel = async (req, res) => {
     res.json({ data: rows[0] });
 };
 
-// DELETE /api/kanban/labels/:id
 const DeleteLabel = async (req, res) => {
     const { id } = req.params;
-    await engPool.query('DELETE FROM kb_label WHERE id=$1', [id]);
-    res.json({ message: 'Label deleted' });
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const { rows: [label] } = await engPool.query('SELECT board_id FROM kb_label WHERE id=$1', [id]);
+        if (!label) return res.status(404).json({ error: 'Label not found' });
+
+        if (!(await canManageBoard(req, label.board_id))) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to delete labels from this board.' });
+        }
+
+        await engPool.query('DELETE FROM kb_label WHERE id=$1', [id]);
+        res.json({ message: 'Label deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 // ─── LIST REORDER (Drag & Drop) ────────────────────────────────────

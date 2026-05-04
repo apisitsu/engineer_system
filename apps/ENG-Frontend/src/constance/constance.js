@@ -112,6 +112,7 @@ export const server = {
   KANBAN_ISSUES: `${apiUrl}api/kanban/issues`,
   KANBAN_NOTIFICATIONS: `${apiUrl}api/kanban/notifications`,
   // New Feature endpoints
+  KANBAN_SETTINGS: `${apiUrl}api/kanban/settings`,
   KANBAN_USER_PREFERENCES: `${apiUrl}api/kanban/user-preferences`,
   KANBAN_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/custom-field-groups`,
   KANBAN_BASE_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/base-custom-field-groups`,
@@ -121,6 +122,7 @@ export const server = {
   KANBAN_BACKGROUND_IMAGES: `${apiUrl}api/kanban/background-images`,
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
   KANBAN_WORKLOAD: `${apiUrl}api/kanban/workload/team-workload`,
+  KANBAN_TEMPLATES: `${apiUrl}api/kanban/templates`,
 
 };
 

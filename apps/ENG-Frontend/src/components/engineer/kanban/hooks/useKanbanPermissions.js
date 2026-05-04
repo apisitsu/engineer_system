@@ -8,16 +8,21 @@ export const useKanbanPermissions = ({
     cardRole = null,
     projectStatus = 'active',
 } = {}) => {
-    const globalRole = useAuthStore(state => state.userRole);
-    const globalDepartment = useAuthStore(state => state.userDepartment);
+    const globalRole = String(useAuthStore(state => state.userRole) || '').toUpperCase();
+    const globalDepartment = String(useAuthStore(state => state.userDepartment) || '').toUpperCase();
+    const globalAuth = String(useAuthStore(state => state.userAuth) || '').toUpperCase();
 
     // console.log(`User :`, globalRole, globalDepartment);
 
     return useMemo(() => {
         // ── 1. Global & Project Member Flags ──
         const isSuperAdmin = globalRole === 'AD' || globalDepartment === 'AD';
-        // console.log(`isSuperAdmin :`, isSuperAdmin);
-        const isManagerOrCoord = ['MGR', 'COORD'].includes(globalRole);
+        
+        // Check if MGR/COORD status exists in role, department, or auth group
+        const isManagerOrCoord = 
+            ['MGR', 'COORD'].includes(globalRole) || 
+            ['MGR', 'COORD'].includes(globalDepartment) || 
+            ['MGR', 'COORD'].includes(globalAuth);
 
         const isProjectOwner = projectRole === 'owner';
         const isProjectEditor = projectRole === 'editor';

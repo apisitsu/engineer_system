@@ -11,6 +11,8 @@ const Card = require('./kanban_card');
 const Extra = require('./kanban_extra');
 const Issue = require('./kanban_issue');
 const Workload = require('./kanban_workload');
+const Settings = require('./kanban_settings');
+const Template = require('./kanban_template');
 
 // ─── PROJECT ROUTES ────────────────────────────────────────────────
 router.get('/users', Project.GetUsers);
@@ -27,6 +29,18 @@ router.get('/projects/:id/report-data', Project.GetReportData);
 
 // ─── WORKLOAD ROUTES ─────────────
 router.get('/workload/team-workload', Workload.GetTeamWorkload);
+
+// ─── ADMIN SETTINGS ────────────────────────────────────────────────
+router.get('/settings', Settings.checkAdminRole, Settings.GetSettings);
+router.patch('/settings', Settings.checkAdminRole, Settings.UpdateSettings);
+
+// ─── TEMPLATE ROUTES (Blueprint & Selective Cloning) ───────────────
+router.get('/templates', Template.GetTemplates);
+router.get('/templates/:id', Template.GetTemplateById);
+router.post('/templates', Template.CreateTemplate);
+router.patch('/templates/:id', Template.UpdateTemplate);
+router.delete('/templates/:id', Template.DeleteTemplate);
+router.post('/templates/:id/instantiate', Template.InstantiateTemplate);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);

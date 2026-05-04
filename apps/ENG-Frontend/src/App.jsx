@@ -40,7 +40,7 @@ import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
 
-import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
+import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
@@ -287,7 +287,7 @@ const AppContent = () => {
                     <Route path="history" element={<EcntHistory />} />
                     <Route path="close/:id" element={<EcntClose />} />
                   </Route>
-                  <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
+                  <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
 
                   {/* ------ Materials Engineer ------ */}
                   <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
@@ -306,6 +306,7 @@ const AppContent = () => {
 
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
+                  <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
@@ -322,9 +323,7 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
-                <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
               </Route>
-
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
                 <Route element={<MainLayout />}>

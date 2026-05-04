@@ -23,6 +23,7 @@ import { useTheme } from '../../../../theme';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
+import TemplateBuilderDrawer from './TemplateBuilderDrawer';
 
 const { Title, Text } = Typography;
 
@@ -164,6 +165,7 @@ const ProjectSettingsDrawer = () => {
     const [editingPriority, setEditingPriority] = useState('Medium');
     const [editingStatus, setEditingStatus] = useState('Active');
     const [memberSearch, setMemberSearch] = useState('');
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
     // Role Editing State
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
@@ -598,6 +600,22 @@ const ProjectSettingsDrawer = () => {
                                                     </Button>
                                                 </Space>
                                             </div>
+
+                                            {canManageProject && (
+                                                <div style={{ marginTop: theme.spacing.md }}>
+                                                    <Button 
+                                                        block 
+                                                        icon={<IoLayersOutline />} 
+                                                        onClick={() => setShowTemplateBuilder(true)}
+                                                        style={{ 
+                                                            borderColor: theme.colors.primary, 
+                                                            color: theme.colors.primary 
+                                                        }}
+                                                    >
+                                                        Save as Blueprint Template
+                                                    </Button>
+                                                </div>
+                                            )}
                                             {/* marginTop: theme.spacing.xl, */}
                                             <div style={{ paddingTop: theme.spacing.lg, borderTop: `1px solid ${theme.colors.border}` }}>
                                                 <Text strong style={{ color: theme.colors.error, display: 'block', marginBottom: theme.spacing.sm }}>Danger Zone</Text>
@@ -706,6 +724,23 @@ const ProjectSettingsDrawer = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Template Builder Drawer */}
+            {isSingleProjectMode && targetProject && (
+                <TemplateBuilderDrawer 
+                    open={showTemplateBuilder} 
+                    onClose={() => setShowTemplateBuilder(false)} 
+                    masterProject={targetProject} 
+                />
+            )}
+            {!isSingleProjectMode && editingId && (
+                <TemplateBuilderDrawer 
+                    open={showTemplateBuilder} 
+                    onClose={() => setShowTemplateBuilder(false)} 
+                    masterProject={projects.find(p => p.id === editingId)} 
+                />
+            )}
+
         </Drawer>
     );
 };
