@@ -45,6 +45,34 @@ const isProjectMember = async (projectId, uCode) => {
     return rows.length > 0;
 };
 
+const canManageProject = async (req, projectId) => {
+    // 1. AD (Admin) bypasses everything
+    if (await isSuperAdmin(req)) return true;
+
+    // Fetch project status and privacy
+    const { rows: [project] } = await engPool.query(
+        'SELECT status, is_private FROM kb_project WHERE id=$1', [projectId]
+    );
+    if (!project) return false;
+
+    // 2. Status Restriction: Suspended or Completed projects are Read-Only for ALL non-AD users
+    const status = (project.status || '').toLowerCase();
+    if (['suspended', 'completed'].includes(status)) return false;
+
+    const uCode = req.user?.empno;
+    const isPrivate = project.is_private;
+
+    // 3. Global Role Logic (Public Projects)
+    if (!isPrivate && (await isManagerOrCoord(req))) return true;
+
+    // 4. Membership Logic
+    const { rows: [membership] } = await engPool.query(
+        'SELECT role FROM kb_project_membership WHERE project_id=$1 AND u_code=$2',
+        [projectId, uCode]
+    );
+    return membership?.role === 'owner';
+};
+
 // ═══════════════════════════════════════════════════════════════════
 //  2. GLOBAL ROLE CHECKS  (AD separated from MGR/COORD)
 // ═══════════════════════════════════════════════════════════════════
@@ -82,10 +110,17 @@ const isSuperAdmin = async (req) => {
  * In PRIVATE projects: must be an explicit member first.
  */
 const isManagerOrCoord = async (req) => {
-    const jwtRole = req.user?.role;
-    const jwtDept = req.user?.department;
-    if (jwtDept && jwtDept.toUpperCase() === 'AD') return false; // AD is handled separately
-    if (jwtRole && ['MGR', 'COORD'].includes(jwtRole.toUpperCase())) return true;
+    const jwtRole = (req.user?.role || '').toUpperCase();
+    const jwtDept = (req.user?.department || '').toUpperCase();
+    const jwtGroup = (req.user?.user_group || '').toUpperCase(); // Feature request support
+
+    // AD is handled separately (God Mode)
+    if (jwtDept === 'AD' || jwtRole === 'AD') return false; 
+    
+    // Check if COORD/MGR status exists in role, department, or user_group
+    if (['MGR', 'COORD'].includes(jwtRole)) return true;
+    if (['MGR', 'COORD'].includes(jwtDept)) return true;
+    if (['MGR', 'COORD'].includes(jwtGroup)) return true;
 
     // Fallback: query DB
     const uCode = req.user?.empno;
@@ -96,7 +131,9 @@ const isManagerOrCoord = async (req) => {
         );
         if (!rows[0]) return false;
         const role = (rows[0].u_role || '').toUpperCase();
-        return ['MGR', 'COORD'].includes(role);
+        const dept = (rows[0].u_department || '').toUpperCase();
+
+        return ['MGR', 'COORD'].includes(role) || ['MGR', 'COORD'].includes(dept);
     } catch {
         return false;
     }
@@ -150,36 +187,6 @@ const canAccessProject = async (req, projectId) => {
     return isMember;
 };
 
-/**
- * Can the user MANAGE a project (settings, members, delete)?
- *   AD            → always
- *   Public:  Owner, MGR/COORD
- *   Private: Owner ONLY (MGR/COORD blocked unless they ARE the owner)
- */
-const canManageProject = async (req, projectId) => {
-    const uCode = req.user?.empno;
-    if (!uCode) return false;
-
-    // 1. AD → always
-    if (await isSuperAdmin(req)) return true;
-
-    // 2. Check project privacy
-    const { rows: projRows } = await engPool.query(
-        'SELECT is_private FROM kb_project WHERE id = $1', [projectId]
-    );
-    if (!projRows[0]) return false;
-    const isPrivate = projRows[0].is_private;
-
-    // 3. Project Owner check
-    const membership = await getProjectMembership(projectId, uCode);
-    const isOwner = membership?.role === 'owner';
-    if (isOwner) return true;
-
-    // 4. MGR/COORD — only for PUBLIC projects
-    if (!isPrivate && (await isManagerOrCoord(req))) return true;
-
-    return false;
-};
 
 // ═══════════════════════════════════════════════════════════════════
 //  4. BOARD-LEVEL CHECKS

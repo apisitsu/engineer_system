@@ -57,7 +57,7 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
         cards, createCard, updateList, deleteList, sortListCards,
         archiveListCards,
         searchQuery, filterMembers, filterLabels,
-        activeProject, activeBoardMembers, activeBoard
+        activeProject, activeBoardMembers, activeBoard, systemSettings
     } = useKanbanStore(
         useShallow(state => ({
             cards: state.cards,
@@ -72,6 +72,7 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             activeProject: state.activeProject,
             activeBoardMembers: state.activeBoardMembers,
             activeBoard: state.activeBoard,
+            systemSettings: state.systemSettings,
         }))
     );
     const { theme } = useTheme();
@@ -82,6 +83,14 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const [isPrivateCard, setIsPrivateCard] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [editName, setEditName] = useState(list.name);
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    // Global Settings
+    const enableLimitSetting = systemSettings?.find(s => s.setting_key === 'enable_list_card_limit');
+    const defaultLimitSetting = systemSettings?.find(s => s.setting_key === 'default_list_card_limit');
+    
+    const enableLimit = enableLimitSetting ? enableLimitSetting.setting_value === 'true' : true;
+    const limitCount = defaultLimitSetting ? Number(defaultLimitSetting.setting_value) : 10;
 
     // Permission Hook
     const currentUserRole = activeBoardMembers.find(m => m.u_code === empNo)?.role;
@@ -125,10 +134,17 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
 
     const totalCards = (cards[list.id] || []).length;
 
+    const displayedCards = useMemo(() => {
+        if (enableLimit && !isExpanded && filteredCards.length > limitCount) {
+            return filteredCards.slice(0, limitCount);
+        }
+        return filteredCards;
+    }, [filteredCards, enableLimit, isExpanded, limitCount]);
+
     // Memoize card IDs for SortableContext
     const cardIds = useMemo(
-        () => filteredCards.map(c => `card-${c.id}`),
-        [filteredCards]
+        () => displayedCards.map(c => `card-${c.id}`),
+        [displayedCards]
     );
 
     // Make this list a droppable target for cards (even when empty)
@@ -357,12 +373,37 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             >
                 <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {filteredCards.map(card => (
+                        {displayedCards.map(card => (
                             <SortableCard key={card.id} card={card} />
                         ))}
                     </div>
                 </SortableContext>
             </div>
+
+            {/* Show More/Less Button */}
+            {enableLimit && filteredCards.length > limitCount && (
+                <div style={{ padding: `0 ${theme.spacing.sm} ${theme.spacing.sm}` }}>
+                    {!isExpanded ? (
+                        <Button 
+                            type="dashed" 
+                            block 
+                            onClick={() => setIsExpanded(true)}
+                            style={{ color: theme.colors.textSecondary, borderColor: `${theme.colors.border}88` }}
+                        >
+                            Show {filteredCards.length - limitCount} more cards
+                        </Button>
+                    ) : (
+                        <Button 
+                            type="dashed" 
+                            block 
+                            onClick={() => setIsExpanded(false)}
+                            style={{ color: theme.colors.textSecondary, borderColor: `${theme.colors.border}88` }}
+                        >
+                            Show less
+                        </Button>
+                    )}
+                </div>
+            )}
 
             {/* Add Card Section */}
             {!isReadOnly && allowAddCard && (

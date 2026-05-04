@@ -3,10 +3,11 @@ import { Typography, Button, Tooltip, Badge, Tabs } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
+import { useAuthStore } from '../../../../stores/authStore';
 
 import { MdOutlineDashboard, MdOutlineAssessment } from 'react-icons/md';
 import { BsKanban } from 'react-icons/bs';
-import { IoTimeOutline, IoHelpCircleOutline, IoAddOutline } from 'react-icons/io5';
+import { IoTimeOutline, IoHelpCircleOutline, IoAddOutline, IoSettingsOutline } from 'react-icons/io5';
 import { RiKanbanView } from 'react-icons/ri';
 
 import DashboardTab from './DashboardTab';
@@ -16,6 +17,7 @@ import WorkloadTab from './WorkloadTab';
 
 import CreateProjectModal from './components/CreateProjectModal';
 import ProjectSettingsDrawer from '../Settings/ProjectSettingsDrawer';
+import KanbanAdminSettings from '../Settings/KanbanAdminSettings';
 import UserGuideDrawer from '../UserGuide/UserGuideDrawer';
 import ScrollbarStyle from '../../../common/scrollbar';
 
@@ -40,8 +42,11 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     // Default active tab to the first item in the preferred order
     const [activeTab, setActiveTab] = useState(kanbanTabOrder?.[0] || 'dashboard');
 
-    // Global permissions
     const { canCreateProject } = useKanbanPermissions();
+    const { userDepartment, userRole } = useAuthStore();
+    const isAdmin = userRole === 'admin' || userDepartment === 'AD' || userRole === 'system_admin';
+
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
@@ -157,20 +162,34 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         </Text>
                     </div>
                 </div>
-                {canCreateProject && (
-                    <Button
-                        type="primary"
-                        icon={<IoAddOutline size={18} />}
-                        onClick={() => setShowCreateModal(true)}
-                        style={{
-                            background: theme.colors.primary, borderColor: theme.colors.primary,
-                            borderRadius: theme.borderRadius.md, height: 38,
-                            fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4,
-                        }}
-                    >
-                        New Project
-                    </Button>
-                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {isAdmin && (
+                        <Tooltip title="Global System Settings">
+                            <Button
+                                onClick={() => setIsSettingsOpen(true)}
+                                icon={<IoSettingsOutline size={18} />}
+                                style={{
+                                    height: 38, width: 38, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    borderRadius: theme.borderRadius.md, color: theme.colors.textSecondary
+                                }}
+                            />
+                        </Tooltip>
+                    )}
+                    {canCreateProject && (
+                        <Button
+                            type="primary"
+                            icon={<IoAddOutline size={18} />}
+                            onClick={() => setShowCreateModal(true)}
+                            style={{
+                                background: theme.colors.primary, borderColor: theme.colors.primary,
+                                borderRadius: theme.borderRadius.md, height: 38,
+                                fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4,
+                            }}
+                        >
+                            New Project
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Main Content Area with Dynamic Tabs */}
@@ -211,6 +230,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 theme={theme} 
             />
             <ProjectSettingsDrawer />
+            <KanbanAdminSettings open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
             <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} />
         </div>
     );

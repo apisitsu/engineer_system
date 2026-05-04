@@ -340,6 +340,64 @@ export const createProjectSlice = (set, get) => ({
     },
 
     // ====================================================================
+    //  TEMPLATE CONFIGURATIONS (Blueprint & Selective Cloning)
+    // ====================================================================
+
+    templateConfigs: [],
+
+    fetchTemplateConfigs: async () => {
+        try {
+            const res = await axios.get(server.KANBAN_TEMPLATES);
+            set({ templateConfigs: res.data?.data || [] });
+        } catch (err) {
+            console.error('Failed to fetch template configs', err);
+        }
+    },
+
+    createTemplateConfig: async (payload) => {
+        try {
+            const res = await axios.post(server.KANBAN_TEMPLATES, payload);
+            if (res.data?.data) {
+                set(state => ({ templateConfigs: [...state.templateConfigs, res.data.data] }));
+                return res.data.data;
+            }
+        } catch (err) {
+            console.error('Failed to create template config', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to create template', 'error');
+        }
+        return null;
+    },
+
+    deleteTemplateConfig: async (id) => {
+        try {
+            await axios.delete(`${server.KANBAN_TEMPLATES}/${id}`);
+            set(state => ({ templateConfigs: state.templateConfigs.filter(t => t.id !== id) }));
+            return true;
+        } catch (err) {
+            console.error('Failed to delete template config', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to delete template', 'error');
+            return false;
+        }
+    },
+
+    instantiateTemplate: async (templateId, newProjectName) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/instantiate`, {
+                new_project_name: newProjectName,
+            });
+            if (res.data?.data) {
+                // Add the new project to the store
+                set(state => ({ projects: [...state.projects, res.data.data] }));
+                return res.data.data;
+            }
+        } catch (err) {
+            console.error('Failed to instantiate template', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to instantiate template', 'error');
+        }
+        return null;
+    },
+
+    // ====================================================================
     //  PROJECT UI ACTIONS
     // ====================================================================
 

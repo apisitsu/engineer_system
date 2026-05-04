@@ -638,8 +638,13 @@ const DuplicateCard = async (req, res) => {
         // Insert new card (without members or comments)
         const newName = originalCard.name + ' (Copy)';
         const { rows: [newCard] } = await client.query(`
-            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_due_completed, is_closed, stopwatch, memo, list_changed_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()) RETURNING *
+            INSERT INTO kb_card (
+                board_id, list_id, creator_u_code, card_type, position, name, 
+                description, due_date, is_due_completed, is_closed, stopwatch, 
+                memo, estimated_hours, priority, is_private, is_suspended, 
+                suspended_reason, list_changed_at
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW()) RETURNING *
         `, [
             originalCard.board_id,
             targetListId,
@@ -649,10 +654,15 @@ const DuplicateCard = async (req, res) => {
             newName,
             originalCard.description,
             originalCard.due_date,
-            originalCard.is_due_completed,
-            originalCard.is_closed,
-            originalCard.stopwatch,
-            originalCard.memo
+            false,  // is_due_completed reset to FALSE
+            false,  // is_closed reset to FALSE
+            null,   // stopwatch reset to NULL
+            originalCard.memo,
+            originalCard.estimated_hours, // Copied from original
+            originalCard.priority,        // Copied from original
+            originalCard.is_private,      // Copied from original
+            false,  // is_suspended reset to FALSE
+            null    // suspended_reason reset to NULL
         ]);
 
         // Duplicate labels
@@ -672,13 +682,26 @@ const DuplicateCard = async (req, res) => {
 
             await client.query(`
                 INSERT INTO kb_task (task_list_id, name, position, is_completed)
-                SELECT $1, name, position, is_completed FROM kb_task WHERE task_list_id=$2
+                SELECT $1, name, position, FALSE FROM kb_task WHERE task_list_id=$2
                 ON CONFLICT DO NOTHING
             `, [newTaskList.id, originalTaskList.id]);
         }
 
-        // Log action
-        await logAction(client, newCard.id, uCode, 'card_created', { name: newCard.name });
+        // Log action as card_duplicated to differentiate from standard creation
+        await logAction(client, newCard.id, uCode, 'card_duplicated', { 
+            original_card_id: id, 
+            name: newName 
+        });
+
+        // Broadcast new card via WebSocket
+        const io = req.app.get('io');
+        if (io && originalCard.board_id) {
+            io.to(`board:${originalCard.board_id}`).emit('cardCreate', {
+                item: newCard,
+                listId: parseInt(targetListId),
+                actorUCode: uCode,
+            });
+        }
 
         await client.query('COMMIT');
         res.status(201).json({ data: newCard });

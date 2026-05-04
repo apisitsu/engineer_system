@@ -7,6 +7,8 @@ const { engPool } = require('../../instance/eng_db');
 const {
     canManageProject,
     canManageBoard,
+    canAccessProject,
+    isSuperAdmin,
     canEditCard
 } = require('./kanban_acl');
 
@@ -26,6 +28,7 @@ const getAuthUser = (req, res) => {
 const GetBaseCustomFieldGroups = async (req, res) => {
     const { projectId } = req.params;
     try {
+        if (!(await canAccessProject(req, projectId))) return res.status(403).json({ error: 'Forbidden' });
         const { rows } = await engPool.query(
             'SELECT * FROM kb_base_custom_field_group WHERE project_id=$1 ORDER BY created_at', [projectId]);
         res.json({ data: rows });
@@ -82,6 +85,9 @@ const DeleteBaseCustomFieldGroup = async (req, res) => {
 const GetCustomFieldGroups = async (req, res) => {
     const { boardId } = req.params;
     try {
+        const { rows: [board] } = await engPool.query('SELECT project_id FROM kb_board WHERE id=$1', [boardId]);
+        if (!board || !(await canAccessProject(req, board.project_id))) return res.status(403).json({ error: 'Forbidden' });
+
         const { rows } = await engPool.query(
             'SELECT * FROM kb_custom_field_group WHERE board_id=$1 ORDER BY position', [boardId]);
         res.json({ data: rows });
@@ -139,6 +145,9 @@ const DeleteCustomFieldGroup = async (req, res) => {
 const GetCustomFields = async (req, res) => {
     const { groupId } = req.params;
     try {
+        const { rows: [group] } = await engPool.query('SELECT project_id FROM kb_base_custom_field_group WHERE id=$1', [groupId]);
+        if (!group || !(await canAccessProject(req, group.project_id))) return res.status(403).json({ error: 'Forbidden' });
+
         const { rows } = await engPool.query(
             'SELECT * FROM kb_custom_field WHERE base_custom_field_group_id=$1 ORDER BY position',
             [groupId]);
@@ -249,6 +258,7 @@ const UpsertCustomFieldValue = async (req, res) => {
 const GetWebhooks = async (req, res) => {
     const { boardId } = req.params;
     try {
+        if (!(await canManageBoard(req, boardId))) return res.status(403).json({ error: 'Forbidden' });
         const { rows } = await engPool.query(
             'SELECT * FROM kb_webhook WHERE board_id=$1 ORDER BY created_at', [boardId]);
         res.json({ data: rows });
@@ -332,22 +342,25 @@ const CreateNotificationService = async (req, res) => {
 
 const UpdateNotificationService = async (req, res) => {
     const { id } = req.params;
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     const { url, format, board_id } = req.body;
     try {
         const { rows } = await engPool.query(
             `UPDATE kb_notification_service SET
                 url=COALESCE($1,url), format=COALESCE($2,format), board_id=COALESCE($3,board_id)
-             WHERE id=$4 RETURNING *`,
-            [url, format, board_id, id]);
-        if (!rows.length) return res.status(404).json({ error: 'Not found' });
+             WHERE id=$4 AND u_code=$5 RETURNING *`,
+            [url, format, board_id, id, uCode]);
+        if (!rows.length) return res.status(404).json({ error: 'Not found or unauthorized' });
         res.json({ data: rows[0] });
     } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
 const DeleteNotificationService = async (req, res) => {
     const { id } = req.params;
+    const uCode = getAuthUser(req, res); if (!uCode) return;
     try {
-        await engPool.query('DELETE FROM kb_notification_service WHERE id=$1', [id]);
+        const { rows } = await engPool.query('DELETE FROM kb_notification_service WHERE id=$1 AND u_code=$2 RETURNING *', [id, uCode]);
+        if (!rows.length) return res.status(404).json({ error: 'Not found or unauthorized' });
         res.json({ data: { deleted: true } });
     } catch (err) { res.status(500).json({ error: err.message }); }
 };

@@ -199,7 +199,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
                 </div>
             </div>
 
-            {/* ═══ Card Status Distribution ═══ */}
+            {/* ═══ Card Status Distribution ═══
             <div className="report-section" data-section-title="Card Status Distribution" style={sectionStyle(theme)}>
                 {sectionTitle(theme, <IoPieChartOutline />, 'Card Status Distribution', '#8b5cf6')}
 
@@ -219,14 +219,81 @@ const ProjectReport = ({ reportData, theme, users }) => {
                         ))}
                     </div>
                 )}
+            </div> */}
+
+            {/* ═══ Card Status Distribution ═══ */}
+            <div className="report-section" data-section-title="Card Status Distribution" style={sectionStyle(theme)}>
+                {sectionTitle(theme, <IoPieChartOutline />, 'Card Status Distribution', '#8b5cf6')}
+
+                {allBoards.length === 0 ? (
+                    <Empty description="No status data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                    <div style={{
+                        display: 'grid',
+                        // ถ้ามีบอร์ดเดียวให้แสดง 1fr (เต็มแถว) แต่ถ้ามากกว่า 1 บอร์ด ให้แบ่งเป็น 2 คอลัมน์
+                        gridTemplateColumns: allBoards.length === 1 ? '1fr' : '1fr 1fr',
+                        gap: theme.spacing.lg,
+                        alignItems: 'start' // ป้องกันไม่ให้กล่องยืดความสูงตามคอลัมน์ข้างเคียง
+                    }}>
+                        {allBoards.map((board, bIdx) => {
+                            const boardTotal = (board.allCards || []).length;
+
+                            // หาจำนวนการ์ดที่เยอะที่สุดใน list ใดๆ ของ board นี้ เพื่อใช้คำนวณความยาวหลอด
+                            // บังคับค่าต่ำสุดเป็น 1 เพื่อป้องกันการหารด้วย 0 กรณีที่ทุก List ไม่มีงานเลย
+                            const maxCountInBoard = Math.max(...(board.lists || []).map(l => (l.cards || []).length), 1);
+
+                            return (
+                                <div key={board.id || bIdx} style={{
+                                    padding: theme.spacing.md,
+                                    background: `${theme.colors.primary}04`,
+                                    border: `1px solid ${theme.colors.border}`,
+                                    borderRadius: theme.borderRadius.md,
+                                }}>
+                                    {/* ชื่อ Board และจำนวนงานรวม */}
+                                    <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}>
+                                        <Text strong style={{ fontSize: 14, color: theme.colors.textPrimary }}>
+                                            {board.name}
+                                        </Text>
+                                        <Tag color="purple" style={{ marginLeft: 8, borderRadius: 10, border: 'none' }}>
+                                            {boardTotal} tasks
+                                        </Tag>
+                                    </div>
+
+                                    {/* วนลูปแสดง list (สถานะ) ภายใน Board นั้นๆ */}
+                                    {(board.lists || []).map((list, lIdx) => {
+                                        const count = (list.cards || []).length;
+
+                                        const isDone = isDoneList(list.name);
+                                        const isInProgress = isInProgressList(list.name);
+                                        // ปรับสีเทาอ่อนๆ สำหรับ list ที่ว่างเปล่า (count === 0) เพื่อให้ UI ดูไม่จม
+                                        const color = count === 0
+                                            ? theme.colors.border
+                                            : (isDone ? '#10b981' : isInProgress ? '#3b82f6' : '#f59e0b');
+
+                                        return (
+                                            <HorizBar
+                                                key={lIdx}
+                                                label={list.name}
+                                                count={count}
+                                                maxCount={maxCountInBoard}
+                                                color={color}
+                                                theme={theme}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* ═══ Two columns: Member Workload + Label Distribution ═══ */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.xl, marginBottom: theme.spacing.xl }}>
 
                 {/* Member Workload */}
-                    <div className="report-section" data-section-title="Member Workload" style={sectionStyle(theme)}>
-                        {sectionTitle(theme, <MdOutlinePeople />, 'Member Workload', '#f59e0b')}
+                <div className="report-section" data-section-title="Member Workload" style={sectionStyle(theme)}>
+                    {sectionTitle(theme, <MdOutlinePeople />, 'Member Workload', '#f59e0b')}
                     {memberWorkload.length === 0 ? (
                         <Empty description="No member data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                     ) : (
@@ -272,8 +339,8 @@ const ProjectReport = ({ reportData, theme, users }) => {
                 </div>
 
                 {/* Label Distribution */}
-                    <div className="report-section" data-section-title="Label Distribution" style={sectionStyle(theme)}>
-                        {sectionTitle(theme, <MdOutlineLabel />, 'Label Distribution', '#ec4899')}
+                <div className="report-section" data-section-title="Label Distribution" style={sectionStyle(theme)}>
+                    {sectionTitle(theme, <MdOutlineLabel />, 'Label Distribution', '#ec4899')}
                     {labelDist.length === 0 ? (
                         <Empty description="No labels used" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                     ) : (
