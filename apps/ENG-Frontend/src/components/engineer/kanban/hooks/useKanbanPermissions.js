@@ -8,9 +8,9 @@ export const useKanbanPermissions = ({
     cardRole = null,
     projectStatus = 'active',
 } = {}) => {
-    const globalRole = (useAuthStore(state => state.userRole) || '').toUpperCase();
-    const globalDepartment = (useAuthStore(state => state.userDepartment) || '').toUpperCase();
-    const globalAuth = (useAuthStore(state => state.userAuth) || '').toUpperCase(); // Maps to user_group/auth levels
+    const globalRole = String(useAuthStore(state => state.userRole) || '').toUpperCase();
+    const globalDepartment = String(useAuthStore(state => state.userDepartment) || '').toUpperCase();
+    const globalAuth = String(useAuthStore(state => state.userAuth) || '').toUpperCase();
 
     // console.log(`User :`, globalRole, globalDepartment);
 

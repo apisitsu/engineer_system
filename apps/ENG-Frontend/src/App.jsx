@@ -40,7 +40,7 @@ import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
 
-import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
+import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
@@ -287,7 +287,7 @@ const AppContent = () => {
                     <Route path="history" element={<EcntHistory />} />
                     <Route path="close/:id" element={<EcntClose />} />
                   </Route>
-                  <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
+                  <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
 
                   {/* ------ Materials Engineer ------ */}
                   <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
