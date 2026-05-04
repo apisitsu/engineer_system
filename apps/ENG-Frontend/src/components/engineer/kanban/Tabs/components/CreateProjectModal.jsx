@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Button, Select, Switch, Typography, Tooltip, Radio, Divider, Spin } from 'antd';
+import { Modal, Form, Input, Button, Select, Switch, Typography, Tooltip, Radio } from 'antd';
 import { IoLockClosedOutline } from 'react-icons/io5';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { GRADIENTS, PROJECT_ICONS } from '../../constants/kanbanConstants';

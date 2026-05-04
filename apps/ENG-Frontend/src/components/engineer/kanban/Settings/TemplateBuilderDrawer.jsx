@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Drawer, Tree, Input, Button, Space, Typography, Spin, Empty, App as AntdApp, Divider, Tag } from 'antd';
-import { SaveOutlined, AppstoreOutlined, UnorderedListOutlined, CreditCardOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { SaveOutlined, AppstoreOutlined, UnorderedListOutlined, CreditCardOutlined } from '@ant-design/icons';
 import { useKanbanStore } from '../store/kanbanStore';
 
 const { Title, Text } = Typography;
@@ -10,10 +10,10 @@ const { Title, Text } = Typography;
  * 
  * Ant Design Drawer for building/editing Template Configurations.
  * Uses <Tree checkable> to display the full project hierarchy:
- *   Board → List → Card → Task
+ *   Board → List → Card
  *
  * Tree node keys are prefixed by type to avoid ID collision:
- *   board-10, list-100, card-1000, task-5000
+ *   board-10, list-100, card-1000
  *
  * IMPORTANT: checkStrictly is NOT enabled (default cascading behavior)
  * so selecting a child auto-selects its parent, preventing orphaned nodes
@@ -63,6 +63,9 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
     }, [open, masterProject?.id, existingTemplate]);
 
     // Build the Ant Design Tree data from report data
+    // Note: GetReportData returns boards[].lists[].cards[] with aggregated
+    // total_tasks / completed_tasks counts but no nested task list objects.
+    // Tree hierarchy is therefore: Board → List → Card (leaf).
     const treeData = useMemo(() => {
         if (!reportData?.boards) return [];
 
@@ -93,26 +96,18 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                             <CreditCardOutlined style={{ marginRight: 6, color: '#fa8c16' }} />
                             {card.name}
                             <Tag color="orange" style={{ marginLeft: 8, fontSize: 10 }}>Card</Tag>
+                            {(card.total_tasks > 0) && (
+                                <Text type="secondary" style={{ marginLeft: 4, fontSize: 11 }}>
+                                    ({card.completed_tasks}/{card.total_tasks} tasks)
+                                </Text>
+                            )}
                         </span>
                     ),
                     key: `card-${card.id}`,
-                    children: buildTaskNodes(card),
                 })),
             })),
         }));
     }, [reportData]);
-
-    // Helper: build task nodes from a card's task_lists + tasks
-    // (report data nests tasks inside task lists per the GetReportData structure)
-    const buildTaskNodes = useCallback((card) => {
-        // reportData structure doesn't include tasks at card level,
-        // we need to handle the case where task data comes from a different source
-        // For now, we'll show tasks if they exist on the card object
-        if (!card.total_tasks || card.total_tasks === 0) return undefined;
-        // If the reportData provides nested task lists, we handle that
-        // Otherwise return undefined to avoid empty leaf nodes
-        return undefined;
-    }, []);
 
     // Parse checked keys → config_data payload
     const parseConfigData = useCallback(() => {
@@ -132,6 +127,7 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                 case 'list':  list_ids.push(id);  break;
                 case 'card':  card_ids.push(id);  break;
                 case 'task':  task_ids.push(id);  break;
+                default: break;
             }
         }
 
@@ -175,16 +171,14 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
         }
     };
 
-    const handleCheck = (checked, e) => {
-        // checked can be an array or { checked: [], halfChecked: [] }
+    const handleCheck = (checked) => {
         // Since we do NOT use checkStrictly, 'checked' is a flat array.
         setCheckedKeys(checked);
     };
 
     // Stat summary of current selection
     const selectionSummary = useMemo(() => {
-        const cfg = parseConfigData();
-        return cfg;
+        return parseConfigData();
     }, [parseConfigData]);
 
     return (
