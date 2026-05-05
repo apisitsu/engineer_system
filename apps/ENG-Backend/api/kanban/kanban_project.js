@@ -117,10 +117,10 @@ const CreateProject = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
 
-    // ── Authorization Check: Only AD, MGR, or COORD can create projects ──
-    if (!(await isSuperAdmin(req)) && !(await isManagerOrCoord(req))) {
-        return res.status(403).json({ error: 'Forbidden: You do not have permission to create projects.' });
-    }
+    // ── Authorization Check: Removed so all users can create projects ──
+    // if (!(await isSuperAdmin(req)) && !(await isManagerOrCoord(req))) {
+    //     return res.status(403).json({ error: 'Forbidden: You do not have permission to create projects.' });
+    // }
     const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent, start_date, due_date } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 

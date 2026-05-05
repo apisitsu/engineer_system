@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tag } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tooltip } from 'antd';
 import dayjs from 'dayjs';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineApi, AiOutlineBell } from 'react-icons/ai';
-import { RiInputField } from 'react-icons/ri';
-import { MdOutlineDashboard, MdOutlineViewQuilt, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineApi, AiOutlineQuestionCircle } from 'react-icons/ai';
+import { MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
 import { IoSettingsOutline, IoArchiveOutline, IoRocketOutline, IoLockClosedOutline, IoSaveOutline } from 'react-icons/io5';
 import { BsGrid1X2 } from 'react-icons/bs';
 import { FiUsers, FiTag } from 'react-icons/fi';
@@ -53,9 +52,9 @@ const { Title, Text } = Typography;
 
 
 const PRIORITY_CONFIG = {
-    LOW:    { label: 'Low',    emoji: '🟢', color: '#52c41a', bgColor: '#f6ffed' },
+    LOW: { label: 'Low', emoji: '🟢', color: '#52c41a', bgColor: '#f6ffed' },
     MEDIUM: { label: 'Medium', emoji: '🔵', color: '#1677ff', bgColor: '#e6f4ff' },
-    HIGH:   { label: 'High',   emoji: '🟠', color: '#fa8c16', bgColor: '#fff7e6' },
+    HIGH: { label: 'High', emoji: '🟠', color: '#fa8c16', bgColor: '#fff7e6' },
     URGENT: { label: 'Urgent', emoji: '🔴', color: '#f5222d', bgColor: '#fff2f0' },
 };
 
@@ -283,7 +282,7 @@ const BoardSettingsDrawer = () => {
                         const lCards = useKanbanStore.getState().cards[l.id] || [];
                         boardCards.push(...lCards);
                     });
-                    
+
                     const newConfig = {
                         name: result.value,
                         type: 'blueprint',
@@ -294,7 +293,7 @@ const BoardSettingsDrawer = () => {
                             sourceProject: activeProject.id
                         }
                     };
-                    
+
                     await createTemplateConfig(newConfig);
                     Swal.fire('Saved!', 'Board has been saved as a Blueprint.', 'success');
                 } catch (e) {
@@ -334,7 +333,7 @@ const BoardSettingsDrawer = () => {
                 <MdOutlineDashboard size={18} color={theme.colors.primary} />
                 <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Information</Title>
             </div>
-            
+
             <div style={{
                 padding: theme.spacing.md,
                 background: `${theme.colors.primary}08`,
@@ -342,7 +341,7 @@ const BoardSettingsDrawer = () => {
                 border: `1px solid ${theme.colors.primary}20`,
                 marginBottom: theme.spacing.md
             }}>
-            {editingBoardId === activeBoard.id ? (
+                {editingBoardId === activeBoard.id ? (
                     <div style={{ display: 'flex', gap: 4 }}>
                         <Input size="small" value={editingBoardName}
                             onChange={(e) => setEditingBoardName(e.target.value)}
@@ -459,7 +458,7 @@ const BoardSettingsDrawer = () => {
                     </Popconfirm>
                 </div>
             )}
-            
+
             {canManageTemplates && (
                 <>
                     <Divider style={{ margin: '16px 0' }} />
@@ -477,7 +476,7 @@ const BoardSettingsDrawer = () => {
                 <FiUsers size={18} color={theme.colors.primary} />
                 <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Members</Title>
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ maxHeight: 350, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {useKanbanStore.getState().activeBoardMembers?.map(member => {
@@ -774,7 +773,7 @@ const BoardSettingsDrawer = () => {
         // Module UI Drag logic
         const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
         const tabConfig = { dashboard: { label: 'Dashboard', icon: MdOutlineDashboard }, projects: { label: 'Projects', icon: IoRocketOutline }, reports: { label: 'Reports', icon: MdOutlineAssessment }, workload: { label: 'Workload', icon: BsGrid1X2 } };
-        
+
         const SortableTabItem = ({ id, label, icon: Icon, theme }) => {
             const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
             const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : 1, marginBottom: 8 };
@@ -827,7 +826,7 @@ const BoardSettingsDrawer = () => {
                         <Button size="small" type="primary" disabled={!webhookUrl.trim()} block onClick={async () => { await createWebhook(activeBoard.id, { name: webhookName, url: webhookUrl }); setWebhookName(''); setWebhookUrl(''); }}>Add Webhook</Button>
                     </div>
                 </Card>
-                
+
                 <Card>
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SectionLabel theme={theme}>Navigation Tabs Order</SectionLabel>
@@ -870,6 +869,15 @@ const BoardSettingsDrawer = () => {
                         Board Settings {activeProject ? `— ${activeProject.name}` : ''}
                     </span>
                 </Space>
+            }
+            extra={
+                <Tooltip title="View User Guide">
+                    <Button
+                        type="text"
+                        icon={<AiOutlineQuestionCircle />}
+                        onClick={() => window.open('/eng/user-guide#board-management', '_blank')}
+                    />
+                </Tooltip>
             }
             placement="right"
             onClose={closeBoardSettings}

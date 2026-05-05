@@ -31,7 +31,7 @@ router.get('/projects/:id/report-data', Project.GetReportData);
 router.get('/workload/team-workload', Workload.GetTeamWorkload);
 
 // ─── ADMIN SETTINGS ────────────────────────────────────────────────
-router.get('/settings', Settings.checkAdminRole, Settings.GetSettings);
+router.get('/settings', Settings.GetSettings);
 router.patch('/settings', Settings.checkAdminRole, Settings.UpdateSettings);
 
 // ─── TEMPLATE ROUTES (Blueprint & Selective Cloning) ───────────────

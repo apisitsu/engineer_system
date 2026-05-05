@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, Alert, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineClose, AiOutlineBgColors, AiOutlineUser } from 'react-icons/ai';
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineClose, AiOutlineBgColors, AiOutlineUser, AiOutlineQuestionCircle } from 'react-icons/ai';
 import { IoSettingsOutline, IoRocketOutline, IoLockClosedOutline, IoLayersOutline } from 'react-icons/io5';
 import { FiUsers } from 'react-icons/fi';
 import { useKanbanStore } from '../store/kanbanStore';
@@ -482,13 +482,17 @@ const ProjectSettingsDrawer = () => {
 
     return (
         <Drawer
-            title={
-                <Space>
-                    <IoSettingsOutline size={20} color={theme.colors.primary} />
-                    <span style={{ color: theme.colors.textPrimary }}>Project Settings</span>
-                </Space>
-            }
+            title={<Space><IoSettingsOutline /> Project Settings</Space>}
             placement="right"
+            extra={
+                <Tooltip title="View User Guide">
+                    <Button 
+                        type="text" 
+                        icon={<AiOutlineQuestionCircle />} 
+                        onClick={() => window.open('/eng/user-guide#settings-permissions', '_blank')}
+                    />
+                </Tooltip>
+            }
             onClose={closeProjectSettings}
             open={isProjectSettingsOpen}
             width={720}

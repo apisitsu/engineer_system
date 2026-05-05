@@ -61,6 +61,7 @@ import OrganizationEng from './components/engineer/overall_eng/home_overall';
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
+import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -314,6 +315,9 @@ const AppContent = () => {
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
                   <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+
+                  {/* ------ User Guide ------ */}
+                  <Route path="/eng/user-guide" element={<UserGuidePage />} />
 
                 </Route>
               </Route>
