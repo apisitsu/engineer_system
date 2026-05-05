@@ -42,7 +42,7 @@ const ToggleRow = ({ title, description, checked, onChange, theme }) => (
     </div>
 );
 
-const { RangePicker } = DatePicker;
+
 
 const GradientPicker = ({ value, onChange, theme }) => (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, padding: '4px 0' }}>
@@ -306,18 +306,27 @@ const ProjectSettingsDrawer = () => {
                             </Select>
                         </div>
                     </div>
-                    <div>
-                        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Start / Due Date</Text>
-                        <RangePicker
-                            style={{ width: '100%' }}
-                            format="DD MMM YYYY"
-                            placeholder={['Start date', 'Due date']}
-                            value={[editingStartDate, editingDueDate]}
-                            onChange={(dates) => {
-                                setEditingStartDate(dates?.[0] || null);
-                                setEditingDueDate(dates?.[1] || null);
-                            }}
-                        />
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Start Date</Text>
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                value={editingStartDate}
+                                disabled
+                                placeholder="Auto-assigned"
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Due Date</Text>
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                placeholder="Not set"
+                                value={editingDueDate}
+                                onChange={(date) => setEditingDueDate(date || null)}
+                            />
+                        </div>
                     </div>
                     <Button type="primary" onClick={handleSaveInfo}>Save Changes</Button>
                     <Divider style={{ margin: '8px 0' }} />

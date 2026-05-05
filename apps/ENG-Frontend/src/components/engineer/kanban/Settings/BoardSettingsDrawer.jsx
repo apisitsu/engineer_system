@@ -50,7 +50,7 @@ const GRADIENT_BGS = [
 ];
 
 const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
+
 
 const PRIORITY_CONFIG = {
     LOW:    { label: 'Low',    emoji: '🟢', color: '#52c41a', bgColor: '#f6ffed' },
@@ -407,26 +407,33 @@ const BoardSettingsDrawer = () => {
                             />
                         </div>
                     </div>
-                    <div>
-                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Start / Due Date</Text>
-                        <RangePicker
-                            size="small"
-                            style={{ width: '100%' }}
-                            format="DD MMM YYYY"
-                            placeholder={['Start date', 'Due date']}
-                            value={[
-                                activeBoard.start_date ? dayjs(activeBoard.start_date) : null,
-                                activeBoard.due_date ? dayjs(activeBoard.due_date) : null,
-                            ]}
-                            onChange={async (dates) => {
-                                if (dates && dates.length === 2) {
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Start Date</Text>
+                            <DatePicker
+                                size="small"
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                value={activeBoard.start_date ? dayjs(activeBoard.start_date) : null}
+                                disabled
+                                placeholder="Auto-assigned"
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Due Date</Text>
+                            <DatePicker
+                                size="small"
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                placeholder="Not set"
+                                value={activeBoard.due_date ? dayjs(activeBoard.due_date) : null}
+                                onChange={async (date) => {
                                     await updateBoard(activeBoard.id, {
-                                        start_date: dates[0].toISOString(),
-                                        due_date: dates[1].toISOString(),
+                                        due_date: date ? date.toISOString() : null,
                                     });
-                                }
-                            }}
-                        />
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
             )}

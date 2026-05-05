@@ -130,7 +130,7 @@ const CreateProject = async (req, res) => {
         const { rows } = await client.query(`
             INSERT INTO kb_project (owner_u_code, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent, start_date, due_date)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
-        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active', is_permanent || false, start_date || null, due_date || null]);
+        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active', is_permanent || false, start_date || new Date().toISOString(), due_date || null]);
 
         const project = rows[0];
 

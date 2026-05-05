@@ -9,7 +9,6 @@ import { server } from '../../../../../constance/constance';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
-const { RangePicker } = DatePicker;
 
 const PRIORITY_OPTIONS = [
     { value: 'LOW', label: '🟢 Low', color: '#52c41a' },
@@ -54,10 +53,9 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
                 priority: values.priority || 'MEDIUM',
             };
 
-            // Handle date range
-            if (values.dateRange && values.dateRange.length === 2) {
-                payload.start_date = values.dateRange[0].toISOString();
-                payload.due_date = values.dateRange[1].toISOString();
+            // Handle due_date only (start_date auto-set by backend)
+            if (values.due_date) {
+                payload.due_date = values.due_date.toISOString();
             }
 
             const res = await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/boards`, payload);
@@ -118,11 +116,11 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
                             }))}
                         />
                     </Form.Item>
-                    <Form.Item name="dateRange" label="Start / Due Date" style={{ flex: 2, marginBottom: 16 }}>
-                        <RangePicker
+                    <Form.Item name="due_date" label="Due Date" style={{ flex: 1, marginBottom: 16 }}>
+                        <DatePicker
                             style={{ width: '100%', borderRadius: theme.borderRadius.sm }}
                             format="DD MMM YYYY"
-                            placeholder={['Start date', 'Due date']}
+                            placeholder="Due date (optional)"
                         />
                     </Form.Item>
                 </div>

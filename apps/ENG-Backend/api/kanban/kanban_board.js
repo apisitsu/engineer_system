@@ -101,7 +101,7 @@ const CreateBoard = async (req, res) => {
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
         `, [projectId, position, name, default_view || 'kanban', default_card_type || 'task', limit_card_types || false,
             always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false, status || 'pool',
-            priority || 'MEDIUM', start_date || null, due_date || null]);
+            priority || 'MEDIUM', start_date || new Date().toISOString(), due_date || null]);
 
         // Add creator as owner of this board
         await client.query(`
