@@ -5,21 +5,23 @@ import { useShallow } from 'zustand/react/shallow';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useAuthStore } from '../../../../stores/authStore';
 
-import { MdOutlineDashboard, MdOutlineAssessment } from 'react-icons/md';
+import { MdOutlineAssessment } from 'react-icons/md';
 import { BsKanban } from 'react-icons/bs';
 import { IoTimeOutline, IoHelpCircleOutline, IoAddOutline, IoSettingsOutline } from 'react-icons/io5';
 import { RiKanbanView } from 'react-icons/ri';
 
-import DashboardTab from './DashboardTab';
 import ProjectsTab from './ProjectsTab';
 import ReportsTab from './ReportsTab';
 import WorkloadTab from './WorkloadTab';
+import TemplatesTab from './TemplatesTab';
 
 import CreateProjectModal from './components/CreateProjectModal';
+import BlueprintInstantiationModal from './components/BlueprintInstantiationModal';
 import ProjectSettingsDrawer from '../Settings/ProjectSettingsDrawer';
 import KanbanAdminSettings from '../Settings/KanbanAdminSettings';
 import UserGuideDrawer from '../UserGuide/UserGuideDrawer';
 import ScrollbarStyle from '../../../common/scrollbar';
+import { IoLayersOutline } from 'react-icons/io5';
 
 const { Title, Text } = Typography;
 
@@ -37,12 +39,17 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
     );
 
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showBlueprintModal, setShowBlueprintModal] = useState(false);
     const [showUserGuide, setShowUserGuide] = useState(false);
 
-    // Default active tab to the first item in the preferred order
-    const [activeTab, setActiveTab] = useState(kanbanTabOrder?.[0] || 'dashboard');
+    // Default active tab — 'dashboard' is no longer valid, map to 'projects'
+    const getInitialTab = () => {
+        const first = kanbanTabOrder?.[0] || 'projects';
+        return first === 'dashboard' ? 'projects' : first;
+    };
+    const [activeTab, setActiveTab] = useState(getInitialTab);
 
-    const { canCreateProject } = useKanbanPermissions();
+    const { canCreateProject, canManageTemplates } = useKanbanPermissions();
     const { userDepartment, userRole } = useAuthStore();
     const isAdmin = userRole === 'admin' || userDepartment === 'AD' || userRole === 'system_admin';
 
@@ -56,25 +63,6 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
 
     // Tab items configuration
     const tabConfig = {
-        dashboard: {
-            key: 'dashboard',
-            label: (
-                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
-                    <MdOutlineDashboard size={15} /> Dashboard
-                </span>
-            ),
-            content: (
-                <DashboardTab
-                    projects={projects}
-                    isLoading={isLoading}
-                    onSelectProject={onSelectProject}
-                    onToggleFavorite={handleToggleFavorite}
-                    onOpenProjectSettings={openProjectSettings}
-                    onShowCreateModal={() => setShowCreateModal(true)}
-                    theme={theme}
-                />
-            )
-        },
         projects: {
             key: 'projects',
             label: (
@@ -86,13 +74,24 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             content: (
                 <ProjectsTab
                     projects={projects}
+                    isLoading={isLoading}
                     onSelectProject={onSelectProject}
                     onToggleFavorite={handleToggleFavorite}
                     onOpenProjectSettings={openProjectSettings}
                     onShowCreateModal={() => setShowCreateModal(true)}
+                    onShowBlueprintModal={() => setShowBlueprintModal(true)}
                     theme={theme}
                 />
             )
+        },
+        templates: {
+            key: 'templates',
+            label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 120 }}>
+                    <RiKanbanView size={15} /> Templates
+                </span>
+            ),
+            content: <TemplatesTab theme={theme} />
         },
         reports: {
             key: 'reports',
@@ -114,15 +113,22 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
         }
     };
 
-    // Build tabs based on preferred order
+    // Build tabs based on preferred order, filtering out removed 'dashboard' key
     const orderedTabs = useMemo(() => {
-        return kanbanTabOrder.map(key => tabConfig[key]).filter(Boolean);
-    }, [kanbanTabOrder, projects, theme]);
+        return kanbanTabOrder
+            .filter(key => key !== 'dashboard') // Dashboard is merged into Projects
+            .filter(key => key !== 'templates' || canManageTemplates) // Templates only for admins
+            .map(key => tabConfig[key])
+            .filter(Boolean);
+    }, [kanbanTabOrder, projects, theme, canManageTemplates]);
 
     // Ensure activeTab is still valid after order changes
     useEffect(() => {
-        if (kanbanTabOrder && !kanbanTabOrder.includes(activeTab)) {
-            setActiveTab(kanbanTabOrder[0]);
+        if (kanbanTabOrder) {
+            const validTabs = kanbanTabOrder.filter(k => k !== 'dashboard');
+            if (!validTabs.includes(activeTab)) {
+                setActiveTab(validTabs[0] || 'projects');
+            }
         }
     }, [kanbanTabOrder, activeTab]);
 
@@ -176,18 +182,31 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                         </Tooltip>
                     )}
                     {canCreateProject && (
-                        <Button
-                            type="primary"
-                            icon={<IoAddOutline size={18} />}
-                            onClick={() => setShowCreateModal(true)}
-                            style={{
-                                background: theme.colors.primary, borderColor: theme.colors.primary,
-                                borderRadius: theme.borderRadius.md, height: 38,
-                                fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4,
-                            }}
-                        >
-                            New Project
-                        </Button>
+                        <>
+                            <Tooltip title="Create from Template">
+                                <Button
+                                    icon={<IoLayersOutline size={18} />}
+                                    onClick={() => setShowBlueprintModal(true)}
+                                    style={{
+                                        borderRadius: theme.borderRadius.md, height: 38,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: theme.colors.textSecondary
+                                    }}
+                                />
+                            </Tooltip>
+                            <Button
+                                type="primary"
+                                icon={<IoAddOutline size={18} />}
+                                onClick={() => setShowCreateModal(true)}
+                                style={{
+                                    background: theme.colors.primary, borderColor: theme.colors.primary,
+                                    borderRadius: theme.borderRadius.md, height: 38,
+                                    fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4,
+                                }}
+                            >
+                                New Project
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>
@@ -228,6 +247,13 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
                 open={showCreateModal} 
                 onCancel={() => setShowCreateModal(false)} 
                 theme={theme} 
+            />
+            <BlueprintInstantiationModal
+                open={showBlueprintModal}
+                onCancel={() => setShowBlueprintModal(false)}
+                template={null}
+                initialMode="new"
+                theme={theme}
             />
             <ProjectSettingsDrawer />
             <KanbanAdminSettings open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

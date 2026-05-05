@@ -27,6 +27,7 @@ const { Title, Text } = Typography;
 const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate = null }) => {
     const { message } = AntdApp.useApp();
     const createTemplateConfig = useKanbanStore(state => state.createTemplateConfig);
+    const updateTemplateConfig = useKanbanStore(state => state.updateTemplateConfig);
     const fetchProjectReportData = useKanbanStore(state => state.fetchProjectReportData);
 
     const [templateName, setTemplateName] = useState('');
@@ -154,11 +155,19 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
 
         setSaving(true);
         try {
-            const result = await createTemplateConfig({
-                name: templateName.trim(),
-                master_project_id: masterProject.id,
-                config_data,
-            });
+            let result;
+            if (existingTemplate) {
+                result = await updateTemplateConfig(existingTemplate.id, {
+                    name: templateName.trim(),
+                    config_data,
+                });
+            } else {
+                result = await createTemplateConfig({
+                    name: templateName.trim(),
+                    master_project_id: masterProject.id,
+                    config_data,
+                });
+            }
 
             if (result) {
                 message.success(`Template "${templateName}" saved successfully!`);

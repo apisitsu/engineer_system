@@ -11,9 +11,12 @@
  * Consumes all data via useCardDetailState() context — zero prop drilling.
  */
 
-import React from 'react';
-import { Typography, Button, Input, Checkbox, Progress, Popconfirm, Space } from 'antd';
+import React, { useState } from 'react';
+import { Typography, Button, Input, Checkbox, Progress, Popconfirm, Space, Tooltip } from 'antd';
 import { useCardDetailState } from './useCardDetailState';
+import { useKanbanStore } from '../store/kanbanStore';
+import ChecklistTemplateFormModal from '../Tabs/components/ChecklistTemplateFormModal';
+import { IoSaveOutline } from 'react-icons/io5';
 
 import { FaCheckSquare } from 'react-icons/fa';
 import { AiOutlineDelete } from 'react-icons/ai';
@@ -53,6 +56,9 @@ const CardTaskLists = () => {
         handleAddTaskList,
     } = useCardDetailState();
 
+    const canManageTemplates = useKanbanStore(state => state.canManageTemplates);
+    const [saveChecklistData, setSaveChecklistData] = useState(null);
+
     if (!card) return null;
     if (taskLists.length === 0 && isReadOnly) return null;
 
@@ -87,9 +93,16 @@ const CardTaskLists = () => {
                                     title={<span style={{ cursor: isReadOnly ? 'default' : 'pointer' }} onClick={() => !isReadOnly && (setEditingTaskListId(tl.id), setEditTaskListName(tl.name))}>{tl.name}</span>}
                                     theme={theme}
                                     extra={!isReadOnly && (
-                                        <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
-                                            <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
-                                        </Popconfirm>
+                                        <Space size={2}>
+                                            {canManageTemplates && (
+                                                <Tooltip title="Save as Template">
+                                                    <Button type="text" size="small" icon={<IoSaveOutline size={14} />} onClick={() => setSaveChecklistData([tl])} />
+                                                </Tooltip>
+                                            )}
+                                            <Popconfirm title="Delete checklist?" onConfirm={() => deleteTaskList(tl.id, card.id)}>
+                                                <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
+                                            </Popconfirm>
+                                        </Space>
                                     )}
                                 />
                             )}
@@ -214,6 +227,18 @@ const CardTaskLists = () => {
                         </Button>
                     </div>
                 )
+            )}
+
+            {/* Save Checklist Template Modal */}
+            {saveChecklistData && (
+                <ChecklistTemplateFormModal
+                    open={!!saveChecklistData}
+                    onCancel={() => setSaveChecklistData(null)}
+                    template={null}
+                    theme={theme}
+                    onSuccess={() => setSaveChecklistData(null)}
+                    importSourceChecklists={saveChecklistData}
+                />
             )}
         </>
     );

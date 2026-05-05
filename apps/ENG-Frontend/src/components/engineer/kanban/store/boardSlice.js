@@ -25,7 +25,7 @@ export const createBoardSlice = (set, get) => ({
 
     // --- User Preferences (Feature 9) ---
     userPreferences: null,
-    kanbanTabOrder: ['dashboard', 'projects', 'reports', 'workload'],
+    kanbanTabOrder: ['projects', 'templates', 'reports', 'workload'],
     boardTabOrders: {}, // { [projectId]: [boardId1, boardId2] }
     cfGroupPreferences: {}, // { [projectId]: { order: [], hidden: [] } }
     boardGroups: {}, // { [projectId]: [{ id: string, name: string, boardIds: number[] }] }

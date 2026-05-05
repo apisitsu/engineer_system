@@ -16,19 +16,36 @@
  *      BEGIN/COMMIT for atomicity.
  */
 const { engPool } = require('../../instance/eng_db');
-const { isSuperAdmin, canAccessProject } = require('./kanban_acl');
+const { isSuperAdmin, canAccessProject, canEditBoard } = require('./kanban_acl');
+
+// ─── HELPERS ──────────────────────────────────────────────────────────
+const logAction = async (client, cardId, uCode, actionType, actionData = {}, boardId = null) => {
+    const { rows: [action] } = await client.query(`
+        INSERT INTO kb_action (card_id, board_id, u_code, action_type, action_data)
+        VALUES ($1,$2,$3,$4,$5) RETURNING id
+    `, [cardId, boardId, uCode, actionType, JSON.stringify(actionData)]);
+    return action.id;
+};
 
 // ─── GET /api/kanban/templates ────────────────────────────────────────
 const GetTemplates = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    const { type } = req.query;
     try {
-        const { rows } = await engPool.query(`
-            SELECT t.*, p.name AS master_project_name
+        let query = `
+            SELECT t.*, COALESCE(p.name, t.master_project_name) AS master_project_name
             FROM kb_template_config t
             LEFT JOIN kb_project p ON p.id = t.master_project_id
-            ORDER BY t.created_at DESC
-        `);
+        `;
+        const params = [];
+        if (type) {
+            query += ` WHERE t.template_type = $1`;
+            params.push(type);
+        }
+        query += ` ORDER BY t.created_at DESC`;
+
+        const { rows } = await engPool.query(query, params);
         res.json({ data: rows });
     } catch (err) {
         console.error('GetTemplates error:', err.message);
@@ -60,17 +77,33 @@ const GetTemplateById = async (req, res) => {
 const CreateTemplate = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
-    const { name, master_project_id, config_data } = req.body;
+    const { name, master_project_id, config_data, template_type } = req.body;
+    const type = template_type || 'project';
 
-    if (!name || !master_project_id || !config_data) {
-        return res.status(400).json({ error: 'name, master_project_id, and config_data are required' });
+    if (!name || !config_data) {
+        return res.status(400).json({ error: 'name and config_data are required' });
+    }
+    if (type === 'project' && !master_project_id) {
+        return res.status(400).json({ error: 'master_project_id is required for project blueprints' });
     }
 
     try {
+        let masterProjectName = null;
+        if (master_project_id) {
+            // Snapshot the master project name at creation time
+            const { rows: projRows } = await engPool.query(
+                'SELECT name FROM kb_project WHERE id = $1', [master_project_id]
+            );
+            masterProjectName = projRows[0]?.name || null;
+        }
+
         const { rows } = await engPool.query(`
-            INSERT INTO kb_template_config (name, master_project_id, config_data, created_by)
-            VALUES ($1, $2, $3, $4) RETURNING *
-        `, [name, master_project_id, JSON.stringify(config_data), uCode]);
+            INSERT INTO kb_template_config (name, master_project_id, config_data, created_by, master_project_name, template_type)
+            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        `, [name, master_project_id || null, JSON.stringify(config_data), uCode, masterProjectName, type]);
+
+        // Attach the live name to response
+        rows[0].master_project_name = masterProjectName;
         res.status(201).json({ data: rows[0] });
     } catch (err) {
         console.error('CreateTemplate error:', err.message);
@@ -142,10 +175,14 @@ const InstantiateTemplate = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { new_project_name } = req.body;
-    if (!new_project_name) {
-        return res.status(400).json({ error: 'new_project_name is required' });
+    const { new_project_name, target_project_id, board_names } = req.body;
+    
+    // Either a new project name OR a target existing project must be provided
+    if (!new_project_name && !target_project_id) {
+        return res.status(400).json({ error: 'new_project_name or target_project_id is required' });
     }
+
+    const customBoardNames = board_names || {};
 
     const client = await engPool.connect();
     try {
@@ -175,31 +212,52 @@ const InstantiateTemplate = async (req, res) => {
             return res.status(404).json({ error: 'Master project not found' });
         }
 
-        // ── 2. Create new project ───────────────────────────────────────
-        const { rows: [newProject] } = await client.query(`
-            INSERT INTO kb_project (
-                owner_u_code, name, description, background_type, background_value,
-                is_hidden, is_private, icon, priority, status, is_permanent
-            )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10) RETURNING *
-        `, [
-            uCode,
-            new_project_name,
-            masterProject.description,
-            masterProject.background_type,
-            masterProject.background_value,
-            false,
-            masterProject.is_private || false,
-            masterProject.icon,
-            masterProject.priority || 'medium',
-            masterProject.is_permanent || false,
-        ]);
+        // ── 2. Create or Resolve Project ───────────────────────────────────────
+        let newProject;
+        if (target_project_id) {
+            // Use existing project
+            const { rows: [existingProject] } = await client.query(
+                'SELECT * FROM kb_project WHERE id = $1', [target_project_id]
+            );
+            if (!existingProject) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ error: 'Target project not found' });
+            }
+            
+            // Check permissions (must be able to access the project, usually owner or team member)
+            if (!(await canAccessProject({ user: req.user }, target_project_id))) {
+                await client.query('ROLLBACK');
+                return res.status(403).json({ error: 'Permission denied to target project' });
+            }
+            newProject = existingProject;
+        } else {
+            // Create new project
+            const { rows: [createdProject] } = await client.query(`
+                INSERT INTO kb_project (
+                    owner_u_code, name, description, background_type, background_value,
+                    is_hidden, is_private, icon, priority, status, is_permanent
+                )
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10) RETURNING *
+            `, [
+                uCode,
+                new_project_name,
+                masterProject.description,
+                masterProject.background_type,
+                masterProject.background_value,
+                false,
+                masterProject.is_private || false,
+                masterProject.icon,
+                masterProject.priority || 'medium',
+                masterProject.is_permanent || false,
+            ]);
+            newProject = createdProject;
 
-        // Add creator as Owner
-        await client.query(
-            "INSERT INTO kb_project_membership (project_id, u_code, role) VALUES ($1, $2, 'owner')",
-            [newProject.id, uCode]
-        );
+            // Add creator as Owner
+            await client.query(
+                "INSERT INTO kb_project_membership (project_id, u_code, role) VALUES ($1, $2, 'owner')",
+                [newProject.id, uCode]
+            );
+        }
 
         // ── 3. Clone Boards (batch, Dead-ID safe) ───────────────────────
         //    Only boards whose IDs are in config_data.board_ids
@@ -212,10 +270,11 @@ const InstantiateTemplate = async (req, res) => {
             `, [boardIds, template.master_project_id]);
 
             for (const mb of masterBoards) {
+                const finalBoardName = customBoardNames[mb.id] || mb.name;
                 const { rows: [newBoard] } = await client.query(`
                     INSERT INTO kb_board (project_id, name, position, status)
                     VALUES ($1, $2, $3, 'pool') RETURNING *
-                `, [newProject.id, mb.name, mb.position]);
+                `, [newProject.id, finalBoardName, mb.position]);
                 boardIdMap[mb.id] = newBoard.id;
             }
         }
@@ -450,6 +509,297 @@ const InstantiateTemplate = async (req, res) => {
     }
 };
 
+// ─── POST /api/kanban/templates/:id/stamp-card ────────────────────────
+const StampCard = async (req, res) => {
+    const { id } = req.params;
+    const { list_id } = req.body;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    if (!list_id) return res.status(400).json({ error: 'list_id is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Verify list and permissions
+        const { rows: [list] } = await client.query(
+            'SELECT l.*, b.project_id FROM kb_list l JOIN kb_board b ON b.id=l.board_id WHERE l.id=$1', [list_id]
+        );
+        if (!list) throw new Error('Target list not found');
+        if (!(await canEditBoard(req, list.board_id))) throw new Error('Editor permission required');
+
+        // Fetch Template
+        const { rows: [tmpl] } = await client.query('SELECT * FROM kb_template_config WHERE id = $1 AND template_type = $2', [id, 'card']);
+        if (!tmpl) throw new Error('Card template not found');
+        const config = tmpl.config_data;
+
+        // Next position
+        const { rows: [{ pos }] } = await client.query('SELECT COALESCE(MAX(position),0)+65536 AS pos FROM kb_card WHERE list_id=$1', [list_id]);
+
+        // Insert Card
+        const { rows: [card] } = await client.query(`
+            INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, due_date, is_private, list_changed_at, estimated_hours, priority)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$11) RETURNING *
+        `, [list.board_id, list_id, uCode, config.card_type || 'task', pos, config.name, config.description || null, null, false, config.estimated_hours || 0, config.priority || 'medium']);
+
+        await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [card.id, uCode]);
+
+        // Insert Task Lists & Tasks
+        if (config.task_lists && config.task_lists.length > 0) {
+            for (let i = 0; i < config.task_lists.length; i++) {
+                const tl = config.task_lists[i];
+                const { rows: [newTl] } = await client.query(`
+                    INSERT INTO kb_task_list (card_id, name, position) VALUES ($1, $2, $3) RETURNING id
+                `, [card.id, tl.name, i]);
+                
+                if (tl.tasks && tl.tasks.length > 0) {
+                    for (let j = 0; j < tl.tasks.length; j++) {
+                        await client.query(`
+                            INSERT INTO kb_task (task_list_id, name, position) VALUES ($1, $2, $3)
+                        `, [newTl.id, tl.tasks[j].name, j]);
+                    }
+                }
+            }
+        }
+
+        await logAction(client, card.id, uCode, 'card_created', { name: config.name, list_id });
+
+        await client.query('COMMIT');
+        
+        // Broadcast
+        const io = req.app.get('io');
+        if (io && list.board_id) {
+            io.to(`board:${list.board_id}`).emit('cardCreate', {
+                item: card,
+                listId: parseInt(list_id),
+                actorUCode: uCode,
+            });
+        }
+        res.status(201).json({ data: card });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('StampCard error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
+// ─── POST /api/kanban/templates/:id/stamp-list ────────────────────────
+const StampList = async (req, res) => {
+    const { id } = req.params;
+    const { board_id } = req.body;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    if (!board_id) return res.status(400).json({ error: 'board_id is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        if (!(await canEditBoard(req, board_id))) throw new Error('Editor permission required');
+
+        // Fetch Template
+        const { rows: [tmpl] } = await client.query('SELECT * FROM kb_template_config WHERE id = $1 AND template_type = $2', [id, 'list']);
+        if (!tmpl) throw new Error('List template not found');
+        const config = tmpl.config_data;
+
+        // Next position for list
+        const { rows: [{ pos }] } = await client.query('SELECT COALESCE(MAX(position),0)+65536 AS pos FROM kb_list WHERE board_id=$1', [board_id]);
+
+        // Insert List
+        const { rows: [newList] } = await client.query(`
+            INSERT INTO kb_list (board_id, name, position) VALUES ($1, $2, $3) RETURNING *
+        `, [board_id, config.name, pos]);
+
+        // Insert Cards
+        if (config.cards && config.cards.length > 0) {
+            for (let i = 0; i < config.cards.length; i++) {
+                const cardConfig = config.cards[i];
+                const cardPos = (i + 1) * 65536;
+                const { rows: [newCard] } = await client.query(`
+                    INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, list_changed_at, priority)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8) RETURNING id
+                `, [board_id, newList.id, uCode, cardConfig.card_type || 'task', cardPos, cardConfig.name, cardConfig.description || null, cardConfig.priority || 'medium']);
+
+                await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [newCard.id, uCode]);
+
+                // Insert Task Lists & Tasks for the card
+                if (cardConfig.task_lists && cardConfig.task_lists.length > 0) {
+                    for (let j = 0; j < cardConfig.task_lists.length; j++) {
+                        const tl = cardConfig.task_lists[j];
+                        const { rows: [newTl] } = await client.query(`
+                            INSERT INTO kb_task_list (card_id, name, position) VALUES ($1, $2, $3) RETURNING id
+                        `, [newCard.id, tl.name, j]);
+                        
+                        if (tl.tasks && tl.tasks.length > 0) {
+                            for (let k = 0; k < tl.tasks.length; k++) {
+                                await client.query(`
+                                    INSERT INTO kb_task (task_list_id, name, position) VALUES ($1, $2, $3)
+                                `, [newTl.id, tl.tasks[k].name, k]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        await client.query('COMMIT');
+        
+        // Broadcast
+        const io = req.app.get('io');
+        if (io && board_id) {
+            io.to(`board:${board_id}`).emit('listCreate', {
+                item: newList,
+                actorUCode: uCode,
+            });
+            // Let the frontend refetch board details to get all the new nested cards correctly
+        }
+        res.status(201).json({ data: newList });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('StampList error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
+// ─── POST /api/kanban/templates/:id/stamp-checklist ───────────────
+// Stamps a checklist template's task lists onto an existing card
+const StampChecklist = async (req, res) => {
+    const { id } = req.params;
+    const { card_id } = req.body;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    if (!card_id) return res.status(400).json({ error: 'card_id is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Verify card exists
+        const { rows: [card] } = await client.query('SELECT * FROM kb_card WHERE id=$1', [card_id]);
+        if (!card) throw new Error('Card not found');
+
+        // Fetch Template
+        const { rows: [tmpl] } = await client.query(
+            'SELECT * FROM kb_template_config WHERE id = $1 AND template_type = $2', [id, 'checklist']
+        );
+        if (!tmpl) throw new Error('Checklist template not found');
+        const config = tmpl.config_data;
+
+        // Get existing max position for task lists on this card
+        const { rows: [{ max_pos }] } = await client.query(
+            'SELECT COALESCE(MAX(position), -1) AS max_pos FROM kb_task_list WHERE card_id=$1', [card_id]
+        );
+        let nextPos = max_pos + 1;
+
+        const createdTaskLists = [];
+
+        if (config.task_lists && config.task_lists.length > 0) {
+            for (const tl of config.task_lists) {
+                const { rows: [newTl] } = await client.query(
+                    'INSERT INTO kb_task_list (card_id, name, position) VALUES ($1, $2, $3) RETURNING *',
+                    [card_id, tl.name, nextPos++]
+                );
+                createdTaskLists.push(newTl);
+
+                if (tl.tasks && tl.tasks.length > 0) {
+                    for (let j = 0; j < tl.tasks.length; j++) {
+                        await client.query(
+                            'INSERT INTO kb_task (task_list_id, name, position) VALUES ($1, $2, $3)',
+                            [newTl.id, tl.tasks[j].name, j]
+                        );
+                    }
+                }
+            }
+        }
+
+        await logAction(client, card_id, uCode, 'checklist_stamped', { template_name: tmpl.name });
+        await client.query('COMMIT');
+
+        // Broadcast
+        const io = req.app.get('io');
+        if (io && card.board_id) {
+            io.to(`board:${card.board_id}`).emit('cardUpdate', {
+                item: card,
+                actorUCode: uCode,
+            });
+        }
+
+        res.status(201).json({ data: createdTaskLists });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('StampChecklist error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
+// ─── POST /api/kanban/templates/:id/stamp-labels ──────────────────
+// Stamps a label template's labels onto an existing board
+const StampLabels = async (req, res) => {
+    const { id } = req.params;
+    const { board_id } = req.body;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    if (!board_id) return res.status(400).json({ error: 'board_id is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        if (!(await canEditBoard(req, board_id))) throw new Error('Editor permission required');
+
+        // Fetch Template
+        const { rows: [tmpl] } = await client.query(
+            'SELECT * FROM kb_template_config WHERE id = $1 AND template_type = $2', [id, 'label']
+        );
+        if (!tmpl) throw new Error('Label template not found');
+        const config = tmpl.config_data;
+
+        // Get next position for labels on this board
+        const { rows: [{ pos }] } = await client.query(
+            'SELECT COALESCE(MAX(position), 0) + 65536 AS pos FROM kb_label WHERE board_id=$1', [board_id]
+        );
+        let nextPos = pos;
+
+        const createdLabels = [];
+
+        if (config.labels && config.labels.length > 0) {
+            for (const label of config.labels) {
+                const { rows: [newLabel] } = await client.query(
+                    'INSERT INTO kb_label (board_id, position, name, color) VALUES ($1, $2, $3, $4) RETURNING *',
+                    [board_id, nextPos, label.name, label.color]
+                );
+                createdLabels.push(newLabel);
+                nextPos += 65536;
+            }
+        }
+
+        await client.query('COMMIT');
+
+        // Broadcast
+        const io = req.app.get('io');
+        if (io && board_id) {
+            io.to(`board:${board_id}`).emit('labelsUpdate', {
+                labels: createdLabels,
+                actorUCode: uCode,
+            });
+        }
+
+        res.status(201).json({ data: createdLabels });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('StampLabels error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 
 module.exports = {
     GetTemplates,
@@ -458,4 +808,9 @@ module.exports = {
     UpdateTemplate,
     DeleteTemplate,
     InstantiateTemplate,
+    StampCard,
+    StampList,
+    StampChecklist,
+    StampLabels,
 };
+

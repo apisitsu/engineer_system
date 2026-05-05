@@ -41,6 +41,10 @@ router.post('/templates', Template.CreateTemplate);
 router.patch('/templates/:id', Template.UpdateTemplate);
 router.delete('/templates/:id', Template.DeleteTemplate);
 router.post('/templates/:id/instantiate', Template.InstantiateTemplate);
+router.post('/templates/:id/stamp-card', Template.StampCard);
+router.post('/templates/:id/stamp-list', Template.StampList);
+router.post('/templates/:id/stamp-checklist', Template.StampChecklist);
+router.post('/templates/:id/stamp-labels', Template.StampLabels);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);
