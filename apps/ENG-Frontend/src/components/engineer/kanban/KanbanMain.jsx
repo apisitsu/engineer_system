@@ -193,7 +193,8 @@ const KanbanMain = () => {
             await Promise.all([
                 fetchUserPreferences(),
                 fetchProjects(),
-                fetchSystemSettings()
+                fetchSystemSettings(),
+                fetchUsers()
             ]);
             // Give the URL param effect a moment to process before dropping the shade
             setTimeout(() => {

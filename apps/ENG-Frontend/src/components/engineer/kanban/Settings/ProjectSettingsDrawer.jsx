@@ -139,7 +139,10 @@ const ProjectSettingsDrawer = () => {
 
     const userInfo = useAuthStore(state => state.userInfo) || {};
     const userDepartment = useAuthStore(state => state.userDepartment);
+    const userRole = useAuthStore(state => state.userRole);
     const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const currentUserRole = userRole || userInfo.u_role || userInfo.role || '';
+    const isAD = (currentUserDept || '').toUpperCase() === 'AD' || (currentUserRole || '').toUpperCase() === 'AD';
     const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
     const isOwner = targetProject?.role === 'owner';
     const canChangeRole = isADorMgr || isOwner;
@@ -329,8 +332,12 @@ const ProjectSettingsDrawer = () => {
                         </div>
                     </div>
                     <Button type="primary" onClick={handleSaveInfo}>Save Changes</Button>
-                    <Divider style={{ margin: '8px 0' }} />
-                    <Button block icon={<IoLayersOutline />} onClick={() => setShowTemplateBuilder(true)} style={{ borderColor: theme.colors.primary, color: theme.colors.primary }}>Save as Blueprint Template</Button>
+                    {isAD && (
+                        <>
+                            <Divider style={{ margin: '8px 0' }} />
+                            <Button block icon={<IoLayersOutline />} onClick={() => setShowTemplateBuilder(true)} style={{ borderColor: theme.colors.primary, color: theme.colors.primary }}>Save as Blueprint Template</Button>
+                        </>
+                    )}
                     <Divider style={{ margin: '8px 0' }} />
                     <Text strong style={{ color: theme.colors.error }}>Danger Zone</Text>
                     <Popconfirm title="Delete this project?" description="All boards and cards will be deleted." onConfirm={handleDeleteProject} okText="Yes, delete it" cancelText="Cancel" okButtonProps={{ danger: true }}>
