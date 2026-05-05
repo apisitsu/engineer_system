@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu } from 'antd';
+import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tag } from 'antd';
+import dayjs from 'dayjs';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineApi, AiOutlineBell } from 'react-icons/ai';
 import { RiInputField } from 'react-icons/ri';
 import { MdOutlineDashboard, MdOutlineViewQuilt, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
@@ -49,6 +50,14 @@ const GRADIENT_BGS = [
 ];
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
+
+const PRIORITY_CONFIG = {
+    LOW:    { label: 'Low',    emoji: '🟢', color: '#52c41a', bgColor: '#f6ffed' },
+    MEDIUM: { label: 'Medium', emoji: '🔵', color: '#1677ff', bgColor: '#e6f4ff' },
+    HIGH:   { label: 'High',   emoji: '🟠', color: '#fa8c16', bgColor: '#fff7e6' },
+    URGENT: { label: 'Urgent', emoji: '🔴', color: '#f5222d', bgColor: '#fff2f0' },
+};
 
 const SectionLabel = ({ children, theme }) => (
     <Text strong style={{
@@ -333,38 +342,23 @@ const BoardSettingsDrawer = () => {
                 border: `1px solid ${theme.colors.primary}20`,
                 marginBottom: theme.spacing.md
             }}>
-                {editingBoardId === activeBoard.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                            <Input size="small" value={editingBoardName}
-                                onChange={(e) => setEditingBoardName(e.target.value)}
-                                onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
-                                style={{ borderRadius: theme.borderRadius.sm, flex: 1 }}
-                            />
-                            <Button size="small" type="primary" icon={<AiOutlineCheck />}
-                                onClick={() => handleEditBoard(activeBoard.id)}
-                            />
-                            <Button size="small" icon={<AiOutlineClose />}
-                                onClick={() => { setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool'); }}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Text type="secondary" style={{ fontSize: 12 }}>Status:</Text>
-                            <Select size="small" value={editingBoardStatus} onChange={setEditingBoardStatus} style={{ flex: 1 }}>
-                                <Select.Option value="pool">Waiting Pool</Select.Option>
-                                <Select.Option value="active">Active Operations</Select.Option>
-                                <Select.Option value="suspended">Suspended</Select.Option>
-                                <Select.Option value="finished">Finished / Archived</Select.Option>
-                            </Select>
-                        </div>
+            {editingBoardId === activeBoard.id ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                        <Input size="small" value={editingBoardName}
+                            onChange={(e) => setEditingBoardName(e.target.value)}
+                            onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
+                            style={{ borderRadius: theme.borderRadius.sm, flex: 1 }}
+                        />
+                        <Button size="small" type="primary" icon={<AiOutlineCheck />}
+                            onClick={() => handleEditBoard(activeBoard.id)}
+                        />
+                        <Button size="small" icon={<AiOutlineClose />}
+                            onClick={() => { setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool'); }}
+                        />
                     </div>
                 ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                            <Text strong style={{ fontSize: 16 }}>{activeBoard.name}</Text>
-                            <br />
-                            <Text type="secondary" style={{ fontSize: 12, textTransform: 'capitalize' }}>Status: {activeBoard.status || 'pool'}</Text>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong style={{ fontSize: 16 }}>{activeBoard.name}</Text>
                         {canManageBoardStructure && (
                             <Button type="text" size="small" icon={<AiOutlineEdit />}
                                 onClick={() => { setEditingBoardId(activeBoard.id); setEditingBoardName(activeBoard.name); setEditingBoardStatus(activeBoard.status || 'pool'); }}
@@ -373,6 +367,69 @@ const BoardSettingsDrawer = () => {
                     </div>
                 )}
             </div>
+
+            {/* Priority & Dates Section */}
+            {canManageBoardStructure && (
+                <div style={{
+                    padding: theme.spacing.md,
+                    background: theme.colors.surfaceHover,
+                    borderRadius: theme.borderRadius.md,
+                    marginBottom: theme.spacing.md,
+                    display: 'flex', flexDirection: 'column', gap: 12,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Status</Text>
+                            <Select
+                                value={activeBoard.status || 'pool'}
+                                onChange={async (val) => await updateBoard(activeBoard.id, { status: val })}
+                                style={{ width: '100%' }}
+                                size="small"
+                                options={[
+                                    { value: 'pool', label: 'Waiting Pool' },
+                                    { value: 'active', label: 'Active Operations' },
+                                    { value: 'suspended', label: 'Suspended' },
+                                    { value: 'finished', label: 'Finished / Archived' },
+                                ]}
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Priority</Text>
+                            <Select
+                                value={activeBoard.priority || 'MEDIUM'}
+                                onChange={async (val) => await updateBoard(activeBoard.id, { priority: val })}
+                                style={{ width: '100%' }}
+                                size="small"
+                                options={Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => ({
+                                    value: key,
+                                    label: <span style={{ color: cfg.color, fontWeight: 500 }}>{cfg.emoji} {cfg.label}</span>
+                                }))}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Start / Due Date</Text>
+                        <RangePicker
+                            size="small"
+                            style={{ width: '100%' }}
+                            format="DD MMM YYYY"
+                            placeholder={['Start date', 'Due date']}
+                            value={[
+                                activeBoard.start_date ? dayjs(activeBoard.start_date) : null,
+                                activeBoard.due_date ? dayjs(activeBoard.due_date) : null,
+                            ]}
+                            onChange={async (dates) => {
+                                if (dates && dates.length === 2) {
+                                    await updateBoard(activeBoard.id, {
+                                        start_date: dates[0].toISOString(),
+                                        due_date: dates[1].toISOString(),
+                                    });
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
 
             {canManageBoardStructure && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

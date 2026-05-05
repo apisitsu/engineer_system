@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, Alert } from 'antd';
+import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, Alert, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineClose, AiOutlineBgColors, AiOutlineUser } from 'react-icons/ai';
 import { IoSettingsOutline, IoRocketOutline, IoLockClosedOutline, IoLayersOutline } from 'react-icons/io5';
 import { FiUsers } from 'react-icons/fi';
@@ -41,18 +42,19 @@ const ToggleRow = ({ title, description, checked, onChange, theme }) => (
     </div>
 );
 
+const { RangePicker } = DatePicker;
+
 const GradientPicker = ({ value, onChange, theme }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, padding: '4px 0' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, padding: '4px 0' }}>
         {GRADIENTS.map((g, i) => (
             <div
                 key={i}
                 onClick={() => onChange(g)}
                 style={{
-                    width: '100%', paddingBottom: '100%', borderRadius: '50%', background: g,
-                    cursor: 'pointer', border: value === g ? `3px solid ${theme.colors.primary}` : '3px solid transparent',
-                    boxShadow: value === g ? `0 0 0 2px #fff, 0 0 0 4px ${theme.colors.primary}` : '0 2px 6px rgba(0,0,0,0.12)',
+                    width: '100%', aspectRatio: '1', borderRadius: '50%', background: g,
+                    cursor: 'pointer', border: value === g ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+                    boxShadow: value === g ? `0 0 0 2px #fff, 0 0 0 3px ${theme.colors.primary}` : '0 1px 4px rgba(0,0,0,0.10)',
                     transition: 'all 0.2s ease', transform: value === g ? 'scale(1.05)' : 'none',
-                    position: 'relative',
                 }}
             />
         ))}
@@ -120,6 +122,8 @@ const ProjectSettingsDrawer = () => {
     const [editingPermanent, setEditingPermanent] = useState(false);
     const [editingPriority, setEditingPriority] = useState('Medium');
     const [editingStatus, setEditingStatus] = useState('Active');
+    const [editingStartDate, setEditingStartDate] = useState(null);
+    const [editingDueDate, setEditingDueDate] = useState(null);
     const [memberSearch, setMemberSearch] = useState('');
     const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
@@ -167,6 +171,8 @@ const ProjectSettingsDrawer = () => {
             setEditingPermanent(proj.is_permanent || false);
             setEditingPriority(proj.priority || 'Medium');
             setEditingStatus(proj.status || 'Active');
+            setEditingStartDate(proj.start_date ? dayjs(proj.start_date) : null);
+            setEditingDueDate(proj.due_date ? dayjs(proj.due_date) : null);
             fetchProjectManagers(proj.id);
         }
     };
@@ -181,6 +187,8 @@ const ProjectSettingsDrawer = () => {
         await updateProject(targetId, {
             name: editingName.trim(), description: editingDesc,
             priority: editingPriority, status: editingStatus,
+            start_date: editingStartDate ? editingStartDate.toISOString() : null,
+            due_date: editingDueDate ? editingDueDate.toISOString() : null,
         });
         Swal.fire({ icon: 'success', title: 'Saved', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
     };
@@ -298,6 +306,19 @@ const ProjectSettingsDrawer = () => {
                             </Select>
                         </div>
                     </div>
+                    <div>
+                        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Start / Due Date</Text>
+                        <RangePicker
+                            style={{ width: '100%' }}
+                            format="DD MMM YYYY"
+                            placeholder={['Start date', 'Due date']}
+                            value={[editingStartDate, editingDueDate]}
+                            onChange={(dates) => {
+                                setEditingStartDate(dates?.[0] || null);
+                                setEditingDueDate(dates?.[1] || null);
+                            }}
+                        />
+                    </div>
                     <Button type="primary" onClick={handleSaveInfo}>Save Changes</Button>
                     <Divider style={{ margin: '8px 0' }} />
                     <Button block icon={<IoLayersOutline />} onClick={() => setShowTemplateBuilder(true)} style={{ borderColor: theme.colors.primary, color: theme.colors.primary }}>Save as Blueprint Template</Button>
@@ -399,7 +420,7 @@ const ProjectSettingsDrawer = () => {
                         );
                     })}
                 </div>
-                {canManageProjectMembers && (
+                {(canManageProjectMembers || canManageProject) && (
                     <div style={{ marginTop: 8 }}>
                         <Select showSearch placeholder="Add member..." style={{ width: '100%' }} optionFilterProp="children" onSearch={setMemberSearch} onChange={(val) => { if (val) { addProjectManager(targetId, val); setMemberSearch(''); } }} value={null} filterOption={false}>
                             {availableUsersForProject.map(u => (

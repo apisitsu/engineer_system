@@ -341,7 +341,7 @@ const KanbanMain = () => {
                         ) : viewMode === 'report' ? (
                             <ReportsTab theme={theme} />
                         ) : activeProject?.is_permanent && !activeBoard ? (
-                            <BoardDashboard boards={boards} onSelectBoard={setActiveBoard} />
+                            <BoardDashboard boards={boards} onSelectBoard={setActiveBoard} onOpenBoardSettings={(board) => openBoardSettings(board)} />
                         ) : activeBoard ? (
                             <BoardView />
                         ) : (

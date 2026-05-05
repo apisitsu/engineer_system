@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Button, Switch, Typography, Select } from 'antd';
+import { Modal, Form, Input, Button, Switch, Typography, Select, DatePicker } from 'antd';
 import { MdOutlineDashboard } from 'react-icons/md';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
+import dayjs from 'dayjs';
 
 const { Text } = Typography;
+const { RangePicker } = DatePicker;
+
+const PRIORITY_OPTIONS = [
+    { value: 'LOW', label: '🟢 Low', color: '#52c41a' },
+    { value: 'MEDIUM', label: '🔵 Medium', color: '#1677ff' },
+    { value: 'HIGH', label: '🟠 High', color: '#fa8c16' },
+    { value: 'URGENT', label: '🔴 Urgent', color: '#f5222d' },
+];
 
 const CreateBoardModal = ({ open, onCancel, theme }) => {
     const { activeProject, fetchBoards, setActiveBoard, createLabel } = useKanbanStore(
@@ -38,11 +47,20 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
         if (!activeProject) return;
         setIsCreating(true);
         try {
-            const res = await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/boards`, {
+            const payload = {
                 name: values.boardName, 
                 projectId: activeProject.id,
-                is_private: values.is_private || false
-            });
+                is_private: values.is_private || false,
+                priority: values.priority || 'MEDIUM',
+            };
+
+            // Handle date range
+            if (values.dateRange && values.dateRange.length === 2) {
+                payload.start_date = values.dateRange[0].toISOString();
+                payload.due_date = values.dateRange[1].toISOString();
+            }
+
+            const res = await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/boards`, payload);
             if (res.data?.data) {
                 const newBoard = res.data.data;
                 
@@ -82,12 +100,33 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
             open={open}
             onCancel={() => { form.resetFields(); onCancel(); }}
             footer={null}
-            width={440}
+            width={480}
         >
-            <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>
+            <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}
+                initialValues={{ priority: 'MEDIUM' }}
+            >
                 <Form.Item name="boardName" label="Board Name" rules={[{ required: true, message: 'Please input board name!' }]}>
                     <Input placeholder="E.g., Sprint 1, Maintenance Tasks" style={{ borderRadius: theme.borderRadius.sm }} />
                 </Form.Item>
+
+                <div style={{ display: 'flex', gap: 12 }}>
+                    <Form.Item name="priority" label="Priority" style={{ flex: 1, marginBottom: 16 }}>
+                        <Select
+                            options={PRIORITY_OPTIONS.map(p => ({
+                                value: p.value,
+                                label: <span style={{ color: p.color, fontWeight: 500 }}>{p.label}</span>
+                            }))}
+                        />
+                    </Form.Item>
+                    <Form.Item name="dateRange" label="Start / Due Date" style={{ flex: 2, marginBottom: 16 }}>
+                        <RangePicker
+                            style={{ width: '100%', borderRadius: theme.borderRadius.sm }}
+                            format="DD MMM YYYY"
+                            placeholder={['Start date', 'Due date']}
+                        />
+                    </Form.Item>
+                </div>
+
                 <Form.Item name="label_template_id" label="Apply Label Template (Optional)" style={{ marginBottom: 16 }}>
                     <Select
                         allowClear

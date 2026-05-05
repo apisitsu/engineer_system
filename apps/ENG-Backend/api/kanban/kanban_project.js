@@ -121,16 +121,16 @@ const CreateProject = async (req, res) => {
     if (!(await isSuperAdmin(req)) && !(await isManagerOrCoord(req))) {
         return res.status(403).json({ error: 'Forbidden: You do not have permission to create projects.' });
     }
-    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent } = req.body;
+    const { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent, start_date, due_date } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
         const { rows } = await client.query(`
-            INSERT INTO kb_project (owner_u_code, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
-        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active', is_permanent || false]);
+            INSERT INTO kb_project (owner_u_code, name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent, start_date, due_date)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
+        `, [uCode, name, description || null, background_type || null, background_value || null, is_hidden || false, is_private || false, icon || null, priority || 'medium', status || 'active', is_permanent || false, start_date || null, due_date || null]);
 
         const project = rows[0];
 
@@ -160,7 +160,7 @@ const UpdateProject = async (req, res) => {
     if (!(await canManageProject(req, id)))
         return res.status(403).json({ error: 'Only project owners or admins can update' });
 
-    let { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent } = req.body;
+    let { name, description, background_type, background_value, is_hidden, is_private, icon, priority, status, is_permanent, start_date, due_date } = req.body;
     try {
         const { isSuperAdmin } = require('./kanban_acl');
         const admin = await isSuperAdmin(req);
@@ -180,6 +180,8 @@ const UpdateProject = async (req, res) => {
             is_private = undefined;
             priority = undefined;
             is_permanent = undefined;
+            start_date = undefined;
+            due_date = undefined;
         }
 
         const client = await engPool.connect();
@@ -197,9 +199,11 @@ const UpdateProject = async (req, res) => {
                     is_private       = COALESCE($7, is_private),
                     priority         = COALESCE($8, priority),
                     status           = COALESCE($9, status),
-                    is_permanent     = COALESCE($10, is_permanent)
-                WHERE id = $11 RETURNING *
-            `, [name, description, background_type, background_value, is_hidden, icon, is_private, priority, status, is_permanent, id]);
+                    is_permanent     = COALESCE($10, is_permanent),
+                    start_date       = COALESCE($11, start_date),
+                    due_date         = COALESCE($12, due_date)
+                WHERE id = $13 RETURNING *
+            `, [name, description, background_type, background_value, is_hidden, icon, is_private, priority, status, is_permanent, start_date, due_date, id]);
             
             const updatedProject = rows[0];
 

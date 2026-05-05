@@ -85,7 +85,8 @@ const CreateBoard = async (req, res) => {
         return res.status(403).json({ error: 'Only project managers can create boards' });
 
     const { name, default_view, default_card_type, limit_card_types,
-        always_display_card_creator, expand_task_lists_by_default, is_private, status } = req.body;
+        always_display_card_creator, expand_task_lists_by_default, is_private, status,
+        priority, start_date, due_date } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
@@ -95,10 +96,12 @@ const CreateBoard = async (req, res) => {
         const position = await getNextPosition('kb_board', 'project_id', projectId);
         const { rows: [board] } = await client.query(`
             INSERT INTO kb_board (project_id, position, name, default_view, default_card_type, limit_card_types,
-                                  always_display_card_creator, expand_task_lists_by_default, is_private, status)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+                                  always_display_card_creator, expand_task_lists_by_default, is_private, status,
+                                  priority, start_date, due_date)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
         `, [projectId, position, name, default_view || 'kanban', default_card_type || 'task', limit_card_types || false,
-            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false, status || 'pool']);
+            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false, status || 'pool',
+            priority || 'MEDIUM', start_date || null, due_date || null]);
 
         // Add creator as owner of this board
         await client.query(`
@@ -184,7 +187,8 @@ const UpdateBoard = async (req, res) => {
     const { name, default_view, default_card_type, limit_card_types, position,
         background_type, background_value,
         always_display_card_creator, expand_task_lists_by_default, is_private,
-        allow_add_list, allow_add_card, status } = req.body;
+        allow_add_list, allow_add_card, status,
+        priority, start_date, due_date } = req.body;
 
     // Support explicit removal: frontend sends '__REMOVE__' to clear a field
     const bgType = background_type === '__REMOVE__' ? null : background_type;
@@ -207,12 +211,16 @@ const UpdateBoard = async (req, res) => {
                 is_private                   = COALESCE($10, is_private),
                 allow_add_list               = COALESCE($11, allow_add_list),
                 allow_add_card               = COALESCE($12, allow_add_card),
-                status                       = COALESCE($13, status)
-            WHERE id=$14 RETURNING *
+                status                       = COALESCE($13, status),
+                priority                     = COALESCE($14, priority),
+                start_date                   = COALESCE($15, start_date),
+                due_date                     = COALESCE($16, due_date)
+            WHERE id=$17 RETURNING *
         `, [name, default_view, default_card_type, limit_card_types, position,
             bgType, bgValue,
             always_display_card_creator, expand_task_lists_by_default, is_private,
-            allow_add_list, allow_add_card, status, id]);
+            allow_add_list, allow_add_card, status,
+            priority, start_date, due_date, id]);
         res.json({ data: rows[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });

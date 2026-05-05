@@ -958,6 +958,19 @@ export const createBoardSlice = (set, get) => ({
     //  BOARD UI ACTIONS
     // ====================================================================
 
-    openBoardSettings: () => set({ isBoardSettingsOpen: true }),
-    closeBoardSettings: () => set({ isBoardSettingsOpen: false }),
+    openBoardSettings: (board) => {
+        if (board) {
+            set({ activeBoard: board, isBoardSettingsOpen: true, _boardSettingsFromDashboard: true });
+        } else {
+            set({ isBoardSettingsOpen: true, _boardSettingsFromDashboard: false });
+        }
+    },
+    closeBoardSettings: () => {
+        const fromDashboard = get()._boardSettingsFromDashboard;
+        if (fromDashboard) {
+            set({ isBoardSettingsOpen: false, activeBoard: null, _boardSettingsFromDashboard: false });
+        } else {
+            set({ isBoardSettingsOpen: false });
+        }
+    },
 });
