@@ -58,7 +58,7 @@ function computeDerivedFlags(partData) {
     isBallInner:     (partData.type.includes('ABR') || partData.type.includes('BALL_INNER')) ? 1 : 0,
     isABR:           (partData.type.includes('ABR') || partData.yBall === 'Y' || partData.yBall === 'B') ? 1 : 0,
     isInner:         (partData.type.includes('INNER') || partData.yBall === 'Y') ? 1 : 0,
-    isIDtoOD:        partData.process === 'ID→OD' ? 1 : 0,
+    isIDtoOD:        partData.process === 'ID->OD' ? 1 : 0,
     isNormalOrOther: (partData.type.includes('NORMAL') || partData.type.includes('OTHER')) ? 1 : 0,
   };
 }

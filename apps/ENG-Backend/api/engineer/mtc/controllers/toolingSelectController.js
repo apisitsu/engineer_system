@@ -47,22 +47,77 @@ router.get('/rules', async (req, res) => {
 });
 
 router.post('/rules', isAdmin, async (req, res) => {
-  const { machine_name, tool_category, rule_name, source_field, operator,
-    offset_value, target_tool_table, target_tool_field,
-    tolerance_plus, tolerance_minus } = req.body;
+  const {
+    machine_name, tool_category, target_tool_table,
+    calc_context, machine_ok_condition,
+    dims, result_fields,
+    // legacy fields
+    rule_name, source_field, operator, offset_value,
+    target_tool_field, tolerance_plus, tolerance_minus,
+  } = req.body;
   try {
     const r = await engPool.query(
       `INSERT INTO ${TABLES.MTC_SELECTION_RULES}
-       (machine_name,tool_category,rule_name,source_field,operator,offset_value,
-        target_tool_table,target_tool_field,tolerance_plus,tolerance_minus)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [machine_name, tool_category, rule_name, source_field, operator,
-        offset_value, target_tool_table, target_tool_field, tolerance_plus, tolerance_minus]
+       (machine_name, tool_category, target_tool_table,
+        calc_context, machine_ok_condition, dims, result_fields,
+        rule_name, source_field, operator, offset_value,
+        target_tool_field, tolerance_plus, tolerance_minus)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING *`,
+      [
+        machine_name, tool_category, target_tool_table,
+        calc_context || null, machine_ok_condition || null,
+        dims ? JSON.stringify(dims) : null,
+        result_fields ? JSON.stringify(result_fields) : null,
+        rule_name || null, source_field || null, operator || null,
+        offset_value || null, target_tool_field || null,
+        tolerance_plus || null, tolerance_minus || null,
+      ]
     );
     res.json({ success: true, rule: r.rows[0] });
   } catch (err) {
     console.error('Create rule error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal Server Error' });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/rules/:id', isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const {
+    machine_name, tool_category, target_tool_table,
+    calc_context, machine_ok_condition,
+    dims, result_fields,
+    rule_name, source_field, operator, offset_value,
+    target_tool_field, tolerance_plus, tolerance_minus,
+    is_active,
+  } = req.body;
+  try {
+    const r = await engPool.query(
+      `UPDATE ${TABLES.MTC_SELECTION_RULES} SET
+        machine_name=$1, tool_category=$2, target_tool_table=$3,
+        calc_context=$4, machine_ok_condition=$5,
+        dims=$6::jsonb, result_fields=$7::jsonb,
+        rule_name=$8, source_field=$9, operator=$10, offset_value=$11,
+        target_tool_field=$12, tolerance_plus=$13, tolerance_minus=$14,
+        is_active=COALESCE($15, is_active)
+       WHERE id=$16 RETURNING *`,
+      [
+        machine_name, tool_category, target_tool_table,
+        calc_context || null, machine_ok_condition || null,
+        dims ? JSON.stringify(dims) : null,
+        result_fields ? JSON.stringify(result_fields) : null,
+        rule_name || null, source_field || null, operator || null,
+        offset_value || null, target_tool_field || null,
+        tolerance_plus || null, tolerance_minus || null,
+        is_active !== undefined ? is_active : null,
+        id,
+      ]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Rule not found' });
+    res.json({ success: true, rule: r.rows[0] });
+  } catch (err) {
+    console.error('Update rule error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -168,6 +223,114 @@ router.delete('/inventory/:tableName/:id', isAdmin, async (req, res) => {
   } catch (err) {
     console.error('Delete inventory error:', err.message);
     res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Spec Process (Part Specification) CRUD ─────────────────────────────────
+
+router.get('/spec', async (req, res) => {
+  try {
+    const { q, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+    let query = `SELECT * FROM ${TABLES.SPEC_PROCESS}`;
+    let countQuery = `SELECT COUNT(*) FROM ${TABLES.SPEC_PROCESS}`;
+    const params = [];
+
+    if (q) {
+      query += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
+      countQuery += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
+      params.push(`%${q}%`);
+    }
+
+    query += ` ORDER BY cn LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const dataParams = [...params, limit, offset];
+
+    const [dataRes, countRes] = await Promise.all([
+      engPool.query(query, dataParams),
+      engPool.query(countQuery, params)
+    ]);
+
+    res.json({
+      success: true,
+      data: dataRes.rows,
+      total: parseInt(countRes.rows[0].count),
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+  } catch (err) {
+    console.error('Fetch spec error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+router.post('/spec', isAdmin, async (req, res) => {
+  const {
+    cn, od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
+    od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
+    type, yball, process, sd, sd_aft
+  } = req.body;
+
+  if (!cn) return res.status(400).json({ success: false, error: 'CN Number is required' });
+
+  try {
+    const r = await engPool.query(
+      `INSERT INTO ${TABLES.SPEC_PROCESS} (
+        cn, od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
+        od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
+        type, yball, process, sd, sd_aft
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+      RETURNING *`,
+      [
+        cn, od_bf||0, od_bf_max||0, od_bf_min||0, id_bf||0, id_bf_max||0, id_bf_min||0, w_bf||0, w_bf_max||0, w_bf_min||0,
+        od_aft||0, od_aft_max||0, od_aft_min||0, id_aft||0, id_aft_max||0, id_aft_min||0, w_aft||0, w_aft_max||0, w_aft_min||0,
+        type, yball, process, sd||0, sd_aft||0
+      ]
+    );
+    res.json({ success: true, data: r.rows[0] });
+  } catch (err) {
+    console.error('Create spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/spec/:cn', isAdmin, async (req, res) => {
+  const { cn } = req.params;
+  const {
+    od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
+    od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
+    type, yball, process, sd, sd_aft
+  } = req.body;
+
+  try {
+    const r = await engPool.query(
+      `UPDATE ${TABLES.SPEC_PROCESS} SET
+        od_bf=$1, od_bf_max=$2, od_bf_min=$3, id_bf=$4, id_bf_max=$5, id_bf_min=$6, w_bf=$7, w_bf_max=$8, w_bf_min=$9,
+        od_aft=$10, od_aft_max=$11, od_aft_min=$12, id_aft=$13, id_aft_max=$14, id_aft_min=$15, w_aft=$16, w_aft_max=$17, w_aft_min=$18,
+        type=$19, yball=$20, process=$21, sd=$22, sd_aft=$23
+      WHERE cn=$24 RETURNING *`,
+      [
+        od_bf||0, od_bf_max||0, od_bf_min||0, id_bf||0, id_bf_max||0, id_bf_min||0, w_bf||0, w_bf_max||0, w_bf_min||0,
+        od_aft||0, od_aft_max||0, od_aft_min||0, id_aft||0, id_aft_max||0, id_aft_min||0, w_aft||0, w_aft_max||0, w_aft_min||0,
+        type, yball, process, sd||0, sd_aft||0, cn
+      ]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Spec not found' });
+    res.json({ success: true, data: r.rows[0] });
+  } catch (err) {
+    console.error('Update spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/spec/:cn', isAdmin, async (req, res) => {
+  const { cn } = req.params;
+  try {
+    const r = await engPool.query(`DELETE FROM ${TABLES.SPEC_PROCESS} WHERE cn=$1 RETURNING *`, [cn]);
+    if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Spec not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete spec error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 

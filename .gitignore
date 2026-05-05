@@ -42,3 +42,13 @@ apps/run.ps1
 OldProject/
 .claude/
 tmp/
+.thclaws/
+CLAUDE.md
+CLAUDE.md.tpl
+GEMINI.md
+GEMINI.md.tpl   
+.claude
+.claude/
+GEMINI.md
+GEMINI.md.tpl   
+.clawsignore

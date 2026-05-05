@@ -68,7 +68,7 @@ class FormulaService {
     // 2. Auto-quote common enum values if they appear unquoted
     // This handles cases like: type == NORMAL
     // Removed 'B' from here because it's a common numeric dimension
-    const keywords = ['NORMAL', 'ABR', 'BALL_INNER', 'OD→ID', 'ID→OD', 'Y', 'N'];
+    const keywords = ['NORMAL', 'ABR', 'BALL_INNER', 'OD->ID', 'ID->OD', 'Y', 'N'];
     keywords.forEach(k => {
       // Matches unquoted enum value not preceded by a quote or dot
       const regex = new RegExp(`(?<!['".])\\b${k}\\b(?!['"])`, 'g');
@@ -85,7 +85,7 @@ class FormulaService {
       if (regex.test(f) || regexRaw.test(f)) {
         let field = 'type';
         if (['Y', 'N', 'B'].includes(k)) field = 'yBall';
-        if (k.includes('→')) field = 'process';
+        if (k.includes('->')) field = 'process';
         
         if (regex.test(f)) f = f.replace(regex, `${field} == "${k}" $1`);
         else f = f.replace(regexRaw, `${field} == "${k}" $1`);
@@ -186,7 +186,7 @@ class FormulaService {
     ctx.odBf_min = odBf + odBfM;
 
     // 4. Smart Logic Flags & String Props
-    ctx.isIDtoOD = (base.process === 'ID→OD' || base.isIDtoOD) ? 1 : 0;
+    ctx.isIDtoOD = (base.process === 'ID->OD' || base.isIDtoOD) ? 1 : 0;
     ctx.isYBall  = (base.yBall === 'Y' || base.isYBall) ? 1 : 0;
     ctx.isABR    = (base.type?.includes('ABR') || base.yBall === 'Y' || base.yBall === 'B') ? 1 : 0;
 
@@ -198,7 +198,7 @@ class FormulaService {
     // --- String Aliases & Offset ---
     ctx.Dwg     = base.parts_no || base.dwg_no || 'Check Dwg';
     ctx.Type    = base.type    || 'NORMAL';
-    ctx.Process = base.process || 'OD→ID';
+    ctx.Process = base.process || 'OD->ID';
     ctx.YBall   = base.yBall   || 'N';
     
     // Check for various possible keys for Offset

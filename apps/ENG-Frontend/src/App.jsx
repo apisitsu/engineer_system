@@ -47,6 +47,8 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
+import { SelectionRuleDrawer } from './components/engineer/mtc_eng/tooling_select/SelectionRuleManager';
+import { SpecProcessManager } from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
 import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
@@ -295,6 +297,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_INSPECT} element={<ToolingInspect />} />
                   <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
+                  <Route path={MTC_PATHS.TOOLING_SPEC} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
                   <Route path={MTC_PATHS.SDS} element={<SdsPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />

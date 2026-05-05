@@ -1,6 +1,7 @@
 'use strict';
 
 const { engPool } = require('../../../../instance/eng_db');
+const FormulaService = require('../services/FormulaService');
 
 // GET /api/mtc/tooling-formula/machines
 const getMachines = async (req, res) => {
@@ -108,4 +109,15 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getMachines, getFormulas, create, update, remove };
+// POST /api/mtc/tooling-formula/test
+const test = async (req, res) => {
+  try {
+    const { formula, context } = req.body;
+    const result = FormulaService.validateFormula(formula, context || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+};
+
+module.exports = { getMachines, getFormulas, create, update, remove, test };

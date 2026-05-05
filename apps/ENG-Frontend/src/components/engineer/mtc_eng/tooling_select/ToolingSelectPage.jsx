@@ -19,13 +19,21 @@ import {
   CloseOutlined,
   EditOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  CalculatorOutlined,
+  CheckCircleOutlined,
+  ApartmentOutlined,
+  ArrowRightOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import ScrollbarStyle from '../../../common/scrollbar';
+import FormulaBuilderInput, { FORMULA_VARS } from '../formula-builder/FormulaBuilderInput';
+import { SelectionRuleDrawer } from './SelectionRuleManager';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -110,11 +118,14 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
 };
 
 const ToolingSelectPage = () => {
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const [cnInput, setCnInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [setupWizard, setSetupWizard] = useState({ open: false, tableName: '', machineName: '', dimCount: 0 });
+  const [isRulesDrawerOpen, setIsRulesDrawerOpen] = useState(false);
 
   // ── Tool List state ──────────────────────────────────────────────────────
   const [isToolListOpen, setIsToolListOpen] = useState(false);
@@ -152,6 +163,13 @@ const ToolingSelectPage = () => {
   });
   const [testResults, setTestResults] = useState({});
   const [testLoading, setTestLoading] = useState(false);
+
+  // ── Formula Edit Drawer state ────────────────────────────────────────────
+  const [formulaEditDrawer, setFormulaEditDrawer] = useState({ open: false, record: null });
+  const [formulaEditDraft, setFormulaEditDraft] = useState({
+    formula_value: '', rounding_rule: 'none', rounding_precision: 2, remark: '',
+  });
+  const [prevParamsForEdit, setPrevParamsForEdit] = useState([]);
 
   // ── Add Tool state ───────────────────────────────────────────────────────
   const [isAddToolOpen, setIsAddToolOpen] = useState(false);
@@ -312,10 +330,16 @@ const ToolingSelectPage = () => {
       const vals = await newMachineForm.validateFields(['machineName', 'dimCount']);
       setCreateTableLoading(true);
       const res = await axios.post(server.MTC_TOOLING_CREATE_TABLE, vals);
-      message.success(`Table "${res.data.tableName}" created! (${res.data.dimCount} dims)`);
       await fetchTables();
       newMachineForm.resetFields();
       setAddMode('existing');
+      setIsAddToolOpen(false);
+      setSetupWizard({
+        open: true,
+        tableName: res.data.tableName,
+        machineName: vals.machineName,
+        dimCount: res.data.dimCount,
+      });
     } catch (err) {
       if (err?.response) message.error(err.response.data.error || 'Failed to create table');
     } finally { setCreateTableLoading(false); }
@@ -496,7 +520,7 @@ const ToolingSelectPage = () => {
         }
 
         // Send to backend for "Multi-Statement" evaluation
-        const res = await axios.post(`${server.MTC_FORMULAS}/test`, {
+        const res = await axios.post(server.MTC_FORMULA_TEST, {
           formula: fValue,
           context: currentContext
         });
@@ -525,6 +549,69 @@ const ToolingSelectPage = () => {
     } finally {
       setTestLoading(false);
     }
+  };
+
+  // ── Formula Edit Drawer helpers ──────────────────────────────────────────
+
+  const testSingleFormula = async (formulaStr) => {
+    try {
+      const b = testContext;
+      const res = await axios.post(server.MTC_FORMULA_TEST, {
+        formula: formulaStr,
+        context: {
+          ...b,
+          odAft: parseFloat(b.odAft || 0),
+          odBf: parseFloat(b.odBf || 0),
+          idAft: parseFloat(b.idAft || 0),
+          wAft: parseFloat(b.wAft || 0),
+          wAftTolPlus: parseFloat(b.wAftTolPlus || 0),
+          W_max: parseFloat(b.wAft || 0) + parseFloat(b.wAftTolPlus || 0),
+          T1: parseFloat(b.wAft || 0),
+          isYBall: b.yBall === 'Y' ? 1 : 0,
+          isIDtoOD: b.process === 'ID→OD' ? 1 : 0,
+          isABR: (b.type?.includes('ABR') || b.yBall === 'Y') ? 1 : 0,
+          Type: b.type,
+          Process: b.process,
+        },
+      });
+      return { valid: res.data?.valid !== false, result: res.data?.result, error: res.data?.error };
+    } catch (err) {
+      return { valid: false, error: err.response?.data?.error || 'Request failed' };
+    }
+  };
+
+  const openFormulaEditDrawer = (record) => {
+    const edits = formulaEdits[record.id] || {};
+    const rowIdx = formulaAllData.findIndex(r => r.id === record.id);
+    const prevParams = formulaAllData
+      .slice(0, rowIdx)
+      .map(r => r.parameter_name)
+      .filter(Boolean);
+    setPrevParamsForEdit(prevParams);
+    setFormulaEditDraft({
+      formula_value: edits.formula_value ?? record.formula_value ?? '',
+      rounding_rule: edits.rounding_rule ?? record.rounding_rule ?? 'none',
+      rounding_precision: edits.rounding_precision ?? record.rounding_precision ?? 2,
+      remark: edits.remark ?? record.remark ?? '',
+    });
+    setFormulaEditDrawer({ open: true, record });
+  };
+
+  const applyFormulaEdit = () => {
+    const id = formulaEditDrawer.record?.id;
+    if (!id) return;
+    setFormulaEdits(prev => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        formula_value: formulaEditDraft.formula_value,
+        rounding_rule: formulaEditDraft.rounding_rule,
+        rounding_precision: formulaEditDraft.rounding_precision,
+        remark: formulaEditDraft.remark,
+      },
+    }));
+    setFormulaEditDrawer({ open: false, record: null });
+    message.success('อัพเดต formula แล้ว — กด "Save Changes" เพื่อบันทึกลง DB');
   };
 
   const openAddTool = async () => {
@@ -698,6 +785,12 @@ const ToolingSelectPage = () => {
             <Space>
               <Button
                 icon={<DatabaseOutlined />}
+                onClick={() => navigate(MTC_PATHS.TOOLING_SPEC)}
+              >
+                Spec Management
+              </Button>
+              <Button
+                icon={<DatabaseOutlined />}
                 onClick={() => { setIsToolListOpen(true); fetchToolList(invKey); }}
               >
                 Tool List
@@ -740,7 +833,7 @@ const ToolingSelectPage = () => {
                     <Col span={24}>
                       <Title level={5} style={{ margin: 0 }}>
                         C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
-                        <Tag color="green">{(result.part.process || '').replace('→', '-').replace('—', '-')}</Tag>
+                        <Tag color="green">{(result.part.process || '').replace('→', '->').replace('???', '->').replace('—', '-')}</Tag>
                         <Tag color="purple">{result.part.type}</Tag>
                         <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
                       </Title>
@@ -825,9 +918,14 @@ const ToolingSelectPage = () => {
           </Space>
         }
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAddTool}>
-            Add Tool
-          </Button>
+          <Space>
+            <Button icon={<ApartmentOutlined />} onClick={() => setIsRulesDrawerOpen(true)}>
+              Selection Rules
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAddTool}>
+              Add Tool
+            </Button>
+          </Space>
         }
         placement="right"
         width="85%"
@@ -1098,41 +1196,58 @@ const ToolingSelectPage = () => {
           <Card
             size="small"
             style={{ marginBottom: 12, background: '#fafafa', borderStyle: 'dashed' }}
-            title={<Text type="secondary" style={{ fontSize: 12 }}>New Formula — {formulaMachine} / {formulaToolingName}</Text>}
+            title={
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                <CalculatorOutlined /> New Formula — {formulaMachine} / {formulaToolingName}
+              </Text>
+            }
           >
-            <Form form={tfAddForm} layout="inline" size="small">
-              <Form.Item name="parameter_name" label="Param" rules={[{ required: true, message: 'Required' }]}>
-                <Input placeholder="A, B, C..." style={{ width: 80 }} />
-              </Form.Item>
-              <Form.Item name="formula_type" label="Type" initialValue="expression">
-                <Select style={{ width: 110 }}>
-                  <Select.Option value="expression">expression</Select.Option>
-                  <Select.Option value="condition">condition</Select.Option>
-                  <Select.Option value="limit">limit</Select.Option>
-                </Select>
-              </Form.Item>
-              <Form.Item name="formula_value" label="Formula" rules={[{ required: true, message: 'Required' }]}>
-                <Input placeholder="e.g. part.odAft + 0.2" style={{ width: 240, fontFamily: 'monospace', fontSize: 12 }} />
-              </Form.Item>
-              <Form.Item name="rounding_rule" label="Round" initialValue="none">
-                <Select style={{ width: 80 }}>
-                  <Select.Option value="none">none</Select.Option>
-                  <Select.Option value="ceil">ceil</Select.Option>
-                  <Select.Option value="floor">floor</Select.Option>
-                  <Select.Option value="round">round</Select.Option>
-                </Select>
-              </Form.Item>
-              <Form.Item name="rounding_precision" label="Prec" initialValue={2}>
-                <InputNumber min={0} max={6} style={{ width: 60 }} />
+            <Form form={tfAddForm} layout="vertical" size="small">
+              <Row gutter={12}>
+                <Col span={6}>
+                  <Form.Item name="parameter_name" label="Param name" rules={[{ required: true, message: 'Required' }]}>
+                    <Input placeholder="A, B, C..." />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item name="formula_type" label="Type" initialValue="expression">
+                    <Select>
+                      <Select.Option value="expression">expression</Select.Option>
+                      <Select.Option value="condition">condition</Select.Option>
+                      <Select.Option value="limit">limit</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item name="rounding_rule" label="Rounding" initialValue="none">
+                    <Select>
+                      <Select.Option value="none">none</Select.Option>
+                      <Select.Option value="ceil">ceil</Select.Option>
+                      <Select.Option value="floor">floor</Select.Option>
+                      <Select.Option value="round">round</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item name="rounding_precision" label="Precision" initialValue={2}>
+                    <InputNumber min={0} max={6} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="formula_value" label="Formula Expression" rules={[{ required: true, message: 'Required' }]}>
+                <FormulaBuilderInput
+                  availableVars={FORMULA_VARS}
+                  previousParams={formulaAllData.map(r => r.parameter_name).filter(Boolean)}
+                  onTest={testSingleFormula}
+                  placeholder="e.g. odAft + 0.2"
+                />
               </Form.Item>
               <Form.Item name="remark" label="Remark">
-                <Input placeholder="optional" style={{ width: 140 }} />
+                <Input placeholder="optional" />
               </Form.Item>
-              <Form.Item>
-                <Button type="primary" icon={<SaveOutlined />} loading={tfAddLoading} onClick={addToolingFormula}>
-                  Add
-                </Button>
-              </Form.Item>
+              <Button type="primary" icon={<SaveOutlined />} loading={tfAddLoading} onClick={addToolingFormula}>
+                Add Formula
+              </Button>
             </Form>
           </Card>
         )}
@@ -1177,15 +1292,23 @@ const ToolingSelectPage = () => {
                 {
                   title: 'Formula',
                   dataIndex: 'formula_value',
-                  render: (v, record) => (
-                    <Input.TextArea
-                      size="small"
-                      rows={2}
-                      style={{ fontFamily: 'monospace', fontSize: 11 }}
-                      value={formulaEdits[record.id]?.formula_value ?? v}
-                      onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_value: e.target.value } }))}
-                    />
-                  ),
+                  render: (v, record) => {
+                    const current = formulaEdits[record.id]?.formula_value ?? v;
+                    return (
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Text code style={{ fontSize: 10, wordBreak: 'break-all', display: 'block', maxWidth: 200 }}>
+                          {current || '(empty)'}
+                        </Text>
+                        <Button
+                          size="small"
+                          icon={<CalculatorOutlined />}
+                          onClick={() => openFormulaEditDrawer(record)}
+                        >
+                          Edit
+                        </Button>
+                      </Space>
+                    );
+                  },
                 },
                 {
                   title: 'Result',
@@ -1261,6 +1384,188 @@ const ToolingSelectPage = () => {
             />
           )}
         </Spin>
+      </Modal>
+      {/* ── Formula Edit Drawer ────────────────────────────────────────────── */}
+      <Drawer
+        title={
+          <Space>
+            <CalculatorOutlined />
+            <span>Formula Builder</span>
+            {formulaEditDrawer.record && (
+              <>
+                <Tag color="blue">{formulaMachine}</Tag>
+                <Tag color="green">{formulaEditDrawer.record.parameter_name}</Tag>
+              </>
+            )}
+          </Space>
+        }
+        placement="right"
+        width={680}
+        open={formulaEditDrawer.open}
+        onClose={() => setFormulaEditDrawer({ open: false, record: null })}
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => setFormulaEditDrawer({ open: false, record: null })}>
+                Cancel
+              </Button>
+              <Button type="primary" icon={<SaveOutlined />} onClick={applyFormulaEdit}>
+                Apply Changes
+              </Button>
+            </Space>
+          </div>
+        }
+      >
+        <Form layout="vertical" size="small">
+          <Form.Item label="Formula Expression">
+            <FormulaBuilderInput
+              value={formulaEditDraft.formula_value}
+              onChange={v => setFormulaEditDraft(p => ({ ...p, formula_value: v }))}
+              availableVars={FORMULA_VARS}
+              previousParams={prevParamsForEdit}
+              onTest={testSingleFormula}
+            />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item label="Rounding Rule">
+                <Select
+                  value={formulaEditDraft.rounding_rule}
+                  onChange={v => setFormulaEditDraft(p => ({ ...p, rounding_rule: v }))}
+                >
+                  <Select.Option value="none">none</Select.Option>
+                  <Select.Option value="ceil">ceil</Select.Option>
+                  <Select.Option value="floor">floor</Select.Option>
+                  <Select.Option value="round">round</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="Precision">
+                <InputNumber
+                  min={0}
+                  max={6}
+                  style={{ width: '100%' }}
+                  value={formulaEditDraft.rounding_precision}
+                  onChange={v => setFormulaEditDraft(p => ({ ...p, rounding_precision: v ?? 2 }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item label="Remark">
+                <Input
+                  value={formulaEditDraft.remark}
+                  onChange={e => setFormulaEditDraft(p => ({ ...p, remark: e.target.value }))}
+                  placeholder="optional"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          {isTestModeOpen && (
+            <Form.Item label="Quick Test (ใช้ค่าจาก Test Simulation ด้านบน)">
+              <Button
+                size="small"
+                type="default"
+                onClick={async () => {
+                  const r = await testSingleFormula(formulaEditDraft.formula_value);
+                  if (r.valid) message.success(`Result: ${r.result}`);
+                  else message.error(`Error: ${r.error}`);
+                }}
+              >
+                Run Test
+              </Button>
+            </Form.Item>
+          )}
+        </Form>
+      </Drawer>
+
+      {/* ── Selection Rules Drawer ────────────────────────────────────────── */}
+      <SelectionRuleDrawer open={isRulesDrawerOpen} onClose={() => setIsRulesDrawerOpen(false)} />
+
+      {/* ── New Machine Setup Wizard ───────────────────────────────────────── */}
+      <Modal
+        title={
+          <Space>
+            <CheckCircleOutlined style={{ color: '#52c41a' }} />
+            <span>Table Created — Next Steps</span>
+          </Space>
+        }
+        open={setupWizard.open}
+        onCancel={() => setSetupWizard(p => ({ ...p, open: false }))}
+        footer={[
+          <Button key="close" onClick={() => setSetupWizard(p => ({ ...p, open: false }))}>
+            Close
+          </Button>,
+          <Button
+            key="rules"
+            type="primary"
+            icon={<ApartmentOutlined />}
+            onClick={() => { setSetupWizard(p => ({ ...p, open: false })); setIsRulesDrawerOpen(true); }}
+          >
+            Go to Selection Rules <ArrowRightOutlined />
+          </Button>,
+        ]}
+        width={520}
+      >
+        <Alert
+          type="success"
+          showIcon
+          message={`Table "${setupWizard.tableName}" created (${setupWizard.dimCount} dims)`}
+          style={{ marginBottom: 16 }}
+        />
+        <p style={{ marginBottom: 12, fontWeight: 600 }}>
+          เพื่อให้ระบบค้นหา tooling สำหรับ Machine ใหม่นี้ได้ ต้องทำครบ 3 ขั้นตอน:
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            {
+              step: 1,
+              icon: <DatabaseOutlined />,
+              title: 'เพิ่ม Tool Records (+Add Tool)',
+              desc: `เพิ่มรายการ tooling เข้า table "${setupWizard.tableName}" ผ่าน Tool List → Add Tool`,
+              done: true,
+            },
+            {
+              step: 2,
+              icon: <SettingOutlined />,
+              title: 'ตั้ง Formula Setting',
+              desc: `ใน Tool List → เลือก machine → Formula Setting เพิ่ม formula สำหรับ machine "${setupWizard.machineName}"`,
+              done: false,
+            },
+            {
+              step: 3,
+              icon: <ApartmentOutlined />,
+              title: 'เพิ่ม Selection Rule',
+              desc: 'ใน Selection Rule Manager เพิ่ม rule เชื่อม formula calc key กับ tool column',
+              done: false,
+            },
+          ].map(({ step, icon, title, desc, done }) => (
+            <div
+              key={step}
+              style={{
+                display: 'flex',
+                gap: 12,
+                padding: '10px 14px',
+                background: done ? '#f6ffed' : '#fff',
+                border: `1px solid ${done ? '#b7eb8f' : '#d9d9d9'}`,
+                borderRadius: 8,
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: done ? '#52c41a' : '#1890ff',
+                color: '#fff', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700,
+              }}>
+                {done ? <CheckCircleOutlined /> : step}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>{icon} {title}</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </Modal>
     </Layout>
   );
