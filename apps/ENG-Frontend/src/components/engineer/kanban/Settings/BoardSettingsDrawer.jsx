@@ -12,6 +12,8 @@ import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
 import Swal from 'sweetalert2';
+import axios from 'axios';
+import { server } from '../../../../constance/constance';
 import {
     DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors
 } from '@dnd-kit/core';
@@ -136,6 +138,20 @@ const BoardSettingsDrawer = () => {
     const [restoreToListId, setRestoreToListId] = useState(null);
     const [memberSearch, setMemberSearch] = useState('');
 
+    const [labelTemplates, setLabelTemplates] = useState([]);
+    const [fetchingLabels, setFetchingLabels] = useState(false);
+    const [importingLabels, setImportingLabels] = useState(false);
+
+    useEffect(() => {
+        if (isBoardSettingsOpen && activeTab === 'labels') {
+            setFetchingLabels(true);
+            axios.get(`${server.KANBAN_TEMPLATES}?type=label`)
+                .then(res => setLabelTemplates(res.data?.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setFetchingLabels(false));
+        }
+    }, [isBoardSettingsOpen, activeTab]);
+
     const { user, empNo } = useAuthStore();
     const currentUserCode = empNo || user?.u_code || '';
 
@@ -198,6 +214,26 @@ const BoardSettingsDrawer = () => {
         if (ok) {
             Swal.fire({ icon: 'success', title: 'Board Deleted', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
             closeBoardSettings();
+        }
+    };
+
+    const handleImportLabelTemplate = async (templateId) => {
+        if (!activeBoard || !templateId) return;
+        const template = labelTemplates.find(t => t.id === templateId);
+        if (!template) return;
+
+        setImportingLabels(true);
+        try {
+            const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
+            const tplLabels = config.labels || [];
+            for (const lbl of tplLabels) {
+                await createLabel(activeBoard.id, lbl.name, lbl.color);
+            }
+            Swal.fire({ icon: 'success', title: 'Labels Imported', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+        } catch (e) {
+            Swal.fire('Error', 'Failed to import labels', 'error');
+        } finally {
+            setImportingLabels(false);
         }
     };
 
@@ -495,7 +531,7 @@ const BoardSettingsDrawer = () => {
                 </div>
             )}
 
-            <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
+            <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.md }}>
                 <SectionLabel theme={theme}>Create New Label</SectionLabel>
                 <Form form={labelForm} layout="vertical" onFinish={handleCreateLabel} size="small">
                     <Form.Item name="labelName" style={{ marginBottom: 8 }}><Input placeholder="Label name (optional)" /></Form.Item>
@@ -507,6 +543,23 @@ const BoardSettingsDrawer = () => {
                     </div>
                     <Button type="primary" htmlType="submit" size="small" block>Add Label</Button>
                 </Form>
+            </div>
+
+            <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
+                <SectionLabel theme={theme}>Import Label Template</SectionLabel>
+                <Select
+                    style={{ width: '100%', marginBottom: 8 }}
+                    placeholder="Select a label template..."
+                    loading={fetchingLabels}
+                    options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
+                    onChange={(val) => {
+                        if (val) {
+                            handleImportLabelTemplate(val);
+                        }
+                    }}
+                    value={null} // Reset after selection
+                    disabled={importingLabels}
+                />
             </div>
         </Card>
     );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Button, Switch, Typography } from 'antd';
+import { Modal, Form, Input, Button, Switch, Typography, Select } from 'antd';
 import { MdOutlineDashboard } from 'react-icons/md';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -10,29 +10,58 @@ import { server } from '../../../../../constance/constance';
 const { Text } = Typography;
 
 const CreateBoardModal = ({ open, onCancel, theme }) => {
-    const { activeProject, fetchBoards, setActiveBoard } = useKanbanStore(
+    const { activeProject, fetchBoards, setActiveBoard, createLabel } = useKanbanStore(
         useShallow(state => ({
             activeProject: state.activeProject,
             fetchBoards: state.fetchBoards,
             setActiveBoard: state.setActiveBoard,
+            createLabel: state.createLabel,
         }))
     );
 
     const [form] = Form.useForm();
     const [isCreating, setIsCreating] = useState(false);
+    const [labelTemplates, setLabelTemplates] = useState([]);
+    const [fetchingLabels, setFetchingLabels] = useState(false);
+
+    React.useEffect(() => {
+        if (open) {
+            setFetchingLabels(true);
+            axios.get(`${server.KANBAN_TEMPLATES}?type=label`)
+                .then(res => setLabelTemplates(res.data?.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setFetchingLabels(false));
+        }
+    }, [open]);
 
     const handleCreate = async (values) => {
         if (!activeProject) return;
         setIsCreating(true);
         try {
             const res = await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/boards`, {
-                name: values.boardName, projectId: activeProject.id
+                name: values.boardName, 
+                projectId: activeProject.id,
+                is_private: values.is_private || false
             });
             if (res.data?.data) {
+                const newBoard = res.data.data;
+                
+                // If a label template was selected, apply it
+                if (values.label_template_id) {
+                    const template = labelTemplates.find(t => t.id === values.label_template_id);
+                    if (template) {
+                        const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
+                        const labels = config.labels || [];
+                        for (const lbl of labels) {
+                            await createLabel(newBoard.id, lbl.name, lbl.color);
+                        }
+                    }
+                }
+
                 Swal.fire({ icon: 'success', title: 'Board Created', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
                 form.resetFields();
                 await fetchBoards(activeProject.id);
-                setActiveBoard(res.data.data);
+                setActiveBoard(newBoard);
                 onCancel();
             }
         } catch (err) {
@@ -58,6 +87,14 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
             <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>
                 <Form.Item name="boardName" label="Board Name" rules={[{ required: true, message: 'Please input board name!' }]}>
                     <Input placeholder="E.g., Sprint 1, Maintenance Tasks" style={{ borderRadius: theme.borderRadius.sm }} />
+                </Form.Item>
+                <Form.Item name="label_template_id" label="Apply Label Template (Optional)" style={{ marginBottom: 16 }}>
+                    <Select
+                        allowClear
+                        placeholder="Select a label template..."
+                        loading={fetchingLabels}
+                        options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
+                    />
                 </Form.Item>
                 <Form.Item name="is_private" valuePropName="checked" label="Private Board" style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

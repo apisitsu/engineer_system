@@ -224,15 +224,46 @@ const ProjectsTab = ({
                     ]}
                 />
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Segmented
-                        value={viewMode}
-                        onChange={handleViewModeChange}
-                        options={[
-                            { value: 'card', icon: <BsGrid3X3Gap size={16} /> },
-                            { value: 'list', icon: <BsListUl size={16} /> },
-                        ]}
-                        size="small"
-                    />
+                    <div
+                        style={{
+                            display: 'inline-flex',
+                            // ปรับสีพื้นหลังให้เป็นสีเขียวอ่อนตามรูป หรือใช้ theme.colors.surfaceHover ของคุณ
+                            background: theme.colors.surfaceHover,
+                            borderRadius: 8,
+                            padding: 4,
+                            gap: 2 // เพิ่มช่องว่างระหว่างปุ่มเล็กน้อย
+                        }}
+                    >
+                        <Tooltip title="Card View">
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<BsGrid3X3Gap size={16} />}
+                                onClick={() => handleViewModeChange('card')}
+                                style={{
+                                    borderRadius: 6,
+                                    // ตั้งค่าสไตล์ตอนที่ถูกเลือกให้เป็นปุ่มสีขาวมีเงา (ตามรูป)
+                                    ...(viewMode === 'card'
+                                        ? { background: '#ffffff', color: '#000', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                                        : { color: '#666' })
+                                }}
+                            />
+                        </Tooltip>
+                        <Tooltip title="List View">
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<BsListUl size={16} />}
+                                onClick={() => handleViewModeChange('list')}
+                                style={{
+                                    borderRadius: 6,
+                                    ...(viewMode === 'list'
+                                        ? { background: '#ffffff', color: '#000', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }
+                                        : { color: '#666' })
+                                }}
+                            />
+                        </Tooltip>
+                    </div>
                     <Tooltip title="Create Project from Template">
                         <Button
                             type="text"
