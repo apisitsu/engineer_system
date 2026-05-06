@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tooltip } from 'antd';
+import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tooltip, Popover } from 'antd';
 import dayjs from 'dayjs';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineApi, AiOutlineQuestionCircle } from 'react-icons/ai';
 import { MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
@@ -149,6 +149,8 @@ const BoardSettingsDrawer = () => {
     const [labelTemplates, setLabelTemplates] = useState([]);
     const [fetchingLabels, setFetchingLabels] = useState(false);
     const [importingLabels, setImportingLabels] = useState(false);
+    const [previewTemplateLabels, setPreviewTemplateLabels] = useState(null);
+    const [selectedLabelTemplateId, setSelectedLabelTemplateId] = useState(null);
 
     useEffect(() => {
         if (isBoardSettingsOpen && activeTab === 'labels') {
@@ -225,19 +227,16 @@ const BoardSettingsDrawer = () => {
         }
     };
 
-    const handleImportLabelTemplate = async (templateId) => {
-        if (!activeBoard || !templateId) return;
-        const template = labelTemplates.find(t => t.id === templateId);
-        if (!template) return;
-
+    const handleApplyTemplateLabels = async () => {
+        if (!activeBoard || !previewTemplateLabels) return;
         setImportingLabels(true);
         try {
-            const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
-            const tplLabels = config.labels || [];
-            for (const lbl of tplLabels) {
-                await createLabel(activeBoard.id, lbl.name, lbl.color);
+            for (const lbl of previewTemplateLabels) {
+                await createLabel(activeBoard.id, lbl.name || '', lbl.color);
             }
             Swal.fire({ icon: 'success', title: 'Labels Imported', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            setPreviewTemplateLabels(null);
+            setSelectedLabelTemplateId(null);
         } catch (e) {
             Swal.fire('Error', 'Failed to import labels', 'error');
         } finally {
@@ -609,19 +608,96 @@ const BoardSettingsDrawer = () => {
 
             <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
                 <SectionLabel theme={theme}>Import Label Template</SectionLabel>
-                <Select
-                    style={{ width: '100%', marginBottom: 8 }}
-                    placeholder="Select a label template..."
-                    loading={fetchingLabels}
-                    options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
-                    onChange={(val) => {
-                        if (val) {
-                            handleImportLabelTemplate(val);
-                        }
-                    }}
-                    value={null} // Reset after selection
-                    disabled={importingLabels}
-                />
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <Select
+                        style={{ flex: 1 }}
+                        placeholder="Select a label template to preview..."
+                        loading={fetchingLabels}
+                        options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
+                        onChange={(val) => {
+                            setSelectedLabelTemplateId(val);
+                            if (val) {
+                                const template = labelTemplates.find(t => t.id === val);
+                                if (template) {
+                                    const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
+                                    setPreviewTemplateLabels((config.labels || []).map((l, i) => ({ ...l, tempId: i })));
+                                }
+                            } else {
+                                setPreviewTemplateLabels(null);
+                            }
+                        }}
+                        value={selectedLabelTemplateId}
+                        disabled={importingLabels}
+                    />
+                </div>
+
+                {previewTemplateLabels && (
+                    <div style={{ marginTop: 12 }}>
+                        <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>Preview & Edit Labels</Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4, marginBottom: 12 }}>
+                            {previewTemplateLabels.map((lbl, idx) => (
+                                <div key={lbl.tempId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Popover
+                                        trigger="click"
+                                        placement="bottomLeft"
+                                        content={
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 200 }}>
+                                                {LABEL_COLORS.map(c => (
+                                                    <div
+                                                        key={c}
+                                                        onClick={() => {
+                                                            const newLabels = [...previewTemplateLabels];
+                                                            newLabels[idx].color = c;
+                                                            setPreviewTemplateLabels(newLabels);
+                                                        }}
+                                                        style={{
+                                                            width: 24, height: 20, borderRadius: 4, background: c, cursor: 'pointer',
+                                                            border: lbl.color === c ? '2px solid #333' : '2px solid transparent'
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        }
+                                    >
+                                        <div style={{
+                                            width: 24, height: 24, borderRadius: 4, background: lbl.color,
+                                            cursor: 'pointer', border: '1px solid #d9d9d9', flexShrink: 0
+                                        }} />
+                                    </Popover>
+                                    <Input
+                                        size="small"
+                                        value={lbl.name}
+                                        onChange={(e) => {
+                                            const newLabels = [...previewTemplateLabels];
+                                            newLabels[idx].name = e.target.value;
+                                            setPreviewTemplateLabels(newLabels);
+                                        }}
+                                        placeholder="Label name"
+                                        style={{ flex: 1 }}
+                                    />
+                                    <Button
+                                        type="text"
+                                        danger
+                                        size="small"
+                                        icon={<AiOutlineDelete />}
+                                        onClick={() => {
+                                            const newLabels = previewTemplateLabels.filter((_, i) => i !== idx);
+                                            setPreviewTemplateLabels(newLabels);
+                                        }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <Space>
+                            <Button type="primary" size="small" onClick={handleApplyTemplateLabels} loading={importingLabels}>
+                                Apply {previewTemplateLabels.length} Labels
+                            </Button>
+                            <Button size="small" onClick={() => { setPreviewTemplateLabels(null); setSelectedLabelTemplateId(null); }}>
+                                Cancel
+                            </Button>
+                        </Space>
+                    </div>
+                )}
             </div>
         </Card>
     );
