@@ -104,6 +104,7 @@ const HeaderBar = () => {
     const master = [
         ...(userDepartment === "ENG" || userDepartment === "AD" ? [
             sideItem(<a href="/eng/home" className="nav-link" style={headerStyle.menu}><i className="fas fa-home" /> Home</a>, "1"),
+            // sideItem(<Link to="/eng/user-guide" className="nav-link" style={headerStyle.menu}><i className="fas fa-book" /> User Guide</Link>, "guide"),
         ] : [
             sideItem(<a href="/home" className="nav-link" style={headerStyle.menu}><i className="fas fa-home" /> Home</a>, "1"),
         ])

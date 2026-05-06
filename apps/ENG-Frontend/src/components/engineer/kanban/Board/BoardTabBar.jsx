@@ -1,18 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Tooltip, Dropdown, Button } from 'antd';
 import { FiPlus, FiEdit2, FiFilter } from 'react-icons/fi';
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
-
 import SortableBoardTab from './SortableBoardTab';
+import CreateBoardModal from '../Tabs/components/CreateBoardModal';
+// Removed BlueprintInstantiationModal since it is now combined into CreateBoardModal
 
 const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGroupId, filteredOrderedBoards, handleDragEndBoards, handleOpenGroupModal }) => {
     const activeBoard = useKanbanStore(state => state.activeBoard);
     const setActiveBoard = useKanbanStore(state => state.setActiveBoard);
     const openBoardSettings = useKanbanStore(state => state.openBoardSettings);
     const setActiveBoardGroup = useKanbanStore(state => state.setActiveBoardGroup);
+
+    const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
 
     const { canManageProject } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
@@ -27,6 +30,7 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
     if (!activeProject) return null;
 
     return (
+    <>
         <div className="kb-hscroll" style={{
             display: 'flex', alignItems: 'center',
             padding: `0 ${theme.spacing.xl}`,
@@ -34,23 +38,25 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
             overflowX: 'auto',
         }}>
             {canManageProject && (
-                <Tooltip title="Create New Board">
-                    <div
-                        onClick={openBoardSettings}
-                        style={{
-                            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                            cursor: 'pointer',
-                            color: theme.colors.textSecondary,
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            borderRight: `1px solid ${theme.colors.border}`,
-                            marginRight: 4
-                        }}
-                        onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.primary; }}
-                        onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.textSecondary; }}
-                    >
-                        <FiPlus size={18} />
-                    </div>
-                </Tooltip>
+                <>
+                    <Tooltip title="Create Board">
+                        <div
+                            onClick={() => setShowCreateBoardModal(true)}
+                            style={{
+                                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+                                cursor: 'pointer',
+                                color: theme.colors.textSecondary,
+                                display: 'flex', alignItems: 'center', gap: 4,
+                                borderRight: `1px solid ${theme.colors.border}`,
+                                marginRight: 4
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.primary; }}
+                            onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.textSecondary; }}
+                        >
+                            <FiPlus size={18} />
+                        </div>
+                    </Tooltip>
+                </>
             )}
 
             <Dropdown
@@ -114,6 +120,15 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
                 </SortableContext>
             </DndContext>
         </div>
+
+        {showCreateBoardModal && (
+            <CreateBoardModal
+                open={showCreateBoardModal}
+                onCancel={() => setShowCreateBoardModal(false)}
+                theme={theme}
+            />
+        )}
+    </>
     );
 };
 

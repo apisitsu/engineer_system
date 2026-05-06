@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Drawer, Tree, Input, Button, Space, Typography, Spin, Empty, App as AntdApp, Divider, Tag } from 'antd';
-import { SaveOutlined, AppstoreOutlined, UnorderedListOutlined, CreditCardOutlined } from '@ant-design/icons';
+import { Drawer, Tree, Input, Button, Space, Typography, Spin, Empty, App as AntdApp, Divider, Tag, Tooltip } from 'antd';
+import { SaveOutlined, AppstoreOutlined, UnorderedListOutlined, CreditCardOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useKanbanStore } from '../store/kanbanStore';
 
 const { Title, Text } = Typography;
@@ -27,6 +27,7 @@ const { Title, Text } = Typography;
 const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate = null }) => {
     const { message } = AntdApp.useApp();
     const createTemplateConfig = useKanbanStore(state => state.createTemplateConfig);
+    const updateTemplateConfig = useKanbanStore(state => state.updateTemplateConfig);
     const fetchProjectReportData = useKanbanStore(state => state.fetchProjectReportData);
 
     const [templateName, setTemplateName] = useState('');
@@ -124,9 +125,9 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
 
             switch (type) {
                 case 'board': board_ids.push(id); break;
-                case 'list':  list_ids.push(id);  break;
-                case 'card':  card_ids.push(id);  break;
-                case 'task':  task_ids.push(id);  break;
+                case 'list': list_ids.push(id); break;
+                case 'card': card_ids.push(id); break;
+                case 'task': task_ids.push(id); break;
                 default: break;
             }
         }
@@ -154,11 +155,19 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
 
         setSaving(true);
         try {
-            const result = await createTemplateConfig({
-                name: templateName.trim(),
-                master_project_id: masterProject.id,
-                config_data,
-            });
+            let result;
+            if (existingTemplate) {
+                result = await updateTemplateConfig(existingTemplate.id, {
+                    name: templateName.trim(),
+                    config_data,
+                });
+            } else {
+                result = await createTemplateConfig({
+                    name: templateName.trim(),
+                    master_project_id: masterProject.id,
+                    config_data,
+                });
+            }
 
             if (result) {
                 message.success(`Template "${templateName}" saved successfully!`);
@@ -192,6 +201,15 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                         Master: {masterProject?.name || '—'}
                     </Text>
                 </div>
+            }
+            extra={
+                <Tooltip title="View User Guide">
+                    <Button
+                        type="text"
+                        icon={<QuestionCircleOutlined />}
+                        onClick={() => window.open('/eng/user-guide#blueprint-system', '_blank')}
+                    />
+                </Tooltip>
             }
             open={open}
             onClose={onClose}

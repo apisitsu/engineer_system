@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Typography, Space, Button, Input, Dropdown, Popconfirm, Badge, Switch, Tooltip } from 'antd';
-import { BsThreeDots, BsGripVertical } from 'react-icons/bs';
-import { IoCloseOutline, IoArchiveOutline } from 'react-icons/io5';
+import { BsThreeDots, BsGripVertical, BsCardChecklist } from 'react-icons/bs';
+import { IoCloseOutline, IoArchiveOutline, IoSaveOutline } from 'react-icons/io5';
 import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';
 import { FiPlus } from 'react-icons/fi';
 import {
@@ -17,6 +17,8 @@ import { useTheme } from '../../../../theme';
 import KanbanCard from './KanbanCard';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useAuthStore } from '../../../../stores/authStore';
+import CardTemplateSelectorModal from '../Tabs/components/CardTemplateSelectorModal';
+import ListTemplateFormModal from '../Tabs/components/ListTemplateFormModal';
 
 const { Text } = Typography;
 
@@ -84,6 +86,8 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
     const [isEditingName, setIsEditingName] = useState(false);
     const [editName, setEditName] = useState(list.name);
     const [isExpanded, setIsExpanded] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [showSaveListTemplate, setShowSaveListTemplate] = useState(false);
 
     // Global Settings
     const enableLimitSetting = systemSettings?.find(s => s.setting_key === 'enable_list_card_limit');
@@ -94,7 +98,7 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
 
     // Permission Hook
     const currentUserRole = activeBoardMembers.find(m => m.u_code === empNo)?.role;
-    const { canEditBoard, isReadOnly } = useKanbanPermissions({
+    const { canEditBoard, isReadOnly, canManageTemplates } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
         boardRole: currentUserRole
@@ -187,6 +191,12 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
             icon: <FiPlus />,
             onClick: () => setIsAddingCard(true)
         });
+        menuItems.push({
+            key: 'add-card-template',
+            label: 'Card from Template',
+            icon: <BsCardChecklist />,
+            onClick: () => setShowTemplateModal(true)
+        });
     }
 
     if (canEditBoard) {
@@ -251,6 +261,17 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
                 </Popconfirm>
             ),
             icon: <AiOutlineDelete style={{ color: theme.colors.error }} />,
+        });
+    }
+
+    // Save as Template — only for template managers
+    if (canManageTemplates) {
+        menuItems.push({ type: 'divider' });
+        menuItems.push({
+            key: 'save-as-template',
+            label: 'Save List as Template',
+            icon: <IoSaveOutline style={{ color: theme.colors.primary }} />,
+            onClick: () => setShowSaveListTemplate(true),
         });
     }
 
@@ -455,27 +476,57 @@ const KanbanList = ({ list, dragHandleListeners, isOverlay }) => {
                             </div>
                         </div>
                     ) : (
-                        <div
-                            style={{
-                                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                                cursor: 'pointer',
-                                borderRadius: theme.borderRadius.sm,
-                                transition: `background ${theme.transitions.fast}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                            }}
-                            onClick={() => setIsAddingCard(true)}
-                            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
-                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                            <FiPlus size={14} color={theme.colors.textTertiary} />
-                            <Text type="secondary" style={{ fontSize: theme.typography.fontSize.sm }}>
-                                Add a card
-                            </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div
+                                style={{
+                                    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                                    cursor: 'pointer',
+                                    borderRadius: theme.borderRadius.sm,
+                                    transition: `background ${theme.transitions.fast}`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    flex: 1
+                                }}
+                                onClick={() => setIsAddingCard(true)}
+                                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                                onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <FiPlus size={14} color={theme.colors.textTertiary} />
+                                <Text type="secondary" style={{ fontSize: theme.typography.fontSize.sm }}>
+                                    Add a card
+                                </Text>
+                            </div>
+                            {(!isReadOnly && allowAddCard) && (
+                                <Tooltip title="Create from Template">
+                                    <Button 
+                                        type="text" 
+                                        icon={<BsCardChecklist size={16} color={theme.colors.textSecondary} />} 
+                                        size="small" 
+                                        onClick={() => setShowTemplateModal(true)}
+                                    />
+                                </Tooltip>
+                            )}
                         </div>
                     )}
                 </div>
+            )}
+
+            <CardTemplateSelectorModal 
+                open={showTemplateModal}
+                onCancel={() => setShowTemplateModal(false)}
+                listId={list.id}
+                theme={theme}
+            />
+            {showSaveListTemplate && (
+                <ListTemplateFormModal
+                    open={showSaveListTemplate}
+                    onCancel={() => setShowSaveListTemplate(false)}
+                    template={null}
+                    theme={theme}
+                    onSuccess={() => setShowSaveListTemplate(false)}
+                    importSourceList={{ listId: list.id, listName: list.name, cards: (cards[list.id] || []) }}
+                />
             )}
         </div>
     );

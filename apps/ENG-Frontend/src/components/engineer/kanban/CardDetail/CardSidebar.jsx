@@ -22,6 +22,11 @@ import { FiUpload } from 'react-icons/fi';
 import { IoSearchOutline, IoArchiveOutline } from 'react-icons/io5';
 import { AiOutlineDelete, AiOutlineTags, AiOutlineCopy, AiOutlineCheck } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
+import { BsCheckSquare } from 'react-icons/bs';
+import ChecklistTemplateSelectorModal from './ChecklistTemplateSelectorModal';
+import LabelTemplateSelectorModal from '../Board/LabelTemplateSelectorModal';
+import CardTemplateFormModal from '../Tabs/components/CardTemplateFormModal';
+import { IoSaveOutline } from 'react-icons/io5';
 
 const { Text } = Typography;
 
@@ -78,6 +83,10 @@ const CardSidebar = () => {
         showMoveSelect, setShowMoveSelect, visibleLists, handleMoveCard, cards,
         editSuspendReason, setEditSuspendReason, updateCard,
     } = ctx;
+
+    const [showChecklistTemplateModal, setShowChecklistTemplateModal] = React.useState(false);
+    const [showLabelTemplateModal, setShowLabelTemplateModal] = React.useState(false);
+    const [showSaveCardTemplate, setShowSaveCardTemplate] = React.useState(false);
 
     if (!card) return null;
 
@@ -163,8 +172,15 @@ const CardSidebar = () => {
                                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Create</Button>
                                     </div>
                                 ) : (
-                                    <Button size="small" type="dashed" block onClick={() => setIsCreatingLabel(true)}
-                                        style={{ borderRadius: theme.borderRadius.sm }}>Create New Label</Button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <Button size="small" type="dashed" block onClick={() => setIsCreatingLabel(true)}
+                                            style={{ borderRadius: theme.borderRadius.sm }}>Create New Label</Button>
+                                        <Button size="small" type="dashed" block icon={<AiOutlineTags size={12} />}
+                                            onClick={() => setShowLabelTemplateModal(true)}
+                                            style={{ borderRadius: theme.borderRadius.sm, fontSize: 12 }}>
+                                            From Label Template
+                                        </Button>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -247,12 +263,19 @@ const CardSidebar = () => {
                         <SidebarButton icon={<FaCheckSquare size={14} />} label="Checklist" active={showAddTaskList}
                             onClick={() => setShowAddTaskList(!showAddTaskList)} theme={theme} />
                         {showAddTaskList && (
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <Input placeholder="Checklist name" size="small" value={newTaskListName}
-                                    onChange={(e) => setNewTaskListName(e.target.value)} onPressEnter={handleAddTaskList}
-                                    style={{ borderRadius: theme.borderRadius.sm }} />
-                                <Button size="small" type="primary" onClick={handleAddTaskList}
-                                    style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Add</Button>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                    <Input placeholder="Checklist name" size="small" value={newTaskListName}
+                                        onChange={(e) => setNewTaskListName(e.target.value)} onPressEnter={handleAddTaskList}
+                                        style={{ borderRadius: theme.borderRadius.sm }} />
+                                    <Button size="small" type="primary" onClick={handleAddTaskList}
+                                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Add</Button>
+                                </div>
+                                <Button size="small" type="dashed" icon={<BsCheckSquare size={12} />}
+                                    onClick={() => setShowChecklistTemplateModal(true)}
+                                    style={{ borderRadius: theme.borderRadius.sm, fontSize: 12 }}>
+                                    From Template
+                                </Button>
                             </div>
                         )}
 
@@ -358,6 +381,38 @@ const CardSidebar = () => {
                                 onClick={async () => { try { await useKanbanStore.getState().duplicateCard(card.id, card.list_id); closeCardDetail(); } catch (err) { console.error('[CardSidebar] Duplicate failed:', err); } }} theme={theme} />
                         )}
 
+                        {canManageCard && ctx.canManageTemplates && (
+                            <SidebarButton 
+                                icon={<IoSaveOutline size={16} />} 
+                                label="Save as Template" 
+                                onClick={() => setShowSaveCardTemplate(true)} 
+                                theme={theme} 
+                            />
+                        )}
+
+                        <SidebarButton icon={<BiLinkExternal size={16} />} label="Copy Link"
+                            onClick={() => { 
+                                const link = `${window.location.origin}/eng/kanban?board=${card.board_id}&card=${card.id}`;
+                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                    navigator.clipboard.writeText(link).then(() => message.success('Link copied!'));
+                                } else {
+                                    const textArea = document.createElement("textarea");
+                                    textArea.value = link;
+                                    document.body.appendChild(textArea);
+                                    textArea.focus();
+                                    textArea.select();
+                                    try {
+                                        document.execCommand('copy');
+                                        message.success('Link copied!');
+                                    } catch (err) {
+                                        console.error('Fallback: Oops, unable to copy', err);
+                                        message.error('Failed to copy link');
+                                    }
+                                    document.body.removeChild(textArea);
+                                }
+                            }}
+                            theme={theme} />
+
                         {/* Archive */}
                         <Popconfirm title="Archive this card?" description="Card will be hidden from the board."
                             onConfirm={async () => { try { await useKanbanStore.getState().archiveCard(card.id); closeCardDetail(); } catch (err) { console.error('[CardSidebar] Archive failed:', err); } }}
@@ -409,6 +464,42 @@ const CardSidebar = () => {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Checklist Template Selector Modal */}
+            <ChecklistTemplateSelectorModal
+                open={showChecklistTemplateModal}
+                onCancel={() => setShowChecklistTemplateModal(false)}
+                cardId={card?.id}
+                theme={theme}
+                onSuccess={() => {
+                    // Refetch card data to show new task lists
+                    useKanbanStore.getState().fetchCardDetail(card.id);
+                }}
+            />
+
+            {/* Label Template Selector Modal */}
+            <LabelTemplateSelectorModal
+                open={showLabelTemplateModal}
+                onCancel={() => setShowLabelTemplateModal(false)}
+                boardId={card?.board_id}
+                theme={theme}
+                onSuccess={() => {
+                    // Refetch board data to show new labels
+                    useKanbanStore.getState().fetchBoardDetails(card?.board_id);
+                }}
+            />
+
+            {/* Save Card Template Modal */}
+            {showSaveCardTemplate && (
+                <CardTemplateFormModal
+                    open={showSaveCardTemplate}
+                    onCancel={() => setShowSaveCardTemplate(false)}
+                    template={null}
+                    theme={theme}
+                    onSuccess={() => setShowSaveCardTemplate(false)}
+                    importSourceCard={{...card, taskLists: ctx.taskLists}}
+                />
             )}
         </div>
     );

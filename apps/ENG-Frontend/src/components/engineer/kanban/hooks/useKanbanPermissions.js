@@ -75,6 +75,10 @@ export const useKanbanPermissions = ({
         const isReadOnly = !canEditCard;
         const canCreateProject = isSuperAdmin || isManagerOrCoord;
 
+        // ── 6. Template Management ──
+        // Admin-only for now, but extensible: add role checks here in the future
+        const canManageTemplates = isSuperAdmin;
+
         return {
             isSuperAdmin, isManagerOrCoord, globalRole,
             isProjectOwner, isProjectEditor, isProjectViewer, isProjectMember,
@@ -83,7 +87,7 @@ export const useKanbanPermissions = ({
             canManageBoardMembers, canManageBoardStructure, canEditBoard, canViewBoard,
             isCardOwner, isCardEditor, isCardViewer, isCardMember,
             canManageCard, canEditCard, canViewCard,
-            isReadOnly, canCreateProject,
+            isReadOnly, canCreateProject, canManageTemplates,
         };
     }, [globalRole, globalDepartment, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
 };
