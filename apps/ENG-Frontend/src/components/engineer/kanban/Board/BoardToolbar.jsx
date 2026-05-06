@@ -511,7 +511,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
                 {/* Board Settings */}
                 <Button type="text" size="small" icon={<IoSettingsOutline size={16} />}
-                    onClick={openBoardSettings} style={{ color: theme.colors.textSecondary }} />
+                    onClick={() => openBoardSettings()} style={{ color: theme.colors.textSecondary }} />
             </Space>
 
             <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
