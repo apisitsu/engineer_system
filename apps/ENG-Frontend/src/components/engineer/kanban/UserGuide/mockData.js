@@ -91,9 +91,9 @@ export const MOCK_BOARD_GROUPS = [
 
 // ─── LISTS ──────────────────────────────────────────────────────────
 export const MOCK_LISTS = [
-    { id: 301, name: 'Backlog', position: 65536, board_id: 101 },
+    { id: 301, name: 'To Do', position: 65536, board_id: 101 },
     { id: 302, name: 'In Progress', position: 131072, board_id: 101 },
-    { id: 303, name: 'Review', position: 196608, board_id: 101 },
+    { id: 303, name: 'Check', position: 196608, board_id: 101 },
     { id: 304, name: 'Done', position: 262144, board_id: 101 },
 ];
 

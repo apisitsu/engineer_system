@@ -1,18 +1,19 @@
 /**
  * BoardGuideDrawer.jsx
  * 
- * Interactive guide for the Board Canvas — covers lists, cards, drag-and-drop,
- * card badges, WIP limits, add card flow, and list menu actions.
- * Rendered inline inside UserGuideDrawer (not as a standalone Drawer).
+ * Interactive guide for the Board Canvas.
+ * Works in TWO modes:
+ *   1. Standalone Drawer — triggered by BoardToolbar's "?" button (open/onClose props)
+ *   2. Inline content    — rendered inside UserGuideDrawer/UserGuideFullPage (no open/onClose)
  */
 
 import React, { useState, useMemo } from 'react';
-import { Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Dropdown, Popconfirm, Space } from 'antd';
+import { Drawer, Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Space } from 'antd';
 import { BsThreeDots, BsGripVertical, BsCardChecklist } from 'react-icons/bs';
 import { FiPlus } from 'react-icons/fi';
 import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdFamilyRestroom, MdDragIndicator } from 'react-icons/md';
 import { CiMemoPad } from 'react-icons/ci';
-import { IoCloseOutline, IoArchiveOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoArchiveOutline, IoHelpCircleOutline } from 'react-icons/io5';
 import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';
 import {
     getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel,
@@ -22,20 +23,17 @@ import { MOCK_CARDS, MOCK_LISTS, MOCK_USERS, MOCK_LABELS, MOCK_SUSPENDED_CARD, P
 
 const { Text } = Typography;
 
-const BoardGuideDrawer = ({ theme }) => {
-    // ─── Interactive State ──────────────────────────────────────────
+/* ─── Inner content (reusable in both modes) ────────────────────────── */
+const BoardGuideContent = ({ theme }) => {
     const [mockCards, setMockCards] = useState(() => {
         const copy = {};
         Object.entries(MOCK_CARDS).forEach(([k, v]) => { copy[k] = v.map(c => ({ ...c })); });
-        // Add suspended card to list 302
         copy['302'] = [...(copy['302'] || []), { ...MOCK_SUSPENDED_CARD }];
         return copy;
     });
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [newCardName, setNewCardName] = useState('');
     const [isPrivateCard, setIsPrivateCard] = useState(false);
-    const [expandedChecklist, setExpandedChecklist] = useState(null);
-    const [showListMenu, setShowListMenu] = useState(null);
 
     const handleAddCard = () => {
         if (!newCardName.trim()) return;
@@ -62,6 +60,47 @@ const BoardGuideDrawer = ({ theme }) => {
         return { bgColor: '#61bd4f', textColor: '#fff', dateStr: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
     };
 
+    const [draggingCard, setDraggingCard] = useState(null);
+
+    const handleDragStart = (e, card, sourceListId) => {
+        setDraggingCard({ ...card, sourceListId });
+        e.dataTransfer.effectAllowed = 'move';
+        // Add a slight delay before making it look 'grabbed'
+        setTimeout(() => {
+            e.target.style.opacity = '0.5';
+        }, 0);
+    };
+
+    const handleDragEnd = (e) => {
+        e.target.style.opacity = '1';
+        setDraggingCard(null);
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e, targetListId) => {
+        e.preventDefault();
+        if (!draggingCard) return;
+
+        const { sourceListId, id } = draggingCard;
+        if (sourceListId === targetListId) return;
+
+        // Prevent dropping suspended cards
+        if (draggingCard.is_suspended) {
+            alert('Cannot move a suspended card!');
+            return;
+        }
+
+        setMockCards(prev => {
+            const sourceCards = prev[sourceListId].filter(c => c.id !== id);
+            const targetCards = [...(prev[targetListId] || []), { ...draggingCard, list_id: targetListId }];
+            return { ...prev, [sourceListId]: sourceCards, [targetListId]: targetCards };
+        });
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
@@ -71,18 +110,42 @@ const BoardGuideDrawer = ({ theme }) => {
                     subtitle="The board is your visual workflow canvas. It contains vertical Lists (columns) and Cards (tasks) that you can drag and rearrange."
                     theme={theme} />
 
+                {/* List Explanations */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+                    <div style={{ background: theme.colors.surfaceHover, padding: 12, borderRadius: 8, borderLeft: `4px solid ${theme.colors.textSecondary}` }}>
+                        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>To Do</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>Tasks that have been planned but not yet started. This is the backlog of upcoming work.</Text>
+                    </div>
+                    <div style={{ background: theme.colors.surfaceHover, padding: 12, borderRadius: 8, borderLeft: `4px solid ${theme.colors.primary}` }}>
+                        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>In Progress</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>Tasks currently being worked on by the team. Keep this list small to maintain flow.</Text>
+                    </div>
+                    <div style={{ background: theme.colors.surfaceHover, padding: 12, borderRadius: 8, borderLeft: `4px solid #fa8c16` }}>
+                        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Check</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>Tasks that are completed but waiting for review, QA testing, or approval.</Text>
+                    </div>
+                    <div style={{ background: theme.colors.surfaceHover, padding: 12, borderRadius: 8, borderLeft: `4px solid #52c41a` }}>
+                        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Done</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>Fully completed and approved tasks. End of the workflow.</Text>
+                    </div>
+                </div>
+
                 <div style={getSandboxStyle(theme)}>
                     <SandboxDot theme={theme} />
                     <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
                         {MOCK_LISTS.map(list => {
                             const listCards = mockCards[list.id] || [];
                             return (
-                                <div key={list.id} style={{
-                                    width: 260, minWidth: 260, flexShrink: 0,
-                                    background: `${theme.colors.surfaceHover}E8`,
-                                    border: `1px solid ${theme.colors.border}`,
-                                    borderRadius: theme.borderRadius.lg || 12,
-                                    display: 'flex', flexDirection: 'column', maxHeight: 400,
+                                <div key={list.id} 
+                                    onDragOver={handleDragOver}
+                                    onDrop={(e) => handleDrop(e, list.id)}
+                                    style={{
+                                        width: 240, minWidth: 240, flexShrink: 0,
+                                        background: `${theme.colors.surfaceHover}E8`,
+                                        border: `1px solid ${theme.colors.border}`,
+                                        borderRadius: theme.borderRadius.lg || 12,
+                                        display: 'flex', flexDirection: 'column', maxHeight: 380,
+                                        transition: 'background 0.2s',
                                 }}>
                                     {/* List Header */}
                                     <div style={{
@@ -103,7 +166,13 @@ const BoardGuideDrawer = ({ theme }) => {
                                     {/* Cards */}
                                     <div style={{ padding: 8, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         {listCards.map(card => (
-                                            <MockCardCompact key={card.id} card={card} theme={theme} getDueDateInfo={getDueDateInfo} />
+                                            <div key={card.id}
+                                                draggable={!card.is_suspended}
+                                                onDragStart={(e) => handleDragStart(e, card, list.id)}
+                                                onDragEnd={handleDragEnd}
+                                                style={{ cursor: card.is_suspended ? 'not-allowed' : 'grab' }}>
+                                                <MockCardCompact card={card} theme={theme} getDueDateInfo={getDueDateInfo} />
+                                            </div>
                                         ))}
                                     </div>
 
@@ -162,20 +231,20 @@ const BoardGuideDrawer = ({ theme }) => {
 
                 <div style={getSandboxStyle(theme)}>
                     <SandboxDot theme={theme} />
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
                         {[
-                            { icon: <Tag color="red" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>HIGH</Tag>, label: 'Priority Badge', desc: 'Color-coded: Red=High, Orange=Medium, Blue=Low' },
-                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#eb5a46', color: '#fff', fontSize: 10, fontWeight: 600 }}><MdAccessTime size={10} />May 15</div>, label: 'Due Date', desc: 'Red=Overdue, Yellow=Due soon, Green=On time' },
-                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: `${theme.colors.primary}15`, color: theme.colors.primary, fontSize: 10, fontWeight: 600 }}>⏱ 3d 5h</div>, label: 'State Time', desc: 'How long the card has been in its current list' },
-                            { icon: <MdOutlineDescription size={14} color={theme.colors.textTertiary} />, label: 'Has Description', desc: 'Card includes a markdown description' },
-                            { icon: <MdOutlineSubtitles size={14} color={theme.colors.textTertiary} />, label: 'Has Issues', desc: 'Problem/Solution entries are logged' },
-                            { icon: <CiMemoPad size={14} color={theme.colors.textTertiary} />, label: 'Has Memo', desc: 'Internal notes are attached' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineAttachFile size={13} /> 4</span>, label: 'Attachments', desc: 'Number of files attached' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineComment size={13} /> 7</span>, label: 'Comments', desc: 'Number of comments/discussions' },
-                            { icon: <MdFamilyRestroom size={14} color={theme.colors.textTertiary} />, label: 'Parent Link', desc: 'This card is a child of another card' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: theme.colors.textTertiary }}><MdFamilyRestroom size={13} /> 1/2</span>, label: 'Child Progress', desc: 'Done children / Total children count' },
-                            { icon: <MdLockOutline size={14} color="#cf1322" />, label: 'Suspended', desc: 'Card is locked — no edits or moves allowed' },
-                            { icon: <Avatar size={20} style={{ background: theme.colors.primary, fontSize: 9, fontWeight: 700 }}>PL</Avatar>, label: 'Assignees', desc: 'Team members assigned to this card' },
+                            { icon: <Tag color="red" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>HIGH</Tag>, label: 'Priority Badge', desc: 'Indicates task urgency (Red=High, Orange=Medium, Blue=Low). Use this to sequence work.' },
+                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#eb5a46', color: '#fff', fontSize: 10, fontWeight: 600 }}><MdAccessTime size={10} />May 15</div>, label: 'Due Date', desc: 'Target completion date. Red=Overdue, Yellow=Due soon (<3d), Green=On track. Helps track deadlines.' },
+                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: `${theme.colors.primary}15`, color: theme.colors.primary, fontSize: 10, fontWeight: 600 }}>⏱ 3d 5h</div>, label: 'State Time', desc: 'Time elapsed since the card entered its current list. Use this to identify bottlenecks or stalled tasks.' },
+                            { icon: <MdOutlineDescription size={14} color={theme.colors.textTertiary} />, label: 'Description', desc: 'Indicates the card contains a detailed markdown description or specification.' },
+                            { icon: <MdOutlineSubtitles size={14} color={theme.colors.textTertiary} />, label: 'Issues Logged', desc: 'Shows the card has recorded problem/solution entries for troubleshooting history.' },
+                            { icon: <CiMemoPad size={14} color={theme.colors.textTertiary} />, label: 'Memo Attached', desc: 'Indicates internal notes or quick memos are attached to the card.' },
+                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineAttachFile size={13} /> 4</span>, label: 'Attachments', desc: 'Total number of files (PDFs, images, spreadsheets) attached to the task.' },
+                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineComment size={13} /> 7</span>, label: 'Comments', desc: 'Active discussion thread. Click to read team communications regarding this task.' },
+                            { icon: <MdFamilyRestroom size={14} color={theme.colors.textTertiary} />, label: 'Parent Link', desc: 'This task is a sub-task (child) of a larger parent initiative.' },
+                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: theme.colors.textTertiary }}><MdFamilyRestroom size={13} /> 1/2</span>, label: 'Child Progress', desc: 'Shows how many child tasks are completed vs total. Helps track epic progress.' },
+                            { icon: <MdLockOutline size={14} color="#cf1322" />, label: 'Suspended', desc: 'Card is temporarily locked (e.g., waiting on external factors). No edits or moves are allowed.' },
+                            { icon: <Avatar size={20} style={{ background: theme.colors.primary, fontSize: 9, fontWeight: 700 }}>PL</Avatar>, label: 'Assignees', desc: 'Team members responsible for this task. Hover to see full names.' },
                         ].map((item, i) => (
                             <div key={i} style={{
                                 display: 'flex', gap: 10, alignItems: 'flex-start',
@@ -224,7 +293,7 @@ const BoardGuideDrawer = ({ theme }) => {
                             { label: 'divider' },
                             { icon: '↕', label: 'Sort By', desc: 'Name, Due Date, Created, Priority' },
                             { label: 'divider' },
-                            { icon: <IoArchiveOutline size={13} />, label: 'Archive All Cards', desc: 'Move all cards to archive', danger: false },
+                            { icon: <IoArchiveOutline size={13} />, label: 'Archive All Cards', desc: 'Move all cards to archive' },
                             { icon: <AiOutlineDelete size={13} color={theme.colors.error} />, label: 'Delete List', desc: 'Permanently remove list + cards', danger: true },
                         ].map((item, i) => {
                             if (item.label === 'divider') return <div key={i} style={{ height: 1, background: theme.colors.border, margin: '4px 0' }} />;
@@ -283,7 +352,7 @@ const BoardGuideDrawer = ({ theme }) => {
                     </div>
                 </div>
                 <Callout type="tip" theme={theme}>
-                    Labels are defined at the <strong>board level</strong>. All cards within a board share the same label set. 
+                    Labels are defined at the <strong>board level</strong>. All cards within a board share the same label set.
                     Create labels from the Card Detail sidebar or Board Settings → Labels tab.
                 </Callout>
             </div>
@@ -295,7 +364,6 @@ const BoardGuideDrawer = ({ theme }) => {
 const MockCardCompact = ({ card, theme, getDueDateInfo }) => {
     const [hovered, setHovered] = useState(false);
     const dueDateInfo = getDueDateInfo(card.due_date);
-    const isEffectivelySuspended = card.is_suspended;
 
     return (
         <div
@@ -307,14 +375,12 @@ const MockCardCompact = ({ card, theme, getDueDateInfo }) => {
                 border: `1px solid ${hovered ? `${theme.colors.primary}30` : theme.colors.border}`,
                 transition: 'all 0.15s ease',
             }}>
-            {/* Name */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginBottom: 4 }}>
-                {isEffectivelySuspended && <MdLockOutline size={12} color="#cf1322" style={{ marginTop: 2 }} />}
-                <Text style={{ fontSize: 12, lineHeight: 1.4, color: isEffectivelySuspended ? theme.colors.textTertiary : theme.colors.textPrimary, wordBreak: 'break-word' }}>
+                {card.is_suspended && <MdLockOutline size={12} color="#cf1322" style={{ marginTop: 2 }} />}
+                <Text style={{ fontSize: 12, lineHeight: 1.4, color: card.is_suspended ? theme.colors.textTertiary : theme.colors.textPrimary, wordBreak: 'break-word' }}>
                     {card.name}
                 </Text>
             </div>
-            {/* Labels */}
             {card.labels && card.labels.length > 0 && (
                 <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
                     {card.labels.map(l => (
@@ -324,7 +390,6 @@ const MockCardCompact = ({ card, theme, getDueDateInfo }) => {
                     ))}
                 </div>
             )}
-            {/* Task Progress */}
             {card.total_tasks > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <Progress percent={Math.round((card.completed_tasks / card.total_tasks) * 100)} size="small" showInfo={false}
@@ -333,7 +398,6 @@ const MockCardCompact = ({ card, theme, getDueDateInfo }) => {
                     <span style={{ fontSize: 10, color: theme.colors.textTertiary }}>{card.completed_tasks}/{card.total_tasks}</span>
                 </div>
             )}
-            {/* Badges Row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <Tag style={{ fontSize: 9, margin: 0, lineHeight: '14px', padding: '0 4px', textTransform: 'uppercase',
                     color: card.priority === 'high' ? '#cf1322' : card.priority === 'low' ? '#096dd9' : '#d46b08',
@@ -362,6 +426,36 @@ const MockCardCompact = ({ card, theme, getDueDateInfo }) => {
             </div>
         </div>
     );
+};
+
+/* ─── Main export: Drawer wrapper OR inline content ─────────────────── */
+const BoardGuideDrawer = ({ open, onClose, theme }) => {
+    // If open/onClose are provided → render as standalone Drawer
+    if (typeof open !== 'undefined') {
+        return (
+            <Drawer
+                title={
+                    <Space>
+                        <IoHelpCircleOutline size={22} color={theme.colors.primary} />
+                        <span style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: 700 }}>Board Interface Guide</span>
+                    </Space>
+                }
+                placement="right"
+                onClose={onClose}
+                open={open}
+                width={720}
+                styles={{
+                    header: { background: theme.colors.surface, borderBottom: `1px solid ${theme.colors.border}` },
+                    body: { background: theme.colors.background, padding: 24 },
+                }}
+            >
+                <BoardGuideContent theme={theme} />
+            </Drawer>
+        );
+    }
+
+    // Otherwise → render inline content (used inside UserGuideDrawer/FullPage)
+    return <BoardGuideContent theme={theme} />;
 };
 
 export default BoardGuideDrawer;

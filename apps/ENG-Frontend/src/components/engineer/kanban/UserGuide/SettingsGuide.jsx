@@ -141,6 +141,11 @@ const SettingsGuide = ({ theme }) => {
                 <Callout type="danger" title="Delete Board" theme={theme}>
                     Permanently removes the board and ALL its lists and cards. This action cannot be undone. Only project Owners can perform this.
                 </Callout>
+
+                <StepRow number={1} title="Basic Information" description="Configure the board's name, status, and priority level." theme={theme} />
+                <StepRow number={2} title="Visual Appearance" description="Set a custom solid color background to distinguish this board visually." theme={theme} />
+                <StepRow number={3} title="Label Management" description="Create, edit, and assign colors to labels used across cards in this board." theme={theme} />
+                <StepRow number={4} title="Access & Permissions" description="Control who can add cards/lists and restrict visibility to members only." theme={theme} />
             </div>
 
             {/* ═══ Project Settings ═══ */}
@@ -156,14 +161,19 @@ const SettingsGuide = ({ theme }) => {
                         <div>
                             <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Status</Text>
                             <Select value={projectStatus} onChange={setProjectStatus} style={{ width: '100%' }}
-                                options={[{ label: 'Active', value: 'active' }, { label: 'Waiting', value: 'waiting' }, { label: 'Suspended', value: 'suspended' }, { label: 'Completed', value: 'completed' }]} />
+                                options={[
+                                    { label: 'Waiting', value: 'waiting' }, 
+                                    { label: 'Active', value: 'active' }, 
+                                    { label: 'Suspended', value: 'suspended' }, 
+                                    { label: 'Completed', value: 'completed' }
+                                ]} />
                         </div>
                     </div>
                 </div>
                 <StepRow number={1} title="Name & Description" description="Edit the project title and add a detailed description." theme={theme} />
                 <StepRow number={2} title="Icon & Gradient" description="Customize the visual identity with an icon and color gradient." theme={theme} />
                 <StepRow number={3} title="Privacy" description="Toggle between Public (visible to all) and Private (members-only)." theme={theme} />
-                <StepRow number={4} title="Status Management" description="Change lifecycle status: Active → Waiting → Suspended → Completed." theme={theme} />
+                <StepRow number={4} title="Status Management" description="Change lifecycle status: Waiting → Active → Suspended → Completed." theme={theme} />
                 <StepRow number={5} title="Member Management" description="Add/remove project members and assign roles (Owner, Editor, Viewer)." theme={theme} />
             </div>
 

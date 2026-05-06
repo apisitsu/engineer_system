@@ -1,15 +1,20 @@
 /**
  * UserGuideDrawer.jsx
  * 
- * Navigation Hub for the Engineering Kanban User Manual.
- * Opens as a full-width drawer with a sidebar menu linking to each sub-guide.
- * Serves as the master entry point accessible from KanbanMain's "?" button.
+ * Context-aware Drawer for the Engineering Kanban User Manual.
+ * Accepts an optional `context` prop to filter which guide sections are shown.
+ * 
+ * Context modes:
+ *   - 'projects'  → shows Projects, Project Settings, Templates, Permissions
+ *   - 'board'     → shows Board Canvas, Toolbar, Card Detail, Settings, Permissions
+ *   - null/undefined → shows ALL sections (full manual)
  */
 
 import React, { useState } from 'react';
 import { Drawer, Typography, Space, Input, Badge, Button, Divider, Tooltip } from 'antd';
 import { BsKanban } from 'react-icons/bs';
-import { IoSearchOutline, IoChevronForwardOutline, IoBookOutline, IoCloseOutline } from 'react-icons/io5';
+import { IoSearchOutline, IoChevronForwardOutline, IoBookOutline, IoOpenOutline } from 'react-icons/io5';
+import { useNavigate } from 'react-router-dom';
 import { GUIDE_SECTIONS, getSectionCardStyle } from './guideStyles';
 
 // Sub-guide imports
@@ -33,7 +38,14 @@ const GUIDE_COMPONENTS = {
     'permissions': PermissionsGuide,
 };
 
-const UserGuideDrawer = ({ open, onClose, theme }) => {
+// Context → relevant section keys
+const CONTEXT_MAP = {
+    projects: ['projects', 'settings', 'templates', 'permissions'],
+    board: ['board-canvas', 'board-toolbar', 'card-detail', 'settings', 'permissions'],
+};
+
+const UserGuideDrawer = ({ open, onClose, theme, context }) => {
+    const navigate = useNavigate();
     const [activeGuide, setActiveGuide] = useState(null);
     const [search, setSearch] = useState('');
     const [visitedSections, setVisitedSections] = useState([]);
@@ -47,14 +59,21 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
 
     const handleBack = () => setActiveGuide(null);
 
-    // Filter sections by search
-    const filteredSections = GUIDE_SECTIONS.filter(s =>
+    // Determine which sections to show
+    const contextKeys = context ? CONTEXT_MAP[context] : null;
+    const availableSections = contextKeys
+        ? GUIDE_SECTIONS.filter(s => contextKeys.includes(s.key))
+        : GUIDE_SECTIONS;
+
+    // Filter by search
+    const filteredSections = availableSections.filter(s =>
         s.title.toLowerCase().includes(search.toLowerCase()) ||
         s.description.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Render the active guide component inline
     const ActiveComponent = activeGuide ? GUIDE_COMPONENTS[activeGuide] : null;
+
+    const contextLabel = context === 'projects' ? 'Projects' : context === 'board' ? 'Board' : 'Full';
 
     return (
         <Drawer
@@ -62,12 +81,8 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                     <Space>
                         {activeGuide && (
-                            <Button
-                                type="text"
-                                size="small"
-                                onClick={handleBack}
-                                style={{ color: theme.colors.textSecondary, marginRight: 4 }}
-                            >
+                            <Button type="text" size="small" onClick={handleBack}
+                                style={{ color: theme.colors.textSecondary, marginRight: 4 }}>
                                 ← Back
                             </Button>
                         )}
@@ -78,22 +93,39 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
                                 : 'Kanban System Manual'
                             }
                         </span>
+                        {context && !activeGuide && (
+                            <span style={{
+                                fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                                padding: '2px 8px', borderRadius: 4,
+                                background: `${theme.colors.primary}15`, color: theme.colors.primary,
+                                letterSpacing: 0.5,
+                            }}>
+                                {contextLabel} Mode
+                            </span>
+                        )}
                     </Space>
                     {!activeGuide && (
-                        <Badge
-                            count={`${visitedSections.length}/${GUIDE_SECTIONS.length}`}
-                            style={{
-                                backgroundColor: visitedSections.length === GUIDE_SECTIONS.length ? '#52c41a' : theme.colors.primary,
-                                fontSize: 11, fontWeight: 600,
-                            }}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tooltip title="Open Full Manual Page">
+                                <Button type="text" size="small" icon={<IoOpenOutline size={16} />}
+                                    onClick={() => { onClose(); navigate('/eng/kanban/guide'); }}
+                                    style={{ color: theme.colors.textSecondary }} />
+                            </Tooltip>
+                            <Badge
+                                count={`${visitedSections.length}/${availableSections.length}`}
+                                style={{
+                                    backgroundColor: visitedSections.length === availableSections.length ? '#52c41a' : theme.colors.primary,
+                                    fontSize: 11, fontWeight: 600,
+                                }}
+                            />
+                        </div>
                     )}
                 </div>
             }
             placement="right"
             onClose={onClose}
             open={open}
-            width={activeGuide ? 820 : 700}
+            width={activeGuide === 'board-toolbar' ? 1000 : (activeGuide ? 820 : 700)}
             styles={{
                 header: {
                     background: theme.colors.surface,
@@ -106,40 +138,43 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
             }}
         >
             {activeGuide && ActiveComponent ? (
-                /* ─── Active Guide Content ─── */
                 <ActiveComponent theme={theme} />
             ) : (
-                /* ─── Navigation Hub ─── */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {/* Hero Banner */}
                     <div style={{
                         background: `linear-gradient(135deg, ${theme.colors.primary}12, ${theme.colors.secondary || theme.colors.primary}08)`,
                         borderRadius: theme.borderRadius.xl || 16,
-                        padding: '28px 24px',
+                        padding: '24px 20px',
                         border: `1px solid ${theme.colors.primary}20`,
-                        marginBottom: 8,
+                        marginBottom: 4,
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                             <div style={{
-                                width: 44, height: 44, borderRadius: 12,
+                                width: 40, height: 40, borderRadius: 10,
                                 background: `${theme.colors.primary}20`,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
-                                <IoBookOutline size={24} color={theme.colors.primary} />
+                                <IoBookOutline size={22} color={theme.colors.primary} />
                             </div>
                             <div>
-                                <Text strong style={{ fontSize: 18, display: 'block', color: theme.colors.textPrimary }}>
-                                    Engineering Kanban System
+                                <Text strong style={{ fontSize: 16, display: 'block', color: theme.colors.textPrimary }}>
+                                    {context ? `${contextLabel} Reference` : 'Engineering Kanban System'}
                                 </Text>
-                                <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>
-                                    Complete Interactive Reference Manual
+                                <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                                    {context
+                                        ? `Showing guides relevant to the ${contextLabel} view`
+                                        : 'Complete Interactive Reference Manual'
+                                    }
                                 </Text>
                             </div>
                         </div>
-                        <Paragraph style={{ fontSize: 13, color: theme.colors.textSecondary, margin: 0, lineHeight: 1.7 }}>
-                            This comprehensive guide covers every feature of the Kanban project management system.
-                            Each section contains <strong>interactive simulations</strong> that mirror the production interface —
-                            click, toggle, and explore to build muscle memory before using the real system.
+                        <Paragraph style={{ fontSize: 13, color: theme.colors.textSecondary, margin: 0, lineHeight: 1.6 }}>
+                            Each section contains <strong>interactive simulations</strong> with working state changes.
+                            Click, toggle, and explore to build muscle memory.
+                            {!context && (
+                                <span> For the full-page experience, click the <IoOpenOutline size={12} style={{ verticalAlign: 'middle' }} /> button above.</span>
+                            )}
                         </Paragraph>
                     </div>
 
@@ -150,10 +185,7 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         allowClear
-                        style={{
-                            borderRadius: theme.borderRadius.md || 8,
-                            marginBottom: 4,
-                        }}
+                        style={{ borderRadius: theme.borderRadius.md || 8, marginBottom: 4 }}
                     />
 
                     {/* Section Cards */}
@@ -184,18 +216,14 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
                                         e.currentTarget.style.transform = 'none';
                                     }}
                                 >
-                                    {/* Icon */}
                                     <div style={{
-                                        width: 42, height: 42,
-                                        borderRadius: 10,
+                                        width: 42, height: 42, borderRadius: 10,
                                         background: `${theme.colors.primary}10`,
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         fontSize: 20, flexShrink: 0,
                                     }}>
                                         {section.icon}
                                     </div>
-
-                                    {/* Text */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <Text strong style={{ fontSize: 14, display: 'block', color: theme.colors.textPrimary }}>
                                             {section.title}
@@ -204,16 +232,12 @@ const UserGuideDrawer = ({ open, onClose, theme }) => {
                                             {section.description}
                                         </Text>
                                     </div>
-
-                                    {/* Status & Arrow */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                                         {isVisited && (
-                                            <Tooltip title="Explored">
-                                                <span style={{
-                                                    width: 8, height: 8, borderRadius: '50%',
-                                                    background: '#52c41a', display: 'inline-block',
-                                                }} />
-                                            </Tooltip>
+                                            <span style={{
+                                                width: 8, height: 8, borderRadius: '50%',
+                                                background: '#52c41a', display: 'inline-block',
+                                            }} />
                                         )}
                                         <IoChevronForwardOutline size={16} color={theme.colors.textTertiary} />
                                     </div>

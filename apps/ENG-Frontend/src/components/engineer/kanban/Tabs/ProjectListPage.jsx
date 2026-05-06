@@ -257,7 +257,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             />
             <ProjectSettingsDrawer />
             <KanbanAdminSettings open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-            <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} />
+            <UserGuideDrawer open={showUserGuide} onClose={() => setShowUserGuide(false)} theme={theme} context="projects" />
         </div>
     );
 };

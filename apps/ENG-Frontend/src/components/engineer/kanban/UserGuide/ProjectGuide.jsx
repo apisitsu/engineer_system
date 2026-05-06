@@ -96,31 +96,36 @@ const ProjectGuide = ({ theme }) => {
                     <SandboxDot theme={theme} />
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         {[
-                            { icon: <BsKanban />, label: 'Total Projects', value: stats.total, color: theme.colors.primary },
-                            { icon: <IoLayersOutline />, label: 'Total Boards', value: stats.totalBoards, color: '#10b981' },
-                            { icon: <MdOutlinePeople />, label: 'Owned by Me', value: stats.owned, color: '#f59e0b' },
-                            { icon: <AiFillStar />, label: 'Favorites', value: stats.favorites, color: '#ef4444' },
+                            { icon: <BsKanban />, label: 'Total Projects', value: stats.total, color: theme.colors.primary, desc: 'Total number of projects currently visible in the selected status tab.' },
+                            { icon: <IoLayersOutline />, label: 'Total Boards', value: stats.totalBoards, color: '#10b981', desc: 'Sum of all boards contained within these projects.' },
+                            { icon: <MdOutlinePeople />, label: 'Owned by Me', value: stats.owned, color: '#f59e0b', desc: 'Projects where you have Owner-level permissions.' },
+                            { icon: <AiFillStar />, label: 'Favorites', value: stats.favorites, color: '#ef4444', desc: 'Projects you have starred for quick access.' },
                         ].map((stat, i) => (
                             <div key={i} style={{
-                                flex: '1 1 140px',
+                                flex: '1 1 200px',
                                 padding: '14px 16px',
                                 background: theme.colors.surface,
                                 border: `1px solid ${theme.colors.border}`,
                                 borderRadius: theme.borderRadius.md || 8,
-                                display: 'flex', alignItems: 'center', gap: 12,
+                                display: 'flex', flexDirection: 'column', gap: 12,
                             }}>
-                                <div style={{
-                                    width: 36, height: 36, borderRadius: 8,
-                                    background: `${stat.color}15`,
-                                    color: stat.color,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: 16,
-                                }}>
-                                    {stat.icon}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{
+                                        width: 36, height: 36, borderRadius: 8,
+                                        background: `${stat.color}15`,
+                                        color: stat.color,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 16,
+                                    }}>
+                                        {stat.icon}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 18, fontWeight: 700, color: theme.colors.textPrimary }}>{stat.value}</div>
+                                        <div style={{ fontSize: 11, color: theme.colors.textSecondary }}>{stat.label}</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div style={{ fontSize: 18, fontWeight: 700, color: theme.colors.textPrimary }}>{stat.value}</div>
-                                    <div style={{ fontSize: 11, color: theme.colors.textSecondary }}>{stat.label}</div>
+                                <div style={{ fontSize: 11, color: theme.colors.textTertiary, borderTop: `1px dashed ${theme.colors.border}`, paddingTop: 8 }}>
+                                    {stat.desc}
                                 </div>
                             </div>
                         ))}
@@ -238,7 +243,7 @@ const ProjectGuide = ({ theme }) => {
                 <SectionTitle
                     icon="📊"
                     title="Status Tabs"
-                    subtitle="Projects are organized by lifecycle status. Click each tab to filter."
+                    subtitle="Projects are organized by lifecycle status. Click each tab to filter. (Please try by selecting the detail will show as below)"
                     theme={theme}
                 />
 

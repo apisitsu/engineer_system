@@ -55,76 +55,67 @@ const BoardToolbarGuide = ({ theme }) => {
             {/* ═══ SECTION 1: Toolbar Overview ═══ */}
             <div style={getSectionCardStyle(theme)}>
                 <SectionTitle icon="🔧" title="Board Toolbar Overview"
-                    subtitle="The toolbar sits at the top of every board. It's split into two halves: Left side = context & filters, Right side = actions & settings."
+                    subtitle="The toolbar sits at the top of every board. It's split into two halves: Left side = context & filters, Right side = actions & settings. (Please try by selecting the detail will show as below)"
                     theme={theme} />
 
                 <div style={getSandboxStyle(theme)}>
                     <SandboxDot theme={theme} />
                     <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '8px 16px',
+                        padding: '8px 14px',
                         background: `${theme.colors.surface}CC`, backdropFilter: 'blur(8px)',
                         borderRadius: theme.borderRadius.md || 8,
                         border: `1px solid ${theme.colors.border}`,
+                        gap: 8, flexWrap: 'wrap',
                     }}>
                         {/* Left Side */}
-                        <Space size={8}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             {/* Board Members */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <Text type="secondary" style={{ fontSize: 11 }}>Board</Text>
-                                <Avatar.Group max={{ count: 3, style: { color: '#1677ff', backgroundColor: '#e6f4ff' } }} size="small">
-                                    {MOCK_BOARD_MEMBERS.slice(0, 3).map(m => {
-                                        const u = MOCK_USERS.find(u2 => u2.u_code === m.u_code);
-                                        return <Avatar key={m.u_code} size="small" style={{ backgroundColor: theme.colors.primary }}>{(u?.u_name || m.u_code).charAt(0)}</Avatar>;
-                                    })}
-                                </Avatar.Group>
-                                <Button shape="circle" size="small" type="text" icon={<IoAddOutline size={14} />}
-                                    style={{ background: theme.colors.surfaceHover }} />
-                            </div>
+                            <Avatar.Group max={{ count: 3, style: { color: '#1677ff', backgroundColor: '#e6f4ff' } }} size="small">
+                                {MOCK_BOARD_MEMBERS.slice(0, 3).map(m => {
+                                    const u = MOCK_USERS.find(u2 => u2.u_code === m.u_code);
+                                    return <Avatar key={m.u_code} size="small" style={{ backgroundColor: theme.colors.primary }}>{(u?.u_name || m.u_code).charAt(0)}</Avatar>;
+                                })}
+                            </Avatar.Group>
+                            <Button shape="circle" size="small" type="text" icon={<IoAddOutline size={12} />}
+                                style={{ background: theme.colors.surfaceHover, width: 22, height: 22, minWidth: 22 }} />
 
-                            {/* Priority Badge */}
-                            <Tag style={{ margin: 0, border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#fa8c16', background: '#fa8c1615' }}>
-                                🟠 High
-                            </Tag>
+                            <div style={{ width: 1, height: 18, background: theme.colors.border, flexShrink: 0 }} />
 
-                            {/* Due Date */}
-                            <Tag style={{ margin: 0, borderRadius: 4, fontSize: 10, fontWeight: 500, color: '#fa8c16', background: '#fff7e6', border: '1px solid #ffd59140' }}>
-                                📅 Due in 2d
-                            </Tag>
+                            <Tag style={{ margin: 0, border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#fa8c16', background: '#fa8c1615' }}>🟠 High</Tag>
+                            <Tag style={{ margin: 0, borderRadius: 4, fontSize: 10, fontWeight: 500, color: '#fa8c16', background: '#fff7e6', border: '1px solid #ffd59140' }}>📅 Due in 2d</Tag>
 
-                            {/* Member Filter */}
-                            <MockToolbarButton icon={<MdOutlinePeople size={14} />}
+                            <div style={{ width: 1, height: 18, background: theme.colors.border, flexShrink: 0 }} />
+
+                            <MockToolbarButton icon={<MdOutlinePeople size={13} />}
                                 label={`Members${filterMembers.length > 0 ? ` (${filterMembers.length})` : ''}`}
                                 active={filterMembers.length > 0}
                                 onClick={() => setShowMemberFilter(!showMemberFilter)} theme={theme} />
 
-                            {/* Label Filter */}
-                            <MockToolbarButton icon={<MdOutlineLabel size={14} />} label="Labels"
+                            <MockToolbarButton icon={<MdOutlineLabel size={13} />} label="Labels"
                                 active={filterLabels.length > 0}
                                 onClick={() => setShowLabelFilter(!showLabelFilter)} theme={theme} />
 
-                            {/* Search */}
                             {showSearch ? (
                                 <Input size="small" placeholder="Search cards..." prefix={<IoSearchOutline />}
                                     value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                                     onBlur={() => { if (!searchQuery) setShowSearch(false); }}
-                                    autoFocus style={{ width: 160, borderRadius: 6 }} allowClear />
+                                    autoFocus style={{ width: 140, borderRadius: 6 }} allowClear />
                             ) : (
-                                <MockToolbarButton icon={<IoSearchOutline size={14} />} label="Search"
+                                <MockToolbarButton icon={<IoSearchOutline size={13} />} label="Search"
                                     active={!!searchQuery} onClick={() => setShowSearch(true)} theme={theme} />
                             )}
 
                             {hasFilters && (
-                                <Button type="link" size="small" style={{ color: theme.colors.error, fontSize: 11 }}
+                                <Button type="link" size="small" style={{ color: theme.colors.error, fontSize: 11, padding: '0 4px' }}
                                     onClick={() => { setSearchQuery(''); setFilterMembers([]); setFilterLabels([]); }}>
-                                    Clear filters
+                                    Clear
                                 </Button>
                             )}
-                        </Space>
+                        </div>
 
                         {/* Right Side */}
-                        <Space size={6}>
-                            {/* View Mode */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                             <div style={{ display: 'flex', background: theme.colors.surfaceHover, borderRadius: 6, padding: 2 }}>
                                 {[
                                     { key: 'board', icon: <IoGridOutline size={12} />, tip: 'Board View' },
@@ -138,24 +129,18 @@ const BoardToolbarGuide = ({ theme }) => {
                                     </Tooltip>
                                 ))}
                             </div>
-
-                            {/* Notifications */}
                             <Badge count={unreadCount} size="small" offset={[-2, 2]}>
                                 <Button type="text" size="small" icon={<IoNotificationsOutline size={16} />}
                                     onClick={() => setShowNotifications(!showNotifications)}
                                     style={{ color: theme.colors.textSecondary }} />
                             </Badge>
-
-                            {/* Help */}
                             <Tooltip title="Board Interface Guide">
                                 <Button type="text" size="small" icon={<IoHelpCircleOutline size={16} />}
                                     style={{ color: theme.colors.textSecondary }} />
                             </Tooltip>
-
-                            {/* Settings */}
                             <Button type="text" size="small" icon={<IoSettingsOutline size={14} />}
                                 style={{ color: theme.colors.textSecondary }} />
-                        </Space>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -210,21 +195,72 @@ const BoardToolbarGuide = ({ theme }) => {
                     theme={theme} />
                 <div style={getSandboxStyle(theme)}>
                     <SandboxDot theme={theme} />
-                    <div style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {MOCK_LABELS.slice(0, 6).map(label => {
-                            const isChecked = filterLabels.includes(label.id);
-                            return (
-                                <div key={label.id} onClick={() => toggleLabelFilter(label.id)} style={{
-                                    display: 'flex', alignItems: 'center', cursor: 'pointer',
-                                    height: 30, borderRadius: 6, background: label.color,
-                                    padding: '0 10px', color: '#fff', fontSize: 12, fontWeight: 500,
-                                    opacity: isChecked ? 1 : 0.8, transition: 'opacity 0.15s',
-                                }}>
-                                    <span style={{ flex: 1 }}>{label.name}</span>
-                                    {isChecked && <AiOutlineCheck size={14} />}
-                                </div>
-                            );
-                        })}
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {/* Left: Label picker */}
+                        <div style={{ width: 220, display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                            <Text type="secondary" style={{ fontSize: 11, marginBottom: 4 }}>Click labels to filter:</Text>
+                            {MOCK_LABELS.slice(0, 6).map(label => {
+                                const isChecked = filterLabels.includes(label.id);
+                                return (
+                                    <div key={label.id} onClick={() => toggleLabelFilter(label.id)} style={{
+                                        display: 'flex', alignItems: 'center', cursor: 'pointer',
+                                        height: 30, borderRadius: 6, background: label.color,
+                                        padding: '0 10px', color: '#fff', fontSize: 12, fontWeight: 500,
+                                        opacity: isChecked ? 1 : 0.7, transition: 'all 0.15s',
+                                        transform: isChecked ? 'scale(1.02)' : 'scale(1)',
+                                    }}>
+                                        <span style={{ flex: 1 }}>{label.name}</span>
+                                        {isChecked && <AiOutlineCheck size={14} />}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Right: Card preview showing filtered results */}
+                        <div style={{
+                            flex: 1, minWidth: 240,
+                            background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
+                            borderRadius: 10, padding: 12,
+                        }}>
+                            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                                {filterLabels.length > 0 ? `Cards matching selected labels (${filterLabels.length})` : 'Select labels to preview filter →'}
+                            </Text>
+                            {(() => {
+                                // Mock cards with labels for preview
+                                const previewCards = [
+                                    { id: 'p1', name: 'Define material specs for inner race', labels: [MOCK_LABELS[0], MOCK_LABELS[2]], priority: 'high' },
+                                    { id: 'p2', name: 'Run FEA simulation for press force', labels: [MOCK_LABELS[0], MOCK_LABELS[1]], priority: 'high' },
+                                    { id: 'p3', name: 'Create 3D CAD model — housing', labels: [MOCK_LABELS[1]], priority: 'medium' },
+                                    { id: 'p4', name: 'Peer review clearance calculations', labels: [MOCK_LABELS[3]], priority: 'medium' },
+                                    { id: 'p5', name: 'Update BOM revision', labels: [MOCK_LABELS[4]], priority: 'low' },
+                                ];
+                                const filtered = filterLabels.length > 0
+                                    ? previewCards.filter(c => c.labels.some(l => filterLabels.includes(l.id)))
+                                    : previewCards;
+                                return filtered.length > 0 ? filtered.map(c => (
+                                    <div key={c.id} style={{
+                                        padding: '8px 10px', marginBottom: 6,
+                                        background: theme.colors.background,
+                                        border: `1px solid ${theme.colors.border}`,
+                                        borderRadius: 6,
+                                    }}>
+                                        <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>{c.name}</Text>
+                                        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                            {c.labels.map(l => (
+                                                <span key={l.id} style={{
+                                                    height: 16, borderRadius: 3, background: l.color,
+                                                    padding: '0 6px', color: '#fff', fontSize: 9, fontWeight: 600,
+                                                    display: 'inline-flex', alignItems: 'center',
+                                                    opacity: filterLabels.includes(l.id) ? 1 : 0.5,
+                                                }}>{l.name}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <Text type="secondary" style={{ fontSize: 12 }}>No cards match the selected labels.</Text>
+                                );
+                            })()}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -12,7 +12,7 @@ import {
 import { AiOutlineClose, AiOutlineCheck } from 'react-icons/ai';
 import { MdOutlinePeople, MdOutlineLabel, MdOutlineAssessment } from 'react-icons/md';
 
-import BoardGuideDrawer from '../UserGuide/BoardGuideDrawer';
+import UserGuideDrawer from '../UserGuide/UserGuideDrawer';
 
 dayjs.extend(relativeTime);
 
@@ -514,7 +514,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
                     onClick={() => openBoardSettings()} style={{ color: theme.colors.textSecondary }} />
             </Space>
 
-            <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
+            <UserGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} context="board" />
 
         </div >
     );
