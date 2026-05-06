@@ -398,7 +398,7 @@ const BoardGuide = ({ theme }) => {
                         <div style={getCardStyle(theme)}>
                             <Title level={5}><NotificationOutlined /> Automation Trigger:</Title>
                             <Paragraph style={{ fontSize: 13, margin: 0 }}>
-                                <code>ON card_move -> IF list.count > list.wip_limit -> EXECUTE workflow(STRICT_WIP_LOCK)</code>
+                                <code>ON card_move -&gt; IF list.count &gt; list.wip_limit -&gt; EXECUTE workflow(STRICT_WIP_LOCK)</code>
                             </Paragraph>
                             <Divider style={{ margin: '12px 0' }} />
                             <Text type="secondary" style={{ fontSize: 11 }}>
@@ -505,10 +505,10 @@ const BoardGuide = ({ theme }) => {
                     <Row gutter={40} align="middle">
                         <Col span={12}>
                             <Title level={5}>Traditional Sync (Slow):</Title>
-                            <Text type="secondary" style={{ fontSize: 12 }}>SERVER -> [FULL_BOARD_JSON_500KB] -> CLIENT</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>SERVER -&gt; [FULL_BOARD_JSON_500KB] -&gt; CLIENT</Text>
                             <Divider />
                             <Title level={5} style={{ color: theme.colors.primary }}>Delta Sync (Ours):</Title>
-                            <Text strong style={{ fontSize: 12 }}>SERVER -> [PATCH_OP: MOVE, ID: 402, TO: 98304 (2KB)] -> CLIENT</Text>
+                            <Text strong style={{ fontSize: 12 }}>SERVER -&gt; [PATCH_OP: MOVE, ID: 402, TO: 98304 (2KB)] -&gt; CLIENT</Text>
                         </Col>
                         <Col span={12}>
                             <div style={{ padding: 24, background: theme.colors.surface, borderRadius: 16, border: `1px solid ${theme.colors.primary}40` }}>

@@ -438,9 +438,18 @@ const ProjectSettingsDrawer = () => {
                 </div>
                 {(canManageProjectMembers || canManageProject) && (
                     <div style={{ marginTop: 8 }}>
-                        <Select showSearch placeholder="Add member..." style={{ width: '100%' }} optionFilterProp="children" onSearch={setMemberSearch} onChange={(val) => { if (val) { addProjectManager(targetId, val); setMemberSearch(''); } }} value={null} filterOption={false}>
-                            {availableUsersForProject.map(u => (
-                                <Select.Option key={u.u_code} value={u.u_code}>
+                        <Select 
+                            showSearch 
+                            placeholder="Add member..." 
+                            style={{ width: '100%' }} 
+                            onChange={(val) => { if (val) { addProjectManager(targetId, val); } }} 
+                            value={null} 
+                            filterOption={(input, option) => {
+                                return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
+                            }}
+                        >
+                            {users.map(u => (
+                                <Select.Option key={u.u_code} value={u.u_code} search_data={`${u.u_code} ${u.u_name || ''} ${u.u_nickname || ''}`}>
                                     <Space>
                                         <Avatar size="small" src={u.profile_img_b64} />
                                         <Text style={{ fontSize: 13 }}>{u.u_code} - {u.u_name || u.u_code}</Text>

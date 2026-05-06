@@ -237,9 +237,10 @@ export const createProjectSlice = (set, get) => ({
     //  REPORT DATA
     // ====================================================================
 
-    fetchProjectReportData: async (projectId) => {
+    fetchProjectReportData: async (projectId, forTemplate = false) => {
         try {
-            const res = await axios.get(`${server.KANBAN_PROJECTS}/${projectId}/report-data`);
+            const url = `${server.KANBAN_PROJECTS}/${projectId}/report-data${forTemplate ? '?for_template=1' : ''}`;
+            const res = await axios.get(url);
             return res.data?.data || null;
         } catch (err) {
             console.error('Failed to fetch report data', err);

@@ -461,8 +461,27 @@ const GetReportData = async (req, res) => {
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-        // Verify access
-        const canAccess = await canAccessProject(req, id);
+        const { for_template } = req.query;
+        let canAccess = false;
+
+        if (for_template === '1') {
+            // Check if this project is referenced by any template (master_project_id or sourceProject)
+            const { rows } = await engPool.query(`
+                SELECT id FROM kb_template_config 
+                WHERE master_project_id = $1 
+                   OR config_data->>'sourceProject' = $1::text 
+                   OR config_data->>'master_project_id' = $1::text
+                LIMIT 1
+            `, [id]);
+            if (rows.length > 0) {
+                canAccess = true;
+            } else {
+                canAccess = await canAccessProject(req, id);
+            }
+        } else {
+            canAccess = await canAccessProject(req, id);
+        }
+
         if (!canAccess) return res.status(403).json({ error: 'Access denied' });
 
         // 1. Get project info

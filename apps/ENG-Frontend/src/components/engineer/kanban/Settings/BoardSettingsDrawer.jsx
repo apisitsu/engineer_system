@@ -524,15 +524,14 @@ const BoardSettingsDrawer = () => {
                     <div style={{ marginTop: 8 }}>
                         <Select
                             showSearch placeholder="Add member to board..." style={{ width: '100%' }}
-                            optionFilterProp="children" onSearch={setMemberSearch}
-                            onChange={(val) => { if (val) { useKanbanStore.getState().addBoardMember(activeBoard.id, val); setMemberSearch(''); } }}
-                            value={null} filterOption={false}
+                            onChange={(val) => { if (val) { useKanbanStore.getState().addBoardMember(activeBoard.id, val); } }}
+                            value={null} 
+                            filterOption={(input, option) => {
+                                return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
+                            }}
                         >
-                            {users.filter(u =>
-                                u.u_code.toLowerCase().includes((memberSearch || '').toLowerCase()) ||
-                                (u.u_name || '').toLowerCase().includes((memberSearch || '').toLowerCase())
-                            ).map(u => (
-                                <Select.Option key={u.u_code} value={u.u_code}>
+                            {users.map(u => (
+                                <Select.Option key={u.u_code} value={u.u_code} search_data={`${u.u_code} ${u.u_name || ''} ${u.u_nickname || ''}`}>
                                     <Space>
                                         <Avatar size="small" src={u.profile_img_b64} />
                                         <Text style={{ fontSize: 13 }}>{u.u_code} - {u.u_name || u.u_code}</Text>
