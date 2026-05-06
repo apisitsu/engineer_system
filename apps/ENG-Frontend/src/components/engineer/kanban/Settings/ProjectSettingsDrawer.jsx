@@ -1,20 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip } from 'antd';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineUser, AiOutlineUserAdd } from 'react-icons/ai';
-import {
-    IoSettingsOutline, IoRocketOutline, IoFlashOutline, IoHeartOutline, IoDiamondOutline,
-    IoLeafOutline, IoBookOutline, IoCodeSlashOutline, IoColorPaletteOutline,
-    IoGameControllerOutline, IoMusicalNotesOutline, IoPlanetOutline, IoShieldCheckmarkOutline,
-    IoTrophyOutline, IoBulbOutline, IoConstructOutline, IoCubeOutline,
-    IoFlagOutline, IoGlobeOutline, IoHammerOutline, IoPizzaOutline,
-    IoPulseOutline, IoSchoolOutline, IoTerminalOutline, IoThunderstormOutline,
-    IoWaterOutline, IoAirplaneOutline, IoBicycleOutline, IoCafeOutline,
-    IoFitnessOutline, IoHomeOutline, IoLayersOutline, IoStarOutline,
-    IoCalendarOutline, IoTimeOutline
-} from 'react-icons/io5';
-import { IoLockClosedOutline } from 'react-icons/io5';
-import { MdOutlineDashboard } from 'react-icons/md';
-import { BsKanban } from 'react-icons/bs';
+import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, Alert, DatePicker } from 'antd';
+import dayjs from 'dayjs';
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineClose, AiOutlineBgColors, AiOutlineUser, AiOutlineQuestionCircle } from 'react-icons/ai';
+import { IoSettingsOutline, IoRocketOutline, IoLockClosedOutline, IoLayersOutline } from 'react-icons/io5';
+import { FiUsers } from 'react-icons/fi';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -24,97 +13,77 @@ import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
 import TemplateBuilderDrawer from './TemplateBuilderDrawer';
+import { GRADIENTS, PROJECT_ICONS } from '../constants/kanbanConstants';
 
 const { Title, Text } = Typography;
 
-// ─── Shared constants ─────────────────────────────────────────────
-const GRADIENTS = [
-    'linear-gradient(135deg,#6366f1,#8b5cf6)',
-    'linear-gradient(135deg,#0ea5e9,#3b82f6)',
-    'linear-gradient(135deg,#10b981,#059669)',
-    'linear-gradient(135deg,#f59e0b,#ef4444)',
-    'linear-gradient(135deg,#ec4899,#f43f5e)',
-    'linear-gradient(135deg,#14b8a6,#06b6d4)',
-    'linear-gradient(135deg,#8b5cf6,#ec4899)',
-    'linear-gradient(135deg,#f97316,#fb923c)',
-];
+// ─── Shared Components ─────────────────────────────────────────────
+const SectionLabel = ({ children, theme }) => (
+    <Text strong style={{
+        fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
+        color: theme.colors.textTertiary, display: 'block', marginBottom: 8
+    }}>
+        {children}
+    </Text>
+);
 
-const PROJECT_ICONS = [
-    { key: 'rocket', icon: IoRocketOutline, label: 'Rocket' },
-    { key: 'flash', icon: IoFlashOutline, label: 'Flash' },
-    { key: 'heart', icon: IoHeartOutline, label: 'Heart' },
-    { key: 'diamond', icon: IoDiamondOutline, label: 'Diamond' },
-    { key: 'leaf', icon: IoLeafOutline, label: 'Leaf' },
-    { key: 'book', icon: IoBookOutline, label: 'Book' },
-    { key: 'code', icon: IoCodeSlashOutline, label: 'Code' },
-    { key: 'palette', icon: IoColorPaletteOutline, label: 'Palette' },
-    { key: 'game', icon: IoGameControllerOutline, label: 'Game' },
-    { key: 'music', icon: IoMusicalNotesOutline, label: 'Music' },
-    { key: 'planet', icon: IoPlanetOutline, label: 'Planet' },
-    { key: 'shield', icon: IoShieldCheckmarkOutline, label: 'Shield' },
-    { key: 'trophy', icon: IoTrophyOutline, label: 'Trophy' },
-    { key: 'bulb', icon: IoBulbOutline, label: 'Bulb' },
-    { key: 'construct', icon: IoConstructOutline, label: 'Tools' },
-    { key: 'cube', icon: IoCubeOutline, label: 'Cube' },
-    { key: 'flag', icon: IoFlagOutline, label: 'Flag' },
-    { key: 'globe', icon: IoGlobeOutline, label: 'Globe' },
-    { key: 'hammer', icon: IoHammerOutline, label: 'Hammer' },
-    { key: 'pizza', icon: IoPizzaOutline, label: 'Pizza' },
-    { key: 'pulse', icon: IoPulseOutline, label: 'Pulse' },
-    { key: 'school', icon: IoSchoolOutline, label: 'School' },
-    { key: 'terminal', icon: IoTerminalOutline, label: 'Terminal' },
-    { key: 'storm', icon: IoThunderstormOutline, label: 'Storm' },
-    { key: 'water', icon: IoWaterOutline, label: 'Water' },
-    { key: 'airplane', icon: IoAirplaneOutline, label: 'Airplane' },
-    { key: 'bicycle', icon: IoBicycleOutline, label: 'Bicycle' },
-    { key: 'cafe', icon: IoCafeOutline, label: 'Cafe' },
-    { key: 'fitness', icon: IoFitnessOutline, label: 'Fitness' },
-    { key: 'home', icon: IoHomeOutline, label: 'Home' },
-    { key: 'kanban', icon: BsKanban, label: 'Kanban' },
-    { key: 'layers', icon: IoLayersOutline, label: 'Layers' },
-    { key: 'settings', icon: IoSettingsOutline, label: 'Settings' },
-    { key: 'star', icon: IoStarOutline, label: 'Star' },
-    { key: 'time', icon: IoTimeOutline, label: 'Time' },
-    { key: 'calendar', icon: IoCalendarOutline, label: 'Calendar' },
-];
+const ToggleRow = ({ title, description, checked, onChange, theme }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+            <Text strong style={{ fontSize: 13 }}>{title}</Text>
+            {description && (
+                <>
+                    <br />
+                    <Text type="secondary" style={{ fontSize: 11 }}>{description}</Text>
+                </>
+            )}
+        </div>
+        <Switch checked={checked} onChange={onChange} />
+    </div>
+);
 
-// ─── Mini Gradient Picker ─────────────────────────────────────────
+
+
 const GradientPicker = ({ value, onChange, theme }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, padding: '4px 0' }}>
         {GRADIENTS.map((g, i) => (
-            <div key={i} onClick={() => onChange(g)}
+            <div
+                key={i}
+                onClick={() => onChange(g)}
                 style={{
-                    width: 24, height: 24, borderRadius: 5,
-                    background: g, cursor: 'pointer',
-                    border: value === g ? '2px solid #fff' : '2px solid transparent',
-                    boxShadow: value === g ? `0 0 0 2px ${theme.colors.primary}` : 'none',
-                    transition: 'all 0.15s ease',
+                    width: '100%', aspectRatio: '1', borderRadius: '50%', background: g,
+                    cursor: 'pointer', border: value === g ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
+                    boxShadow: value === g ? `0 0 0 2px #fff, 0 0 0 3px ${theme.colors.primary}` : '0 1px 4px rgba(0,0,0,0.10)',
+                    transition: 'all 0.2s ease', transform: value === g ? 'scale(1.05)' : 'none',
                 }}
             />
         ))}
     </div>
 );
 
-// ─── Mini Icon Picker ─────────────────────────────────────────────
 const IconPicker = ({ value, onChange, theme }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-        {PROJECT_ICONS.map(({ key, icon: Icon, label }) => (
-            <Tooltip title={label} key={key}>
-                <div onClick={() => onChange(key)}
-                    style={{
-                        width: 28, height: 28, borderRadius: 5,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer',
-                        background: value === key ? `${theme.colors.primary}20` : 'transparent',
-                        border: value === key ? `2px solid ${theme.colors.primary}` : '2px solid transparent',
-                        color: value === key ? theme.colors.primary : theme.colors.textSecondary,
-                        transition: 'all 0.15s ease',
-                    }}
-                >
-                    <Icon size={15} />
-                </div>
-            </Tooltip>
-        ))}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, padding: '4px 0' }}>
+        {PROJECT_ICONS.map((item) => {
+            const Icon = item.icon;
+            return (
+                <Tooltip key={item.key} title={item.label}>
+                    <div
+                        onClick={() => onChange(item.key)}
+                        style={{
+                            width: '100%', aspectRatio: '1', borderRadius: 8,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', background: value === item.key ? theme.colors.primary : theme.colors.surface,
+                            color: value === item.key ? '#fff' : theme.colors.textSecondary,
+                            border: `1.5px solid ${value === item.key ? theme.colors.primary : theme.colors.border}`,
+                            transition: 'all 0.2s ease',
+                            boxShadow: value === item.key ? `0 2px 8px ${theme.colors.primary}40` : 'none',
+                        }}
+                    >
+                        <Icon size={18} />
+                    </div>
+                </Tooltip>
+            );
+        })}
     </div>
 );
 
@@ -124,38 +93,27 @@ const ProjectSettingsDrawer = () => {
     const activeProject = useKanbanStore(state => state.activeProject);
     const projects = useKanbanStore(state => state.projects);
     const {
-        isProjectSettingsOpen,
-        closeProjectSettings,
-        projectSettingsTargetId,
-        fetchProjects,
-        setActiveProject,
-        updateProject,
-        deleteProject,
+        isProjectSettingsOpen, closeProjectSettings, projectSettingsTargetId, fetchProjects,
+        setActiveProject, updateProject, deleteProject,
         userPreferences, fetchUserPreferences, updateUserPreferences,
-        projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager,
-        users
+        projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager, users
     } = useKanbanStore(
         useShallow(state => ({
-            isProjectSettingsOpen: state.isProjectSettingsOpen,
-            closeProjectSettings: state.closeProjectSettings,
-            projectSettingsTargetId: state.projectSettingsTargetId,
-            fetchProjects: state.fetchProjects,
-            setActiveProject: state.setActiveProject,
-            updateProject: state.updateProject,
-            deleteProject: state.deleteProject,
+            isProjectSettingsOpen: state.isProjectSettingsOpen, closeProjectSettings: state.closeProjectSettings,
+            projectSettingsTargetId: state.projectSettingsTargetId, fetchProjects: state.fetchProjects,
+            setActiveProject: state.setActiveProject, updateProject: state.updateProject, deleteProject: state.deleteProject,
             userPreferences: state.userPreferences, fetchUserPreferences: state.fetchUserPreferences,
-            updateUserPreferences: state.updateUserPreferences,
-            projectManagers: state.projectManagers, fetchProjectManagers: state.fetchProjectManagers,
-            addProjectManager: state.addProjectManager, removeProjectManager: state.removeProjectManager,
-            users: state.users
+            updateUserPreferences: state.updateUserPreferences, projectManagers: state.projectManagers,
+            fetchProjectManagers: state.fetchProjectManagers, addProjectManager: state.addProjectManager,
+            removeProjectManager: state.removeProjectManager, users: state.users
         }))
     );
 
     const [form] = Form.useForm();
-    const [isCreating, setIsCreating] = useState(false);
+    const [activeTab, setActiveTab] = useState('project_info');
+    const [selectedProjectId, setSelectedProjectId] = useState(null);
 
     // Edit Form State
-    const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState('');
     const [editingDesc, setEditingDesc] = useState('');
     const [editingGradient, setEditingGradient] = useState(GRADIENTS[0]);
@@ -164,583 +122,436 @@ const ProjectSettingsDrawer = () => {
     const [editingPermanent, setEditingPermanent] = useState(false);
     const [editingPriority, setEditingPriority] = useState('Medium');
     const [editingStatus, setEditingStatus] = useState('Active');
+    const [editingStartDate, setEditingStartDate] = useState(null);
+    const [editingDueDate, setEditingDueDate] = useState(null);
     const [memberSearch, setMemberSearch] = useState('');
     const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
-
-    // Role Editing State
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
 
-    const targetId = projectSettingsTargetId || activeProject?.id;
-    const activeProjectForPermissions = projects.find(p => String(p.id) === String(targetId));
-    const { canCreateProject, canManageProjectMembers, canManageProject } = useKanbanPermissions({
-        isPrivateProject: activeProjectForPermissions?.is_private,
-        projectRole: activeProjectForPermissions?.role,
+    const isSingleProjectMode = !!projectSettingsTargetId;
+    const targetId = isSingleProjectMode ? projectSettingsTargetId : selectedProjectId;
+    const targetProject = projects.find(p => String(p.id) === String(targetId));
+
+    const { canManageProjectMembers, canManageProject } = useKanbanPermissions({
+        isPrivateProject: targetProject?.is_private,
+        projectRole: targetProject?.role,
     });
 
     const userInfo = useAuthStore(state => state.userInfo) || {};
     const userDepartment = useAuthStore(state => state.userDepartment);
+    const userRole = useAuthStore(state => state.userRole);
     const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const currentUserRole = userRole || userInfo.u_role || userInfo.role || '';
+    const isAD = (currentUserDept || '').toUpperCase() === 'AD' || (currentUserRole || '').toUpperCase() === 'AD';
     const isADorMgr = ['AD', 'MGR', 'COORD'].includes((currentUserDept || '').toUpperCase());
-    const isOwner = activeProjectForPermissions?.role === 'owner';
+    const isOwner = targetProject?.role === 'owner';
     const canChangeRole = isADorMgr || isOwner;
 
     useEffect(() => {
         if (isProjectSettingsOpen) fetchUserPreferences();
     }, [isProjectSettingsOpen, fetchUserPreferences]);
 
-    // Single-project mode: auto-open editing when drawer opens with a target
-    const isSingleProjectMode = !!projectSettingsTargetId;
-    const targetProject = isSingleProjectMode ? projects.find(p => p.id === projectSettingsTargetId) : null;
-
     useEffect(() => {
-        if (isProjectSettingsOpen && isSingleProjectMode && targetProject) {
-            startEditing(targetProject);
-        }
-        if (!isProjectSettingsOpen) {
-            setEditingId(null);
-        }
-    }, [isProjectSettingsOpen, projectSettingsTargetId]);
-
-    const handleCreateProject = async (values) => {
-        setIsCreating(true);
-        try {
-            const res = await axios.post(server.KANBAN_PROJECTS, { name: values.projectName });
-            if (res.data?.data) {
-                Swal.fire({ icon: 'success', title: 'Project Created', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                form.resetFields();
-                await fetchProjects();
-                setActiveProject(res.data.data);
-                closeProjectSettings();
+        if (isProjectSettingsOpen) {
+            if (isSingleProjectMode) {
+                setSelectedProjectId(projectSettingsTargetId);
+                loadProjectData(projectSettingsTargetId);
+            } else if (projects.length > 0 && !selectedProjectId) {
+                setSelectedProjectId(projects[0].id);
+                loadProjectData(projects[0].id);
             }
-        } catch (err) {
-            Swal.fire('Error', err.response?.data?.error || 'Failed to create project', 'error');
-        } finally {
-            setIsCreating(false);
+        }
+    }, [isProjectSettingsOpen, projectSettingsTargetId, projects]);
+
+    const loadProjectData = (pid) => {
+        const proj = projects.find(p => p.id === pid);
+        if (proj) {
+            setEditingName(proj.name);
+            setEditingDesc(proj.description || '');
+            setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
+            setEditingIcon(proj.icon || 'rocket');
+            setEditingPrivate(proj.is_private || false);
+            setEditingPermanent(proj.is_permanent || false);
+            setEditingPriority(proj.priority || 'Medium');
+            setEditingStatus(proj.status || 'Active');
+            setEditingStartDate(proj.start_date ? dayjs(proj.start_date) : null);
+            setEditingDueDate(proj.due_date ? dayjs(proj.due_date) : null);
+            fetchProjectManagers(proj.id);
         }
     };
 
-    const handleEditProject = async (projectId) => {
-        if (!editingName.trim()) return;
-        await updateProject(projectId, {
-            name: editingName.trim(),
-            description: editingDesc,
-            background_type: 'gradient',
-            background_value: editingGradient,
-            icon: editingIcon,
-            is_private: editingPrivate,
-            is_permanent: editingPermanent,
-            priority: editingPriority,
-            status: editingStatus,
+    const handleProjectChange = (val) => {
+        setSelectedProjectId(val);
+        loadProjectData(val);
+    };
+
+    const handleSaveInfo = async () => {
+        if (!targetId || !editingName.trim()) return;
+        await updateProject(targetId, {
+            name: editingName.trim(), description: editingDesc,
+            priority: editingPriority, status: editingStatus,
+            start_date: editingStartDate ? editingStartDate.format('YYYY-MM-DD') : null,
+            due_date: editingDueDate ? editingDueDate.format('YYYY-MM-DD') : null,
         });
-        setEditingId(null);
-        setEditingName('');
-        setEditingDesc('');
+        Swal.fire({ icon: 'success', title: 'Saved', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
     };
 
-    const startEditing = (proj) => {
-        setEditingId(proj.id);
-        setEditingName(proj.name);
-        setEditingDesc(proj.description || '');
-        setEditingGradient(proj.background_value || GRADIENTS[(proj.id || 0) % GRADIENTS.length]);
-        setEditingIcon(proj.icon || 'rocket');
-        setEditingPrivate(proj.is_private || false);
-        setEditingPermanent(proj.is_permanent || false);
-        setEditingPriority(proj.priority || 'Medium');
-        setEditingStatus(proj.status || 'Active');
-        setMemberSearch('');
-        fetchProjectManagers(proj.id);
+    const handleSaveAppearance = async () => {
+        if (!targetId) return;
+        await updateProject(targetId, {
+            background_type: 'gradient', background_value: editingGradient, icon: editingIcon,
+        });
+        Swal.fire({ icon: 'success', title: 'Saved', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
     };
 
-    // Filter users for the project member dropdown
-    const availableUsersForProject = useMemo(() => {
-        return users.filter(u =>
-            u.u_code.toLowerCase().includes(memberSearch.toLowerCase()) ||
-            (u.u_name || '').toLowerCase().includes(memberSearch.toLowerCase()) ||
-            (u.u_nickname || '').toLowerCase().includes(memberSearch.toLowerCase())
-        );
-    }, [users, memberSearch]);
+    const handleSaveAccess = async () => {
+        if (!targetId) return;
+        await updateProject(targetId, {
+            is_private: editingPrivate, is_permanent: editingPermanent,
+        });
+        Swal.fire({ icon: 'success', title: 'Saved', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+    };
 
-    const handleDeleteProject = async (projectId) => {
-        const ok = await deleteProject(projectId);
+    const handleDeleteProject = async () => {
+        if (!targetId) return;
+        const ok = await deleteProject(targetId);
         if (ok) {
             Swal.fire({ icon: 'success', title: 'Project Deleted', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            if (isSingleProjectMode) closeProjectSettings();
+            else {
+                setSelectedProjectId(null);
+                setActiveTab('user_prefs');
+            }
         }
     };
 
-    const handleRemoveMemberClick = (projectId, member) => {
+    const handleRemoveMemberClick = (member) => {
         if (member.role === 'owner') {
             const owners = projectManagers.filter(m => m.role === 'owner');
             if (owners.length <= 1) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Cannot Remove Last Owner',
-                    text: 'This project must have at least one owner. Please assign another member as an owner (Transfer Ownership) before removing this user.'
-                });
+                Swal.fire({ icon: 'warning', title: 'Cannot Remove Last Owner', text: 'This project must have at least one owner.' });
                 return;
             }
         }
-        removeProjectManager(projectId, member.u_code);
+        removeProjectManager(targetId, member.u_code);
     };
 
-    const handleRoleChange = (projectId, member, newRole) => {
+    const handleRoleChange = (member, newRole) => {
         if (member.role === 'owner' && newRole !== 'owner') {
             const owners = projectManagers.filter(m => m.role === 'owner');
             if (owners.length <= 1) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Cannot Change Role',
-                    text: 'This project must have at least one owner. Please assign another member as an owner before demoting this user.'
-                });
+                Swal.fire({ icon: 'warning', title: 'Cannot Change Role', text: 'This project must have at least one owner.' });
                 return;
             }
         }
-        addProjectManager(projectId, member.u_code, newRole);
+        addProjectManager(targetId, member.u_code, newRole);
         setEditingRoleUcode(null);
     };
 
-    // Which projects to show in the list
-    const displayProjects = isSingleProjectMode && targetProject
-        ? [targetProject]
-        : projects;
+    const availableUsersForProject = useMemo(() => {
+        return users.filter(u =>
+            u.u_code.toLowerCase().includes((memberSearch || '').toLowerCase()) ||
+            (u.u_name || '').toLowerCase().includes((memberSearch || '').toLowerCase()) ||
+            (u.u_nickname || '').toLowerCase().includes((memberSearch || '').toLowerCase())
+        );
+    }, [users, memberSearch]);
+
+    const Card = ({ children, style }) => (
+        <div style={{
+            background: theme.colors.surface, padding: theme.spacing.lg,
+            borderRadius: theme.borderRadius.lg, border: `1px solid ${theme.colors.border}`,
+            marginBottom: theme.spacing.md, ...style,
+        }}>
+            {children}
+        </div>
+    );
+
+    const menuItems = [
+        { key: 'project_info', icon: <IoRocketOutline />, label: 'Project Info' },
+        { key: 'appearance', icon: <AiOutlineBgColors />, label: 'Appearance' },
+        { key: 'access', icon: <IoLockClosedOutline />, label: 'Access' },
+        { key: 'members', icon: <FiUsers />, label: 'Members' },
+        { key: 'user_prefs', icon: <AiOutlineUser />, label: 'My Preferences' },
+    ];
+
+    const ProjectInfoTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <IoRocketOutline size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Project Information</Title>
+            </div>
+            {canManageProject ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Name</Text>
+                        <Input value={editingName} onChange={(e) => setEditingName(e.target.value)} placeholder="Project Name..." style={{ borderRadius: theme.borderRadius.sm }} />
+                    </div>
+                    <div>
+                        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Description</Text>
+                        <Input.TextArea value={editingDesc} onChange={(e) => setEditingDesc(e.target.value)} placeholder="Project description..." rows={2} style={{ borderRadius: theme.borderRadius.sm }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Priority</Text>
+                            <Select value={editingPriority} onChange={setEditingPriority} style={{ width: '100%' }}>
+                                <Select.Option value="Low">Low</Select.Option>
+                                <Select.Option value="Medium">Medium</Select.Option>
+                                <Select.Option value="High">High</Select.Option>
+                                <Select.Option value="Urgent">Urgent</Select.Option>
+                            </Select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Status</Text>
+                            <Select value={editingStatus} onChange={setEditingStatus} style={{ width: '100%' }}>
+                                <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
+                                <Select.Option value="Active">Active</Select.Option>
+                                <Select.Option value="Completed">Completed</Select.Option>
+                            </Select>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Start Date</Text>
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                value={editingStartDate}
+                                disabled
+                                placeholder="Auto-assigned"
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Due Date</Text>
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                placeholder="Not set"
+                                value={editingDueDate}
+                                onChange={(date) => setEditingDueDate(date || null)}
+                            />
+                        </div>
+                    </div>
+                    <Button type="primary" onClick={handleSaveInfo}>Save Changes</Button>
+                    {isAD && (
+                        <>
+                            <Divider style={{ margin: '8px 0' }} />
+                            <Button block icon={<IoLayersOutline />} onClick={() => setShowTemplateBuilder(true)} style={{ borderColor: theme.colors.primary, color: theme.colors.primary }}>Save as Blueprint Template</Button>
+                        </>
+                    )}
+                    <Divider style={{ margin: '8px 0' }} />
+                    <Text strong style={{ color: theme.colors.error }}>Danger Zone</Text>
+                    <Popconfirm title="Delete this project?" description="All boards and cards will be deleted." onConfirm={handleDeleteProject} okText="Yes, delete it" cancelText="Cancel" okButtonProps={{ danger: true }}>
+                        <Button danger block icon={<AiOutlineDelete />}>Delete Project</Button>
+                    </Popconfirm>
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <Text strong style={{ fontSize: 16 }}>{targetProject?.name}</Text>
+                    <Text type="secondary">{targetProject?.description || 'No description'}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Priority: {targetProject?.priority || 'Medium'} | Status: {targetProject?.status || 'Active'}</Text>
+                </div>
+            )}
+        </Card>
+    );
+
+    const AppearanceTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <AiOutlineBgColors size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Appearance</Title>
+            </div>
+            {canManageProject ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                        <SectionLabel theme={theme}>Gradient Color</SectionLabel>
+                        <GradientPicker value={editingGradient} onChange={setEditingGradient} theme={theme} />
+                    </div>
+                    <div>
+                        <SectionLabel theme={theme}>Project Icon</SectionLabel>
+                        <IconPicker value={editingIcon} onChange={setEditingIcon} theme={theme} />
+                    </div>
+                    <Button type="primary" onClick={handleSaveAppearance}>Save Appearance</Button>
+                </div>
+            ) : (
+                <Text type="secondary">You don't have permission to change appearance.</Text>
+            )}
+        </Card>
+    );
+
+    const AccessTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <IoLockClosedOutline size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Access & Settings</Title>
+            </div>
+            {canManageProject ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <ToggleRow title="Private Project" description="Only members can see this project" checked={editingPrivate} onChange={setEditingPrivate} theme={theme} />
+                    <Divider style={{ margin: '0' }} />
+                    <ToggleRow title="Permanent Project" description="Enable for continuous operations dashboard" checked={editingPermanent} onChange={setEditingPermanent} theme={theme} />
+                    <Button type="primary" onClick={handleSaveAccess}>Save Access Settings</Button>
+                </div>
+            ) : (
+                <Text type="secondary">You don't have permission to change access settings.</Text>
+            )}
+        </Card>
+    );
+
+    const MembersTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <FiUsers size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Project Members</Title>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ maxHeight: 350, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {projectManagers.map(mgr => {
+                        const u = users.find(user => user.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
+                        return (
+                            <div key={mgr.u_code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderRadius: theme.borderRadius.sm, background: `${theme.colors.info}10` }}>
+                                <Space>
+                                    <Avatar size="small" src={u.profile_img_b64} style={{ backgroundColor: theme.colors.info }}>
+                                        {u.profile_img_b64 ? null : (u.u_name || u.u_code)[0].toUpperCase()}
+                                    </Avatar>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{u.u_name || u.u_nickname || u.u_code}</Text>
+                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code}</Text>
+                                    </div>
+                                </Space>
+                                <Space>
+                                    {editingRoleUcode === mgr.u_code ? (
+                                        <>
+                                            <Select size="small" value={mgr.role} onChange={(newRole) => handleRoleChange(mgr, newRole)} options={[{ label: 'Viewer', value: 'viewer' }, { label: 'Editor', value: 'editor' }, { label: 'Owner', value: 'owner' }]} style={{ width: 85, fontSize: 11 }} />
+                                            <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>{mgr.role}</Text>
+                                            {canChangeRole && <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(mgr.u_code)} />}
+                                        </>
+                                    )}
+                                    {canChangeRole && <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveMemberClick(mgr)} />}
+                                </Space>
+                            </div>
+                        );
+                    })}
+                </div>
+                {(canManageProjectMembers || canManageProject) && (
+                    <div style={{ marginTop: 8 }}>
+                        <Select 
+                            showSearch 
+                            placeholder="Add member..." 
+                            style={{ width: '100%' }} 
+                            onChange={(val) => { if (val) { addProjectManager(targetId, val); } }} 
+                            value={null} 
+                            filterOption={(input, option) => {
+                                return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
+                            }}
+                        >
+                            {users.map(u => (
+                                <Select.Option key={u.u_code} value={u.u_code} search_data={`${u.u_code} ${u.u_name || ''} ${u.u_nickname || ''}`}>
+                                    <Space>
+                                        <Avatar size="small" src={u.profile_img_b64} />
+                                        <Text style={{ fontSize: 13 }}>{u.u_code} - {u.u_name || u.u_code}</Text>
+                                    </Space>
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+
+    const UserPrefsTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <AiOutlineUser size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>My Preferences</Title>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <ToggleRow title="Subscribe to own cards" description="Auto-subscribe to cards you create" checked={userPreferences?.subscribe_to_own_cards || false} onChange={(checked) => updateUserPreferences({ subscribe_to_own_cards: checked })} theme={theme} />
+                <Divider style={{ margin: '0' }} />
+                <ToggleRow title="Turn off Notifications" description="Disable all in-app notifications" checked={userPreferences?.is_notification_off || false} onChange={(checked) => updateUserPreferences({ is_notification_off: checked })} theme={theme} />
+                <Divider style={{ margin: '0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong style={{ fontSize: 13 }}>Language</Text>
+                    <Select size="small" style={{ width: 120 }} value={userPreferences?.pref_language || 'en'} onChange={(val) => updateUserPreferences({ pref_language: val })} options={[{ label: 'English', value: 'en' }, { label: 'ไทย', value: 'th' }]} />
+                </div>
+            </div>
+        </Card>
+    );
+
+    const renderActiveTab = () => {
+        if (!targetProject && activeTab !== 'user_prefs') {
+            return <div style={{ textAlign: 'center', padding: theme.spacing.xl }}><Text type="secondary">Please select a project.</Text></div>;
+        }
+        switch (activeTab) {
+            case 'project_info': return <ProjectInfoTab />;
+            case 'appearance': return <AppearanceTab />;
+            case 'access': return <AccessTab />;
+            case 'members': return <MembersTab />;
+            case 'user_prefs': return <UserPrefsTab />;
+            default: return <ProjectInfoTab />;
+        }
+    };
 
     return (
         <Drawer
-            title={
-                <Space>
-                    <IoSettingsOutline size={20} color={theme.colors.primary} />
-                    <span style={{ color: theme.colors.textPrimary }}>
-                        {isSingleProjectMode ? `${targetProject?.name || 'Project'} Settings` : 'Project Settings'}
-                    </span>
-                </Space>
-            }
+            title={<Space><IoSettingsOutline /> Project Settings</Space>}
             placement="right"
+            extra={
+                <Tooltip title="View User Guide">
+                    <Button 
+                        type="text" 
+                        icon={<AiOutlineQuestionCircle />} 
+                        onClick={() => window.open('/eng/user-guide#settings-permissions', '_blank')}
+                    />
+                </Tooltip>
+            }
             onClose={closeProjectSettings}
             open={isProjectSettingsOpen}
-            width={420}
+            width={720}
             styles={{
                 body: { background: theme.colors.background, padding: 0 },
                 header: { background: theme.colors.surface, borderBottom: `1px solid ${theme.colors.border}` }
             }}
         >
-            <div style={{ padding: theme.spacing.xl }}>
-
-                {/* Create Project — only show in global mode for AD/MGR */}
-                {!isSingleProjectMode && canCreateProject && (
-                    <div style={{
-                        background: theme.colors.surface,
-                        padding: theme.spacing.lg,
-                        borderRadius: theme.borderRadius.lg,
-                        border: `1px solid ${theme.colors.border}`,
-                        marginBottom: theme.spacing.xl,
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                            <MdOutlineDashboard size={18} color={theme.colors.primary} />
-                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Create New Project</Title>
-                        </div>
-                        <Text type="secondary" style={{ display: 'block', marginBottom: theme.spacing.md, fontSize: 13 }}>
-                            Start a new workspace to organize your boards.
-                        </Text>
-                        <Form form={form} layout="vertical" onFinish={handleCreateProject}>
-                            <Form.Item
-                                name="projectName"
-                                rules={[{ required: true, message: 'Please input project name!' }]}
-                                style={{ marginBottom: theme.spacing.md }}
-                            >
-                                <Input
-                                    placeholder="E.g., Production Line A, IT Helpdesk"
-                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                />
-                            </Form.Item>
-                            <Button type="primary" htmlType="submit" loading={isCreating} block
-                                style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm, height: 38 }}
-                            >
-                                Create Project
-                            </Button>
-                        </Form>
-                    </div>
-                )}
-
-                {/* Projects List */}
-                <div style={{ marginBottom: theme.spacing.xl }}>
-                    <Text strong style={{
-                        fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
-                        color: theme.colors.textTertiary, display: 'block', marginBottom: theme.spacing.md
-                    }}>
-                        {isSingleProjectMode ? 'Edit Project' : 'Your Projects'}
-                    </Text>
-                    {projects.length === 0 ? (
-                        <div style={{
-                            textAlign: 'center', padding: theme.spacing.xl,
-                            background: theme.colors.surface, borderRadius: theme.borderRadius.md,
-                            border: `1px dashed ${theme.colors.border}`
-                        }}>
-                            <Text type="secondary">No projects found. Create one above!</Text>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {displayProjects.map((proj, idx) => (
-                                <div key={proj.id} style={{
-                                    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                                    background: `linear-gradient(135deg, ${theme.colors.primary}20, ${theme.colors.primary}05)`,
-                                    borderRadius: theme.borderRadius.md,
-                                    border: `1px solid ${theme.colors.border}`,
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    transition: `all ${theme.transitions.fast}`,
-                                }}>
-                                    {editingId === proj.id ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md, flex: 1, width: '100%' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <Text strong>Edit Project</Text>
-                                                <Button size="small" type="text" icon={<AiOutlineClose />} onClick={() => setEditingId(null)} />
-                                            </div>
-
-                                            <div>
-                                                <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Name</Text>
-                                                <Input
-                                                    value={editingName}
-                                                    onChange={(e) => setEditingName(e.target.value)}
-                                                    placeholder="Project Name..."
-                                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Description</Text>
-                                                <Input.TextArea
-                                                    value={editingDesc}
-                                                    onChange={(e) => setEditingDesc(e.target.value)}
-                                                    placeholder="Project description..."
-                                                    rows={2}
-                                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                                />
-                                            </div>
-
-                                            <Divider style={{ margin: '8px 0' }} />
-
-                                            {/* Gradient Picker */}
-                                            <div>
-                                                <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>Gradient Color</Text>
-                                                <GradientPicker value={editingGradient} onChange={setEditingGradient} theme={theme} />
-                                            </div>
-
-                                            {/* Icon Picker */}
-                                            <div>
-                                                <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>Project Icon</Text>
-                                                <IconPicker value={editingIcon} onChange={setEditingIcon} theme={theme} />
-                                            </div>
-
-                                            <div style={{ display: 'flex', gap: 16 }}>
-                                                <div style={{ flex: 1 }}>
-                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Priority</Text>
-                                                    <Select value={editingPriority} onChange={setEditingPriority} style={{ width: '100%' }}>
-                                                        <Select.Option value="Low">Low</Select.Option>
-                                                        <Select.Option value="Medium">Medium</Select.Option>
-                                                        <Select.Option value="High">High</Select.Option>
-                                                        <Select.Option value="Urgent">Urgent</Select.Option>
-                                                    </Select>
-                                                </div>
-                                                <div style={{ flex: 1 }}>
-                                                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>Status</Text>
-                                                    <Select value={editingStatus} onChange={setEditingStatus} style={{ width: '100%' }}>
-                                                        <Select.Option value="Waiting">Waiting (Pool)</Select.Option>
-                                                        <Select.Option value="Active">Active</Select.Option>
-                                                        <Select.Option value="Completed">Completed</Select.Option>
-                                                    </Select>
-                                                </div>
-                                            </div>
-
-                                            <Divider style={{ margin: '8px 0' }} />
-
-                                            {/* Private Project Toggle */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <IoLockClosedOutline size={14} color={theme.colors.textSecondary} />
-                                                    <div>
-                                                        <Text strong style={{ fontSize: 13 }}>Private Project</Text>
-                                                        <br />
-                                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                                            {editingPrivate ? 'Only members can see this project' : 'Visible to managers'}
-                                                        </Text>
-                                                    </div>
-                                                </div>
-                                                <Switch checked={editingPrivate} onChange={setEditingPrivate} />
-                                            </div>
-
-                                            <Divider style={{ margin: '8px 0' }} />
-
-                                            {/* Permanent Project Toggle */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <div>
-                                                        <Text strong style={{ fontSize: 13 }}>Permanent Project (โปรเจคถาวร)</Text>
-                                                        <br />
-                                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                                            Enable for continuous operations. Opens the Operations Dashboard instead of a single board.
-                                                        </Text>
-                                                    </div>
-                                                </div>
-                                                <Switch checked={editingPermanent} onChange={setEditingPermanent} />
-                                            </div>
-
-                                            <Divider style={{ margin: '8px 0' }} />
-
-                                            {/* Members Section inside Edit Modal */}
-                                            <div>
-                                                <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Project Members</Text>
-                                                <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-                                                    {projectManagers.map(mgr => {
-                                                        const userObj = users.find(u => u.u_code === mgr.u_code) || { u_code: mgr.u_code, u_name: mgr.u_code };
-                                                        const words = (userObj?.u_name || '').split(' ');
-                                                        const initials = words.length >= 2
-                                                            ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
-                                                            : (userObj?.u_nickname?.[0] || mgr.u_code[0]).toUpperCase();
-                                                        return (
-                                                            <div key={mgr.u_code} style={{
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                                padding: '6px 8px', borderRadius: theme.borderRadius.sm,
-                                                                background: `${theme.colors.info}10`,
-                                                            }}>
-                                                                <Space>
-                                                                    {userObj?.profile_img_b64 ? (
-                                                                        <Avatar size="small" src={userObj.profile_img_b64} />
-                                                                    ) : (
-                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
-                                                                            {initials}
-                                                                        </Avatar>
-                                                                    )}
-                                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                        <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{userObj?.u_name || userObj?.u_nickname || userObj?.u_code}</Text>
-                                                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{userObj?.u_code}</Text>
-                                                                    </div>
-                                                                </Space>
-                                                                <Space>
-                                                                    {editingRoleUcode === mgr.u_code ? (
-                                                                        <>
-                                                                            <Select
-                                                                                size="small"
-                                                                                value={mgr.role}
-                                                                                onChange={(newRole) => handleRoleChange(proj.id, mgr, newRole)}
-                                                                                options={[
-                                                                                    { label: 'Viewer', value: 'viewer' },
-                                                                                    { label: 'Editor', value: 'editor' },
-                                                                                    { label: 'Owner', value: 'owner' }
-                                                                                ]}
-                                                                                style={{ width: 85, fontSize: 11 }}
-                                                                            />
-                                                                            <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <Text type="secondary" style={{ fontSize: 11 }}>{mgr.role}</Text>
-                                                                            {canChangeRole && (
-                                                                                <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(mgr.u_code)} />
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                    {canChangeRole && (
-                                                                        <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveMemberClick(proj.id, mgr)} />
-                                                                    )}
-                                                                </Space>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-
-                                                {canManageProjectMembers && (
-                                                    <Select
-                                                        showSearch
-                                                        placeholder="Add member to project..."
-                                                        style={{ width: '100%' }}
-                                                        optionFilterProp="children"
-                                                        onSearch={setMemberSearch}
-                                                        onChange={(val) => {
-                                                            if (val) addProjectManager(proj.id, val);
-                                                        }}
-                                                        value={null}
-                                                        filterOption={false}
-                                                    >
-                                                        {availableUsersForProject.map(u => (
-                                                            <Select.Option key={u.u_code} value={u.u_code}>
-                                                                <Space>
-                                                                    {u.profile_img_b64 ? (
-                                                                        <Avatar size="small" src={u.profile_img_b64} />
-                                                                    ) : (
-                                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
-                                                                            {(u.u_name || u.u_code)[0].toUpperCase()}
-                                                                        </Avatar>
-                                                                    )}
-                                                                    <Text style={{ fontSize: 13 }}>
-                                                                        {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
-                                                                    </Text>
-                                                                </Space>
-                                                            </Select.Option>
-                                                        ))}
-                                                    </Select>
-                                                )}
-                                            </div>
-
-                                            <div style={{ display: 'flex', marginTop: theme.spacing.sm }}>
-                                                <Space style={{ width: '100%' }}>
-                                                    <Button
-                                                        block
-                                                        type="primary"
-                                                        onClick={() => handleEditProject(proj.id)}
-                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
-                                                    >
-                                                        Save Changes
-                                                    </Button>
-                                                    <Button
-                                                        block
-                                                        onClick={() => setEditingId(null)}
-                                                        style={{ flex: 1 }} // เพิ่มตรงนี้
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                </Space>
-                                            </div>
-
-                                            {canManageProject && (
-                                                <div style={{ marginTop: theme.spacing.md }}>
-                                                    <Button 
-                                                        block 
-                                                        icon={<IoLayersOutline />} 
-                                                        onClick={() => setShowTemplateBuilder(true)}
-                                                        style={{ 
-                                                            borderColor: theme.colors.primary, 
-                                                            color: theme.colors.primary 
-                                                        }}
-                                                    >
-                                                        Save as Blueprint Template
-                                                    </Button>
-                                                </div>
-                                            )}
-                                            {/* marginTop: theme.spacing.xl, */}
-                                            <div style={{ paddingTop: theme.spacing.lg, borderTop: `1px solid ${theme.colors.border}` }}>
-                                                <Text strong style={{ color: theme.colors.error, display: 'block', marginBottom: theme.spacing.sm }}>Danger Zone</Text>
-                                                <div>
-                                                    {canManageProject && (
-                                                        <Popconfirm
-                                                            title="Delete this project?"
-                                                            description="All boards and cards will be deleted."
-                                                            onConfirm={() => handleDeleteProject(proj.id)}
-                                                            okText="Delete"
-                                                            okType="danger"
-                                                            placement="topLeft"
-                                                        >
-                                                            <Button danger block icon={<AiOutlineDelete />} >Delete Project</Button>
-                                                        </Popconfirm>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div>
-                                                <Text strong style={{ fontSize: 14, color: theme.colors.textPrimary }}>{proj.name}</Text>
-                                                <br />
-                                                <Text type="secondary" style={{ fontSize: 11 }}>
-                                                    {proj.board_count || 0} board(s)
-                                                </Text>
-                                            </div>
-                                            <Space size={2}>
-                                                {canManageProject && (
-                                                    <>
-                                                        <Button
-                                                            type="text" size="small"
-                                                            icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />}
-                                                            onClick={() => startEditing(proj)}
-                                                        />
-                                                        <Popconfirm
-                                                            title="Delete this project?"
-                                                            description="All boards and cards will be deleted."
-                                                            onConfirm={() => handleDeleteProject(proj.id)}
-                                                            okText="Delete"
-                                                            okType="danger"
-                                                        >
-                                                            <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
-                                                        </Popconfirm>
-                                                    </>
-                                                )}
-                                            </Space>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
+            <div style={{ display: 'flex', height: '100%' }}>
+                {/* Sidebar */}
+                <div style={{ width: 220, borderRight: `1px solid ${theme.colors.border}`, background: theme.colors.surface, padding: '16px 8px', display: 'flex', flexDirection: 'column' }}>
+                    {!isSingleProjectMode && (
+                        <div style={{ padding: '0 8px 16px 8px' }}>
+                            <Select
+                                value={selectedProjectId}
+                                onChange={handleProjectChange}
+                                style={{ width: '100%' }}
+                                placeholder="Select Project"
+                                options={projects.map(p => ({ label: p.name, value: p.id }))}
+                            />
                         </div>
                     )}
+                    <Menu
+                        mode="vertical"
+                        selectedKeys={[activeTab]}
+                        onClick={({ key }) => setActiveTab(key)}
+                        items={menuItems}
+                        style={{ border: 'none', background: 'transparent' }}
+                    />
                 </div>
-
-                <Divider style={{ margin: `${theme.spacing.sm} 0` }} />
-
-                {/* User Preferences */}
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                        <AiOutlineUser size={18} color={theme.colors.primary} />
-                        <Title level={5} style={{ margin: 0, fontSize: 15 }}>User Preferences</Title>
-                    </div>
-                    <div style={{
-                        background: theme.colors.surface, padding: theme.spacing.lg,
-                        borderRadius: theme.borderRadius.lg, border: `1px solid ${theme.colors.border}`,
-                        display: 'flex', flexDirection: 'column', gap: 14
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <Text strong style={{ fontSize: 13 }}>Subscribe to own cards</Text>
-                                <br />
-                                <Text type="secondary" style={{ fontSize: 11 }}>Auto-subscribe to cards you create</Text>
-                            </div>
-                            <Switch
-                                checked={userPreferences?.subscribe_to_own_cards || false}
-                                onChange={(checked) => updateUserPreferences({ subscribe_to_own_cards: checked })}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <Text strong style={{ fontSize: 13 }}>Turn off Notifications</Text>
-                                <br />
-                                <Text type="secondary" style={{ fontSize: 11 }}>Disable all in-app notifications</Text>
-                            </div>
-                            <Switch
-                                checked={userPreferences?.is_notification_off || false}
-                                onChange={(checked) => updateUserPreferences({ is_notification_off: checked })}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <Text strong style={{ fontSize: 13 }}>Language</Text>
-                            </div>
-                            <Select
-                                size="small" style={{ width: 120 }}
-                                value={userPreferences?.pref_language || 'en'}
-                                onChange={(val) => updateUserPreferences({ pref_language: val })}
-                                options={[
-                                    { label: 'English', value: 'en' },
-                                    { label: 'ไทย', value: 'th' },
-                                ]}
-                            />
-                        </div>
-                    </div>
+                {/* Content */}
+                <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+                    {renderActiveTab()}
                 </div>
             </div>
-
-            {/* Template Builder Drawer */}
-            {isSingleProjectMode && targetProject && (
-                <TemplateBuilderDrawer 
-                    open={showTemplateBuilder} 
-                    onClose={() => setShowTemplateBuilder(false)} 
-                    masterProject={targetProject} 
+            
+            {showTemplateBuilder && targetProject && (
+                <TemplateBuilderDrawer
+                    open={showTemplateBuilder}
+                    onClose={() => setShowTemplateBuilder(false)}
+                    masterProject={targetProject}
                 />
             )}
-            {!isSingleProjectMode && editingId && (
-                <TemplateBuilderDrawer 
-                    open={showTemplateBuilder} 
-                    onClose={() => setShowTemplateBuilder(false)} 
-                    masterProject={projects.find(p => p.id === editingId)} 
-                />
-            )}
-
         </Drawer>
     );
 };

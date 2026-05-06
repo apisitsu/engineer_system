@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Space, Typography, Avatar, Tooltip, Popover, Select, Button, Input, Badge, Dropdown } from 'antd';
+import { Space, Typography, Avatar, Tooltip, Popover, Select, Button, Input, Badge, Dropdown, Tag } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import dayjs from 'dayjs';
@@ -12,11 +12,28 @@ import {
 import { AiOutlineClose, AiOutlineCheck } from 'react-icons/ai';
 import { MdOutlinePeople, MdOutlineLabel, MdOutlineAssessment } from 'react-icons/md';
 
-import BoardGuideDrawer from '../UserGuide/BoardGuideDrawer';
+import UserGuideDrawer from '../UserGuide/UserGuideDrawer';
 
 dayjs.extend(relativeTime);
 
 const { Text } = Typography;
+
+const PRIORITY_CONFIG = {
+    LOW:    { label: 'Low',    emoji: '🟢', color: '#52c41a' },
+    MEDIUM: { label: 'Medium', emoji: '🔵', color: '#1677ff' },
+    HIGH:   { label: 'High',   emoji: '🟠', color: '#fa8c16' },
+    URGENT: { label: 'Urgent', emoji: '🔴', color: '#f5222d' },
+};
+
+const getDueDateStatus = (dueDate) => {
+    if (!dueDate) return null;
+    const due = dayjs(dueDate);
+    const now = dayjs();
+    const daysLeft = due.diff(now, 'day');
+    if (daysLeft < 0) return { color: '#f5222d', label: `Overdue ${Math.abs(daysLeft)}d`, status: 'overdue' };
+    if (daysLeft <= 3) return { color: '#fa8c16', label: `Due in ${daysLeft}d`, status: 'warning' };
+    return { color: '#8c8c8c', label: due.format('DD MMM'), status: 'normal' };
+};
 
 const BoardToolbar = ({ theme, activeProject }) => {
     const {
@@ -197,6 +214,48 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         </Popover>
                     </div>
                 </div >
+
+                {/* Board Priority Badge & Due Date */}
+                {activeBoard && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 }}>
+                        {(() => {
+                            const p = PRIORITY_CONFIG[activeBoard.priority] || PRIORITY_CONFIG.MEDIUM;
+                            return (
+                                <Tooltip title={`Priority: ${p.label}`}>
+                                    <Tag
+                                        style={{
+                                            margin: 0, border: 'none', borderRadius: 4,
+                                            fontSize: 11, fontWeight: 600, lineHeight: '20px',
+                                            color: p.color, background: `${p.color}15`,
+                                            cursor: 'default',
+                                        }}
+                                    >
+                                        {p.emoji} {p.label}
+                                    </Tag>
+                                </Tooltip>
+                            );
+                        })()}
+                        {(() => {
+                            const info = getDueDateStatus(activeBoard.due_date);
+                            if (!info) return null;
+                            return (
+                                <Tooltip title={`Due: ${dayjs(activeBoard.due_date).format('DD MMM YYYY')}`}>
+                                    <Tag
+                                        style={{
+                                            margin: 0, border: `1px solid ${info.color}40`, borderRadius: 4,
+                                            fontSize: 11, fontWeight: 500, lineHeight: '20px',
+                                            color: info.color,
+                                            background: info.status === 'overdue' ? '#fff2f0' : info.status === 'warning' ? '#fff7e6' : 'transparent',
+                                            cursor: 'default',
+                                        }}
+                                    >
+                                        📅 {info.label}
+                                    </Tag>
+                                </Tooltip>
+                            );
+                        })()}
+                    </div>
+                )}
 
                 {/* Filter Members — Multi-select Popover */}
                 < Popover
@@ -452,10 +511,10 @@ const BoardToolbar = ({ theme, activeProject }) => {
 
                 {/* Board Settings */}
                 <Button type="text" size="small" icon={<IoSettingsOutline size={16} />}
-                    onClick={openBoardSettings} style={{ color: theme.colors.textSecondary }} />
+                    onClick={() => openBoardSettings()} style={{ color: theme.colors.textSecondary }} />
             </Space>
 
-            <BoardGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} />
+            <UserGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} context="board" />
 
         </div >
     );

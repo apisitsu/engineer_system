@@ -237,9 +237,10 @@ export const createProjectSlice = (set, get) => ({
     //  REPORT DATA
     // ====================================================================
 
-    fetchProjectReportData: async (projectId) => {
+    fetchProjectReportData: async (projectId, forTemplate = false) => {
         try {
-            const res = await axios.get(`${server.KANBAN_PROJECTS}/${projectId}/report-data`);
+            const url = `${server.KANBAN_PROJECTS}/${projectId}/report-data${forTemplate ? '?for_template=1' : ''}`;
+            const res = await axios.get(url);
             return res.data?.data || null;
         } catch (err) {
             console.error('Failed to fetch report data', err);
@@ -345,9 +346,10 @@ export const createProjectSlice = (set, get) => ({
 
     templateConfigs: [],
 
-    fetchTemplateConfigs: async () => {
+    fetchTemplateConfigs: async (type = null) => {
         try {
-            const res = await axios.get(server.KANBAN_TEMPLATES);
+            const url = type ? `${server.KANBAN_TEMPLATES}?type=${type}` : server.KANBAN_TEMPLATES;
+            const res = await axios.get(url);
             set({ templateConfigs: res.data?.data || [] });
         } catch (err) {
             console.error('Failed to fetch template configs', err);
@@ -358,12 +360,28 @@ export const createProjectSlice = (set, get) => ({
         try {
             const res = await axios.post(server.KANBAN_TEMPLATES, payload);
             if (res.data?.data) {
-                set(state => ({ templateConfigs: [...state.templateConfigs, res.data.data] }));
+                set(state => ({ templateConfigs: [res.data.data, ...state.templateConfigs] }));
                 return res.data.data;
             }
         } catch (err) {
             console.error('Failed to create template config', err);
             Swal.fire('Error', err.response?.data?.error || 'Failed to create template', 'error');
+        }
+        return null;
+    },
+
+    updateTemplateConfig: async (id, payload) => {
+        try {
+            const res = await axios.patch(`${server.KANBAN_TEMPLATES}/${id}`, payload);
+            if (res.data?.data) {
+                set(state => ({
+                    templateConfigs: state.templateConfigs.map(t => t.id === id ? { ...t, ...res.data.data } : t)
+                }));
+                return res.data.data;
+            }
+        } catch (err) {
+            console.error('Failed to update template config', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to update template', 'error');
         }
         return null;
     },
@@ -380,19 +398,69 @@ export const createProjectSlice = (set, get) => ({
         }
     },
 
-    instantiateTemplate: async (templateId, newProjectName) => {
+    instantiateTemplate: async (templateId, payload) => {
         try {
-            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/instantiate`, {
-                new_project_name: newProjectName,
-            });
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/instantiate`, payload);
             if (res.data?.data) {
-                // Add the new project to the store
-                set(state => ({ projects: [...state.projects, res.data.data] }));
+                // Add the new project to the store or update if existing project
+                set(state => {
+                    const existingIdx = state.projects.findIndex(p => p.id === res.data.data.id);
+                    if (existingIdx !== -1) {
+                        const newProjects = [...state.projects];
+                        newProjects[existingIdx] = res.data.data;
+                        return { projects: newProjects };
+                    }
+                    return { projects: [res.data.data, ...state.projects] };
+                });
                 return res.data.data;
             }
         } catch (err) {
             console.error('Failed to instantiate template', err);
             Swal.fire('Error', err.response?.data?.error || 'Failed to instantiate template', 'error');
+        }
+        return null;
+    },
+
+    stampCard: async (templateId, listId) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/stamp-card`, { list_id: listId });
+            return res.data?.data;
+        } catch (err) {
+            console.error('Failed to stamp card template', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to use card template', 'error');
+        }
+        return null;
+    },
+
+    stampList: async (templateId, boardId) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/stamp-list`, { board_id: boardId });
+            return res.data?.data;
+        } catch (err) {
+            console.error('Failed to stamp list template', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to use list template', 'error');
+        }
+        return null;
+    },
+
+    stampChecklist: async (templateId, cardId) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/stamp-checklist`, { card_id: cardId });
+            return res.data?.data;
+        } catch (err) {
+            console.error('Failed to stamp checklist template', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to use checklist template', 'error');
+        }
+        return null;
+    },
+
+    stampLabels: async (templateId, boardId) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/stamp-labels`, { board_id: boardId });
+            return res.data?.data;
+        } catch (err) {
+            console.error('Failed to stamp label template', err);
+            Swal.fire('Error', err.response?.data?.error || 'Failed to use label template', 'error');
         }
         return null;
     },

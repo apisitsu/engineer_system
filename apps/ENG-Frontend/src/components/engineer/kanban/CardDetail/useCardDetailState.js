@@ -176,7 +176,8 @@ export const CardDetailProvider = ({ children }) => {
         isSuperAdmin,
         isManagerOrCoord,
         canManageBoardStructure,
-        canEditBoard
+        canEditBoard,
+        canManageTemplates
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
@@ -445,7 +446,7 @@ export const CardDetailProvider = ({ children }) => {
         // Permissions
         canManageCard, canEditCard, baseIsReadOnly, isReadOnly,
         isCardMember, isSuperAdmin, isManagerOrCoord, canManageBoardStructure, canEditBoard,
-        isEffectivelySuspended, canEditEstimatedHours,
+        isEffectivelySuspended, canEditEstimatedHours, canManageTemplates,
 
         // Time tracking
         timeTrackingData,
@@ -513,7 +514,7 @@ export const CardDetailProvider = ({ children }) => {
         // Permissions
         canManageCard, canEditCard, baseIsReadOnly, isReadOnly,
         isCardMember, isSuperAdmin, isManagerOrCoord, canManageBoardStructure, canEditBoard,
-        isEffectivelySuspended, canEditEstimatedHours,
+        isEffectivelySuspended, canEditEstimatedHours, canManageTemplates,
         // Tracking
         timeTrackingData, activityLog, customFieldValues,
         // Local state toggles

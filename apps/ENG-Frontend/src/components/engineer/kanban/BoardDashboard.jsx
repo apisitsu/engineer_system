@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Card, List, Progress, Button, Space, Typography, Badge, Empty, Row, Col, Divider, Tooltip } from 'antd';
-import { IoGridOutline, IoListOutline, IoTimeOutline, IoPauseCircleOutline, IoCheckmarkCircleOutline } from 'react-icons/io5';
+import { IoGridOutline, IoListOutline, IoTimeOutline, IoPauseCircleOutline, IoCheckmarkCircleOutline, IoSettingsOutline } from 'react-icons/io5';
 
 const { Title, Text } = Typography;
 
-const BoardDashboard = ({ boards, onSelectBoard }) => {
+const BoardDashboard = ({ boards, onSelectBoard, onOpenBoardSettings }) => {
     const [viewMode, setViewMode] = useState('card');
 
     const poolBoards = boards.filter(b => b.status === 'pool' || !b.status);
@@ -28,13 +28,33 @@ const BoardDashboard = ({ boards, onSelectBoard }) => {
                 style={{ height: '100%', borderColor: color }}
                 bodyStyle={{ padding: 16 }}
             >
-                <Space align="start" style={{ width: '100%', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <Space>
                         <span style={{ color, fontSize: 20, display: 'flex' }}>{icon}</span>
-                        <Text strong ellipsis style={{ width: 150 }}>{board.name}</Text>
+                        <Text strong ellipsis style={{ maxWidth: 120 }}>{board.name}</Text>
                     </Space>
-                    <Badge color={color} text={board.status || 'pool'} style={{ textTransform: 'capitalize' }} />
-                </Space>
+                    <Space size={4}>
+                        <Badge color={color} text={board.status || 'pool'} style={{ textTransform: 'capitalize' }} />
+                        {onOpenBoardSettings && (
+                            <Tooltip title="Board Settings">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<IoSettingsOutline size={13} />}
+                                    onClick={(e) => { e.stopPropagation(); onOpenBoardSettings(board); }}
+                                    style={{
+                                        color: '#bfbfbf',
+                                        width: 22, height: 22, minWidth: 22,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        borderRadius: 4, padding: 0,
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.color = '#595959'; e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.color = '#bfbfbf'; e.currentTarget.style.background = 'transparent'; }}
+                                />
+                            </Tooltip>
+                        )}
+                    </Space>
+                </div>
                 <Text type="secondary" style={{ fontSize: 12 }}>View: {board.default_view}</Text>
                 <div style={{ marginTop: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
