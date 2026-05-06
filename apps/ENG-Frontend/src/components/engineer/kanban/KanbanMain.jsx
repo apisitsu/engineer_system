@@ -36,6 +36,7 @@ import BoardGroupModal from './Board/components/BoardGroupModal';
 import BoardView from './Board/BoardView';
 import ReportsTab from './Tabs/ReportsTab';
 import BoardDashboard from './BoardDashboard';
+import CreateBoardModal from './Tabs/components/CreateBoardModal';
 
 dayjs.extend(relativeTime);
 
@@ -145,6 +146,7 @@ const KanbanMain = () => {
 
     // Board Group Modal State
     const [groupModalState, setGroupModalState] = useState({ open: false, group: null });
+    const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
 
     const handleOpenGroupModal = (group = null) => {
         setGroupModalState({ open: true, group });
@@ -353,11 +355,11 @@ const KanbanMain = () => {
                                 <BsKanban size={48} color={theme.colors.textTertiary} />
                                 <Text type="secondary" style={{ fontSize: theme.typography.fontSize.base }}>
                                     {boards.length === 0
-                                        ? 'No boards yet. Create one in Board Settings.'
+                                        ? 'No boards yet. Create a new one to get started.'
                                         : 'Select a board to get started.'}
                                 </Text>
                                 {boards.length === 0 && (
-                                    <Button type="primary" onClick={openBoardSettings}
+                                    <Button type="primary" onClick={() => setShowCreateBoardModal(true)}
                                         style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>
                                         Create Board
                                     </Button>
@@ -380,6 +382,12 @@ const KanbanMain = () => {
                 orderedBoards={orderedBoards}
                 projectBoardGroups={projectBoardGroups}
                 currentBoardGroupId={currentBoardGroupId}
+                theme={theme}
+            />
+
+            <CreateBoardModal
+                open={showCreateBoardModal}
+                onCancel={() => setShowCreateBoardModal(false)}
                 theme={theme}
             />
         </>

@@ -175,7 +175,7 @@ const InstantiateTemplate = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { new_project_name, target_project_id, board_names } = req.body;
+    const { new_project_name, target_project_id, board_names, board_priority, board_due_date } = req.body;
     
     // Either a new project name OR a target existing project must be provided
     if (!new_project_name && !target_project_id) {
@@ -272,9 +272,21 @@ const InstantiateTemplate = async (req, res) => {
             for (const mb of masterBoards) {
                 const finalBoardName = customBoardNames[mb.id] || mb.name;
                 const { rows: [newBoard] } = await client.query(`
-                    INSERT INTO kb_board (project_id, name, position, status)
-                    VALUES ($1, $2, $3, 'pool') RETURNING *
-                `, [newProject.id, finalBoardName, mb.position]);
+                    INSERT INTO kb_board (project_id, name, position, status, priority, due_date, 
+                        default_view, default_card_type, limit_card_types, always_display_card_creator, 
+                        expand_task_lists_by_default, is_private)
+                    VALUES ($1, $2, $3, 'pool', $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *
+                `, [
+                    newProject.id, finalBoardName, mb.position, 
+                    board_priority || mb.priority || 'MEDIUM', 
+                    board_due_date || mb.due_date || null,
+                    mb.default_view || 'kanban',
+                    mb.default_card_type || 'task',
+                    mb.limit_card_types || false,
+                    mb.always_display_card_creator || false,
+                    mb.expand_task_lists_by_default || false,
+                    mb.is_private || false
+                ]);
                 boardIdMap[mb.id] = newBoard.id;
             }
         }

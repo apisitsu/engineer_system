@@ -5,11 +5,9 @@ import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, us
 import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
-
 import SortableBoardTab from './SortableBoardTab';
 import CreateBoardModal from '../Tabs/components/CreateBoardModal';
-import BlueprintInstantiationModal from '../Tabs/components/BlueprintInstantiationModal';
-import { IoLayersOutline } from 'react-icons/io5';
+// Removed BlueprintInstantiationModal since it is now combined into CreateBoardModal
 
 const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGroupId, filteredOrderedBoards, handleDragEndBoards, handleOpenGroupModal }) => {
     const activeBoard = useKanbanStore(state => state.activeBoard);
@@ -18,7 +16,6 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
     const setActiveBoardGroup = useKanbanStore(state => state.setActiveBoardGroup);
 
     const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
-    const [showBlueprintModal, setShowBlueprintModal] = useState(false);
 
     const { canManageProject } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
@@ -42,22 +39,7 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
         }}>
             {canManageProject && (
                 <>
-                    <Tooltip title="Create Board from Template">
-                        <div
-                            onClick={() => setShowBlueprintModal(true)}
-                            style={{
-                                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                                cursor: 'pointer',
-                                color: theme.colors.textSecondary,
-                                display: 'flex', alignItems: 'center', gap: 4,
-                            }}
-                            onMouseOver={(e) => { e.currentTarget.style.color = theme.colors.primary; }}
-                            onMouseOut={(e) => { e.currentTarget.style.color = theme.colors.textSecondary; }}
-                        >
-                            <IoLayersOutline size={18} />
-                        </div>
-                    </Tooltip>
-                    <Tooltip title="Create New Board">
+                    <Tooltip title="Create Board">
                         <div
                             onClick={() => setShowCreateBoardModal(true)}
                             style={{
@@ -146,14 +128,6 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
                 theme={theme}
             />
         )}
-        <BlueprintInstantiationModal
-            open={showBlueprintModal}
-            onCancel={() => setShowBlueprintModal(false)}
-            template={null}
-            initialMode="existing"
-            targetProjectId={activeProject?.id}
-            theme={theme}
-        />
     </>
     );
 };

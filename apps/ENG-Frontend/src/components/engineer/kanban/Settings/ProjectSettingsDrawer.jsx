@@ -190,8 +190,8 @@ const ProjectSettingsDrawer = () => {
         await updateProject(targetId, {
             name: editingName.trim(), description: editingDesc,
             priority: editingPriority, status: editingStatus,
-            start_date: editingStartDate ? editingStartDate.toISOString() : null,
-            due_date: editingDueDate ? editingDueDate.toISOString() : null,
+            start_date: editingStartDate ? editingStartDate.format('YYYY-MM-DD') : null,
+            due_date: editingDueDate ? editingDueDate.format('YYYY-MM-DD') : null,
         });
         Swal.fire({ icon: 'success', title: 'Saved', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
     };

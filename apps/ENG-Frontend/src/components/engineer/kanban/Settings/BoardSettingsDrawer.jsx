@@ -428,7 +428,7 @@ const BoardSettingsDrawer = () => {
                                 value={activeBoard.due_date ? dayjs(activeBoard.due_date) : null}
                                 onChange={async (date) => {
                                     await updateBoard(activeBoard.id, {
-                                        due_date: date ? date.toISOString() : null,
+                                        due_date: date ? date.format('YYYY-MM-DD') : null,
                                     });
                                 }}
                             />
