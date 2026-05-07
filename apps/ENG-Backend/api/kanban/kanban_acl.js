@@ -87,7 +87,7 @@ const isSuperAdmin = async (req) => {
     const jwtDept = req.user?.department; // The JWT payload maps it to 'department'
     if (jwtDept && jwtDept.toUpperCase() === 'AD') return true;
     if (jwtRole && jwtRole.toUpperCase() === 'AD') return true;
-    console.log(`isSuperAdmin :`, jwtDept, jwtRole);
+    // console.log(`isSuperAdmin :`, jwtDept, jwtRole);
     // Fallback: query DB
     const uCode = req.user?.empno; // The JWT payload maps u_code to 'empno', not 'id'
     if (!uCode) return false;
@@ -115,8 +115,8 @@ const isManagerOrCoord = async (req) => {
     const jwtGroup = (req.user?.user_group || '').toUpperCase(); // Feature request support
 
     // AD is handled separately (God Mode)
-    if (jwtDept === 'AD' || jwtRole === 'AD') return false; 
-    
+    if (jwtDept === 'AD' || jwtRole === 'AD') return false;
+
     // Check if COORD/MGR status exists in role, department, or user_group
     if (['MGR', 'COORD'].includes(jwtRole)) return true;
     if (['MGR', 'COORD'].includes(jwtDept)) return true;

@@ -47,6 +47,7 @@ export const createBoardSlice = (set, get) => ({
     wsSocket: null,
     wsBoardId: null,
     wsUserCode: null,
+    lastReconnectTime: 0,
 
     // ====================================================================
     //  BOARD ACTIONS
@@ -103,6 +104,20 @@ export const createBoardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to fetch board members', err);
             set({ activeBoardMembers: [] });
+            if (err.response?.status === 403) {
+                Swal.fire({
+                    title: 'Access Denied',
+                    text: 'คุณไม่ได้รับอนุญาตให้เข้าถึงโปรเจคนี้ หรือคุณไม่ได้เป็นสมาชิกของโปรเจคนี้',
+                    icon: 'error',
+                    confirmButtonText: 'กลับสู่หน้าเริ่มต้น',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/eng/kanban';
+                    }
+                });
+            }
         }
     },
 
@@ -161,7 +176,22 @@ export const createBoardSlice = (set, get) => ({
             visibleLists.forEach(list => get().fetchCardsForList(list.id));
         } catch (err) {
             console.error("Failed to fetch board details", err);
-            Swal.fire('Error', 'Failed to load board details', 'error');
+            if (err.response?.status === 403) {
+                Swal.fire({
+                    title: 'Access Denied',
+                    text: 'คุณไม่ได้รับอนุญาตให้เข้าถึงโปรเจคนี้ หรือคุณไม่ได้เป็นสมาชิกของโปรเจคนี้',
+                    icon: 'error',
+                    confirmButtonText: 'กลับสู่หน้าเริ่มต้น',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/eng/kanban';
+                    }
+                });
+            } else {
+                Swal.fire('Error', 'Failed to load board details', 'error');
+            }
         } finally {
             set({ isLoading: false });
         }
@@ -265,6 +295,7 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     createLabel: async (boardId, name, color) => {
+        await get().checkAndAutoJoin('board', boardId);
         try {
             const res = await axios.post(`${server.KANBAN_BOARDS}/${boardId}/labels`, { name, color });
             if (res.data?.data) {
@@ -279,6 +310,7 @@ export const createBoardSlice = (set, get) => ({
     },
 
     updateLabel: async (labelId, data) => {
+        if (get().activeBoard?.id) await get().checkAndAutoJoin('board', get().activeBoard.id);
         try {
             const res = await axios.patch(`${server.KANBAN_LABELS}/${labelId}`, data);
             if (res.data?.data) {
@@ -319,6 +351,7 @@ export const createBoardSlice = (set, get) => ({
     },
 
     deleteLabel: async (labelId) => {
+        if (get().activeBoard?.id) await get().checkAndAutoJoin('board', get().activeBoard.id);
         try {
             await axios.delete(`${server.KANBAN_LABELS}/${labelId}`);
             set(state => {
@@ -606,6 +639,7 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     fetchWebhooks: async (boardId) => {
+        await get().checkAndAutoJoin('board', boardId);
         try {
             const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/webhooks`);
             set({ webhooks: res.data?.data || [] });
@@ -752,6 +786,14 @@ export const createBoardSlice = (set, get) => ({
                 if (currentUCode) socket.emit('user:join', currentUCode);
 
                 if (!isFirstConnect) {
+                    const now = Date.now();
+                    const last = get().lastReconnectTime || 0;
+                    if (now - last < 5000) {
+                        console.log('[WS] Reconnected (throttled) — skipping revalidation');
+                        return;
+                    }
+                    set({ lastReconnectTime: now });
+
                     // ── Stale-While-Revalidate on Reconnect ──
                     console.log('[WS] Reconnected — revalidating board state');
                     const activeBoardId = get().activeBoard?.id;

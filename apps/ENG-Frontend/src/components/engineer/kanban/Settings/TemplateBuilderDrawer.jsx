@@ -24,7 +24,7 @@ const { Title, Text } = Typography;
  * @param {object|null} masterProject - { id, name }
  * @param {object|null} existingTemplate - for edit mode
  */
-const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate = null }) => {
+const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate = null, targetBoardId = null }) => {
     const { message } = AntdApp.useApp();
     const createTemplateConfig = useKanbanStore(state => state.createTemplateConfig);
     const updateTemplateConfig = useKanbanStore(state => state.updateTemplateConfig);
@@ -54,6 +54,19 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                             ...(cfg.task_ids || []).map(id => `task-${id}`),
                         ];
                         setCheckedKeys(keys);
+                    } else if (targetBoardId && data?.boards) {
+                        const targetBoard = data.boards.find(b => b.id === targetBoardId);
+                        if (targetBoard) {
+                            const keys = [`board-${targetBoard.id}`];
+                            (targetBoard.lists || []).forEach(list => {
+                                keys.push(`list-${list.id}`);
+                                (list.cards || []).forEach(card => {
+                                    keys.push(`card-${card.id}`);
+                                });
+                            });
+                            setCheckedKeys(keys);
+                        }
+                        setTemplateName('');
                     } else {
                         setTemplateName('');
                         setCheckedKeys([]);
@@ -61,7 +74,7 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                 })
                 .finally(() => setLoading(false));
         }
-    }, [open, masterProject?.id, existingTemplate]);
+    }, [open, masterProject?.id, existingTemplate, targetBoardId]);
 
     // Build the Ant Design Tree data from report data
     // Note: GetReportData returns boards[].lists[].cards[] with aggregated
@@ -70,7 +83,11 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
     const treeData = useMemo(() => {
         if (!reportData?.boards) return [];
 
-        return reportData.boards.map(board => ({
+        const boardsToRender = targetBoardId
+            ? reportData.boards.filter(b => b.id === targetBoardId)
+            : reportData.boards;
+
+        return boardsToRender.map(board => ({
             title: (
                 <span>
                     <AppstoreOutlined style={{ marginRight: 6, color: '#1890ff' }} />
@@ -108,7 +125,7 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                 })),
             })),
         }));
-    }, [reportData]);
+    }, [reportData, targetBoardId]);
 
     // Parse checked keys → config_data payload
     const parseConfigData = useCallback(() => {

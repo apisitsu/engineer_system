@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, List, Empty, Tabs, Drawer, Select, Tooltip, Calendar, Badge, Space, Alert } from 'antd';
+import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, Empty, Tabs, Drawer, Select, Tooltip, Calendar, Badge, Space, Alert, Table } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -17,9 +17,10 @@ import {
     MdOutlineTimer,
     MdOutlineReportProblem
 } from 'react-icons/md';
-import { IoSearchOutline, IoTimeOutline } from 'react-icons/io5';
+import { IoSearchOutline } from 'react-icons/io5';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -33,6 +34,7 @@ import {
 import { Bar, Doughnut } from 'react-chartjs-2';
 
 dayjs.extend(isBetween);
+dayjs.extend(isSameOrBefore);
 
 ChartJS.register(
     CategoryScale,
@@ -50,13 +52,13 @@ const verticalBaselinePlugin = {
     id: 'verticalBaseline',
     afterDraw: (chart, args, options) => {
         if (!options.baseline) return;
-        const { ctx, chartArea: { top, bottom, left, right }, scales: { x } } = chart;
-        const xPos = x.getPixelForValue(options.baseline);
-        if (xPos >= left && xPos <= right) {
+        const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+        const yPos = y.getPixelForValue(options.baseline);
+        if (yPos >= top && yPos <= bottom) {
             ctx.save();
             ctx.beginPath();
-            ctx.moveTo(xPos, top);
-            ctx.lineTo(xPos, bottom);
+            ctx.moveTo(left, yPos);
+            ctx.lineTo(right, yPos);
             ctx.lineWidth = 2;
             ctx.strokeStyle = options.color || '#ff4d4f';
             ctx.setLineDash([5, 5]);
@@ -67,13 +69,51 @@ const verticalBaselinePlugin = {
 };
 ChartJS.register(verticalBaselinePlugin);
 
-// Note: Overdue tasks are always included in current timeframes to reflect true load
+const TOTAL_DAILY_HOURS = 8;
+const DAILY_ROUTINE_HOURS = 2;
+const NET_DAILY_CAPACITY = TOTAL_DAILY_HOURS - DAILY_ROUTINE_HOURS;
+
+const getBusinessDays = (startDate, endDate) => {
+    let start = dayjs(startDate || dayjs());
+    let end = dayjs(endDate || dayjs());
+    if (end.isBefore(start, 'day')) return 1;
+    let count = 0;
+    let current = start.clone();
+    while (current.isSameOrBefore(end, 'day')) {
+        const dayOfWeek = current.day();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) count++;
+        current = current.add(1, 'day');
+    }
+    return count > 0 ? count : 1; 
+};
+
+const getFiscalYearBounds = (currentDate = dayjs()) => {
+    let year = currentDate.year();
+    let month = currentDate.month(); // 0-indexed, March is 2
+    if (month < 2) {
+        return {
+            fy_start: dayjs(`${year - 1}-03-01`).startOf('day'),
+            fy_end: dayjs(`${year}-02-28`).endOf('month').endOf('day')
+        };
+    } else {
+        return {
+            fy_start: dayjs(`${year}-03-01`).startOf('day'),
+            fy_end: dayjs(`${year + 1}-02-28`).endOf('month').endOf('day')
+        };
+    }
+};
+
+const CHART_COLORS = [
+    '#1677ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', 
+    '#13c2c2', '#eb2f96', '#fa8c16', '#a0d911', '#2f54eb'
+];
+
 const TIMEFRAMES = {
-    daily: { label: 'Daily (Today)', capacity: 6, filter: (d) => dayjs(d).isSame(dayjs(), 'day') || dayjs(d).isBefore(dayjs(), 'day') },
-    weekly: { label: 'Weekly (This Week)', capacity: 30, filter: (d) => dayjs(d).isSame(dayjs(), 'week') || dayjs(d).isBefore(dayjs(), 'week') },
-    monthly: { label: 'Monthly (This Month)', capacity: 120, filter: (d) => dayjs(d).isSame(dayjs(), 'month') || dayjs(d).isBefore(dayjs(), 'month') },
-    yearly: { label: 'Yearly (This Year)', capacity: 1440, filter: (d) => dayjs(d).isSame(dayjs(), 'year') || dayjs(d).isBefore(dayjs(), 'year') },
-    overall: { label: 'Overall (Until All Done)', capacity: 'dynamic', filter: () => true }
+    daily: { label: 'Daily (Today)', getBounds: () => [dayjs().startOf('day'), dayjs().endOf('day')] },
+    weekly: { label: 'Weekly (This Week)', getBounds: () => [dayjs().startOf('week'), dayjs().endOf('week')] },
+    monthly: { label: 'Monthly (This Month)', getBounds: () => [dayjs().startOf('month'), dayjs().endOf('month')] },
+    yearly: { label: 'Yearly (This Year)', getBounds: () => [dayjs().startOf('year'), dayjs().endOf('year')] },
+    overall: { label: 'Overall (Until All Done)', getBounds: () => [dayjs().startOf('day'), dayjs().add(10, 'year')] }
 };
 
 const WorkloadDashboard = ({ theme }) => {
@@ -105,37 +145,158 @@ const WorkloadDashboard = ({ theme }) => {
 
     const processedWorkload = useMemo(() => {
         const tf = TIMEFRAMES[timeframeMode];
+        const [tfStart, tfEnd] = tf.getBounds();
         
         return teamWorkload.map(user => {
-            const validCards = user.cards?.filter(c => c.list_type !== 'closed' && tf.filter(c.due_date)) || [];
-            const totalHours = validCards.reduce((sum, c) => sum + (parseFloat(c.estimated_hours) || 0), 0);
-            
-            let capacity = tf.capacity;
-            if (capacity === 'dynamic') {
-                if (validCards.length === 0) {
-                    capacity = 6;
+            let userTotalHours = 0;
+            const validCards = [];
+            const projectsMap = {};
+
+            (user.cards || []).forEach(card => {
+                if (card.list_type === 'closed') return;
+
+                let cStart = dayjs(card.start_date || card.card_created_at || dayjs());
+                let cEnd = dayjs(card.due_date || dayjs());
+                const totalHoursRaw = parseFloat(card.estimated_hours) || 0;
+                
+                let allocatedHours = 0;
+
+                if (timeframeMode === 'overall') {
+                    allocatedHours = totalHoursRaw;
                 } else {
-                    const maxDate = dayjs(Math.max(...validCards.map(c => dayjs(c.due_date).valueOf())));
-                    let days = maxDate.diff(dayjs(), 'day', true);
-                    if (days < 1) days = 1;
-                    capacity = Math.round(days * 6);
+                    if (cEnd.isBefore(dayjs(), 'day')) {
+                        if (dayjs().isBetween(tfStart, tfEnd, 'day', '[]')) {
+                            allocatedHours = totalHoursRaw;
+                        }
+                    } else {
+                        if (cStart.isBefore(dayjs(), 'day')) cStart = dayjs();
+                        const totalBysDays = getBusinessDays(cStart, cEnd);
+                        const hoursPerDay = totalHoursRaw / totalBysDays;
+                        
+                        let daysInTf = 0;
+                        let curr = cStart.clone();
+                        while (curr.isSameOrBefore(cEnd, 'day')) {
+                            if (curr.isBetween(tfStart, tfEnd, 'day', '[]')) {
+                                const d = curr.day();
+                                if (d !== 0 && d !== 6) daysInTf++;
+                            }
+                            curr = curr.add(1, 'day');
+                        }
+                        allocatedHours = daysInTf * hoursPerDay;
+                    }
                 }
+
+                if (allocatedHours > 0) {
+                    const finalHours = Math.round(allocatedHours * 10) / 10;
+                    userTotalHours += finalHours;
+                    
+                    const pName = card.project_name || 'Unassigned Project';
+                    const bName = card.board_name || card.list_name || 'Main Board';
+
+                    if (!projectsMap[pName]) projectsMap[pName] = { projectName: pName, totalHours: 0, boardsMap: {} };
+                    if (!projectsMap[pName].boardsMap[bName]) projectsMap[pName].boardsMap[bName] = { boardName: bName, hours: 0, tasks: [] };
+
+                    projectsMap[pName].totalHours += finalHours;
+                    projectsMap[pName].boardsMap[bName].hours += finalHours;
+                    
+                    const cardCopy = { ...card, allocated_hours: finalHours };
+                    projectsMap[pName].boardsMap[bName].tasks.push(cardCopy);
+                    validCards.push(cardCopy);
+                }
+            });
+
+            const projectsArray = Object.values(projectsMap).map(p => ({
+                ...p,
+                totalHours: Math.round(p.totalHours * 10) / 10,
+                boards: Object.values(p.boardsMap).map(b => ({
+                    ...b,
+                    hours: Math.round(b.hours * 10) / 10
+                }))
+            }));
+
+            let capacity = 0;
+            if (timeframeMode === 'overall') {
+                if (validCards.length === 0) capacity = NET_DAILY_CAPACITY;
+                else {
+                    const maxDate = dayjs(Math.max(...validCards.map(c => dayjs(c.due_date).valueOf())));
+                    capacity = getBusinessDays(dayjs(), maxDate) * NET_DAILY_CAPACITY;
+                }
+            } else {
+                capacity = getBusinessDays(tfStart, tfEnd) * NET_DAILY_CAPACITY;
             }
 
             return {
                 ...user,
                 filteredCards: validCards,
-                totalHours: Math.round(totalHours * 10) / 10,
+                projects: projectsArray,
+                totalHours: Math.round(userTotalHours * 10) / 10,
                 capacity: capacity,
-                utilization: Math.min(Math.round((totalHours / capacity) * 100), 100)
+                utilization: Math.min(Math.round((userTotalHours / capacity) * 100), 100) || 0
             };
         });
     }, [teamWorkload, timeframeMode]);
 
     const myWorkload = useMemo(() => {
         const myCode = (empNo || '').toLowerCase();
-        return processedWorkload.find(w => (w.u_code || '').toLowerCase() === myCode) || { totalHours: 0, capacity: 6, filteredCards: [] };
+        return processedWorkload.find(w => (w.u_code || '').toLowerCase() === myCode) || { totalHours: 0, capacity: NET_DAILY_CAPACITY, filteredCards: [], projects: [] };
     }, [processedWorkload, empNo]);
+
+    const fyeStats = useMemo(() => {
+        const myCode = (empNo || '').toLowerCase();
+        const user = teamWorkload.find(w => (w.u_code || '').toLowerCase() === myCode);
+        if (!user || !user.cards) return null;
+
+        const { fy_start, fy_end } = getFiscalYearBounds();
+        const totalFyDays = getBusinessDays(fy_start, fy_end);
+        const grossAnnualCapacity = totalFyDays * TOTAL_DAILY_HOURS;
+        const netAnnualCapacity = totalFyDays * NET_DAILY_CAPACITY;
+
+        const today = dayjs();
+        const ytd_end = today.isBefore(fy_end) ? today : fy_end;
+        const ytdDays = getBusinessDays(fy_start, ytd_end);
+
+        let ytdHours = ytdDays * DAILY_ROUTINE_HOURS; // Baseline Routine YTD
+
+        user.cards.forEach(card => {
+            // Note: If you want true FYE, ideally you include closed cards too if available.
+            // For now we process whatever is in user.cards (which are typically active cards)
+            if (card.list_type === 'closed') return;
+            
+            let cStart = dayjs(card.start_date || card.card_created_at || today);
+            let cEnd = dayjs(card.due_date || today);
+            const totalHoursRaw = parseFloat(card.estimated_hours) || 0;
+            
+            let totalBysDays = getBusinessDays(cStart, cEnd);
+            let hoursPerDay = totalHoursRaw / totalBysDays;
+
+            let curr = cStart.clone();
+            while (curr.isSameOrBefore(cEnd, 'day')) {
+                const d = curr.day();
+                if (d !== 0 && d !== 6) {
+                    if (curr.isBetween(fy_start, fy_end, 'day', '[]')) {
+                        if (curr.isSameOrBefore(today, 'day')) {
+                            ytdHours += hoursPerDay;
+                        }
+                    }
+                }
+                curr = curr.add(1, 'day');
+            }
+        });
+
+        let monthDiff = ytd_end.diff(fy_start, 'month', true);
+        if (monthDiff < 1) monthDiff = 1;
+
+        const avgMonthlyBurn = ytdHours / monthDiff;
+        const remainingFyHours = Math.max(0, netAnnualCapacity - (ytdHours - (ytdDays * DAILY_ROUTINE_HOURS))); // Remaining net capacity
+
+        return {
+            grossAnnualCapacity,
+            netAnnualCapacity,
+            ytdHours: Math.round(ytdHours * 10) / 10,
+            remainingFyHours: Math.round(remainingFyHours * 10) / 10,
+            avgMonthlyBurn: Math.round(avgMonthlyBurn * 10) / 10
+        };
+    }, [teamWorkload, empNo]);
 
     const getStats = (cards) => {
         const now = dayjs();
@@ -153,9 +314,6 @@ const WorkloadDashboard = ({ theme }) => {
         return { total: cards.length, nearDeadline, overdueReal, overdueEstimated, overdueTotal: overdueReal + overdueEstimated, longPending };
     };
 
-    // =========================================================
-    // COMPONENTS
-    // =========================================================
     const StatCard = ({ title, value, icon, color, bg }) => (
         <Card size="small" style={{ borderRadius: theme.borderRadius.md, background: bg, border: 'none', height: '100%' }}>
             <Text type="secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{icon} {title}</Text>
@@ -163,20 +321,59 @@ const WorkloadDashboard = ({ theme }) => {
         </Card>
     );
 
+    const MyWorkloadTable = ({ data }) => {
+        const projectColumns = [
+            { title: 'Project', dataIndex: 'projectName', key: 'projectName', render: text => <Text strong>{text}</Text> },
+            { title: 'Total Hours', dataIndex: 'totalHours', key: 'totalHours', render: val => <Tag color="blue">{val}h</Tag>, width: 120 }
+        ];
+
+        const expandedRowRender = (project) => {
+            const boardColumns = [
+                { title: 'Board', dataIndex: 'boardName', key: 'boardName' },
+                { title: 'Hours', dataIndex: 'hours', key: 'hours', render: val => <Tag color="cyan">{val}h</Tag>, width: 120 }
+            ];
+
+            const taskExpandedRowRender = (board) => {
+                const taskColumns = [
+                    { title: 'Task Name', dataIndex: 'card_name', key: 'card_name' },
+                    { title: 'Status', dataIndex: 'list_name', key: 'list_name', width: 150 },
+                    { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', render: d => dayjs(d).format('DD MMM YYYY'), width: 150 },
+                    { title: 'Alloc. Hours', dataIndex: 'allocated_hours', key: 'allocated_hours', render: val => `${val}h`, width: 120 }
+                ];
+                return <Table columns={taskColumns} dataSource={board.tasks} pagination={false} rowKey="id" size="small" />;
+            };
+
+            return <Table columns={boardColumns} dataSource={project.boards} pagination={false} expandable={{ expandedRowRender: taskExpandedRowRender }} rowKey="boardName" size="small" />;
+        };
+
+        return <Table columns={projectColumns} dataSource={data.projects} expandable={{ expandedRowRender }} rowKey="projectName" size="middle" />;
+    };
+
     const renderWorkloadView = (data, isTeamView = false) => {
         if (!data) return null;
         const stats = getStats(data.filteredCards || []);
-        const estHours = data.totalHours;
-        const capHours = data.capacity;
-        const isOverloaded = estHours > capHours;
-        const gaugeColor = isOverloaded ? theme.colors.error : (estHours > capHours * 0.8 ? theme.colors.warning : theme.colors.success);
+        
+        let routineHours = 0;
+        let totalGrossCapacity = 0;
+        let capHours = data.capacity; // This is net capacity
+        
+        if (timeframeMode === 'overall') {
+            routineHours = (data.capacity / NET_DAILY_CAPACITY) * DAILY_ROUTINE_HOURS;
+            totalGrossCapacity = (data.capacity / NET_DAILY_CAPACITY) * TOTAL_DAILY_HOURS;
+        } else {
+            const [s, e] = TIMEFRAMES[timeframeMode].getBounds();
+            const bd = getBusinessDays(s, e);
+            routineHours = bd * DAILY_ROUTINE_HOURS;
+            totalGrossCapacity = bd * TOTAL_DAILY_HOURS;
+        }
 
-        const sortedCards = [...(data.filteredCards || [])].sort((a, b) => dayjs(a.due_date).diff(dayjs(b.due_date)));
+        const estHours = data.totalHours; // Kanban allocated
+        const totalAllocated = estHours + routineHours;
+        const isOverloaded = totalAllocated > totalGrossCapacity;
+        const gaugeColor = isOverloaded ? theme.colors.error : (totalAllocated > totalGrossCapacity * 0.8 ? theme.colors.warning : theme.colors.success);
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: isTeamView ? 0 : '0 16px' }}>
-                
-                {/* Overdue Alert Banner */}
                 {stats.overdueTotal > 0 && (
                     <Alert
                         message="Overdue Tasks Detected"
@@ -209,83 +406,68 @@ const WorkloadDashboard = ({ theme }) => {
                 </Row>
 
                 <Row gutter={[24, 24]}>
-                    <Col xs={24} md={12}>
-                        <Card size="small" style={{ borderRadius: theme.borderRadius.lg, height: '100%', boxShadow: theme.shadows.sm }}>
-                            <Row align="middle" justify="space-around" style={{ height: '100%' }}>
-                                <Col span={10}>
-                                    <div style={{ position: 'relative', width: 140, height: 140, margin: '0 auto' }}>
-                                        <Doughnut 
-                                            data={{
-                                                labels: ['Allocated', 'Free'],
-                                                datasets: [{
-                                                    data: [estHours, Math.max(capHours - estHours, 0)],
-                                                    backgroundColor: [gaugeColor, theme.colors.borderLight],
-                                                    borderWidth: 0,
-                                                    cutout: '80%'
-                                                }]
-                                            }} 
-                                            options={{ plugins: { legend: { display: false }, tooltip: { enabled: false } }, maintainAspectRatio: false }} 
-                                        />
-                                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', width: '100%' }}>
-                                            <Title level={3} style={{ margin: 0, color: gaugeColor }}>{estHours}h</Title>
-                                            <Text type="secondary" style={{ fontSize: 11 }}>/ {capHours}h Limit</Text>
-                                        </div>
-                                    </div>
-                                </Col>
-                                <Col span={12}>
+                    <Col xs={24} md={10}>
+                        <Card size="small" style={{ borderRadius: theme.borderRadius.lg, minHeight: 420, height: '100%', boxShadow: theme.shadows.sm }}>
+                            <Row align="top" justify="space-around" style={{ height: '100%', flexDirection: 'column' }}>
+                                <Col span={24} style={{ textAlign: 'center', marginBottom: 24 }}>
                                     <Title level={5}><MdOutlineTrendingUp style={{ color: theme.colors.primary, marginRight: 8 }}/> Capacity Analytics</Title>
                                     <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-                                        Based on <b>{TIMEFRAMES[timeframeMode].label}</b> projection. 
-                                        {isOverloaded ? " You are currently exceeding safe capacity limits." : " You are operating within safe capacity limits."}
+                                        Based on <b>{TIMEFRAMES[timeframeMode].label}</b> projection.
                                     </Text>
-                                    <div style={{ display: 'flex', gap: 16 }}>
-                                        <div>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>Pending Tasks</Text>
-                                            <div style={{ fontSize: 20, fontWeight: 'bold' }}>{stats.total}</div>
-                                        </div>
-                                        <div>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>Utilization</Text>
-                                            <div style={{ fontSize: 20, fontWeight: 'bold', color: gaugeColor }}>{data.utilization}%</div>
+                                    <div style={{ position: 'relative', width: 180, height: 180, margin: '0 auto' }}>
+                                        <Doughnut 
+                                            data={{
+                                                labels: ['Routine / Admin', ...(data.projects.length > 0 ? data.projects.map(p => p.projectName) : [])],
+                                                datasets: [{
+                                                    data: [routineHours, ...(data.projects.length > 0 ? data.projects.map(p => p.totalHours) : [])],
+                                                    backgroundColor: [theme.colors.borderLight || '#d9d9d9', ...(data.projects.length > 0 ? data.projects.map((p, i) => CHART_COLORS[i % CHART_COLORS.length]) : [])],
+                                                    borderWidth: 0,
+                                                    cutout: '70%'
+                                                }]
+                                            }} 
+                                            options={{ plugins: { legend: { display: false } }, maintainAspectRatio: false }} 
+                                        />
+                                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', width: '100%' }}>
+                                            <Title level={3} style={{ margin: 0, color: gaugeColor }}>{Math.round(totalAllocated*10)/10}h</Title>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>/ {totalGrossCapacity}h Limit</Text>
                                         </div>
                                     </div>
                                 </Col>
+                                
+                                {fyeStats && (
+                                    <Col span={24} style={{ width: '100%', marginTop: 12, paddingTop: 16, borderTop: `1px solid ${theme.colors.borderLight}` }}>
+                                        <Title level={5}><MdOutlineTrendingUp style={{ color: theme.colors.primary, marginRight: 8 }}/> FYE YTD Analytics</Title>
+                                        <Row gutter={[16, 16]}>
+                                            <Col span={12}>
+                                                <Text type="secondary" style={{ fontSize: 11 }}>Gross FY Cap</Text>
+                                                <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fyeStats.grossAnnualCapacity}h</div>
+                                            </Col>
+                                            <Col span={12}>
+                                                <Text type="secondary" style={{ fontSize: 11 }}>Net FY Cap</Text>
+                                                <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fyeStats.netAnnualCapacity}h</div>
+                                            </Col>
+                                            <Col span={12}>
+                                                <Text type="secondary" style={{ fontSize: 11 }}>YTD Burned</Text>
+                                                <div style={{ fontSize: 14, fontWeight: 'bold', color: theme.colors.warning }}>{fyeStats.ytdHours}h</div>
+                                            </Col>
+                                            <Col span={12}>
+                                                <Text type="secondary" style={{ fontSize: 11 }}>Avg Burn Rate</Text>
+                                                <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fyeStats.avgMonthlyBurn}h/mo</div>
+                                            </Col>
+                                        </Row>
+                                    </Col>
+                                )}
                             </Row>
                         </Card>
                     </Col>
                     
-                    <Col xs={24} md={12}>
-                        <Card size="small" title={`Task List (${TIMEFRAMES[timeframeMode].label})`} style={{ borderRadius: theme.borderRadius.lg, height: 300, overflowY: 'auto', boxShadow: theme.shadows.sm }}>
-                            <List
-                                dataSource={sortedCards}
-                                locale={{ emptyText: <Empty description="No tasks scheduled for this timeframe" /> }}
-                                renderItem={card => {
-                                    const isOverdue = dayjs(card.due_date).isBefore(dayjs(), 'day');
-                                    return (
-                                        <List.Item style={{ padding: '12px 0', borderBottom: `1px solid ${theme.colors.borderLight}` }}>
-                                            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                                    <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-                                                        <Tag color="blue" style={{ border: 'none', fontSize: 10 }}>{card.project_name}</Tag>
-                                                        {card.is_unfeasible && <Tag color="error" style={{ border: 'none', fontSize: 10 }}>Unfeasible</Tag>}
-                                                        {isOverdue && <Tag color="error" style={{ border: 'none', fontSize: 10 }}>Overdue</Tag>}
-                                                    </div>
-                                                    <Text strong style={{ fontSize: 13, display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                                        {card.card_name}
-                                                    </Text>
-                                                    <Text type={isOverdue ? 'danger' : 'secondary'} style={{ fontSize: 11 }}>
-                                                        Due: {dayjs(card.due_date).format('DD MMM YYYY')} {card.is_estimated_due_date && <i>(Estimated)</i>}
-                                                    </Text>
-                                                </div>
-                                                <div style={{ textAlign: 'right', minWidth: 60 }}>
-                                                    <Tag icon={<IoTimeOutline />} color="orange" style={{ margin: 0, fontWeight: 'bold' }}>
-                                                        {card.estimated_hours}h
-                                                    </Tag>
-                                                </div>
-                                            </div>
-                                        </List.Item>
-                                    );
-                                }}
-                            />
+                    <Col xs={24} md={14}>
+                        <Card size="small" title={`Project Breakdown (${TIMEFRAMES[timeframeMode].label})`} style={{ borderRadius: theme.borderRadius.lg, minHeight: 420, height: '100%', overflowY: 'auto', boxShadow: theme.shadows.sm }}>
+                            {data.projects.length > 0 ? (
+                                <MyWorkloadTable data={data} />
+                            ) : (
+                                <Empty description="No tasks scheduled for this timeframe" />
+                            )}
                         </Card>
                     </Col>
                 </Row>
@@ -304,33 +486,76 @@ const WorkloadDashboard = ({ theme }) => {
         
         filtered.sort((a, b) => b.totalHours - a.totalHours);
 
-        const commonCapacity = TIMEFRAMES[timeframeMode].capacity === 'dynamic' ? null : TIMEFRAMES[timeframeMode].capacity;
-        const maxChartVal = Math.max(...filtered.map(w => w.totalHours), commonCapacity || 0, 10);
+        let commonCapacity = 0;
+        let commonRoutine = 0;
+        if (TIMEFRAMES[timeframeMode].getBounds) {
+             const [s, e] = TIMEFRAMES[timeframeMode].getBounds();
+             const bd = getBusinessDays(s, e);
+             commonCapacity = bd * TOTAL_DAILY_HOURS;
+             commonRoutine = bd * DAILY_ROUTINE_HOURS;
+        }
+
+        const allProjects = Array.from(new Set(filtered.flatMap(w => w.projects.map(p => p.projectName))));
+        
+        const routineDataset = {
+            label: 'Routine / Admin',
+            data: filtered.map(w => {
+                if (timeframeMode === 'overall') {
+                    return (w.capacity / NET_DAILY_CAPACITY) * DAILY_ROUTINE_HOURS;
+                }
+                return commonRoutine;
+            }),
+            backgroundColor: theme.colors.borderLight || '#d9d9d9',
+            stack: 'Stack 0',
+        };
+
+        const projectDatasets = allProjects.map((projName, i) => ({
+            label: projName,
+            data: filtered.map(w => {
+                const p = w.projects.find(proj => proj.projectName === projName);
+                return p ? p.totalHours : 0;
+            }),
+            backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+            stack: 'Stack 0',
+        }));
+
+        const datasets = [routineDataset, ...projectDatasets];
 
         const barData = {
             labels: filtered.map(w => w.u_name || w.u_code),
-            datasets: [{
-                label: 'Allocated Hours',
-                data: filtered.map(w => w.totalHours),
-                backgroundColor: filtered.map(w => {
-                    if (w.totalHours > w.capacity) return theme.colors.error;
-                    if (w.totalHours >= w.capacity * 0.8) return theme.colors.warning;
-                    return theme.colors.success;
-                }),
-                borderRadius: 4
-            }]
+            datasets: datasets
         };
 
         const barOptions = {
-            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
-                verticalBaseline: commonCapacity ? { baseline: commonCapacity, color: theme.colors.error } : null
+                legend: { position: 'top' },
+                verticalBaseline: timeframeMode !== 'overall' ? { baseline: commonCapacity, color: theme.colors.error } : null,
+                tooltip: {
+                    callbacks: {
+                        afterLabel: (context) => {
+                            const userIndex = context.dataIndex;
+                            const user = filtered[userIndex];
+                            const datasetLabel = context.dataset.label;
+                            
+                            if (datasetLabel === 'Routine / Admin') return 'Base Hours';
+
+                            const project = user.projects.find(p => p.projectName === datasetLabel);
+                            if (!project || project.boards.length === 0) return '';
+                            
+                            const lines = ['--- Boards ---'];
+                            project.boards.forEach(b => {
+                                lines.push(`${b.boardName}: ${b.hours}h`);
+                            });
+                            return lines;
+                        }
+                    }
+                }
             },
             scales: {
-                x: { beginAtZero: true, max: maxChartVal + (maxChartVal * 0.1) }
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true }
             },
             onClick: (e, elements) => {
                 if (elements.length > 0) {
@@ -358,7 +583,7 @@ const WorkloadDashboard = ({ theme }) => {
                                     style={{ width: 200, borderRadius: theme.borderRadius.md }}
                                 />
                             </div>
-                            <div style={{ height: Math.max(300, filtered.length * 45) }}>
+                            <div style={{ height: 400 }}>
                                 <Bar data={barData} options={barOptions} />
                             </div>
                         </Card>
@@ -512,7 +737,7 @@ const WorkloadDashboard = ({ theme }) => {
                     </div>
                 }
                 placement="right"
-                width={500}
+                width={800}
                 onClose={() => setDrawerVisible(false)}
                 open={drawerVisible}
             >

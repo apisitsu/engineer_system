@@ -14,6 +14,7 @@ import { useTheme } from '../../../../theme';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
+import TemplateBuilderDrawer from './TemplateBuilderDrawer';
 import {
     DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors
 } from '@dnd-kit/core';
@@ -151,6 +152,7 @@ const BoardSettingsDrawer = () => {
     const [importingLabels, setImportingLabels] = useState(false);
     const [previewTemplateLabels, setPreviewTemplateLabels] = useState(null);
     const [selectedLabelTemplateId, setSelectedLabelTemplateId] = useState(null);
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
     useEffect(() => {
         if (isBoardSettingsOpen && activeTab === 'labels') {
@@ -168,6 +170,7 @@ const BoardSettingsDrawer = () => {
     const {
         canManageBoardMembers,
         canManageBoardStructure,
+        canEditBoard,
         canManageTemplates
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
@@ -184,7 +187,9 @@ const BoardSettingsDrawer = () => {
 
     useEffect(() => {
         if (activeBoard?.id) {
-            fetchWebhooks(activeBoard.id);
+            if (canManageBoardStructure) {
+                fetchWebhooks(activeBoard.id);
+            }
             if (activeProject?.id) fetchBaseCustomFieldGroups(activeProject.id);
         }
         fetchNotificationServices();
@@ -260,46 +265,8 @@ const BoardSettingsDrawer = () => {
         setEditingLabelId(label.id); setEditLabelName(label.name || ''); setEditLabelColor(label.color || LABEL_COLORS[0]);
     };
 
-    const handleSaveBoardAsBlueprint = async () => {
-        if (!activeBoard) return;
-        Swal.fire({
-            title: 'Save Board as Blueprint',
-            input: 'text',
-            inputLabel: 'Blueprint Name',
-            inputValue: activeBoard.name,
-            showCancelButton: true,
-            confirmButtonText: 'Save',
-            inputValidator: (value) => {
-                if (!value) return 'You need to write something!';
-            }
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                try {
-                    // Collect cards and lists
-                    const boardCards = [];
-                    lists.forEach(l => {
-                        const lCards = useKanbanStore.getState().cards[l.id] || [];
-                        boardCards.push(...lCards);
-                    });
-
-                    const newConfig = {
-                        name: result.value,
-                        type: 'blueprint',
-                        is_public: false,
-                        department_id: currentUserDept,
-                        config_data: {
-                            boardId: activeBoard.id, // For cloning
-                            sourceProject: activeProject.id
-                        }
-                    };
-
-                    await createTemplateConfig(newConfig);
-                    Swal.fire('Saved!', 'Board has been saved as a Blueprint.', 'success');
-                } catch (e) {
-                    Swal.fire('Error', 'Could not save blueprint.', 'error');
-                }
-            }
-        });
+    const handleSaveBoardAsBlueprint = () => {
+        setShowTemplateBuilder(true);
     };
 
     const Card = ({ children, style }) => (
@@ -317,12 +284,12 @@ const BoardSettingsDrawer = () => {
         { key: 'board_info', icon: <MdOutlineDashboard />, label: 'Board Info' },
         { key: 'members', icon: <FiUsers />, label: 'Members' },
         { key: 'labels', icon: <FiTag />, label: 'Labels' },
-        { key: 'permissions', icon: <IoLockClosedOutline />, label: 'Permissions' },
+        canManageBoardStructure && { key: 'permissions', icon: <IoLockClosedOutline />, label: 'Permissions' },
         { key: 'appearance', icon: <AiOutlineBgColors />, label: 'Appearance' },
-        { key: 'groups', icon: <BsGrid1X2 />, label: 'Board Groups' },
+        canManageBoardStructure && { key: 'groups', icon: <BsGrid1X2 />, label: 'Board Groups' },
         { key: 'archive', icon: <IoArchiveOutline />, label: 'Archived Cards' },
-        { key: 'advanced', icon: <IoSettingsOutline />, label: 'Advanced Settings' },
-    ];
+        canManageBoardStructure && { key: 'advanced', icon: <IoSettingsOutline />, label: 'Advanced Settings' },
+    ].filter(Boolean);
 
     // ─── Tab Components ──────────────────────────────────────────────
 
@@ -524,7 +491,7 @@ const BoardSettingsDrawer = () => {
                         <Select
                             showSearch placeholder="Add member to board..." style={{ width: '100%' }}
                             onChange={(val) => { if (val) { useKanbanStore.getState().addBoardMember(activeBoard.id, val); } }}
-                            value={null} 
+                            value={null}
                             filterOption={(input, option) => {
                                 return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
                             }}
@@ -580,10 +547,14 @@ const BoardSettingsDrawer = () => {
                                         {label.name || ''}
                                     </div>
                                     <Space size={2}>
-                                        <Button type="text" size="small" icon={<AiOutlineEdit />} onClick={() => startEditingLabel(label)} />
-                                        <Popconfirm title="Delete label?" onConfirm={() => deleteLabel(label.id)} okText="Yes" cancelText="No">
-                                            <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
-                                        </Popconfirm>
+                                        {canEditBoard && (
+                                            <>
+                                                <Button type="text" size="small" icon={<AiOutlineEdit />} onClick={() => startEditingLabel(label)} />
+                                                <Popconfirm title="Delete label?" onConfirm={() => deleteLabel(label.id)} okText="Yes" cancelText="No">
+                                                    <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
+                                                </Popconfirm>
+                                            </>
+                                        )}
                                     </Space>
                                 </>
                             )}
@@ -592,113 +563,117 @@ const BoardSettingsDrawer = () => {
                 </div>
             )}
 
-            <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.md }}>
-                <SectionLabel theme={theme}>Create New Label</SectionLabel>
-                <Form form={labelForm} layout="vertical" onFinish={handleCreateLabel} size="small">
-                    <Form.Item name="labelName" style={{ marginBottom: 8 }}><Input placeholder="Label name (optional)" /></Form.Item>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                        {LABEL_COLORS.map(color => (
-                            <div key={color} onClick={() => setNewLabelColor(color)}
-                                style={{ width: 28, height: 22, borderRadius: 4, background: color, cursor: 'pointer', border: newLabelColor === color ? '2px solid #333' : '2px solid transparent' }} />
-                        ))}
-                    </div>
-                    <Button type="primary" htmlType="submit" size="small" block>Add Label</Button>
-                </Form>
-            </div>
-
-            <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
-                <SectionLabel theme={theme}>Import Label Template</SectionLabel>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                    <Select
-                        style={{ flex: 1 }}
-                        placeholder="Select a label template to preview..."
-                        loading={fetchingLabels}
-                        options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
-                        onChange={(val) => {
-                            setSelectedLabelTemplateId(val);
-                            if (val) {
-                                const template = labelTemplates.find(t => t.id === val);
-                                if (template) {
-                                    const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
-                                    setPreviewTemplateLabels((config.labels || []).map((l, i) => ({ ...l, tempId: i })));
-                                }
-                            } else {
-                                setPreviewTemplateLabels(null);
-                            }
-                        }}
-                        value={selectedLabelTemplateId}
-                        disabled={importingLabels}
-                    />
-                </div>
-
-                {previewTemplateLabels && (
-                    <div style={{ marginTop: 12 }}>
-                        <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>Preview & Edit Labels</Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4, marginBottom: 12 }}>
-                            {previewTemplateLabels.map((lbl, idx) => (
-                                <div key={lbl.tempId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <Popover
-                                        trigger="click"
-                                        placement="bottomLeft"
-                                        content={
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 200 }}>
-                                                {LABEL_COLORS.map(c => (
-                                                    <div
-                                                        key={c}
-                                                        onClick={() => {
-                                                            const newLabels = [...previewTemplateLabels];
-                                                            newLabels[idx].color = c;
-                                                            setPreviewTemplateLabels(newLabels);
-                                                        }}
-                                                        style={{
-                                                            width: 24, height: 20, borderRadius: 4, background: c, cursor: 'pointer',
-                                                            border: lbl.color === c ? '2px solid #333' : '2px solid transparent'
-                                                        }}
-                                                    />
-                                                ))}
-                                            </div>
-                                        }
-                                    >
-                                        <div style={{
-                                            width: 24, height: 24, borderRadius: 4, background: lbl.color,
-                                            cursor: 'pointer', border: '1px solid #d9d9d9', flexShrink: 0
-                                        }} />
-                                    </Popover>
-                                    <Input
-                                        size="small"
-                                        value={lbl.name}
-                                        onChange={(e) => {
-                                            const newLabels = [...previewTemplateLabels];
-                                            newLabels[idx].name = e.target.value;
-                                            setPreviewTemplateLabels(newLabels);
-                                        }}
-                                        placeholder="Label name"
-                                        style={{ flex: 1 }}
-                                    />
-                                    <Button
-                                        type="text"
-                                        danger
-                                        size="small"
-                                        icon={<AiOutlineDelete />}
-                                        onClick={() => {
-                                            const newLabels = previewTemplateLabels.filter((_, i) => i !== idx);
-                                            setPreviewTemplateLabels(newLabels);
-                                        }}
-                                    />
-                                </div>
+            {canEditBoard && (
+                <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.md }}>
+                    <SectionLabel theme={theme}>Create New Label</SectionLabel>
+                    <Form form={labelForm} layout="vertical" onFinish={handleCreateLabel} size="small">
+                        <Form.Item name="labelName" style={{ marginBottom: 8 }}><Input placeholder="Label name (optional)" /></Form.Item>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                            {LABEL_COLORS.map(color => (
+                                <div key={color} onClick={() => setNewLabelColor(color)}
+                                    style={{ width: 28, height: 22, borderRadius: 4, background: color, cursor: 'pointer', border: newLabelColor === color ? '2px solid #333' : '2px solid transparent' }} />
                             ))}
                         </div>
-                        <Space>
-                            <Button type="primary" size="small" onClick={handleApplyTemplateLabels} loading={importingLabels}>
-                                Apply {previewTemplateLabels.length} Labels
-                            </Button>
-                            <Button size="small" onClick={() => { setPreviewTemplateLabels(null); setSelectedLabelTemplateId(null); }}>
-                                Cancel
-                            </Button>
-                        </Space>
+                        <Button type="primary" htmlType="submit" size="small" block>Add Label</Button>
+                    </Form>
+                </div>
+            )}
+
+            {canManageTemplates && (
+                <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
+                    <SectionLabel theme={theme}>Import Label Template</SectionLabel>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <Select
+                            style={{ flex: 1 }}
+                            placeholder="Select a label template to preview..."
+                            loading={fetchingLabels}
+                            options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
+                            onChange={(val) => {
+                                setSelectedLabelTemplateId(val);
+                                if (val) {
+                                    const template = labelTemplates.find(t => t.id === val);
+                                    if (template) {
+                                        const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
+                                        setPreviewTemplateLabels((config.labels || []).map((l, i) => ({ ...l, tempId: i })));
+                                    }
+                                } else {
+                                    setPreviewTemplateLabels(null);
+                                }
+                            }}
+                            value={selectedLabelTemplateId}
+                            disabled={importingLabels}
+                        />
                     </div>
-                )}
-            </div>
+
+                    {previewTemplateLabels && (
+                        <div style={{ marginTop: 12 }}>
+                            <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>Preview & Edit Labels</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4, marginBottom: 12 }}>
+                                {previewTemplateLabels.map((lbl, idx) => (
+                                    <div key={lbl.tempId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Popover
+                                            trigger="click"
+                                            placement="bottomLeft"
+                                            content={
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 200 }}>
+                                                    {LABEL_COLORS.map(c => (
+                                                        <div
+                                                            key={c}
+                                                            onClick={() => {
+                                                                const newLabels = [...previewTemplateLabels];
+                                                                newLabels[idx].color = c;
+                                                                setPreviewTemplateLabels(newLabels);
+                                                            }}
+                                                            style={{
+                                                                width: 24, height: 20, borderRadius: 4, background: c, cursor: 'pointer',
+                                                                border: lbl.color === c ? '2px solid #333' : '2px solid transparent'
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            }
+                                        >
+                                            <div style={{
+                                                width: 24, height: 24, borderRadius: 4, background: lbl.color,
+                                                cursor: 'pointer', border: '1px solid #d9d9d9', flexShrink: 0
+                                            }} />
+                                        </Popover>
+                                        <Input
+                                            size="small"
+                                            value={lbl.name}
+                                            onChange={(e) => {
+                                                const newLabels = [...previewTemplateLabels];
+                                                newLabels[idx].name = e.target.value;
+                                                setPreviewTemplateLabels(newLabels);
+                                            }}
+                                            placeholder="Label name"
+                                            style={{ flex: 1 }}
+                                        />
+                                        <Button
+                                            type="text"
+                                            danger
+                                            size="small"
+                                            icon={<AiOutlineDelete />}
+                                            onClick={() => {
+                                                const newLabels = previewTemplateLabels.filter((_, i) => i !== idx);
+                                                setPreviewTemplateLabels(newLabels);
+                                            }}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <Space>
+                                <Button type="primary" size="small" onClick={handleApplyTemplateLabels} loading={importingLabels}>
+                                    Apply {previewTemplateLabels.length} Labels
+                                </Button>
+                                <Button size="small" onClick={() => { setPreviewTemplateLabels(null); setSelectedLabelTemplateId(null); }}>
+                                    Cancel
+                                </Button>
+                            </Space>
+                        </div>
+                    )}
+                </div>
+            )}
         </Card>
     );
 
@@ -950,7 +925,7 @@ const BoardSettingsDrawer = () => {
                     <Button
                         type="text"
                         icon={<AiOutlineQuestionCircle />}
-                        onClick={() => window.open('/eng/user-guide#board-management', '_blank')}
+                        onClick={() => window.open('/eng/kanban/guide', '_blank')}
                     />
                 </Tooltip>
             }
@@ -984,6 +959,15 @@ const BoardSettingsDrawer = () => {
                         {renderActiveTab()}
                     </div>
                 </div>
+            )}
+
+            {showTemplateBuilder && activeProject && (
+                <TemplateBuilderDrawer
+                    open={showTemplateBuilder}
+                    onClose={() => setShowTemplateBuilder(false)}
+                    masterProject={activeProject}
+                    targetBoardId={activeBoard?.id}
+                />
             )}
         </Drawer>
     );
