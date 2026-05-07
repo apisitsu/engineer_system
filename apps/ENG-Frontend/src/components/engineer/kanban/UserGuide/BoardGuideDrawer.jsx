@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Drawer, Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Space } from 'antd';
+import { Drawer, Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Space, Modal } from 'antd';
 import { BsThreeDots, BsGripVertical, BsCardChecklist } from 'react-icons/bs';
 import { FiPlus } from 'react-icons/fi';
 import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdFamilyRestroom, MdDragIndicator } from 'react-icons/md';
@@ -34,6 +34,10 @@ const BoardGuideContent = ({ theme }) => {
     const [isAddingCard, setIsAddingCard] = useState(false);
     const [newCardName, setNewCardName] = useState('');
     const [isPrivateCard, setIsPrivateCard] = useState(false);
+    
+    // State for Badge Reference Modal
+    const [selectedBadge, setSelectedBadge] = useState(null);
+    const [isBadgeModalVisible, setIsBadgeModalVisible] = useState(false);
 
     const handleAddCard = () => {
         if (!newCardName.trim()) return;
@@ -226,34 +230,45 @@ const BoardGuideContent = ({ theme }) => {
             {/* ═══ SECTION 2: Card Badge Legend ═══ */}
             <div style={getSectionCardStyle(theme)}>
                 <SectionTitle icon="🏷️" title="Card Badge Reference"
-                    subtitle="Every icon and indicator on a card has meaning. Here's the complete legend."
+                    subtitle="Every icon and indicator on a card has meaning. Click any badge to see its details and where it appears."
                     theme={theme} />
 
                 <div style={getSandboxStyle(theme)}>
                     <SandboxDot theme={theme} />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
                         {[
-                            { icon: <Tag color="red" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>HIGH</Tag>, label: 'Priority Badge', desc: 'Indicates task urgency (Red=High, Orange=Medium, Blue=Low). Use this to sequence work.' },
-                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#eb5a46', color: '#fff', fontSize: 10, fontWeight: 600 }}><MdAccessTime size={10} />May 15</div>, label: 'Due Date', desc: 'Target completion date. Red=Overdue, Yellow=Due soon (<3d), Green=On track. Helps track deadlines.' },
-                            { icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: `${theme.colors.primary}15`, color: theme.colors.primary, fontSize: 10, fontWeight: 600 }}>⏱ 3d 5h</div>, label: 'State Time', desc: 'Time elapsed since the card entered its current list. Use this to identify bottlenecks or stalled tasks.' },
-                            { icon: <MdOutlineDescription size={14} color={theme.colors.textTertiary} />, label: 'Description', desc: 'Indicates the card contains a detailed markdown description or specification.' },
-                            { icon: <MdOutlineSubtitles size={14} color={theme.colors.textTertiary} />, label: 'Issues Logged', desc: 'Shows the card has recorded problem/solution entries for troubleshooting history.' },
-                            { icon: <CiMemoPad size={14} color={theme.colors.textTertiary} />, label: 'Memo Attached', desc: 'Indicates internal notes or quick memos are attached to the card.' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineAttachFile size={13} /> 4</span>, label: 'Attachments', desc: 'Total number of files (PDFs, images, spreadsheets) attached to the task.' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineComment size={13} /> 7</span>, label: 'Comments', desc: 'Active discussion thread. Click to read team communications regarding this task.' },
-                            { icon: <MdFamilyRestroom size={14} color={theme.colors.textTertiary} />, label: 'Parent Link', desc: 'This task is a sub-task (child) of a larger parent initiative.' },
-                            { icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: theme.colors.textTertiary }}><MdFamilyRestroom size={13} /> 1/2</span>, label: 'Child Progress', desc: 'Shows how many child tasks are completed vs total. Helps track epic progress.' },
-                            { icon: <MdLockOutline size={14} color="#cf1322" />, label: 'Suspended', desc: 'Card is temporarily locked (e.g., waiting on external factors). No edits or moves are allowed.' },
-                            { icon: <Avatar size={20} style={{ background: theme.colors.primary, fontSize: 9, fontWeight: 700 }}>PL</Avatar>, label: 'Assignees', desc: 'Team members responsible for this task. Hover to see full names.' },
+                            { id: 'priority', icon: <Tag color="red" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>HIGH</Tag>, label: 'Priority Badge', desc: 'Indicates task urgency (Red=High, Orange=Medium, Blue=Low). Use this to sequence work.' },
+                            { id: 'duedate', icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#eb5a46', color: '#fff', fontSize: 10, fontWeight: 600 }}><MdAccessTime size={10} />May 15</div>, label: 'Due Date', desc: 'Target completion date. Red=Overdue, Yellow=Due soon (<3d), Green=On track. Helps track deadlines.' },
+                            { id: 'statetime', icon: <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: `${theme.colors.primary}15`, color: theme.colors.primary, fontSize: 10, fontWeight: 600 }}>⏱ 3d 5h</div>, label: 'State Time', desc: 'Time elapsed since the card entered its current list. Use this to identify bottlenecks or stalled tasks.' },
+                            { id: 'desc', icon: <MdOutlineDescription size={14} color={theme.colors.textTertiary} />, label: 'Description', desc: 'Indicates the card contains a detailed markdown description or specification.' },
+                            { id: 'issues', icon: <MdOutlineSubtitles size={14} color={theme.colors.textTertiary} />, label: 'Issues Logged', desc: 'Shows the card has recorded problem/solution entries for troubleshooting history.' },
+                            { id: 'memo', icon: <CiMemoPad size={14} color={theme.colors.textTertiary} />, label: 'Memo Attached', desc: 'Indicates internal notes or quick memos are attached to the card.' },
+                            { id: 'attachments', icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineAttachFile size={13} /> 4</span>, label: 'Attachments', desc: 'Total number of files (PDFs, images, spreadsheets) attached to the task.' },
+                            { id: 'comments', icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: theme.colors.textTertiary, fontSize: 11 }}><MdOutlineComment size={13} /> 7</span>, label: 'Comments', desc: 'Active discussion thread. Click to read team communications regarding this task.' },
+                            { id: 'parent', icon: <MdFamilyRestroom size={14} color={theme.colors.textTertiary} />, label: 'Parent Link', desc: 'This task is a sub-task (child) of a larger parent initiative.' },
+                            { id: 'child', icon: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: theme.colors.textTertiary }}><MdFamilyRestroom size={13} /> 1/2</span>, label: 'Child Progress', desc: 'Shows how many child tasks are completed vs total. Helps track epic progress.' },
+                            { id: 'suspended', icon: <MdLockOutline size={14} color="#cf1322" />, label: 'Suspended', desc: 'Card is temporarily locked (e.g., waiting on external factors). No edits or moves are allowed.' },
+                            { id: 'assignees', icon: <Avatar size={20} style={{ background: theme.colors.primary, fontSize: 9, fontWeight: 700 }}>PL</Avatar>, label: 'Assignees', desc: 'Team members responsible for this task. Hover to see full names.' },
                         ].map((item, i) => (
-                            <div key={i} style={{
-                                display: 'flex', gap: 10, alignItems: 'flex-start',
-                                padding: '8px 10px', borderRadius: 6,
-                                background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
-                            }}>
+                            <div key={i} 
+                                onClick={() => { setSelectedBadge(item); setIsBadgeModalVisible(true); }}
+                                style={{
+                                    display: 'flex', gap: 10, alignItems: 'flex-start',
+                                    padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+                                    background: theme.colors.surface, border: `1px solid ${theme.colors.border}`,
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseOver={e => {
+                                    e.currentTarget.style.borderColor = theme.colors.primary;
+                                    e.currentTarget.style.boxShadow = `0 2px 8px ${theme.colors.primary}22`;
+                                }}
+                                onMouseOut={e => {
+                                    e.currentTarget.style.borderColor = theme.colors.border;
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }}>
                                 <div style={{ flexShrink: 0, marginTop: 2, minWidth: 28, display: 'flex', justifyContent: 'center' }}>{item.icon}</div>
                                 <div>
-                                    <Text strong style={{ fontSize: 12, display: 'block' }}>{item.label}</Text>
+                                    <Text strong style={{ fontSize: 12, display: 'block', color: theme.colors.primary }}>{item.label}</Text>
                                     <Text type="secondary" style={{ fontSize: 11 }}>{item.desc}</Text>
                                 </div>
                             </div>
@@ -261,6 +276,126 @@ const BoardGuideContent = ({ theme }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Badge Reference Modal */}
+            <Modal
+                title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {selectedBadge?.icon}
+                        <span>{selectedBadge?.label}</span>
+                    </div>
+                }
+                open={isBadgeModalVisible}
+                onCancel={() => setIsBadgeModalVisible(false)}
+                footer={[
+                    <Button key="close" onClick={() => setIsBadgeModalVisible(false)}>
+                        Close
+                    </Button>
+                ]}
+                width={500}
+                centered
+            >
+                {selectedBadge && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+                        <div style={{ background: `${theme.colors.background}`, padding: 12, borderRadius: 8 }}>
+                            <Text>{selectedBadge.desc}</Text>
+                        </div>
+                        
+                        <Text strong style={{ fontSize: 14 }}>Example Position on Card</Text>
+                        <div style={{ 
+                            background: theme.colors.surface, 
+                            border: `1px solid ${theme.colors.border}`,
+                            borderRadius: 8, 
+                            padding: 12,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            position: 'relative'
+                        }}>
+                            {/* Generic Card Layout representing a standard Kanban card */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    {selectedBadge.id === 'priority' ? (
+                                        <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}` }}>
+                                            {selectedBadge.icon}
+                                        </div>
+                                    ) : (
+                                        <Tag color="blue" style={{ fontSize: 10, margin: 0, lineHeight: '16px', opacity: 0.5 }}>LOW</Tag>
+                                    )}
+                                    {selectedBadge.id === 'parent' ? (
+                                        <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}` }}>
+                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: theme.colors.textSecondary, background: theme.colors.background, padding: '2px 6px', borderRadius: 4 }}>
+                                                <MdFamilyRestroom size={12} /> <Text underline style={{ fontSize: 11 }}>PRJ-123</Text>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                                
+                                {selectedBadge.id === 'suspended' ? (
+                                    <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}` }}>
+                                        {selectedBadge.icon}
+                                    </div>
+                                ) : (
+                                    <Tooltip title="Edit"><Button type="text" size="small" icon={<BsThreeDots />} style={{ opacity: 0.5 }} /></Tooltip>
+                                )}
+                            </div>
+
+                            <Text strong style={{ display: 'block', fontSize: 14, marginBottom: 8, opacity: 0.8 }}>
+                                Example Task Title That Needs to Be Done
+                            </Text>
+
+                            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+                                <Tag color="blue" style={{ opacity: 0.5 }}>Frontend</Tag>
+                                <Tag color="purple" style={{ opacity: 0.5 }}>Design</Tag>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    {['duedate', 'statetime'].includes(selectedBadge.id) ? (
+                                        <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}` }}>
+                                            {selectedBadge.icon}
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: theme.colors.background, color: theme.colors.textSecondary, fontSize: 10, opacity: 0.5 }}>
+                                            <MdAccessTime size={10} /> May 15
+                                        </div>
+                                    )}
+
+                                    {/* Action Icons group */}
+                                    <div style={{ display: 'flex', gap: 6, color: theme.colors.textTertiary }}>
+                                        {['desc', 'issues', 'memo', 'attachments', 'comments', 'child'].includes(selectedBadge.id) ? (
+                                            <>
+                                                {selectedBadge.id !== 'desc' && <MdOutlineDescription size={14} style={{ opacity: 0.3 }} />}
+                                                {selectedBadge.id !== 'comments' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, opacity: 0.3 }}><MdOutlineComment size={13} /> 2</span>}
+                                                <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}`, display: 'flex', alignItems: 'center' }}>
+                                                    {selectedBadge.icon}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <MdOutlineDescription size={14} style={{ opacity: 0.3 }} />
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, opacity: 0.3 }}><MdOutlineComment size={13} /> 2</span>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, opacity: 0.3 }}><MdOutlineAttachFile size={13} /> 1</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                {selectedBadge.id === 'assignees' ? (
+                                    <div style={{ padding: 4, borderRadius: 4, background: `${theme.colors.primary}11`, border: `2px dashed ${theme.colors.primary}` }}>
+                                        <Avatar.Group size="small">
+                                            {selectedBadge.icon}
+                                            <Avatar style={{ background: '#f56a00', fontSize: 9 }}>JD</Avatar>
+                                        </Avatar.Group>
+                                    </div>
+                                ) : (
+                                    <Avatar.Group size="small" style={{ opacity: 0.5 }}>
+                                        <Avatar style={{ background: theme.colors.primary, fontSize: 9 }}>PL</Avatar>
+                                    </Avatar.Group>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* ═══ SECTION 3: Drag-and-Drop ═══ */}
             <div style={getSectionCardStyle(theme)}>
