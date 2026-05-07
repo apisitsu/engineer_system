@@ -14,6 +14,7 @@ import { useTheme } from '../../../../theme';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
+import TemplateBuilderDrawer from './TemplateBuilderDrawer';
 import {
     DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors
 } from '@dnd-kit/core';
@@ -151,6 +152,7 @@ const BoardSettingsDrawer = () => {
     const [importingLabels, setImportingLabels] = useState(false);
     const [previewTemplateLabels, setPreviewTemplateLabels] = useState(null);
     const [selectedLabelTemplateId, setSelectedLabelTemplateId] = useState(null);
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
     useEffect(() => {
         if (isBoardSettingsOpen && activeTab === 'labels') {
@@ -260,46 +262,8 @@ const BoardSettingsDrawer = () => {
         setEditingLabelId(label.id); setEditLabelName(label.name || ''); setEditLabelColor(label.color || LABEL_COLORS[0]);
     };
 
-    const handleSaveBoardAsBlueprint = async () => {
-        if (!activeBoard) return;
-        Swal.fire({
-            title: 'Save Board as Blueprint',
-            input: 'text',
-            inputLabel: 'Blueprint Name',
-            inputValue: activeBoard.name,
-            showCancelButton: true,
-            confirmButtonText: 'Save',
-            inputValidator: (value) => {
-                if (!value) return 'You need to write something!';
-            }
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                try {
-                    // Collect cards and lists
-                    const boardCards = [];
-                    lists.forEach(l => {
-                        const lCards = useKanbanStore.getState().cards[l.id] || [];
-                        boardCards.push(...lCards);
-                    });
-
-                    const newConfig = {
-                        name: result.value,
-                        type: 'blueprint',
-                        is_public: false,
-                        department_id: currentUserDept,
-                        config_data: {
-                            boardId: activeBoard.id, // For cloning
-                            sourceProject: activeProject.id
-                        }
-                    };
-
-                    await createTemplateConfig(newConfig);
-                    Swal.fire('Saved!', 'Board has been saved as a Blueprint.', 'success');
-                } catch (e) {
-                    Swal.fire('Error', 'Could not save blueprint.', 'error');
-                }
-            }
-        });
+    const handleSaveBoardAsBlueprint = () => {
+        setShowTemplateBuilder(true);
     };
 
     const Card = ({ children, style }) => (
@@ -984,6 +948,15 @@ const BoardSettingsDrawer = () => {
                         {renderActiveTab()}
                     </div>
                 </div>
+            )}
+
+            {showTemplateBuilder && activeProject && (
+                <TemplateBuilderDrawer
+                    open={showTemplateBuilder}
+                    onClose={() => setShowTemplateBuilder(false)}
+                    masterProject={activeProject}
+                    targetBoardId={activeBoard?.id}
+                />
             )}
         </Drawer>
     );

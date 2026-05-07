@@ -103,6 +103,20 @@ export const createBoardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to fetch board members', err);
             set({ activeBoardMembers: [] });
+            if (err.response?.status === 403) {
+                Swal.fire({
+                    title: 'Access Denied',
+                    text: 'คุณไม่ได้รับอนุญาตให้เข้าถึงโปรเจคนี้ หรือคุณไม่ได้เป็นสมาชิกของโปรเจคนี้',
+                    icon: 'error',
+                    confirmButtonText: 'กลับสู่หน้าเริ่มต้น',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/eng/kanban';
+                    }
+                });
+            }
         }
     },
 
@@ -161,7 +175,22 @@ export const createBoardSlice = (set, get) => ({
             visibleLists.forEach(list => get().fetchCardsForList(list.id));
         } catch (err) {
             console.error("Failed to fetch board details", err);
-            Swal.fire('Error', 'Failed to load board details', 'error');
+            if (err.response?.status === 403) {
+                Swal.fire({
+                    title: 'Access Denied',
+                    text: 'คุณไม่ได้รับอนุญาตให้เข้าถึงโปรเจคนี้ หรือคุณไม่ได้เป็นสมาชิกของโปรเจคนี้',
+                    icon: 'error',
+                    confirmButtonText: 'กลับสู่หน้าเริ่มต้น',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/eng/kanban';
+                    }
+                });
+            } else {
+                Swal.fire('Error', 'Failed to load board details', 'error');
+            }
         } finally {
             set({ isLoading: false });
         }
