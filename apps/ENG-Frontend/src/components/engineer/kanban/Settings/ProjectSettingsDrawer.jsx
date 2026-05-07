@@ -438,12 +438,12 @@ const ProjectSettingsDrawer = () => {
                 </div>
                 {(canManageProjectMembers || canManageProject) && (
                     <div style={{ marginTop: 8 }}>
-                        <Select 
-                            showSearch 
-                            placeholder="Add member..." 
-                            style={{ width: '100%' }} 
-                            onChange={(val) => { if (val) { addProjectManager(targetId, val); } }} 
-                            value={null} 
+                        <Select
+                            showSearch
+                            placeholder="Add member..."
+                            style={{ width: '100%' }}
+                            onChange={(val) => { if (val) { addProjectManager(targetId, val); } }}
+                            value={null}
                             filterOption={(input, option) => {
                                 return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
                             }}
@@ -502,10 +502,10 @@ const ProjectSettingsDrawer = () => {
             placement="right"
             extra={
                 <Tooltip title="View User Guide">
-                    <Button 
-                        type="text" 
-                        icon={<AiOutlineQuestionCircle />} 
-                        onClick={() => window.open('/eng/user-guide#settings-permissions', '_blank')}
+                    <Button
+                        type="text"
+                        icon={<AiOutlineQuestionCircle />}
+                        onClick={() => window.open('/eng/kanban/guide', '_blank')}
                     />
                 </Tooltip>
             }
@@ -544,7 +544,7 @@ const ProjectSettingsDrawer = () => {
                     {renderActiveTab()}
                 </div>
             </div>
-            
+
             {showTemplateBuilder && targetProject && (
                 <TemplateBuilderDrawer
                     open={showTemplateBuilder}

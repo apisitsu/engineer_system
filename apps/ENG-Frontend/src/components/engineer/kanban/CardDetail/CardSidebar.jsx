@@ -168,7 +168,7 @@ const CardSidebar = () => {
                                             ))}
                                         </div>
                                         <Button size="small" type="primary" disabled={!newLabelName.trim()}
-                                            onClick={async () => { try { await createLabel({ name: newLabelName.trim(), color: newLabelColor }); } catch (err) { console.error('[CardSidebar] Create label failed:', err); } setIsCreatingLabel(false); setNewLabelName(''); }}
+                                            onClick={async () => { try { await createLabel(card.board_id, newLabelName.trim(), newLabelColor); } catch (err) { console.error('[CardSidebar] Create label failed:', err); } setIsCreatingLabel(false); setNewLabelName(''); }}
                                             style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}>Create</Button>
                                     </div>
                                 ) : (
