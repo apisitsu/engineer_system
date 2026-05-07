@@ -28,6 +28,7 @@ export const createCardSlice = (set, get) => ({
     // --- Notifications (In-App) ---
     notifications: [],
     unreadNotificationCount: 0,
+    isFetchingNotifications: false,
 
     // ====================================================================
     //  CARD CRUD
@@ -737,10 +738,11 @@ export const createCardSlice = (set, get) => ({
     fetchNotifications: async () => {
         try {
             const empNo = useAuthStore.getState().empNo;
-            if (!empNo) {
-                console.warn('[Auth] No authenticated user — skipping notification fetch');
+            if (!empNo || get().isFetchingNotifications) {
+                console.warn('[Auth/Guard] Skipping notification fetch (No user or already fetching)');
                 return [];
             }
+            set({ isFetchingNotifications: true });
             const res = await axios.get(server.KANBAN_NOTIFICATIONS, {
                 params: { owner_u_code: empNo }
             });
@@ -751,6 +753,8 @@ export const createCardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to fetch notifications', err);
             return [];
+        } finally {
+            set({ isFetchingNotifications: false });
         }
     },
 
@@ -821,10 +825,13 @@ export const createCardSlice = (set, get) => ({
         const isAD = role === 'AD' || dept === 'AD';
         const isMgr = ['MGR', 'COORD'].includes(role);
 
-        // Only for AD, MGR, and COORD roles
-        if (!isAD && !isMgr) return;
-
         const { activeProject, projectManagers, activeBoard, activeBoardMembers, activeCardDetail } = get();
+
+        const isProjectOwner = projectManagers.some(m => m.u_code === uCode && m.role === 'owner');
+        const isProjectEditor = projectManagers.some(m => m.u_code === uCode && m.role === 'editor');
+
+        // Only for AD, MGR, and Project Managers (Owner/Editor)
+        if (!isAD && !isMgr && !isProjectOwner && !isProjectEditor) return;
 
         // MGR/COORD only auto-joins Public projects. AD joins everything.
         if (isMgr && activeProject?.is_private) return;

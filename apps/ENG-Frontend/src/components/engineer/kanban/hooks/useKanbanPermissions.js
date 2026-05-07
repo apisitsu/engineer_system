@@ -46,10 +46,10 @@ export const useKanbanPermissions = ({
         const canManageBoardMembers = canManageProject || isBoardOwner;
 
         // 3.2 Manage Structure (Create/Move/Delete Boards): All the above + Public Project Editors
-        let canManageBoardStructure = canManageBoardMembers || (!isPrivateProject && isProjectEditor);
+        let canManageBoardStructure = canManageBoardMembers;
 
         // 3.3 Edit Board Content: All the above + Explicit Board Editors + Private Project Editors
-        let canEditBoard = canManageBoardStructure || isBoardEditor || (isPrivateProject && isProjectEditor);
+        let canEditBoard = canManageBoardStructure || isBoardEditor || isProjectEditor;
 
         const canViewBoard = canEditBoard || isBoardViewer || canViewProject;
 

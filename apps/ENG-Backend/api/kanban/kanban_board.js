@@ -525,7 +525,7 @@ const DeleteLabel = async (req, res) => {
         const { rows: [label] } = await engPool.query('SELECT board_id FROM kb_label WHERE id=$1', [id]);
         if (!label) return res.status(404).json({ error: 'Label not found' });
 
-        if (!(await canManageBoard(req, label.board_id))) {
+        if (!(await canEditBoard(req, label.board_id))) {
             return res.status(403).json({ error: 'Forbidden: You do not have permission to delete labels from this board.' });
         }
 

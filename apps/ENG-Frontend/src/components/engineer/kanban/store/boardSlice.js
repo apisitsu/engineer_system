@@ -47,6 +47,7 @@ export const createBoardSlice = (set, get) => ({
     wsSocket: null,
     wsBoardId: null,
     wsUserCode: null,
+    lastReconnectTime: 0,
 
     // ====================================================================
     //  BOARD ACTIONS
@@ -294,6 +295,7 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     createLabel: async (boardId, name, color) => {
+        await get().checkAndAutoJoin('board', boardId);
         try {
             const res = await axios.post(`${server.KANBAN_BOARDS}/${boardId}/labels`, { name, color });
             if (res.data?.data) {
@@ -308,6 +310,7 @@ export const createBoardSlice = (set, get) => ({
     },
 
     updateLabel: async (labelId, data) => {
+        if (get().activeBoard?.id) await get().checkAndAutoJoin('board', get().activeBoard.id);
         try {
             const res = await axios.patch(`${server.KANBAN_LABELS}/${labelId}`, data);
             if (res.data?.data) {
@@ -348,6 +351,7 @@ export const createBoardSlice = (set, get) => ({
     },
 
     deleteLabel: async (labelId) => {
+        if (get().activeBoard?.id) await get().checkAndAutoJoin('board', get().activeBoard.id);
         try {
             await axios.delete(`${server.KANBAN_LABELS}/${labelId}`);
             set(state => {
@@ -635,6 +639,7 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     fetchWebhooks: async (boardId) => {
+        await get().checkAndAutoJoin('board', boardId);
         try {
             const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/webhooks`);
             set({ webhooks: res.data?.data || [] });
@@ -781,6 +786,14 @@ export const createBoardSlice = (set, get) => ({
                 if (currentUCode) socket.emit('user:join', currentUCode);
 
                 if (!isFirstConnect) {
+                    const now = Date.now();
+                    const last = get().lastReconnectTime || 0;
+                    if (now - last < 5000) {
+                        console.log('[WS] Reconnected (throttled) — skipping revalidation');
+                        return;
+                    }
+                    set({ lastReconnectTime: now });
+
                     // ── Stale-While-Revalidate on Reconnect ──
                     console.log('[WS] Reconnected — revalidating board state');
                     const activeBoardId = get().activeBoard?.id;
