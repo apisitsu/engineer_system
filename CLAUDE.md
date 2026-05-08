@@ -79,6 +79,23 @@ npm run cypress:run  # Cypress E2E headless
 - **Nginx:** `/api/` → backend:2005; `/uploads/` → backend:2005; `/ws` → WebSocket upgrade; `/` → React static
 - **Production:** PM2 manages the backend process; Nginx serves the React `build/` folder as static files
 
+### Environment Variables (`apps/ENG-Backend/.env`)
+
+| Group | Vars | Notes |
+|---|---|---|
+| **Main DB** | `PG_NEW_HOST`, `PG_NEW_PORT`, `PG_NEW_DB`, `PG_NEW_USER`, `PG_NEW_PASS` | `eng_system` on port 6543 → `engPool` |
+| **Factory DB** | `PG_RODPC_HOST/PORT/DB/USER/PASSWORD` | `rodpc` on 5432 → `pool` |
+| **MAQ DB** | `PG_MAQ_HOST/PORT/DB/USER/PASSWORD` | `maqdb` on 5432 → `maqPool` |
+| **QC DB** | `PG_RODQC_HOST/PORT/DB/USER/PASSWORD` | `rodqc` on 5432 → `maqQcPool` |
+| **Auth** | `JWT_SECRET` | Signs all tokens |
+| **Redis** | `REDIS_HOST`, `REDIS_PORT` | BullMQ for FEA; backend starts without it |
+| **Gmail** | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REDIRECT_URI`, `GMAIL_REFRESH_TOKEN` | OAuth2 integration |
+| **Proxy** | `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` | Corporate proxy for outbound HTTP |
+| **MTC scripts** | `PYTHON_EXE`, `TOOLING_IMPORT_SCRIPT` | PC-tooling import pipeline |
+| **Misc** | `EXTERNAL_JOB_CHECK_API_KEY`, `GAS_EMAIL_URL` | External integrations |
+
+Frontend (`apps/ENG-Frontend/.env`) only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`; the API base URL is set in `constance.js` not via env.
+
 ## Key Conventions
 
 ### Security (mandatory)
@@ -155,6 +172,8 @@ Key columns for the dynamic (new-style) approach:
 
 **`dims[].calc_key`** must match a `parameter_name` in `tooling_formula` for the same machine (or a derived key produced by `FormulaService._enrichContext`, e.g. `odAft_max`, `W_max`). There is no DB foreign key — the linkage is by naming convention only.
 
+**`SelectionRuleManager.jsx` live validation**: The `DimsEditor` and `ResultFieldsEditor` sub-components fetch valid values at edit time — `calc_key` options come from `GET /api/mtc/tooling-formula/:machineName` and `tool_field` options come from `GET /api/tooling-select/columns/:tableName`. Both show a red border + warning icon when a saved value is not found in current options.
+
 ## MTC Formula Engine
 
 - Formulas stored in `tooling_formula` table (sole formula store — `mtc_formulas` table is retired and should be dropped from DB), evaluated sequentially at runtime with `expr-eval`
@@ -162,7 +181,7 @@ Key columns for the dynamic (new-style) approach:
   - `round05`, `ceil05`, `floor05` — round to nearest 0.5
   - `lookup(val, v1, v2, ...)` — returns first value in list ≥ val
   - Overridden `ceil(x, n)` / `floor(x, n)` / `round(x, n)` with optional decimal precision
-  - `_enrichContext()` — adds derived vars: `odAft_max`, `odAft_min`, `W_max`, `T1`, `SD`, `Offset`, `A`, `B`, etc.
+  - `_enrichContext()` — adds derived vars: `odAft_max`, `odAft_min`, `W_max`, `T1`, `SD`, `Offset`, plus all single letters A–Z default to **0**. Each machine must supply its own A–Z values via explicit `tooling_formula` rows — there are no inherited "jawA" defaults. KS-B22G / KS-B80 use hardcoded SQL in `machineQueryService` and never call `_enrichContext`.
 - Formulas are evaluated sequentially: each formula's output becomes a variable available to subsequent formulas in the same machine run
 - Multi-statement formulas use `;` separator; assignment form `varName = expr` stores intermediate values
 - `_preprocess()` handles: Excel-style `func(var, list)` → `lookup(var, list)`, `&&`/`||` → `and`/`or`, unquoted enum auto-quoting
@@ -172,10 +191,26 @@ Key columns for the dynamic (new-style) approach:
 
 `src/components/engineer/mtc_eng/formula-builder/FormulaBuilderInput.jsx` — reusable Form.Item-compatible component:
 - Exports `FORMULA_VARS` (35 categorized variables) used across formula editing UIs
-- Visual mode: template-based (simple arithmetic, rounding, conditional, lookup)
-- Text mode: raw formula string
+- Visual mode: template-based (arithmetic, rounding, conditional, lookup). Arithmetic template supports **N terms** via `simpleTerms[]` / `simpleOps[]` arrays — not limited to two operands. Switching to Visual is disabled if the current formula string can't be round-tripped through `parseFormula`.
+- Text mode: raw formula string. The `value` prop is always the source of truth; `formulaPreview` always reflects it.
 - `onTest` prop: async `(formulaStr) => { valid, result, error }` — calls `POST /api/mtc/tooling-formula/test` (`MTC_FORMULA_TEST` constant)
-- Used in: `ToolingSelectPage.jsx` (inline formula editing per tooling row, via Formula Setting modal and Formula Builder drawer)
+- Used in: `ToolingSelectPage.jsx` (inline formula editing per tooling row) and `ToolManagementPage.jsx` (formula settings modal + add-tool wizard)
+
+### Tooling Select API Routes
+
+`toolingSelectController.js` at `/api/tooling-select/*`:
+
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/api/tooling-select/search` | Main tooling search by CN number |
+| `GET` | `/api/tooling-select/rules` | List all active selection rules |
+| `POST/PUT/DELETE` | `/api/tooling-select/rules[/:id]` | CRUD for selection rules (isAdmin) |
+| `GET` | `/api/tooling-select/columns/:tableName` | Real column names from an inventory table (whitelisted via `inventoryService.tableExists()`) — used by SelectionRuleManager for live `tool_field` validation |
+| `GET` | `/api/tooling-select/tables` | List all tooling inventory tables |
+| `GET` | `/api/tooling-select/tooling-names/:tableName` | Distinct tooling names in a table |
+| `GET/POST/PUT/DELETE` | `/api/tooling-select/inventory/:tableName[/:id]` | Inventory CRUD (isAdmin for mutations) |
+| `GET/POST/PUT/DELETE` | `/api/tooling-select/spec[/:cn]` | Part spec CRUD (isAdmin for mutations) |
+| `POST` | `/api/tooling-select/create-table` | Create new tooling inventory table (isAdmin) |
 
 ### Formula API Routes (current)
 
@@ -192,6 +227,29 @@ All formula operations go through `toolingFormulaController.js` at `/api/mtc/too
 
 The legacy `/api/mtc/formulas/*` routes and `formulaController.js` have been deleted. Do not recreate them.
 
+### ToolManagementPage
+
+`src/components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx` — standalone page (has its own route + sidebar entry) for admin-side tooling management. Three panels:
+
+1. **Inventory table** — inline edit of tool records per machine; dynamic columns reflect DB schema
+2. **Formula Setting modal** — CRUD for `tooling_formula` rows scoped to a machine/tooling-name; includes a test-simulation panel with mock part dimensions
+3. **Add Tool / New Machine wizard** — add rows to existing tables or create a new machine table; 3-step flow: add tools → set formulas → configure selection rules
+
+Embeds both `FormulaBuilderInput` and `SelectionRuleDrawer`.
+
 ### Selection Rules UI
 
-`SelectionRuleDrawer` (exported from `tooling_select/SelectionRuleManager.jsx`) is embedded inside `ToolingSelectPage` as a Drawer — it is **not** a standalone page or route. Access: Tool List drawer → "Selection Rules" button.
+`SelectionRuleDrawer` (exported from `tooling_select/SelectionRuleManager.jsx`) is embedded inside both `ToolingSelectPage` and `ToolManagementPage` as a Drawer — it is **not** a standalone page or route. Access: Tool List drawer → "Selection Rules" button.
+
+### MTC Legacy Duplicate Files
+
+Several files exist both at `api/engineer/mtc/<file>.js` (old) **and** at `api/engineer/mtc/services/<file>.js` (active). Always use the `services/` versions:
+
+| Active (`services/`) | Legacy root (ignore) |
+|---|---|
+| `services/fixtureLogic.js` | `fixtureLogic.js` |
+| `services/dynamicLogic.js` | `dynamicLogic.js` |
+| `services/calculationLogic.js` | `calculationLogic.js` |
+| `services/partDataMapper.js` | _(no root duplicate)_ |
+
+The root-level duplicates are dead code — do not edit them.

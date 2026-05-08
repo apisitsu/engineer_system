@@ -208,9 +208,11 @@ class FormulaService {
 
 
     // 5. Tooling Standard Default Aliases (If not already defined)
-    const jawA = ctx.isIDtoOD ? odBf : odAft;
-    if (ctx.A === undefined) ctx.A = jawA;
-    if (ctx.B === undefined) ctx.B = jawA - 0.4;
+    // A–Z default to 0; each machine defines its own params via tooling_formula rows.
+    // KS-B22G / KS-B80 use hardcoded SQL (machineQueryService) — not this context.
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(k => {
+      if (ctx[k] === undefined) ctx[k] = 0;
+    });
     
     // 6. Final Wrap
     ctx.part = { ...ctx };

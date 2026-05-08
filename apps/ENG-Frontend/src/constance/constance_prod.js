@@ -55,6 +55,8 @@ export const server = {
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
   MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
   MTC_TOOLING_RULES: `${apiUrl}api/tooling-select/rules`,
+  MTC_TOOLING_RULES_VALIDATE: `${apiUrl}api/tooling-select/rules/validate`,
+  MTC_TOOLING_COLUMNS: `${apiUrl}api/tooling-select/columns`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_FORMULA: `${apiUrl}api/mtc/tooling-formula`,
   MTC_FORMULA_TEST: `${apiUrl}api/mtc/tooling-formula/test`,

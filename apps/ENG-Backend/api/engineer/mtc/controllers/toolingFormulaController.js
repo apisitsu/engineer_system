@@ -1,6 +1,7 @@
 'use strict';
 
 const { engPool } = require('../../../../instance/eng_db');
+const { TABLES } = require('../mtcConstants');
 const FormulaService = require('../services/FormulaService');
 
 // GET /api/mtc/tooling-formula/machines
@@ -70,29 +71,68 @@ const create = async (req, res) => {
 
 // PUT /api/mtc/tooling-formula/:id
 const update = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { parameter_name, formula_type, formula_value, rounding_rule, rounding_precision, remark } = req.body;
+  const { id } = req.params;
+  const { parameter_name, formula_type, formula_value, rounding_rule, rounding_precision, remark } = req.body;
 
-    const result = await engPool.query(
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query(
+      'SELECT machine_name, parameter_name FROM tooling_formula WHERE id = $1',
+      [id]
+    );
+    if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Formula not found' });
+    }
+    const { machine_name: machineName, parameter_name: oldParam } = current.rows[0];
+
+    const result = await client.query(
       `UPDATE tooling_formula
        SET parameter_name     = COALESCE($1, parameter_name),
            formula_type       = COALESCE($2, formula_type),
            formula_value      = COALESCE($3, formula_value),
            rounding_rule      = COALESCE($4, rounding_rule),
            rounding_precision = COALESCE($5, rounding_precision),
-           remark             = COALESCE($6, remark),
+           remark             = $6,
            updated_at         = NOW()
        WHERE id = $7
        RETURNING *`,
       [parameter_name, formula_type, formula_value, rounding_rule, rounding_precision, remark, id]
     );
 
-    if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Formula not found' });
+    const newParam = result.rows[0].parameter_name;
+
+    // Cascade rename to selection rules dims when parameter_name changes
+    if (parameter_name && oldParam !== newParam) {
+      const normalizedMachine = machineName.toLowerCase().replace(/-/g, '');
+      await client.query(
+        `UPDATE ${TABLES.MTC_SELECTION_RULES}
+         SET dims = (
+           SELECT jsonb_agg(
+             CASE WHEN elem->>'calc_key' = $1
+                  THEN jsonb_set(elem, '{calc_key}', to_jsonb($2::text))
+                  ELSE elem
+             END
+           )
+           FROM jsonb_array_elements(dims) AS elem
+         )
+         WHERE is_active = true
+           AND dims IS NOT NULL
+           AND LOWER(REPLACE(COALESCE(calc_context, ''), '-', '')) = $3`,
+        [oldParam, newParam, normalizedMachine]
+      );
+    }
+
+    await client.query('COMMIT');
     res.json({ success: true, formula: result.rows[0] });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('toolingFormula update error:', err.message);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
+  } finally {
+    client.release();
   }
 };
 

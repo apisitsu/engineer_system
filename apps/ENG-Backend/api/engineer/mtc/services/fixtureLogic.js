@@ -35,6 +35,7 @@ async function findFixtures(cnNumber) {
       ks400b5: calcs.ks400b5_calc,
       ks400b6: calcs.ks400b6_calc,
       tsg:     calcs.calc,
+      ksb22g:  dynKSB22G,
     }, okFlags);
 
     const calc = calcs.calc;

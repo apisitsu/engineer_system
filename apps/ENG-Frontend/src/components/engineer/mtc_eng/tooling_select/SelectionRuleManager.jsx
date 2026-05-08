@@ -1,96 +1,239 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Tag,
-  InputNumber, Divider, Alert, Collapse, Tooltip,
+  InputNumber, Divider, Alert, Collapse, Tooltip, Select, AutoComplete,
   Badge, Row, Col, Table, Drawer,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ApartmentOutlined,
   QuestionCircleOutlined, CheckCircleOutlined, InfoCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 
 const { Text, Paragraph } = Typography;
 
-// ── Sub-editors ───────────────────────────────────────────────────────────────
+// ── Known valid values for formula linkage fields ─────────────────────────────
+const CALC_CONTEXT_OPTIONS = [
+  { value: 'tsg',     label: 'tsg — TSG-300ZNC / KS-B22G common' },
+  { value: 'ksb22g',  label: 'ksb22g — KS-B22G raw formula output' },
+  { value: 'ks03a',   label: 'ks03a — KS-03A / KS-B22RD' },
+  { value: 'ks400b',  label: 'ks400b — KS400B' },
+  { value: 'ks500rd', label: 'ks500rd — KS500RD' },
+  { value: 'ks400b5', label: 'ks400b5 — KS400B5' },
+  { value: 'ks400b6', label: 'ks400b6 — KS400B6' },
+];
 
-const DimsEditor = ({ value = [], onChange }) => {
-  const add = () => onChange([...value, { calc_key: '', tool_field: '', tol_plus: 0.1, tol_minus: 0.1, label: '', sort_priority: 1 }]);
+const OK_CONDITION_OPTIONS = [
+  'ksb22gOK', 'ksb80OK', 'ks03aOK', 'ks400bOK', 'ks500rdOK', 'ks400b5OK', 'ks400b6OK',
+].map(v => ({ value: v, label: v }));
+
+const COMMON_TOOL_CATEGORIES = [
+  'JAW', 'BACK PLATE', 'CHUTE COVER', 'CARRIER',
+  'WORK DRIVER', 'SUPPORT BLOCK', 'LOADING CHUTE', 'PLUG',
+  'ROLLER SHOE', 'CPX SHOE', 'FRONT PLATE', 'MASTER RING', 'PLUG GAUGE', 'LOADER',
+  'WORK CLAMP', 'SHAFT', 'WORK CHUTE', 'WORK LOADER', 'WORK CHUCK', 'WORK HOLDER',
+  'CHUCK JAW', 'CHUTE GUIDE', 'STOPPER', 'LOADING PINTLE',
+];
+
+// ── DimsEditor ────────────────────────────────────────────────────────────────
+// machineName  → fetches formula parameter_names for calc_key dropdown
+// targetTable  → fetches real columns for tool_field dropdown
+
+const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
+  const [formulaParams, setFormulaParams] = useState([]);
+  const [tableColumns,  setTableColumns]  = useState([]);
+
+  // Load formula parameter_names whenever machineName changes
+  useEffect(() => {
+    if (!machineName) { setFormulaParams([]); return; }
+    axios.get(`${server.MTC_TOOLING_FORMULA}/${encodeURIComponent(machineName)}`)
+      .then(r => {
+        const params = [...new Set((r.data.formulas || []).map(f => f.parameter_name).filter(Boolean))];
+        setFormulaParams(params);
+      })
+      .catch(() => setFormulaParams([]));
+  }, [machineName]);
+
+  // Load real columns whenever targetTable changes
+  useEffect(() => {
+    if (!targetTable) { setTableColumns([]); return; }
+    axios.get(`${server.MTC_TOOLING_COLUMNS}/${encodeURIComponent(targetTable)}`)
+      .then(r => setTableColumns(r.data.columns || []))
+      .catch(() => setTableColumns([]));
+  }, [targetTable]);
+
+  const add    = () => onChange([...value, { calc_key: '', tool_field: '', tol_plus: 0.1, tol_minus: 0.1, label: '', sort_priority: 1 }]);
   const remove = (i) => onChange(value.filter((_, idx) => idx !== i));
   const update = (i, field, val) => onChange(value.map((d, idx) => idx === i ? { ...d, [field]: val } : d));
 
+  // Highlight mismatches
+  const calcKeyInvalid  = (key)   => key && formulaParams.length > 0 && !formulaParams.includes(key);
+  const toolFieldInvalid = (field) => field && tableColumns.length > 0  && !tableColumns.includes(field);
+
   return (
     <div>
-      {value.map((dim, i) => (
-        <div
-          key={i}
-          style={{ border: '1px solid #d9d9d9', borderRadius: 6, padding: '8px 10px', marginBottom: 8, background: '#fafafa' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>Dimension {i + 1}</Text>
-            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => remove(i)} />
+      {!machineName && (
+        <Alert type="warning" showIcon={false} style={{ marginBottom: 8, fontSize: 11 }}
+          message={<Text style={{ fontSize: 11 }}><WarningOutlined /> กรอก Machine Name ก่อนเพื่อโหลด Calc Key options</Text>} />
+      )}
+      {!targetTable && (
+        <Alert type="warning" showIcon={false} style={{ marginBottom: 8, fontSize: 11 }}
+          message={<Text style={{ fontSize: 11 }}><WarningOutlined /> กรอก Inventory Table ก่อนเพื่อโหลด Tool Column options</Text>} />
+      )}
+
+      {value.map((dim, i) => {
+        const badCalcKey   = calcKeyInvalid(dim.calc_key);
+        const badToolField = toolFieldInvalid(dim.tool_field);
+        return (
+          <div
+            key={i}
+            style={{
+              border: `1px solid ${badCalcKey || badToolField ? '#ff4d4f' : '#d9d9d9'}`,
+              borderRadius: 6, padding: '8px 10px', marginBottom: 8, background: '#fafafa',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>Dimension {i + 1}</Text>
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => remove(i)} />
+            </div>
+            <Row gutter={8}>
+              <Col span={8}>
+                <Form.Item
+                  label={
+                    badCalcKey
+                      ? <Tooltip title={`"${dim.calc_key}" ไม่มีใน tooling_formula ของ ${machineName}`}>
+                          <Text type="danger" style={{ fontSize: 12 }}>Calc Key <WarningOutlined /></Text>
+                        </Tooltip>
+                      : 'Calc Key'
+                  }
+                  style={{ marginBottom: 4 }}
+                >
+                  <Select
+                    size="small"
+                    showSearch
+                    allowClear
+                    style={{ width: '100%' }}
+                    value={dim.calc_key || undefined}
+                    onChange={v => update(i, 'calc_key', v || '')}
+                    placeholder={formulaParams.length ? 'เลือก parameter' : 'พิมพ์ calc key...'}
+                    status={badCalcKey ? 'error' : ''}
+                    options={formulaParams.map(p => ({ value: p, label: p }))}
+                    notFoundContent={
+                      formulaParams.length === 0
+                        ? <Text type="secondary" style={{ fontSize: 11 }}>ยังไม่มี formula rows สำหรับ machine นี้</Text>
+                        : null
+                    }
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  label={
+                    badToolField
+                      ? <Tooltip title={`"${dim.tool_field}" ไม่มีใน ${targetTable}`}>
+                          <Text type="danger" style={{ fontSize: 12 }}>Tool Column <WarningOutlined /></Text>
+                        </Tooltip>
+                      : 'Tool Column'
+                  }
+                  style={{ marginBottom: 4 }}
+                >
+                  <Select
+                    size="small"
+                    showSearch
+                    allowClear
+                    style={{ width: '100%' }}
+                    value={dim.tool_field || undefined}
+                    onChange={v => update(i, 'tool_field', v || '')}
+                    placeholder={tableColumns.length ? 'เลือก column' : 'พิมพ์ column...'}
+                    status={badToolField ? 'error' : ''}
+                    options={tableColumns.map(c => ({ value: c, label: c }))}
+                    notFoundContent={
+                      tableColumns.length === 0
+                        ? <Text type="secondary" style={{ fontSize: 11 }}>ยังไม่ได้ระบุ Inventory Table</Text>
+                        : null
+                    }
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item label="Label" style={{ marginBottom: 4 }}>
+                  <Input size="small" placeholder="e.g. Size A" value={dim.label} onChange={e => update(i, 'label', e.target.value)} />
+                </Form.Item>
+              </Col>
+              <Col span={4}>
+                <Form.Item label="Priority" style={{ marginBottom: 4 }}>
+                  <InputNumber size="small" min={1} max={10} style={{ width: '100%' }} value={dim.sort_priority} onChange={v => update(i, 'sort_priority', v)} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={8}>
+              <Col span={4}>
+                <Form.Item label="Tol +" style={{ marginBottom: 0 }}>
+                  <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.tol_plus} onChange={v => update(i, 'tol_plus', v)} />
+                </Form.Item>
+              </Col>
+              <Col span={4}>
+                <Form.Item label="Tol -" style={{ marginBottom: 0 }}>
+                  <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.tol_minus} onChange={v => update(i, 'tol_minus', v)} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item
+                  label={<Tooltip title="หาก diff เกินค่านี้ row จะถูก penalty (optional)">Penalty Over <QuestionCircleOutlined /></Tooltip>}
+                  style={{ marginBottom: 0 }}
+                >
+                  <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.penalty_over || ''} placeholder="optional" onChange={v => update(i, 'penalty_over', v || null)} />
+                </Form.Item>
+              </Col>
+            </Row>
           </div>
-          <Row gutter={8}>
-            <Col span={8}>
-              <Form.Item label="Calc Key" style={{ marginBottom: 4 }}>
-                <Input size="small" placeholder="e.g. size_A" value={dim.calc_key} onChange={e => update(i, 'calc_key', e.target.value)} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item label="Tool Column" style={{ marginBottom: 4 }}>
-                <Input size="small" placeholder="e.g. dim_a" value={dim.tool_field} onChange={e => update(i, 'tool_field', e.target.value)} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item label="Label" style={{ marginBottom: 4 }}>
-                <Input size="small" placeholder="e.g. Size A" value={dim.label} onChange={e => update(i, 'label', e.target.value)} />
-              </Form.Item>
-            </Col>
-            <Col span={4}>
-              <Form.Item label="Priority" style={{ marginBottom: 4 }}>
-                <InputNumber size="small" min={1} max={10} style={{ width: '100%' }} value={dim.sort_priority} onChange={v => update(i, 'sort_priority', v)} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={8}>
-            <Col span={4}>
-              <Form.Item label="Tol +" style={{ marginBottom: 0 }}>
-                <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.tol_plus} onChange={v => update(i, 'tol_plus', v)} />
-              </Form.Item>
-            </Col>
-            <Col span={4}>
-              <Form.Item label="Tol -" style={{ marginBottom: 0 }}>
-                <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.tol_minus} onChange={v => update(i, 'tol_minus', v)} />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item
-                label={<Tooltip title="หาก diff เกินค่านี้ row จะถูก penalty (optional)">Penalty Over <QuestionCircleOutlined /></Tooltip>}
-                style={{ marginBottom: 0 }}
-              >
-                <InputNumber size="small" step={0.01} style={{ width: '100%' }} value={dim.penalty_over || ''} placeholder="optional" onChange={v => update(i, 'penalty_over', v || null)} />
-              </Form.Item>
-            </Col>
-          </Row>
-        </div>
-      ))}
+        );
+      })}
       <Button size="small" icon={<PlusOutlined />} onClick={add} block>Add Dimension</Button>
     </div>
   );
 };
 
-const ResultFieldsEditor = ({ value = [], onChange }) => {
-  const add = () => onChange([...value, { tool_field: '', label: '' }]);
+// ── ResultFieldsEditor ────────────────────────────────────────────────────────
+
+const ResultFieldsEditor = ({ value = [], onChange, targetTable }) => {
+  const [tableColumns, setTableColumns] = useState([]);
+
+  useEffect(() => {
+    if (!targetTable) { setTableColumns([]); return; }
+    axios.get(`${server.MTC_TOOLING_COLUMNS}/${encodeURIComponent(targetTable)}`)
+      .then(r => setTableColumns(r.data.columns || []))
+      .catch(() => setTableColumns([]));
+  }, [targetTable]);
+
+  const add    = () => onChange([...value, { tool_field: '', label: '' }]);
   const remove = (i) => onChange(value.filter((_, idx) => idx !== i));
   const update = (i, field, val) => onChange(value.map((d, idx) => idx === i ? { ...d, [field]: val } : d));
+
+  const fieldInvalid = (f) => f && tableColumns.length > 0 && !tableColumns.includes(f);
+
   return (
     <div>
       {value.map((rf, i) => (
         <Row key={i} gutter={8} style={{ marginBottom: 6 }} align="middle">
-          <Col span={10}><Input size="small" placeholder="tool_field (e.g. dim_a)" value={rf.tool_field} onChange={e => update(i, 'tool_field', e.target.value)} /></Col>
-          <Col span={10}><Input size="small" placeholder="Label (e.g. Size A)" value={rf.label} onChange={e => update(i, 'label', e.target.value)} /></Col>
-          <Col span={4}><Button size="small" danger icon={<DeleteOutlined />} onClick={() => remove(i)} /></Col>
+          <Col span={10}>
+            <Select
+              size="small" showSearch allowClear style={{ width: '100%' }}
+              value={rf.tool_field || undefined}
+              onChange={v => update(i, 'tool_field', v || '')}
+              placeholder={tableColumns.length ? 'เลือก column' : 'tool_field...'}
+              status={fieldInvalid(rf.tool_field) ? 'error' : ''}
+              options={tableColumns.map(c => ({ value: c, label: c }))}
+            />
+          </Col>
+          <Col span={10}>
+            <Input size="small" placeholder="Label (e.g. Size A)" value={rf.label} onChange={e => update(i, 'label', e.target.value)} />
+          </Col>
+          <Col span={4}>
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => remove(i)} />
+          </Col>
         </Row>
       ))}
       <Button size="small" icon={<PlusOutlined />} onClick={add}>Add Column</Button>
@@ -102,13 +245,18 @@ const ResultFieldsEditor = ({ value = [], onChange }) => {
 
 export const SelectionRuleDrawer = ({ open, onClose }) => {
   const { message, modal } = App.useApp();
-  const [rules, setRules] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState(null);
-  const [dimsValue, setDimsValue] = useState([]);
+  const [rules,            setRules]            = useState([]);
+  const [loading,          setLoading]          = useState(false);
+  const [saving,           setSaving]           = useState(false);
+  const [isFormOpen,       setIsFormOpen]       = useState(false);
+  const [editingRecord,    setEditingRecord]    = useState(null);
+  const [dimsValue,        setDimsValue]        = useState([]);
   const [resultFieldsValue, setResultFieldsValue] = useState([]);
+  // Watch form fields for live validation in sub-editors
+  const [watchMachine,     setWatchMachine]     = useState('');
+  const [watchTable,       setWatchTable]       = useState('');
+  const [availableMachines, setAvailableMachines] = useState([]);
+  const [availableTables,   setAvailableTables]   = useState([]);
   const [form] = Form.useForm();
 
   const fetchRules = useCallback(async () => {
@@ -123,12 +271,23 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
     }
   }, [message]);
 
-  useEffect(() => { if (open) fetchRules(); }, [open, fetchRules]);
+  useEffect(() => {
+    if (!open) return;
+    fetchRules();
+    axios.get(`${server.MTC_TOOLING_FORMULA}/machines`)
+      .then(r => setAvailableMachines(r.data.machines || []))
+      .catch(() => {});
+    axios.get(server.MTC_TOOLING_TABLES)
+      .then(r => setAvailableTables((r.data.tables || []).map(t => t.table_name)))
+      .catch(() => {});
+  }, [open, fetchRules]);
 
   const openAdd = () => {
     setEditingRecord(null);
     setDimsValue([]);
     setResultFieldsValue([]);
+    setWatchMachine('');
+    setWatchTable('');
     form.resetFields();
     setIsFormOpen(true);
   };
@@ -137,11 +296,13 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
     setEditingRecord(record);
     setDimsValue(Array.isArray(record.dims) ? record.dims : []);
     setResultFieldsValue(Array.isArray(record.result_fields) ? record.result_fields : []);
+    setWatchMachine(record.machine_name || '');
+    setWatchTable(record.target_tool_table || '');
     form.setFieldsValue({
-      machine_name: record.machine_name,
-      tool_category: record.tool_category,
-      target_tool_table: record.target_tool_table,
-      calc_context: record.calc_context,
+      machine_name:        record.machine_name,
+      tool_category:       record.tool_category,
+      target_tool_table:   record.target_tool_table,
+      calc_context:        record.calc_context,
       machine_ok_condition: record.machine_ok_condition,
     });
     setIsFormOpen(true);
@@ -153,7 +314,7 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
       setSaving(true);
       const payload = {
         ...values,
-        dims: dimsValue.length > 0 ? dimsValue : null,
+        dims:          dimsValue.length > 0        ? dimsValue        : null,
         result_fields: resultFieldsValue.length > 0 ? resultFieldsValue : null,
       };
       if (editingRecord?.id) {
@@ -193,11 +354,14 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
     return acc;
   }, {});
 
-  const columns = [
-    { title: 'Category', dataIndex: 'tool_category', key: 'category', render: v => <Tag color="cyan">{v}</Tag> },
-    { title: 'Table', dataIndex: 'target_tool_table', key: 'table', render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
-    { title: 'Calc Context', dataIndex: 'calc_context', key: 'ctx', render: v => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Dims', dataIndex: 'dims', key: 'dims', width: 60, render: v => Array.isArray(v) && v.length > 0 ? <Badge count={v.length} color="#52c41a" /> : <Text type="secondary" style={{ fontSize: 11 }}>Legacy</Text> },
+  const tableColumns = [
+    { title: 'Category',    dataIndex: 'tool_category',    key: 'category', render: v => <Tag color="cyan">{v}</Tag> },
+    { title: 'Table',       dataIndex: 'target_tool_table', key: 'table',   render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Calc Context', dataIndex: 'calc_context',    key: 'ctx',      render: v => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">-</Text> },
+    { title: 'Dims', dataIndex: 'dims', key: 'dims', width: 60,
+      render: v => Array.isArray(v) && v.length > 0
+        ? <Badge count={v.length} color="#52c41a" />
+        : <Text type="secondary" style={{ fontSize: 11 }}>Legacy</Text> },
     {
       title: '', key: 'action', width: 80,
       render: (_, record) => (
@@ -218,7 +382,7 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
         {machineRules[0]?.machine_ok_condition && <Tag color="orange">{machineRules[0].machine_ok_condition}</Tag>}
       </Space>
     ),
-    children: <Table dataSource={machineRules.map(r => ({ ...r, key: r.id }))} columns={columns} size="small" pagination={false} bordered />,
+    children: <Table dataSource={machineRules.map(r => ({ ...r, key: r.id }))} columns={tableColumns} size="small" pagination={false} bordered />,
   }));
 
   return (
@@ -267,52 +431,93 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
         width={720}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" size="small">
+        <Form
+          form={form}
+          layout="vertical"
+          size="small"
+          onValuesChange={(changed) => {
+            if ('machine_name'      in changed) setWatchMachine(changed.machine_name || '');
+            if ('target_tool_table' in changed) setWatchTable(changed.target_tool_table || '');
+          }}
+        >
           <Row gutter={12}>
             <Col span={8}>
               <Form.Item name="machine_name" label="Machine Name" rules={[{ required: true }]}>
-                <Input placeholder="e.g. KSX100" />
+                <AutoComplete
+                  placeholder="e.g. KS-B22RD"
+                  options={availableMachines.map(m => ({ value: m, label: m }))}
+                  filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item name="tool_category" label="Tool Category" rules={[{ required: true }]}>
-                <Input placeholder="e.g. JAW" />
+                <AutoComplete
+                  placeholder="e.g. JAW"
+                  options={COMMON_TOOL_CATEGORIES.map(c => ({ value: c, label: c }))}
+                  filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="target_tool_table" label="Inventory Table" rules={[{ required: true }]} extra="เช่น tooling_ksx100">
-                <Input placeholder="tooling_ksx100" />
+              <Form.Item name="target_tool_table" label="Inventory Table" rules={[{ required: true }]}>
+                <Select
+                  showSearch
+                  placeholder="tooling_ksb22rd"
+                  options={availableTables.map(t => ({ value: t, label: t }))}
+                  filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+                />
               </Form.Item>
             </Col>
           </Row>
 
           <Divider orientation="left" style={{ fontSize: 12 }}>Formula Linkage</Divider>
-          <Alert
-            type="info" showIcon={false} style={{ marginBottom: 10 }}
-            message={<Text style={{ fontSize: 12 }}><strong>calc_context</strong>: key ใน FormulaService output เช่น <Text code>ks400b</Text> | <strong>machine_ok_condition</strong>: flag เช่น <Text code>ks400bOK</Text></Text>}
-          />
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="calc_context" label="Calc Context">
-                <Input placeholder="e.g. ks400b" />
+              <Form.Item
+                name="calc_context"
+                label="Calc Context"
+                extra={<Text style={{ fontSize: 11 }}>key ใน allCalcs ที่ส่งเข้า findDynamicFixtures</Text>}
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="เลือก context key..."
+                  options={CALC_CONTEXT_OPTIONS}
+                  filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="machine_ok_condition" label="Machine OK Condition">
-                <Input placeholder="e.g. ks400bOK (optional)" />
+              <Form.Item
+                name="machine_ok_condition"
+                label="Machine OK Condition"
+                extra={<Text style={{ fontSize: 11 }}>ถ้า flag นี้เป็น false จะ skip machine</Text>}
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="optional"
+                  options={OK_CONDITION_OPTIONS}
+                />
               </Form.Item>
             </Col>
           </Row>
 
           <Divider orientation="left" style={{ fontSize: 12 }}>Dimension Matching (dims)</Divider>
-          <Alert
-            type="warning" showIcon={false} style={{ marginBottom: 10 }}
-            message={<Text style={{ fontSize: 12 }}>เชื่อม <strong>Calc Key</strong> (ค่าจาก Formula) → <strong>Tool Column</strong> (column ใน inventory table) ด้วย tolerance range</Text>}
+          <DimsEditor
+            value={dimsValue}
+            onChange={setDimsValue}
+            machineName={watchMachine}
+            targetTable={watchTable}
           />
-          <DimsEditor value={dimsValue} onChange={setDimsValue} />
 
           <Divider orientation="left" style={{ fontSize: 12 }}>Result Columns</Divider>
-          <ResultFieldsEditor value={resultFieldsValue} onChange={setResultFieldsValue} />
+          <ResultFieldsEditor
+            value={resultFieldsValue}
+            onChange={setResultFieldsValue}
+            targetTable={watchTable}
+          />
         </Form>
       </Modal>
     </Drawer>

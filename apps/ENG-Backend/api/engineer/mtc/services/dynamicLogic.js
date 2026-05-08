@@ -8,6 +8,7 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
+const inventoryService = require('./inventoryService');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"
@@ -86,6 +87,13 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
 
       for (const catName of Object.keys(mGroup.tools)) {
         const toolSpec = mGroup.tools[catName];
+
+        if (!await inventoryService.tableExists(toolSpec.table)) {
+          console.warn(`dynamicLogic: skipping unknown table "${toolSpec.table}" for ${mName}/${catName}`);
+          continue;
+        }
+        const validCols = await inventoryService.getValidColumns(toolSpec.table);
+
         const dims = toolSpec.dims;
         const legacyRules = toolSpec.legacyRules;
 
@@ -102,6 +110,10 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
           dims.forEach((dim, idx) => {
             const targetVal = resolveCalcKey(calcObj, dim.calc_key);
             if (targetVal === null) return;
+            if (!validCols.has(dim.tool_field)) {
+              console.warn(`dynamicLogic: unknown column "${dim.tool_field}" in "${toolSpec.table}", skipping dim`);
+              return;
+            }
             const tPlus  = parseFloat(dim.tol_plus  || 99);
             const tMinus = parseFloat(dim.tol_minus || 99);
             const pIdx = params.length;
@@ -143,6 +155,10 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
 
             const min = calcVal - (parseFloat(rule.tolerance_minus) || 0);
             const max = calcVal + (parseFloat(rule.tolerance_plus) || 0);
+            if (!validCols.has(rule.target_tool_field)) {
+              console.warn(`dynamicLogic: unknown legacy column "${rule.target_tool_field}" in "${toolSpec.table}", skipping`);
+              return;
+            }
             const pIdx = params.length;
             legacyConditions.push(`${rule.target_tool_field} BETWEEN $${pIdx + 1} AND $${pIdx + 2}`);
             params.push(min, max);

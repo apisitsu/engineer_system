@@ -82,6 +82,11 @@ function adaptDynamicCalcCommon(dynKSB22G, dynTSG300ZNC, partData) {
     ...(bp.A  != null && { bpAA: bp.A }),
     ...(bp.B  != null && { bpBB: bp.B }),
     ...(ch.A  != null && { chuteCalcA: ch.A }),
+    ...(ch.B  != null && { chuteCalcB: ch.B }),
+    ...(ch.C  != null && { chuteCalcC: ch.C }),
+    ...(ch.D  != null && { chuteCalcD: ch.D }),
+    ...(ca.A  != null && { carrierCalcA: ca.A }),
+    ...(ca.B  != null && { carrierCalcB: ca.B }),
     ...(ca.C  != null && { carrierCalcC: ca.C }),
   };
 }

@@ -134,6 +134,100 @@ router.delete('/rules/:id', isAdmin, async (req, res) => {
   }
 });
 
+// ── Rules Health Check ─────────────────────────────────────────────────────
+// Keys produced by FormulaService._enrichContext — keep in sync with that method.
+const ENRICHED_CONTEXT_KEYS = new Set([
+  'odAft', 'odAftTolPlus', 'odAftTolMinus',
+  'idAft', 'idTolPlus', 'idAftTolPlus', 'idTolMinus', 'idAftTolMinus',
+  'wAft', 'wAftTolPlus', 'wAftTolMinus',
+  'odBf', 'odBfTolPlus', 'odBfTolMinus',
+  'odAft_max', 'odAft_min', 'idAft_max', 'idAft_min',
+  'wAft_max', 'wAft_min', 'W_max', 'T1', 'odBf_max', 'odBf_min',
+  'isIDtoOD', 'isYBall', 'isABR', 'sdCalc', 'SD',
+  'Dwg', 'Type', 'Process', 'YBall', 'Offset', 'Tol_P', 'Tol_M', 'PI', 'E',
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+]);
+
+router.get('/rules/validate', async (req, res) => {
+  try {
+    const [rulesRes, formulaRes] = await Promise.all([
+      engPool.query(
+        `SELECT id, machine_name, tool_category, calc_context, dims
+         FROM ${TABLES.MTC_SELECTION_RULES}
+         WHERE is_active = true AND dims IS NOT NULL AND jsonb_array_length(dims) > 0`
+      ),
+      engPool.query(`SELECT DISTINCT machine_name, parameter_name FROM tooling_formula`),
+    ]);
+
+    const formulaMap = {};
+    for (const row of formulaRes.rows) {
+      const key = row.machine_name.toLowerCase().replace(/-/g, '');
+      if (!formulaMap[key]) formulaMap[key] = new Set();
+      formulaMap[key].add(row.parameter_name);
+    }
+
+    const issues = [];
+    for (const rule of rulesRes.rows) {
+      const dims = Array.isArray(rule.dims) ? rule.dims : [];
+      const normalizedCtx = (rule.calc_context || '').toLowerCase().replace(/-/g, '');
+      const validKeys = new Set([...ENRICHED_CONTEXT_KEYS, ...(formulaMap[normalizedCtx] || [])]);
+
+      for (const dim of dims) {
+        if (dim.calc_key && !validKeys.has(dim.calc_key)) {
+          issues.push({
+            rule_id:       rule.id,
+            machine_name:  rule.machine_name,
+            tool_category: rule.tool_category,
+            calc_context:  rule.calc_context,
+            bad_calc_key:  dim.calc_key,
+            tool_field:    dim.tool_field,
+          });
+        }
+      }
+    }
+
+    // Build valid formula keys per calc_context (used by frontend repair dropdowns)
+    const validKeysByContext = {};
+    for (const rule of rulesRes.rows) {
+      if (rule.calc_context && !validKeysByContext[rule.calc_context]) {
+        const normalizedCtx = rule.calc_context.toLowerCase().replace(/-/g, '');
+        validKeysByContext[rule.calc_context] = [...(formulaMap[normalizedCtx] || [])].sort();
+      }
+    }
+
+    res.json({
+      success: true,
+      total_rules_checked: rulesRes.rows.length,
+      issue_count: issues.length,
+      issues,
+      valid_keys_by_context: validKeysByContext,
+    });
+  } catch (err) {
+    console.error('Validate rules error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── Inventory Columns (for Selection Rule validation) ─────────────────────
+
+router.get('/columns/:tableName', async (req, res) => {
+  const { tableName } = req.params;
+  if (!await inventoryService.tableExists(tableName))
+    return res.status(400).json({ success: false, error: 'Invalid or unauthorized table' });
+  try {
+    const r = await engPool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = $1 AND table_schema = 'public'
+       ORDER BY ordinal_position`,
+      [tableName]
+    );
+    res.json({ success: true, columns: r.rows.map(row => row.column_name) });
+  } catch (err) {
+    console.error('Fetch columns error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // ── Table Management ───────────────────────────────────────────────────────
 
 router.get('/tables', async (req, res) => {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Input, InputNumber, Select, Button, Space, Tag,
-  Typography, Radio, Row, Col, Tooltip,
+  Typography, Radio, Tooltip,
 } from 'antd';
 import {
   CalculatorOutlined, CodeOutlined, PlayCircleOutlined,
   CheckCircleOutlined, ExclamationCircleOutlined,
+  PlusOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -22,31 +23,31 @@ export const FORMULA_VARS = [
   { key: 'odBfTolMinus',  desc: 'OD Bf tol-',          cat: 'OD' },
   { key: 'idAft',         desc: 'ID After (nom)',       cat: 'ID' },
   { key: 'idBf',          desc: 'ID Before (nom)',      cat: 'ID' },
-  { key: 'idAft_max',     desc: 'idAft + tol+',         cat: 'ID' },
-  { key: 'idAft_min',     desc: 'idAft + tol-',         cat: 'ID' },
-  { key: 'idAftTolPlus',  desc: 'ID Aft tol+',          cat: 'ID' },
-  { key: 'idAftTolMinus', desc: 'ID Aft tol-',          cat: 'ID' },
-  { key: 'idBfTolPlus',   desc: 'ID Bf tol+',           cat: 'ID' },
-  { key: 'idBfTolMinus',  desc: 'ID Bf tol-',           cat: 'ID' },
-  { key: 'wAft',          desc: 'Width After (nom)',    cat: 'W' },
-  { key: 'wBf',           desc: 'Width Before (nom)',   cat: 'W' },
-  { key: 'wAft_max',      desc: 'wAft + wAftTolPlus',  cat: 'W' },
-  { key: 'wAftTolPlus',   desc: 'W Aft tol+',           cat: 'W' },
-  { key: 'wAftTolMinus',  desc: 'W Aft tol-',           cat: 'W' },
-  { key: 'W_max',         desc: 'wAft + wAftTolPlus',  cat: 'W' },
-  { key: 'T1',            desc: 'wAft alias',           cat: 'W' },
-  { key: 'sd',            desc: 'Ball Diam Before',     cat: 'Ball' },
-  { key: 'sdAft',         desc: 'Ball Diam After',      cat: 'Ball' },
-  { key: 'isYBall',       desc: '1 if Y-Ball',          cat: 'Flag' },
-  { key: 'isIDtoOD',      desc: '1 if ID→OD process',  cat: 'Flag' },
-  { key: 'isABR',         desc: '1 if ABR type',        cat: 'Flag' },
-  { key: 'isInner',       desc: '1 if Inner',           cat: 'Flag' },
-  { key: 'isBallInner',   desc: '1 if Ball Inner',      cat: 'Flag' },
-  { key: 'baseC',         desc: 'Carrier base C',       cat: 'Calc' },
-  { key: 'jawA',          desc: 'Jaw A value',          cat: 'Calc' },
-  { key: 'A',             desc: 'Param A (from prev row)', cat: 'Calc' },
-  { key: 'B',             desc: 'Param B (from prev row)', cat: 'Calc' },
-  { key: 'C',             desc: 'Param C (from prev row)', cat: 'Calc' },
+  { key: 'idAft_max',     desc: 'idAft + tol+',        cat: 'ID' },
+  { key: 'idAft_min',     desc: 'idAft + tol-',        cat: 'ID' },
+  { key: 'idAftTolPlus',  desc: 'ID Aft tol+',         cat: 'ID' },
+  { key: 'idAftTolMinus', desc: 'ID Aft tol-',         cat: 'ID' },
+  { key: 'idBfTolPlus',   desc: 'ID Bf tol+',          cat: 'ID' },
+  { key: 'idBfTolMinus',  desc: 'ID Bf tol-',          cat: 'ID' },
+  { key: 'wAft',          desc: 'Width After (nom)',   cat: 'W' },
+  { key: 'wBf',           desc: 'Width Before (nom)',  cat: 'W' },
+  { key: 'wAft_max',      desc: 'wAft + wAftTolPlus', cat: 'W' },
+  { key: 'wAftTolPlus',   desc: 'W Aft tol+',          cat: 'W' },
+  { key: 'wAftTolMinus',  desc: 'W Aft tol-',          cat: 'W' },
+  { key: 'W_max',         desc: 'wAft + wAftTolPlus', cat: 'W' },
+  { key: 'T1',            desc: 'wAft alias',          cat: 'W' },
+  { key: 'sd',            desc: 'Ball Diam Before',    cat: 'Ball' },
+  { key: 'sdAft',         desc: 'Ball Diam After',     cat: 'Ball' },
+  { key: 'isYBall',       desc: '1 if Y-Ball',         cat: 'Flag' },
+  { key: 'isIDtoOD',      desc: '1 if ID→OD process', cat: 'Flag' },
+  { key: 'isABR',         desc: '1 if ABR type',       cat: 'Flag' },
+  { key: 'isInner',       desc: '1 if Inner',          cat: 'Flag' },
+  { key: 'isBallInner',   desc: '1 if Ball Inner',     cat: 'Flag' },
+  { key: 'baseC',         desc: 'Carrier base C',      cat: 'Calc' },
+  { key: 'jawA',          desc: 'Jaw A value',         cat: 'Calc' },
+  { key: 'A',             desc: 'Param A (prev row)',  cat: 'Calc' },
+  { key: 'B',             desc: 'Param B (prev row)',  cat: 'Calc' },
+  { key: 'C',             desc: 'Param C (prev row)',  cat: 'Calc' },
 ];
 
 const FUNCTIONS = [
@@ -63,7 +64,7 @@ const COMPARE_OPS = ['==', '!=', '>', '<', '>=', '<='];
 const ENUM_VALUES = ['NORMAL', 'ABR', 'BALL_INNER', 'OD→ID', 'ID→OD', 'Y', 'N', 'B'];
 
 const TEMPLATES = [
-  { id: 'simple',      emoji: '🔢', label: 'Arithmetic', desc: 'A ± B' },
+  { id: 'simple',      emoji: '🔢', label: 'Arithmetic', desc: 'A ± B ± C ...' },
   { id: 'rounding',    emoji: '🔄', label: 'Round/Ceil',  desc: 'round(x)' },
   { id: 'conditional', emoji: '❓', label: 'IF / ELSE',   desc: 'cond ? A : B' },
   { id: 'lookup',      emoji: '📊', label: 'Lookup',      desc: 'Table lookup' },
@@ -71,18 +72,25 @@ const TEMPLATES = [
 
 // ── Slot state ────────────────────────────────────────────────────────────────
 const makeDefaultSlots = () => ({
-  leftType: 'var',  leftVar: 'odAft', leftNum: 0,
-  op: '+',
-  rightType: 'num', rightVar: '', rightNum: 0.5,
+  // Multi-term arithmetic (replaces old left/op/right binary model)
+  simpleTerms: [
+    { type: 'var', var: 'odAft', num: 0 },
+    { type: 'num', var: '',      num: 0.5 },
+  ],
+  simpleOps: ['+'],
+  // rounding
   fn: 'round05',
   innerType: 'var', innerVar: 'odAft', innerNum: 0, precision: 2,
+  // conditional
   condVar: 'isYBall', condOp: '==',
   condValType: 'num', condValVar: '', condValNum: 1,
   thenType: 'var', thenVar: 'odAft', thenNum: 0,
   elseType: 'num', elseVar: '', elseNum: 0,
+  // lookup
   lookupVar: 'W_max', lookupValues: '10, 20, 30',
 });
 
+// slotVal is used for prefix-keyed slots (inner, then, else, condVal)
 const slotVal = (slots, prefix) =>
   slots[`${prefix}Type`] === 'num'
     ? String(slots[`${prefix}Num`] ?? 0)
@@ -93,8 +101,12 @@ const generateFormula = (template, slots) => {
   const sv = (p) => slotVal(slots, p);
   switch (template) {
     case 'simple': {
-      const l = sv('left'), r = sv('right');
-      return l && r ? `${l} ${slots.op} ${r}` : '';
+      const terms = slots.simpleTerms || [];
+      const ops   = slots.simpleOps   || [];
+      if (terms.length < 2) return '';
+      const parts = terms.map(t => t.type === 'num' ? String(t.num ?? 0) : (t.var || ''));
+      if (parts.some(p => p === '')) return '';
+      return parts.reduce((acc, p, i) => i === 0 ? p : `${acc} ${ops[i - 1] || '+'} ${p}`, '');
     }
     case 'rounding': {
       const inner = sv('inner');
@@ -106,13 +118,9 @@ const generateFormula = (template, slots) => {
     }
     case 'conditional': {
       let condRight;
-      if (slots.condValType === 'num') {
-        condRight = String(slots.condValNum ?? 0);
-      } else if (slots.condValType === 'enum') {
-        condRight = `"${slots.condValVar}"`;
-      } else {
-        condRight = slots.condValVar || '';
-      }
+      if (slots.condValType === 'num')        condRight = String(slots.condValNum ?? 0);
+      else if (slots.condValType === 'enum')  condRight = `"${slots.condValVar}"`;
+      else                                    condRight = slots.condValVar || '';
       const th = sv('then'), el = sv('else');
       if (!slots.condVar || !condRight || !th || !el) return '';
       return `${slots.condVar} ${slots.condOp} ${condRight} ? ${th} : ${el}`;
@@ -141,25 +149,21 @@ const parseFormula = (raw) => {
   if (!raw) return null;
   const f = raw.trim();
 
-  // lookup(var, vals)
   const m1 = f.match(/^lookup\s*\(\s*(\w+)\s*,\s*(.+)\s*\)$/i);
   if (m1) return { template: 'lookup', slots: { lookupVar: m1[1], lookupValues: m1[2].trim() } };
 
-  // round|ceil|floor(expr, n)
   const m2 = f.match(/^(round|ceil|floor)\s*\(\s*(.+?)\s*,\s*(\d+)\s*\)$/);
   if (m2) return {
     template: 'rounding',
     slots: { fn: m2[1], precision: parseInt(m2[3]), ...parseSlotVal(m2[2], 'inner') },
   };
 
-  // round05|ceil05|floor05(expr)
   const m3 = f.match(/^(round05|ceil05|floor05)\s*\(\s*(.+?)\s*\)$/);
   if (m3) return {
     template: 'rounding',
     slots: { fn: m3[1], precision: 2, ...parseSlotVal(m3[2], 'inner') },
   };
 
-  // conditional: cond ? then : else
   const qIdx = f.indexOf('?');
   if (qIdx > 0) {
     const cIdx = f.lastIndexOf(':');
@@ -186,17 +190,66 @@ const parseFormula = (raw) => {
     }
   }
 
-  // simple: A op B
-  const m5 = f.match(/^(\S+)\s*([+\-*/])\s*(\S+)$/);
-  if (m5) return {
-    template: 'simple',
-    slots: { ...parseSlotVal(m5[1], 'left'), op: m5[2], ...parseSlotVal(m5[3], 'right') },
-  };
+  // Multi-term arithmetic: A + B, A + B - C, A * B + C / D, etc.
+  // Split on operators (with capture group to retain them), validate all parts are var/num tokens.
+  if (!f.includes('(') && !f.includes(')') && !f.includes('?') && !f.includes(':')) {
+    const parts = f.split(/\s*([+\-*/])\s*/);
+    const termStrs = parts.filter((_, i) => i % 2 === 0);
+    const opsArr   = parts.filter((_, i) => i % 2 === 1);
+    const validTerm = (s) => s !== '' && /^[a-zA-Z_]\w*$|^\d+(?:\.\d+)?$/.test(s);
+    if (termStrs.length >= 2 && termStrs.every(validTerm)) {
+      return {
+        template: 'simple',
+        slots: {
+          simpleTerms: termStrs.map(t => {
+            const isNum = !isNaN(Number(t));
+            return { type: isNum ? 'num' : 'var', var: isNum ? '' : t, num: isNum ? Number(t) : 0 };
+          }),
+          simpleOps: opsArr,
+        },
+      };
+    }
+  }
 
   return null;
 };
 
-// ── ValuePicker sub-component ─────────────────────────────────────────────────
+// ── TermPicker — one slot in the multi-term simple editor ────────────────────
+const TermPicker = ({ index, term, onUpdate, allVars, label }) => (
+  <Space direction="vertical" size={2} style={{ minWidth: 130 }}>
+    {label && <Text type="secondary" style={{ fontSize: 10 }}>{label}</Text>}
+    <Radio.Group
+      size="small"
+      optionType="button"
+      value={term.type}
+      onChange={e => onUpdate(index, 'type', e.target.value)}
+      options={[{ value: 'var', label: 'Var' }, { value: 'num', label: '#' }]}
+      style={{ marginBottom: 2 }}
+    />
+    {term.type === 'var' ? (
+      <Select
+        showSearch
+        size="small"
+        style={{ width: 150 }}
+        value={term.var || undefined}
+        onChange={v => onUpdate(index, 'var', v)}
+        placeholder="Pick variable..."
+        options={allVars.map(v => ({ value: v.key, label: v.key, title: v.desc }))}
+        filterOption={(inp, opt) => opt.value.toLowerCase().includes(inp.toLowerCase())}
+      />
+    ) : (
+      <InputNumber
+        size="small"
+        style={{ width: 100 }}
+        value={term.num ?? 0}
+        onChange={v => onUpdate(index, 'num', v ?? 0)}
+        step={0.1}
+      />
+    )}
+  </Space>
+);
+
+// ── ValuePicker — for prefix-keyed slots (inner / then / else) ────────────────
 const ValuePicker = ({ prefix, label, slots, onSlotChange, allVars }) => {
   const type = slots[`${prefix}Type`];
   return (
@@ -248,7 +301,11 @@ const FormulaBuilderInput = ({
   const [slots, setSlots] = useState(makeDefaultSlots());
   const [testResult, setTestResult] = useState(null);
   const [testLoading, setTestLoading] = useState(false);
-  const skipParse = useRef(false);
+  const [varCategory, setVarCategory] = useState('All');
+  // Track the last formula we emitted ourselves.
+  // useEffect skips re-parsing when value === lastEmitted (our own change).
+  // When value is set externally (form load, row switch), lastEmitted differs → parse happens.
+  const lastEmitted = useRef('');
 
   const allVars = [
     ...availableVars,
@@ -257,9 +314,11 @@ const FormulaBuilderInput = ({
       .map(p => ({ key: p, desc: `Prev param: ${p}`, cat: 'Prev' })),
   ];
 
-  // Parse incoming value → visual slots
+  // Sync external value changes into visual slots.
+  // Skip when value came from our own emit (prevents re-parse loop).
+  // Fires on external changes: form initial load, switching to a different formula row.
   useEffect(() => {
-    if (skipParse.current) { skipParse.current = false; return; }
+    if (value === lastEmitted.current) return;
     if (!value) return;
     const parsed = parseFormula(value);
     if (parsed) {
@@ -273,11 +332,14 @@ const FormulaBuilderInput = ({
 
   const emit = useCallback((formula) => {
     if (formula === value) return;
-    skipParse.current = true;
+    lastEmitted.current = formula;
     onChange?.(formula);
     setTestResult(null);
   }, [onChange, value]);
 
+  // ── Slot updaters ────────────────────────────────────────────────────────────
+
+  // For prefix-keyed slots (fn, innerType, condVar, precision, etc.)
   const updateSlot = (key, val) => {
     const next = { ...slots, [key]: val };
     setSlots(next);
@@ -285,6 +347,43 @@ const FormulaBuilderInput = ({
       const f = generateFormula(template, next);
       if (f) emit(f);
     }
+  };
+
+  // For simpleTerms array
+  const updateTerm = (i, field, val) => {
+    const terms = (slots.simpleTerms || []).map((t, idx) => idx === i ? { ...t, [field]: val } : t);
+    const next = { ...slots, simpleTerms: terms };
+    setSlots(next);
+    if (mode === 'visual') { const f = generateFormula(template, next); if (f) emit(f); }
+  };
+
+  // For simpleOps array
+  const updateOp = (i, val) => {
+    const ops = (slots.simpleOps || []).map((o, idx) => idx === i ? val : o);
+    const next = { ...slots, simpleOps: ops };
+    setSlots(next);
+    if (mode === 'visual') { const f = generateFormula(template, next); if (f) emit(f); }
+  };
+
+  const addTerm = () => {
+    const terms = [...(slots.simpleTerms || []), { type: 'num', var: '', num: 0 }];
+    const ops   = [...(slots.simpleOps   || []), '+'];
+    const next  = { ...slots, simpleTerms: terms, simpleOps: ops };
+    setSlots(next);
+    const f = generateFormula(template, next); if (f) emit(f);
+  };
+
+  const removeTerm = (i) => {
+    const terms = slots.simpleTerms || [];
+    const ops   = slots.simpleOps   || [];
+    if (terms.length <= 2) return;
+    const newTerms = terms.filter((_, idx) => idx !== i);
+    // Remove the op that was "after" the term (or before if it's the last)
+    const opIdx   = i < ops.length ? i : i - 1;
+    const newOps  = ops.filter((_, idx) => idx !== opIdx);
+    const next    = { ...slots, simpleTerms: newTerms, simpleOps: newOps };
+    setSlots(next);
+    const f = generateFormula(template, next); if (f) emit(f);
   };
 
   const switchTemplate = (t) => {
@@ -304,216 +403,223 @@ const FormulaBuilderInput = ({
     }
   };
 
+  // Switching to Visual: re-parse current value into slots so they match exactly.
+  // If value can't be parsed (complex formula), leave user in Text mode.
   const switchMode = (m) => {
-    setMode(m);
-    if (m === 'visual') {
-      const parsed = parseFormula(value);
-      if (parsed) {
-        setTemplate(parsed.template);
-        setSlots(prev => ({ ...prev, ...parsed.slots }));
+    if (m === 'text') {
+      setMode('text');
+    } else {
+      if (value) {
+        const parsed = parseFormula(value);
+        if (parsed) {
+          setTemplate(parsed.template);
+          setSlots(prev => ({ ...prev, ...parsed.slots }));
+          setMode('visual');
+        }
+        // else: formula too complex for Visual — stay in text
+      } else {
+        setMode('visual');
       }
     }
     setTestResult(null);
   };
 
-  const formulaPreview = mode === 'text' ? value : generateFormula(template, slots);
+  // Preview always shows the actual value (ground truth), not re-generated from potentially stale slots
+  const formulaPreview = value || (mode === 'visual' ? generateFormula(template, slots) : '');
 
-  const SmallLabel = ({ children }) => (
-    <Text type="secondary" style={{ fontSize: 10 }}>{children}</Text>
+  const SmallLabel = ({ children, color }) => (
+    <Text type="secondary" style={{ fontSize: 10, color }}>{children}</Text>
   );
 
+  // ValuePicker shorthand for prefix-keyed slots
   const vp = (prefix, label) => (
     <ValuePicker prefix={prefix} label={label} slots={slots} onSlotChange={updateSlot} allVars={allVars} />
   );
 
+  // ── Template editors ──────────────────────────────────────────────────────────
   const renderEditor = () => {
     switch (template) {
-      case 'simple':
+      case 'simple': {
+        const terms = slots.simpleTerms || [];
+        const ops   = slots.simpleOps   || [];
         return (
-          <Row gutter={[8, 8]} align="bottom" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-            <Col>{vp('left', 'Value A')}</Col>
-            <Col>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Operator</SmallLabel>
-                <Radio.Group
-                  size="small"
-                  optionType="button"
-                  value={slots.op}
-                  onChange={e => updateSlot('op', e.target.value)}
-                  options={OPS.map(o => ({
-                    value: o,
-                    label: o === '*' ? '×' : o === '/' ? '÷' : o,
-                  }))}
-                />
-              </Space>
-            </Col>
-            <Col>{vp('right', 'Value B')}</Col>
-          </Row>
+          <Space direction="vertical" size={8} style={{ marginTop: 10, width: '100%' }}>
+            {terms.map((term, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <Space direction="vertical" size={2}>
+                    <SmallLabel>Operator</SmallLabel>
+                    <Radio.Group
+                      size="small"
+                      optionType="button"
+                      value={ops[i - 1] || '+'}
+                      onChange={e => updateOp(i - 1, e.target.value)}
+                      options={OPS.map(o => ({
+                        value: o,
+                        label: o === '*' ? '×' : o === '/' ? '÷' : o,
+                      }))}
+                    />
+                  </Space>
+                )}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <TermPicker
+                    index={i}
+                    term={term}
+                    onUpdate={updateTerm}
+                    allVars={allVars}
+                    label={`Value ${String.fromCharCode(65 + i)}`}
+                  />
+                  {terms.length > 2 && (
+                    <Tooltip title="Remove this term">
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeTerm(i)}
+                        style={{ marginTop: 20 }}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+              </React.Fragment>
+            ))}
+            <Button
+              size="small"
+              type="dashed"
+              icon={<PlusOutlined />}
+              onClick={addTerm}
+              style={{ width: 120 }}
+            >
+              Add Term
+            </Button>
+          </Space>
         );
+      }
 
       case 'rounding': {
         const fn = FUNCTIONS.find(f => f.key === slots.fn);
         return (
-          <Row gutter={[8, 8]} align="bottom" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-            <Col>
+          <Space direction="vertical" size={8} style={{ marginTop: 10, width: '100%' }}>
+            <Space direction="vertical" size={2}>
+              <SmallLabel>Function</SmallLabel>
+              <Select
+                size="small"
+                style={{ width: 155 }}
+                value={slots.fn}
+                onChange={v => updateSlot('fn', v)}
+                options={FUNCTIONS.map(f => ({ value: f.key, label: f.label, title: f.desc }))}
+              />
+            </Space>
+            {vp('inner', 'Input Expression')}
+            {fn?.hasPrecision && (
               <Space direction="vertical" size={2}>
-                <SmallLabel>Function</SmallLabel>
-                <Select
+                <SmallLabel>Decimal Precision</SmallLabel>
+                <InputNumber
                   size="small"
-                  style={{ width: 120 }}
-                  value={slots.fn}
-                  onChange={v => updateSlot('fn', v)}
-                  options={FUNCTIONS.map(f => ({
-                    value: f.key,
-                    label: f.key,
-                    title: f.desc,
-                  }))}
+                  style={{ width: 80 }}
+                  value={slots.precision}
+                  min={0}
+                  max={6}
+                  onChange={v => updateSlot('precision', v ?? 2)}
                 />
               </Space>
-            </Col>
-            <Col style={{ paddingBottom: 4 }}><Text>(</Text></Col>
-            <Col>{vp('inner', 'Expression')}</Col>
-            {fn?.hasPrecision && (
-              <>
-                <Col style={{ paddingBottom: 4 }}><Text>,</Text></Col>
-                <Col>
-                  <Space direction="vertical" size={2}>
-                    <SmallLabel>Decimals</SmallLabel>
-                    <InputNumber
-                      size="small"
-                      style={{ width: 60 }}
-                      value={slots.precision}
-                      min={0}
-                      max={6}
-                      onChange={v => updateSlot('precision', v ?? 2)}
-                    />
-                  </Space>
-                </Col>
-              </>
             )}
-            <Col style={{ paddingBottom: 4 }}><Text>)</Text></Col>
-          </Row>
+          </Space>
         );
       }
 
       case 'conditional':
         return (
-          <div style={{ marginTop: 12 }}>
-            <Space wrap align="end" size={[8, 8]}>
-              <Text strong style={{ fontSize: 12, color: '#1677ff' }}>IF</Text>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Variable</SmallLabel>
+          <Space direction="vertical" size={10} style={{ marginTop: 10, width: '100%' }}>
+            <div>
+              <div style={{ marginBottom: 6 }}>
+                <Text strong style={{ fontSize: 12, color: '#1677ff' }}>IF</Text>
+                <SmallLabel>  Condition</SmallLabel>
+              </div>
+              <Space wrap align="center" size={4}>
                 <Select
-                  showSearch
-                  size="small"
-                  style={{ width: 120 }}
+                  showSearch size="small" style={{ width: 120 }}
                   value={slots.condVar || undefined}
                   onChange={v => updateSlot('condVar', v)}
                   options={allVars.map(v => ({ value: v.key, label: v.key }))}
                   filterOption={(i, o) => o.value.toLowerCase().includes(i.toLowerCase())}
+                  placeholder="Variable"
                 />
-              </Space>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Condition</SmallLabel>
                 <Select
-                  size="small"
-                  style={{ width: 70 }}
+                  size="small" style={{ width: 70 }}
                   value={slots.condOp}
                   onChange={v => updateSlot('condOp', v)}
                   options={COMPARE_OPS.map(o => ({ value: o, label: o }))}
                 />
-              </Space>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Value type</SmallLabel>
                 <Radio.Group
-                  size="small"
-                  optionType="button"
+                  size="small" optionType="button"
                   value={slots.condValType}
                   onChange={e => updateSlot('condValType', e.target.value)}
                   options={[
-                    { value: 'num', label: '#' },
+                    { value: 'num',  label: '#' },
                     { value: 'enum', label: 'Text' },
-                    { value: 'var', label: 'Var' },
+                    { value: 'var',  label: 'Var' },
                   ]}
                 />
-              </Space>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Value</SmallLabel>
                 {slots.condValType === 'num' && (
-                  <InputNumber
-                    size="small"
-                    style={{ width: 80 }}
-                    value={slots.condValNum}
-                    onChange={v => updateSlot('condValNum', v ?? 0)}
-                    step={0.1}
-                  />
+                  <InputNumber size="small" style={{ width: 80 }} value={slots.condValNum}
+                    onChange={v => updateSlot('condValNum', v ?? 0)} step={0.1} />
                 )}
                 {slots.condValType === 'enum' && (
-                  <Select
-                    showSearch
-                    size="small"
-                    style={{ width: 110 }}
+                  <Select showSearch size="small" style={{ width: 110 }}
                     value={slots.condValVar || undefined}
                     onChange={v => updateSlot('condValVar', v)}
-                    options={ENUM_VALUES.map(e => ({ value: e, label: e }))}
-                  />
+                    options={ENUM_VALUES.map(e => ({ value: e, label: e }))} />
                 )}
                 {slots.condValType === 'var' && (
-                  <Select
-                    showSearch
-                    size="small"
-                    style={{ width: 130 }}
+                  <Select showSearch size="small" style={{ width: 130 }}
                     value={slots.condValVar || undefined}
                     onChange={v => updateSlot('condValVar', v)}
                     options={allVars.map(v => ({ value: v.key, label: v.key }))}
-                    filterOption={(i, o) => o.value.toLowerCase().includes(i.toLowerCase())}
-                  />
+                    filterOption={(i, o) => o.value.toLowerCase().includes(i.toLowerCase())} />
                 )}
               </Space>
-            </Space>
-            <Row gutter={[8, 8]} align="bottom" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-              <Col>
+            </div>
+            <div>
+              <div style={{ marginBottom: 6 }}>
                 <Text strong style={{ fontSize: 12, color: '#52c41a' }}>THEN</Text>
-              </Col>
-              <Col>{vp('then', '')}</Col>
-              <Col>
+                <SmallLabel>  Value if true</SmallLabel>
+              </div>
+              {vp('then', '')}
+            </div>
+            <div>
+              <div style={{ marginBottom: 6 }}>
                 <Text strong style={{ fontSize: 12, color: '#ff4d4f' }}>ELSE</Text>
-              </Col>
-              <Col>{vp('else', '')}</Col>
-            </Row>
-          </div>
+                <SmallLabel>  Value if false</SmallLabel>
+              </div>
+              {vp('else', '')}
+            </div>
+          </Space>
         );
 
       case 'lookup':
         return (
-          <Row gutter={[8, 8]} align="bottom" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-            <Col>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Input Variable</SmallLabel>
-                <Select
-                  showSearch
-                  size="small"
-                  style={{ width: 130 }}
-                  value={slots.lookupVar || undefined}
-                  onChange={v => updateSlot('lookupVar', v)}
-                  options={allVars.map(v => ({ value: v.key, label: v.key }))}
-                  filterOption={(i, o) => o.value.toLowerCase().includes(i.toLowerCase())}
-                />
-              </Space>
-            </Col>
-            <Col>
-              <Space direction="vertical" size={2}>
-                <SmallLabel>Table values (comma-separated)</SmallLabel>
-                <Input
-                  size="small"
-                  style={{ width: 210, fontFamily: 'monospace' }}
-                  value={slots.lookupValues}
-                  onChange={e => updateSlot('lookupValues', e.target.value)}
-                  placeholder="10, 20, 30"
-                />
-              </Space>
-            </Col>
-          </Row>
+          <Space direction="vertical" size={8} style={{ marginTop: 10, width: '100%' }}>
+            <Space direction="vertical" size={2}>
+              <SmallLabel>Input Variable</SmallLabel>
+              <Select
+                showSearch size="small" style={{ width: 160 }}
+                value={slots.lookupVar || undefined}
+                onChange={v => updateSlot('lookupVar', v)}
+                options={allVars.map(v => ({ value: v.key, label: v.key, title: v.desc }))}
+                filterOption={(i, o) => o.value.toLowerCase().includes(i.toLowerCase())}
+              />
+            </Space>
+            <Space direction="vertical" size={2}>
+              <SmallLabel>Table Values (comma-separated, smallest → largest)</SmallLabel>
+              <Input
+                size="small" style={{ width: 260, fontFamily: 'monospace' }}
+                value={slots.lookupValues}
+                onChange={e => updateSlot('lookupValues', e.target.value)}
+                placeholder="10, 20, 30, 40"
+              />
+            </Space>
+          </Space>
         );
 
       default:
@@ -521,9 +627,15 @@ const FormulaBuilderInput = ({
     }
   };
 
+  const varCategories = ['All', ...new Set(allVars.map(v => v.cat).filter(Boolean))];
+  const filteredVars  = varCategory === 'All' ? allVars : allVars.filter(v => v.cat === varCategory);
+
+  // Whether the current value can be represented in Visual mode
+  const canParseToVisual = !value || !!parseFormula(value);
+
   return (
     <div>
-      {/* Mode toggle */}
+      {/* ① Mode toggle */}
       <Radio.Group
         size="small"
         optionType="button"
@@ -531,35 +643,54 @@ const FormulaBuilderInput = ({
         value={mode}
         onChange={e => switchMode(e.target.value)}
         options={[
-          { value: 'visual', label: <><CalculatorOutlined /> Visual</> },
+          { value: 'visual', label: <><CalculatorOutlined /> Visual</>, disabled: !canParseToVisual },
           { value: 'text',   label: <><CodeOutlined /> Text</> },
         ]}
         style={{ marginBottom: 8 }}
       />
+      {!canParseToVisual && (
+        <Text type="secondary" style={{ fontSize: 10, marginLeft: 8 }}>
+          (formula ซับซ้อนเกิน — ใช้ Text mode)
+        </Text>
+      )}
 
       {mode === 'visual' ? (
         <div>
-          {/* Template selector */}
-          <Space wrap size={4}>
+          {/* ② Template selector */}
+          <Radio.Group
+            size="small"
+            optionType="button"
+            buttonStyle="solid"
+            value={template}
+            onChange={e => switchTemplate(e.target.value)}
+          >
             {TEMPLATES.map(t => (
-              <Tag
-                key={t.id}
-                color={template === t.id ? 'blue' : 'default'}
-                style={{ cursor: 'pointer', padding: '2px 8px', fontSize: 12, userSelect: 'none' }}
-                title={t.desc}
-                onClick={() => switchTemplate(t.id)}
-              >
+              <Radio.Button key={t.id} value={t.id} title={t.desc}>
                 {t.emoji} {t.label}
-              </Tag>
+              </Radio.Button>
             ))}
-          </Space>
+          </Radio.Group>
+          {/* ③ Editor (top-to-bottom per template) */}
           {renderEditor()}
         </div>
       ) : (
         <div>
-          {/* Variable quick-insert panel */}
+          {/* ② Category filter */}
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
+            {varCategories.map(cat => (
+              <Tag
+                key={cat}
+                color={varCategory === cat ? 'blue' : 'default'}
+                style={{ cursor: 'pointer', fontSize: 10, margin: 0 }}
+                onClick={() => setVarCategory(cat)}
+              >
+                {cat}
+              </Tag>
+            ))}
+          </div>
+          {/* ③ Variable quick-insert (filtered) */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6 }}>
-            {allVars.map(v => (
+            {filteredVars.map(v => (
               <Tooltip key={v.key} title={v.desc}>
                 <Tag
                   style={{ cursor: 'pointer', fontSize: 10, padding: '0 5px', margin: 0 }}
@@ -574,6 +705,7 @@ const FormulaBuilderInput = ({
               </Tooltip>
             ))}
           </div>
+          {/* ④ Text input */}
           <Input.TextArea
             rows={3}
             value={value}
@@ -584,7 +716,7 @@ const FormulaBuilderInput = ({
         </div>
       )}
 
-      {/* Formula preview + test */}
+      {/* Formula preview + test — always shows actual value (ground truth) */}
       <div style={{
         marginTop: 8,
         padding: '5px 10px',
