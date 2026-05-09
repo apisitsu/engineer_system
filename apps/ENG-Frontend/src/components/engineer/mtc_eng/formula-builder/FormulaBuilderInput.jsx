@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Input, InputNumber, Select, Button, Space, Tag,
-  Typography, Radio, Tooltip,
+  Typography, Radio, Tooltip, Spin,
 } from 'antd';
 import {
-  CalculatorOutlined, CodeOutlined, PlayCircleOutlined,
   CheckCircleOutlined, ExclamationCircleOutlined,
   PlusOutlined, DeleteOutlined,
 } from '@ant-design/icons';
@@ -61,7 +60,7 @@ const FUNCTIONS = [
 
 const OPS = ['+', '-', '*', '/'];
 const COMPARE_OPS = ['==', '!=', '>', '<', '>=', '<='];
-const ENUM_VALUES = ['NORMAL', 'ABR', 'BALL_INNER', 'OD→ID', 'ID→OD', 'Y', 'N', 'B'];
+const ENUM_VALUES = ['NORMAL', 'ABR', 'BALL_INNER', 'OD->ID', 'ID->OD', 'Y', 'N', 'B'];
 
 const TEMPLATES = [
   { id: 'simple',      emoji: '🔢', label: 'Arithmetic', desc: 'A ± B ± C ...' },
@@ -72,25 +71,20 @@ const TEMPLATES = [
 
 // ── Slot state ────────────────────────────────────────────────────────────────
 const makeDefaultSlots = () => ({
-  // Multi-term arithmetic (replaces old left/op/right binary model)
   simpleTerms: [
     { type: 'var', var: 'odAft', num: 0 },
     { type: 'num', var: '',      num: 0.5 },
   ],
   simpleOps: ['+'],
-  // rounding
   fn: 'round05',
   innerType: 'var', innerVar: 'odAft', innerNum: 0, precision: 2,
-  // conditional
   condVar: 'isYBall', condOp: '==',
   condValType: 'num', condValVar: '', condValNum: 1,
   thenType: 'var', thenVar: 'odAft', thenNum: 0,
   elseType: 'num', elseVar: '', elseNum: 0,
-  // lookup
   lookupVar: 'W_max', lookupValues: '10, 20, 30',
 });
 
-// slotVal is used for prefix-keyed slots (inner, then, else, condVal)
 const slotVal = (slots, prefix) =>
   slots[`${prefix}Type`] === 'num'
     ? String(slots[`${prefix}Num`] ?? 0)
@@ -190,8 +184,6 @@ const parseFormula = (raw) => {
     }
   }
 
-  // Multi-term arithmetic: A + B, A + B - C, A * B + C / D, etc.
-  // Split on operators (with capture group to retain them), validate all parts are var/num tokens.
   if (!f.includes('(') && !f.includes(')') && !f.includes('?') && !f.includes(':')) {
     const parts = f.split(/\s*([+\-*/])\s*/);
     const termStrs = parts.filter((_, i) => i % 2 === 0);
@@ -214,7 +206,7 @@ const parseFormula = (raw) => {
   return null;
 };
 
-// ── TermPicker — one slot in the multi-term simple editor ────────────────────
+// ── TermPicker ────────────────────────────────────────────────────────────────
 const TermPicker = ({ index, term, onUpdate, allVars, label }) => (
   <Space direction="vertical" size={2} style={{ minWidth: 130 }}>
     {label && <Text type="secondary" style={{ fontSize: 10 }}>{label}</Text>}
@@ -249,7 +241,7 @@ const TermPicker = ({ index, term, onUpdate, allVars, label }) => (
   </Space>
 );
 
-// ── ValuePicker — for prefix-keyed slots (inner / then / else) ────────────────
+// ── ValuePicker ───────────────────────────────────────────────────────────────
 const ValuePicker = ({ prefix, label, slots, onSlotChange, allVars }) => {
   const type = slots[`${prefix}Type`];
   return (
@@ -296,16 +288,14 @@ const FormulaBuilderInput = ({
   onTest,
   placeholder = 'e.g. odAft + 0.5',
 }) => {
-  const [mode, setMode] = useState('visual');
   const [template, setTemplate] = useState('simple');
   const [slots, setSlots] = useState(makeDefaultSlots());
   const [testResult, setTestResult] = useState(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [showTextMode, setShowTextMode] = useState(false);
   const [varCategory, setVarCategory] = useState('All');
-  // Track the last formula we emitted ourselves.
-  // useEffect skips re-parsing when value === lastEmitted (our own change).
-  // When value is set externally (form load, row switch), lastEmitted differs → parse happens.
   const lastEmitted = useRef('');
+  const autoTestTimer = useRef(null);
 
   const allVars = [
     ...availableVars,
@@ -315,20 +305,35 @@ const FormulaBuilderInput = ({
   ];
 
   // Sync external value changes into visual slots.
-  // Skip when value came from our own emit (prevents re-parse loop).
-  // Fires on external changes: form initial load, switching to a different formula row.
   useEffect(() => {
     if (value === lastEmitted.current) return;
-    if (!value) return;
+    if (!value) { setShowTextMode(false); return; }
     const parsed = parseFormula(value);
     if (parsed) {
       setTemplate(parsed.template);
       setSlots(prev => ({ ...prev, ...parsed.slots }));
-      setMode('visual');
+      setShowTextMode(false);
     } else {
-      setMode('text');
+      setShowTextMode(true);
     }
   }, [value]);
+
+  // Auto-test with 500ms debounce
+  useEffect(() => {
+    if (!onTest) return;
+    if (!value) { setTestResult(null); return; }
+    if (autoTestTimer.current) clearTimeout(autoTestTimer.current);
+    autoTestTimer.current = setTimeout(async () => {
+      setTestLoading(true);
+      try {
+        const res = await onTest(value);
+        setTestResult(res);
+      } finally {
+        setTestLoading(false);
+      }
+    }, 500);
+    return () => clearTimeout(autoTestTimer.current);
+  }, [value, onTest]);
 
   const emit = useCallback((formula) => {
     if (formula === value) return;
@@ -337,32 +342,27 @@ const FormulaBuilderInput = ({
     setTestResult(null);
   }, [onChange, value]);
 
-  // ── Slot updaters ────────────────────────────────────────────────────────────
+  // ── Slot updaters ─────────────────────────────────────────────────────────
 
-  // For prefix-keyed slots (fn, innerType, condVar, precision, etc.)
   const updateSlot = (key, val) => {
     const next = { ...slots, [key]: val };
     setSlots(next);
-    if (mode === 'visual') {
-      const f = generateFormula(template, next);
-      if (f) emit(f);
-    }
+    const f = generateFormula(template, next);
+    if (f) emit(f);
   };
 
-  // For simpleTerms array
   const updateTerm = (i, field, val) => {
     const terms = (slots.simpleTerms || []).map((t, idx) => idx === i ? { ...t, [field]: val } : t);
     const next = { ...slots, simpleTerms: terms };
     setSlots(next);
-    if (mode === 'visual') { const f = generateFormula(template, next); if (f) emit(f); }
+    const f = generateFormula(template, next); if (f) emit(f);
   };
 
-  // For simpleOps array
   const updateOp = (i, val) => {
     const ops = (slots.simpleOps || []).map((o, idx) => idx === i ? val : o);
     const next = { ...slots, simpleOps: ops };
     setSlots(next);
-    if (mode === 'visual') { const f = generateFormula(template, next); if (f) emit(f); }
+    const f = generateFormula(template, next); if (f) emit(f);
   };
 
   const addTerm = () => {
@@ -378,7 +378,6 @@ const FormulaBuilderInput = ({
     const ops   = slots.simpleOps   || [];
     if (terms.length <= 2) return;
     const newTerms = terms.filter((_, idx) => idx !== i);
-    // Remove the op that was "after" the term (or before if it's the last)
     const opIdx   = i < ops.length ? i : i - 1;
     const newOps  = ops.filter((_, idx) => idx !== opIdx);
     const next    = { ...slots, simpleTerms: newTerms, simpleOps: newOps };
@@ -392,51 +391,29 @@ const FormulaBuilderInput = ({
     if (f) emit(f);
   };
 
-  const handleTest = async () => {
-    if (!onTest) return;
-    setTestLoading(true);
-    try {
-      const res = await onTest(value);
-      setTestResult(res);
-    } finally {
-      setTestLoading(false);
-    }
-  };
-
-  // Switching to Visual: re-parse current value into slots so they match exactly.
-  // If value can't be parsed (complex formula), leave user in Text mode.
-  const switchMode = (m) => {
-    if (m === 'text') {
-      setMode('text');
-    } else {
-      if (value) {
-        const parsed = parseFormula(value);
-        if (parsed) {
-          setTemplate(parsed.template);
-          setSlots(prev => ({ ...prev, ...parsed.slots }));
-          setMode('visual');
-        }
-        // else: formula too complex for Visual — stay in text
-      } else {
-        setMode('visual');
+  const toggleTextMode = () => {
+    if (showTextMode) {
+      const parsed = parseFormula(value);
+      if (parsed) {
+        setTemplate(parsed.template);
+        setSlots(prev => ({ ...prev, ...parsed.slots }));
       }
     }
-    setTestResult(null);
+    setShowTextMode(v => !v);
   };
 
-  // Preview always shows the actual value (ground truth), not re-generated from potentially stale slots
-  const formulaPreview = value || (mode === 'visual' ? generateFormula(template, slots) : '');
+  const canParseToVisual = !value || !!parseFormula(value);
+  const formulaPreview = value || generateFormula(template, slots);
 
-  const SmallLabel = ({ children, color }) => (
-    <Text type="secondary" style={{ fontSize: 10, color }}>{children}</Text>
+  const SmallLabel = ({ children }) => (
+    <Text type="secondary" style={{ fontSize: 10 }}>{children}</Text>
   );
 
-  // ValuePicker shorthand for prefix-keyed slots
   const vp = (prefix, label) => (
     <ValuePicker prefix={prefix} label={label} slots={slots} onSlotChange={updateSlot} allVars={allVars} />
   );
 
-  // ── Template editors ──────────────────────────────────────────────────────────
+  // ── Template editors ──────────────────────────────────────────────────────
   const renderEditor = () => {
     switch (template) {
       case 'simple': {
@@ -630,52 +607,67 @@ const FormulaBuilderInput = ({
   const varCategories = ['All', ...new Set(allVars.map(v => v.cat).filter(Boolean))];
   const filteredVars  = varCategory === 'All' ? allVars : allVars.filter(v => v.cat === varCategory);
 
-  // Whether the current value can be represented in Visual mode
-  const canParseToVisual = !value || !!parseFormula(value);
-
   return (
     <div>
-      {/* ① Mode toggle */}
-      <Radio.Group
-        size="small"
-        optionType="button"
-        buttonStyle="solid"
-        value={mode}
-        onChange={e => switchMode(e.target.value)}
-        options={[
-          { value: 'visual', label: <><CalculatorOutlined /> Visual</>, disabled: !canParseToVisual },
-          { value: 'text',   label: <><CodeOutlined /> Text</> },
-        ]}
-        style={{ marginBottom: 8 }}
-      />
-      {!canParseToVisual && (
-        <Text type="secondary" style={{ fontSize: 10, marginLeft: 8 }}>
-          (formula ซับซ้อนเกิน — ใช้ Text mode)
+      {/* ── Visual mode (always shown when parseable) ── */}
+      {canParseToVisual ? (
+        <div>
+          {/* Template cards */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {TEMPLATES.map(t => (
+              <div
+                key={t.id}
+                onClick={() => switchTemplate(t.id)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: `2px solid ${template === t.id ? '#1677ff' : '#d9d9d9'}`,
+                  background: template === t.id ? '#e6f4ff' : '#fafafa',
+                  textAlign: 'center',
+                  minWidth: 84,
+                  userSelect: 'none',
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+              >
+                <div style={{ fontSize: 18, lineHeight: '1.4' }}>{t.emoji}</div>
+                <div style={{
+                  fontSize: 11, lineHeight: '1.3',
+                  fontWeight: template === t.id ? 600 : 400,
+                  color: template === t.id ? '#1677ff' : '#555',
+                }}>
+                  {t.label}
+                </div>
+                <div style={{ fontSize: 9, color: '#bbb', lineHeight: '1.2' }}>{t.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Editor */}
+          {renderEditor()}
+
+          {/* Advanced toggle */}
+          <div style={{ marginTop: 10 }}>
+            <Button
+              type="link"
+              size="small"
+              onClick={toggleTextMode}
+              style={{ fontSize: 11, padding: 0, color: '#bbb' }}
+            >
+              {showTextMode ? '▲ ซ่อน Text mode' : '▼ Advanced (edit text directly)'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Text type="secondary" style={{ fontSize: 10, display: 'block', marginBottom: 4 }}>
+          formula ซับซ้อน — ใช้ Text mode
         </Text>
       )}
 
-      {mode === 'visual' ? (
-        <div>
-          {/* ② Template selector */}
-          <Radio.Group
-            size="small"
-            optionType="button"
-            buttonStyle="solid"
-            value={template}
-            onChange={e => switchTemplate(e.target.value)}
-          >
-            {TEMPLATES.map(t => (
-              <Radio.Button key={t.id} value={t.id} title={t.desc}>
-                {t.emoji} {t.label}
-              </Radio.Button>
-            ))}
-          </Radio.Group>
-          {/* ③ Editor (top-to-bottom per template) */}
-          {renderEditor()}
-        </div>
-      ) : (
-        <div>
-          {/* ② Category filter */}
+      {/* ── Text mode (shown when advanced or can't parse) ── */}
+      {(showTextMode || !canParseToVisual) && (
+        <div style={{ marginTop: canParseToVisual ? 6 : 0, padding: canParseToVisual ? '8px 10px' : 0, background: canParseToVisual ? '#fafafa' : 'transparent', borderRadius: 6, border: canParseToVisual ? '1px solid #f0f0f0' : 'none' }}>
+          {/* Category filter */}
           <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
             {varCategories.map(cat => (
               <Tag
@@ -688,7 +680,7 @@ const FormulaBuilderInput = ({
               </Tag>
             ))}
           </div>
-          {/* ③ Variable quick-insert (filtered) */}
+          {/* Variable quick-insert */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6 }}>
             {filteredVars.map(v => (
               <Tooltip key={v.key} title={v.desc}>
@@ -705,9 +697,9 @@ const FormulaBuilderInput = ({
               </Tooltip>
             ))}
           </div>
-          {/* ④ Text input */}
+          {/* Text input */}
           <Input.TextArea
-            rows={3}
+            rows={2}
             value={value}
             onChange={e => emit(e.target.value)}
             style={{ fontFamily: 'monospace', fontSize: 12 }}
@@ -716,7 +708,7 @@ const FormulaBuilderInput = ({
         </div>
       )}
 
-      {/* Formula preview + test — always shows actual value (ground truth) */}
+      {/* ── Formula preview + auto-test result ── */}
       <div style={{
         marginTop: 8,
         padding: '5px 10px',
@@ -733,19 +725,8 @@ const FormulaBuilderInput = ({
         <Text code style={{ fontSize: 12, wordBreak: 'break-all', flex: 1 }}>
           {formulaPreview || '(empty)'}
         </Text>
-        {onTest && formulaPreview && (
-          <Button
-            size="small"
-            type="link"
-            loading={testLoading}
-            icon={<PlayCircleOutlined />}
-            onClick={handleTest}
-            style={{ padding: '0 4px', fontSize: 11 }}
-          >
-            Test
-          </Button>
-        )}
-        {testResult && (
+        {onTest && testLoading && <Spin size="small" />}
+        {testResult && !testLoading && (
           testResult.valid
             ? <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontSize: 11 }}>
                 = {testResult.result}

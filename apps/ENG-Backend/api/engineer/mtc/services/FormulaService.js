@@ -50,6 +50,10 @@ class FormulaService {
     if (!formula) return '';
     let f = String(formula).trim();
 
+    // 0. Normalize arrow variants to ASCII -> (handles → and => used interchangeably in DB)
+    f = f.replace(/→/g, '->');
+    f = f.replace(/=>/g, '->');
+
     // 1. Convert Excel-style "func(v1, v2...)" to lookup(func, v1, v2...)
     // ONLY if there's at least one comma (indicating a list, not arithmetic)
     const lookupRegex = /\b([a-zA-Z0-9_]+)\s*\(([^)]+,[^)]+)\)/g;
@@ -185,10 +189,17 @@ class FormulaService {
     ctx.odBf_max = odBf + odBfP;
     ctx.odBf_min = odBf + odBfM;
 
+    const idBf = parseFloat(base.idBf || 0);
+    const idBfP = parseFloat(base.idBfTolPlus || 0);
+    const idBfM = parseFloat(base.idBfTolMinus || 0);
+    ctx.idBf_max = idBf + idBfP;
+    ctx.idBf_min = idBf + idBfM;
+
     // 4. Smart Logic Flags & String Props
-    ctx.isIDtoOD = (base.process === 'ID->OD' || base.isIDtoOD) ? 1 : 0;
-    ctx.isYBall  = (base.yBall === 'Y' || base.isYBall) ? 1 : 0;
-    ctx.isABR    = (base.type?.includes('ABR') || base.yBall === 'Y' || base.yBall === 'B') ? 1 : 0;
+    ctx.isIDtoOD    = (base.process === 'ID->OD' || base.isIDtoOD) ? 1 : 0;
+    ctx.isYBall     = (base.yBall === 'Y' || base.isYBall) ? 1 : 0;
+    ctx.isABR       = (base.type?.includes('ABR') || base.yBall === 'Y' || base.yBall === 'B') ? 1 : 0;
+    ctx.isBallInner = (base.type?.includes('ABR') || base.type?.includes('BALL_INNER')) ? 1 : 0;
 
     // 4b. SD — equivalent of calculationLogic.calculateSD(part)
     const _sdRaw = ctx.isYBall ? parseFloat(base.sd || 0) : parseFloat(base.sdAft || 0);

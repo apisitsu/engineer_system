@@ -3,9 +3,9 @@
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const {
-  calculateToolingParams, calculateSD,
-  calculateKS400B_Params, calculateKS03A_Params,
-  calculateKS500RD_Params, calculateKS400B5_Params, calculateKS400B6_Params,
+  calculateSD,
+  calculateKS03A_Params,
+  calculateKS400B5_Params, calculateKS400B6_Params,
 } = require('./calculationLogic');
 
 // ── DB fetch ───────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ function mapPartData(row) {
     wAftTolMinus:  parseFloat(row.w_aft_min || 0),
     type:    String(row.type    || '').toUpperCase(),
     yBall:   row.yball ? String(row.yball).toUpperCase() : 'N',
-    process: String(row.process || ''),
+    process: String(row.process || '').replace(/=>/g, '->').replace(/→/g, '->'),
     sd:      parseFloat(row.sd     || 0),
     sdAft:   parseFloat(row.sd_aft || 0),
   };
@@ -64,30 +64,32 @@ function computeDerivedFlags(partData) {
 }
 
 // ── Dynamic formula adapters ───────────────────────────────────────────────
-// Adapter: apply dynamic DB formula results onto legacy calc base.
-// Legacy provides complete structure (limit checks, all keys). Dynamic patches individual values.
+// KS-B22G and TSG-300ZNC are fully DB-driven (no hardcode base).
+// Remaining machines still use hardcode base + DB patches (Phase 2/3 migration pending).
 
 // dynKSB22G  → tooling_formula machine='KS-B22G'  (JAW, BACK PLATE)
-// dynTSG300ZNC → tooling_formula machine='TSG-300ZNC' (CHUTE COVER, CARRIER)
+// dynTSG300ZNC → tooling_formula machine='TSG-300ZNC' (CHUTE COVER, CARRIER, CARRIER W)
 function adaptDynamicCalcCommon(dynKSB22G, dynTSG300ZNC, partData) {
-  const base = calculateToolingParams(partData);
-  const jaw = dynKSB22G?.['JAW']         || {};
-  const bp  = dynKSB22G?.['BACK PLATE']  || {};
-  const ch  = dynTSG300ZNC?.['CHUTE COVER'] || {};
-  const ca  = dynTSG300ZNC?.['CARRIER']     || {};
+  const jaw = dynKSB22G?.['JAW']             || {};
+  const bp  = dynKSB22G?.['BACK PLATE']      || {};
+  const ch  = dynTSG300ZNC?.['CHUTE COVER']  || {};
+  const ca  = dynTSG300ZNC?.['CARRIER']      || {};
+  const caw = dynTSG300ZNC?.['CARRIER W']    || {};
   return {
-    ...base,
-    ...(jaw.A != null && { jawA: jaw.A }),
-    ...(jaw.B != null && { jawB: jaw.B }),
-    ...(bp.A  != null && { bpAA: bp.A }),
-    ...(bp.B  != null && { bpBB: bp.B }),
-    ...(ch.A  != null && { chuteCalcA: ch.A }),
-    ...(ch.B  != null && { chuteCalcB: ch.B }),
-    ...(ch.C  != null && { chuteCalcC: ch.C }),
-    ...(ch.D  != null && { chuteCalcD: ch.D }),
-    ...(ca.A  != null && { carrierCalcA: ca.A }),
-    ...(ca.B  != null && { carrierCalcB: ca.B }),
-    ...(ca.C  != null && { carrierCalcC: ca.C }),
+    jawA:         jaw.A    ?? 0,
+    jawB:         jaw.B    ?? 0,
+    baseC:        jaw.C    ?? 0,
+    bpAA:         bp.A     ?? 0,
+    bpBB:         bp.B     ?? 0,
+    chuteCalcA:   ch.A     ?? 0,
+    chuteCalcB:   ch.B     ?? 0,
+    chuteCalcC:   ch.C     ?? 0,
+    chuteCalcD:   ch.D     ?? 0,
+    carrierCalcA: ca.A     ?? 0,
+    carrierCalcB: ca.B     ?? 0,
+    carrierCalcC: ca.C     ?? 0,
+    tsgW_Amin:    caw.Amin ?? 0,
+    tsgW_Amax:    caw.Amax ?? 0,
   };
 }
 
@@ -119,31 +121,89 @@ function adaptDynamicKS03A(dynamic, partData) {
 }
 
 function adaptDynamicKS400B(dynamic, partData) {
-  const base = calculateKS400B_Params(partData);
-  if (dynamic.error || base.error) return base;
-  const wd   = dynamic['WORK DRIVER']   || {};
-  const sb   = dynamic['SUPPORT BLOCK'] || {};
-  const lc   = dynamic['LOADING CHUTE'] || {};
-  const plug = dynamic['PLUG']          || {};
+  if (dynamic.error) return { error: dynamic.error };
+  if (partData.odBf > 32 || partData.wAft > 30) return { error: 'Part size is out of KS400B machine limits' };
+  const SD = calculateSD(partData);
+  if (SD === null) return { error: 'Cannot calculate SD: SD not found' };
+
+  const wd = dynamic['WORK DRIVER']   || {};
+  const sb = dynamic['SUPPORT BLOCK'] || {};
+  const lc = dynamic['LOADING CHUTE'] || {};
+  const pa = dynamic['PLUG(A)']       || {};
+  const pb = dynamic['PLUG(B)']       || {};
+
+  const wd_type = SD < 19.5 ? 'TYPE1' : 'TYPE2';
+  const pa_type = SD <= 8.5 ? 'TYPE1' : (partData.idAft <= 11.4 ? 'TYPE2' : 'TYPE3');
+
   return {
-    ...base,
-    ...(wd.A   != null && { wd_A: wd.A }),
-    ...(wd.B   != null && { wd_B: wd.B }),
-    ...(sb.A   != null && { sb_A: sb.A }),
-    ...(lc.D   != null && { lc_D: lc.D }),
-    ...(plug.A != null && { pa_B: plug.A, pb_B: plug.A }),
+    od_turning: partData.odBf,
+    w_aft:      partData.wAft,
+    SD:         SD.toFixed(3),
+    wd_type,
+    wd_A: wd.A ?? 0,
+    wd_B: wd.B ?? 0,
+    wd_C: wd.C ?? 0,
+    wd_D: wd.D ?? 0,
+    wd_E: wd.E ?? 0,
+    wd_F: wd.F ?? 0,
+    sb_A: sb.A ?? 0,
+    sb_B: sb.B ?? 0,
+    sb_C: sb.C ?? 0,
+    sb_D: sb.D ?? 0,
+    sb_E: sb.E ?? 0,
+    sb_hasR: (sb.R ?? 0) > 0,
+    lc_A: lc.A ?? 0,
+    lc_B: lc.B ?? 0,
+    lc_C: lc.C ?? 0,
+    lc_D: lc.D ?? 0,
+    lc_E: lc.E ?? 0,
+    lc_F: lc.F ?? 0,
+    pa_type,
+    pa_A: pa.A ?? 0,
+    pa_B: pa.B ?? 0,
+    pa_C: pa.C ?? 0,
+    pa_D: pa.D ?? 0,
+    pa_E: pa.E ?? 0,
+    pa_F: 48,
+    pb_type: pa_type,
+    pb_A: pb.A ?? 0,
+    pb_B: pb.B ?? 0,
+    pb_C: pb.C ?? 0,
+    pb_D: pa.D ?? 0,
+    pb_E: pa.E ?? 0,
+    pb_F: 70,
   };
 }
 
 function adaptDynamicKS500RD(dynamic, partData) {
-  const base = calculateKS500RD_Params(partData);
-  if (dynamic.error || base.error) return base;
+  if (dynamic.error) return { error: dynamic.error };
+  const { idAft: ID, odAft: OD, wAft: W } = partData;
+  if (ID < 14 || ID > 38.125 || OD < 26 || OD > 59.531 || W < 23.5 || W > 51.15) {
+    return { error: 'Part size is out of KS500RD machine limits' };
+  }
+  const SD = calculateSD(partData);
+  if (SD === null) return { error: 'SD not found' };
+
   const lp = dynamic['LOADING PINTLE'] || {};
   const wd = dynamic['WORK DRIVER']    || {};
+
+  let fs_No;
+  if (W < 19)       fs_No = '4033-03-0001';
+  else if (W < 21)  fs_No = '4033-03-0002';
+  else if (W < 28)  fs_No = '4033-03-0003';
+  else if (W < 37)  fs_No = '4033-03-0004';
+  else if (W < 46)  fs_No = '4033-03-0005';
+  else if (W < 100) fs_No = '4033-03-0006';
+  else              fs_No = 'Out of Range';
+
   return {
-    ...base,
-    lp: { ...base.lp, ...(lp.A != null && { A: lp.A }), ...(lp.B != null && { B: lp.B }) },
-    wd: { ...base.wd, ...(wd.A != null && { A: wd.A }), ...(wd.B != null && { B: wd.B }) },
+    error: null,
+    lp: {
+      A: lp.A ?? 0, B: lp.B ?? 0, C: lp.C ?? 0, D: lp.D ?? 0,
+      E: lp.E ?? 0, F: lp.F ?? 0, G: lp.G ?? 0, H: lp.H ?? 0,
+    },
+    wd: { A: wd.A ?? 0, B: wd.B ?? 0 },
+    fs: { No: fs_No },
   };
 }
 

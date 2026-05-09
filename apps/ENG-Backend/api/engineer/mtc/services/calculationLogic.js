@@ -1,130 +1,9 @@
 'use strict';
 
-function calculateToolingParams(part) {
-  const jawA = part.process === 'ID->OD' ? part.odBf : part.odAft;
-  const jawB = jawA - 0.4;
-
-  const normalBaseC = 18.5 + (part.wAft / 2) + 3;
-  const specialBaseC = 18.5 + part.wAft - 2;
-  let baseC;
-  if ((part.type.includes('NORMAL') || part.type.includes('OTHER')) && !part.yBall.includes('Y')) {
-    baseC = normalBaseC;
-  } else {
-    baseC = specialBaseC;
-  }
-
-  const ID_part = part.idAft + part.idTolPlus;
-  const bpAA = parseFloat((ID_part + 0.3).toFixed(2));
-  const bpBB = Math.ceil((bpAA + 1.0) * 10) / 10;
-
-  const chuteCalcA = parseFloat((part.odAft + 0.2).toFixed(2));
-  const chuteCalcB = parseFloat((part.wAft + 0.1).toFixed(2));
-  const tempChuteC = chuteCalcB + 5;
-  const chuteCalcC = Math.ceil(tempChuteC / 5) * 5;
-  const chuteCalcD = parseFloat((12 + (chuteCalcA / 2)).toFixed(2));
-
-  const carrierCalcA = parseFloat((part.odAft + 0.5).toFixed(2));
-  const carrierCalcB = parseFloat((404 - carrierCalcA).toFixed(2));
-  const carrierCalcC = parseFloat(((400 + carrierCalcA - carrierCalcB) / 2).toFixed(2));
-
-  const wVal = part.wAft * 0.55;
-  let maxCarrierD = null;
-  if (wVal <= 2.5) maxCarrierD = 2.5;
-  else if (wVal <= 3.0) maxCarrierD = 3.0;
-  else if (wVal <= 4.0) maxCarrierD = 4.0;
-  else if (wVal <= 4.5) maxCarrierD = 4.5;
-  else if (wVal <= 5.0) maxCarrierD = 5.0;
-  else if (wVal <= 6.0) maxCarrierD = 6.0;
-  else if (wVal <= 7.0) maxCarrierD = 7.0;
-  else if (wVal <= 8.0) maxCarrierD = 8.0;
-  else if (wVal <= 9.0) maxCarrierD = 9.0;
-  else if (wVal <= 10.0) maxCarrierD = 10.0;
-  else if (wVal <= 12.0) maxCarrierD = 12.0;
-  else maxCarrierD = Math.round(wVal);
-
-  const odMin = part.odBf - part.odBfTolMinus;
-  const odMax = part.odBf + part.odBfTolPlus;
-  const tsgW_Amin = parseFloat((odMax + 0.1).toFixed(2));
-  const tsgW_Amax = parseFloat((odMin + 1.0).toFixed(2));
-  const wRounded = Math.ceil(part.wAft * 10) / 10;
-  const tsgW_Emin = parseFloat((wRounded * 0.6).toFixed(2));
-  const tsgW_Emax = parseFloat((wRounded * 0.9).toFixed(2));
-
-  return {
-    jawA, jawB, baseC, ID_part, bpAA, bpBB,
-    chuteCalcA, chuteCalcB, chuteCalcC, chuteCalcD,
-    carrierCalcA, carrierCalcB, carrierCalcC, maxCarrierD,
-    tsgW_Amin, tsgW_Amax, tsgW_Emin, tsgW_Emax
-  };
-}
-
 function calculateSD(part) {
   const SD = part.yBall === 'Y' ? part.sd : part.sdAft;
   if (!SD || isNaN(SD) || SD <= 0) return null;
   return SD;
-}
-
-function calculateKS400B_Params(part) {
-  const OD_turning = part.odBf || 0;
-  const W = part.wAft || 0;
-  const ID = part.idAft || 0;
-  const SD = calculateSD(part);
-
-  if (OD_turning > 32 || W > 30) return { error: 'Part size is out of KS400B machine limits' };
-  if (SD === null) return { error: 'Cannot calculate SD: W >= OD', od_turning: part.odBf, w_aft: part.wAft };
-
-  const wd_type = SD < 19.5 ? 'TYPE1' : 'TYPE2';
-  const wd_A = Math.ceil((SD - 0.5) * 2) / 2;
-  const wd_B = Math.floor((ID - 0.8) * 2) / 2;
-  const wd_C = wd_A < 13 ? 32 : 36;
-  const wd_D = SD < 13.5 ? 24 : 30;
-  const wd_E = 23;
-  const wd_F = 8;
-
-  const sb_A = parseFloat((20 + (OD_turning / 3)).toFixed(2));
-  const sb_B = parseFloat((W + 0.3).toFixed(2));
-  const sb_C = parseFloat((OD_turning * (5 / 6)).toFixed(2));
-  const sb_D = parseFloat((30 - (OD_turning / 2)).toFixed(2));
-  const sb_E = parseFloat((30 + (OD_turning / 4)).toFixed(2));
-  const sb_hasR = OD_turning >= 30;
-
-  const lc_E = Math.floor(OD_turning / 6);
-  const lc_A = Math.ceil(197 - (OD_turning / 2) + lc_E);
-  const lc_B = Math.ceil(W + 6);
-  const lc_C = parseFloat((W + 0.2).toFixed(2));
-  const lc_D = Math.ceil(parseFloat((OD_turning + 0.2).toFixed(3)) * 10) / 10;
-  const lc_F = lc_C;
-
-  let pa_A;
-  if (ID < 20) pa_A = parseFloat((ID * 0.7).toFixed(2));
-  else pa_A = parseFloat((ID - 4.0).toFixed(2));
-
-  let pa_type, pa_E;
-  if (SD <= 8.5) { pa_type = 'TYPE1'; pa_E = parseFloat((pa_A / 2).toFixed(2)); }
-  else if (ID <= 11.4) { pa_type = 'TYPE2'; pa_E = 4; }
-  else { pa_type = 'TYPE3'; pa_E = parseFloat((pa_A / 2).toFixed(2)); }
-
-  const pa_B = parseFloat((SD - 0.5).toFixed(2));
-  let pa_C;
-  if (W <= 5) pa_C = 7;
-  else pa_C = parseFloat((W * 0.9).toFixed(2));
-  const pa_D = ID < 4 ? 0.5 : 1.0;
-  const pa_F = 48;
-
-  let pb_A;
-  if (ID < 20) pb_A = parseFloat((ID - 0.7).toFixed(2));
-  else pb_A = parseFloat((ID - 1.0).toFixed(2));
-  const pb_B = pa_B, pb_C = pa_C, pb_D = pa_D, pb_E = pa_E, pb_F = 70;
-
-  return {
-    SD: SD.toFixed(3),
-    wd_type, wd_A, wd_B, wd_C, wd_D, wd_E, wd_F,
-    sb_A, sb_B, sb_C, sb_D, sb_E, sb_hasR,
-    lc_A, lc_B, lc_C, lc_D, lc_E, lc_F,
-    pa_type, pa_A, pa_B, pa_C, pa_D, pa_E, pa_F,
-    pb_A, pb_B, pb_C, pb_D, pb_E, pb_F, pb_type: pa_type,
-    od_turning: OD_turning, w_aft: W
-  };
 }
 
 function calculateKS03A_Params(part) {
@@ -249,48 +128,6 @@ function calculateKS03A_Params(part) {
     pg: { Type: pg_Type, A: pg_A, B: pg_B, C: pg_C, D: pg_D, E: pg_E, F: pg_F },
     ld: { A_target: ld_A_target, A_min: ld_A_min, A_max: ld_A_max, B: ld_B, C: ld_C, D: ld_D, E: ld_E, F: ld_F },
     pr: { Type: pr_Type, A: pr_A }
-  };
-}
-
-function calculateKS500RD_Params(part) {
-  const ID = part.idAft || 0;
-  const W = part.wAft || 0;
-  const OD = part.odAft || 0;
-  if (ID < 14 || ID > 38.125 || OD < 26 || OD > 59.531 || W < 23.5 || W > 51.15) {
-    return { error: 'Part size is out of KS500RD machine limits' };
-  }
-  const SD = calculateSD(part);
-  if (SD === null) return { error: 'SD not found' };
-
-  const lp_A = Math.floor((ID - 1.0) * 10) / 10;
-  const lp_B = Math.floor((ID + 3.0) * 10) / 10;
-  const lp_C = W <= 20 ? parseFloat((W * 0.6).toFixed(1)) : 12;
-  let lp_D = 0;
-  if (ID > 14.0 && ID <= 14.5) lp_D = 9.0;
-  else if (ID > 14.5 && ID <= 24.5) lp_D = 9.5;
-  else if (ID > 24.5) lp_D = 17.5;
-  const lp_E = ID < 24.5 ? 5.5 : 11;
-  const lp_F = Math.floor((ID - 4.5) * 10) / 10;
-  const lp_G = ID < 24.5 ? 9 : 20;
-  const lp_H = Math.round((ID - 0.8) * 10) / 10;
-
-  const wd_A = parseFloat((SD - 0.2).toFixed(2));
-  const wd_B = parseFloat((wd_A - 7.0).toFixed(2));
-
-  let fs_No = '';
-  if (W >= 0 && W < 19) fs_No = '4033-03-0001';
-  else if (W >= 19 && W < 21) fs_No = '4033-03-0002';
-  else if (W >= 21 && W < 28) fs_No = '4033-03-0003';
-  else if (W >= 28 && W < 37) fs_No = '4033-03-0004';
-  else if (W >= 37 && W < 46) fs_No = '4033-03-0005';
-  else if (W >= 46 && W < 100) fs_No = '4033-03-0006';
-  else fs_No = 'Out of Range';
-
-  return {
-    error: null,
-    lp: { A: lp_A, B: lp_B, C: lp_C, D: lp_D, E: lp_E, F: lp_F, G: lp_G, H: lp_H },
-    wd: { A: wd_A, B: wd_B },
-    fs: { No: fs_No }
   };
 }
 
@@ -549,11 +386,8 @@ function calculateKS400B6_Params(part) {
 }
 
 module.exports = {
-  calculateToolingParams,
   calculateSD,
-  calculateKS400B_Params,
   calculateKS03A_Params,
-  calculateKS500RD_Params,
   calculateKS400B5_Params,
   calculateKS400B6_Params,
 };

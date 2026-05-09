@@ -205,6 +205,7 @@ Key columns for the dynamic (new-style) approach:
 | `POST` | `/api/tooling-select/search` | Main tooling search by CN number |
 | `GET` | `/api/tooling-select/rules` | List all active selection rules |
 | `POST/PUT/DELETE` | `/api/tooling-select/rules[/:id]` | CRUD for selection rules (isAdmin) |
+| `GET` | `/api/tooling-select/rules/validate` | Health check: cross-checks every active rule's `dims[].calc_key` against current formula params + enriched context keys; returns `{ issues[], valid_keys_by_context }` |
 | `GET` | `/api/tooling-select/columns/:tableName` | Real column names from an inventory table (whitelisted via `inventoryService.tableExists()`) — used by SelectionRuleManager for live `tool_field` validation |
 | `GET` | `/api/tooling-select/tables` | List all tooling inventory tables |
 | `GET` | `/api/tooling-select/tooling-names/:tableName` | Distinct tooling names in a table |
@@ -222,7 +223,7 @@ All formula operations go through `toolingFormulaController.js` at `/api/mtc/too
 | `GET` | `/api/mtc/tooling-formula/machines` | Distinct machine names in `tooling_formula` |
 | `GET` | `/api/mtc/tooling-formula/:machineName` | Formula rows; optional `?tooling_name=` filter |
 | `POST` | `/api/mtc/tooling-formula` | Create formula row (isAdmin) |
-| `PUT` | `/api/mtc/tooling-formula/:id` | Update formula row (isAdmin) |
+| `PUT` | `/api/mtc/tooling-formula/:id` | Update formula row (isAdmin) — runs in a **transaction**; if `parameter_name` changes, cascades the rename into `mtc_selection_rules.dims[].calc_key` for all active rules whose `calc_context` normalizes to the same machine |
 | `DELETE` | `/api/mtc/tooling-formula/:id` | Hard-delete formula row (isAdmin) |
 
 The legacy `/api/mtc/formulas/*` routes and `formulaController.js` have been deleted. Do not recreate them.
@@ -237,9 +238,27 @@ The legacy `/api/mtc/formulas/*` routes and `formulaController.js` have been del
 
 Embeds both `FormulaBuilderInput` and `SelectionRuleDrawer`.
 
+**Health Check button** (header) — calls `GET /api/tooling-select/rules/validate`, opens a modal showing bad `calc_key` per rule with a "Replace with" dropdown (grouped: formula params for that machine + common enriched keys). "Apply Fixes" PUTs the corrected dims back and re-runs the audit automatically.
+
+**`toolingTables` array** in this file is a hardcoded list of known legacy machines and their inventory tables. Adding a new legacy machine requires updating this array manually.
+
 ### Selection Rules UI
 
 `SelectionRuleDrawer` (exported from `tooling_select/SelectionRuleManager.jsx`) is embedded inside both `ToolingSelectPage` and `ToolManagementPage` as a Drawer — it is **not** a standalone page or route. Access: Tool List drawer → "Selection Rules" button.
+
+### Known Sync Risks (hardcode)
+
+These values exist in **both** backend and frontend — changing one without the other causes silent divergence:
+
+| Value | Backend location | Frontend location |
+|---|---|---|
+| `idAft >= 12.0` threshold (KS-B22RD vs KS-03A routing) | `services/partDataMapper.js` | `ToolingSelectPage.jsx` |
+| `normalBaseC = 18.5 + (wAft/2) + 3` | `services/calculationLogic.js` | `ToolingSelectPage.jsx`, `ToolManagementPage.jsx` (test context) |
+| `jawB = jawA - 0.4` | `services/calculationLogic.js` | `ToolManagementPage.jsx` (test context) |
+
+`ENRICHED_CONTEXT_KEYS` set in `toolingSelectController.js` (used by `/rules/validate`) must also be kept in sync with `FormulaService._enrichContext()` — there is a comment in the controller marking this dependency.
+
+`tooling_formula` table name is still hardcoded as a string in `toolingFormulaController.js` — `TABLES.TOOLING_FORMULA` constant does not yet exist in `mtcConstants.js`.
 
 ### MTC Legacy Duplicate Files
 

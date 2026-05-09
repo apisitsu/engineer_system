@@ -1012,7 +1012,7 @@ const SdsV2AdminPage = () => {
 
   const tabItems = [
     { key: 'params', label: 'Per-record Params', children: <ParamsTab theme={theme} /> },
-    { key: 'machine-config', label: 'Machine Config', children: <MachineConfigTab theme={theme} /> },
+    { key: 'machine-config', label: 'Machine Parameter Config', children: <MachineConfigTab theme={theme} /> },
     {
       key: 'images',
       label: 'Images',
@@ -1035,7 +1035,7 @@ const SdsV2AdminPage = () => {
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
           <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-            SDS v2 — Admin
+            Setup Data Sheet Management
           </Title>
           <Card style={{ background: theme.colors.cardBackground }}>
             <Tabs items={tabItems} />

@@ -18,6 +18,7 @@ import {
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import ScrollbarStyle from '../../../common/scrollbar';
 
@@ -188,19 +189,28 @@ const SdsPage = () => {
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"5"} defaultOpenKeys={"sub1"} />
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
+        <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '15px' }}>
+          <div style={{ padding: '24px', background: theme.colors.background }}>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <Title level={4} style={{ margin: 0, color: colors.primary }}>
-              <DashboardOutlined /> Setup Data Sheet (SDS)
-            </Title>
-            <Button
-              icon={<SettingOutlined />}
-              onClick={() => { fetchTemplates(); setIsModalOpen(true); }}
-            >
-              Manage Templates
-            </Button>
-          </div>
+            {/* Header Section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <AssessmentRoundedIcon sx={{ color: colors.primary, fontSize: 60 }} />
+                <div style={{ padding: '16px' }}>
+                  <Title level={2} style={{ marginBottom: 0 }}>
+                    Setup Data Sheet (SDS)
+                  </Title>
+                  <Text type="secondary">Manage and view machine setup data sheets</Text>
+                </div>
+              </div>
+              <Button
+                icon={<SettingOutlined />}
+                size="large"
+                onClick={() => { fetchTemplates(); setIsModalOpen(true); }}
+              >
+                Manage Templates
+              </Button>
+            </div>
 
           {/* Stats Dashboard */}
           {!searched && (
@@ -231,43 +241,50 @@ const SdsPage = () => {
             </Row>
           )}
 
-          {/* Search Section */}
-          <Card size="small" style={{ marginBottom: 16, borderRadius: '8px', boxShadow: shadows.sm }}>
-            <Space.Compact style={{ width: '100%', maxWidth: 600 }}>
-              <Input
-                placeholder="C/N Number"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                onPressEnter={handleSearch}
-                prefix={<SearchOutlined />}
-                allowClear
-              />
-              <Button type="primary" onClick={handleSearch} loading={loading}>Search</Button>
-              {searched && (
-                <Button icon={<ReloadOutlined />} onClick={() => { setSearched(false); setSearchTerm(''); setResults([]); }} />
+            {/* Search Section */}
+            <Card style={{ marginTop: 16, marginBottom: 16 }}>
+              <Row gutter={[16, 16]} align="middle">
+                <Col xs={24} md={8}>
+                  <Space.Compact style={{ width: 300 }}>
+                    <Input
+                      placeholder="C/N Number"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      onPressEnter={handleSearch}
+                      prefix={<SearchOutlined />}
+                      allowClear
+                    />
+                    <Button type="primary" onClick={handleSearch} loading={loading}>Search</Button>
+                    {searched && (
+                      <Button icon={<ReloadOutlined />} onClick={() => { setSearched(false); setSearchTerm(''); setResults([]); }} />
+                    )}
+                  </Space.Compact>
+                </Col>
+              </Row>
+            </Card>
+
+            <Spin spinning={loading}>
+              {searched ? (
+                <Card size="small" style={{ borderRadius: '8px', boxShadow: shadows.sm }}>
+                  <Table
+                    dataSource={results}
+                    columns={resultColumns}
+                    rowKey={r => `${r.id}_${r.cn}_${r.process_code}`}
+                    size="small"
+                    pagination={{ pageSize: 20 }}
+                  />
+                </Card>
+              ) : (
+                !loading && (
+                  <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.4 }}>
+                    <DashboardOutlined style={{ fontSize: 64, marginBottom: 16, display: 'block', margin: '0 auto', color: colors.primary }} />
+                    <Title level={5} type="secondary">Search for SDS Document</Title>
+                    <Text type="secondary">Enter C/N Number to find related Setup Data Sheets</Text>
+                  </div>
+                )
               )}
-            </Space.Compact>
-          </Card>
-
-          <Spin spinning={loading}>
-            {searched ? (
-              <Card size="small" style={{ borderRadius: '8px', boxShadow: shadows.sm }}>
-                <Table
-                  dataSource={results}
-                  columns={resultColumns}
-                  rowKey={r => `${r.id}_${r.cn}_${r.process_code}`}
-                  size="small"
-                  pagination={{ pageSize: 20 }}
-                />
-              </Card>
-            ) : (
-              !loading && (
-                <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.4 }}>
-
-                </div>
-              )
-            )}
-          </Spin>
+            </Spin>
+          </div>
 
           {/* Template Management Modal */}
           <Modal

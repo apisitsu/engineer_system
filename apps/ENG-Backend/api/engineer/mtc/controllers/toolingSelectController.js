@@ -7,6 +7,7 @@ const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const inventoryService = require('../services/inventoryService');
 const tableAdminService = require('../services/tableAdminService');
+const { invalidateMachineConfigCache } = require('../services/machineQueryService');
 
 // ── Role Authorization Middleware ──────────────────────────────────────────
 const isAdmin = (req, res, next) => {
@@ -424,6 +425,89 @@ router.delete('/spec/:cn', isAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Delete spec error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── Machine Config (Phase 1/2) ────────────────────────────────────────────
+// GET /api/tooling-select/machine-config
+router.get('/machine-config', async (req, res) => {
+  try {
+    const result = await engPool.query(
+      `SELECT * FROM ${TABLES.MTC_MACHINE_CONFIG} ORDER BY id`
+    );
+    res.json({ success: true, configs: result.rows });
+  } catch (err) {
+    console.error('machine-config GET error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/tooling-select/machine-config  (isAdmin)
+router.post('/machine-config', isAdmin, async (req, res) => {
+  const { machine_key, machine_name, display_name, ok_flag_key, conditions, use_dynamic_rules } = req.body;
+  if (!machine_key || !machine_name) {
+    return res.status(400).json({ success: false, error: 'machine_key and machine_name are required' });
+  }
+  try {
+    const result = await engPool.query(
+      `INSERT INTO ${TABLES.MTC_MACHINE_CONFIG}
+       (machine_key, machine_name, display_name, ok_flag_key, conditions, use_dynamic_rules)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [machine_key, machine_name, display_name || machine_name, ok_flag_key || null,
+       JSON.stringify(conditions || []), use_dynamic_rules || false]
+    );
+    invalidateMachineConfigCache();
+    res.json({ success: true, config: result.rows[0] });
+  } catch (err) {
+    console.error('machine-config POST error:', err.message);
+    if (err.code === '23505') return res.status(409).json({ success: false, error: 'machine_key already exists' });
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// PUT /api/tooling-select/machine-config/:id  (isAdmin)
+router.put('/machine-config/:id', isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { machine_name, display_name, ok_flag_key, conditions, use_dynamic_rules, is_active } = req.body;
+  try {
+    const result = await engPool.query(
+      `UPDATE ${TABLES.MTC_MACHINE_CONFIG}
+       SET machine_name       = COALESCE($1, machine_name),
+           display_name       = COALESCE($2, display_name),
+           ok_flag_key        = COALESCE($3, ok_flag_key),
+           conditions         = COALESCE($4, conditions),
+           use_dynamic_rules  = COALESCE($5, use_dynamic_rules),
+           is_active          = COALESCE($6, is_active),
+           updated_at         = NOW()
+       WHERE id = $7 RETURNING *`,
+      [machine_name, display_name, ok_flag_key,
+       conditions !== undefined ? JSON.stringify(conditions) : null,
+       use_dynamic_rules !== undefined ? use_dynamic_rules : null,
+       is_active !== undefined ? is_active : null,
+       id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Config not found' });
+    invalidateMachineConfigCache();
+    res.json({ success: true, config: result.rows[0] });
+  } catch (err) {
+    console.error('machine-config PUT error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/tooling-select/machine-config/:id  (isAdmin)
+router.delete('/machine-config/:id', isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await engPool.query(
+      `DELETE FROM ${TABLES.MTC_MACHINE_CONFIG} WHERE id=$1 RETURNING id`, [id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Config not found' });
+    invalidateMachineConfigCache();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('machine-config DELETE error:', err.message);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });

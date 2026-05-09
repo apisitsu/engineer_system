@@ -77,11 +77,11 @@ export const newprod = createMenu([
 ]);
 
 export const mtc = createMenu([
-    { label: "Home", path: MTC_PATHS.HOME, key: "home" },
+    // { label: "Home", path: MTC_PATHS.HOME, key: "home" },
     { label: "General DWG Request", path: MTC_PATHS.TOOL_REQUEST, key: "tool-request" },
     { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
-    { label: "Setup Data Sheet v2", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
+    { label: "Setup Data Sheet", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
 ]);
 
 export const all = createMenu([

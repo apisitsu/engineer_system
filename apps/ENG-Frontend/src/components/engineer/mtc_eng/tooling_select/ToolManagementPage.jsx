@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Space, Layout,
-  Select, Form, Drawer, message, Popconfirm,
+  Select, Form, message, Popconfirm,
   Modal, Radio, InputNumber, AutoComplete, Tooltip, Tag, Table, Row, Col, Spin, Badge,
 } from 'antd';
 import {
@@ -10,6 +10,7 @@ import {
   SaveOutlined, CloseOutlined, EditOutlined, PlusOutlined, DeleteOutlined,
   CalculatorOutlined, CheckCircleOutlined, ApartmentOutlined, ArrowRightOutlined,
   ArrowLeftOutlined, AuditOutlined, ExclamationCircleOutlined,
+  DownOutlined, UpOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -60,18 +61,14 @@ const ToolManagementPage = () => {
     odAft: 10, odAftTolPlus: 0, odAftTolMinus: 0,
     idAft: 5,  idTolPlus: 0, idTolMinus: 0,
     wAft: 2,   wAftTolPlus: 0, wAftTolMinus: 0,
-    type: 'NORMAL', yBall: 'N', process: 'OD→ID',
+    type: 'NORMAL', yBall: 'N', process: 'OD->ID',
     sd: 0, sdAft: 0,
   });
   const [testResults, setTestResults] = useState({});
   const [testLoading, setTestLoading] = useState(false);
 
-  // ── Formula Edit Drawer state ────────────────────────────────────────────
-  const [formulaEditDrawer, setFormulaEditDrawer] = useState({ open: false, record: null });
-  const [formulaEditDraft, setFormulaEditDraft] = useState({
-    formula_value: '', rounding_rule: 'none', rounding_precision: 2, remark: '',
-  });
-  const [prevParamsForEdit, setPrevParamsForEdit] = useState([]);
+  // ── Inline formula expand state ──────────────────────────────────────────
+  const [expandedFormulaIds, setExpandedFormulaIds] = useState([]);
 
   // ── Add Tool state ───────────────────────────────────────────────────────
   const [isAddToolOpen, setIsAddToolOpen] = useState(false);
@@ -97,6 +94,13 @@ const ToolManagementPage = () => {
   const [auditFixes, setAuditFixes] = useState({});   // { issueIndex: newCalcKey }
   const [auditFixing, setAuditFixing] = useState(false);
   const [auditRules, setAuditRules] = useState({});   // { ruleId: fullRuleObject }
+
+  // ── Machine Config (Phase 1/2) ───────────────────────────────────────────
+  const [machineConfigOpen, setMachineConfigOpen] = useState(false);
+  const [machineConfigs, setMachineConfigs] = useState([]);
+  const [machineConfigLoading, setMachineConfigLoading] = useState(false);
+  const [machineConfigEdits, setMachineConfigEdits] = useState({}); // { id: { conditions, use_dynamic_rules } }
+  const [machineConfigSaving, setMachineConfigSaving] = useState(null); // id being saved
 
   // ── Machine / table config ───────────────────────────────────────────────
   const toolingTables = [
@@ -377,7 +381,7 @@ const ToolManagementPage = () => {
           W_max: parseFloat(b.wAft || 0) + parseFloat(b.wAftTolPlus || 0),
           T1: parseFloat(b.wAft || 0),
           isYBall: b.yBall === 'Y' ? 1 : 0,
-          isIDtoOD: b.process === 'ID→OD' ? 1 : 0,
+          isIDtoOD: b.process === 'ID->OD' ? 1 : 0,
           isABR: (b.type?.includes('ABR') || b.yBall === 'Y') ? 1 : 0,
           Type: b.type,
           Process: b.process,
@@ -407,7 +411,7 @@ const ToolManagementPage = () => {
       const specialBaseC = 18.5 + wAft - 2;
       const isSpecialC = (b.yBall === 'Y' || b.yBall === 'B' || (b.type && !b.type.includes('NORMAL') && !b.type.includes('OTHER')));
       const legacyBaseC = isSpecialC ? specialBaseC : normalBaseC;
-      const legacyJawA  = (b.process === 'ID→OD') ? odBf : odAft;
+      const legacyJawA  = (b.process === 'ID->OD') ? odBf : odAft;
       const context = {
         ...b,
         baseC: legacyBaseC, jawA: legacyJawA, jawB: legacyJawA - 0.4, ID_part: idAft + idAftP,
@@ -417,11 +421,11 @@ const ToolManagementPage = () => {
         odBf_max: odBf + odBfP,    odBf_min: odBf + parseFloat(b.odBfTolMinus || 0),
         W_max: wAft + wAftP, T1: wAft, OD: odAft, ID: idAft,
         Dwg: b.parts_no || b.drawing_no || 'Check Dwg', Type: b.type || 'NORMAL',
-        Process: b.process || 'OD→ID', YBall: b.yBall || 'N',
+        Process: b.process || 'OD->ID', YBall: b.yBall || 'N',
         A: legacyJawA, B: legacyJawA - 0.4, C: legacyBaseC,
         PI: Math.PI, E: Math.E,
         isYBall: (b.yBall === 'Y') ? 1 : 0,
-        isIDtoOD: (b.process === 'ID→OD') ? 1 : 0,
+        isIDtoOD: (b.process === 'ID->OD') ? 1 : 0,
         isABR: (b.type?.includes('ABR') || b.yBall === 'Y' || b.yBall === 'B') ? 1 : 0,
         part: { ...b },
       };
@@ -461,35 +465,10 @@ const ToolManagementPage = () => {
     }
   };
 
-  const openFormulaEditDrawer = (record) => {
-    const edits = formulaEdits[record.id] || {};
-    const rowIdx = formulaAllData.findIndex(r => r.id === record.id);
-    const prevParams = formulaAllData.slice(0, rowIdx).map(r => r.parameter_name).filter(Boolean);
-    setPrevParamsForEdit(prevParams);
-    setFormulaEditDraft({
-      formula_value:      edits.formula_value      ?? record.formula_value      ?? '',
-      rounding_rule:      edits.rounding_rule      ?? record.rounding_rule      ?? 'none',
-      rounding_precision: edits.rounding_precision ?? record.rounding_precision ?? 2,
-      remark:             edits.remark             ?? record.remark             ?? '',
-    });
-    setFormulaEditDrawer({ open: true, record });
-  };
-
-  const applyFormulaEdit = () => {
-    const id = formulaEditDrawer.record?.id;
-    if (!id) return;
-    setFormulaEdits(prev => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        formula_value:      formulaEditDraft.formula_value,
-        rounding_rule:      formulaEditDraft.rounding_rule,
-        rounding_precision: formulaEditDraft.rounding_precision,
-        remark:             formulaEditDraft.remark,
-      },
-    }));
-    setFormulaEditDrawer({ open: false, record: null });
-    message.success('อัพเดต formula แล้ว — กด "Save Changes" เพื่อบันทึกลง DB');
+  const toggleExpandRow = (id) => {
+    setExpandedFormulaIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   // ── Health Check ────────────────────────────────────────────────────────
@@ -551,6 +530,70 @@ const ToolManagementPage = () => {
     }
   };
 
+  // ── Machine Config helpers ────────────────────────────────────────────────
+
+  const openMachineConfig = async () => {
+    setMachineConfigOpen(true);
+    setMachineConfigLoading(true);
+    try {
+      const res = await axios.get(server.MTC_MACHINE_CONFIG);
+      setMachineConfigs(res.data.configs || []);
+      setMachineConfigEdits({});
+    } catch {
+      message.error('Failed to load machine configs');
+    } finally {
+      setMachineConfigLoading(false);
+    }
+  };
+
+  const getConfigDraft = (cfg) => machineConfigEdits[cfg.id] || {
+    conditions: cfg.conditions || [],
+    use_dynamic_rules: cfg.use_dynamic_rules || false,
+  };
+
+  const updateConfigDraft = (id, patch) =>
+    setMachineConfigEdits(prev => ({
+      ...prev,
+      [id]: { ...getConfigDraft({ id, conditions: [], use_dynamic_rules: false }), ...prev[id], ...patch },
+    }));
+
+  const saveMachineConfig = async (cfg) => {
+    const draft = getConfigDraft(cfg);
+    setMachineConfigSaving(cfg.id);
+    try {
+      await axios.put(`${server.MTC_MACHINE_CONFIG}/${cfg.id}`, {
+        conditions: draft.conditions,
+        use_dynamic_rules: draft.use_dynamic_rules,
+      });
+      message.success(`Saved ${cfg.machine_name}`);
+      setMachineConfigEdits(prev => { const n = { ...prev }; delete n[cfg.id]; return n; });
+      const res = await axios.get(server.MTC_MACHINE_CONFIG);
+      setMachineConfigs(res.data.configs || []);
+    } catch {
+      message.error('Failed to save');
+    } finally {
+      setMachineConfigSaving(null);
+    }
+  };
+
+  const addCondition = (id) =>
+    updateConfigDraft(id, {
+      conditions: [...(getConfigDraft({ id, conditions: [] }).conditions),
+        { key: '', source: 'partData', op: '<=', value: 0, label: '' }],
+    });
+
+  const removeCondition = (id, idx) => {
+    const conds = [...(getConfigDraft({ id, conditions: [] }).conditions)];
+    conds.splice(idx, 1);
+    updateConfigDraft(id, { conditions: conds });
+  };
+
+  const updateCondition = (id, idx, field, val) => {
+    const conds = [...(getConfigDraft({ id, conditions: [] }).conditions)];
+    conds[idx] = { ...conds[idx], [field]: val };
+    updateConfigDraft(id, { conditions: conds });
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -578,6 +621,9 @@ const ToolManagementPage = () => {
                   Health Check
                 </Button>
               </Badge>
+              <Button icon={<SettingOutlined />} onClick={openMachineConfig}>
+                Machine Limits
+              </Button>
               <Button icon={<ApartmentOutlined />} onClick={() => setIsRulesDrawerOpen(true)}>
                 Selection Rules
               </Button>
@@ -647,6 +693,137 @@ const ToolManagementPage = () => {
 
         </Content>
       </Layout>
+
+      {/* ── Machine Config Modal (Phase 1/2) ─────────────────────────────── */}
+      <Modal
+        title={<Space><SettingOutlined />Machine Eligibility Limits</Space>}
+        open={machineConfigOpen}
+        onCancel={() => setMachineConfigOpen(false)}
+        footer={null}
+        width={820}
+      >
+        <Spin spinning={machineConfigLoading}>
+          {machineConfigs.map(cfg => {
+            const draft = getConfigDraft(cfg);
+            const isDirty = !!machineConfigEdits[cfg.id];
+            return (
+              <Card
+                key={cfg.id}
+                size="small"
+                style={{ marginBottom: 12 }}
+                title={
+                  <Space>
+                    <Text strong>{cfg.machine_name}</Text>
+                    {cfg.use_dynamic_rules && <Tag color="blue">Dynamic Rules</Tag>}
+                    {isDirty && <Tag color="orange">Unsaved</Tag>}
+                  </Space>
+                }
+                extra={
+                  <Space>
+                    <Tooltip title="When ON, legacy SQL is skipped and mtc_selection_rules engine handles this machine">
+                      <span style={{ fontSize: 12, color: '#666' }}>Dynamic Rules:</span>
+                    </Tooltip>
+                    <Select
+                      size="small"
+                      value={draft.use_dynamic_rules}
+                      style={{ width: 80 }}
+                      onChange={v => updateConfigDraft(cfg.id, { use_dynamic_rules: v })}
+                      options={[{ value: false, label: 'OFF' }, { value: true, label: 'ON' }]}
+                    />
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<SaveOutlined />}
+                      loading={machineConfigSaving === cfg.id}
+                      disabled={!isDirty}
+                      onClick={() => saveMachineConfig(cfg)}
+                    >
+                      Save
+                    </Button>
+                  </Space>
+                }
+              >
+                {draft.conditions.map((cond, idx) => (
+                  <Row key={idx} gutter={4} style={{ marginBottom: 6 }} align="middle">
+                    <Col span={4}>
+                      <Select
+                        size="small"
+                        style={{ width: '100%' }}
+                        value={cond.source}
+                        onChange={v => updateCondition(cfg.id, idx, 'source', v)}
+                        options={[
+                          { value: 'partData', label: 'Part Dim' },
+                          { value: 'calc', label: 'Calc' },
+                        ]}
+                      />
+                    </Col>
+                    <Col span={5}>
+                      <Input
+                        size="small"
+                        placeholder="key (e.g. jawA)"
+                        value={cond.key}
+                        onChange={e => updateCondition(cfg.id, idx, 'key', e.target.value)}
+                      />
+                    </Col>
+                    <Col span={3}>
+                      <Select
+                        size="small"
+                        style={{ width: '100%' }}
+                        value={cond.op}
+                        onChange={v => updateCondition(cfg.id, idx, 'op', v)}
+                        options={['<=', '>=', '<', '>', '='].map(o => ({ value: o, label: o }))}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <InputNumber
+                        size="small"
+                        style={{ width: '100%' }}
+                        value={cond.value}
+                        step={0.1}
+                        onChange={v => updateCondition(cfg.id, idx, 'value', v)}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Input
+                        size="small"
+                        placeholder="Label (shown in exclusion reason)"
+                        value={cond.label}
+                        onChange={e => updateCondition(cfg.id, idx, 'label', e.target.value)}
+                      />
+                    </Col>
+                    <Col span={2} style={{ textAlign: 'center' }}>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeCondition(cfg.id, idx)}
+                      />
+                    </Col>
+                  </Row>
+                ))}
+                {draft.conditions.length === 0 && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    No dimension conditions — machine is eligible when formula has no error
+                  </Text>
+                )}
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  style={{ marginTop: 8 }}
+                  onClick={() => addCondition(cfg.id)}
+                >
+                  Add Condition
+                </Button>
+              </Card>
+            );
+          })}
+          {!machineConfigLoading && machineConfigs.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 32, color: '#999' }}>
+              No machine configs found — run the DB migration first
+            </div>
+          )}
+        </Spin>
+      </Modal>
 
       {/* ── Health Check Modal ────────────────────────────────────────────── */}
       <Modal
@@ -837,7 +1014,7 @@ const ToolManagementPage = () => {
           </Space>
         }
         open={isFormulaSettingOpen}
-        onCancel={() => setIsFormulaSettingOpen(false)}
+        onCancel={() => { setIsFormulaSettingOpen(false); setExpandedFormulaIds([]); }}
         width={940}
         destroyOnHidden
         footer={[
@@ -900,8 +1077,8 @@ const ToolManagementPage = () => {
                   <Col>
                     <Form.Item label="Process" style={{ marginBottom: 0 }}>
                       <Select value={testContext.process} onChange={v => setTestContext({ ...testContext, process: v })} style={{ width: 90 }}>
-                        <Select.Option value="OD→ID">OD→ID</Select.Option>
-                        <Select.Option value="ID→OD">ID→OD</Select.Option>
+                        <Select.Option value="OD->ID">OD→ID</Select.Option>
+                        <Select.Option value="ID->OD">ID→OD</Select.Option>
                       </Select>
                     </Form.Item>
                   </Col>
@@ -1035,6 +1212,31 @@ const ToolManagementPage = () => {
               pagination={false}
               bordered
               scroll={{ y: 420 }}
+              expandable={{
+                expandedRowKeys: expandedFormulaIds,
+                showExpandColumn: false,
+                expandedRowRender: (record) => {
+                  const rowIdx = formulaAllData.findIndex(r => r.id === record.id);
+                  const prevParams = formulaAllData.slice(0, rowIdx).map(r => r.parameter_name).filter(Boolean);
+                  return (
+                    <div style={{ padding: '12px 16px', background: '#f0f4ff', borderRadius: 6, margin: '0 8px 8px 8px' }}>
+                      <Text strong style={{ fontSize: 11, color: '#1677ff', display: 'block', marginBottom: 8 }}>
+                        <CalculatorOutlined /> Formula Builder — Param: {record.parameter_name}
+                      </Text>
+                      <FormulaBuilderInput
+                        value={formulaEdits[record.id]?.formula_value ?? record.formula_value ?? ''}
+                        onChange={v => setFormulaEdits(prev => ({
+                          ...prev,
+                          [record.id]: { ...prev[record.id], formula_value: v },
+                        }))}
+                        availableVars={FORMULA_VARS}
+                        previousParams={prevParams}
+                        onTest={testSingleFormula}
+                      />
+                    </div>
+                  );
+                },
+              }}
               columns={[
                 {
                   title: <Tooltip title="Execution order — formulas run top-to-bottom.">#</Tooltip>,
@@ -1061,18 +1263,34 @@ const ToolManagementPage = () => {
                   ),
                 },
                 {
-                  title: 'Formula', dataIndex: 'formula_value',
+                  title: 'Formula',
+                  dataIndex: 'formula_value',
                   render: (v, record) => {
                     const current = formulaEdits[record.id]?.formula_value ?? v;
+                    const currentRemark = formulaEdits[record.id]?.remark ?? record.remark;
+                    const isExpanded = expandedFormulaIds.includes(record.id);
                     return (
-                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                        <Text code style={{ fontSize: 10, wordBreak: 'break-all', display: 'block', maxWidth: 200 }}>
-                          {current || '(empty)'}
-                        </Text>
-                        <Button size="small" icon={<CalculatorOutlined />} onClick={() => openFormulaEditDrawer(record)}>
-                          Edit
-                        </Button>
-                      </Space>
+                      <div style={{ cursor: 'pointer' }} onClick={() => toggleExpandRow(record.id)}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                          <Text code style={{ fontSize: 10, flex: 1, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
+                            {current || <span style={{ color: '#bbb' }}>(empty)</span>}
+                          </Text>
+                          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, paddingTop: 1 }}>
+                            {formulaEdits[record.id] && (
+                              <Tag color="orange" style={{ fontSize: 9, padding: '0 3px', margin: 0, lineHeight: '14px' }}>edited</Tag>
+                            )}
+                            {isExpanded
+                              ? <UpOutlined style={{ fontSize: 10, color: '#1677ff' }} />
+                              : <DownOutlined style={{ fontSize: 10, color: '#bbb' }} />
+                            }
+                          </div>
+                        </div>
+                        {currentRemark && (
+                          <div style={{ fontSize: 10, color: '#888', marginTop: 2, fontStyle: 'italic' }}>
+                            {currentRemark}
+                          </div>
+                        )}
+                      </div>
                     );
                   },
                 },
@@ -1133,86 +1351,6 @@ const ToolManagementPage = () => {
           )}
         </Spin>
       </Modal>
-
-      {/* ── Formula Edit Drawer ────────────────────────────────────────────── */}
-      <Drawer
-        title={
-          <Space>
-            <CalculatorOutlined />
-            <span>Formula Builder</span>
-            {formulaEditDrawer.record && (
-              <>
-                <Tag color="blue">{formulaMachine}</Tag>
-                <Tag color="green">{formulaEditDrawer.record.parameter_name}</Tag>
-              </>
-            )}
-          </Space>
-        }
-        placement="right"
-        width={680}
-        open={formulaEditDrawer.open}
-        onClose={() => setFormulaEditDrawer({ open: false, record: null })}
-        footer={
-          <div style={{ textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setFormulaEditDrawer({ open: false, record: null })}>Cancel</Button>
-              <Button type="primary" icon={<SaveOutlined />} onClick={applyFormulaEdit}>Apply Changes</Button>
-            </Space>
-          </div>
-        }
-      >
-        <Form layout="vertical" size="small">
-          <Form.Item label="Formula Expression">
-            <FormulaBuilderInput
-              value={formulaEditDraft.formula_value}
-              onChange={v => setFormulaEditDraft(p => ({ ...p, formula_value: v }))}
-              availableVars={FORMULA_VARS}
-              previousParams={prevParamsForEdit}
-              onTest={testSingleFormula}
-            />
-          </Form.Item>
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item label="Rounding Rule">
-                <Select value={formulaEditDraft.rounding_rule}
-                  onChange={v => setFormulaEditDraft(p => ({ ...p, rounding_rule: v }))}>
-                  <Select.Option value="none">none</Select.Option>
-                  <Select.Option value="ceil">ceil</Select.Option>
-                  <Select.Option value="floor">floor</Select.Option>
-                  <Select.Option value="round">round</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item label="Precision">
-                <InputNumber min={0} max={6} style={{ width: '100%' }}
-                  value={formulaEditDraft.rounding_precision}
-                  onChange={v => setFormulaEditDraft(p => ({ ...p, rounding_precision: v ?? 2 }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={10}>
-              <Form.Item label="Remark">
-                <Input value={formulaEditDraft.remark}
-                  onChange={e => setFormulaEditDraft(p => ({ ...p, remark: e.target.value }))}
-                  placeholder="optional"
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          {isTestModeOpen && (
-            <Form.Item label="Quick Test (ใช้ค่าจาก Test Simulation ด้านบน)">
-              <Button size="small" onClick={async () => {
-                const r = await testSingleFormula(formulaEditDraft.formula_value);
-                if (r.valid) message.success(`Result: ${r.result}`);
-                else message.error(`Error: ${r.error}`);
-              }}>
-                Run Test
-              </Button>
-            </Form.Item>
-          )}
-        </Form>
-      </Drawer>
 
       {/* ── Selection Rules Drawer ────────────────────────────────────────── */}
       <SelectionRuleDrawer open={isRulesDrawerOpen} onClose={() => setIsRulesDrawerOpen(false)} />

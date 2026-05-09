@@ -24,7 +24,7 @@ async function findFixtures(cnNumber) {
     ]);
 
     const calcs   = buildCalcMap({ dynKSB22G, dynTSG300ZNC, dynKS400B, dynKS03A, dynKS500RD, dynKS400B5, dynKS400B6 }, partData);
-    const okFlags = computeOkFlags(calcs.calc, calcs, partData);
+    const okFlags = await computeOkFlags(calcs.calc, calcs, partData);
     const rows    = await fetchToolingRows(okFlags, calcs.calc);
     const results = assembleResults(rows, okFlags, calcs, partData);
 
@@ -44,6 +44,7 @@ async function findFixtures(cnNumber) {
       cn: String(cnNumber).trim(),
       part: partData,
       dynamicFixtures,
+      exclusionReasons: okFlags._exclusionReasons || {},
       calc: {
         A:        calc.jawA.toFixed(3),
         B:        calc.jawB.toFixed(3),

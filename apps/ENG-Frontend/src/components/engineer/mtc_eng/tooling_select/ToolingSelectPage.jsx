@@ -20,19 +20,17 @@ import { useNavigate } from 'react-router-dom';
 import { server } from '../../../../constance/constance';
 import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import ScrollbarStyle from '../../../common/scrollbar';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
-// Generic Table Component
 const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
 
 const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) => {
   if (!dataSource || dataSource.length === 0) return null;
-
-  // กรองเฉพาะ column ที่มีข้อมูลอย่างน้อย 1 row หรือมีการตั้ง Target ไว้
   const visibleIndices = columns
     .map((colKey, i) => ({ colKey, i }))
     .filter(({ colKey, i }) => dataSource.some(row => !isEmpty(row[colKey])) || !isEmpty(targets[i]));
@@ -53,36 +51,20 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
         return rank <= 3 ? <Badge count={rank} style={{ backgroundColor: color }} /> : rank;
       }
     },
-    {
-      title: 'No',
-      dataIndex: 'no',
-      key: 'no',
-      width: 120,
-      render: (text) => <Text strong>{text}</Text>
-    },
+    { title: 'No', dataIndex: 'no', key: 'no', width: 120, render: (text) => <Text strong>{text}</Text> },
     ...visibleIndices.map(({ colKey, i }) => ({
       title: (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '12px', fontWeight: '600' }}>{headers[i]}</div>
           {targets[i] !== undefined && targets[i] !== null && targets[i] !== '' && targets[i] !== '-' && (
             <div style={{
-              fontSize: '10px',
-              marginTop: '4px',
-              padding: '2px 4px',
-              backgroundColor: '#e6f7ff',
-              color: '#1890ff',
-              borderRadius: '4px',
-              border: '1px solid #91d5ff'
-            }}>
-              Req: {targets[i]}
-            </div>
+              fontSize: '10px', marginTop: '4px', padding: '2px 4px',
+              backgroundColor: '#e6f7ff', color: '#1890ff', borderRadius: '4px', border: '1px solid #91d5ff'
+            }}> Req: {targets[i]} </div>
           )}
         </div>
       ),
-      dataIndex: colKey,
-      key: colKey,
-      align: 'center',
-      render: (text) => text || '-'
+      dataIndex: colKey, key: colKey, align: 'center', render: (text) => text || '-'
     }))
   ];
 
@@ -94,13 +76,7 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
       style={{ marginBottom: 16, borderRadius: '8px', overflow: 'hidden' }}
       styles={{ body: { padding: 0 } }}
     >
-      <Table
-        dataSource={dataSource.map((item, idx) => ({ ...item, key: idx }))}
-        columns={tableColumns}
-        pagination={false}
-        size="small"
-        bordered
-      />
+      <Table dataSource={dataSource.map((item, idx) => ({ ...item, key: idx }))} columns={tableColumns} pagination={false} size="small" bordered />
     </Card>
   );
 };
@@ -112,7 +88,6 @@ const ToolingSelectPage = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-
 
   const colors = theme?.colors || {};
   const shadows = theme?.shadows || {};
@@ -138,11 +113,9 @@ const ToolingSelectPage = () => {
     const c = res.calc;
     const mData = [];
 
-    // TSG-300ZNC & TSG300W — แสดงทั้งคู่เสมอถ้ามีข้อมูล TSG
     const zncChutes = res.chutes?.filter(item => !String(item.machine).toUpperCase().includes('W')) || [];
     const wChutes = res.chutes?.filter(item => String(item.machine).toUpperCase().includes('W')) || [];
-    const hasTsg = zncChutes.length || res.carriersZNC?.length || wChutes.length || res.carriersW?.length;
-    if (hasTsg) {
+    if (zncChutes.length || res.carriersZNC?.length || wChutes.length || res.carriersW?.length) {
       const zncFound = (zncChutes.length ? 1 : 0) + (res.carriersZNC?.length ? 1 : 0);
       mData.push({
         name: 'TSG-300ZNC', group: 'FACE', found: zncFound, required: 2, tools: [
@@ -159,7 +132,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B
     const ks = res.ks400b?.calc;
     if (ks && !ks.error) {
       const found = (res.ks400b.workDrivers?.length ? 1 : 0) + (res.ks400b.loadingChutes?.length ? 1 : 0) + (res.ks400b.supportBlocks?.length ? 1 : 0) + (res.ks400b.plugsA?.length ? 1 : 0) + (res.ks400b.plugsB?.length ? 1 : 0);
@@ -174,7 +146,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B5
     const b5 = res.ks400b5?.calc;
     if (b5 && !b5.error) {
       const found = Object.keys(res.ks400b5).filter(k => k !== 'calc' && res.ks400b5[k]?.length).length;
@@ -194,7 +165,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B6
     const b6 = res.ks400b6?.calc;
     if (b6 && !b6.error) {
       const found = Object.keys(res.ks400b6).filter(k => k !== 'calc' && res.ks400b6[k]?.length).length;
@@ -213,7 +183,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS500RD
     const ks5 = res.ks500rd?.calc;
     if (ks5 && !ks5.error) {
       const found = (res.ks500rd.workDrivers?.length ? 1 : 0) + (res.ks500rd.loadingPintles?.length ? 1 : 0) + (res.ks500rd.frontShoes?.length ? 1 : 0);
@@ -226,7 +195,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS-03A & KS-B22RD — แสดงแค่เครื่องเดียวตาม idAft (>= 12 = KS-B22RD, < 12 = KS-03A)
     const ks3 = res.ks03a?.calc;
     if (ks3 && !ks3.error) {
       const found = Object.keys(res.ks03a).filter(k => k !== 'calc' && res.ks03a[k]?.length).length;
@@ -245,7 +213,6 @@ const ToolingSelectPage = () => {
       mData.push({ name: machineName, group: 'ID', found, required: 9, tools: ks3Tools });
     }
 
-    // KS-B22G / KS-B80
     if (res.jaws?.length || res.bps?.length) {
       const found = (res.jaws?.length ? 1 : 0) + (res.bps?.length ? 1 : 0);
       mData.push({
@@ -255,7 +222,6 @@ const ToolingSelectPage = () => {
         ]
       });
     }
-
     return mData;
   };
 
@@ -266,141 +232,83 @@ const ToolingSelectPage = () => {
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"4"} defaultOpenKeys={"sub1"} />
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Title level={4} style={{ margin: 0, color: colors.primary }}>
-              Tooling Selection System
-            </Title>
-            <Space>
-              <Button
-                icon={<DatabaseOutlined />}
-                onClick={() => navigate(MTC_PATHS.TOOLING_SPEC)}
-              >
-                Spec Management
-              </Button>
-              <Button
-                icon={<DatabaseOutlined />}
-                onClick={() => navigate(MTC_PATHS.TOOLING_MANAGEMENT)}
-              >
-                Tool Management
-              </Button>
-            </Space>
-          </div>
-
-          {/* Search Section */}
-          <Card size="small" style={{ marginBottom: 16, borderRadius: '8px', boxShadow: shadows.sm }}>
-            <Space.Compact style={{ width: '100%', maxWidth: 500 }}>
-              <Input
-                placeholder="C/N Number"
-                value={cnInput}
-                onChange={e => setCnInput(e.target.value)}
-                onPressEnter={handleSearch}
-                prefix={<SearchOutlined />}
-                allowClear
-              />
-              <Button
-                type="primary"
-                onClick={handleSearch}
-                loading={loading}
-                style={{ background: colors.primary, borderColor: colors.primary }}
-                disabled={!cnInput.trim()}
-              >
-                Search
-              </Button>
-            </Space.Compact>
-          </Card>
-
-          {error && (
-            <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />
-          )}
-
-          <Spin spinning={loading} tip="Searching...">
-            {result ? (
-              <>
-                <Card size="small" style={{ marginBottom: 16, borderLeft: `4px solid ${colors.primary}`, borderRadius: '8px', boxShadow: shadows.sm }}>
-                  <Row gutter={[24, 16]}>
-                    <Col span={24}>
-                      <Title level={5} style={{ margin: 0 }}>
-                        C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
-                        <Tag color="green">{(result.part.process || '').replace('→', '->').replace('???', '->').replace('—', '-')}</Tag>
-                        <Tag color="purple">{result.part.type}</Tag>
-                        <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
-                      </Title>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">OD (Outside Diameter)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.odBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.odAft}</Text>
-                      </Space>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">ID (Inside Diameter)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.idBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.idAft}</Text>
-                      </Space>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">W (Thickness)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.wBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.wAft}</Text>
-                      </Space>
-                    </Col>
-                    {(result.part.sd > 0 || result.part.sdAft > 0) && (
-                      <Col xs={24} md={8}>
-                        <div style={{ marginBottom: 8 }}><Text type="secondary">SD (Ball Diameter)</Text></div>
-                        <Space>
-                          <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.sd || '-'}</Text>
-                          <SwapOutlined style={{ color: colors.primary }} />
-                          <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.sdAft || '-'}</Text>
-                        </Space>
-                      </Col>
-                    )}
-                  </Row>
-                </Card>
-
-                <Collapse
-                  items={mData.map(m => ({
-                    key: m.name,
-                    label: (
-                      <Space>
-                        <Text strong>{m.name}</Text>
-                        <Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>
-                        {m.found < m.required && (
-                          <Tag color="orange">{m.found}/{m.required} found</Tag>
-                        )}
-                      </Space>
-                    ),
-                    children: (
-                      <div>
-                        {m.tools.map(t => (
-                          <div key={t.title}>{t.content}</div>
-                        ))}
-                      </div>
-                    )
-                  }))}
-                  style={{ marginBottom: 16 }}
-                />
-              </>
-            ) : (
-              !loading && (
-                <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }}>
-                  <ToolOutlined style={{ fontSize: 64, marginBottom: 16, display: 'block', margin: '0 auto', color: colors.primary }} />
-                  <Title level={5} type="secondary">Tooling Selection System</Title>
-                  <Text type="secondary">C/N Number</Text>
+        <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '15px' }}>
+          <div style={{ padding: '24px', background: colors.background }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <AssessmentRoundedIcon sx={{ color: colors.primary, fontSize: 60 }} />
+                <div style={{ padding: '16px' }}>
+                  <Title level={2} style={{ marginBottom: 0 }}>Tooling Selection System</Title>
+                  <Text type="secondary">Intelligent tooling calculation and selection</Text>
                 </div>
-              )
-            )}
-          </Spin>
+              </div>
+              <Space>
+                <Button icon={<DatabaseOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_SPEC)}>Spec Part Management</Button>
+                <Button icon={<DatabaseOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_MANAGEMENT)}>Tooling Management</Button>
+              </Space>
+            </div>
+
+            <Card style={{ marginTop: 16, marginBottom: 16 }}>
+              <Row gutter={[16, 16]} align="middle">
+                <Col xs={24} md={8}>
+                  <Space.Compact style={{ width: 300 }}>
+                    <Input placeholder="C/N Number" value={cnInput} onChange={e => setCnInput(e.target.value)} onPressEnter={handleSearch} prefix={<SearchOutlined />} allowClear />
+                    <Button type="primary" onClick={handleSearch} loading={loading} style={{ background: colors.primary, borderColor: colors.primary }} disabled={!cnInput.trim()}>Search</Button>
+                  </Space.Compact>
+                </Col>
+              </Row>
+            </Card>
+
+            {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
+
+            <Spin spinning={loading} tip="Searching...">
+              {result ? (
+                <>
+                  <Card size="small" style={{ marginBottom: 16, borderLeft: `4px solid ${colors.primary}`, borderRadius: '8px', boxShadow: shadows.sm }}>
+                    <Row gutter={[24, 16]}>
+                      <Col span={24}>
+                        <Title level={5} style={{ margin: 0 }}>
+                          C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
+                          <Tag color="green">{(result.part.process || '').replace('→', '->')}</Tag>
+                          <Tag color="purple">{result.part.type}</Tag>
+                          <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
+                        </Title>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">OD (Outside Diameter)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.odBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.odAft}</Text></Space>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">ID (Inside Diameter)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.idBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.idAft}</Text></Space>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">W (Thickness)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.wBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.wAft}</Text></Space>
+                      </Col>
+                      {(result.part.sd > 0 || result.part.sdAft > 0) && (
+                        <Col xs={24} md={8}>
+                          <div style={{ marginBottom: 8 }}><Text type="secondary">SD (Ball Diameter)</Text></div>
+                          <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.sd || '-'}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.sdAft || '-'}</Text></Space>
+                        </Col>
+                      )}
+                    </Row>
+                  </Card>
+                  <Collapse items={mData.map(m => ({
+                    key: m.name,
+                    label: (<Space><Text strong>{m.name}</Text><Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>{m.found < m.required && (<Tag color="orange">{m.found}/{m.required} found</Tag>)}</Space>),
+                    children: (<div>{m.tools.map(t => (<div key={t.title}>{t.content}</div>))}</div>)
+                  }))} style={{ marginBottom: 16 }} />
+                </>
+              ) : (!loading && (
+                <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }}>
+
+                </div>
+              ))}
+            </Spin>
+          </div>
         </Content>
       </Layout>
-      {/* Tool management moved to ToolManagementPage */}
     </Layout>
   );
 };

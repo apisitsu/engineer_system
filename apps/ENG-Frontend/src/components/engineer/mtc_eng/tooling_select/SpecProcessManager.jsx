@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Table,
-  InputNumber, Row, Col, Tag, Popconfirm, Card, Layout
+  InputNumber, Row, Col, Tag, Popconfirm, Card, Layout, Select
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined,
-  SearchOutlined, ReloadOutlined, ArrowLeftOutlined
+  SearchOutlined, ReloadOutlined, ArrowLeftOutlined, DownOutlined, UpOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +30,7 @@ export const SpecProcessManager = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
+  const [tableVisible, setTableVisible] = useState(false);
   const [form] = Form.useForm();
 
   const colors = theme?.colors || {};
@@ -50,8 +51,8 @@ export const SpecProcessManager = () => {
   }, [message]);
 
   useEffect(() => {
-    fetchSpecs(pagination.current, pagination.pageSize, searchText);
-  }, [fetchSpecs, pagination.current, pagination.pageSize]);
+    if (tableVisible) fetchSpecs(pagination.current, pagination.pageSize, searchText);
+  }, [fetchSpecs, tableVisible, pagination.current, pagination.pageSize]);
 
   const handleTableChange = (pag) => {
     setPagination(pag);
@@ -171,12 +172,20 @@ export const SpecProcessManager = () => {
                 style={{ width: 300 }}
                 allowClear
               />
-              <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText)} />
+              <Button
+                icon={tableVisible ? <UpOutlined /> : <DownOutlined />}
+                onClick={() => setTableVisible(v => !v)}
+              >
+                {tableVisible ? 'Hide Table' : 'Show Table'}
+              </Button>
+              {tableVisible && (
+                <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText)} />
+              )}
               <Button icon={<PlusOutlined />} type="primary" onClick={openAdd}>Add Spec</Button>
             </Space>
           </div>
 
-          <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
+          {tableVisible && <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
             <Table
               dataSource={data.map(r => ({ ...r, key: r.cn }))}
               columns={columns}
@@ -192,7 +201,7 @@ export const SpecProcessManager = () => {
               }}
               onChange={handleTableChange}
             />
-          </Card>
+          </Card>}
 
           <Modal
             title={editingRecord ? 'Edit Specification' : 'Add New Specification'}
@@ -213,17 +222,27 @@ export const SpecProcessManager = () => {
                 </Col>
                 <Col span={6}>
                   <Form.Item name="type" label="Type">
-                    <Input placeholder="e.g. ABR-ID" />
+                    <Select allowClear placeholder="เลือก Type">
+                      <Select.Option value="NORMAL">NORMAL</Select.Option>
+                      <Select.Option value="ABR">ABR</Select.Option>
+                      <Select.Option value="OTHER">OTHER</Select.Option>
+                    </Select>
                   </Form.Item>
                 </Col>
                 <Col span={6}>
                   <Form.Item name="process" label="Process">
-                    <Input placeholder="e.g. ID→OD" />
+                    <Select allowClear placeholder="เลือก Process">
+                      <Select.Option value="OD->ID">OD→ID</Select.Option>
+                      <Select.Option value="ID->OD">ID→OD</Select.Option>
+                    </Select>
                   </Form.Item>
                 </Col>
                 <Col span={6}>
                   <Form.Item name="yball" label="Y-Ball" initialValue="N">
-                    <Input placeholder="Y / N / B" />
+                    <Select>
+                      <Select.Option value="N">N</Select.Option>
+                      <Select.Option value="Y">Y</Select.Option>
+                    </Select>
                   </Form.Item>
                 </Col>
               </Row>
