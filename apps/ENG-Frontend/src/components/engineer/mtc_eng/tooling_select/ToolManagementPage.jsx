@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Space, Layout,
@@ -40,8 +40,10 @@ const ToolManagementPage = () => {
   const [invToolingName, setInvToolingName] = useState(null);
   const [invForm] = Form.useForm();
 
+  // ── Active view ('main' | 'formula' | 'machineLimits' | 'selectionRules') ─
+  const [activeView, setActiveView] = useState('main');
+
   // ── Formula Setting state ────────────────────────────────────────────────
-  const [isFormulaSettingOpen, setIsFormulaSettingOpen] = useState(false);
   const [formulaAllData, setFormulaAllData] = useState([]);
   const [formulaSettingLoading, setFormulaSettingLoading] = useState(false);
   const [formulaEdits, setFormulaEdits] = useState({});
@@ -84,7 +86,6 @@ const ToolManagementPage = () => {
   const [createTableLoading, setCreateTableLoading] = useState(false);
 
   // ── Selection Rules / Setup Wizard state ────────────────────────────────
-  const [isRulesDrawerOpen, setIsRulesDrawerOpen] = useState(false);
   const [setupWizard, setSetupWizard] = useState({ open: false, tableName: '', machineName: '', dimCount: 0 });
 
   // ── Health Check (audit) state ───────────────────────────────────────────
@@ -96,7 +97,6 @@ const ToolManagementPage = () => {
   const [auditRules, setAuditRules] = useState({});   // { ruleId: fullRuleObject }
 
   // ── Machine Config (Phase 1/2) ───────────────────────────────────────────
-  const [machineConfigOpen, setMachineConfigOpen] = useState(false);
   const [machineConfigs, setMachineConfigs] = useState([]);
   const [machineConfigLoading, setMachineConfigLoading] = useState(false);
   const [machineConfigEdits, setMachineConfigEdits] = useState({}); // { id: { conditions, use_dynamic_rules } }
@@ -297,9 +297,10 @@ const ToolManagementPage = () => {
     setFormulaEdits({});
     setFormulaAllData([]);
     setIsTfAddOpen(false);
+    setIsTestModeOpen(false);
     setFormulaMachine(cfg.tfMachine);
     setFormulaToolingName(invToolingName);
-    setIsFormulaSettingOpen(true);
+    setActiveView('formula');
     setFormulaSettingLoading(true);
     try {
       const res = await axios.get(`${server.MTC_TOOLING_FORMULA}/${cfg.tfMachine}`, {
@@ -533,7 +534,7 @@ const ToolManagementPage = () => {
   // ── Machine Config helpers ────────────────────────────────────────────────
 
   const openMachineConfig = async () => {
-    setMachineConfigOpen(true);
+    setActiveView('machineLimits');
     setMachineConfigLoading(true);
     try {
       const res = await axios.get(server.MTC_MACHINE_CONFIG);
@@ -603,227 +604,602 @@ const ToolManagementPage = () => {
         <ScrollbarStyle primary={colors.primary} />
         <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
 
-          {/* ── Header ── */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <Space size={16}>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_SELECT)} />
-              <Title level={4} style={{ margin: 0, color: colors.primary }}>
-                Tool Management
-              </Title>
-            </Space>
-            <Space>
-              <Badge count={auditResult?.issue_count ?? 0} size="small">
-                <Button
-                  icon={<AuditOutlined />}
-                  loading={auditLoading}
-                  onClick={runAudit}
-                >
-                  Health Check
-                </Button>
-              </Badge>
-              <Button icon={<SettingOutlined />} onClick={openMachineConfig}>
-                Machine Limits
-              </Button>
-              <Button icon={<ApartmentOutlined />} onClick={() => setIsRulesDrawerOpen(true)}>
-                Selection Rules
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openAddTool}>
-                Add Tool
-              </Button>
-            </Space>
-          </div>
-
-          {/* ── Controls ── */}
-          <Card size="small" style={{ marginBottom: 16, borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <Space wrap>
-                <Select
-                  value={invKey}
-                  style={{ width: 160 }}
-                  onChange={(val) => { setInvKey(val); fetchToolList(val); setInvEditingKey(''); setInvToolingName(null); }}
-                  placeholder="Machine"
-                  allowClear
-                >
-                  {toolingTables.map(t => <Select.Option key={t.key} value={t.key}>{t.label}</Select.Option>)}
-                </Select>
-                <Select
-                  placeholder="Tool Name"
-                  value={invToolingName}
-                  style={{ width: 180 }}
-                  allowClear
-                  onChange={v => { setInvToolingName(v || null); setInvEditingKey(''); }}
-                >
-                  {invToolingNames.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
-                </Select>
-                <Button onClick={() => fetchToolList(invKey)}>Reload</Button>
-                {invKey && invToolingName && (
-                  <Button icon={<SettingOutlined />} onClick={openFormulaSettings}>
-                    Formula Setting
-                  </Button>
-                )}
+          {/* ── Header: Main ── */}
+          {activeView === 'main' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Space size={16}>
+                <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_SELECT)} />
+                <Title level={4} style={{ margin: 0, color: colors.primary }}>
+                  Tool Management
+                </Title>
               </Space>
-              <Input
-                placeholder="Search..."
-                prefix={<SearchOutlined />}
-                value={invSearch}
-                onChange={e => setInvSearch(e.target.value)}
-                style={{ width: 200 }}
-                allowClear
-              />
+              <Space>
+                <Badge count={auditResult?.issue_count ?? 0} size="small">
+                  <Button icon={<AuditOutlined />} loading={auditLoading} onClick={runAudit}>
+                    Health Check
+                  </Button>
+                </Badge>
+                <Button icon={<SettingOutlined />} onClick={openMachineConfig}>
+                  Machine Limits
+                </Button>
+                <Button icon={<ApartmentOutlined />} onClick={() => setActiveView('selectionRules')}>
+                  Selection Rules
+                </Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={openAddTool}>
+                  Add Tool
+                </Button>
+              </Space>
             </div>
-          </Card>
+          )}
 
-          {/* ── Inventory table ── */}
-          <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
-            <Form form={invForm}>
-              <Table
-                components={{ body: { cell: InvEditableCell } }}
-                bordered
-                size="small"
-                dataSource={invFiltered.map((r, i) => ({ ...r, key: r.id ?? i }))}
-                columns={invMergedColumns}
-                loading={invLoading}
-                pagination={{ pageSize: 20, onChange: invCancel, showSizeChanger: true }}
-                scroll={{ x: 'max-content', y: 'calc(100vh - 330px)' }}
-                rowClassName="editable-row"
-                locale={{ emptyText: invKey ? (invToolingName ? 'ไม่พบข้อมูล' : 'กรุณาเลือก Tool Name') : 'กรุณาเลือก Machine' }}
-              />
-            </Form>
-          </Card>
+          {/* ── Header: Formula Setting ── */}
+          {activeView === 'formula' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Space size={16}>
+                <Button icon={<ArrowLeftOutlined />} onClick={() => { setActiveView('main'); setExpandedFormulaIds([]); }} />
+                <Title level={4} style={{ margin: 0, color: colors.primary }}>Formula Setting</Title>
+                <Tag color="blue">{formulaMachine}</Tag>
+                <Tag color="green">{formulaToolingName}</Tag>
+              </Space>
+              <Space>
+                <Button
+                  type={isTestModeOpen ? 'primary' : 'default'}
+                  icon={<SearchOutlined />}
+                  onClick={() => setIsTestModeOpen(v => !v)}
+                >
+                  {isTestModeOpen ? 'Hide Test' : 'Test Formula'}
+                </Button>
+                <Button
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    if (!isTfAddOpen) {
+                      tfAddForm.resetFields();
+                      if (nextParamSuggestion) tfAddForm.setFieldValue('parameter_name', nextParamSuggestion);
+                    }
+                    setIsTfAddOpen(v => !v);
+                  }}
+                >
+                  Add Formula
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={formulaSaving}
+                  disabled={!Object.keys(formulaEdits).length}
+                  onClick={saveFormulaSettings}
+                >
+                  Save ({Object.keys(formulaEdits).length})
+                </Button>
+              </Space>
+            </div>
+          )}
+
+          {/* ── Header: Machine Limits ── */}
+          {activeView === 'machineLimits' && (
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 16 }}>
+              <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveView('main')} />
+              <Title level={4} style={{ margin: 0, color: colors.primary }}>
+                Machine Eligibility Limits
+              </Title>
+            </div>
+          )}
+
+          {/* ── Header: Selection Rules ── */}
+          {activeView === 'selectionRules' && (
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 16 }}>
+              <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveView('main')} />
+              <Title level={4} style={{ margin: 0, color: colors.primary }}>
+                Selection Rules
+              </Title>
+            </div>
+          )}
+
+          {/* ── Main: Controls + Inventory ── */}
+          {activeView === 'main' && (
+            <>
+              <Card size="small" style={{ marginBottom: 16, borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <Space wrap>
+                    <Select
+                      value={invKey}
+                      style={{ width: 160 }}
+                      onChange={(val) => { setInvKey(val); fetchToolList(val); setInvEditingKey(''); setInvToolingName(null); }}
+                      placeholder="Machine"
+                      allowClear
+                    >
+                      {toolingTables.map(t => <Select.Option key={t.key} value={t.key}>{t.label}</Select.Option>)}
+                    </Select>
+                    <Select
+                      placeholder="Tool Name"
+                      value={invToolingName}
+                      style={{ width: 180 }}
+                      allowClear
+                      onChange={v => { setInvToolingName(v || null); setInvEditingKey(''); }}
+                    >
+                      {invToolingNames.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
+                    </Select>
+                    <Button onClick={() => fetchToolList(invKey)}>Reload</Button>
+                    {invKey && invToolingName && (
+                      <Button icon={<SettingOutlined />} onClick={openFormulaSettings}>
+                        Formula Setting
+                      </Button>
+                    )}
+                  </Space>
+                  <Input
+                    placeholder="Search..."
+                    prefix={<SearchOutlined />}
+                    value={invSearch}
+                    onChange={e => setInvSearch(e.target.value)}
+                    style={{ width: 200 }}
+                    allowClear
+                  />
+                </div>
+              </Card>
+
+              <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
+                <Form form={invForm}>
+                  <Table
+                    components={{ body: { cell: InvEditableCell } }}
+                    bordered
+                    size="small"
+                    dataSource={invFiltered.map((r, i) => ({ ...r, key: r.id ?? i }))}
+                    columns={invMergedColumns}
+                    loading={invLoading}
+                    pagination={{ pageSize: 20, onChange: invCancel, showSizeChanger: true }}
+                    scroll={{ x: 'max-content', y: 'calc(100vh - 330px)' }}
+                    rowClassName="editable-row"
+                    locale={{ emptyText: invKey ? (invToolingName ? 'ไม่พบข้อมูล' : 'กรุณาเลือก Tool Name') : 'กรุณาเลือก Machine' }}
+                  />
+                </Form>
+              </Card>
+            </>
+          )}
+
+          {/* ── Formula Setting View ── */}
+          {activeView === 'formula' && (
+            <>
+              {isTestModeOpen && (
+                <Card
+                  size="small"
+                  style={{ marginBottom: 12, background: '#f0f5ff', border: '1px solid #adc6ff' }}
+                  title={<Space><SearchOutlined /> <Text strong>Test Simulation (part.*)</Text></Space>}
+                  extra={<Button size="small" type="primary" loading={testLoading} onClick={handleTestFormula}>Run Test</Button>}
+                >
+                  <Space wrap align="end">
+                    <Form layout="vertical" size="small">
+                      <Row gutter={12}>
+                        <Col><Form.Item label="odAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.odAft} onChange={v => setTestContext({ ...testContext, odAft: v })} style={{ width: 70 }} /></Form.Item></Col>
+                        <Col><Form.Item label="idAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.idAft} onChange={v => setTestContext({ ...testContext, idAft: v })} style={{ width: 70 }} /></Form.Item></Col>
+                        <Col><Form.Item label="wAft"  style={{ marginBottom: 0 }}><InputNumber value={testContext.wAft}  onChange={v => setTestContext({ ...testContext, wAft:  v })} style={{ width: 70 }} /></Form.Item></Col>
+                        <Col>
+                          <Form.Item label="Type" style={{ marginBottom: 0 }}>
+                            <Select value={testContext.type} onChange={v => setTestContext({ ...testContext, type: v })} style={{ width: 100 }}>
+                              <Select.Option value="NORMAL">NORMAL</Select.Option>
+                              <Select.Option value="ABR">ABR</Select.Option>
+                              <Select.Option value="BALL_INNER">BALL_INNER</Select.Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col>
+                          <Form.Item label="Y-Ball" style={{ marginBottom: 0 }}>
+                            <Select value={testContext.yBall} onChange={v => setTestContext({ ...testContext, yBall: v })} style={{ width: 70 }}>
+                              <Select.Option value="N">N</Select.Option>
+                              <Select.Option value="Y">Y</Select.Option>
+                              <Select.Option value="B">B</Select.Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col>
+                          <Form.Item label="Process" style={{ marginBottom: 0 }}>
+                            <Select value={testContext.process} onChange={v => setTestContext({ ...testContext, process: v })} style={{ width: 90 }}>
+                              <Select.Option value="OD->ID">OD→ID</Select.Option>
+                              <Select.Option value="ID->OD">ID→OD</Select.Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </Form>
+                  </Space>
+                  <div style={{ marginTop: 8, fontSize: 10, color: '#666' }}>
+                    <Tooltip title={
+                      <div style={{ fontSize: 11 }}>
+                        <b>Example Formulas:</b><br/>
+                        • Basic: <Text code style={{ color: '#fff' }}>odAft + 0.5</Text><br/>
+                        • Conditional: <Text code style={{ color: '#fff' }}>type == NORMAL ? odAft : 30</Text><br/>
+                        • Rounding: <Text code style={{ color: '#fff' }}>round05(baseC)</Text> (round to nearest 0.5)<br/>
+                        • Sequential: <Text code style={{ color: '#fff' }}>(A * 2) / 2</Text> (Use Param from prev row)
+                      </div>
+                    }>
+                      <AuditOutlined /> <u>Formula Guide &amp; Variables</u>
+                    </Tooltip>
+                    <span style={{ marginLeft: 12 }}>
+                      Vars: <Tag color="default" style={{ fontSize: 9 }}>odAft</Tag>{' '}
+                      <Tag color="default" style={{ fontSize: 9 }}>baseC</Tag>{' '}
+                      <Tag color="orange" style={{ fontSize: 9 }}>isYBall</Tag>{' '}
+                      <Tag color="orange" style={{ fontSize: 9 }}>isIDtoOD</Tag>
+                    </span>
+                  </div>
+                </Card>
+              )}
+
+              {isTfAddOpen && (
+                <Card
+                  size="small"
+                  style={{ marginBottom: 12, background: '#fafafa', borderStyle: 'dashed' }}
+                  title={
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      <CalculatorOutlined /> New Formula — {formulaMachine} / {formulaToolingName}
+                    </Text>
+                  }
+                >
+                  <Form form={tfAddForm} layout="vertical" size="small">
+                    <Row gutter={12}>
+                      <Col span={12}>
+                        <Form.Item
+                          name="parameter_name"
+                          label={
+                            <Space size={4}>
+                              <span>Param name</span>
+                              {nextParamSuggestion && (
+                                <Tag
+                                  color="blue"
+                                  style={{ cursor: 'pointer', fontSize: 10, marginLeft: 2 }}
+                                  onClick={() => tfAddForm.setFieldValue('parameter_name', nextParamSuggestion)}
+                                >
+                                  suggest: {nextParamSuggestion}
+                                </Tag>
+                              )}
+                            </Space>
+                          }
+                          rules={[
+                            { required: true, message: 'Required' },
+                            { pattern: /^\S+$/, message: 'ห้ามมี space' },
+                          ]}
+                        >
+                          <AutoComplete
+                            placeholder="A, B, C..."
+                            options={
+                              'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+                                .filter(l => !existingParamSet.has(l))
+                                .map(l => ({ value: l, label: l }))
+                            }
+                            filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item name="remark" label="Remark">
+                          <Input placeholder="optional" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Form.Item name="formula_value" label="Formula Expression" rules={[{ required: true, message: 'Required' }]}>
+                      <FormulaBuilderInput
+                        availableVars={FORMULA_VARS}
+                        previousParams={formulaAllData.map(r => r.parameter_name).filter(Boolean)}
+                        onTest={testSingleFormula}
+                        placeholder="e.g. odAft + 0.2"
+                      />
+                    </Form.Item>
+                    <Row gutter={12}>
+                      <Col span={8}>
+                        <Form.Item name="formula_type" label="Type" initialValue="expression">
+                          <Select>
+                            <Select.Option value="expression">expression</Select.Option>
+                            <Select.Option value="condition">condition</Select.Option>
+                            <Select.Option value="limit">limit</Select.Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="rounding_rule" label="Rounding" initialValue="none">
+                          <Select>
+                            <Select.Option value="none">none</Select.Option>
+                            <Select.Option value="ceil">ceil</Select.Option>
+                            <Select.Option value="floor">floor</Select.Option>
+                            <Select.Option value="round">round</Select.Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="rounding_precision" label="Precision" initialValue={2}>
+                          <InputNumber min={0} max={6} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Button type="primary" icon={<SaveOutlined />} loading={tfAddLoading} onClick={addToolingFormula}>
+                      Add Formula
+                    </Button>
+                  </Form>
+                </Card>
+              )}
+
+              <Spin spinning={formulaSettingLoading}>
+                {!formulaSettingLoading && formulaAllData.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+                    <SettingOutlined style={{ fontSize: 40, marginBottom: 12, display: 'block' }} />
+                    ไม่พบ formula config สำหรับ <strong>{formulaMachine}</strong> / <strong>{formulaToolingName}</strong>
+                  </div>
+                ) : (
+                  <Table
+                    dataSource={formulaAllData.map(r => ({ ...r, key: r.id }))}
+                    size="small"
+                    pagination={false}
+                    bordered
+                    scroll={{ y: 'calc(100vh - 320px)' }}
+                    expandable={{
+                      expandedRowKeys: expandedFormulaIds,
+                      showExpandColumn: false,
+                      expandedRowRender: (record) => {
+                        const rowIdx = formulaAllData.findIndex(r => r.id === record.id);
+                        const prevParams = formulaAllData.slice(0, rowIdx).map(r => r.parameter_name).filter(Boolean);
+                        return (
+                          <div style={{ padding: '12px 16px', background: '#f0f4ff', borderRadius: 6, margin: '0 8px 8px 8px' }}>
+                            <Text strong style={{ fontSize: 11, color: '#1677ff', display: 'block', marginBottom: 8 }}>
+                              <CalculatorOutlined /> Formula Builder — Param: {record.parameter_name}
+                            </Text>
+                            <FormulaBuilderInput
+                              value={formulaEdits[record.id]?.formula_value ?? record.formula_value ?? ''}
+                              onChange={v => setFormulaEdits(prev => ({
+                                ...prev,
+                                [record.id]: { ...prev[record.id], formula_value: v },
+                              }))}
+                              availableVars={FORMULA_VARS}
+                              previousParams={prevParams}
+                              onTest={testSingleFormula}
+                            />
+                          </div>
+                        );
+                      },
+                    }}
+                    columns={[
+                      {
+                        title: <Tooltip title="Execution order — formulas run top-to-bottom.">#</Tooltip>,
+                        width: 36, align: 'center',
+                        render: (_, __, index) => (
+                          <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>{index + 1}</Text>
+                        ),
+                      },
+                      {
+                        title: 'Param', dataIndex: 'parameter_name', width: 70,
+                        render: v => <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>,
+                      },
+                      {
+                        title: 'Type', dataIndex: 'formula_type', width: 110,
+                        render: (v, record) => (
+                          <Select size="small" style={{ width: 100 }}
+                            value={formulaEdits[record.id]?.formula_type ?? v}
+                            onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_type: val } }))}
+                          >
+                            <Select.Option value="expression">expression</Select.Option>
+                            <Select.Option value="condition">condition</Select.Option>
+                            <Select.Option value="limit">limit</Select.Option>
+                          </Select>
+                        ),
+                      },
+                      {
+                        title: 'Formula',
+                        dataIndex: 'formula_value',
+                        render: (v, record) => {
+                          const current = formulaEdits[record.id]?.formula_value ?? v;
+                          const currentRemark = formulaEdits[record.id]?.remark ?? record.remark;
+                          const isExpanded = expandedFormulaIds.includes(record.id);
+                          return (
+                            <div style={{ cursor: 'pointer' }} onClick={() => toggleExpandRow(record.id)}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                <Text code style={{ fontSize: 10, flex: 1, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
+                                  {current || <span style={{ color: '#bbb' }}>(empty)</span>}
+                                </Text>
+                                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, paddingTop: 1 }}>
+                                  {formulaEdits[record.id] && (
+                                    <Tag color="orange" style={{ fontSize: 9, padding: '0 3px', margin: 0, lineHeight: '14px' }}>edited</Tag>
+                                  )}
+                                  {isExpanded
+                                    ? <UpOutlined style={{ fontSize: 10, color: '#1677ff' }} />
+                                    : <DownOutlined style={{ fontSize: 10, color: '#bbb' }} />
+                                  }
+                                </div>
+                              </div>
+                              {currentRemark && (
+                                <div style={{ fontSize: 10, color: '#888', marginTop: 2, fontStyle: 'italic' }}>
+                                  {currentRemark}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        },
+                      },
+                      {
+                        title: 'Result', width: 100, hidden: !isTestModeOpen,
+                        render: (_, record) => {
+                          const res = testResults[record.id];
+                          if (!res) return null;
+                          return res.success ? (
+                            <Tag color="blue" style={{ fontFamily: 'monospace' }}>{res.value}</Tag>
+                          ) : (
+                            <Tooltip title={res.error}><Tag color="error">Error</Tag></Tooltip>
+                          );
+                        },
+                      },
+                      {
+                        title: 'Round', dataIndex: 'rounding_rule', width: 90,
+                        render: (v, record) => (
+                          <Select size="small" style={{ width: 80 }}
+                            value={formulaEdits[record.id]?.rounding_rule ?? v}
+                            onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_rule: val } }))}
+                          >
+                            <Select.Option value="none">none</Select.Option>
+                            <Select.Option value="ceil">ceil</Select.Option>
+                            <Select.Option value="floor">floor</Select.Option>
+                            <Select.Option value="round">round</Select.Option>
+                          </Select>
+                        ),
+                      },
+                      {
+                        title: 'Prec', dataIndex: 'rounding_precision', width: 65,
+                        render: (v, record) => (
+                          <InputNumber size="small" min={0} max={6} style={{ width: 55 }}
+                            value={formulaEdits[record.id]?.rounding_precision ?? v}
+                            onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_precision: val } }))}
+                          />
+                        ),
+                      },
+                      {
+                        title: 'Remark', dataIndex: 'remark', width: 140,
+                        render: (v, record) => (
+                          <Input size="small"
+                            value={formulaEdits[record.id]?.remark ?? (v || '')}
+                            onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], remark: e.target.value } }))}
+                          />
+                        ),
+                      },
+                      {
+                        title: '', dataIndex: 'action', width: 40,
+                        render: (_, record) => (
+                          <Popconfirm title="ลบ formula นี้?" onConfirm={() => deleteToolingFormula(record.id)} okText="ลบ" cancelText="ยกเลิก">
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+              </Spin>
+            </>
+          )}
+
+          {/* ── Machine Limits View ── */}
+          {activeView === 'machineLimits' && (
+            <Spin spinning={machineConfigLoading}>
+              {machineConfigs.map(cfg => {
+                const draft = getConfigDraft(cfg);
+                const isDirty = !!machineConfigEdits[cfg.id];
+                return (
+                  <Card
+                    key={cfg.id}
+                    size="small"
+                    style={{ marginBottom: 12 }}
+                    title={
+                      <Space>
+                        <Text strong>{cfg.machine_name}</Text>
+                        {cfg.use_dynamic_rules && <Tag color="blue">Dynamic Rules</Tag>}
+                        {isDirty && <Tag color="orange">Unsaved</Tag>}
+                      </Space>
+                    }
+                    extra={
+                      <Space>
+                        <Tooltip title="When ON, legacy SQL is skipped and mtc_selection_rules engine handles this machine">
+                          <span style={{ fontSize: 12, color: '#666' }}>Dynamic Rules:</span>
+                        </Tooltip>
+                        <Select
+                          size="small"
+                          value={draft.use_dynamic_rules}
+                          style={{ width: 80 }}
+                          onChange={v => updateConfigDraft(cfg.id, { use_dynamic_rules: v })}
+                          options={[{ value: false, label: 'OFF' }, { value: true, label: 'ON' }]}
+                        />
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<SaveOutlined />}
+                          loading={machineConfigSaving === cfg.id}
+                          disabled={!isDirty}
+                          onClick={() => saveMachineConfig(cfg)}
+                        >
+                          Save
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    {draft.conditions.map((cond, idx) => (
+                      <Row key={idx} gutter={4} style={{ marginBottom: 6 }} align="middle">
+                        <Col span={4}>
+                          <Select
+                            size="small"
+                            style={{ width: '100%' }}
+                            value={cond.source}
+                            onChange={v => updateCondition(cfg.id, idx, 'source', v)}
+                            options={[
+                              { value: 'partData', label: 'Part Dim' },
+                              { value: 'calc', label: 'Calc' },
+                            ]}
+                          />
+                        </Col>
+                        <Col span={5}>
+                          <Input
+                            size="small"
+                            placeholder="key (e.g. jawA)"
+                            value={cond.key}
+                            onChange={e => updateCondition(cfg.id, idx, 'key', e.target.value)}
+                          />
+                        </Col>
+                        <Col span={3}>
+                          <Select
+                            size="small"
+                            style={{ width: '100%' }}
+                            value={cond.op}
+                            onChange={v => updateCondition(cfg.id, idx, 'op', v)}
+                            options={['<=', '>=', '<', '>', '='].map(o => ({ value: o, label: o }))}
+                          />
+                        </Col>
+                        <Col span={4}>
+                          <InputNumber
+                            size="small"
+                            style={{ width: '100%' }}
+                            value={cond.value}
+                            step={0.1}
+                            onChange={v => updateCondition(cfg.id, idx, 'value', v)}
+                          />
+                        </Col>
+                        <Col span={6}>
+                          <Input
+                            size="small"
+                            placeholder="Label (shown in exclusion reason)"
+                            value={cond.label}
+                            onChange={e => updateCondition(cfg.id, idx, 'label', e.target.value)}
+                          />
+                        </Col>
+                        <Col span={2} style={{ textAlign: 'center' }}>
+                          <Button
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => removeCondition(cfg.id, idx)}
+                          />
+                        </Col>
+                      </Row>
+                    ))}
+                    {draft.conditions.length === 0 && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        No dimension conditions — machine is eligible when formula has no error
+                      </Text>
+                    )}
+                    <Button
+                      size="small"
+                      icon={<PlusOutlined />}
+                      style={{ marginTop: 8 }}
+                      onClick={() => addCondition(cfg.id)}
+                    >
+                      Add Condition
+                    </Button>
+                  </Card>
+                );
+              })}
+              {!machineConfigLoading && machineConfigs.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 32, color: '#999' }}>
+                  No machine configs found — run the DB migration first
+                </div>
+              )}
+            </Spin>
+          )}
+
+          {/* ── Selection Rules View ── */}
+          {activeView === 'selectionRules' && (
+            <SelectionRuleDrawer inline open />
+          )}
 
         </Content>
       </Layout>
-
-      {/* ── Machine Config Modal (Phase 1/2) ─────────────────────────────── */}
-      <Modal
-        title={<Space><SettingOutlined />Machine Eligibility Limits</Space>}
-        open={machineConfigOpen}
-        onCancel={() => setMachineConfigOpen(false)}
-        footer={null}
-        width={820}
-      >
-        <Spin spinning={machineConfigLoading}>
-          {machineConfigs.map(cfg => {
-            const draft = getConfigDraft(cfg);
-            const isDirty = !!machineConfigEdits[cfg.id];
-            return (
-              <Card
-                key={cfg.id}
-                size="small"
-                style={{ marginBottom: 12 }}
-                title={
-                  <Space>
-                    <Text strong>{cfg.machine_name}</Text>
-                    {cfg.use_dynamic_rules && <Tag color="blue">Dynamic Rules</Tag>}
-                    {isDirty && <Tag color="orange">Unsaved</Tag>}
-                  </Space>
-                }
-                extra={
-                  <Space>
-                    <Tooltip title="When ON, legacy SQL is skipped and mtc_selection_rules engine handles this machine">
-                      <span style={{ fontSize: 12, color: '#666' }}>Dynamic Rules:</span>
-                    </Tooltip>
-                    <Select
-                      size="small"
-                      value={draft.use_dynamic_rules}
-                      style={{ width: 80 }}
-                      onChange={v => updateConfigDraft(cfg.id, { use_dynamic_rules: v })}
-                      options={[{ value: false, label: 'OFF' }, { value: true, label: 'ON' }]}
-                    />
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<SaveOutlined />}
-                      loading={machineConfigSaving === cfg.id}
-                      disabled={!isDirty}
-                      onClick={() => saveMachineConfig(cfg)}
-                    >
-                      Save
-                    </Button>
-                  </Space>
-                }
-              >
-                {draft.conditions.map((cond, idx) => (
-                  <Row key={idx} gutter={4} style={{ marginBottom: 6 }} align="middle">
-                    <Col span={4}>
-                      <Select
-                        size="small"
-                        style={{ width: '100%' }}
-                        value={cond.source}
-                        onChange={v => updateCondition(cfg.id, idx, 'source', v)}
-                        options={[
-                          { value: 'partData', label: 'Part Dim' },
-                          { value: 'calc', label: 'Calc' },
-                        ]}
-                      />
-                    </Col>
-                    <Col span={5}>
-                      <Input
-                        size="small"
-                        placeholder="key (e.g. jawA)"
-                        value={cond.key}
-                        onChange={e => updateCondition(cfg.id, idx, 'key', e.target.value)}
-                      />
-                    </Col>
-                    <Col span={3}>
-                      <Select
-                        size="small"
-                        style={{ width: '100%' }}
-                        value={cond.op}
-                        onChange={v => updateCondition(cfg.id, idx, 'op', v)}
-                        options={['<=', '>=', '<', '>', '='].map(o => ({ value: o, label: o }))}
-                      />
-                    </Col>
-                    <Col span={4}>
-                      <InputNumber
-                        size="small"
-                        style={{ width: '100%' }}
-                        value={cond.value}
-                        step={0.1}
-                        onChange={v => updateCondition(cfg.id, idx, 'value', v)}
-                      />
-                    </Col>
-                    <Col span={6}>
-                      <Input
-                        size="small"
-                        placeholder="Label (shown in exclusion reason)"
-                        value={cond.label}
-                        onChange={e => updateCondition(cfg.id, idx, 'label', e.target.value)}
-                      />
-                    </Col>
-                    <Col span={2} style={{ textAlign: 'center' }}>
-                      <Button
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => removeCondition(cfg.id, idx)}
-                      />
-                    </Col>
-                  </Row>
-                ))}
-                {draft.conditions.length === 0 && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    No dimension conditions — machine is eligible when formula has no error
-                  </Text>
-                )}
-                <Button
-                  size="small"
-                  icon={<PlusOutlined />}
-                  style={{ marginTop: 8 }}
-                  onClick={() => addCondition(cfg.id)}
-                >
-                  Add Condition
-                </Button>
-              </Card>
-            );
-          })}
-          {!machineConfigLoading && machineConfigs.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 32, color: '#999' }}>
-              No machine configs found — run the DB migration first
-            </div>
-          )}
-        </Spin>
-      </Modal>
 
       {/* ── Health Check Modal ────────────────────────────────────────────── */}
       <Modal
@@ -1003,357 +1379,6 @@ const ToolManagementPage = () => {
         )}
       </Modal>
 
-      {/* ── Formula Setting Modal ──────────────────────────────────────────── */}
-      <Modal
-        title={
-          <Space>
-            <SettingOutlined />
-            <span>Formula Setting</span>
-            <Tag color="blue">{formulaMachine}</Tag>
-            <Tag color="green">{formulaToolingName}</Tag>
-          </Space>
-        }
-        open={isFormulaSettingOpen}
-        onCancel={() => { setIsFormulaSettingOpen(false); setExpandedFormulaIds([]); }}
-        width={940}
-        destroyOnHidden
-        footer={[
-          <Button key="test_mode" type={isTestModeOpen ? 'primary' : 'default'} onClick={() => setIsTestModeOpen(!isTestModeOpen)}>
-            {isTestModeOpen ? 'Hide Test Mode' : 'Test Formula'}
-          </Button>,
-          <Button key="add" icon={<PlusOutlined />} onClick={() => {
-            if (!isTfAddOpen) {
-              tfAddForm.resetFields();
-              if (nextParamSuggestion) tfAddForm.setFieldValue('parameter_name', nextParamSuggestion);
-            }
-            setIsTfAddOpen(v => !v);
-          }}>
-            Add Formula
-          </Button>,
-          <Button key="close" onClick={() => setIsFormulaSettingOpen(false)}>Close</Button>,
-          <Button
-            key="save"
-            type="primary"
-            icon={<SaveOutlined />}
-            loading={formulaSaving}
-            disabled={!Object.keys(formulaEdits).length}
-            onClick={saveFormulaSettings}
-          >
-            Save Changes ({Object.keys(formulaEdits).length})
-          </Button>,
-        ]}
-      >
-        {isTestModeOpen && (
-          <Card
-            size="small"
-            style={{ marginBottom: 12, background: '#f0f5ff', border: '1px solid #adc6ff' }}
-            title={<Space><SearchOutlined /> <Text strong>Test Simulation (part.*)</Text></Space>}
-            extra={<Button size="small" type="primary" loading={testLoading} onClick={handleTestFormula}>Run Test</Button>}
-          >
-            <Space wrap align="end">
-              <Form layout="vertical" size="small">
-                <Row gutter={12}>
-                  <Col><Form.Item label="odAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.odAft} onChange={v => setTestContext({ ...testContext, odAft: v })} style={{ width: 70 }} /></Form.Item></Col>
-                  <Col><Form.Item label="idAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.idAft} onChange={v => setTestContext({ ...testContext, idAft: v })} style={{ width: 70 }} /></Form.Item></Col>
-                  <Col><Form.Item label="wAft"  style={{ marginBottom: 0 }}><InputNumber value={testContext.wAft}  onChange={v => setTestContext({ ...testContext, wAft:  v })} style={{ width: 70 }} /></Form.Item></Col>
-                  <Col>
-                    <Form.Item label="Type" style={{ marginBottom: 0 }}>
-                      <Select value={testContext.type} onChange={v => setTestContext({ ...testContext, type: v })} style={{ width: 100 }}>
-                        <Select.Option value="NORMAL">NORMAL</Select.Option>
-                        <Select.Option value="ABR">ABR</Select.Option>
-                        <Select.Option value="BALL_INNER">BALL_INNER</Select.Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                  <Col>
-                    <Form.Item label="Y-Ball" style={{ marginBottom: 0 }}>
-                      <Select value={testContext.yBall} onChange={v => setTestContext({ ...testContext, yBall: v })} style={{ width: 70 }}>
-                        <Select.Option value="N">N</Select.Option>
-                        <Select.Option value="Y">Y</Select.Option>
-                        <Select.Option value="B">B</Select.Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                  <Col>
-                    <Form.Item label="Process" style={{ marginBottom: 0 }}>
-                      <Select value={testContext.process} onChange={v => setTestContext({ ...testContext, process: v })} style={{ width: 90 }}>
-                        <Select.Option value="OD->ID">OD→ID</Select.Option>
-                        <Select.Option value="ID->OD">ID→OD</Select.Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                </Row>
-              </Form>
-            </Space>
-            <div style={{ marginTop: 8, fontSize: 10, color: '#666' }}>
-              <Tooltip title={
-                <div style={{ fontSize: 11 }}>
-                  <b>Example Formulas:</b><br/>
-                  • Basic: <Text code style={{ color: '#fff' }}>odAft + 0.5</Text><br/>
-                  • Conditional: <Text code style={{ color: '#fff' }}>type == NORMAL ? odAft : 30</Text><br/>
-                  • Rounding: <Text code style={{ color: '#fff' }}>round05(baseC)</Text> (round to nearest 0.5)<br/>
-                  • Sequential: <Text code style={{ color: '#fff' }}>(A * 2) / 2</Text> (Use Param from prev row)
-                </div>
-              }>
-                <AuditOutlined /> <u>Formula Guide &amp; Variables</u>
-              </Tooltip>
-              <span style={{ marginLeft: 12 }}>
-                Vars: <Tag color="default" style={{ fontSize: 9 }}>odAft</Tag>{' '}
-                <Tag color="default" style={{ fontSize: 9 }}>baseC</Tag>{' '}
-                <Tag color="orange" style={{ fontSize: 9 }}>isYBall</Tag>{' '}
-                <Tag color="orange" style={{ fontSize: 9 }}>isIDtoOD</Tag>
-              </span>
-            </div>
-          </Card>
-        )}
-
-        {isTfAddOpen && (
-          <Card
-            size="small"
-            style={{ marginBottom: 12, background: '#fafafa', borderStyle: 'dashed' }}
-            title={
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <CalculatorOutlined /> New Formula — {formulaMachine} / {formulaToolingName}
-              </Text>
-            }
-          >
-            <Form form={tfAddForm} layout="vertical" size="small">
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Form.Item
-                    name="parameter_name"
-                    label={
-                      <Space size={4}>
-                        <span>Param name</span>
-                        {nextParamSuggestion && (
-                          <Tag
-                            color="blue"
-                            style={{ cursor: 'pointer', fontSize: 10, marginLeft: 2 }}
-                            onClick={() => tfAddForm.setFieldValue('parameter_name', nextParamSuggestion)}
-                          >
-                            suggest: {nextParamSuggestion}
-                          </Tag>
-                        )}
-                      </Space>
-                    }
-                    rules={[
-                      { required: true, message: 'Required' },
-                      { pattern: /^\S+$/, message: 'ห้ามมี space' },
-                    ]}
-                  >
-                    <AutoComplete
-                      placeholder="A, B, C..."
-                      options={
-                        'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
-                          .filter(l => !existingParamSet.has(l))
-                          .map(l => ({ value: l, label: l }))
-                      }
-                      filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="remark" label="Remark">
-                    <Input placeholder="optional" />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item name="formula_value" label="Formula Expression" rules={[{ required: true, message: 'Required' }]}>
-                <FormulaBuilderInput
-                  availableVars={FORMULA_VARS}
-                  previousParams={formulaAllData.map(r => r.parameter_name).filter(Boolean)}
-                  onTest={testSingleFormula}
-                  placeholder="e.g. odAft + 0.2"
-                />
-              </Form.Item>
-              <Row gutter={12}>
-                <Col span={8}>
-                  <Form.Item name="formula_type" label="Type" initialValue="expression">
-                    <Select>
-                      <Select.Option value="expression">expression</Select.Option>
-                      <Select.Option value="condition">condition</Select.Option>
-                      <Select.Option value="limit">limit</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="rounding_rule" label="Rounding" initialValue="none">
-                    <Select>
-                      <Select.Option value="none">none</Select.Option>
-                      <Select.Option value="ceil">ceil</Select.Option>
-                      <Select.Option value="floor">floor</Select.Option>
-                      <Select.Option value="round">round</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="rounding_precision" label="Precision" initialValue={2}>
-                    <InputNumber min={0} max={6} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Button type="primary" icon={<SaveOutlined />} loading={tfAddLoading} onClick={addToolingFormula}>
-                Add Formula
-              </Button>
-            </Form>
-          </Card>
-        )}
-
-        <Spin spinning={formulaSettingLoading}>
-          {!formulaSettingLoading && formulaAllData.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
-              <SettingOutlined style={{ fontSize: 40, marginBottom: 12, display: 'block' }} />
-              ไม่พบ formula config สำหรับ <strong>{formulaMachine}</strong> / <strong>{formulaToolingName}</strong>
-            </div>
-          ) : (
-            <Table
-              dataSource={formulaAllData.map(r => ({ ...r, key: r.id }))}
-              size="small"
-              pagination={false}
-              bordered
-              scroll={{ y: 420 }}
-              expandable={{
-                expandedRowKeys: expandedFormulaIds,
-                showExpandColumn: false,
-                expandedRowRender: (record) => {
-                  const rowIdx = formulaAllData.findIndex(r => r.id === record.id);
-                  const prevParams = formulaAllData.slice(0, rowIdx).map(r => r.parameter_name).filter(Boolean);
-                  return (
-                    <div style={{ padding: '12px 16px', background: '#f0f4ff', borderRadius: 6, margin: '0 8px 8px 8px' }}>
-                      <Text strong style={{ fontSize: 11, color: '#1677ff', display: 'block', marginBottom: 8 }}>
-                        <CalculatorOutlined /> Formula Builder — Param: {record.parameter_name}
-                      </Text>
-                      <FormulaBuilderInput
-                        value={formulaEdits[record.id]?.formula_value ?? record.formula_value ?? ''}
-                        onChange={v => setFormulaEdits(prev => ({
-                          ...prev,
-                          [record.id]: { ...prev[record.id], formula_value: v },
-                        }))}
-                        availableVars={FORMULA_VARS}
-                        previousParams={prevParams}
-                        onTest={testSingleFormula}
-                      />
-                    </div>
-                  );
-                },
-              }}
-              columns={[
-                {
-                  title: <Tooltip title="Execution order — formulas run top-to-bottom.">#</Tooltip>,
-                  width: 36, align: 'center',
-                  render: (_, __, index) => (
-                    <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>{index + 1}</Text>
-                  ),
-                },
-                {
-                  title: 'Param', dataIndex: 'parameter_name', width: 70,
-                  render: v => <Text strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>,
-                },
-                {
-                  title: 'Type', dataIndex: 'formula_type', width: 110,
-                  render: (v, record) => (
-                    <Select size="small" style={{ width: 100 }}
-                      value={formulaEdits[record.id]?.formula_type ?? v}
-                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], formula_type: val } }))}
-                    >
-                      <Select.Option value="expression">expression</Select.Option>
-                      <Select.Option value="condition">condition</Select.Option>
-                      <Select.Option value="limit">limit</Select.Option>
-                    </Select>
-                  ),
-                },
-                {
-                  title: 'Formula',
-                  dataIndex: 'formula_value',
-                  render: (v, record) => {
-                    const current = formulaEdits[record.id]?.formula_value ?? v;
-                    const currentRemark = formulaEdits[record.id]?.remark ?? record.remark;
-                    const isExpanded = expandedFormulaIds.includes(record.id);
-                    return (
-                      <div style={{ cursor: 'pointer' }} onClick={() => toggleExpandRow(record.id)}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                          <Text code style={{ fontSize: 10, flex: 1, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
-                            {current || <span style={{ color: '#bbb' }}>(empty)</span>}
-                          </Text>
-                          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, paddingTop: 1 }}>
-                            {formulaEdits[record.id] && (
-                              <Tag color="orange" style={{ fontSize: 9, padding: '0 3px', margin: 0, lineHeight: '14px' }}>edited</Tag>
-                            )}
-                            {isExpanded
-                              ? <UpOutlined style={{ fontSize: 10, color: '#1677ff' }} />
-                              : <DownOutlined style={{ fontSize: 10, color: '#bbb' }} />
-                            }
-                          </div>
-                        </div>
-                        {currentRemark && (
-                          <div style={{ fontSize: 10, color: '#888', marginTop: 2, fontStyle: 'italic' }}>
-                            {currentRemark}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  },
-                },
-                {
-                  title: 'Result', width: 100, hidden: !isTestModeOpen,
-                  render: (_, record) => {
-                    const res = testResults[record.id];
-                    if (!res) return null;
-                    return res.success ? (
-                      <Tag color="blue" style={{ fontFamily: 'monospace' }}>{res.value}</Tag>
-                    ) : (
-                      <Tooltip title={res.error}><Tag color="error">Error</Tag></Tooltip>
-                    );
-                  },
-                },
-                {
-                  title: 'Round', dataIndex: 'rounding_rule', width: 90,
-                  render: (v, record) => (
-                    <Select size="small" style={{ width: 80 }}
-                      value={formulaEdits[record.id]?.rounding_rule ?? v}
-                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_rule: val } }))}
-                    >
-                      <Select.Option value="none">none</Select.Option>
-                      <Select.Option value="ceil">ceil</Select.Option>
-                      <Select.Option value="floor">floor</Select.Option>
-                      <Select.Option value="round">round</Select.Option>
-                    </Select>
-                  ),
-                },
-                {
-                  title: 'Prec', dataIndex: 'rounding_precision', width: 65,
-                  render: (v, record) => (
-                    <InputNumber size="small" min={0} max={6} style={{ width: 55 }}
-                      value={formulaEdits[record.id]?.rounding_precision ?? v}
-                      onChange={val => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], rounding_precision: val } }))}
-                    />
-                  ),
-                },
-                {
-                  title: 'Remark', dataIndex: 'remark', width: 140,
-                  render: (v, record) => (
-                    <Input size="small"
-                      value={formulaEdits[record.id]?.remark ?? (v || '')}
-                      onChange={e => setFormulaEdits(prev => ({ ...prev, [record.id]: { ...prev[record.id], remark: e.target.value } }))}
-                    />
-                  ),
-                },
-                {
-                  title: '', dataIndex: 'action', width: 40,
-                  render: (_, record) => (
-                    <Popconfirm title="ลบ formula นี้?" onConfirm={() => deleteToolingFormula(record.id)} okText="ลบ" cancelText="ยกเลิก">
-                      <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
-                  ),
-                },
-              ]}
-            />
-          )}
-        </Spin>
-      </Modal>
-
-      {/* ── Selection Rules Drawer ────────────────────────────────────────── */}
-      <SelectionRuleDrawer open={isRulesDrawerOpen} onClose={() => setIsRulesDrawerOpen(false)} />
 
       {/* ── New Machine Setup Wizard ───────────────────────────────────────── */}
       <Modal
@@ -1363,7 +1388,7 @@ const ToolManagementPage = () => {
         footer={[
           <Button key="close" onClick={() => setSetupWizard(p => ({ ...p, open: false }))}>Close</Button>,
           <Button key="rules" type="primary" icon={<ApartmentOutlined />}
-            onClick={() => { setSetupWizard(p => ({ ...p, open: false })); setIsRulesDrawerOpen(true); }}>
+            onClick={() => { setSetupWizard(p => ({ ...p, open: false })); setActiveView('selectionRules'); }}>
             Go to Selection Rules <ArrowRightOutlined />
           </Button>,
         ]}

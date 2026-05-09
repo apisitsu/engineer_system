@@ -56,7 +56,7 @@ npm run cypress:run  # Cypress E2E headless
 - **Auth middleware:** Two separate files:
   - `middleware/auth.js` — `verifyToken` (JWT), `generateToken`
   - `middleware/mtcAuth.js` — role-based guards: `isAdmin` = dept/role 'AD' only; `isEngineer` = 'AD' or 'Engineering'
-  - **Note:** `toolingSelectController.js` defines its own local `isAdmin` inline — does not import from `mtcAuth.js`
+  - `toolingSelectController.js` imports `isAdmin` from `mtcAuth.js` (do not redefine it locally)
 - **JWT payload shape:** `{ empno, name, department, group, role }` — in Kanban routes `empno` is mapped to `id` via middleware in `server.js`
 - **Constants:** Domain-specific paths and table names in `<domain>Constants.js`; never hardcode table names. MTC table names are in `api/engineer/mtc/mtcConstants.js` → `TABLES`
 - **FEA dependency:** Requires Redis (BullMQ) at `REDIS_HOST/REDIS_PORT` env vars — gracefully skips if Redis is absent
@@ -136,7 +136,7 @@ fixtureLogic.findFixtures(cnNumber)
   ├─ partDataMapper.computeDerivedFlags()  → isYBall, isIDtoOD, isABR...
   ├─ FormulaService.calculateMachineParams() × all machines (parallel)
   │    └─ reads tooling_formula table, evaluates with expr-eval
-  ├─ partDataMapper.buildCalcMap()         → merges formula output with legacy adaptors
+  ├─ partDataMapper.buildCalcMap()         → merges formula output with adaptors
   ├─ machineQueryService.computeOkFlags()  → eligibility flags per machine
   ├─ machineQueryService.fetchToolingRows()→ hardcoded SQL for 8 legacy machines
   ├─ fixtureAssembler.assembleResults()   → formats rows per machine
@@ -147,7 +147,7 @@ fixtureLogic.findFixtures(cnNumber)
 
 | Path | Machines | Configured via |
 |---|---|---|
-| **Legacy** (`machineQueryService.fetchToolingRows`) | KSB22G, KSB80, TSG300, KS03A, KS400B, KS500RD, KS400B5, KS400B6 | Hardcoded SQL |
+| **Legacy** (`machineQueryService.fetchToolingRows`) | KSB22G, KSB80, TSG300, KS03A, KS400B, KS500RD, KS400B5, KS400B6 | Hardcoded SQL (inventory lookup only — formula calculation is DB-driven for all) |
 | **Dynamic** (`dynamicLogic.findDynamicFixtures`) | Any new machine | `mtc_selection_rules` table |
 
 ### Three-table dependency for a new machine
@@ -156,7 +156,7 @@ A new machine created via +Add Tool only returns search results when **all three
 
 1. **`tooling_<machine>`** — inventory table (created by +Add Tool → New Machine)
 2. **`tooling_formula`** — formula rows for the machine (via Formula Setting UI)
-3. **`mtc_selection_rules`** — linking calc output to inventory columns (via Selection Rules drawer in Tool List)
+3. **`mtc_selection_rules`** — linking calc output to inventory columns (via Selection Rules in ToolManagementPage)
 
 ### `mtc_selection_rules` schema
 
@@ -183,8 +183,9 @@ Key columns for the dynamic (new-style) approach:
   - Overridden `ceil(x, n)` / `floor(x, n)` / `round(x, n)` with optional decimal precision
   - `_enrichContext()` — adds derived vars: `odAft_max`, `odAft_min`, `W_max`, `T1`, `SD`, `Offset`, plus all single letters A–Z default to **0**. Each machine must supply its own A–Z values via explicit `tooling_formula` rows — there are no inherited "jawA" defaults. KS-B22G / KS-B80 use hardcoded SQL in `machineQueryService` and never call `_enrichContext`.
 - Formulas are evaluated sequentially: each formula's output becomes a variable available to subsequent formulas in the same machine run
-- Multi-statement formulas use `;` separator; assignment form `varName = expr` stores intermediate values
-- `_preprocess()` handles: Excel-style `func(var, list)` → `lookup(var, list)`, `&&`/`||` → `and`/`or`, unquoted enum auto-quoting
+- Multi-statement formulas use `;` separator; assignment form `varName = expr` stores intermediate values; the assignment regex uses a negative lookahead `=(?!=)` to avoid matching `==` as an assignment
+- `_preprocess()` handles: Excel-style `func(var, list)` → `lookup(var, list)`, `&&`/`||` → `and`/`or`, unquoted enum auto-quoting. Note: `Y` and `N` are intentionally NOT auto-quoted (they map to A–Z dimension defaults = 0, not string literals)
+- All machine calculation logic lives in `tooling_formula` DB rows — `services/calculationLogic.js` now only exports `calculateSD(part)` (returns SD value for a part, or null)
 - The formula engine is the calculation source of truth — do not duplicate logic in frontend constants
 
 ### Visual Formula Builder
@@ -194,7 +195,7 @@ Key columns for the dynamic (new-style) approach:
 - Visual mode: template-based (arithmetic, rounding, conditional, lookup). Arithmetic template supports **N terms** via `simpleTerms[]` / `simpleOps[]` arrays — not limited to two operands. Switching to Visual is disabled if the current formula string can't be round-tripped through `parseFormula`.
 - Text mode: raw formula string. The `value` prop is always the source of truth; `formulaPreview` always reflects it.
 - `onTest` prop: async `(formulaStr) => { valid, result, error }` — calls `POST /api/mtc/tooling-formula/test` (`MTC_FORMULA_TEST` constant)
-- Used in: `ToolingSelectPage.jsx` (inline formula editing per tooling row) and `ToolManagementPage.jsx` (formula settings modal + add-tool wizard)
+- Used in: `ToolingSelectPage.jsx` (inline formula editing per tooling row) and `ToolManagementPage.jsx` (formula settings full-page view + add-tool wizard)
 
 ### Tooling Select API Routes
 
@@ -230,21 +231,26 @@ The legacy `/api/mtc/formulas/*` routes and `formulaController.js` have been del
 
 ### ToolManagementPage
 
-`src/components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx` — standalone page (has its own route + sidebar entry) for admin-side tooling management. Three panels:
+`src/components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx` — standalone page (has its own route + sidebar entry) for admin-side tooling management.
 
-1. **Inventory table** — inline edit of tool records per machine; dynamic columns reflect DB schema
-2. **Formula Setting modal** — CRUD for `tooling_formula` rows scoped to a machine/tooling-name; includes a test-simulation panel with mock part dimensions
-3. **Add Tool / New Machine wizard** — add rows to existing tables or create a new machine table; 3-step flow: add tools → set formulas → configure selection rules
+Uses a single `activeView` state (`'main'` | `'formula'` | `'machineLimits'` | `'selectionRules'`) to switch the entire content area between views — **not** modal/drawer overlays. The header re-renders with a back button + contextual action buttons for each view.
 
-Embeds both `FormulaBuilderInput` and `SelectionRuleDrawer`.
+- **`'main'`** — machine selector + inventory table with inline editing
+- **`'formula'`** — full-page CRUD for `tooling_formula` rows (scoped to selected machine/tooling-name); includes test-simulation panel with mock part dimensions; action buttons (Test, Add Formula, Save) live in the header
+- **`'machineLimits'`** — full-page editor for `mtc_machine_config` rows (eligibility conditions + Dynamic Rules toggle per machine)
+- **`'selectionRules'`** — `SelectionRuleDrawer` rendered inline via `inline={true}` prop
 
-**Health Check button** (header) — calls `GET /api/tooling-select/rules/validate`, opens a modal showing bad `calc_key` per rule with a "Replace with" dropdown (grouped: formula params for that machine + common enriched keys). "Apply Fixes" PUTs the corrected dims back and re-runs the audit automatically.
+**Health Check button** (main header) — calls `GET /api/tooling-select/rules/validate`, opens a modal showing bad `calc_key` per rule with a "Replace with" dropdown. "Apply Fixes" PUTs the corrected dims back and re-runs audit automatically.
 
-**`toolingTables` array** in this file is a hardcoded list of known legacy machines and their inventory tables. Adding a new legacy machine requires updating this array manually.
+**`toolingTables` array** — hardcoded list of known legacy machines + inventory tables. Adding a new legacy machine requires updating this array manually.
 
 ### Selection Rules UI
 
-`SelectionRuleDrawer` (exported from `tooling_select/SelectionRuleManager.jsx`) is embedded inside both `ToolingSelectPage` and `ToolManagementPage` as a Drawer — it is **not** a standalone page or route. Access: Tool List drawer → "Selection Rules" button.
+`SelectionRuleDrawer` (exported from `tooling_select/SelectionRuleManager.jsx`) supports two rendering modes:
+- **Drawer mode** (default, `inline=false`): slides in from the right — used in `ToolingSelectPage`
+- **Inline mode** (`inline={true}`): renders directly into the parent layout — used in `ToolManagementPage` full-page `selectionRules` view
+
+When `inline=true`, the component loads data on mount (not gated by `open` prop), and renders an "Add Rule" button at the top instead of a Drawer header.
 
 ### Known Sync Risks (hardcode)
 
@@ -253,12 +259,14 @@ These values exist in **both** backend and frontend — changing one without the
 | Value | Backend location | Frontend location |
 |---|---|---|
 | `idAft >= 12.0` threshold (KS-B22RD vs KS-03A routing) | `services/partDataMapper.js` | `ToolingSelectPage.jsx` |
-| `normalBaseC = 18.5 + (wAft/2) + 3` | `services/calculationLogic.js` | `ToolingSelectPage.jsx`, `ToolManagementPage.jsx` (test context) |
-| `jawB = jawA - 0.4` | `services/calculationLogic.js` | `ToolManagementPage.jsx` (test context) |
+| `normalBaseC = 18.5 + (wAft/2) + 3` | formula in `tooling_formula` DB | `ToolManagementPage.jsx` test simulation context (hardcoded) |
+| `jawB = jawA - 0.4` | formula in `tooling_formula` DB | `ToolManagementPage.jsx` test simulation context (hardcoded) |
 
 `ENRICHED_CONTEXT_KEYS` set in `toolingSelectController.js` (used by `/rules/validate`) must also be kept in sync with `FormulaService._enrichContext()` — there is a comment in the controller marking this dependency.
 
 `tooling_formula` table name is still hardcoded as a string in `toolingFormulaController.js` — `TABLES.TOOLING_FORMULA` constant does not yet exist in `mtcConstants.js`.
+
+`inventoryService.js` caches column schema per table with a 5-minute TTL (`_colCache` + `_colCacheAt`). Schema changes to inventory tables are visible within 5 minutes without restart; `registerTable()` immediately invalidates the cache for a given table.
 
 ### MTC Legacy Duplicate Files
 

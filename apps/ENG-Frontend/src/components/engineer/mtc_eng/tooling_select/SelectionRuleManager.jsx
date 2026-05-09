@@ -243,7 +243,7 @@ const ResultFieldsEditor = ({ value = [], onChange, targetTable }) => {
 
 // ── Main Drawer Content ───────────────────────────────────────────────────────
 
-export const SelectionRuleDrawer = ({ open, onClose }) => {
+export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
   const { message, modal } = App.useApp();
   const [rules,            setRules]            = useState([]);
   const [loading,          setLoading]          = useState(false);
@@ -272,7 +272,7 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
   }, [message]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !inline) return;
     fetchRules();
     axios.get(`${server.MTC_TOOLING_FORMULA}/machines`)
       .then(r => setAvailableMachines(r.data.machines || []))
@@ -280,7 +280,7 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
     axios.get(server.MTC_TOOLING_TABLES)
       .then(r => setAvailableTables((r.data.tables || []).map(t => t.table_name)))
       .catch(() => {});
-  }, [open, fetchRules]);
+  }, [open, inline, fetchRules]);
 
   const openAdd = () => {
     setEditingRecord(null);
@@ -385,16 +385,8 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
     children: <Table dataSource={machineRules.map(r => ({ ...r, key: r.id }))} columns={tableColumns} size="small" pagination={false} bordered />,
   }));
 
-  return (
-    <Drawer
-      title={<Space><ApartmentOutlined /><span>Selection Rules</span></Space>}
-      placement="right"
-      width={760}
-      open={open}
-      onClose={onClose}
-      extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Rule</Button>}
-      styles={{ body: { padding: 16 } }}
-    >
+  const rulesContent = (
+    <>
       <Alert
         type="info"
         showIcon={false}
@@ -520,6 +512,31 @@ export const SelectionRuleDrawer = ({ open, onClose }) => {
           />
         </Form>
       </Modal>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Rule</Button>
+        </div>
+        {rulesContent}
+      </div>
+    );
+  }
+
+  return (
+    <Drawer
+      title={<Space><ApartmentOutlined /><span>Selection Rules</span></Space>}
+      placement="right"
+      width={760}
+      open={open}
+      onClose={onClose}
+      extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Rule</Button>}
+      styles={{ body: { padding: 16 } }}
+    >
+      {rulesContent}
     </Drawer>
   );
 };

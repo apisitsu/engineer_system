@@ -72,7 +72,9 @@ class FormulaService {
     // 2. Auto-quote common enum values if they appear unquoted
     // This handles cases like: type == NORMAL
     // Removed 'B' from here because it's a common numeric dimension
-    const keywords = ['NORMAL', 'ABR', 'BALL_INNER', 'OD->ID', 'ID->OD', 'Y', 'N'];
+    // 'Y' and 'N' intentionally excluded: they alias to ctx.Y/ctx.N (A–Z defaults = 0).
+    // Auto-quoting them silently converts dimension variable usage to string literals → result 0.
+    const keywords = ['NORMAL', 'ABR', 'BALL_INNER', 'OD->ID', 'ID->OD'];
     keywords.forEach(k => {
       // Matches unquoted enum value not preceded by a quote or dot
       const regex = new RegExp(`(?<!['".])\\b${k}\\b(?!['"])`, 'g');
@@ -126,7 +128,7 @@ class FormulaService {
       if (!trimmed) continue;
 
       try {
-        const assignMatch = trimmed.match(/^([a-zA-Z0-9_]+)\s*=\s*(.*)$/);
+        const assignMatch = trimmed.match(/^([a-zA-Z0-9_]+)\s*=(?!=)\s*(.*)$/);
         if (assignMatch) {
           const varName = assignMatch[1];
           const exprStr = assignMatch[2];

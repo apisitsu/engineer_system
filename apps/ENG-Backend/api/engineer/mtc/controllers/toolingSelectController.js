@@ -8,14 +8,7 @@ const { TABLES } = require('../mtcConstants');
 const inventoryService = require('../services/inventoryService');
 const tableAdminService = require('../services/tableAdminService');
 const { invalidateMachineConfigCache } = require('../services/machineQueryService');
-
-// ── Role Authorization Middleware ──────────────────────────────────────────
-const isAdmin = (req, res, next) => {
-  const dept = req.user?.department || req.user?.u_department || req.user?.userDepartment;
-  const role = req.user?.role || req.user?.u_role;
-  if (dept === 'AD' || role === 'AD') return next();
-  return res.status(403).json({ success: false, error: 'Access denied: Admin only' });
-};
+const { isAdmin } = require('../../../../middleware/mtcAuth');
 
 // ── Search ─────────────────────────────────────────────────────────────────
 
@@ -325,8 +318,10 @@ router.delete('/inventory/:tableName/:id', isAdmin, async (req, res) => {
 
 router.get('/spec', async (req, res) => {
   try {
-    const { q, page = 1, limit = 50 } = req.query;
-    const offset = (page - 1) * limit;
+    const { q } = req.query;
+    const safePage  = Math.max(1, parseInt(req.query.page)  || 1);
+    const safeLimit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset    = (safePage - 1) * safeLimit;
     let query = `SELECT * FROM ${TABLES.SPEC_PROCESS}`;
     let countQuery = `SELECT COUNT(*) FROM ${TABLES.SPEC_PROCESS}`;
     const params = [];
@@ -338,7 +333,7 @@ router.get('/spec', async (req, res) => {
     }
 
     query += ` ORDER BY cn LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    const dataParams = [...params, limit, offset];
+    const dataParams = [...params, safeLimit, offset];
 
     const [dataRes, countRes] = await Promise.all([
       engPool.query(query, dataParams),
@@ -349,8 +344,8 @@ router.get('/spec', async (req, res) => {
       success: true,
       data: dataRes.rows,
       total: parseInt(countRes.rows[0].count),
-      page: parseInt(page),
-      limit: parseInt(limit)
+      page: safePage,
+      limit: safeLimit,
     });
   } catch (err) {
     console.error('Fetch spec error:', err.message);

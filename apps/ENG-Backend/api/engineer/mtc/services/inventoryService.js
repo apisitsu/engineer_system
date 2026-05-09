@@ -3,7 +3,9 @@
 const { engPool } = require('../../../../instance/eng_db');
 
 const _tableCache = new Map();
-const _colCache = new Map();
+const _colCache   = new Map();
+const _colCacheAt = new Map();
+const COL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const ALLOWED_TABLES = new Set([
   'tooling_ksb22g',
@@ -32,16 +34,21 @@ async function tableExists(tableName) {
 function registerTable(tableName) {
   _tableCache.set(tableName, true);
   _colCache.delete(tableName);
+  _colCacheAt.delete(tableName);
 }
 
 async function getValidColumns(tableName) {
-  if (_colCache.has(tableName)) return _colCache.get(tableName);
+  const now = Date.now();
+  if (_colCache.has(tableName) && now - (_colCacheAt.get(tableName) || 0) < COL_CACHE_TTL_MS) {
+    return _colCache.get(tableName);
+  }
   const r = await engPool.query(
     `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
     [tableName]
   );
   const cols = new Set(r.rows.map(row => row.column_name));
   _colCache.set(tableName, cols);
+  _colCacheAt.set(tableName, now);
   return cols;
 }
 
