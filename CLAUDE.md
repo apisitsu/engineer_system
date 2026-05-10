@@ -43,20 +43,23 @@ npm run cypress:run  # Cypress E2E headless
 - **Routing:** Most domains register routes inline in `server.js`. MTC has a partial `routes/mtcRoutes.js`, but most MTC controllers are also registered directly in `server.js`
 - **MVC per domain:** routes → controller (HTTP layer) → service (business logic, PDF/Excel) → model (DB access)
 - **Key domains:**
-  - `api/engineer/mtc/` — tooling inspection, SDS v1/v2, formula engine (`expr-eval`), tooling selection
-  - `api/engineer/process/` — ECR/ECN workflow, tumble conditions
+  - `api/engineer/mtc/` — tooling inspection, SDS v1/v2, formula engine (`expr-eval`), tooling selection, tool-request workflow
+  - `api/engineer/process/` — ECR workflow (`/api/ecr/*`), tumble conditions/models (`/api/tumble/*`)
+  - `api/engineer/system/` — PDF converter (`pdfConverter.js`) at `/api/engineer/system`
+  - `api/engineer/new_prod/` — external job-check proxy (`/api/proxy/job_check`, **no auth** — whitelisted in the global auth middleware)
   - `api/kanban/` — real-time board/card CRUD via Socket.io
   - `api/fea/` — FEA simulation (BullMQ job queue + `fea_worker.js`); **not** under `api/engineer/`
   - `api/user/` — JWT auth, user profile, RBAC roles
-  - `api/system/` — Gmail integration, system settings, user management schema
+  - `api/system/` — Gmail integration, system settings (`/api/system/settings`), user management schema (`/api/system/user-management/*`)
 - **Database:** Raw `pg.Pool` (no Sequelize) from `instance/`:
   - `instance/eng_db.js` → `engPool` — main app DB (`eng_system`) on port 6543
   - `instance/instance.js` → `pool` — factory DB `rodpc` on port 5432
   - `instance/maq_db.js` → `maqPool` — factory DB `maqdb` on port 5432
+  - `maqQcPool` appears in `.env` (`PG_RODQC_*`) but **no instance file exists** for it — the env vars are declared but unused in current code
 - **Auth middleware:** Two separate files:
   - `middleware/auth.js` — `verifyToken` (JWT), `generateToken`
-  - `middleware/mtcAuth.js` — role-based guards: `isAdmin` = dept/role 'AD' only; `isEngineer` = 'AD' or 'Engineering'
-  - `toolingSelectController.js` imports `isAdmin` from `mtcAuth.js` (do not redefine it locally)
+  - `middleware/mtcAuth.js` — exports `authorize(roles[])` factory plus pre-built `isAdmin` (dept/role 'AD') and `isEngineer` ('AD' or 'Engineering'). Use `authorize(['AD', 'SomeOtherDept'])` for custom role combos. `toolingSelectController.js` imports `isAdmin` from here — do not redefine it locally.
+  - **Inline guards in `server.js`:** `requireSuperAdminOrEmergency` (for schema-altering user-management routes) and `requireSystemEngineer` (for settings writes) are defined inline in `server.js`, not in middleware files
 - **JWT payload shape:** `{ empno, name, department, group, role }` — in Kanban routes `empno` is mapped to `id` via middleware in `server.js`
 - **Constants:** Domain-specific paths and table names in `<domain>Constants.js`; never hardcode table names. MTC table names are in `api/engineer/mtc/mtcConstants.js` → `TABLES`
 - **FEA dependency:** Requires Redis (BullMQ) at `REDIS_HOST/REDIS_PORT` env vars — gracefully skips if Redis is absent
@@ -127,21 +130,55 @@ Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
 
 ## MTC Tooling Selection — Full Pipeline
 
-The tooling search (`POST /api/tooling-select/search`) orchestrates multiple services in `fixtureLogic.js`:
+The tooling search (`POST /api/tooling-select/search`) runs through `ToolingOrchestrator.js`. `fixtureLogic.js` is now a thin re-export wrapper — do not add logic there.
 
 ```
-fixtureLogic.findFixtures(cnNumber)
-  ├─ partDataMapper.fetchSpecRow()         → raw part spec from DB
-  ├─ partDataMapper.mapPartData()          → normalized part object
-  ├─ partDataMapper.computeDerivedFlags()  → isYBall, isIDtoOD, isABR...
-  ├─ FormulaService.calculateMachineParams() × all machines (parallel)
-  │    └─ reads tooling_formula table, evaluates with expr-eval
-  ├─ partDataMapper.buildCalcMap()         → merges formula output with adaptors
-  ├─ machineQueryService.computeOkFlags()  → eligibility flags per machine
-  ├─ machineQueryService.fetchToolingRows()→ hardcoded SQL for 8 legacy machines
-  ├─ fixtureAssembler.assembleResults()   → formats rows per machine
-  └─ dynamicLogic.findDynamicFixtures()   → reads mtc_selection_rules for new machines
+ToolingOrchestrator.findFixtures(cnNumber)
+  ├─ CacheAgent.get('tooling:{CN}')        → return immediately on hit (5-min TTL)
+  ├─ SpecAgent.execute()                   → fetchSpecRow → mapPartData → computeDerivedFlags
+  ├─ FormulaAgent × N machines             → Promise.allSettled (parallel, partial-failure OK)
+  │    └─ FormulaService.calculateMachineParams() per machine → tooling_formula table
+  ├─ buildCalcMap()                        → merges formula output with machine adapters
+  ├─ computeOkFlags()                      → eligibility flags per machine
+  ├─ Promise.all([                         → legacy search + dynamic search in PARALLEL
+  │    fetchToolingRows(),                 → hardcoded SQL for 8 legacy machines
+  │    findDynamicFixtures()               → mtc_selection_rules for new machines
+  │  ])
+  ├─ assembleResults()                     → formats + ranks per machine
+  └─ CacheAgent.set('tooling:{CN}', result, 5min)
 ```
+
+### Agent Layer (`services/agents/`)
+
+All agents extend `BaseAgent` which provides: **timeout per agent**, **uniform error shape** `{ _agentError, agent, error }`, and **automatic latency recording** to `MonitorAgent`.
+
+| File | Role | Timeout |
+|---|---|---|
+| `BaseAgent.js` | Base class — `execute()` wraps `run()` with timeout + catch + monitor | — |
+| `MonitorAgent.js` | Singleton — rolling-window latency stats per agent name; `getAllStats()`, `slowAgents(ms)` | — |
+| `CacheAgent.js` | Singleton — in-memory TTL Map; `get/set/invalidate/invalidatePrefix`; `TTL.TOOLING=5min`, `TTL.SDS=10min` | — |
+| `SpecAgent.js` | Wraps `partDataMapper` fetch + normalize + derivedFlags | 5 s |
+| `FormulaAgent.js` | Wraps `FormulaService.calculateMachineParams` for one machine | 8 s |
+| `SdsAgent.js` | Wraps `sdsV2SearchService.searchByCn`; on connection error retries with `NULL_POOL` (graceful degradation) | 15 s |
+
+**Formula Swarm failure behaviour:** if one `FormulaAgent` times out or errors, its machine is skipped. The response includes `_formulaWarnings: { machineName: reason }` instead of crashing the request.
+
+**SDS degradation:** if `rodpcPool` is unreachable, `SdsAgent` retries with a null pool → response still contains MAQ data but `production: null` and `process_names: []`, with `_rodpcUnavailable: true`.
+
+### Cache Invalidation Rules
+
+Any mutation that affects tooling search results must call `cache.invalidatePrefix('tooling:')` or `invalidateCache(cn)` after the DB write:
+
+| Trigger | Scope |
+|---|---|
+| Formula create / update / delete (`toolingFormulaController`) | `tooling:*` — all CNs |
+| Selection rule create / update / delete | `tooling:*` — all CNs |
+| Inventory update / delete | `tooling:*` — all CNs |
+| Machine config create / update / delete | `tooling:*` — all CNs |
+| Spec update / delete | `tooling:{cn}` — specific CN only |
+| SDS | TTL-only (no write path into maqdb/rodpc) |
+
+Import `{ invalidateCache }` from `ToolingOrchestrator` for CN-specific invalidation; import `cache` from `agents/CacheAgent` for prefix flush.
 
 ### Two search paths for tooling lookup
 
@@ -152,11 +189,13 @@ fixtureLogic.findFixtures(cnNumber)
 
 ### Three-table dependency for a new machine
 
-A new machine created via +Add Tool only returns search results when **all three** are configured:
+A new machine created via +Add Tool returns search results when **all three** are configured — **no code change required**:
 
 1. **`tooling_<machine>`** — inventory table (created by +Add Tool → New Machine)
 2. **`tooling_formula`** — formula rows for the machine (via Formula Setting UI)
 3. **`mtc_selection_rules`** — linking calc output to inventory columns (via Selection Rules in ToolManagementPage)
+
+`dynamicLogic.js` auto-detects any `calc_context` not already in `allCalcs`, looks up the matching formula machine name from `tooling_formula`, and calculates it at runtime — so new machines work without touching `fixtureLogic.js` or `partDataMapper.js`.
 
 ### `mtc_selection_rules` schema
 
@@ -164,7 +203,7 @@ Key columns for the dynamic (new-style) approach:
 - `machine_name` — display name
 - `tool_category` — tool type, e.g. "JAW"
 - `target_tool_table` — inventory table, e.g. `tooling_ksx100`
-- `calc_context` — key into `allCalcs` object returned by FormulaService, e.g. `ks400b`
+- `calc_context` — for **new machines**: set this to the exact `machine_name` as stored in `tooling_formula` (e.g. `KSX100`). For **legacy machines**: the short-key forms (`ks400b`, `ks03a`, etc.) are kept for backward compat. Matching is by normalization: `toLowerCase().replace(/-/g, '')` — so `KS-X100`, `KSX100`, and `ksx100` all resolve to the same formula machine.
 - `machine_ok_condition` — key in `okFlags`; if `false`, machine is skipped
 - `dims` (JSONB) — array of `{ calc_key, tool_field, tol_plus, tol_minus, label, sort_priority, penalty_over }`
 - `result_fields` (JSONB) — array of `{ tool_field, label }` controlling result display columns
@@ -174,17 +213,19 @@ Key columns for the dynamic (new-style) approach:
 
 **`SelectionRuleManager.jsx` live validation**: The `DimsEditor` and `ResultFieldsEditor` sub-components fetch valid values at edit time — `calc_key` options come from `GET /api/mtc/tooling-formula/:machineName` and `tool_field` options come from `GET /api/tooling-select/columns/:tableName`. Both show a red border + warning icon when a saved value is not found in current options.
 
+**`calc_context` auto-fill** — hidden from the Add/Edit Rule form; automatically set equal to the selected `machine_name`. `machine_ok_condition` is also hidden and auto-filled from `GET /api/tooling-select/machine-config` (`ok_flag_key` for that machine). `target_tool_table` is auto-populated from `GET /api/tooling-select/machine-table-config` (matching `tfMachine`) or by `tooling_<normalized_name>` convention for new machines not in that list. An info bar in the form shows the auto-filled values so admins can verify.
+
 ## MTC Formula Engine
 
 - Formulas stored in `tooling_formula` table (sole formula store — `mtc_formulas` table is retired and should be dropped from DB), evaluated sequentially at runtime with `expr-eval`
 - `FormulaService` (`api/engineer/mtc/services/FormulaService.js`) extends `expr-eval` with:
   - `round05`, `ceil05`, `floor05` — round to nearest 0.5
   - `lookup(val, v1, v2, ...)` — returns first value in list ≥ val
-  - Overridden `ceil(x, n)` / `floor(x, n)` / `round(x, n)` with optional decimal precision
-  - `_enrichContext()` — adds derived vars: `odAft_max`, `odAft_min`, `W_max`, `T1`, `SD`, `Offset`, plus all single letters A–Z default to **0**. Each machine must supply its own A–Z values via explicit `tooling_formula` rows — there are no inherited "jawA" defaults. KS-B22G / KS-B80 use hardcoded SQL in `machineQueryService` and never call `_enrichContext`.
+  - `roundN(x, n)` / `ceilN(x, n)` / `floorN(x, n)` — precision rounding with optional decimal places. **Do NOT use `round(x,n)` in DB formulas** — `expr-eval` v2 registers `round/ceil/floor` as built-in unary operators; a second argument causes a parse error even when `parser.functions.round` is overridden. `_preprocess()` auto-rewrites `round(` → `roundN(` etc. before parsing, so existing DB formulas with `round(x, n)` continue to work transparently.
+  - `_enrichContext()` — adds derived vars: `odAft_max`, `odAft_min`, `W_max`, `T1`, `SD`, `isInner` (type includes INNER or yBall=Y), `Offset`, plus all single letters A–Z default to **0**. Each machine must supply its own A–Z values via explicit `tooling_formula` rows — there are no inherited "jawA" defaults. KS-B22G / KS-B80 use hardcoded SQL in `machineQueryService` and never call `_enrichContext`.
 - Formulas are evaluated sequentially: each formula's output becomes a variable available to subsequent formulas in the same machine run
 - Multi-statement formulas use `;` separator; assignment form `varName = expr` stores intermediate values; the assignment regex uses a negative lookahead `=(?!=)` to avoid matching `==` as an assignment
-- `_preprocess()` handles: Excel-style `func(var, list)` → `lookup(var, list)`, `&&`/`||` → `and`/`or`, unquoted enum auto-quoting. Note: `Y` and `N` are intentionally NOT auto-quoted (they map to A–Z dimension defaults = 0, not string literals)
+- `_preprocess()` handles (in order): `round/ceil/floor(` → `roundN/ceilN/floorN(`, arrow normalization, Excel-style lookup, `&&`/`||` → `and`/`or`, unquoted enum auto-quoting. Note: `Y` and `N` are intentionally NOT auto-quoted (they map to A–Z dimension defaults = 0, not string literals)
 - All machine calculation logic lives in `tooling_formula` DB rows — `services/calculationLogic.js` now only exports `calculateSD(part)` (returns SD value for a part, or null)
 - The formula engine is the calculation source of truth — do not duplicate logic in frontend constants
 
@@ -206,13 +247,17 @@ Key columns for the dynamic (new-style) approach:
 | `POST` | `/api/tooling-select/search` | Main tooling search by CN number |
 | `GET` | `/api/tooling-select/rules` | List all active selection rules |
 | `POST/PUT/DELETE` | `/api/tooling-select/rules[/:id]` | CRUD for selection rules (isAdmin) |
-| `GET` | `/api/tooling-select/rules/validate` | Health check: cross-checks every active rule's `dims[].calc_key` against current formula params + enriched context keys; returns `{ issues[], valid_keys_by_context }` |
+| `GET` | `/api/tooling-select/rules/validate` | Health check: cross-checks every active rule's `dims[].calc_key` against current formula params + enriched context keys; returns `{ issues[], valid_keys_by_context, enriched_context_keys }` |
 | `GET` | `/api/tooling-select/columns/:tableName` | Real column names from an inventory table (whitelisted via `inventoryService.tableExists()`) — used by SelectionRuleManager for live `tool_field` validation |
 | `GET` | `/api/tooling-select/tables` | List all tooling inventory tables |
+| `GET` | `/api/tooling-select/machine-table-config` | Static display config for all known legacy machines (key, label, table, tfMachine, machineFilter) — sourced from `services/machineTableConfig.js` using `TABLES` constants |
 | `GET` | `/api/tooling-select/tooling-names/:tableName` | Distinct tooling names in a table |
 | `GET/POST/PUT/DELETE` | `/api/tooling-select/inventory/:tableName[/:id]` | Inventory CRUD (isAdmin for mutations) |
 | `GET/POST/PUT/DELETE` | `/api/tooling-select/spec[/:cn]` | Part spec CRUD (isAdmin for mutations) |
 | `POST` | `/api/tooling-select/create-table` | Create new tooling inventory table (isAdmin) |
+| `GET/POST/PUT/DELETE` | `/api/tooling-select/machine-config[/:id]` | CRUD for `mtc_machine_config` rows — eligibility conditions and Dynamic Rules toggle per machine (isAdmin for mutations) |
+| `GET` | `/api/tooling-select/monitor` | Latency stats per agent + cache size/keys (isAdmin) |
+| `DELETE` | `/api/tooling-select/monitor/cache` | Manual cache flush; `?prefix=tooling:` or `?prefix=sds:` for partial flush (isAdmin) |
 
 ### Formula API Routes (current)
 
@@ -242,7 +287,7 @@ Uses a single `activeView` state (`'main'` | `'formula'` | `'machineLimits'` | `
 
 **Health Check button** (main header) — calls `GET /api/tooling-select/rules/validate`, opens a modal showing bad `calc_key` per rule with a "Replace with" dropdown. "Apply Fixes" PUTs the corrected dims back and re-runs audit automatically.
 
-**`toolingTables` array** — hardcoded list of known legacy machines + inventory tables. Adding a new legacy machine requires updating this array manually.
+**`toolingTables` state** — fetched on mount from `GET /api/tooling-select/machine-table-config` (`MTC_MACHINE_TABLE_CONFIG` constant). The backend source is `services/machineTableConfig.js`. The API returns `machineFilter` as a string (`'W'`, `'NOT_W'`, or `null`); `ToolManagementPage.jsx` converts it to a row-filter function `mf`. Adding a new legacy machine requires adding an entry to `machineTableConfig.js` only — no frontend changes needed.
 
 ### Selection Rules UI
 
@@ -252,21 +297,39 @@ Uses a single `activeView` state (`'main'` | `'formula'` | `'machineLimits'` | `
 
 When `inline=true`, the component loads data on mount (not gated by `open` prop), and renders an "Add Rule" button at the top instead of a Drawer header.
 
+**Add/Edit Rule form** — only exposes Machine Name, Tool Category, and Inventory Table to the user. `calc_context` and `machine_ok_condition` are hidden `Form.Item`s that are auto-filled when Machine Name changes (see `autoFillFromMachine` callback). An info bar (`ThunderboltOutlined`) shows the auto-detected Calc and OK flag values. On edit, the info bar reflects the existing saved values; auto-fill only re-runs when the user actively changes Machine Name.
+
 ### Known Sync Risks (hardcode)
 
-These values exist in **both** backend and frontend — changing one without the other causes silent divergence:
+Previously critical sync risks — **now resolved**:
 
-| Value | Backend location | Frontend location |
-|---|---|---|
-| `idAft >= 12.0` threshold (KS-B22RD vs KS-03A routing) | `services/partDataMapper.js` | `ToolingSelectPage.jsx` |
-| `normalBaseC = 18.5 + (wAft/2) + 3` | formula in `tooling_formula` DB | `ToolManagementPage.jsx` test simulation context (hardcoded) |
-| `jawB = jawA - 0.4` | formula in `tooling_formula` DB | `ToolManagementPage.jsx` test simulation context (hardcoded) |
+| Value | Resolution |
+|---|---|
+| `idAft >= 12.0` threshold (KS-B22RD vs KS-03A) | Backend computes `targetMachine` and sends it as `res.ks03a.machineName`; frontend reads that field — no longer duplicated |
+| `normalBaseC`, `jawB` in test simulation panel | Extracted to `LEGACY_JAW_SIM` constant object in `ToolManagementPage.jsx` |
+| `tooling_formula` table name | Now `TABLES.TOOLING_FORMULA` in `mtcConstants.js`; used in all controllers + FormulaService |
+| `ENRICHED_CONTEXT_KEYS` | Defined once in `FormulaService.js`, exported as `instance.ENRICHED_CONTEXT_KEYS`; imported in `toolingSelectController.js`; non-letter keys also returned by `/rules/validate` as `enriched_context_keys` for frontend dropdowns |
+| `toolingTables` machine list | Now fetched from `GET /api/tooling-select/machine-table-config`; source is `services/machineTableConfig.js` using `TABLES` constants |
+| Audit modal `enrichedKeys` | Now read from `auditResult.enriched_context_keys` (API response) instead of a hardcoded array |
+| Jaw/BP search tolerances in `searchFunctions.js` | Extracted to `KSB22G_SEARCH`, `KSB80_SEARCH`, `JAW_A_CLEARANCE`, `BP_A_MAX_EXCESS`, `KS400B_PLUG` constants at module top |
+| `calc_context`, `machine_ok_condition`, `target_tool_table` in `SelectionRuleManager.jsx` | Were user-editable dropdowns. Now all three are auto-filled when Machine Name is selected: `calc_context` = machine_name; `machine_ok_condition` = `ok_flag_key` from `machine-config` API; `target_tool_table` = lookup from `machine-table-config` or naming convention. `calc_context` and `machine_ok_condition` are hidden Form.Items; `target_tool_table` remains a visible Select (pre-populated, overrideable). |
+| New machine formula calculation in `fixtureLogic.js` | Was hardcoded to 7 machines; `dynamicLogic.js` now auto-detects any `calc_context` not in `allCalcs` and calls `FormulaService.calculateMachineParams` at search time — no code change needed to add a new machine |
 
-`ENRICHED_CONTEXT_KEYS` set in `toolingSelectController.js` (used by `/rules/validate`) must also be kept in sync with `FormulaService._enrichContext()` — there is a comment in the controller marking this dependency.
+**Remaining machine adapter constants** (in `partDataMapper.js`) — extracted to named constant objects at the top of the file but still code-level (not DB-driven). Changing machine dimension thresholds still requires a code deploy:
 
-`tooling_formula` table name is still hardcoded as a string in `toolingFormulaController.js` — `TABLES.TOOLING_FORMULA` constant does not yet exist in `mtcConstants.js`.
+| Constant object | What it covers |
+|---|---|
+| `KS03A_PARAMS` | OD_MAX, CPX/RS/CHUTE/SG/PR type thresholds, chute E min, chute G max |
+| `KS400B_PARAMS` | OD/W eligibility limits, SD/ID type thresholds, fixed PA_F/PB_F dimensions |
+| `KS500RD_PARAMS` | ID/OD/W eligibility limits, FRONT_SHOE_MAP (W range → part number) |
+| `KS400B5_PARAMS` | OD_MAX, WORK CLAMP / SHAFT type thresholds |
+| `KS400B6_PARAMS` | PILOT PIN type thresholds, STOCKER CHUTE limits, drill/thread string lookup |
+
+`LEGACY_JAW_SIM` in `ToolManagementPage.jsx` — these constants shadow `tooling_formula` DB values for the test simulation panel **only**. They must stay consistent with the actual formula rows for KS-B22G in the DB.
 
 `inventoryService.js` caches column schema per table with a 5-minute TTL (`_colCache` + `_colCacheAt`). Schema changes to inventory tables are visible within 5 minutes without restart; `registerTable()` immediately invalidates the cache for a given table.
+
+`MAX_JAW_DEPTH = 10.0` is defined in `fixtureAssembler.js` (exported) and imported in `fixtureLogic.js` — single definition.
 
 ### MTC Legacy Duplicate Files
 
@@ -280,3 +343,59 @@ Several files exist both at `api/engineer/mtc/<file>.js` (old) **and** at `api/e
 | `services/partDataMapper.js` | _(no root duplicate)_ |
 
 The root-level duplicates are dead code — do not edit them.
+
+## Other Backend Route Groups
+
+These routes exist in `server.js` but are not part of the MTC tooling pipeline:
+
+### SDS Routes (`/api/sds/*`)
+
+| Prefix | Controller | Notes |
+|---|---|---|
+| `/api/sds` | `sdsController.js` | SDS v1 — legacy tooling setup data sheet |
+| `/api/sds/v2` | `sdsV2Controller.js` | Search by CN — now routes through `SdsOrchestrator` (10-min cache, rodpcPool graceful degradation) |
+| `/api/sds/v2/images` | `sdsV2ImageController.js` | Image upload/retrieval for SDS v2 records |
+| `/api/sds/v2/admin` | `sdsV2AdminController.js` | Admin CRUD for machine types; uses `engPool` + `maqPool` + `rodpcPool` (isAdmin) |
+| `/api/sds/v2` | `sdsV2PdfController.js` | PDF generation for SDS v2 (also mounted at `/api/sds/v2`) |
+
+SDS v2 admin is notably the only domain that queries all three DB pools in the same handler.
+
+### Tool Request Workflow (`/api/engineer/mtc/tool-requests/*`)
+
+Multi-stage approval workflow managed by `toolRequestController.js` and `toolRequestAuth.js`:
+- `GET /api/engineer/mtc/tool-requests` — list requests
+- `GET /api/engineer/mtc/tool-requests/dashboard` — summary dashboard
+- `GET /api/engineer/mtc/tool-requests/permissions` — stage permission config
+- `GET/POST/PUT/DELETE /api/engineer/mtc/tool-requests/:id` — request CRUD
+- `POST /api/engineer/mtc/tool-requests/:id/action` — stage-advance action
+- `GET/POST/PUT/DELETE /api/engineer/mtc/email-config[/:id]` — per-stage email config
+
+Auth uses `mtcVerifyToken` (separate alias for `verifyToken` from `toolRequestAuth.js`) — same JWT validation, different import path.
+
+### ECR / Tumble Routes
+
+ECR (Engineering Change Request) in `api/engineer/process/eng_process_model.js` — uses `engPool` + `rodpcPool`:
+- `GET /api/ecr/users-by-dept/:dept`, `PUT /api/ecr/:id/resubmit`, `POST /api/ecr/:id/tasks`, `GET /api/ecr/:id/tasks`, `PUT /api/ecr/tasks/:taskId/ack`
+
+Tumble (cutting-condition models) — full CRUD:
+- `/api/tumble/getAllCondition`, `/api/tumble/createCondition`, `/api/tumble/updateCondition/:id`, `/api/tumble/deleteCondition/:id`
+- `/api/tumble/getAllModel`, `/api/tumble/createModel`, `/api/tumble/updateModel/:id`, `/api/tumble/deleteModel/:id`
+
+Note: the domain is named "ECR" in routes (not "ECN") — ECN is referenced in legacy UI text only, not in route names.
+
+### System Routes
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /api/system/settings` | public | Read system settings |
+| `POST /api/system/settings` | `requireSystemEngineer` (inline in `server.js`) | Write system settings |
+| `GET /api/system/user-management/schema` | public | Fetch user table schema |
+| `GET/POST/PUT/DELETE /api/system/user-management/users[/:u_code]` | public/none | User CRUD |
+| `POST /api/system/user-management/schema/add-column` | `requireSuperAdminOrEmergency` | Live schema ALTER TABLE |
+| `POST /api/system/user-management/schema/drop-column` | `requireSuperAdminOrEmergency` | Live schema ALTER TABLE |
+
+`requireSuperAdminOrEmergency` and `requireSystemEngineer` are defined inline in `server.js` — not in middleware files.
+
+### External Proxy
+
+`GET /api/proxy/job_check` — no auth required (whitelisted in the global auth middleware at the top of `server.js`). Proxies an internal factory job-check API at `pkv0198.kz.minebea.local:5002`. Handler in `api/engineer/new_prod/tool.js`.

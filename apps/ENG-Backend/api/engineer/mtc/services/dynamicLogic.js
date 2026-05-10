@@ -9,6 +9,7 @@
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const inventoryService = require('./inventoryService');
+const FormulaService  = require('./FormulaService');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"
@@ -40,6 +41,28 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
     );
     const rules = rulesRes.rows;
     if (rules.length === 0) return [];
+
+    // Auto-calculate formulas for any calc_context not yet in allCalcs.
+    // Uses the same normalization as /rules/validate: lowercase + strip hyphens.
+    // e.g. calc_context "ksx100" matches tooling_formula machine_name "KSX100" or "KS-X100".
+    const neededContexts = [...new Set(rules.map(r => r.calc_context).filter(Boolean))];
+    const missingContexts = neededContexts.filter(ctx => !(ctx in allCalcs));
+    if (missingContexts.length > 0) {
+      const formulaRes = await engPool.query(`SELECT DISTINCT machine_name FROM ${TABLES.TOOLING_FORMULA}`);
+      const formulaNameMap = {};
+      for (const { machine_name } of formulaRes.rows) {
+        formulaNameMap[machine_name.toLowerCase().replace(/-/g, '')] = machine_name;
+      }
+      const toCalc = missingContexts
+        .map(ctx => ({ ctx, machineName: formulaNameMap[ctx.toLowerCase().replace(/-/g, '')] }))
+        .filter(e => e.machineName);
+      if (toCalc.length > 0) {
+        const results = await Promise.all(
+          toCalc.map(({ machineName }) => FormulaService.calculateMachineParams(machineName, partData))
+        );
+        toCalc.forEach(({ ctx }, i) => { allCalcs[ctx] = results[i]; });
+      }
+    }
 
     // จัดกลุ่มกฎตาม machine + category
     const machineGroups = {};

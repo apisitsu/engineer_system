@@ -51,7 +51,6 @@ import { SpecProcessManager } from './components/engineer/mtc_eng/tooling_select
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
 import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage';
 import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
-import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
@@ -300,7 +299,6 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_SPEC} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
-                  <Route path={MTC_PATHS.SDS} element={<SdsPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />

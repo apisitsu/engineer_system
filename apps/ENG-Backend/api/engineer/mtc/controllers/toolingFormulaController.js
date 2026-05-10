@@ -3,12 +3,13 @@
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const FormulaService = require('../services/FormulaService');
+const cache = require('../services/agents/CacheAgent');
 
 // GET /api/mtc/tooling-formula/machines
 const getMachines = async (req, res) => {
   try {
     const result = await engPool.query(
-      `SELECT DISTINCT machine_name FROM tooling_formula ORDER BY machine_name ASC`
+      `SELECT DISTINCT machine_name FROM ${TABLES.TOOLING_FORMULA} ORDER BY machine_name ASC`
     );
     res.json({ success: true, machines: result.rows.map(r => r.machine_name) });
   } catch (err) {
@@ -26,14 +27,14 @@ const getFormulas = async (req, res) => {
     let result;
     if (tooling_name?.trim()) {
       result = await engPool.query(
-        `SELECT * FROM tooling_formula
+        `SELECT * FROM ${TABLES.TOOLING_FORMULA}
          WHERE machine_name = $1 AND tooling_name = $2
          ORDER BY id ASC`,
         [machineName, tooling_name.trim()]
       );
     } else {
       result = await engPool.query(
-        `SELECT * FROM tooling_formula WHERE machine_name = $1 ORDER BY id ASC`,
+        `SELECT * FROM ${TABLES.TOOLING_FORMULA} WHERE machine_name = $1 ORDER BY id ASC`,
         [machineName]
       );
     }
@@ -55,13 +56,14 @@ const create = async (req, res) => {
     }
 
     const result = await engPool.query(
-      `INSERT INTO tooling_formula
+      `INSERT INTO ${TABLES.TOOLING_FORMULA}
        (machine_name, tooling_name, parameter_name, formula_type, formula_value, rounding_rule, rounding_precision, remark)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [machine_name, tooling_name, parameter_name, formula_type || 'expression', formula_value, rounding_rule || 'none', rounding_precision ?? 2, remark || null]
     );
 
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, formula: result.rows[0] });
   } catch (err) {
     console.error('toolingFormula create error:', err.message);
@@ -79,7 +81,7 @@ const update = async (req, res) => {
     await client.query('BEGIN');
 
     const current = await client.query(
-      'SELECT machine_name, parameter_name FROM tooling_formula WHERE id = $1',
+      `SELECT machine_name, parameter_name FROM ${TABLES.TOOLING_FORMULA} WHERE id = $1`,
       [id]
     );
     if (current.rowCount === 0) {
@@ -89,7 +91,7 @@ const update = async (req, res) => {
     const { machine_name: machineName, parameter_name: oldParam } = current.rows[0];
 
     const result = await client.query(
-      `UPDATE tooling_formula
+      `UPDATE ${TABLES.TOOLING_FORMULA}
        SET parameter_name     = COALESCE($1, parameter_name),
            formula_type       = COALESCE($2, formula_type),
            formula_value      = COALESCE($3, formula_value),
@@ -126,6 +128,7 @@ const update = async (req, res) => {
     }
 
     await client.query('COMMIT');
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, formula: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -140,8 +143,9 @@ const update = async (req, res) => {
 const remove = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await engPool.query('DELETE FROM tooling_formula WHERE id = $1 RETURNING id', [id]);
+    const result = await engPool.query(`DELETE FROM ${TABLES.TOOLING_FORMULA} WHERE id = $1 RETURNING id`, [id]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Formula not found' });
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true });
   } catch (err) {
     console.error('toolingFormula remove error:', err.message);

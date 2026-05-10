@@ -198,7 +198,7 @@ const ToolingSelectPage = () => {
     const ks3 = res.ks03a?.calc;
     if (ks3 && !ks3.error) {
       const found = Object.keys(res.ks03a).filter(k => k !== 'calc' && res.ks03a[k]?.length).length;
-      const machineName = (res.part?.idAft ?? 0) >= 12.0 ? 'KS-B22RD' : 'KS-03A';
+      const machineName = res.ks03a?.machineName || 'KS-03A';
       const ks3Tools = [
         { title: 'FRONT PLATE', content: <ToolingTable title="FRONT PLATE" dataSource={res.ks03a.frontPlates} columns={['val1', 'val2', 'val3', 'val5']} headers={['A', 'B', 'C', 'Type']} targets={[ks3.fp?.A, ks3.fp?.B, ks3.fp?.C, ks3.fp?.Type]} icon={<ToolOutlined />} /> },
         { title: 'CHUTE COVER', content: <ToolingTable title="CHUTE COVER" dataSource={res.ks03a.chuteCovers} columns={['val1', 'val2', 'val3', 'val5']} headers={['A', 'B', 'C', 'Type']} targets={[ks3.chute?.A, ks3.chute?.B, ks3.chute?.C, ks3.chute?.Type]} icon={<SwapOutlined />} /> },

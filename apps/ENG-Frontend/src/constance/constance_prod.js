@@ -57,16 +57,12 @@ export const server = {
   MTC_TOOLING_RULES: `${apiUrl}api/tooling-select/rules`,
   MTC_TOOLING_RULES_VALIDATE: `${apiUrl}api/tooling-select/rules/validate`,
   MTC_MACHINE_CONFIG: `${apiUrl}api/tooling-select/machine-config`,
+  MTC_MACHINE_TABLE_CONFIG: `${apiUrl}api/tooling-select/machine-table-config`,
   MTC_TOOLING_COLUMNS: `${apiUrl}api/tooling-select/columns`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_FORMULA: `${apiUrl}api/mtc/tooling-formula`,
+  MTC_TOOLING_FORMULA_MACHINES: `${apiUrl}api/mtc/tooling-formula/machines`,
   MTC_FORMULA_TEST: `${apiUrl}api/mtc/tooling-formula/test`,
-  MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
-  MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
-  MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
-  MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
-  MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
-
   // -------------------- ECNT --------------------
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
   ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,

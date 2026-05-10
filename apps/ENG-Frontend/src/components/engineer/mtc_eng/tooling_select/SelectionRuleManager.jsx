@@ -7,27 +7,12 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ApartmentOutlined,
   QuestionCircleOutlined, CheckCircleOutlined, InfoCircleOutlined,
-  WarningOutlined,
+  WarningOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 
 const { Text, Paragraph } = Typography;
-
-// ── Known valid values for formula linkage fields ─────────────────────────────
-const CALC_CONTEXT_OPTIONS = [
-  { value: 'tsg',     label: 'tsg — TSG-300ZNC / KS-B22G common' },
-  { value: 'ksb22g',  label: 'ksb22g — KS-B22G raw formula output' },
-  { value: 'ks03a',   label: 'ks03a — KS-03A / KS-B22RD' },
-  { value: 'ks400b',  label: 'ks400b — KS400B' },
-  { value: 'ks500rd', label: 'ks500rd — KS500RD' },
-  { value: 'ks400b5', label: 'ks400b5 — KS400B5' },
-  { value: 'ks400b6', label: 'ks400b6 — KS400B6' },
-];
-
-const OK_CONDITION_OPTIONS = [
-  'ksb22gOK', 'ksb80OK', 'ks03aOK', 'ks400bOK', 'ks500rdOK', 'ks400b5OK', 'ks400b6OK',
-].map(v => ({ value: v, label: v }));
 
 const COMMON_TOOL_CATEGORIES = [
   'JAW', 'BACK PLATE', 'CHUTE COVER', 'CARRIER',
@@ -257,6 +242,9 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
   const [watchTable,       setWatchTable]       = useState('');
   const [availableMachines, setAvailableMachines] = useState([]);
   const [availableTables,   setAvailableTables]   = useState([]);
+  const [machineConfigs,    setMachineConfigs]    = useState([]);
+  const [machineTableConfigs, setMachineTableConfigs] = useState([]);
+  const [autoFillInfo,      setAutoFillInfo]      = useState(null);
   const [form] = Form.useForm();
 
   const fetchRules = useCallback(async () => {
@@ -280,7 +268,38 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
     axios.get(server.MTC_TOOLING_TABLES)
       .then(r => setAvailableTables((r.data.tables || []).map(t => t.table_name)))
       .catch(() => {});
+    axios.get(server.MTC_MACHINE_CONFIG)
+      .then(r => setMachineConfigs(r.data.configs || []))
+      .catch(() => {});
+    axios.get(server.MTC_MACHINE_TABLE_CONFIG)
+      .then(r => setMachineTableConfigs(r.data.configs || []))
+      .catch(() => {});
   }, [open, inline, fetchRules]);
+
+  const autoFillFromMachine = useCallback((machineName) => {
+    if (!machineName) { setAutoFillInfo(null); return; }
+
+    const calcContext = machineName;
+
+    const configEntry = machineConfigs.find(c => c.machine_name === machineName);
+    const okCondition = configEntry?.ok_flag_key || null;
+
+    const tableEntry = machineTableConfigs.find(c => c.tfMachine === machineName);
+    let table = tableEntry?.table || null;
+    if (!table) {
+      const normalized = machineName.toLowerCase().replace(/[-\s]/g, '');
+      const guessed = `tooling_${normalized}`;
+      if (availableTables.includes(guessed)) table = guessed;
+    }
+
+    form.setFieldsValue({
+      calc_context: calcContext,
+      machine_ok_condition: okCondition,
+      ...(table ? { target_tool_table: table } : {}),
+    });
+    if (table) setWatchTable(table);
+    setAutoFillInfo({ calcContext, okCondition, table });
+  }, [machineConfigs, machineTableConfigs, availableTables, form]);
 
   const openAdd = () => {
     setEditingRecord(null);
@@ -288,6 +307,7 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
     setResultFieldsValue([]);
     setWatchMachine('');
     setWatchTable('');
+    setAutoFillInfo(null);
     form.resetFields();
     setIsFormOpen(true);
   };
@@ -298,11 +318,16 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
     setResultFieldsValue(Array.isArray(record.result_fields) ? record.result_fields : []);
     setWatchMachine(record.machine_name || '');
     setWatchTable(record.target_tool_table || '');
+    setAutoFillInfo({
+      calcContext: record.calc_context,
+      okCondition: record.machine_ok_condition,
+      table: record.target_tool_table,
+    });
     form.setFieldsValue({
-      machine_name:        record.machine_name,
-      tool_category:       record.tool_category,
-      target_tool_table:   record.target_tool_table,
-      calc_context:        record.calc_context,
+      machine_name:         record.machine_name,
+      tool_category:        record.tool_category,
+      target_tool_table:    record.target_tool_table,
+      calc_context:         record.calc_context,
       machine_ok_condition: record.machine_ok_condition,
     });
     setIsFormOpen(true);
@@ -428,7 +453,12 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
           layout="vertical"
           size="small"
           onValuesChange={(changed) => {
-            if ('machine_name'      in changed) setWatchMachine(changed.machine_name || '');
+            if ('machine_name' in changed) {
+              const mn = changed.machine_name || '';
+              setWatchMachine(mn);
+              if (mn) autoFillFromMachine(mn);
+              else setAutoFillInfo(null);
+            }
             if ('target_tool_table' in changed) setWatchTable(changed.target_tool_table || '');
           }}
         >
@@ -463,38 +493,28 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
             </Col>
           </Row>
 
-          <Divider orientation="left" style={{ fontSize: 12 }}>Formula Linkage</Divider>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item
-                name="calc_context"
-                label="Calc Context"
-                extra={<Text style={{ fontSize: 11 }}>key ใน allCalcs ที่ส่งเข้า findDynamicFixtures</Text>}
-              >
-                <Select
-                  showSearch
-                  allowClear
-                  placeholder="เลือก context key..."
-                  options={CALC_CONTEXT_OPTIONS}
-                  filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="machine_ok_condition"
-                label="Machine OK Condition"
-                extra={<Text style={{ fontSize: 11 }}>ถ้า flag นี้เป็น false จะ skip machine</Text>}
-              >
-                <Select
-                  showSearch
-                  allowClear
-                  placeholder="optional"
-                  options={OK_CONDITION_OPTIONS}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+          {/* Hidden: calc_context and machine_ok_condition are auto-filled from machine_name */}
+          <Form.Item name="calc_context" hidden><Input /></Form.Item>
+          <Form.Item name="machine_ok_condition" hidden><Input /></Form.Item>
+
+          {autoFillInfo && (
+            <Alert
+              type="info"
+              showIcon
+              icon={<ThunderboltOutlined />}
+              style={{ marginBottom: 12, padding: '4px 10px' }}
+              message={
+                <Space size={6} wrap>
+                  <Text style={{ fontSize: 11 }}>Auto-fill:</Text>
+                  <Tag color="geekblue" style={{ fontSize: 11 }}>Calc: {autoFillInfo.calcContext || '—'}</Tag>
+                  {autoFillInfo.okCondition
+                    ? <Tag color="orange" style={{ fontSize: 11 }}>OK flag: {autoFillInfo.okCondition}</Tag>
+                    : <Tag color="default" style={{ fontSize: 11 }}>OK flag: —</Tag>
+                  }
+                </Space>
+              }
+            />
+          )}
 
           <Divider orientation="left" style={{ fontSize: 12 }}>Dimension Matching (dims)</Divider>
           <DimsEditor

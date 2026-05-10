@@ -111,7 +111,7 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path === '/sds/test-puppeteer' || req.path.startsWith('/public')) {
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')) {
     return next();
   }
 
@@ -201,9 +201,6 @@ app.get('/api/mtc/tooling-formula/:machineName', verifyToken, toolingFormulaCont
 app.post('/api/mtc/tooling-formula', verifyToken, mtcIsAdmin, toolingFormulaController.create);
 app.put('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.update);
 app.delete('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.remove);
-
-const sdsController = require('./api/engineer/mtc/controllers/sdsController');
-app.use('/api/sds', sdsController);
 
 const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
 app.use('/api/sds/v2', sdsV2Controller);

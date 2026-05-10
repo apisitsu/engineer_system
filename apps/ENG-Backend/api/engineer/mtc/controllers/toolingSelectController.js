@@ -3,12 +3,17 @@
 const express = require('express');
 const router = express.Router();
 const { findFixtures } = require('../services/fixtureLogic');
+const { invalidateCache } = require('../services/ToolingOrchestrator');
+const cache = require('../services/agents/CacheAgent');
+const monitor = require('../services/agents/MonitorAgent');
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const inventoryService = require('../services/inventoryService');
 const tableAdminService = require('../services/tableAdminService');
 const { invalidateMachineConfigCache } = require('../services/machineQueryService');
 const { isAdmin } = require('../../../../middleware/mtcAuth');
+const FormulaService = require('../services/FormulaService');
+const { MACHINE_TABLE_CONFIG } = require('../services/machineTableConfig');
 
 // ── Search ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +73,7 @@ router.post('/rules', isAdmin, async (req, res) => {
         tolerance_plus || null, tolerance_minus || null,
       ]
     );
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, rule: r.rows[0] });
   } catch (err) {
     console.error('Create rule error:', err.message);
@@ -108,6 +114,7 @@ router.put('/rules/:id', isAdmin, async (req, res) => {
       ]
     );
     if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Rule not found' });
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, rule: r.rows[0] });
   } catch (err) {
     console.error('Update rule error:', err.message);
@@ -121,6 +128,7 @@ router.delete('/rules/:id', isAdmin, async (req, res) => {
       `UPDATE ${TABLES.MTC_SELECTION_RULES} SET is_active=false WHERE id=$1`,
       [req.params.id]
     );
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true });
   } catch (err) {
     console.error('Delete rule error:', err.message);
@@ -129,18 +137,8 @@ router.delete('/rules/:id', isAdmin, async (req, res) => {
 });
 
 // ── Rules Health Check ─────────────────────────────────────────────────────
-// Keys produced by FormulaService._enrichContext — keep in sync with that method.
-const ENRICHED_CONTEXT_KEYS = new Set([
-  'odAft', 'odAftTolPlus', 'odAftTolMinus',
-  'idAft', 'idTolPlus', 'idAftTolPlus', 'idTolMinus', 'idAftTolMinus',
-  'wAft', 'wAftTolPlus', 'wAftTolMinus',
-  'odBf', 'odBfTolPlus', 'odBfTolMinus',
-  'odAft_max', 'odAft_min', 'idAft_max', 'idAft_min',
-  'wAft_max', 'wAft_min', 'W_max', 'T1', 'odBf_max', 'odBf_min',
-  'isIDtoOD', 'isYBall', 'isABR', 'sdCalc', 'SD',
-  'Dwg', 'Type', 'Process', 'YBall', 'Offset', 'Tol_P', 'Tol_M', 'PI', 'E',
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
-]);
+// Sourced from FormulaService — single source of truth.
+const { ENRICHED_CONTEXT_KEYS } = FormulaService;
 
 router.get('/rules/validate', async (req, res) => {
   try {
@@ -150,7 +148,7 @@ router.get('/rules/validate', async (req, res) => {
          FROM ${TABLES.MTC_SELECTION_RULES}
          WHERE is_active = true AND dims IS NOT NULL AND jsonb_array_length(dims) > 0`
       ),
-      engPool.query(`SELECT DISTINCT machine_name, parameter_name FROM tooling_formula`),
+      engPool.query(`SELECT DISTINCT machine_name, parameter_name FROM ${TABLES.TOOLING_FORMULA}`),
     ]);
 
     const formulaMap = {};
@@ -189,12 +187,18 @@ router.get('/rules/validate', async (req, res) => {
       }
     }
 
+    // Expose enriched-context keys for frontend audit dropdowns (exclude single A–Z letters)
+    const enriched_context_keys = [...ENRICHED_CONTEXT_KEYS]
+      .filter(k => k.length > 1)
+      .sort();
+
     res.json({
       success: true,
       total_rules_checked: rulesRes.rows.length,
       issue_count: issues.length,
       issues,
       valid_keys_by_context: validKeysByContext,
+      enriched_context_keys,
     });
   } catch (err) {
     console.error('Validate rules error:', err.message);
@@ -294,6 +298,7 @@ router.put('/inventory/:tableName/:id', isAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid or unauthorized table' });
   try {
     const data = await inventoryService.updateRecord(tableName, id, req.body);
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, data });
   } catch (err) {
     console.error('Update inventory error:', err.message);
@@ -307,6 +312,7 @@ router.delete('/inventory/:tableName/:id', isAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid or unauthorized table' });
   try {
     const deletedId = await inventoryService.deleteRecord(tableName, id);
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, deletedId });
   } catch (err) {
     console.error('Delete inventory error:', err.message);
@@ -405,6 +411,7 @@ router.put('/spec/:cn', isAdmin, async (req, res) => {
       ]
     );
     if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Spec not found' });
+    invalidateCache(cn);
     res.json({ success: true, data: r.rows[0] });
   } catch (err) {
     console.error('Update spec error:', err.message);
@@ -417,11 +424,17 @@ router.delete('/spec/:cn', isAdmin, async (req, res) => {
   try {
     const r = await engPool.query(`DELETE FROM ${TABLES.SPEC_PROCESS} WHERE cn=$1 RETURNING *`, [cn]);
     if (r.rows.length === 0) return res.status(404).json({ success: false, error: 'Spec not found' });
+    invalidateCache(cn);
     res.json({ success: true });
   } catch (err) {
     console.error('Delete spec error:', err.message);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
+});
+
+// ── Machine Table Config (static display config for legacy machines) ──────
+router.get('/machine-table-config', (req, res) => {
+  res.json({ success: true, configs: MACHINE_TABLE_CONFIG });
 });
 
 // ── Machine Config (Phase 1/2) ────────────────────────────────────────────
@@ -453,6 +466,7 @@ router.post('/machine-config', isAdmin, async (req, res) => {
        JSON.stringify(conditions || []), use_dynamic_rules || false]
     );
     invalidateMachineConfigCache();
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, config: result.rows[0] });
   } catch (err) {
     console.error('machine-config POST error:', err.message);
@@ -484,6 +498,7 @@ router.put('/machine-config/:id', isAdmin, async (req, res) => {
     );
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Config not found' });
     invalidateMachineConfigCache();
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true, config: result.rows[0] });
   } catch (err) {
     console.error('machine-config PUT error:', err.message);
@@ -500,10 +515,41 @@ router.delete('/machine-config/:id', isAdmin, async (req, res) => {
     );
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Config not found' });
     invalidateMachineConfigCache();
+    cache.invalidatePrefix('tooling:');
     res.json({ success: true });
   } catch (err) {
     console.error('machine-config DELETE error:', err.message);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── Monitor — latency stats + cache info (isAdmin) ───────────────────────────
+
+router.get('/monitor', isAdmin, (req, res) => {
+  const stats = monitor.getAllStats();
+  const slow  = monitor.slowAgents(2000);
+  res.json({
+    success: true,
+    cache: {
+      size:    cache.size(),
+      keys:    cache.keys(),
+      ttl_ms:  { tooling: cache.TTL.TOOLING, sds: cache.TTL.SDS },
+    },
+    agents: stats,
+    slow_agents: slow,
+  });
+});
+
+// Admin: manual cache flush (e.g., after bulk DB import)
+router.delete('/monitor/cache', isAdmin, (req, res) => {
+  const { prefix } = req.query;
+  if (prefix) {
+    cache.invalidatePrefix(prefix);
+    res.json({ success: true, action: `invalidated prefix "${prefix}"` });
+  } else {
+    cache.invalidatePrefix('tooling:');
+    cache.invalidatePrefix('sds:');
+    res.json({ success: true, action: 'full cache flush' });
   }
 });
 

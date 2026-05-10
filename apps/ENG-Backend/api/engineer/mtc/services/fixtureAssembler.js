@@ -19,6 +19,9 @@ const {
 
 const TOP_N = 2;
 const MAX_JAW_DEPTH = 10.0;
+// idAft threshold: KS-03A results are relabelled KS-B22RD when idAft >= this value.
+// Frontend reads machineName from ks03a_results — do NOT duplicate this threshold there.
+const KS03A_B22RD_ID_THRESHOLD = 12.0;
 const h = name => name;
 
 function assembleResults(rows, okFlags, calcs, partData) {
@@ -46,8 +49,9 @@ function assembleResults(rows, okFlags, calcs, partData) {
   // ── KS03A ─────────────────────────────────────────────────────────────────
   let ks03a_results = {};
   if (ks03aOK) {
-    const targetMachine = partData.idAft >= 12.0 ? 'KS-B22RD' : 'KS-03A';
+    const targetMachine = partData.idAft >= KS03A_B22RD_ID_THRESHOLD ? 'KS-B22RD' : 'KS-03A';
     ks03a_results = {
+      machineName: targetMachine,
       calc: ks03a_calc,
       rollerShoes:    topNPerMachine(searchKS03A_RollerShoe(ks03a, h, targetMachine, ks03a_calc), TOP_N),
       cpxShoes:       topNPerMachine(searchKS03A_CPXShoe(ks03a, h, targetMachine, ks03a_calc), TOP_N),
@@ -134,4 +138,4 @@ function assembleResults(rows, okFlags, calcs, partData) {
   };
 }
 
-module.exports = { assembleResults };
+module.exports = { assembleResults, MAX_JAW_DEPTH };

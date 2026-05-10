@@ -1,5 +1,5 @@
 ﻿'use strict';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Input, Button, Typography, Card, Space, Layout,
   Select, Form, message, Popconfirm,
@@ -26,6 +26,17 @@ const { Content } = Layout;
 const { Title, Text } = Typography;
 
 const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
+
+// Legacy KS-B22G / KS-B80 jaw simulation constants.
+// These mirror the tooling_formula DB rows for KS-B22G and are used ONLY in the
+// test simulation panel (formula edit view). The source of truth at runtime is the DB.
+const LEGACY_JAW_SIM = {
+  NORMAL_BASE_C_BASE:   18.5,  // normalBaseC = BASE + (wAft/2) + HALF_W_ADD
+  NORMAL_BASE_C_ADD:    3,
+  SPECIAL_BASE_C_BASE:  18.5,  // specialBaseC = BASE + wAft + W_ADD
+  SPECIAL_BASE_C_W_ADD: -2,
+  JAW_B_OFFSET:         -0.4,  // jawB = jawA + OFFSET
+};
 
 const ToolManagementPage = () => {
   const navigate = useNavigate();
@@ -103,18 +114,22 @@ const ToolManagementPage = () => {
   const [machineConfigSaving, setMachineConfigSaving] = useState(null); // id being saved
 
   // ── Machine / table config ───────────────────────────────────────────────
-  const toolingTables = [
-    { key: 'tsg300znc', label: 'TSG-300ZNC',  table: 'tooling_tsg300',  mf: r => !String(r.machine || '').toUpperCase().includes('W'), tfMachine: 'TSG-300ZNC' },
-    { key: 'tsg300w',   label: 'TSG300W',      table: 'tooling_tsg300',  mf: r =>  String(r.machine || '').toUpperCase().includes('W'), tfMachine: 'TSG300W' },
-    { key: 'ksb22g',    label: 'KS-B22G',      table: 'tooling_ksb22g',  tfMachine: 'KS-B22G' },
-    { key: 'ksb80',     label: 'KS-B80',       table: 'tooling_ksb80',   tfMachine: 'KS-B80' },
-    { key: 'ks03a',     label: 'KS-03A',       table: 'tooling_ks03a',   tfMachine: 'KS-03A' },
-    { key: 'ksb22rd',   label: 'KS-B22RD',     table: 'tooling_ks03a',   tfMachine: 'KS-B22RD' },
-    { key: 'ks400b',    label: 'KS400B',        table: 'tooling_ks400b',  tfMachine: 'KS400B' },
-    { key: 'ks500rd',   label: 'KS500RD',       table: 'tooling_ks500rd', tfMachine: 'KS500RD' },
-    { key: 'ks400b5',   label: 'KS400B5',       table: 'tooling_ks400b5', tfMachine: 'KS-400B5' },
-    { key: 'ks400b6',   label: 'KS400B6',       table: 'tooling_ks400b6', tfMachine: 'KS400B6' },
-  ];
+  const [toolingTables, setToolingTables] = useState([]);
+
+  useEffect(() => {
+    axios.get(server.MTC_MACHINE_TABLE_CONFIG).then(res => {
+      if (!res.data?.configs) return;
+      setToolingTables(res.data.configs.map(cfg => ({
+        ...cfg,
+        mf: cfg.machineFilter === 'W'
+          ? r =>  String(r.machine || '').toUpperCase().includes('W')
+          : cfg.machineFilter === 'NOT_W'
+          ? r => !String(r.machine || '').toUpperCase().includes('W')
+          : null,
+      })));
+    }).catch(() => message.error('Failed to load machine table config'));
+  }, []);
+
   const invTableConfig = toolingTables.find(t => t.key === invKey);
 
   const colors = theme?.colors || {};
@@ -408,14 +423,15 @@ const ToolManagementPage = () => {
       const wAftP = parseFloat(b.wAftTolPlus || 0);
       const odBf = parseFloat(b.odBf || 0);
       const odBfP = parseFloat(b.odBfTolPlus || 0);
-      const normalBaseC = 18.5 + (wAft / 2) + 3;
-      const specialBaseC = 18.5 + wAft - 2;
+      const { NORMAL_BASE_C_BASE, NORMAL_BASE_C_ADD, SPECIAL_BASE_C_BASE, SPECIAL_BASE_C_W_ADD, JAW_B_OFFSET } = LEGACY_JAW_SIM;
+      const normalBaseC = NORMAL_BASE_C_BASE + (wAft / 2) + NORMAL_BASE_C_ADD;
+      const specialBaseC = SPECIAL_BASE_C_BASE + wAft + SPECIAL_BASE_C_W_ADD;
       const isSpecialC = (b.yBall === 'Y' || b.yBall === 'B' || (b.type && !b.type.includes('NORMAL') && !b.type.includes('OTHER')));
       const legacyBaseC = isSpecialC ? specialBaseC : normalBaseC;
       const legacyJawA  = (b.process === 'ID->OD') ? odBf : odAft;
       const context = {
         ...b,
-        baseC: legacyBaseC, jawA: legacyJawA, jawB: legacyJawA - 0.4, ID_part: idAft + idAftP,
+        baseC: legacyBaseC, jawA: legacyJawA, jawB: legacyJawA + JAW_B_OFFSET, ID_part: idAft + idAftP,
         odAft_max: odAft + odAftP, odAft_min: odAft + parseFloat(b.odAftTolMinus || 0),
         idAft_max: idAft + idAftP, idAft_min: idAft + parseFloat(b.idTolMinus || 0),
         wAft_max: wAft + wAftP,    wAft_min: wAft + parseFloat(b.wAftTolMinus || 0),
@@ -423,7 +439,7 @@ const ToolManagementPage = () => {
         W_max: wAft + wAftP, T1: wAft, OD: odAft, ID: idAft,
         Dwg: b.parts_no || b.drawing_no || 'Check Dwg', Type: b.type || 'NORMAL',
         Process: b.process || 'OD->ID', YBall: b.yBall || 'N',
-        A: legacyJawA, B: legacyJawA - 0.4, C: legacyBaseC,
+        A: legacyJawA, B: legacyJawA + JAW_B_OFFSET, C: legacyBaseC,
         PI: Math.PI, E: Math.E,
         isYBall: (b.yBall === 'Y') ? 1 : 0,
         isIDtoOD: (b.process === 'ID->OD') ? 1 : 0,
@@ -1269,11 +1285,8 @@ const ToolManagementPage = () => {
                       render: (_, record, idx) => {
                         const formulaKeys = (auditResult.valid_keys_by_context?.[record.calc_context] || [])
                           .map(k => ({ value: k, label: k }));
-                        const enrichedKeys = [
-                          'odAft_max', 'odAft_min', 'W_max', 'T1', 'SD',
-                          'isYBall', 'isIDtoOD', 'isABR',
-                          'odBf_max', 'odBf_min', 'idAft_max', 'idAft_min',
-                        ].map(k => ({ value: k, label: k }));
+                        const enrichedKeys = (auditResult.enriched_context_keys || [])
+                          .map(k => ({ value: k, label: k }));
                         const options = [
                           ...(formulaKeys.length ? [{ label: 'Formula Parameters', options: formulaKeys }] : []),
                           { label: 'Enriched Context', options: enrichedKeys },

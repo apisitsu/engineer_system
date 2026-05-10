@@ -2,6 +2,25 @@
 
 const { Parser } = require('expr-eval');
 const { engPool } = require('../../../../instance/eng_db');
+const { TABLES } = require('../mtcConstants');
+
+/**
+ * Keys produced by _enrichContext — single source of truth for the /rules/validate endpoint.
+ * Keep in sync with _enrichContext() method below.
+ */
+const ENRICHED_CONTEXT_KEYS = new Set([
+  'odAft', 'odAftTolPlus', 'odAftTolMinus',
+  'idAft', 'idTolPlus', 'idAftTolPlus', 'idTolMinus', 'idAftTolMinus',
+  'wAft', 'wAftTolPlus', 'wAftTolMinus',
+  'odBf', 'odBfTolPlus', 'odBfTolMinus',
+  'idBf', 'idBfTolPlus', 'idBfTolMinus',
+  'odAft_max', 'odAft_min', 'idAft_max', 'idAft_min',
+  'wAft_max', 'wAft_min', 'W_max', 'T1',
+  'odBf_max', 'odBf_min', 'idBf_max', 'idBf_min',
+  'isIDtoOD', 'isYBall', 'isABR', 'isBallInner', 'isInner', 'sdCalc', 'SD',
+  'Dwg', 'Type', 'Process', 'YBall', 'Offset', 'Tol_P', 'Tol_M', 'PI', 'E',
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+]);
 
 /**
  * FormulaService handles dynamic calculation of tooling parameters
@@ -16,18 +35,27 @@ class FormulaService {
     this.parser.functions.ceil05  = (x) => Math.ceil(x * 2) / 2;
     this.parser.functions.floor05 = (x) => Math.floor(x * 2) / 2;
 
-    this.parser.functions.ceil = (x, n) => {
-      if (n === undefined || n === null) return Math.ceil(x);
-      const f = Math.pow(10, n); return Math.ceil(x * f) / f;
-    };
-    this.parser.functions.floor = (x, n) => {
-      if (n === undefined || n === null) return Math.floor(x);
-      const f = Math.pow(10, n); return Math.floor(x * f) / f;
-    };
-    this.parser.functions.round = (x, n) => {
+    // expr-eval v2 treats round/ceil/floor as built-in UNARY functions —
+    // overriding .functions.round changes the implementation but not the parser
+    // grammar, so round(x, n) fails with "Expected )".
+    // Fix: _preprocess rewrites round( → roundN(  before the parser sees it.
+    // These N-variants are pure custom functions → expr-eval accepts N args.
+    this.parser.functions.roundN = (x, n) => {
       if (n === undefined || n === null) return Math.round(x);
       const f = Math.pow(10, n); return Math.round(x * f) / f;
     };
+    this.parser.functions.ceilN = (x, n) => {
+      if (n === undefined || n === null) return Math.ceil(x);
+      const f = Math.pow(10, n); return Math.ceil(x * f) / f;
+    };
+    this.parser.functions.floorN = (x, n) => {
+      if (n === undefined || n === null) return Math.floor(x);
+      const f = Math.pow(10, n); return Math.floor(x * f) / f;
+    };
+    // Keep single-arg overrides for backward compat with any formula not rewritten
+    this.parser.functions.ceil  = (x) => Math.ceil(x);
+    this.parser.functions.floor = (x) => Math.floor(x);
+    this.parser.functions.round = (x) => Math.round(x);
     
     this.parser.functions.sqrt = (x) => Math.sqrt(x);
     this.parser.functions.abs = (x) => Math.abs(x);
@@ -49,6 +77,14 @@ class FormulaService {
   _preprocess(formula) {
     if (!formula) return '';
     let f = String(formula).trim();
+
+    // 0a. Rewrite round/ceil/floor to N-variants BEFORE any other processing.
+    // expr-eval v2 parses these as built-in unary operators — the parser grammar
+    // rejects a second argument even when parser.functions.round is overridden.
+    // roundN/ceilN/floorN are pure custom functions that accept (x, n).
+    f = f.replace(/\bround\s*\(/g, 'roundN(')
+         .replace(/\bceil\s*\(/g,  'ceilN(')
+         .replace(/\bfloor\s*\(/g, 'floorN(');
 
     // 0. Normalize arrow variants to ASCII -> (handles → and => used interchangeably in DB)
     f = f.replace(/→/g, '->');
@@ -202,6 +238,8 @@ class FormulaService {
     ctx.isYBall     = (base.yBall === 'Y' || base.isYBall) ? 1 : 0;
     ctx.isABR       = (base.type?.includes('ABR') || base.yBall === 'Y' || base.yBall === 'B') ? 1 : 0;
     ctx.isBallInner = (base.type?.includes('ABR') || base.type?.includes('BALL_INNER')) ? 1 : 0;
+    // isInner: used by KS400B6 formulas — matches adaptDynamicKS400B6 logic
+    ctx.isInner     = (base.type?.toUpperCase().includes('INNER') || base.yBall === 'Y') ? 1 : 0;
 
     // 4b. SD — equivalent of calculationLogic.calculateSD(part)
     const _sdRaw = ctx.isYBall ? parseFloat(base.sd || 0) : parseFloat(base.sdAft || 0);
@@ -240,7 +278,7 @@ class FormulaService {
       const res = await engPool.query(
         `SELECT tooling_name, parameter_name, formula_value, formula_type,
                 rounding_rule, rounding_precision
-         FROM tooling_formula WHERE machine_name = $1 ORDER BY id ASC`,
+         FROM ${TABLES.TOOLING_FORMULA} WHERE machine_name = $1 ORDER BY id ASC`,
         [machineName]
       );
       const formulas = res.rows;
@@ -302,4 +340,6 @@ class FormulaService {
   }
 }
 
-module.exports = new FormulaService();
+const instance = new FormulaService();
+instance.ENRICHED_CONTEXT_KEYS = ENRICHED_CONTEXT_KEYS;
+module.exports = instance;

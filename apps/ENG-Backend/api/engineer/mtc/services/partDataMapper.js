@@ -4,6 +4,68 @@ const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
 const { calculateSD } = require('./calculationLogic');
 
+// ── Machine dimension constants ────────────────────────────────────────────
+// Named thresholds for each machine's adapter logic.
+// Eligibility conditions (that admin can tune) live in mtc_machine_config.conditions.
+// These constants cover type-selection and display logic inside the adapters.
+
+const KS03A_PARAMS = {
+  OD_MAX:               33,     // max odAft for machine eligibility
+  CPX_OD_THRESHOLDS:    [15, 20, 30],  // OD_max boundaries for CPX SHOE TYPE1/2/3/4
+  CPX_C_THRESHOLDS:     [6, 8],        // C value boundaries for V field selection
+  RS_W_THRESHOLDS:      [7.0, 12.3, 29.0], // W_max boundaries for ROLLER SHOE TYPE1/2/3
+  CHUTE_FP_OD_SPLIT:    19.05, // OD_max threshold for CHUTE COVER / FRONT PLATE TYPE1/2
+  SG_A_THRESHOLDS:      [10, 19], // fp_A boundaries for SETTING GAUGE TYPE1/2/3
+  PR_A_THRESHOLDS:      [10, 16.25], // pr_A boundaries for PRESSURE ROTOR TYPE1/2/3
+  CHUTE_E_MIN:          1.5,   // min E value; below this, E/G/H are null (chute unusable)
+  CHUTE_G_MAX:          55.8,  // cap on chute G dimension
+};
+
+const KS400B_PARAMS = {
+  OD_BF_MAX:            32,    // max odBf for machine eligibility
+  W_AFT_MAX:            30,    // max wAft for machine eligibility
+  SD_TYPE_THRESHOLD:    19.5,  // SD < this → WORK DRIVER TYPE1
+  PA_SD_THRESHOLD:      8.5,   // SD <= this → PLUG(A) TYPE1
+  PA_ID_THRESHOLD:      11.4,  // idAft <= this (and SD > 8.5) → PLUG(A) TYPE2, else TYPE3
+  PA_F:                 48,    // fixed PLUG(A) F dimension (physical constant)
+  PB_F:                 70,    // fixed PLUG(B) F dimension (physical constant)
+};
+
+const KS500RD_PARAMS = {
+  ID_MIN: 14,   ID_MAX: 38.125,
+  OD_MIN: 26,   OD_MAX: 59.531,
+  W_MIN:  23.5, W_MAX:  51.15,
+  // W range → FRONT SHOE part number. Update if manufacturing part numbers change.
+  FRONT_SHOE_MAP: [
+    { maxW: 19,       no: '4033-03-0001' },
+    { maxW: 21,       no: '4033-03-0002' },
+    { maxW: 28,       no: '4033-03-0003' },
+    { maxW: 37,       no: '4033-03-0004' },
+    { maxW: 46,       no: '4033-03-0005' },
+    { maxW: 100,      no: '4033-03-0006' },
+  ],
+};
+
+const KS400B5_PARAMS = {
+  OD_MAX:              35,    // max odAft / odBf for machine eligibility
+  WC_TYPE_THRESHOLD:   12.2,  // wc_min < this → WORK CLAMP TYPE1
+  SHAFT_TYPE_THRESHOLD: 14,   // sh_A < this → SHAFT TYPE1
+};
+
+const KS400B6_PARAMS = {
+  // PILOT PIN type boundaries based on pp_ID = idBf + idBfTolMinus
+  PP_ID_THRESHOLDS: [6, 10],
+  // STOCKER CHUTE: only present when OD_max <= SC_OD_MAX and W <= SC_W_MAX
+  SC_OD_MAX: 32,
+  SC_W_MAX:  26,
+  // Drill/thread string lookup by W range (cannot be computed by expr-eval — string constants)
+  SC_DRILL_SPECS: [
+    { maxW: 6,        F: 'Ø2.1THRU.',  G: 'M5x0.8THRU.', H: 44 },
+    { maxW: 10,       F: 'Ø3.1THRU.',  G: 'M5x0.8THRU.', H: 44 },
+    { maxW: Infinity, F: 'M5x0.8THRU.', G: '-',           H: '-' },
+  ],
+};
+
 // ── DB fetch ───────────────────────────────────────────────────────────────
 
 async function fetchSpecRow(cnNumber) {
@@ -91,7 +153,7 @@ function adaptDynamicCalcCommon(dynKSB22G, dynTSG300ZNC, partData) {
 
 function adaptDynamicKS03A(dynamic, partData) {
   if (dynamic.error) return { error: dynamic.error };
-  if ((partData.odAft || 0) > 33) return { error: 'OD > 33, Cannot use KS-03A' };
+  if ((partData.odAft || 0) > KS03A_PARAMS.OD_MAX) return { error: `OD > ${KS03A_PARAMS.OD_MAX}, Cannot use KS-03A` };
 
   const OD_max = (partData.odAft || 0) + (partData.odAftTolPlus || 0);
   const W_max  = (partData.wAft  || 0) + (partData.wAftTolPlus  || 0);
@@ -109,29 +171,32 @@ function adaptDynamicKS03A(dynamic, partData) {
   const ld  = dynamic['LOADER']         || {};
   const pr  = dynamic['PRESSURE ROTOR'] || {};
 
-  // Type strings — conditional logic stays in adapter
-  const cpx_Type   = OD_max <= 15 ? 'TYPE1' : OD_max <= 20 ? 'TYPE2' : OD_max <= 30 ? 'TYPE3' : 'TYPE4';
+  const [cpx1, cpx2, cpx3] = KS03A_PARAMS.CPX_OD_THRESHOLDS;
+  const cpx_Type   = OD_max <= cpx1 ? 'TYPE1' : OD_max <= cpx2 ? 'TYPE2' : OD_max <= cpx3 ? 'TYPE3' : 'TYPE4';
+  const [cpc1, cpc2] = KS03A_PARAMS.CPX_C_THRESHOLDS;
   const cpx_C_val  = cpx.C ?? 0;
   let   cpx_V;
-  if (isABR)           cpx_V = 'Check Dwg';
-  else if (cpx_C_val < 6) cpx_V = cpx_C_val.toFixed(3);
-  else if (cpx_C_val < 8) cpx_V = '4.000';
-  else                 cpx_V = '5.000';
+  if (isABR)               cpx_V = 'Check Dwg';
+  else if (cpx_C_val < cpc1) cpx_V = cpx_C_val.toFixed(3);
+  else if (cpx_C_val < cpc2) cpx_V = '4.000';
+  else                       cpx_V = '5.000';
 
-  const rs_Type    = W_max >= 7.0 && W_max < 12.3 ? 'TYPE1' : W_max >= 12.3 && W_max < 29.0 ? 'TYPE2' : 'TYPE3';
-  const chute_Type = OD_max < 19.05 ? 'TYPE1' : 'TYPE2';
-  const fp_Type    = OD_max < 19.05 ? 'TYPE1' : 'TYPE2';
+  const [rs1, rs2] = KS03A_PARAMS.RS_W_THRESHOLDS;
+  const rs_Type    = W_max >= rs1 && W_max < rs2 ? 'TYPE1' : W_max >= rs2 && W_max < KS03A_PARAMS.RS_W_THRESHOLDS[2] ? 'TYPE2' : 'TYPE3';
+  const chute_Type = OD_max < KS03A_PARAMS.CHUTE_FP_OD_SPLIT ? 'TYPE1' : 'TYPE2';
+  const fp_Type    = OD_max < KS03A_PARAMS.CHUTE_FP_OD_SPLIT ? 'TYPE1' : 'TYPE2';
   const fp_A_val   = fp.A ?? 0;
-  const sg_Type    = fp_A_val < 10 ? 'TYPE1' : fp_A_val < 19 ? 'TYPE2' : 'TYPE3';
+  const [sg1, sg2] = KS03A_PARAMS.SG_A_THRESHOLDS;
+  const sg_Type    = fp_A_val < sg1 ? 'TYPE1' : fp_A_val < sg2 ? 'TYPE2' : 'TYPE3';
   const sg_M       = sg_Type === 'TYPE1' ? 'M6x1.0' : 'M8x1.25';
 
   const pr_A_val   = pr.A ?? 0;
-  const pr_Type    = pr_A_val <= 10 ? 'TYPE1' : pr_A_val <= 16.25 ? 'TYPE2' : 'TYPE3';
+  const [pr1, pr2] = KS03A_PARAMS.PR_A_THRESHOLDS;
+  const pr_Type    = pr_A_val <= pr1 ? 'TYPE1' : pr_A_val <= pr2 ? 'TYPE2' : 'TYPE3';
 
-  // Chute E/G/H: null when E < 1.5
   const chute_E_raw = ch.E ?? 0;
-  const chute_E = chute_E_raw >= 1.5 ? chute_E_raw : null;
-  const chute_G = chute_E !== null ? Math.min(ch.G ?? 0, 55.8) : null;
+  const chute_E = chute_E_raw >= KS03A_PARAMS.CHUTE_E_MIN ? chute_E_raw : null;
+  const chute_G = chute_E !== null ? Math.min(ch.G ?? 0, KS03A_PARAMS.CHUTE_G_MAX) : null;
   const chute_H = chute_E !== null ? (ch.H ?? 0) : null;
 
   // Plug gauge D/E: null when TYPE1
@@ -154,7 +219,9 @@ function adaptDynamicKS03A(dynamic, partData) {
 
 function adaptDynamicKS400B(dynamic, partData) {
   if (dynamic.error) return { error: dynamic.error };
-  if (partData.odBf > 32 || partData.wAft > 30) return { error: 'Part size is out of KS400B machine limits' };
+  if (partData.odBf > KS400B_PARAMS.OD_BF_MAX || partData.wAft > KS400B_PARAMS.W_AFT_MAX) {
+    return { error: `Part size is out of KS400B machine limits (odBf max ${KS400B_PARAMS.OD_BF_MAX}, wAft max ${KS400B_PARAMS.W_AFT_MAX})` };
+  }
   const SD = calculateSD(partData);
   if (SD === null) return { error: 'Cannot calculate SD: SD not found' };
 
@@ -164,8 +231,8 @@ function adaptDynamicKS400B(dynamic, partData) {
   const pa = dynamic['PLUG(A)']       || {};
   const pb = dynamic['PLUG(B)']       || {};
 
-  const wd_type = SD < 19.5 ? 'TYPE1' : 'TYPE2';
-  const pa_type = SD <= 8.5 ? 'TYPE1' : (partData.idAft <= 11.4 ? 'TYPE2' : 'TYPE3');
+  const wd_type = SD < KS400B_PARAMS.SD_TYPE_THRESHOLD ? 'TYPE1' : 'TYPE2';
+  const pa_type = SD <= KS400B_PARAMS.PA_SD_THRESHOLD ? 'TYPE1' : (partData.idAft <= KS400B_PARAMS.PA_ID_THRESHOLD ? 'TYPE2' : 'TYPE3');
 
   return {
     od_turning: partData.odBf,
@@ -196,22 +263,23 @@ function adaptDynamicKS400B(dynamic, partData) {
     pa_C: pa.C ?? 0,
     pa_D: pa.D ?? 0,
     pa_E: pa.E ?? 0,
-    pa_F: 48,
+    pa_F: KS400B_PARAMS.PA_F,
     pb_type: pa_type,
     pb_A: pb.A ?? 0,
     pb_B: pb.B ?? 0,
     pb_C: pb.C ?? 0,
     pb_D: pa.D ?? 0,
     pb_E: pa.E ?? 0,
-    pb_F: 70,
+    pb_F: KS400B_PARAMS.PB_F,
   };
 }
 
 function adaptDynamicKS500RD(dynamic, partData) {
   if (dynamic.error) return { error: dynamic.error };
   const { idAft: ID, odAft: OD, wAft: W } = partData;
-  if (ID < 14 || ID > 38.125 || OD < 26 || OD > 59.531 || W < 23.5 || W > 51.15) {
-    return { error: 'Part size is out of KS500RD machine limits' };
+  const p = KS500RD_PARAMS;
+  if (ID < p.ID_MIN || ID > p.ID_MAX || OD < p.OD_MIN || OD > p.OD_MAX || W < p.W_MIN || W > p.W_MAX) {
+    return { error: `Part size is out of KS500RD machine limits (ID ${p.ID_MIN}–${p.ID_MAX}, OD ${p.OD_MIN}–${p.OD_MAX}, W ${p.W_MIN}–${p.W_MAX})` };
   }
   const SD = calculateSD(partData);
   if (SD === null) return { error: 'SD not found' };
@@ -219,14 +287,8 @@ function adaptDynamicKS500RD(dynamic, partData) {
   const lp = dynamic['LOADING PINTLE'] || {};
   const wd = dynamic['WORK DRIVER']    || {};
 
-  let fs_No;
-  if (W < 19)       fs_No = '4033-03-0001';
-  else if (W < 21)  fs_No = '4033-03-0002';
-  else if (W < 28)  fs_No = '4033-03-0003';
-  else if (W < 37)  fs_No = '4033-03-0004';
-  else if (W < 46)  fs_No = '4033-03-0005';
-  else if (W < 100) fs_No = '4033-03-0006';
-  else              fs_No = 'Out of Range';
+  const fsEntry = KS500RD_PARAMS.FRONT_SHOE_MAP.find(e => W < e.maxW);
+  const fs_No = fsEntry ? fsEntry.no : 'Out of Range';
 
   return {
     error: null,
@@ -241,7 +303,9 @@ function adaptDynamicKS500RD(dynamic, partData) {
 
 function adaptDynamicKS400B5(dynamic, partData) {
   if (dynamic.error) return { error: dynamic.error };
-  if ((partData.odAft || 0) > 35 || (partData.odBf || 0) > 35) return { error: 'Part OD > 35, out of KS-400B5 machine limits' };
+  if ((partData.odAft || 0) > KS400B5_PARAMS.OD_MAX || (partData.odBf || 0) > KS400B5_PARAMS.OD_MAX) {
+    return { error: `Part OD > ${KS400B5_PARAMS.OD_MAX}, out of KS-400B5 machine limits` };
+  }
 
   const wc  = dynamic['WORK CLAMP']   || {};
   const sh  = dynamic['SHAFT']        || {};
@@ -254,11 +318,10 @@ function adaptDynamicKS400B5(dynamic, partData) {
   const st  = dynamic['STOPPER']      || {};
   const mrj = dynamic['MASTER RING']  || {};
 
-  // Type strings — conditional logic stays in adapter
   const wc_min  = Math.min(partData.odAft || 0, partData.sd || 0, partData.sdAft || 0);
-  const wc_Type = wc_min < 12.2 ? 'TYPE1' : 'TYPE2';
+  const wc_Type = wc_min < KS400B5_PARAMS.WC_TYPE_THRESHOLD ? 'TYPE1' : 'TYPE2';
   const sh_A_val   = sh.A ?? 0;
-  const shaft_Type = sh_A_val < 14 ? 'TYPE1' : 'TYPE2';
+  const shaft_Type = sh_A_val < KS400B5_PARAMS.SHAFT_TYPE_THRESHOLD ? 'TYPE1' : 'TYPE2';
 
   return {
     error: null,
@@ -283,7 +346,8 @@ function adaptDynamicKS400B6(dynamic, partData) {
 
   const isInner = String(partData.type || '').toUpperCase().includes('INNER') || String(partData.yBall || '').toUpperCase() === 'Y';
   const pp_ID   = (partData.idBf || 0) + (partData.idBfTolMinus || 0);
-  const pp_Type = pp_ID < 6 ? 'TYPE1' : pp_ID < 10 ? 'TYPE2' : 'TYPE3';
+  const [pp1, pp2] = KS400B6_PARAMS.PP_ID_THRESHOLDS;
+  const pp_Type = pp_ID < pp1 ? 'TYPE1' : pp_ID < pp2 ? 'TYPE2' : 'TYPE3';
   const sc_OD   = (partData.odBf || 0) + (partData.odBfTolPlus || 0);
   const sc_W    = partData.wAft || 0;
 
@@ -310,13 +374,12 @@ function adaptDynamicKS400B6(dynamic, partData) {
   // workGuide.D: DB returns 0 when !isInner → null
   const wg_D = isInner ? (wg.D ?? 0) : null;
 
-  // stockerChute: null when OD_max > 32 or W > 26; F/G/H are string constants
+  // stockerChute: null when OD_max > SC_OD_MAX or W > SC_W_MAX; F/G/H are string constants
+  // (cannot be stored in tooling_formula — expr-eval only returns numbers)
   let stockerChute = null;
-  if (sc_OD <= 32 && sc_W <= 26) {
-    let sc_F, sc_G, sc_H;
-    if (sc_W <= 6)       { sc_F = 'Ø2.1THRU.';  sc_G = 'M5x0.8THRU.'; sc_H = 44; }
-    else if (sc_W <= 10) { sc_F = 'Ø3.1THRU.';  sc_G = 'M5x0.8THRU.'; sc_H = 44; }
-    else                 { sc_F = 'M5x0.8THRU.'; sc_G = '-';            sc_H = '-'; }
+  if (sc_OD <= KS400B6_PARAMS.SC_OD_MAX && sc_W <= KS400B6_PARAMS.SC_W_MAX) {
+    const drillSpec = KS400B6_PARAMS.SC_DRILL_SPECS.find(s => sc_W <= s.maxW);
+    const { F: sc_F, G: sc_G, H: sc_H } = drillSpec;
     stockerChute = { A: sc.A ?? 0, B: sc.B ?? 0, C: sc.C ?? 0, D: sc.D ?? 0, E: sc.E ?? 0, F: sc_F, G: sc_G, H: sc_H };
   }
 
