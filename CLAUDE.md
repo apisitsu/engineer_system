@@ -352,8 +352,7 @@ These routes exist in `server.js` but are not part of the MTC tooling pipeline:
 
 | Prefix | Controller | Notes |
 |---|---|---|
-| `/api/sds` | `sdsController.js` | SDS v1 — legacy tooling setup data sheet |
-| `/api/sds/v2` | `sdsV2Controller.js` | Search by CN — now routes through `SdsOrchestrator` (10-min cache, rodpcPool graceful degradation) |
+| `/api/sds/v2` | `sdsV2Controller.js` | Search by CN — routes through `SdsOrchestrator` (10-min cache, rodpcPool graceful degradation) |
 | `/api/sds/v2/images` | `sdsV2ImageController.js` | Image upload/retrieval for SDS v2 records |
 | `/api/sds/v2/admin` | `sdsV2AdminController.js` | Admin CRUD for machine types; uses `engPool` + `maqPool` + `rodpcPool` (isAdmin) |
 | `/api/sds/v2` | `sdsV2PdfController.js` | PDF generation for SDS v2 (also mounted at `/api/sds/v2`) |
