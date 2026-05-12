@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
-  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox,
+  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image,
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
@@ -295,9 +295,7 @@ const ToolingImagesTab = ({ theme }) => {
         fd.append('description', selectedTool.tool_name);
       }
       fd.append('image', fileList[0].originFileObj);
-      await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd); // Let axios set the correct multipart boundary
       message.success('Uploaded');
       setDwgNo(''); setOptions([]); setFileList([]); setSelectedTool(null);
       load();
@@ -318,21 +316,46 @@ const ToolingImagesTab = ({ theme }) => {
     }
   };
 
-  const inferredMachineTag = (tool_dwg_no) => {
-    if (!tool_dwg_no) return <Tag>-</Tag>;
+  const inferredMachineName = (tool_dwg_no) => {
+    if (!tool_dwg_no) return '-';
+    if (!allMachineTypes || allMachineTypes.length === 0) {
+      // Temporary fallback until data loads
+      const match = tool_dwg_no.match(/(\d{3})/);
+      return <Text type="secondary">{match ? match[1] : tool_dwg_no}</Text>;
+    }
+    // 1. Try to find if any machine_type_code exists inside tool_dwg_no (case-insensitive)
+    const mt = allMachineTypes.find(m => {
+      const c = String(m.machine_type_code).trim().toLowerCase();
+      return c && tool_dwg_no.toLowerCase().includes(c);
+    });
+    if (mt) return <Text>{mt.machine_type_name || mt.machine_type_code}</Text>;
+
+    // 2. Fallback to legacy extraction
     let code = tool_dwg_no.substring(1, 4);
     if (/^\d/.test(tool_dwg_no)) {
       code = tool_dwg_no.substring(0, 3);
     }
-    const mt = allMachineTypes.find(m => m.machine_type_code === code);
-    return mt ? <Tag color="blue">{mt.machine_type_code} — {mt.machine_type_name || '(no name)'}</Tag> : <Tag>{code}</Tag>;
+    return <Text type="secondary">{code}</Text>;
   };
 
   const cols = [
+    {
+      title: 'Preview',
+      key: 'preview',
+      width: 100,
+      render: (_, row) => (
+        <Image
+          width={80}
+          height={60}
+          style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+          src={`${server.MTC_SDS_V2_IMAGES_TOOLING}/${encodeURIComponent(row.tool_dwg_no)}?token=${localStorage.getItem('token')}`}
+          fallback="/image_m.png"
+        />
+      ),
+    },
     { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 180 },
     { title: 'Tool Name', dataIndex: 'tool_name', render: v => v || <Text type="secondary">-</Text> },
-    { title: 'Machine Type', key: 'mt', width: 180, render: (_, row) => inferredMachineTag(row.tool_dwg_no) },
-    { title: 'File', dataIndex: 'file_name' },
+    { title: 'Machine Name', key: 'mt', width: 220, render: (_, row) => inferredMachineName(row.tool_dwg_no) },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -378,7 +401,7 @@ const ToolingImagesTab = ({ theme }) => {
             {selectedTool && (
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>{selectedTool.tool_name}</Text>
-                <span style={{ marginLeft: 8 }}>{inferredMachineTag(selectedTool.tool_dwg_no)}</span>
+                <span style={{ marginLeft: 8 }}>{inferredMachineName(selectedTool.tool_dwg_no)}</span>
               </div>
             )}
             {dwgNo && !selectedTool && !lookupLoading && (
@@ -445,12 +468,10 @@ const GrindingImagesTab = ({ theme }) => {
       const vals = await form.validateFields();
       setUploading(true);
       const fd = new FormData();
-      fd.append('cn_prefix', vals.cn_prefix);
+      fd.append('cn_prefixes', JSON.stringify(vals.cn_prefixes));
       if (vals.process_code) fd.append('process_code', vals.process_code);
       fd.append('image', fileList[0].originFileObj);
-      await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd);
       message.success('Uploaded');
       form.resetFields(); setFileList([]);
       load();
@@ -473,9 +494,30 @@ const GrindingImagesTab = ({ theme }) => {
   };
 
   const cols = [
-    { title: 'CN Prefix', dataIndex: 'cn_prefix', width: 100 },
+    {
+      title: 'Preview',
+      key: 'preview',
+      width: 100,
+      render: (_, row) => (
+        <Image
+          width={80}
+          height={60}
+          style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+          src={`${server.MTC_SDS_V2_IMAGES_GRINDING}/view/${row.id}?token=${localStorage.getItem('token')}`}
+          fallback="/image_m.png"
+        />
+      ),
+    },
+    {
+      title: 'CN Prefixes',
+      dataIndex: 'cn_prefixes',
+      render: (v) => (
+        <Space size={2} wrap>
+          {(Array.isArray(v) ? v : [v]).map(p => <Tag key={p}>{p}</Tag>)}
+        </Space>
+      ),
+    },
     { title: 'Process Code', dataIndex: 'process_code', width: 140, render: v => v || <Tag>default</Tag> },
-    { title: 'File', dataIndex: 'file_name' },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -493,8 +535,14 @@ const GrindingImagesTab = ({ theme }) => {
     <div>
       <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Upload Grinding Layout Image">
         <Form form={form} layout="inline">
-          <Form.Item name="cn_prefix" label="CN Prefix" rules={[{ required: true }]}>
-            <Select options={CN_PREFIX_OPTIONS} style={{ width: 160 }} />
+          <Form.Item name="cn_prefixes" label="CN Prefix" rules={[{ required: true, message: 'Select at least one CN Prefix' }]}>
+            <Select
+              mode="multiple"
+              options={CN_PREFIX_OPTIONS}
+              style={{ minWidth: 220 }}
+              placeholder="Select one or more"
+              maxTagCount="responsive"
+            />
           </Form.Item>
           <Form.Item name="process_code" label="Process Code">
             <Input placeholder="e.g. IDG001 (optional)" style={{ width: 160 }} />
@@ -829,10 +877,10 @@ const AuditTab = ({ theme }) => {
     return cats;
   }, [data]);
 
-  const getCategoryPrefix = (catKey) => {
+  const getCategoryPrefix = useCallback((catKey) => {
     const cat = categories.find(c => c.key === catKey);
     return cat?.prefix || catKey;
-  };
+  }, [categories]);
 
   const handleCategoryClick = (key) => {
     setActiveCategory(prev => prev === key ? null : key);
@@ -844,13 +892,13 @@ const AuditTab = ({ theme }) => {
     if (!activeCategory) return data.noProcessPlan;
     const prefix = getCategoryPrefix(activeCategory);
     return data.noProcessPlan.filter(r => r.sub_class?.startsWith(prefix));
-  }, [data.noProcessPlan, activeCategory, categories]);
+  }, [data.noProcessPlan, activeCategory, getCategoryPrefix]);
 
   const filteredMissingTooling = useMemo(() => {
     if (!activeCategory) return data.missingTooling;
     const prefix = getCategoryPrefix(activeCategory);
     return data.missingTooling.filter(r => r.sub_class?.startsWith(prefix));
-  }, [data.missingTooling, activeCategory, categories]);
+  }, [data.missingTooling, activeCategory, getCategoryPrefix]);
 
   // Group missingTooling by CN for rowSpan display
   const groupedMissingTooling = useMemo(() => {
@@ -1047,5 +1095,3 @@ const SdsV2AdminPage = () => {
 };
 
 export default SdsV2AdminPage;
-
-

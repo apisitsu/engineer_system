@@ -185,7 +185,10 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     );
     const imgMap = {};
     for (const img of allImgRows.rows) {
-      const match = dwgNos.find(d => d === img.tool_dwg_no || d.startsWith(img.tool_dwg_no + '-') || d.startsWith(img.tool_dwg_no));
+      const match = dwgNos.find(d => 
+        d === img.tool_dwg_no || 
+        d.startsWith(img.tool_dwg_no + '-')
+      );
       if (match && !imgMap[match]) imgMap[match] = img;
     }
     for (let i = 0; i < 20; i++) {
@@ -201,7 +204,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const cnPrefix = searchData.cn.slice(0, 3);
   const grindingQ = await engPool.query(
     `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-     WHERE cn_prefix = $1
+     WHERE $1 = ANY(cn_prefixes)
        AND (process_code IS NULL OR process_code = $2)
      ORDER BY (process_code = $2) DESC NULLS LAST
      LIMIT 1`,
