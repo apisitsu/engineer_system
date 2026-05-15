@@ -132,6 +132,29 @@ const newProducts = require('./api/engineer/new_prod/tool');
 
 app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
 
+//--------------------Template Tool (APQP Forms)---------------------//
+const templateTool = require('./api/engineer/new_prod/templateToolController');
+
+// Form Headers (Dashboard)
+app.get('/api/engineer/new_prod/forms', verifyToken, templateTool.listForms);
+app.post('/api/engineer/new_prod/forms', verifyToken, templateTool.createForm);
+app.delete('/api/engineer/new_prod/forms/:id', verifyToken, templateTool.deleteForm);
+
+// Form Data CRUD (generic for all form types)
+app.get('/api/engineer/new_prod/forms/:formType/:id', verifyToken, templateTool.getFormData);
+app.put('/api/engineer/new_prod/forms/:formType/:id', verifyToken, templateTool.saveFormData);
+app.put('/api/engineer/new_prod/forms/:formType/:id/status', verifyToken, templateTool.updateFormStatus);
+
+// Audit Trail
+app.get('/api/engineer/new_prod/forms/:id/audit', verifyToken, templateTool.getAuditTrail);
+
+// User Stamps
+app.get('/api/engineer/new_prod/stamps/:em_id', verifyToken, templateTool.getStamp);
+app.post('/api/engineer/new_prod/stamps', verifyToken, templateTool.upsertStamp);
+
+// Calculator Usage Log
+app.post('/api/engineer/new_prod/calc/log', verifyToken, templateTool.logCalcUsage);
+
 
 //--------------------User----------------------//
 const userController = require('./api/user/userModel');

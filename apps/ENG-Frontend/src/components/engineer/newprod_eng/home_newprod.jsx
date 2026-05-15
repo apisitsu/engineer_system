@@ -79,6 +79,16 @@ const HomeNewProd = () => {
       category: 'Utilities',
       status: 'Active',
       tags: ['PDF', 'Merge', 'Document']
+    },
+    {
+      id: 'template-tool',
+      title: 'Template Tool',
+      description: 'Create and manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans. With auto-save and approval workflows.',
+      icon: <FileSearchOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/template_tool',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['APQP', 'Forms', 'Templates']
     }
   ];
 

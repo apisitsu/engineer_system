@@ -78,6 +78,11 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
 
+  // Template Tool (APQP Forms)
+  TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
+  TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
+  TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
+
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
 
