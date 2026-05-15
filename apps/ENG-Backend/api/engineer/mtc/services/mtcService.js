@@ -29,11 +29,11 @@ const buildTiListBaseSql = (options = {}) => {
     } 
     // กรองโหมดอื่นๆ (all, pending, pending_all)
     else {
-        if (status === 'all' && currentMonthStr) {
-            const startOfMonth = moment(currentMonthStr, 'MM-YYYY').startOf('month').format('YYYY-MM-DD');
-            const endOfMonth = moment(currentMonthStr, 'MM-YYYY').endOf('month').format('YYYY-MM-DD');
+        if (status === 'all' && options.currentYear) {
+            const startOfYear = `${options.currentYear}-01-01`;
+            const endOfYear = `${options.currentYear}-12-31`;
             baseSql += ` AND NULLIF(receive_date, '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1}`;
-            params.push(startOfMonth, endOfMonth);
+            params.push(startOfYear, endOfYear);
             paramCount += 2;
         } else if (status === 'pending' && currentMonthStr) {
             const startOfMonth = moment(currentMonthStr, 'MM-YYYY').startOf('month').format('YYYY-MM-DD');

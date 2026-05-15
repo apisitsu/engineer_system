@@ -60,7 +60,7 @@ const generateSdsPdf = async (req, res) => {
         const tempExcelPath = path.join('./output', `__temp_${Date.now()}_${setup.id}.xlsx`);
         await workbook.xlsx.writeFile(tempExcelPath);
 
-        const SOFFICE = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+        const SOFFICE = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
         execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempExcelPath, '--outdir', CACHE_DIR], (error) => {
             safeUnlink(tempExcelPath);
             if (error) return res.status(500).json({ error: 'PDF conversion failed' });

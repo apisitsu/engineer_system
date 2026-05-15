@@ -1,7 +1,7 @@
 'use strict';
 
 function calculateToolingParams(part) {
-  const jawA = part.process === 'ID→OD' ? part.odBf : part.odAft;
+  const jawA = part.process === 'ID->OD' ? part.odBf : part.odAft;
   const jawB = jawA - 0.4;
 
   const normalBaseC = 18.5 + (part.wAft / 2) + 3;

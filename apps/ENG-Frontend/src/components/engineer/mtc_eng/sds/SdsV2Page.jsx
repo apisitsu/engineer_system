@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select,
+  Modal, Select, Space,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined } from '@ant-design/icons';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
+import { useNavigate } from 'react-router-dom';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
+import { useAuthStore } from '../../../../stores/authStore';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 
 const { Content } = Layout;
@@ -30,6 +33,10 @@ const toolCols = [
 const SdsV2Page = () => {
   const { message } = App.useApp();
   const { theme } = useTheme();
+  const navigate = useNavigate();
+  const userRole = useAuthStore(state => state.userRole);
+  const userDepartment = useAuthStore(state => state.userDepartment);
+  const isAdmin = userRole === 'AD' || userDepartment === 'AD';
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -63,7 +70,6 @@ const SdsV2Page = () => {
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
     setSelectedMachine(null);
-    // Extract machine_type_codes from tools of this process (tool_dwg_no[1..3])
     const toolsForProcess = (data?.process_plan || []).filter(t => t.process_code === processRow.process_code);
     const codes = [...new Set(toolsForProcess.map(t => t.tool_dwg_no?.substring(1, 4)).filter(Boolean))];
     const filtered = allMachineTypes.filter(m => codes.includes(m.machine_type_code));
@@ -84,12 +90,8 @@ const SdsV2Page = () => {
         _t: Date.now(),
         token: localStorage.getItem('token') || '',
       };
-
-      // Construct the get URL natively so Chrome opens it as a standard PDF tab.
-      // This completely avoids Blob URL 'cross-partition' blocks.
       const queryParams = new URLSearchParams(params).toString();
       const fullUrl = `${server.MTC_SDS_V2_PDF}?${queryParams}`;
-
       const a = document.createElement('a');
       a.href = fullUrl;
       a.target = '_blank';
@@ -143,125 +145,141 @@ const SdsV2Page = () => {
 
   return (
     <Layout style={{ height: '100%' }}>
-      <MenuTemplate type="MTC" />
+      <MenuTemplate type="MTC" defaultSelectedKeys="5" />
       <Layout style={{ backgroundColor: theme.colors.background }}>
-        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto' }}>
-          <Spin spinning={loading}>
-            <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-              Setup Data Sheet v2
-            </Title>
-
-            <Card style={{ marginBottom: 16, background: theme.colors.cardBackground }}>
-              <Row gutter={12} align="middle">
-                <Col>
-                  <Input
-                    placeholder="C/N Number"
-                    value={cn}
-                    onChange={e => setCn(e.target.value)}
-                    onPressEnter={handleSearch}
-                    style={{ width: 600 }}
-                    allowClear
-                  />
-                </Col>
-                <Col>
-                  <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-                    Search
+        <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '15px' }}>
+          <div style={{ padding: '24px', background: theme.colors.background }}>
+            <Spin spinning={loading}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 60 }} />
+                  <div style={{ padding: '16px' }}>
+                    <Title level={2} style={{ marginBottom: 0 }}>
+                      Setup Data Sheet
+                    </Title>
+                    <Text type="secondary">Manage and view machine setup data sheets</Text>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <Button
+                    icon={<SettingOutlined />}
+                    size="large"
+                    onClick={() => navigate('/eng/mtc_eng/sds-v2/admin')}
+                  >
+                    Machine Template
                   </Button>
-                </Col>
-              </Row>
-            </Card>
+                )}
+              </div>
 
-            {data && (
-              <>
-                {/* Header Info */}
-                <Card
-                  style={{ marginBottom: 16, background: theme.colors.cardBackground }}
-                  title={
-                    <Row align="middle" gutter={12}>
-                      <Col><Text strong style={{ color: theme.colors.text }}>{data.cn}</Text></Col>
-                      <Col>
-                        <Tag color={PART_TYPE_COLOR[data.part_type] || 'default'}>
-                          {data.part_type}
-                        </Tag>
-                      </Col>
-                      {data.part_info && (
-                        <Col>
-                          <Text type="secondary">
-                            {data.part_info.class1_name} — {data.part_info.sub_class_name}
-                          </Text>
-                        </Col>
-                      )}
-                    </Row>
-                  }
-                >
-                  <Descriptions size="small" bordered column={4}>
-                    <Descriptions.Item label="PN">{data.parts_no || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="DWG Rev">{data.dwg_rev || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Material">{data.material?.material || '-'}</Descriptions.Item>
-                    {data.production && <>
-                      <Descriptions.Item label="Model">{data.production.model || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Customer">{data.production.customer || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Type">{data.production.type || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Approval Type">{data.production.approval_type || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Cust DWG No">{data.production.cust_dwg_no || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="Cust DWG Rev">{data.production.cust_dwg_no_rev || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="SWG No">{data.production.sdwg_no || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="SWG Rev">{data.production.sdwg_no_rev || '-'}</Descriptions.Item>
-                    </>}
-                  </Descriptions>
-                </Card>
-
-                {/* Dimension */}
-                <Card
-                  title={<Text strong style={{ color: theme.colors.text }}>Dimension ({data.part_type})</Text>}
-                  style={{ marginBottom: 16, background: theme.colors.cardBackground }}
-                >
-                  {renderDimension()}
-                </Card>
-
-                {/* Process Plan + Tooling (expandable) */}
-                {(() => {
-                  const toolingByCode = data.process_plan.reduce((acc, r) => {
-                    if (!acc[r.process_code]) acc[r.process_code] = [];
-                    acc[r.process_code].push(r);
-                    return acc;
-                  }, {});
-                  return (
-                    <Card
-                      title={<Text strong style={{ color: theme.colors.text }}>Process Info</Text>}
-                      style={{ marginBottom: 16, background: theme.colors.cardBackground }}
-                    >
-                      <Table
-                        dataSource={data.process_info.map((r, i) => ({ ...r, key: i }))}
-                        columns={processInfoCols}
-                        pagination={false}
-                        size="small"
-                        scroll={{ x: 'max-content' }}
-                        expandable={{
-                          rowExpandable: (row) => (toolingByCode[row.process_code]?.length > 0),
-                          expandedRowRender: (row) => (
-                            <Table
-                              dataSource={toolingByCode[row.process_code].map((r, i) => ({
-                                ...r, key: `${r.process_code}_${r.tool_dwg_no}_${i}`
-                              }))}
-                              columns={toolCols}
-                              pagination={false}
-                              size="small"
-                              scroll={{ x: 'max-content' }}
-                            />
-                          ),
-                        }}
+              {/* Search Section */}
+              <Card style={{ marginTop: 16, marginBottom: 16 }}>
+                <Row gutter={[16, 16]} align="middle">
+                  <Col xs={24} md={8}>
+                    <Space.Compact style={{ width: 300 }}>
+                      <Input
+                        placeholder="C/N Number"
+                        value={cn}
+                        onChange={e => setCn(e.target.value)}
+                        onPressEnter={handleSearch}
+                        prefix={<SearchOutlined />}
+                        allowClear
                       />
-                    </Card>
-                  );
-                })()}
-              </>
-            )}
-          </Spin>
+                      <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                        Search
+                      </Button>
+                    </Space.Compact>
+                  </Col>
+                </Row>
+              </Card>
+
+              {data && (
+                <>
+                  <Card
+                    style={{ marginBottom: 16, background: theme.colors.cardBackground }}
+                    title={
+                      <Row align="middle" gutter={12}>
+                        <Col><Text strong style={{ color: theme.colors.text }}>{data.cn}</Text></Col>
+                        <Col>
+                          <Tag color={PART_TYPE_COLOR[data.part_type] || 'default'}>
+                            {data.part_type}
+                          </Tag>
+                        </Col>
+                        {data.part_info && (
+                          <Col>
+                            <Text type="secondary">
+                              {data.part_info.class1_name} — {data.part_info.sub_class_name}
+                            </Text>
+                          </Col>
+                        )}
+                      </Row>
+                    }
+                  >
+                    <Descriptions size="small" bordered column={4}>
+                      <Descriptions.Item label="PN">{data.parts_no || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="DWG Rev">{data.dwg_rev || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="Material">{data.material?.material || '-'}</Descriptions.Item>
+                      {data.production && <>
+                        <Descriptions.Item label="Model">{data.production.model || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="Customer">{data.production.customer || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="Type">{data.production.type || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="Approval Type">{data.production.approval_type || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="Cust DWG No">{data.production.cust_dwg_no || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="Cust DWG Rev">{data.production.cust_dwg_no_rev || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="SWG No">{data.production.sdwg_no || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="SWG Rev">{data.production.sdwg_no_rev || '-'}</Descriptions.Item>
+                      </>}
+                    </Descriptions>
+                  </Card>
+
+                  <Card
+                    title={<Text strong style={{ color: theme.colors.text }}>Dimension ({data.part_type})</Text>}
+                    style={{ marginBottom: 16, background: theme.colors.cardBackground }}
+                  >
+                    {renderDimension()}
+                  </Card>
+
+                  {(() => {
+                    const toolingByCode = data.process_plan.reduce((acc, r) => {
+                      if (!acc[r.process_code]) acc[r.process_code] = [];
+                      acc[r.process_code].push(r);
+                      return acc;
+                    }, {});
+                    return (
+                      <Card
+                        title={<Text strong style={{ color: theme.colors.text }}>Process Info</Text>}
+                        style={{ marginBottom: 16, background: theme.colors.cardBackground }}
+                      >
+                        <Table
+                          dataSource={data.process_info.map((r, i) => ({ ...r, key: i }))}
+                          columns={processInfoCols}
+                          pagination={false}
+                          size="small"
+                          scroll={{ x: 'max-content' }}
+                          expandable={{
+                            rowExpandable: (row) => (toolingByCode[row.process_code]?.length > 0),
+                            expandedRowRender: (row) => (
+                              <Table
+                                dataSource={toolingByCode[row.process_code].map((r, i) => ({
+                                  ...r, key: `${r.process_code}_${r.tool_dwg_no}_${i}`
+                                }))}
+                                columns={toolCols}
+                                pagination={false}
+                                size="small"
+                                scroll={{ x: 'max-content' }}
+                              />
+                            ),
+                          }}
+                        />
+                      </Card>
+                    );
+                  })()}
+                </>
+              )}
+            </Spin>
+          </div>
         </Content>
       </Layout>
 
-      {/* PDF Generation Modal */}
       <Modal
         title={
           <span>
