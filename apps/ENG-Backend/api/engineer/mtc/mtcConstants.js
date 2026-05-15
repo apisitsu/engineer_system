@@ -18,13 +18,6 @@ const TABLES = {
   TR_WORKFLOW: 'tr_workflow',
   TR_EMAIL_CONFIG: 'tr_email_config',
 
-  // SDS (Setup Data Sheet)
-  SETUP_SHEET: 'setup_sheet',
-  APPROVAL: 'approval',
-  TEMPLATE: 'template',
-  TEMPLATE_EXCEL_MAPPING: 'template_excel_mapping',
-  SETUP_PARAMETER_VALUE: 'setup_parameter_value',
-
   // SDS v2 — New tables (lpb / rodpc schemas)
   LPB_ENG_BALL:           'lpb.eng_ball',
   LPB_ENG_BODY:           'lpb.eng_body',
@@ -48,15 +41,15 @@ const TABLES = {
   SDS_MACHINE_TYPE_CODE:  'sds_machine_type_code',  // machine lookup + grinding_area_label
   SDS_EXCEL_MAPPING:      'sds_excel_mapping',       // cell_address → param_key per machine type
   SDS_PARAMETER:          'sds_parameter',           // manual params per (cn, machine_type_name)
-  SDS_V2_TOOLING_IMAGE:   'sds_v2_tooling_image',   // tooling images by tool_dwg_no
-  SDS_V2_GRINDING_IMAGE:  'sds_v2_grinding_image',  // grinding diagrams by cn_prefix
-  SDS_V2_MACHINE_TOOL:    'sds_v2_machine_tool',    // tool ordering per (machine_type, process_code)
+  SDS_V2_TOOLING_IMAGE:   'sds_tooling_image',   // tooling images by tool_dwg_no
+  SDS_V2_GRINDING_IMAGE:  'sds_grinding_image',  // grinding diagrams by cn_prefix
+  SDS_V2_MACHINE_TOOL:    'sds_machine_tool',    // tool ordering per (machine_type, process_code)
 
   // Tooling Selection & Rules
-  MTC_SELECTION_RULES: 'mtc_selection_rules',
-  MTC_MACHINE_CONFIG:  'mtc_machine_config',
+  MTC_SELECTION_RULES: 'tooling_selection_rules',
+  MTC_MACHINE_CONFIG:  'tooling_machine_config',
   TOOLING_FORMULA:     'tooling_formula',
-  SPEC_PROCESS: 'spec_process',
+  SPEC_PROCESS: 'tooling_spec_process',
 
   // Specific Tooling Tables
   TOOLING_KS03A: 'tooling_ks03a',
@@ -109,10 +102,24 @@ const CATEGORIES = {
   OTHER: 'Other',
 };
 
+// Legacy machines with hardcoded adapter logic in partDataMapper.js.
+// New machines added via UI use the dynamic rules path and do NOT need to be listed here.
+// Adding a new entry requires a matching adapter in partDataMapper.buildCalcMap().
+const LEGACY_MACHINES = [
+  'KS-B22G',
+  'TSG-300ZNC',
+  'KS400B',
+  'KS-03A',
+  'KS-500RD',
+  'KS-400B5',
+  'KS-400B6',
+];
+
 module.exports = {
   TABLES,
   PATHS,
   WORKFLOW_STATUS,
   REQUEST_TYPES,
   CATEGORIES,
+  LEGACY_MACHINES,
 };

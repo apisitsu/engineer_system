@@ -32,14 +32,14 @@ const getToolDWGRequest = async () => {
 const getSetupSheetByParams = async (cn, process_code, machine) => {
     return await engPool.query(
         `SELECT ss.id, ss.cn, ss.process_code, ss.machine, ss.setup_data_sheet_rev
-         FROM setup_sheet ss WHERE ss.cn=$1 AND ss.process_code=$2 AND ss.machine=$3`,
+         FROM sds_setup_sheet ss WHERE ss.cn=$1 AND ss.process_code=$2 AND ss.machine=$3`,
         [cn, process_code, machine]
     );
 };
 
 const getExcelTemplateBySetupId = async (setupId) => {
     return await engPool.query(
-        `SELECT t.excel_file_name FROM setup_sheet ss JOIN template t ON ss.template_id = t.id WHERE ss.id=$1`,
+        `SELECT t.excel_file_name FROM sds_setup_sheet ss JOIN sds_template t ON ss.template_id = t.id WHERE ss.id=$1`,
         [setupId]
     );
 };
@@ -47,9 +47,9 @@ const getExcelTemplateBySetupId = async (setupId) => {
 const getTemplateMapping = async (setupId) => {
     return await engPool.query(
         `SELECT m.sheet_name, m.cell_address, m.param_key, COALESCE(v.param_value,'') AS param_value
-         FROM template_excel_mapping m
-         JOIN setup_sheet ss ON ss.template_id = m.template_id
-         LEFT JOIN setup_parameter_value v ON v.param_key = m.param_key AND v.setup_sheet_id = ss.id
+         FROM sds_template_excel_mapping m
+         JOIN sds_setup_sheet ss ON ss.template_id = m.template_id
+         LEFT JOIN sds_setup_parameter_value v ON v.param_key = m.param_key AND v.setup_sheet_id = ss.id
          WHERE ss.id=$1 ORDER BY m.id`,
         [setupId]
     );

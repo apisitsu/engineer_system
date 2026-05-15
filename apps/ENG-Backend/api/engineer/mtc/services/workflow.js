@@ -127,10 +127,8 @@ const VALIDATION_RULES = {
   MAX_COMMENT_LENGTH: 1000,
 };
 
-// ── File Upload Configuration ────────────────────────────────────────────────
+// ── File Upload Configuration — no type or size restrictions ─────────────────
 const FILE_CONFIG = {
-  MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
-  ALLOWED_EXTENSIONS: ['.pdf', '.dwg', '.dxf', '.png', '.jpg', '.jpeg'],
   UPLOAD_DIR: 'tool_requests',
 };
 
