@@ -11,7 +11,7 @@ const engPool = new Pool({
     password: process.env.PG_NEW_PASS,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000,
 });
 
 engPool.connect()
