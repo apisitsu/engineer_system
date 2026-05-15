@@ -9,7 +9,7 @@ import MainLayout from "./layout/MainLayout";
 import Swal from "sweetalert2";
 import { useIdleTimer } from 'react-idle-timer';
 import axios from "axios";
-import { server, key_constance } from "./constance/constance";
+import { server } from "./constance/constance";
 import { MTC_PATHS } from "./constance/mtc_constance";
 
 // Import theme system
@@ -48,17 +48,18 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
-import SdsPage from './components/engineer/mtc_eng/sds/SdsPage';
+import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager.jsx';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage.jsx';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx';
+import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage.jsx';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
-import FormulaManager from './components/engineer/mtc_eng/formula/FormulaManager';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
+import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
@@ -299,11 +300,11 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_INSPECT} element={<ToolingInspect />} />
                   <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
+                  <Route path={MTC_PATHS.TOOLING_SPEC} element={<SpecProcessManager />} />
+                  <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
-                  <Route path={MTC_PATHS.SDS} element={<SdsPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
-                  <Route path="/eng/mtc/formulas" element={<FormulaManager />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
 
                   {/* ------ New Product Engineer ------ */}
@@ -329,6 +330,7 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
+                <Route path="/eng/template_tool" element={<TemplateTool />} />
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>

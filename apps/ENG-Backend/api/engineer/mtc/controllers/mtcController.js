@@ -7,7 +7,7 @@ const { execFile } = require('child_process');
 
 const TEMPLATE_DIR = path.resolve(process.env.SDS_TEMPLATE_DIR || path.join(__dirname, '../templates'));
 const CACHE_DIR = path.resolve('./output/pdf-cache');
-const SOFFICE = path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+const SOFFICE = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { if (fs.existsSync(p)) fs.unlinkSync(p); }
@@ -23,13 +23,13 @@ const getConstants = (req, res) => {
 
 const getToolingInspectList = async (req, res) => {
     try {
-        const { page, limit, search, status, startDate, endDate, currentMonth } = req.query;
+        const { page, limit, search, status, startDate, endDate, currentMonth, currentYear } = req.query;
 
         const fetchList = mtcService.getToolingInspectListService({
             page: parseInt(page), limit: parseInt(limit),
-            search, status, startDate, endDate, currentMonth,
+            search, status, startDate, endDate, currentMonth, currentYear,
         });
-        const fetchStats = mtcService.getToolingInspectStatsService({ search, status, startDate, endDate, currentMonth });
+        const fetchStats = mtcService.getToolingInspectStatsService({ search, status, startDate, endDate, currentMonth, currentYear });
         const fetchActivity = (status === 'date' && startDate)
             ? mtcService.getDateActivityStatsService(startDate)
             : Promise.resolve(null);

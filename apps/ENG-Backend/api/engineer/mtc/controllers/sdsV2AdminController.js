@@ -275,7 +275,7 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     `);
 
     // 3. Warning: Missing Tooling in specific Process Codes
-    const targetProcessCodes = ['1011', '1012', '1021', '1022', '1041', '1042', '1061', '1062', '1181', '1182', '1241'];
+    const targetProcessCodes = ['1011', '1012', '1021', '1022', '1041', '1042', '1061', '1062', '1101', '1102', '1181', '1182', '1241'];
     
     const missingToolingResult = await maqPool.query(`
       SELECT i.control_no, i.sub_class, pi.process_code, pi.wc

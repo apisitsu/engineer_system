@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PFMEA Form Editor (A2 Landscape)</title>
+    <style>
+        /* ตั้งค่าพื้นฐาน */
+        :root {
+            --border-color: #000;
+            --paper-width: 594mm;   /* ขนาด A2 แนวนอน */
+            --paper-height: 420mm;  /* ขนาด A2 แนวนอน */
+        }
+
+        body {
+            background-color: #525659;
+            display: flex;
+            justify-content: center;
+            padding: 70px 0 20px 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Sarabun';
+            font-size: 11px;
+            color: #000;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* Topbar เมนูควบคุมด้านบน */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 55px;
+            background-color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            box-sizing: border-box;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .topbar-left,
+        .topbar-right,
+        .topbar-center {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Toolbar สำหรับจัด Format ข้อความ */
+        .format-toolbar {
+            display: flex;
+            align-items: center;
+            background: #f0f2f5;
+            padding: 4px 6px;
+            border-radius: 5px;
+            gap: 2px;
+        }
+
+        .format-toolbar button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #333;
+            cursor: pointer;
+            padding: 4px 6px;
+            font-size: 13px;
+            border-radius: 4px;
+            outline: none;
+            height: 26px;
+            min-width: 26px;
+        }
+
+        .format-toolbar button svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .format-toolbar button:hover {
+            background: #d9e8ff;
+            border-color: #91caff;
+            color: #1677ff;
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 18px;
+            background: #ccc;
+            margin: 0 4px;
+        }
+
+        .zoom-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .zoom-control select {
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: 0.2s;
+        }
+
+        .btn-add { background-color: #1677ff; }
+        .btn-add:hover { background-color: #4096ff; }
+        
+        .btn-eval-all { background-color: #fa8c16; }
+        .btn-eval-all:hover { background-color: #ffa940; }
+
+        .btn-export { background-color: #52c41a; }
+        .btn-export:hover { background-color: #73d13d; }
+
+        .btn-remove {
+            background-color: #ff4d4f;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 2px;
+            border: none;
+            color: white;
+        }
+
+        /* Container สำหรับจัดการหลายๆ หน้า */
+        #pages-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+            align-items: center;
+        }
+
+        /* รูปแบบกระดาษ A2 แนวนอน */
+        .a2-page {
+            width: var(--paper-width);
+            height: var(--paper-height);
+            background-color: #fff;
+            padding: 10mm;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 6mm;
+            right: 10mm;
+            font-size: 11px;
+            font-weight: bold;
+            color: #555;
+            z-index: 10;
+        }
+
+        .page-content {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        /* หัวเอกสาร */
+        .header-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .standard-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 11px;
+            border: 2px solid var(--border-color, #000);
+            background-color: #fff;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .header-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            flex: 1;
+            border-right: 2px solid var(--border-color, #000);
+            min-width: 0;
+        }
+
+        .header-col {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color, #000);
+            min-width: 0;
+        }
+
+        .header-col:last-child {
+            border-right: none;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color, #000);
+            padding: 2px 4px;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+        }
+
+        .header-row:last-child {
+            border-bottom: none;
+        }
+
+        .header-row label {
+            font-weight: bold;
+            margin-right: 5px;
+            white-space: nowrap;
+        }
+
+        .header-row input[type="text"],
+        .header-row input[type="date"] {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 11px;
+            min-width: 0;
+            text-overflow: ellipsis;
+        }
+
+        .approval-block {
+            display: flex;
+            width: 200px;
+            flex-shrink: 0;
+        }
+
+        .stamp-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color, #000);
+        }
+
+        .stamp-box:last-child {
+            border-right: none;
+        }
+
+        .stamp-title {
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid var(--border-color, #000);
+            padding: 2px;
+            background-color: #f9f9f9;
+        }
+
+        .stamp-area {
+            flex: 1;
+            min-height: 40px;
+            cursor: text;
+            outline: none;
+            padding: 2px;
+            text-align: center;
+        }
+
+        /* ตาราง */
+        table.data-table {
+            border-collapse: collapse !important;
+            width: 100%; border: 1px solid #000;
+            table-layout: fixed;
+        }
+        th, td {
+            border: 1px solid #000 !important;
+            padding: 4px; text-align: center;
+            vertical-align: top; word-wrap: break-word;
+            box-sizing: border-box;
+        }
+        table.data-table th { background-color: #f0f0f0; font-weight: bold; position: relative; vertical-align: middle; }
+        table.data-table td.row-num { font-weight: bold; color: #333; vertical-align: middle; }
+
+        .editable-cell {
+            min-height: 25px; width: 100%; outline: none; cursor: text;
+            text-align: left; padding: 2px 4px; box-sizing: border-box;
+            word-break: break-word; transition: background-color 0.2s;
+        }
+        .editable-cell:focus { background-color: #fff; box-shadow: inset 0 -2px 0 0 #1677ff; }
+        .editable-cell ul { padding-left: 20px; margin: 4px 0; text-align: left; }
+        .editable-cell li { margin-bottom: 2px; }
+        .center-text { text-align: center !important; }
+        
+        .rpn-cell { font-weight: bold; font-size: 14px; }
+
+        .resizer {
+            position: absolute; top: 0; right: -3px; width: 6px; height: 100%;
+            cursor: col-resize; user-select: none; z-index: 10;
+        }
+        .resizer:hover, .resizer.resizing { background-color: #1677ff; opacity: 0.5; }
+        .topbar-title { color: #fff; font-size: 16px; font-weight: bold; }
+
+        /* การตั้งค่าพิมพ์ (Export PDF) */
+        @media print {
+            * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; print-color-adjust: exact !important; }
+            @page { size: A2 landscape; margin: 0; }
+            body { background: none; padding: 0; min-height: auto; margin: 0; }
+            #pages-container { gap: 0; zoom: 1 !important; transform: none !important; margin: 0 !important; align-items: flex-start; }
+            .a2-page { box-shadow: none; padding: 10mm; margin: 0; width: var(--paper-width); height: var(--paper-height); page-break-after: always; page-break-inside: avoid; overflow: visible; }
+            .a2-page:last-child { page-break-after: auto; }
+            .page-content { overflow: visible !important; }
+            .resizer, .no-print { display: none !important; }
+            table.data-table { border-collapse: collapse !important; border: 1px solid #000 !important; table-layout: fixed !important; width: 100% !important; }
+            th, td { border: 1px solid #000 !important; background-clip: padding-box !important; }
+            table.data-table th { position: static !important; }
+            .editable-cell { box-shadow: none !important; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar no-print">
+        <div class="topbar-left">
+            <div class="topbar-title">PFMEA Editor (A2 Size)</div>
+        </div>
+
+        <div class="topbar-center format-toolbar">
+            <button onmousedown="event.preventDefault(); execCmd('bold')" title="ตัวหนา (Bold)" style="font-weight:bold;">B</button>
+            <button onmousedown="event.preventDefault(); execCmd('italic')" title="ตัวเอียง (Italic)" style="font-style:italic; font-family:serif;">I</button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); execCmd('justifyLeft')" title="จัดชิดซ้าย (Align Left)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+            <button onmousedown="event.preventDefault(); execCmd('justifyCenter')" title="จัดกึ่งกลาง (Align Center)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+            <button onmousedown="event.preventDefault(); execCmd('justifyRight')" title="จัดชิดขวา (Align Right)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); setVerticalAlign('top')" title="ชิดขอบบน (Align Top)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16" /><path d="M12 8v12" /><path d="M8 12l4-4 4 4" /></svg>
+            </button>
+            <button onmousedown="event.preventDefault(); setVerticalAlign('middle')" title="กึ่งกลางแนวตั้ง (Align Middle)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16" /><path d="M12 4v16" /><path d="M8 8l4-4 4 4" /><path d="M8 16l4 4 4-4" /></svg>
+            </button>
+            <button onmousedown="event.preventDefault(); setVerticalAlign('bottom')" title="ชิดขอบล่าง (Align Bottom)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16" /><path d="M12 4v12" /><path d="M8 12l4 4 4-4" /></svg>
+            </button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); applyBullet('disc')" title="Bullet วงกลมทึบ" style="font-size:14px; font-weight:bold;">●</button>
+            <button onmousedown="event.preventDefault(); applyBullet('circle')" title="Bullet วงกลมโปร่ง" style="font-size:14px; font-weight:bold;">○</button>
+            <button onmousedown="event.preventDefault(); applyBullet('dash')" title="Bullet ขีด (-)" style="font-size:14px; font-weight:bold;">-</button>
+
+            <button onmousedown="event.preventDefault(); applyBullet('')" title="นำ Bullet ออก" style="color:#ff4d4f;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <div class="topbar-right">
+            <div class="zoom-control">
+                <label for="zoom-select">Zoom:</label>
+                <select id="zoom-select" onchange="applyZoom(this.value)">
+                    <option value="0.30">30%</option>
+                    <option value="0.40">40%</option>
+                    <option value="0.50" selected>50%</option>
+                    <option value="0.75">75%</option>
+                    <option value="0.90">90%</option>
+                    <option value="1">100%</option>
+                </select>
+            </div>
+            <button class="action-btn btn-eval-all" onclick="evaluateAllRPN()">Evaluate RPN</button>
+            <button class="action-btn btn-add" onclick="addRow()">+ Add Row</button>
+            <button class="action-btn btn-export" onclick="window.print()">Export PDF</button>
+        </div>
+    </div>
+
+    <div id="pages-container">
+        <div class="a2-page" id="page-1">
+            <div class="page-number">Page 1 of 1</div>
+
+            <div class="page-content">
+                <div class="header-title">Process Failure Mode and Effects Analysis (PFMEA)</div>
+
+                <div class="standard-header">
+                    <div class="header-details">
+                        <div class="header-col">
+                            <div class="header-row"><label>PID Number:</label><input type="text"></div>
+                            <div class="header-row"><label>Customer P/N:</label><input type="text"></div>
+                            <div class="header-row"><label>NMB P/N:</label><input type="text"></div>
+                        </div>
+                        <div class="header-col">
+                            <div class="header-row"><label>PFMEA No.:</label><input type="text"></div>
+                            <div class="header-row"><label>Prepare by:</label><input type="text"></div>
+                            <div class="header-row"><label>Check by:</label><input type="text"></div>
+                        </div>
+                        <div class="header-col">
+                            <div class="header-row"><label>REV.:</label><input type="text"></div>
+                            <div class="header-row"><label>Date Initiated:</label><input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"></div>
+                            <div class="header-row"><label>Target Date:</label><input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"></div>
+                        </div>
+                    </div>
+                    <div class="approval-block">
+                        <div class="stamp-box">
+                            <div class="stamp-title">Prepare</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                        <div class="stamp-box">
+                            <div class="stamp-title">Check by</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                        <div class="stamp-box">
+                            <div class="stamp-title">Approve</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <table class="data-table">
+                    <colgroup class="table-colgroup">
+                        <col style="width: 2%;">  <col style="width: 4%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 2%;">  <col style="width: 7%;">  <col style="width: 2%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 2%;">  <col style="width: 3%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 7%;">  <col style="width: 2%;">  <col style="width: 2%;">  <col style="width: 2%;">  <col style="width: 3%;">  <col class="no-print" style="width: 2%;"> </colgroup>
+                    <thead id="main-table-header">
+                        <tr>
+                            <th rowspan="2" data-col="0">No.</th>
+                            <th rowspan="2" data-col="1">Operation</th>
+                            <th rowspan="2" data-col="2">Process Function<br>Description</th>
+                            <th rowspan="2" data-col="3">Requirements</th>
+                            <th rowspan="2" data-col="4">Potential<br>Failure Mode</th>
+                            <th rowspan="2" data-col="5">Potential<br>Effects of Failure</th>
+                            <th rowspan="2" data-col="6">S</th>
+                            <th rowspan="2" data-col="7">Potential<br>Cause(s) of Failure</th>
+                            <th rowspan="2" data-col="8">O</th>
+                            <th rowspan="2" data-col="9">Prevention<br>Controls</th>
+                            <th rowspan="2" data-col="10">Detection<br>Controls</th>
+                            <th rowspan="2" data-col="11">D</th>
+                            <th rowspan="2" data-col="12">RPN</th>
+                            <th rowspan="2" data-col="13">Recommended<br>Action</th>
+                            <th rowspan="2" data-col="14">Responsibility &<br>Target Date</th>
+                            <th colspan="5">Action Results</th>
+                            <th rowspan="2" class="no-print" data-col="20">Del</th>
+                        </tr>
+                        <tr>
+                            <th data-col="15">Actions Taken & Date</th>
+                            <th data-col="16">S</th>
+                            <th data-col="17">O</th>
+                            <th data-col="18">D</th>
+                            <th data-col="19">RPN</th>
+                        </tr>
+                    </thead>
+                    <tbody class="table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rowCount = 0;
+        let pageCount = 1;
+        let isResizing = false;
+
+        // ==========================================
+        // RPN Evaluation Logic (AIAG-VDA Action Priority Matrix)
+        // ==========================================
+        function calculateActionPriority(s, o, d) {
+            s = parseInt(s); o = parseInt(o); d = parseInt(d);
+            if (isNaN(s) || isNaN(o) || isNaN(d)) return "";
+            if (s < 1 || s > 10 || o < 1 || o > 10 || d < 1 || d > 10) return "";
+
+            // Mapping algorithm based on the AIAG-VDA AP Table
+            if (s === 1) return "L";
+            if (s >= 2 && s <= 3) {
+                if (o <= 7) return "L";
+                if (o >= 8) {
+                    if (d <= 4) return "L";
+                    return "M";
+                }
+            }
+            if (s >= 4 && s <= 6) {
+                if (o <= 3) return "L";
+                if (o >= 4 && o <= 5) {
+                    if (d <= 6) return "L";
+                    return "M";
+                }
+                if (o >= 6 && o <= 7) {
+                    if (d === 1) return "L";
+                    return "M";
+                }
+                if (o >= 8) {
+                    if (d <= 4) return "M";
+                    return "H";
+                }
+            }
+            if (s >= 7 && s <= 8) {
+                if (o === 1) return "L";
+                if (o >= 2 && o <= 3) {
+                    if (d <= 4) return "L";
+                    return "M";
+                }
+                if (o >= 4 && o <= 5) {
+                    if (d <= 6) return "M";
+                    return "H";
+                }
+                if (o >= 6 && o <= 7) {
+                    if (d === 1) return "M";
+                    return "H";
+                }
+                if (o >= 8) return "H";
+            }
+            if (s >= 9 && s <= 10) {
+                if (o === 1) return "L";
+                if (o >= 2 && o <= 3) {
+                    if (d <= 4) return "L";
+                    if (d >= 5 && d <= 6) return "M";
+                    return "H";
+                }
+                if (o >= 4 && o <= 5) {
+                    if (d === 1) return "M";
+                    return "H";
+                }
+                if (o >= 6) return "H";
+            }
+            return "";
+        }
+
+        function applyAPStyle(cell, ap) {
+            cell.innerText = ap;
+            if (ap === "H") {
+                cell.style.backgroundColor = "#ff4d4f"; // Red
+                cell.style.color = "#fff";
+            } else if (ap === "M") {
+                cell.style.backgroundColor = "#faad14"; // Yellow
+                cell.style.color = "#000";
+            } else if (ap === "L") {
+                cell.style.backgroundColor = "#52c41a"; // Green
+                cell.style.color = "#fff";
+            } else {
+                cell.style.backgroundColor = "transparent";
+                cell.style.color = "inherit";
+                cell.innerText = ""; // Clear if not H/M/L
+            }
+        }
+
+        function evaluateRowRPN(el) {
+            let tr = el.closest('tr');
+            if (!tr) return;
+
+            // 1. Initial RPN Evaluation
+            let s1 = tr.querySelector('.eval-s1').innerText.trim();
+            let o1 = tr.querySelector('.eval-o1').innerText.trim();
+            let d1 = tr.querySelector('.eval-d1').innerText.trim();
+            let rpn1Cell = tr.querySelector('.eval-rpn1');
+
+            if (s1 && o1 && d1) {
+                let ap1 = calculateActionPriority(s1, o1, d1);
+                applyAPStyle(rpn1Cell, ap1);
+            } else {
+                applyAPStyle(rpn1Cell, "");
+            }
+
+            // 2. Revised RPN Evaluation
+            let s2 = tr.querySelector('.eval-s2').innerText.trim();
+            let o2 = tr.querySelector('.eval-o2').innerText.trim();
+            let d2 = tr.querySelector('.eval-d2').innerText.trim();
+            let rpn2Cell = tr.querySelector('.eval-rpn2');
+
+            if (s2 && o2 && d2) {
+                let ap2 = calculateActionPriority(s2, o2, d2);
+                applyAPStyle(rpn2Cell, ap2);
+            } else {
+                applyAPStyle(rpn2Cell, "");
+            }
+        }
+
+        function evaluateAllRPN() {
+            const rows = document.querySelectorAll('.table-body tr');
+            rows.forEach(row => {
+                // Just trigger the evaluation by passing any cell from that row
+                let anyCell = row.querySelector('.editable-cell');
+                if(anyCell) evaluateRowRPN(anyCell);
+            });
+        }
+
+        // ==========================================
+        // Text Formatting Functions (Rich Text)
+        // ==========================================
+        function execCmd(command, value = null) {
+            document.execCommand(command, false, value);
+        }
+
+        function setVerticalAlign(align) {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                let node = sel.anchorNode;
+                if (node && node.nodeType === 3) node = node.parentNode;
+                if (node) {
+                    const td = node.closest('td');
+                    if (td) td.style.verticalAlign = align;
+                }
+            }
+        }
+
+        function applyBullet(style) {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+            let node = sel.anchorNode;
+            if (node && node.nodeType === 3) node = node.parentNode;
+            let cell = node ? node.closest('.editable-cell') : null;
+            if (!cell) return;
+            let ul = node.closest('ul');
+
+            if (style === "") {
+                if (ul) document.execCommand('insertUnorderedList');
+                return;
+            }
+
+            if (!ul) {
+                document.execCommand('insertUnorderedList');
+                node = window.getSelection().anchorNode;
+                if (node && node.nodeType === 3) node = node.parentNode;
+                if (node) ul = node.closest('ul');
+            }
+
+            if (ul) {
+                if (style === 'dash') {
+                    ul.style.listStyleType = "'- '";
+                } else {
+                    ul.style.listStyleType = style;
+                }
+                ul.style.paddingLeft = '15px';
+                ul.style.margin = '4px 0';
+                ul.style.textAlign = 'left';
+            }
+        }
+
+        // ==========================================
+        // UI Helpers
+        // ==========================================
+        function applyZoom(scale) {
+            const container = document.getElementById('pages-container');
+            container.style.zoom = scale;
+            if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
+                container.style.transform = `scale(${scale})`;
+                container.style.marginBottom = scale > 1 ? `${(scale - 1) * 100}%` : '0';
+            }
+        }
+
+        function updatePageNumbers() {
+            const pages = document.querySelectorAll('.a2-page');
+            pages.forEach((page, index) => {
+                const pageNumEl = page.querySelector('.page-number');
+                if (pageNumEl) pageNumEl.innerText = `Page ${index + 1} of ${pages.length}`;
+            });
+        }
+
+        function updateRowNumbers() {
+            const rows = document.querySelectorAll('.table-body tr');
+            rows.forEach((row, index) => {
+                const numCell = row.querySelector('.row-num');
+                if (numCell) numCell.innerText = index + 1;
+            });
+        }
+
+        // ==========================================
+        // Pagination Reflow System (Push & Pull)
+        // ==========================================
+        function getNextPageTbody(currentPage) {
+            let nextPage = currentPage.nextElementSibling;
+            if (!nextPage || !nextPage.classList.contains('a2-page')) {
+                nextPage = createNewPageDOM();
+            }
+            return nextPage.querySelector('.table-body');
+        }
+
+        function reflowPagination() {
+            const activeEl = document.activeElement;
+            let pages = document.querySelectorAll('.a2-page');
+
+            for (let i = 0; i < pages.length; i++) {
+                let page = pages[i];
+                let content = page.querySelector('.page-content');
+                let tbody = page.querySelector('.table-body');
+
+                while (content.scrollHeight > content.clientHeight + 2 && tbody.children.length > 1) {
+                    let lastRow = tbody.lastElementChild;
+                    let nextPageTbody = getNextPageTbody(page);
+                    nextPageTbody.insertBefore(lastRow, nextPageTbody.firstElementChild);
+                }
+
+                let nextPage = page.nextElementSibling;
+                if (nextPage && nextPage.classList.contains('a2-page')) {
+                    let nextTbody = nextPage.querySelector('.table-body');
+                    while (content.scrollHeight <= content.clientHeight && nextTbody.children.length > 0) {
+                        let firstRowNext = nextTbody.firstElementChild;
+                        tbody.appendChild(firstRowNext);
+                        if (content.scrollHeight > content.clientHeight + 2) {
+                            nextTbody.insertBefore(firstRowNext, nextTbody.firstElementChild);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            pages = document.querySelectorAll('.a2-page');
+            pages.forEach(page => {
+                if (page.id !== 'page-1') {
+                    let tbody = page.querySelector('.table-body');
+                    if (!tbody || tbody.children.length === 0) {
+                        page.remove();
+                    }
+                }
+            });
+
+            updatePageNumbers();
+            updateRowNumbers();
+
+            if (activeEl && activeEl.classList.contains('editable-cell') && document.body.contains(activeEl)) {
+                activeEl.focus();
+            }
+        }
+
+        // ==========================================
+        // Table Rows Management (21 Cols)
+        // ==========================================
+        function getNewRowHTML() {
+            // Note the added eval-* classes and evaluateRowRPN(this) on input
+            return `
+                <td class="row-num"></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-s1" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-o1" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-d1" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td style="-webkit-print-color-adjust: exact;"><div class="editable-cell center-text rpn-cell eval-rpn1"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-s2" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-o2" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td><div contenteditable="true" class="editable-cell center-text eval-d2" oninput="reflowPagination(); evaluateRowRPN(this)"></div></td>
+                <td style="-webkit-print-color-adjust: exact;"><div class="editable-cell center-text rpn-cell eval-rpn2"></div></td>
+                <td class="no-print"><button class="btn-remove" onclick="removeRow(this)">X</button></td>
+            `;
+        }
+
+        function createNewPageDOM() {
+            pageCount++;
+            const container = document.getElementById('pages-container');
+            const newPage = document.createElement('div');
+            newPage.className = 'a2-page';
+            newPage.id = `page-${pageCount}`;
+
+            const headerHTML = document.getElementById('main-table-header').innerHTML;
+            const colgroupHTML = document.querySelector('.table-colgroup').outerHTML;
+
+            newPage.innerHTML = `
+                <div class="page-number"></div>
+                <div class="page-content">
+                    <table class="data-table" style="margin-top: 10px;">
+                        ${colgroupHTML}
+                        <thead>${headerHTML}</thead>
+                        <tbody class="table-body"></tbody>
+                    </table>
+                </div>
+            `;
+
+            container.appendChild(newPage);
+            updatePageNumbers();
+            initResizers(newPage);
+
+            return newPage;
+        }
+
+        function addRow() {
+            rowCount++;
+            const pages = document.querySelectorAll('.a2-page');
+            const lastPage = pages[pages.length - 1];
+            let tbody = lastPage.querySelector('.table-body');
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = getNewRowHTML();
+            tbody.appendChild(tr);
+
+            reflowPagination();
+        }
+
+        function removeRow(btn) {
+            const tr = btn.closest('tr');
+            tr.remove();
+            reflowPagination();
+        }
+
+        // ==========================================
+        // Adjacent Column Resizer
+        // ==========================================
+        function initResizers(container = document) {
+            const headers = container.querySelectorAll('th[data-col]');
+
+            headers.forEach(th => {
+                if (th.classList.contains('no-print')) return;
+                if (th.querySelector('.resizer')) return;
+
+                const resizer = document.createElement('div');
+                resizer.classList.add('resizer');
+                th.appendChild(resizer);
+
+                let startX, tableWidthPx, colIndex, nextColIndex;
+                let w1, w2;
+
+                resizer.addEventListener('mousedown', function (e) {
+                    isResizing = true;
+                    startX = e.clientX;
+                    colIndex = parseInt(th.getAttribute('data-col'));
+                    nextColIndex = colIndex + 1;
+
+                    const table = th.closest('table');
+                    tableWidthPx = table.offsetWidth;
+
+                    const colgroups = document.querySelectorAll('.table-colgroup');
+                    const targetCol = colgroups[0].children[colIndex];
+                    const nextCol = colgroups[0].children[nextColIndex];
+
+                    w1 = parseFloat(targetCol.style.width) || 0;
+                    w2 = parseFloat(nextCol.style.width) || 0;
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                    resizer.classList.add('resizing');
+                });
+
+                function onMouseMove(e) {
+                    if (!isResizing) return;
+
+                    const deltaX = e.clientX - startX;
+                    const deltaPct = (deltaX / tableWidthPx) * 100;
+
+                    if (w1 + deltaPct > 2 && w2 - deltaPct > 2) {
+                        const allColgroups = document.querySelectorAll('.table-colgroup');
+                        allColgroups.forEach(cg => {
+                            if (cg.children[colIndex] && cg.children[nextColIndex]) {
+                                cg.children[colIndex].style.width = (w1 + deltaPct) + '%';
+                                cg.children[nextColIndex].style.width = (w2 - deltaPct) + '%';
+                            }
+                        });
+                        reflowPagination();
+                    }
+                }
+
+                function onMouseUp() {
+                    isResizing = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    document.querySelectorAll('.resizer').forEach(r => r.classList.remove('resizing'));
+                }
+            });
+        }
+
+        window.onload = () => {
+            initResizers(document);
+            addRow(); 
+            const defaultZoom = document.getElementById('zoom-select').value;
+            applyZoom(defaultZoom);
+            updatePageNumbers();
+        };
+
+        window.onbeforeprint = function () {
+            document.querySelectorAll('.editable-cell, input').forEach(el => el.blur());
+        };
+    </script>
+</body>
+
+</html>

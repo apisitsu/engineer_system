@@ -182,7 +182,7 @@ const ToolingInventoryPage = () => {
             <MenuTemplate type={"MTC"} defaultSelectedKeys={"inventory"} defaultOpenKeys={"sub1"} />
             <Layout style={{ backgroundColor: '#f5f5f5' }}>
                 <ScrollbarStyle primary={colors.primary} />
-                <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto' }}>
+                <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                         <Title level={4} style={{ margin: 0, color: colors.primary }}>
                             <DatabaseOutlined /> Tooling Inventory Management

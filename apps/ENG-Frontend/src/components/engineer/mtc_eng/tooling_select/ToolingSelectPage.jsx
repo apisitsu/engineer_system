@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Space, Spin, Alert,
   Collapse, Table, Tag, Row, Col, Layout, Badge,
-  Select, Form, Drawer, message, Popconfirm,
-  Modal, Radio, InputNumber, AutoComplete
+  Select, Tooltip
 } from 'antd';
 import {
   SearchOutlined,
@@ -15,27 +14,23 @@ import {
   BgColorsOutlined,
   AuditOutlined,
   DatabaseOutlined,
-  SaveOutlined,
-  CloseOutlined,
-  EditOutlined,
-  PlusOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import ScrollbarStyle from '../../../common/scrollbar';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
-// Generic Table Component
 const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
 
 const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) => {
   if (!dataSource || dataSource.length === 0) return null;
-
-  // กรองเฉพาะ column ที่มีข้อมูลอย่างน้อย 1 row หรือมีการตั้ง Target ไว้
   const visibleIndices = columns
     .map((colKey, i) => ({ colKey, i }))
     .filter(({ colKey, i }) => dataSource.some(row => !isEmpty(row[colKey])) || !isEmpty(targets[i]));
@@ -56,36 +51,20 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
         return rank <= 3 ? <Badge count={rank} style={{ backgroundColor: color }} /> : rank;
       }
     },
-    {
-      title: 'No',
-      dataIndex: 'no',
-      key: 'no',
-      width: 120,
-      render: (text) => <Text strong>{text}</Text>
-    },
+    { title: 'No', dataIndex: 'no', key: 'no', width: 120, render: (text) => <Text strong>{text}</Text> },
     ...visibleIndices.map(({ colKey, i }) => ({
       title: (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '12px', fontWeight: '600' }}>{headers[i]}</div>
           {targets[i] !== undefined && targets[i] !== null && targets[i] !== '' && targets[i] !== '-' && (
             <div style={{
-              fontSize: '10px',
-              marginTop: '4px',
-              padding: '2px 4px',
-              backgroundColor: '#e6f7ff',
-              color: '#1890ff',
-              borderRadius: '4px',
-              border: '1px solid #91d5ff'
-            }}>
-              Req: {targets[i]}
-            </div>
+              fontSize: '10px', marginTop: '4px', padding: '2px 4px',
+              backgroundColor: '#e6f7ff', color: '#1890ff', borderRadius: '4px', border: '1px solid #91d5ff'
+            }}> Req: {targets[i]} </div>
           )}
         </div>
       ),
-      dataIndex: colKey,
-      key: colKey,
-      align: 'center',
-      render: (text) => text || '-'
+      dataIndex: colKey, key: colKey, align: 'center', render: (text) => text || '-'
     }))
   ];
 
@@ -97,224 +76,18 @@ const ToolingTable = ({ title, dataSource, columns, headers, targets, icon }) =>
       style={{ marginBottom: 16, borderRadius: '8px', overflow: 'hidden' }}
       styles={{ body: { padding: 0 } }}
     >
-      <Table
-        dataSource={dataSource.map((item, idx) => ({ ...item, key: idx }))}
-        columns={tableColumns}
-        pagination={false}
-        size="small"
-        bordered
-      />
+      <Table dataSource={dataSource.map((item, idx) => ({ ...item, key: idx }))} columns={tableColumns} pagination={false} size="small" bordered />
     </Card>
   );
 };
 
 const ToolingSelectPage = () => {
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const [cnInput, setCnInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-
-  // ── Tool List state ──────────────────────────────────────────────────────
-  const [isToolListOpen, setIsToolListOpen] = useState(false);
-  const [invKey, setInvKey] = useState(null);
-  const [invData, setInvData] = useState([]);
-  const [invLoading, setInvLoading] = useState(false);
-  const [invEditingKey, setInvEditingKey] = useState('');
-  const [invSearch, setInvSearch] = useState('');
-  const [invToolingName, setInvToolingName] = useState(null);
-  const [invForm] = Form.useForm();
-
-  // ── Add Tool state ───────────────────────────────────────────────────────
-  const [isAddToolOpen, setIsAddToolOpen] = useState(false);
-  const [addMode, setAddMode] = useState('existing');
-  const [tablesList, setTablesList] = useState([]);
-  const [tablesLoading, setTablesLoading] = useState(false);
-  const [addSelectedTable, setAddSelectedTable] = useState(null);
-  const [addDimCols, setAddDimCols] = useState([]);
-  const [addToolingNameOptions, setAddToolingNameOptions] = useState([]);
-  const [addToolForm] = Form.useForm();
-  const [newMachineForm] = Form.useForm();
-  const [addToolLoading, setAddToolLoading] = useState(false);
-  const [createTableLoading, setCreateTableLoading] = useState(false);
-
-  const toolingTables = [
-    { key: 'tsg300znc', label: 'TSG-300ZNC', table: 'tooling_tsg300', mf: r => !String(r.machine || '').toUpperCase().includes('W') },
-    { key: 'tsg300w', label: 'TSG300W', table: 'tooling_tsg300', mf: r => String(r.machine || '').toUpperCase().includes('W') },
-    { key: 'ksb22g', label: 'KS-B22G', table: 'tooling_ksb22g' },
-    { key: 'ksb80', label: 'KS-B80', table: 'tooling_ksb80' },
-    { key: 'ks03a', label: 'KS-03A', table: 'tooling_ks03a' },
-    { key: 'ksb22rd', label: 'KS-B22RD', table: 'tooling_ks03a' },
-    { key: 'ks400b', label: 'KS400B', table: 'tooling_ks400b' },
-    { key: 'ks500rd', label: 'KS500RD', table: 'tooling_ks500rd' },
-    { key: 'ks400b5', label: 'KS400B5', table: 'tooling_ks400b5' },
-    { key: 'ks400b6', label: 'KS400B6', table: 'tooling_ks400b6' },
-  ];
-  const invTableConfig = toolingTables.find(t => t.key === invKey);
-
-  const fetchToolList = async (key) => {
-    const cfg = toolingTables.find(t => t.key === key);
-    if (!cfg) {
-      setInvData([]);
-      setInvToolingName(null);
-      return;
-    }
-    setInvLoading(true);
-    setInvToolingName(null);
-    try {
-      const res = await axios.get(`${server.MTC_TOOLING_INVENTORY}/${cfg.table}`);
-      setInvData(res.data.data || []);
-    } catch {
-      message.error('Failed to fetch inventory data');
-    } finally {
-      setInvLoading(false);
-    }
-  };
-
-  const invIsEditing = (record) => record.id === invEditingKey;
-
-  const invEdit = (record) => { invForm.setFieldsValue({ ...record }); setInvEditingKey(record.id); };
-  const invCancel = () => setInvEditingKey('');
-
-  const invSave = async (id) => {
-    try {
-      if (!invTableConfig) return;
-      const row = await invForm.validateFields();
-      await axios.put(`${server.MTC_TOOLING_INVENTORY}/${invTableConfig.table}/${id}`, row);
-      message.success('Updated');
-      setInvEditingKey('');
-      fetchToolList(invKey);
-    } catch { }
-  };
-
-  const invFiltered = !invToolingName ? [] : invData.filter(item => {
-    if (invTableConfig?.mf && !invTableConfig.mf(item)) return false;
-    if (item.tooling_name !== invToolingName) return false;
-    if (invSearch && !Object.values(item).some(val => String(val).toLowerCase().includes(invSearch.toLowerCase()))) return false;
-    return true;
-  });
-
-  const getInvColumns = () => {
-    if (invData.length === 0) return [];
-    const dynamicCols = Object.keys(invData[0])
-      .filter(key => !['id', 'created_at', 'updated_at', 'tooling_name', 'machine'].includes(key))
-      .filter(key => {
-        if (!key.startsWith('dim_')) return true;
-        return invFiltered.some(row => !isEmpty(row[key]));
-      })
-      .map(key => ({
-        title: key.startsWith('dim_') ? key.slice(4).toUpperCase() : key.replace(/_/g, ' ').toUpperCase(),
-        dataIndex: key,
-        key,
-        editable: true,
-        render: (text) => {
-          if (key === 'tooling_no') return <Typography.Text strong>{text}</Typography.Text>;
-          if (key === 'machine') return <Tag color="blue">{text}</Tag>;
-          return text;
-        }
-      }));
-    return [...dynamicCols, {
-      title: 'Action', dataIndex: 'operation', fixed: 'right', width: 100,
-      render: (_, record) => invIsEditing(record) ? (
-        <Space>
-          <Typography.Link onClick={() => invSave(record.id)}><SaveOutlined /> Save</Typography.Link>
-          <Popconfirm title="Cancel?" onConfirm={invCancel}><a style={{ color: '#ff4d4f' }}><CloseOutlined /></a></Popconfirm>
-        </Space>
-      ) : (
-        <Button type="text" size="small" disabled={invEditingKey !== ''} onClick={() => invEdit(record)} icon={<EditOutlined style={{ color: colors.primary }} />} />
-      )
-    }];
-  };
-
-  const invMergedColumns = getInvColumns().map(col => {
-    if (!col.editable) return col;
-    return {
-      ...col,
-      onCell: (record) => ({
-        record, dataIndex: col.dataIndex, title: col.title, editing: invIsEditing(record),
-      }),
-    };
-  });
-
-  const InvEditableCell = ({ editing, dataIndex, title, record, children, ...restProps }) => (
-    <td {...restProps}>
-      {editing ? (
-        <Form.Item name={dataIndex} style={{ margin: 0 }} rules={[{ required: true, message: `${title}?` }]}>
-          <Input size="small" />
-        </Form.Item>
-      ) : children}
-    </td>
-  );
-
-  // invFiltered is declared above
-
-  const invToolingNames = [...new Set(
-    invData
-      .filter(r => !invTableConfig?.mf || invTableConfig.mf(r))
-      .map(r => r.tooling_name)
-      .filter(Boolean)
-  )].sort();
-
-  // ── Add Tool helpers ─────────────────────────────────────────────────────
-  const fetchTables = async () => {
-    setTablesLoading(true);
-    try {
-      const res = await axios.get(server.MTC_TOOLING_TABLES);
-      const tables = res.data.tables || [];
-      setTablesList(tables);
-      return tables;
-    } catch { message.error('Failed to fetch tables'); return []; }
-    finally { setTablesLoading(false); }
-  };
-
-  const onAddTableSelect = async (tableName) => {
-    setAddSelectedTable(tableName);
-    const tbl = tablesList.find(t => t.table_name === tableName);
-    setAddDimCols(Array.isArray(tbl?.data_cols) ? tbl.data_cols : []);
-    addToolForm.setFieldsValue({ tooling_name: undefined, tooling_no: undefined });
-    try {
-      const res = await axios.get(`${server.MTC_TOOLING_NAMES}/${tableName}`);
-      setAddToolingNameOptions(res.data.names || []);
-    } catch { setAddToolingNameOptions([]); }
-  };
-
-  const handleCreateTable = async () => {
-    try {
-      const vals = await newMachineForm.validateFields(['machineName', 'dimCount']);
-      setCreateTableLoading(true);
-      const res = await axios.post(server.MTC_TOOLING_CREATE_TABLE, vals);
-      message.success(`Table "${res.data.tableName}" created! (${res.data.dimCount} dims)`);
-      await fetchTables();
-      newMachineForm.resetFields();
-      setAddMode('existing');
-    } catch (err) {
-      if (err?.response) message.error(err.response.data.error || 'Failed to create table');
-    } finally { setCreateTableLoading(false); }
-  };
-
-  const handleAddToolSubmit = async () => {
-    if (!addSelectedTable) { message.warning('Select a machine table first'); return; }
-    try {
-      const vals = await addToolForm.validateFields();
-      setAddToolLoading(true);
-      await axios.post(`${server.MTC_TOOLING_INVENTORY}/${addSelectedTable}`, vals);
-      message.success('Tool record added!');
-      addToolForm.resetFields(['tooling_no', ...addDimCols]);
-      if (isToolListOpen && invTableConfig.table === addSelectedTable) fetchToolList(invKey);
-    } catch (err) {
-      if (err?.response) message.error(err.response.data.error || 'Failed to add tool');
-    } finally { setAddToolLoading(false); }
-  };
-
-  const openAddTool = async () => {
-    setAddMode('existing');
-    setAddSelectedTable(null);
-    setAddDimCols([]);
-    addToolForm.resetFields();
-    newMachineForm.resetFields();
-    setIsAddToolOpen(true);
-    await fetchTables();
-  };
 
   const colors = theme?.colors || {};
   const shadows = theme?.shadows || {};
@@ -329,7 +102,7 @@ const ToolingSelectPage = () => {
       const res = await axios.post(server.MTC_TOOLING_SELECT_SEARCH, { cnNumber: cn });
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'ไม่พบ C/N หรือเกิดข้อผิดพลาดในการดึงข้อมูล');
+      setError(err.response?.data?.error || 'Can not find C/N');
     } finally {
       setLoading(false);
     }
@@ -340,11 +113,9 @@ const ToolingSelectPage = () => {
     const c = res.calc;
     const mData = [];
 
-    // TSG-300ZNC & TSG300W — แสดงทั้งคู่เสมอถ้ามีข้อมูล TSG
     const zncChutes = res.chutes?.filter(item => !String(item.machine).toUpperCase().includes('W')) || [];
     const wChutes = res.chutes?.filter(item => String(item.machine).toUpperCase().includes('W')) || [];
-    const hasTsg = zncChutes.length || res.carriersZNC?.length || wChutes.length || res.carriersW?.length;
-    if (hasTsg) {
+    if (zncChutes.length || res.carriersZNC?.length || wChutes.length || res.carriersW?.length) {
       const zncFound = (zncChutes.length ? 1 : 0) + (res.carriersZNC?.length ? 1 : 0);
       mData.push({
         name: 'TSG-300ZNC', group: 'FACE', found: zncFound, required: 2, tools: [
@@ -361,7 +132,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B
     const ks = res.ks400b?.calc;
     if (ks && !ks.error) {
       const found = (res.ks400b.workDrivers?.length ? 1 : 0) + (res.ks400b.loadingChutes?.length ? 1 : 0) + (res.ks400b.supportBlocks?.length ? 1 : 0) + (res.ks400b.plugsA?.length ? 1 : 0) + (res.ks400b.plugsB?.length ? 1 : 0);
@@ -376,7 +146,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B5
     const b5 = res.ks400b5?.calc;
     if (b5 && !b5.error) {
       const found = Object.keys(res.ks400b5).filter(k => k !== 'calc' && res.ks400b5[k]?.length).length;
@@ -396,7 +165,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS400B6
     const b6 = res.ks400b6?.calc;
     if (b6 && !b6.error) {
       const found = Object.keys(res.ks400b6).filter(k => k !== 'calc' && res.ks400b6[k]?.length).length;
@@ -415,7 +183,6 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS500RD
     const ks5 = res.ks500rd?.calc;
     if (ks5 && !ks5.error) {
       const found = (res.ks500rd.workDrivers?.length ? 1 : 0) + (res.ks500rd.loadingPintles?.length ? 1 : 0) + (res.ks500rd.frontShoes?.length ? 1 : 0);
@@ -428,11 +195,10 @@ const ToolingSelectPage = () => {
       });
     }
 
-    // KS-03A & KS-B22RD — แสดงแค่เครื่องเดียวตาม idAft (>= 12 = KS-B22RD, < 12 = KS-03A)
     const ks3 = res.ks03a?.calc;
     if (ks3 && !ks3.error) {
       const found = Object.keys(res.ks03a).filter(k => k !== 'calc' && res.ks03a[k]?.length).length;
-      const machineName = (res.part?.idAft ?? 0) >= 12.0 ? 'KS-B22RD' : 'KS-03A';
+      const machineName = res.ks03a?.machineName || 'KS-03A';
       const ks3Tools = [
         { title: 'FRONT PLATE', content: <ToolingTable title="FRONT PLATE" dataSource={res.ks03a.frontPlates} columns={['val1', 'val2', 'val3', 'val5']} headers={['A', 'B', 'C', 'Type']} targets={[ks3.fp?.A, ks3.fp?.B, ks3.fp?.C, ks3.fp?.Type]} icon={<ToolOutlined />} /> },
         { title: 'CHUTE COVER', content: <ToolingTable title="CHUTE COVER" dataSource={res.ks03a.chuteCovers} columns={['val1', 'val2', 'val3', 'val5']} headers={['A', 'B', 'C', 'Type']} targets={[ks3.chute?.A, ks3.chute?.B, ks3.chute?.C, ks3.chute?.Type]} icon={<SwapOutlined />} /> },
@@ -447,7 +213,6 @@ const ToolingSelectPage = () => {
       mData.push({ name: machineName, group: 'ID', found, required: 9, tools: ks3Tools });
     }
 
-    // KS-B22G / KS-B80
     if (res.jaws?.length || res.bps?.length) {
       const found = (res.jaws?.length ? 1 : 0) + (res.bps?.length ? 1 : 0);
       mData.push({
@@ -457,7 +222,6 @@ const ToolingSelectPage = () => {
         ]
       });
     }
-
     return mData;
   };
 
@@ -468,307 +232,83 @@ const ToolingSelectPage = () => {
       <MenuTemplate type={"MTC"} defaultSelectedKeys={"4"} defaultOpenKeys={"sub1"} />
       <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
         <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto' }}>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Title level={4} style={{ margin: 0, color: colors.primary }}>
-              Tooling Selection System
-            </Title>
-            <Space>
-              <Button
-                icon={<DatabaseOutlined />}
-                onClick={() => { setIsToolListOpen(true); fetchToolList(invKey); }}
-              >
-                Tool List
-              </Button>
-            </Space>
-          </div>
-
-          {/* Search Section */}
-          <Card size="small" style={{ marginBottom: 16, borderRadius: '8px', boxShadow: shadows.sm }}>
-            <Space.Compact style={{ width: '100%', maxWidth: 500 }}>
-              <Input
-                placeholder="C/N Number"
-                value={cnInput}
-                onChange={e => setCnInput(e.target.value)}
-                onPressEnter={handleSearch}
-                prefix={<SearchOutlined />}
-                allowClear
-              />
-              <Button
-                type="primary"
-                onClick={handleSearch}
-                loading={loading}
-                style={{ background: colors.primary, borderColor: colors.primary }}
-                disabled={!cnInput.trim()}
-              >
-                Search
-              </Button>
-            </Space.Compact>
-          </Card>
-
-          {error && (
-            <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />
-          )}
-
-          <Spin spinning={loading} tip="Searching...">
-            {result ? (
-              <>
-                <Card size="small" style={{ marginBottom: 16, borderLeft: `4px solid ${colors.primary}`, borderRadius: '8px', boxShadow: shadows.sm }}>
-                  <Row gutter={[24, 16]}>
-                    <Col span={24}>
-                      <Title level={5} style={{ margin: 0 }}>
-                        C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
-                        <Tag color="green">{(result.part.process || '').replace('→', '-').replace('—', '-')}</Tag>
-                        <Tag color="purple">{result.part.type}</Tag>
-                        <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
-                      </Title>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">OD (Outside Diameter)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.odBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.odAft}</Text>
-                      </Space>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">ID (Inside Diameter)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.idBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.idAft}</Text>
-                      </Space>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <div style={{ marginBottom: 8 }}><Text type="secondary">W (Thickness)</Text></div>
-                      <Space>
-                        <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.wBf}</Text>
-                        <SwapOutlined style={{ color: colors.primary }} />
-                        <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.wAft}</Text>
-                      </Space>
-                    </Col>
-                    {(result.part.sd > 0 || result.part.sdAft > 0) && (
-                      <Col xs={24} md={8}>
-                        <div style={{ marginBottom: 8 }}><Text type="secondary">SD (Ball Diameter)</Text></div>
-                        <Space>
-                          <Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.sd || '-'}</Text>
-                          <SwapOutlined style={{ color: colors.primary }} />
-                          <Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.sdAft || '-'}</Text>
-                        </Space>
-                      </Col>
-                    )}
-                  </Row>
-                </Card>
-
-                <Collapse
-                  items={mData.map(m => ({
-                    key: m.name,
-                    label: (
-                      <Space>
-                        <Text strong>{m.name}</Text>
-                        <Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>
-                        {m.found < m.required && (
-                          <Tag color="orange">{m.found}/{m.required} found</Tag>
-                        )}
-                      </Space>
-                    ),
-                    children: (
-                      <div>
-                        {m.tools.map(t => (
-                          <div key={t.title}>{t.content}</div>
-                        ))}
-                      </div>
-                    )
-                  }))}
-                  style={{ marginBottom: 16 }}
-                />
-              </>
-            ) : (
-              !loading && (
-                <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }}>
-                  <ToolOutlined style={{ fontSize: 64, marginBottom: 16, display: 'block', margin: '0 auto', color: colors.primary }} />
-                  <Title level={5} type="secondary">Tooling Selection System</Title>
-                  <Text type="secondary">C/N Number</Text>
+        <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '15px' }}>
+          <div style={{ padding: '24px', background: colors.background }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <AssessmentRoundedIcon sx={{ color: colors.primary, fontSize: 60 }} />
+                <div style={{ padding: '16px' }}>
+                  <Title level={2} style={{ marginBottom: 0 }}>Tooling Selection System</Title>
+                  <Text type="secondary">Intelligent tooling calculation and selection</Text>
                 </div>
-              )
-            )}
-          </Spin>
+              </div>
+              <Space>
+                <Button icon={<DatabaseOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_SPEC)}>Spec Part Management</Button>
+                <Button icon={<DatabaseOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_MANAGEMENT)}>Tooling Management</Button>
+              </Space>
+            </div>
+
+            <Card style={{ marginTop: 16, marginBottom: 16 }}>
+              <Row gutter={[16, 16]} align="middle">
+                <Col xs={24} md={8}>
+                  <Space.Compact style={{ width: 300 }}>
+                    <Input placeholder="C/N Number" value={cnInput} onChange={e => setCnInput(e.target.value)} onPressEnter={handleSearch} prefix={<SearchOutlined />} allowClear />
+                    <Button type="primary" onClick={handleSearch} loading={loading} style={{ background: colors.primary, borderColor: colors.primary }} disabled={!cnInput.trim()}>Search</Button>
+                  </Space.Compact>
+                </Col>
+              </Row>
+            </Card>
+
+            {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
+
+            <Spin spinning={loading} tip="Searching...">
+              {result ? (
+                <>
+                  <Card size="small" style={{ marginBottom: 16, borderLeft: `4px solid ${colors.primary}`, borderRadius: '8px', boxShadow: shadows.sm }}>
+                    <Row gutter={[24, 16]}>
+                      <Col span={24}>
+                        <Title level={5} style={{ margin: 0 }}>
+                          C/N: <Tag color="blue" style={{ fontSize: '16px', padding: '4px 12px' }}>{result.cn}</Tag>
+                          <Tag color="green">{(result.part.process || '').replace('→', '->')}</Tag>
+                          <Tag color="purple">{result.part.type}</Tag>
+                          <Tag color={result.part.yBall === 'Y' ? 'gold' : 'default'}>Y-Ball: {result.part.yBall}</Tag>
+                        </Title>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">OD (Outside Diameter)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.odBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.odAft}</Text></Space>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">ID (Inside Diameter)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.idBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.idAft}</Text></Space>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <div style={{ marginBottom: 8 }}><Text type="secondary">W (Thickness)</Text></div>
+                        <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.wBf}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.wAft}</Text></Space>
+                      </Col>
+                      {(result.part.sd > 0 || result.part.sdAft > 0) && (
+                        <Col xs={24} md={8}>
+                          <div style={{ marginBottom: 8 }}><Text type="secondary">SD (Ball Diameter)</Text></div>
+                          <Space><Badge count="Bf" style={{ backgroundColor: '#8c8c8c' }} /><Text strong>{result.part.sd || '-'}</Text><SwapOutlined style={{ color: colors.primary }} /><Badge count="Aft" style={{ backgroundColor: colors.primary }} /><Text strong style={{ color: colors.primary, fontSize: '16px' }}>{result.part.sdAft || '-'}</Text></Space>
+                        </Col>
+                      )}
+                    </Row>
+                  </Card>
+                  <Collapse items={mData.map(m => ({
+                    key: m.name,
+                    label: (<Space><Text strong>{m.name}</Text><Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>{m.found < m.required && (<Tag color="orange">{m.found}/{m.required} found</Tag>)}</Space>),
+                    children: (<div>{m.tools.map(t => (<div key={t.title}>{t.content}</div>))}</div>)
+                  }))} style={{ marginBottom: 16 }} />
+                </>
+              ) : (!loading && (
+                <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }}>
+
+                </div>
+              ))}
+            </Spin>
+          </div>
         </Content>
       </Layout>
-      <Drawer
-        title={
-          <Space>
-            <DatabaseOutlined />
-            <span>Tool List</span>
-          </Space>
-        }
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAddTool}>
-            Add Tool
-          </Button>
-        }
-        placement="right"
-        width="85%"
-        open={isToolListOpen}
-        onClose={() => { setIsToolListOpen(false); setInvEditingKey(''); }}
-        styles={{ body: { padding: '16px' } }}
-      >
-        <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <Space wrap>
-            <Select
-              value={invKey}
-              style={{ width: 160 }}
-              onChange={(val) => { setInvKey(val); fetchToolList(val); setInvEditingKey(''); setInvToolingName(null); }}
-              placeholder="Machine"
-              allowClear
-            >
-              {toolingTables.map(t => <Select.Option key={t.key} value={t.key}>{t.label}</Select.Option>)}
-            </Select>
-            <Select
-              placeholder="Tool Name (All)"
-              value={invToolingName}
-              style={{ width: 180 }}
-              allowClear
-              onChange={v => { setInvToolingName(v || null); setInvEditingKey(''); }}
-            >
-              {invToolingNames.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
-            </Select>
-            <Button onClick={() => fetchToolList(invKey)}>Reload</Button>
-          </Space>
-          <Input
-            placeholder="Search..."
-            prefix={<SearchOutlined />}
-            value={invSearch}
-            onChange={e => setInvSearch(e.target.value)}
-            style={{ width: 200 }}
-            allowClear
-          />
-        </Space>
-        <Form form={invForm}>
-          <Table
-            components={{ body: { cell: InvEditableCell } }}
-            bordered
-            size="small"
-            dataSource={invFiltered.map((r, i) => ({ ...r, key: r.id ?? i }))}
-            columns={invMergedColumns}
-            loading={invLoading}
-            pagination={{ pageSize: 15, onChange: invCancel }}
-            scroll={{ x: 'max-content' }}
-            rowClassName="editable-row"
-          />
-        </Form>
-      </Drawer>
-
-      {/* ── Add Tool Modal ─────────────────────────────────────────────── */}
-      <Modal
-        title={<Space><PlusOutlined /><span>Add Tool Record</span></Space>}
-        open={isAddToolOpen}
-        onCancel={() => setIsAddToolOpen(false)}
-        footer={null}
-        width={560}
-        destroyOnHidden
-      >
-        <Radio.Group
-          value={addMode}
-          onChange={e => setAddMode(e.target.value)}
-          style={{ marginBottom: 20 }}
-          buttonStyle="solid"
-        >
-          <Radio.Button value="existing">Existing Machine</Radio.Button>
-          <Radio.Button value="new">New Machine</Radio.Button>
-        </Radio.Group>
-
-        {addMode === 'new' && (
-          <Form form={newMachineForm} layout="vertical">
-            <Form.Item
-              label="Machine Name"
-              name="machineName"
-              rules={[{ required: true, message: 'Enter machine name' }]}
-              extra="Will become table name: tooling_<machine_name>"
-            >
-              <Input placeholder="e.g. KSX100" />
-            </Form.Item>
-            <Form.Item label="Number of Dimensions" name="dimCount" initialValue={6}>
-              <InputNumber min={1} max={26} style={{ width: 120 }} />
-            </Form.Item>
-            <Button
-              type="primary"
-              loading={createTableLoading}
-              onClick={handleCreateTable}
-              icon={<PlusOutlined />}
-            >
-              Create Table
-            </Button>
-          </Form>
-        )}
-
-        {addMode === 'existing' && (
-          <Form form={addToolForm} layout="vertical">
-            <Form.Item
-              label="Machine / Table"
-              required
-            >
-              <Select
-                placeholder="Select machine table"
-                loading={tablesLoading}
-                onChange={onAddTableSelect}
-                showSearch
-                filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
-              >
-                {tablesList.map(t => (
-                  <Select.Option key={t.table_name} value={t.table_name}>
-                    {t.table_name.replace('tooling_', '').toUpperCase()}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            {addSelectedTable && (
-              <>
-                <Form.Item
-                  label="Tooling Name (Type)"
-                  name="tooling_name"
-                  rules={[{ required: true, message: 'Enter tooling name' }]}
-                >
-                  <AutoComplete
-                    options={addToolingNameOptions.map(n => ({ value: n }))}
-                    placeholder="e.g. JAW, BACK PLATE, CARRIER..."
-                    filterOption={(input, opt) =>
-                      opt.value.toLowerCase().includes(input.toLowerCase())
-                    }
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="Tooling No."
-                  name="tooling_no"
-                  rules={[{ required: true, message: 'Enter tooling no.' }]}
-                >
-                  <Input placeholder="e.g. TSG-JAW-001" />
-                </Form.Item>
-                <Row gutter={12}>
-                  {addDimCols.map(col => (
-                    <Col key={col} xs={12} sm={8}>
-                      <Form.Item label={`Dim ${col.slice(4).toUpperCase()}`} name={col}>
-                        <Input placeholder={col.slice(4).toUpperCase()} />
-                      </Form.Item>
-                    </Col>
-                  ))}
-                </Row>
-                <Button
-                  type="primary"
-                  loading={addToolLoading}
-                  onClick={handleAddToolSubmit}
-                  icon={<PlusOutlined />}
-                  block
-                >
-                  Add Tool
-                </Button>
-              </>
-            )}
-          </Form>
-        )}
-      </Modal>
     </Layout>
   );
 };

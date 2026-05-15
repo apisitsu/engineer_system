@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
     Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
 } from 'antd';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
-    StopOutlined
+    StopOutlined, SettingOutlined
 } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -30,11 +30,14 @@ const { Title, Text } = Typography;
 const ToolRequestContent = () => {
     const { message, modal } = App.useApp();
     const { theme } = useTheme();
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const userName = useAuthStore(state => state.userName);
     const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
     const userInfo = useAuthStore(state => state.userInfo);
+    const userRole = useAuthStore(state => state.userRole);
+    const isAdmin = userRole === 'AD' || userDepartment === 'AD';
 
     const [loading, setLoading] = useState(false);
     const [requests, setRequests] = useState([]);
@@ -345,12 +348,12 @@ const ToolRequestContent = () => {
     ];
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
+        <Layout style={{ height: '100%' }}>
             <MenuTemplate type="MTC" defaultSelectedKeys="3" defaultOpenKeys="sub1" />
             <Layout style={{ backgroundColor: theme.colors.background }}>
                 <Spin tip="Loading" size="large" spinning={loading}>
                     <Content style={{
-                        height: '90vh',
+                        height: 'calc(100vh - 64px)',
                         overflowY: 'auto',
                         padding: '15px'
                     }}>
@@ -367,14 +370,25 @@ const ToolRequestContent = () => {
                                         <Text type="secondary">Manage and track tool & drawing requests</Text>
                                     </div>
                                 </div>
-                                <Button
-                                    type="primary"
-                                    icon={<PlusOutlined />}
-                                    size="large"
-                                    onClick={handleCreateNew}
-                                >
-                                    Create New Request
-                                </Button>
+                                <Space>
+                                    {isAdmin && (
+                                        <Button
+                                            icon={<SettingOutlined />}
+                                            size="large"
+                                            onClick={() => navigate('/eng/mtc/email-config')}
+                                        >
+                                            Email Config
+                                        </Button>
+                                    )}
+                                    <Button
+                                        type="primary"
+                                        icon={<PlusOutlined />}
+                                        size="large"
+                                        onClick={handleCreateNew}
+                                    >
+                                        Create New Request
+                                    </Button>
+                                </Space>
                             </div>
 
                             {/* Filter Section */}

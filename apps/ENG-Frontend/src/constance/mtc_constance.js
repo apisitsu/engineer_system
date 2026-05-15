@@ -8,12 +8,14 @@ export const MTC_PATHS = {
   TOOLING_INSPECT: '/eng/mtc_eng/tooling',
   TOOL_REQUEST: '/eng/mtc_eng/tool-request',
   TOOLING_SELECT: '/eng/mtc_eng/tooling-select',
-  TOOLING_INVENTORY: '/eng/mtc_eng/tooling_inventory',
-  SDS: '/eng/mtc_eng/sds',
+  TOOLING_SPEC: '/eng/mtc_eng/tooling-spec',
+  TOOLING_MANAGEMENT: '/eng/mtc_eng/tooling-management',
+  TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
+  SELECTION_RULES: '/eng/mtc_eng/selection-rules',
 };
 
 export const WORKFLOW_STATUS = {
