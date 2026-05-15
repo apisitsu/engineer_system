@@ -294,6 +294,8 @@ app.get('/api/engineer/mtc/tool-requests/permissions', toolReq.getStagePermissio
 app.get('/api/engineer/mtc/tool-requests/:id', toolReq.getToolRequestById);
 
 // Protected endpoints (require authentication)
+app.post('/api/engineer/mtc/tool-requests/test-email', mtcVerifyToken, toolReq.testEmail);
+
 app.post('/api/engineer/mtc/tool-requests',
   mtcVerifyToken,
   validateFileUpload({ fieldName: 'attachment', required: false }),

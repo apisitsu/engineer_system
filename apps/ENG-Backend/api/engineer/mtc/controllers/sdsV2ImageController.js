@@ -120,8 +120,8 @@ router.delete('/tooling/:tool_dwg_no', async (req, res) => {
 router.get('/grinding', async (_req, res) => {
   try {
     const result = await engPool.query(
-      `SELECT id, cn_prefixes, process_code, label, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
-       FROM ${TABLES.SDS_V2_GRINDING_IMAGE} ORDER BY cn_prefixes[1], process_code`
+      `SELECT id, cn_prefixes, process_codes, label, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
+       FROM ${TABLES.SDS_V2_GRINDING_IMAGE} ORDER BY cn_prefixes[1], process_codes[1]`
     );
     res.json(result.rows);
   } catch (err) {
@@ -150,7 +150,7 @@ router.get('/grinding/view/:id', async (req, res) => {
 
 /**
  * GET /api/sds/v2/images/grinding/:cn_prefix — serve image binary (Legacy/Lookup)
- * Optional ?process_code=IDG001 to get process-specific image; falls back to default (process_code IS NULL)
+ * Optional ?process_code=IDG001 to get process-specific image; falls back to default (empty process_codes)
  */
 router.get('/grinding/:cn_prefix', async (req, res) => {
   const { cn_prefix } = req.params;
@@ -160,20 +160,20 @@ router.get('/grinding/:cn_prefix', async (req, res) => {
     if (process_code) {
       result = await engPool.query(
         `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE $1 = ANY(cn_prefixes) AND process_code = $2 LIMIT 1`,
+         WHERE $1 = ANY(cn_prefixes) AND $2 = ANY(process_codes) LIMIT 1`,
         [cn_prefix, process_code]
       );
       if (!result.rows[0]) {
         result = await engPool.query(
           `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-           WHERE $1 = ANY(cn_prefixes) AND process_code IS NULL LIMIT 1`,
+           WHERE $1 = ANY(cn_prefixes) AND (process_codes IS NULL OR process_codes = '{}') LIMIT 1`,
           [cn_prefix]
         );
       }
     } else {
       result = await engPool.query(
         `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE $1 = ANY(cn_prefixes) AND process_code IS NULL LIMIT 1`,
+         WHERE $1 = ANY(cn_prefixes) AND (process_codes IS NULL OR process_codes = '{}') LIMIT 1`,
         [cn_prefix]
       );
     }
@@ -187,9 +187,9 @@ router.get('/grinding/:cn_prefix', async (req, res) => {
   }
 });
 
-/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_code, file) */
+/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_codes JSON array, file) */
 router.post('/grinding', async (req, res) => {
-  const { cn_prefixes: cn_prefixes_raw, process_code } = req.body;
+  const { cn_prefixes: cn_prefixes_raw, process_codes: process_codes_raw } = req.body;
   if (!cn_prefixes_raw) return res.status(400).json({ error: 'cn_prefixes is required' });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
 
@@ -203,30 +203,40 @@ router.post('/grinding', async (req, res) => {
     return res.status(400).json({ error: 'cn_prefixes must be a non-empty array' });
   }
 
+  let process_codes = [];
+  if (process_codes_raw) {
+    try {
+      const parsed = typeof process_codes_raw === 'string' ? JSON.parse(process_codes_raw) : process_codes_raw;
+      process_codes = Array.isArray(parsed) ? parsed.map(c => String(c).trim()).filter(Boolean) : [];
+    } catch (_) { process_codes = []; }
+  }
+
   const prefixes = cn_prefixes.map(p => String(p).trim()).filter(Boolean);
-  const process_code_val = process_code?.trim() || null;
-  const label = prefixes.join(', ') + (process_code_val ? ` — ${process_code_val}` : '');
+  const label = prefixes.join(', ') + (process_codes.length ? ` — ${process_codes.join(', ')}` : '');
 
   const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
   const mime = file.mimetype || 'image/jpeg';
 
   try {
-    // Replace any existing records that overlap with the same prefixes + process_code
+    // Replace existing records that overlap cn_prefixes AND have overlapping process_codes
     await engPool.query(
       `DELETE FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
        WHERE cn_prefixes && $1::text[]
-         AND (process_code IS NOT DISTINCT FROM $2)`,
-      [prefixes, process_code_val]
+         AND (
+           (cardinality($2::text[]) = 0 AND (process_codes IS NULL OR process_codes = '{}'))
+           OR (cardinality($2::text[]) > 0 AND process_codes && $2::text[])
+         )`,
+      [prefixes, process_codes]
     );
 
     const result = await engPool.query(
       `INSERT INTO ${TABLES.SDS_V2_GRINDING_IMAGE}
-         (cn_prefixes, process_code, label, image_data, mime_type, file_name, created_by, updated_by)
+         (cn_prefixes, process_codes, label, image_data, mime_type, file_name, created_by, updated_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-       RETURNING id, cn_prefixes, process_code, label, mime_type, file_name, updated_at`,
+       RETURNING id, cn_prefixes, process_codes, label, mime_type, file_name, updated_at`,
       [
         prefixes,
-        process_code_val,
+        process_codes,
         label,
         file.data,
         mime,

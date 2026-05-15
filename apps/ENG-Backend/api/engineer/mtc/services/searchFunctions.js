@@ -166,7 +166,7 @@ function searchTSG_Chutes(fixData, h, sheetName, calc) {
 function searchTSG300_Carriers(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
-    const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG300W');
+    const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG-300W');
     if (!toolType.includes('CARRIER') || isW_Machine) return false;
     const sDepth = parseFloat(row[h('Dim_D')]);
     const sA = parseFloat(row[h('Dim_A')]);
@@ -192,7 +192,7 @@ function searchTSG300_Carriers(fixData, h, sheetName, calc) {
 function searchTSG300W_Carriers(fixData, h, sheetName, calc) {
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
-    const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG300W');
+    const isW_Machine = String(row[h('Machine')]).toUpperCase().includes('TSG-300W');
     if (!toolType.includes('CARRIER') || !isW_Machine) return false;
     const sA = parseFloat(row[h('Dim_A')]);
     const sE = parseFloat(row[h('Dim_E')]);

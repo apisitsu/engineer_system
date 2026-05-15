@@ -4,6 +4,7 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const { isAdmin } = require('../../../../middleware/mtcAuth');
+const cache = require('../services/agents/CacheAgent');
 
 const router = express.Router();
 
@@ -28,7 +29,11 @@ router.get('/machine-types', async (req, res) => {
   }
 });
 
-/** PUT /api/sds/v2/admin/machine-types/:id */
+/** PUT /api/sds/v2/admin/machine-types/:id
+ *  If machine_type_name changes, cascades the rename to sds_parameter,
+ *  sds_machine_tool, and sds_excel_mapping in a single transaction, then
+ *  flushes the SDS search cache so stale results are not served.
+ */
 router.put('/machine-types/:id', isAdmin, async (req, res) => {
   const { machine_type_name, grinding_area_label, tool_code_filter, is_active } = req.body;
   try {
@@ -39,14 +44,44 @@ router.put('/machine-types/:id', isAdmin, async (req, res) => {
     if (tool_code_filter !== undefined) { vals.push(tool_code_filter || null); sets.push(`tool_code_filter=$${vals.length}`); }
     if (is_active !== undefined) { vals.push(is_active); sets.push(`is_active=$${vals.length}`); }
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
-
     vals.push(req.params.id);
-    const result = await engPool.query(
-      `UPDATE ${TABLES.SDS_MACHINE_TYPE_CODE} SET ${sets.join(', ')} WHERE id=$${vals.length} RETURNING *`,
-      vals
-    );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Machine type not found' });
-    res.json(result.rows[0]);
+
+    const client = await engPool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE id=$1 FOR UPDATE`,
+        [req.params.id]
+      );
+      if (!current.rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Machine type not found' });
+      }
+      const oldName = current.rows[0].machine_type_name;
+
+      const result = await client.query(
+        `UPDATE ${TABLES.SDS_MACHINE_TYPE_CODE} SET ${sets.join(', ')} WHERE id=$${vals.length} RETURNING *`,
+        vals
+      );
+
+      if (machine_type_name !== undefined && machine_type_name !== oldName) {
+        await Promise.all([
+          client.query(`UPDATE ${TABLES.SDS_PARAMETER}      SET machine_type_name=$1 WHERE machine_type_name=$2`, [machine_type_name, oldName]),
+          client.query(`UPDATE ${TABLES.SDS_V2_MACHINE_TOOL} SET machine_type=$1       WHERE machine_type=$2`,       [machine_type_name, oldName]),
+          client.query(`UPDATE ${TABLES.SDS_EXCEL_MAPPING}  SET machine_type_name=$1 WHERE machine_type_name=$2`, [machine_type_name, oldName]),
+        ]);
+        cache.invalidatePrefix('sds:');
+      }
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -238,6 +273,113 @@ router.delete('/parameters/:id', isAdmin, async (req, res) => {
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Parameter not found' });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Machine Tool Config (sds_machine_tool) ────────────────────────────────────
+
+/**
+ * GET /api/sds/v2/admin/machine-tools/combos
+ * Distinct (machine_type, process_code) pairs with row count.
+ */
+router.get('/machine-tools/combos', async (req, res) => {
+  const { machine_type } = req.query;
+  try {
+    let sql = `SELECT machine_type, process_code, COUNT(*)::int AS tool_count
+               FROM ${TABLES.SDS_V2_MACHINE_TOOL}`;
+    const params = [];
+    if (machine_type?.trim()) {
+      params.push(machine_type.trim());
+      sql += ` WHERE machine_type = $1`;
+    }
+    sql += ` GROUP BY machine_type, process_code ORDER BY machine_type, process_code`;
+    const result = await engPool.query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/sds/v2/admin/machine-tools?machine_type=&process_code=
+ * Rows for a specific (machine_type, process_code) combo, ordered by tool_number.
+ */
+router.get('/machine-tools', async (req, res) => {
+  const { machine_type, process_code } = req.query;
+  try {
+    let sql = `SELECT id, machine_type, process_code, tool_number, tool_drawing_no
+               FROM ${TABLES.SDS_V2_MACHINE_TOOL}`;
+    const params = [];
+    const where = [];
+    if (machine_type?.trim()) { params.push(machine_type.trim()); where.push(`machine_type = $${params.length}`); }
+    if (process_code?.trim()) { params.push(String(process_code).trim()); where.push(`process_code = $${params.length}`); }
+    if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+    sql += ` ORDER BY machine_type, process_code, LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`;
+    const result = await engPool.query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/sds/v2/admin/machine-tools/bulk
+ * Replaces all rows for a (machine_type, process_code) combo.
+ * Body: { machine_type, process_code, rows: [{ tool_number, tool_drawing_no }] }
+ * Rows with empty tool_drawing_no are skipped (treated as clearing the slot).
+ */
+router.put('/machine-tools/bulk', isAdmin, async (req, res) => {
+  const { machine_type, process_code, rows } = req.body;
+  if (!machine_type?.trim() || !process_code?.trim()) {
+    return res.status(400).json({ error: 'machine_type and process_code are required' });
+  }
+  if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
+
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM ${TABLES.SDS_V2_MACHINE_TOOL} WHERE machine_type = $1 AND process_code = $2`,
+      [machine_type.trim(), String(process_code).trim()]
+    );
+    const saved = [];
+    for (const { tool_number, tool_drawing_no } of rows) {
+      if (!tool_number?.trim() || !tool_drawing_no?.trim()) continue;
+      const r = await client.query(
+        `INSERT INTO ${TABLES.SDS_V2_MACHINE_TOOL} (machine_type, process_code, tool_number, tool_drawing_no)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [machine_type.trim(), String(process_code).trim(), tool_number.trim(), tool_drawing_no.trim()]
+      );
+      saved.push(r.rows[0]);
+    }
+    await client.query('COMMIT');
+    res.json({ saved, count: saved.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * DELETE /api/sds/v2/admin/machine-tools/combo?machine_type=&process_code=
+ * Delete all rows for a specific (machine_type, process_code) combo.
+ */
+router.delete('/machine-tools/combo', isAdmin, async (req, res) => {
+  const { machine_type, process_code } = req.query;
+  if (!machine_type?.trim() || !process_code?.trim()) {
+    return res.status(400).json({ error: 'machine_type and process_code are required' });
+  }
+  try {
+    const result = await engPool.query(
+      `DELETE FROM ${TABLES.SDS_V2_MACHINE_TOOL}
+       WHERE machine_type = $1 AND process_code = $2 RETURNING id`,
+      [machine_type.trim(), String(process_code).trim()]
+    );
+    res.json({ success: true, deleted: result.rowCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

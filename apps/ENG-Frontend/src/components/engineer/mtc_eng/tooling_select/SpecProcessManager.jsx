@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Table,
-  InputNumber, Row, Col, Tag, Popconfirm, Card, Layout, Select
+  InputNumber, Row, Col, Tag, Popconfirm, Card, Layout, Select,
+  Alert, Spin,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined,
   SearchOutlined, ReloadOutlined, ArrowLeftOutlined, DownOutlined, UpOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +34,9 @@ export const SpecProcessManager = () => {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
   const [tableVisible, setTableVisible] = useState(false);
   const [form] = Form.useForm();
+
+  const [syncNewLoading, setSyncNewLoading] = useState(false);
+  const [syncNewResult, setSyncNewResult] = useState(null);  // { synced, failed, errors[] }
 
   const colors = theme?.colors || {};
 
@@ -109,6 +114,20 @@ export const SpecProcessManager = () => {
     }
   };
 
+  const runSyncNew = async () => {
+    setSyncNewLoading(true);
+    setSyncNewResult(null);
+    try {
+      const res = await axios.post(server.MTC_TOOLING_SPEC_SYNC_NEW);
+      setSyncNewResult(res.data);
+      if (res.data.synced > 0) fetchSpecs(1, pagination.pageSize, searchText);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Sync ล้มเหลว');
+    } finally {
+      setSyncNewLoading(false);
+    }
+  };
+
   const columns = [
     { title: 'C/N', dataIndex: 'cn', key: 'cn', width: 120, fixed: 'left', render: v => <Text strong>{v}</Text> },
     { title: 'Type', dataIndex: 'type', key: 'type', width: 100 },
@@ -181,6 +200,15 @@ export const SpecProcessManager = () => {
               {tableVisible && (
                 <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText)} />
               )}
+              <Popconfirm
+                title="Sync New CNs จาก Factory"
+                description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
+                onConfirm={runSyncNew}
+                okText="Sync เลย"
+                cancelText="Cancel"
+              >
+                <Button icon={<DatabaseOutlined />} loading={syncNewLoading}>Sync New CNs</Button>
+              </Popconfirm>
               <Button icon={<PlusOutlined />} type="primary" onClick={openAdd}>Add Spec</Button>
             </Space>
           </div>
@@ -203,6 +231,49 @@ export const SpecProcessManager = () => {
             />
           </Card>}
 
+          {/* ── Sync New CNs — Result Modal ──────────────────────────────── */}
+          <Modal
+            title="Sync New CNs — Result"
+            open={!!syncNewResult}
+            onCancel={() => setSyncNewResult(null)}
+            footer={<Button type="primary" onClick={() => setSyncNewResult(null)}>Close</Button>}
+            width={560}
+            destroyOnHidden
+          >
+            {syncNewResult && (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Alert
+                  type={syncNewResult.failed === 0 ? 'success' : 'warning'}
+                  showIcon
+                  message={`สำเร็จ ${syncNewResult.synced} / ล้มเหลว ${syncNewResult.failed} จากทั้งหมด ${syncNewResult.total_found} CN ใหม่`}
+                />
+                {syncNewResult.table_status?.length > 0 && (
+                  <Card size="small" title="Factory Table Status">
+                    <div style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                      {syncNewResult.table_status.map((t, i) => (
+                        <div key={i}>
+                          <Text type={t.ok ? 'success' : 'danger'}>
+                            {t.ok ? '✓' : '✗'} {t.table}
+                          </Text>
+                          {t.ok ? ` (${t.count} rows)` : `: ${t.error}`}
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+                {syncNewResult.errors?.length > 0 && (
+                  <Card size="small" title="Insert Errors">
+                    <div style={{ maxHeight: 200, overflowY: 'auto', fontFamily: 'monospace', fontSize: 11 }}>
+                      {syncNewResult.errors.map((e, i) => (
+                        <div key={i}><Text type="danger">{e.cn}</Text>: {e.error}</div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </Space>
+            )}
+          </Modal>
+
           <Modal
             title={editingRecord ? 'Edit Specification' : 'Add New Specification'}
             open={isFormOpen}
@@ -211,7 +282,7 @@ export const SpecProcessManager = () => {
             okText="Save"
             confirmLoading={saving}
             width={800}
-            destroyOnClose
+            destroyOnHidden
           >
             <Form form={form} layout="vertical" size="small">
               <Row gutter={12}>

@@ -66,7 +66,7 @@ function evaluateConditions(conditions, calc, partData) {
 
 /**
  * Phase 1: Compute machine eligibility flags.
- * Reads conditions from mtc_machine_config when available; falls back to hardcoded values.
+ * Reads conditions from tooling_machine_config when available; falls back to hardcoded values.
  * Returns okFlags object compatible with legacy callers plus _exclusionReasons map.
  *
  * @param {Object} calc      - calcs.calc (legacy common calc: jawA, bpAA, chuteCalcA ...)
@@ -114,9 +114,9 @@ async function computeOkFlags(calc, calcs, partData) {
         : `OD After = ${partData.odAft?.toFixed(3)} > 33`;
     }
     if (!hardcodedFlags.ks400bOK)  exclusionReasons['KS400B']   = ks400b_calc?.error  ? 'Formula error' : 'Not eligible';
-    if (!hardcodedFlags.ks500rdOK) exclusionReasons['KS500RD']  = ks500rd_calc?.error ? 'Formula error' : 'Not eligible';
+    if (!hardcodedFlags.ks500rdOK) exclusionReasons['KS-500RD'] = ks500rd_calc?.error ? 'Formula error' : 'Not eligible';
     if (!hardcodedFlags.ks400b5OK) exclusionReasons['KS-400B5'] = ks400b5_calc?.error ? 'Formula error' : 'Not eligible';
-    if (!hardcodedFlags.ks400b6OK) exclusionReasons['KS400B6']  = ks400b6_calc?.error ? 'Formula error' : 'Not eligible';
+    if (!hardcodedFlags.ks400b6OK) exclusionReasons['KS-400B6'] = ks400b6_calc?.error ? 'Formula error' : 'Not eligible';
 
     return { ...hardcodedFlags, _exclusionReasons: exclusionReasons, _machineConfigs: [] };
   }

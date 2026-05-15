@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
     Table, Card, Typography, Button, Space, Tag, Modal, Form, Input, message, Layout
 } from 'antd';
-import { 
-    MailOutlined, EditOutlined, PlusOutlined, DeleteOutlined, 
-    SettingOutlined, InfoCircleOutlined 
+import {
+    MailOutlined, EditOutlined, PlusOutlined, DeleteOutlined,
+    SettingOutlined, InfoCircleOutlined
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -48,7 +48,7 @@ const EmailConfigManager = () => {
         return (
             <div style={{ padding: 50, textAlign: 'center' }}>
                 <Title level={3} type="danger">Access Denied</Title>
-                <Text>เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถเข้าถึงหน้านี้ได้</Text>
+                <Text>Admin only can access this page</Text>
             </div>
         );
     }
@@ -67,14 +67,14 @@ const EmailConfigManager = () => {
 
     const handleDelete = async (id) => {
         Modal.confirm({
-            title: 'ยืนยันการลบ',
-            content: 'คุณต้องการลบการตั้งค่าอีเมลนี้ใช่หรือไม่?',
-            okText: 'ลบ',
+            title: 'Confirm to delete',
+            content: 'Delete this email configuration?',
+            okText: 'Delete',
             okType: 'danger',
             onOk: async () => {
                 try {
                     await axios.delete(`${server.MTC_EMAIL_CONFIG}/${id}`);
-                    message.success('ลบข้อมูลเรียบร้อยแล้ว');
+                    message.success('Delete successful');
                     fetchConfigs();
                 } catch (error) {
                     message.error('Failed to delete config');
@@ -87,10 +87,10 @@ const EmailConfigManager = () => {
         try {
             if (editingItem) {
                 await axios.put(`${server.MTC_EMAIL_CONFIG}/${editingItem.id}`, values);
-                message.success('อัปเดตข้อมูลเรียบร้อยแล้ว');
+                message.success('Update successful');
             } else {
                 await axios.post(server.MTC_EMAIL_CONFIG, values);
-                message.success('สร้างรายการใหม่เรียบร้อยแล้ว');
+                message.success('Create new item successful');
             }
             setModalVisible(false);
             fetchConfigs();
@@ -132,16 +132,16 @@ const EmailConfigManager = () => {
             width: 150,
             render: (_, record) => (
                 <Space>
-                    <Button 
-                        icon={<EditOutlined />} 
+                    <Button
+                        icon={<EditOutlined />}
                         onClick={() => handleEdit(record)}
                         size="small"
                     >
                         Edit
                     </Button>
-                    <Button 
-                        icon={<DeleteOutlined />} 
-                        danger 
+                    <Button
+                        icon={<DeleteOutlined />}
+                        danger
                         onClick={() => handleDelete(record.id)}
                         size="small"
                     >
@@ -156,69 +156,69 @@ const EmailConfigManager = () => {
         <Layout style={{ height: '100%' }}>
             <MenuTemplate type="MTC" defaultSelectedKeys="admin-email" defaultOpenKeys="admin-config" />
             <Layout style={{ backgroundColor: theme.colors.background }}>
-            <ScrollbarStyle primary={theme.colors.primary} />
-            <Content className="kb-vscroll" style={{
-                height: 'calc(100vh - 64px)',
-                overflowY: 'auto',
-                padding: '15px'
-            }}>
-                <Card 
-                    title={
-                        <Space>
-                            <SettingOutlined />
-                            <span>Email Notification Settings (General DWG Request)</span>
-                        </Space>
-                    }
-                    extra={
-                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                            Add New Stage/CC
-                        </Button>
-                    }
-                    style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-                >
-                    <div style={{ marginBottom: 16 }}>
-                        <Text type="secondary">
-                            <InfoCircleOutlined /> จัดการรายชื่ออีเมลผู้รับแยกตามขั้นตอนของ Workflow (ระบุหลายอีเมลโดยใช้เครื่องหมาย , คั่น)
-                        </Text>
-                    </div>
-
-                    <Table 
-                        columns={columns} 
-                        dataSource={data} 
-                        rowKey="id" 
-                        loading={loading}
-                        pagination={false}
-                        bordered
-                    />
-
-                    <Modal
-                        title={editingItem ? 'Edit Email Config' : 'Add New Email Config'}
-                        open={modalVisible}
-                        onCancel={() => setModalVisible(false)}
-                        onOk={() => form.submit()}
-                        destroyOnHidden
-                        okText="Save"
+                <ScrollbarStyle primary={theme.colors.primary} />
+                <Content className="kb-vscroll" style={{
+                    height: 'calc(100vh - 64px)',
+                    overflowY: 'auto',
+                    padding: '15px'
+                }}>
+                    <Card
+                        title={
+                            <Space>
+                                <SettingOutlined />
+                                <span>Email Notification Settings (General DWG Request)</span>
+                            </Space>
+                        }
+                        extra={
+                            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                                Add New Stage/CC
+                            </Button>
+                        }
+                        style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                     >
-                        <Form form={form} layout="vertical" onFinish={onFinish}>
-                            <Form.Item 
-                                name="stage" 
-                                label="Workflow Stage Name" 
-                                rules={[{ required: true, message: 'Please input stage name!' }]}
-                                help="ตัวอย่าง: Eng Check หรือ CC_Eng Check"
-                            >
-                                <Input placeholder="Enter stage name" />
-                            </Form.Item>
-                            <Form.Item 
-                                name="emails" 
-                                label="Email Addresses (comma separated)" 
-                                rules={[{ required: true, message: 'Please input at least one email!' }]}
-                            >
-                                <Input.TextArea rows={4} placeholder="email1@example.com, email2@example.com" />
-                            </Form.Item>
-                        </Form>
-                    </Modal>
-                </Card>
-            </Content>
+                        <div style={{ marginBottom: 16 }}>
+                            <Text type="secondary">
+                                <InfoCircleOutlined /> Manage email recipients list for each Workflow stage (specify multiple emails using , )
+                            </Text>
+                        </div>
+
+                        <Table
+                            columns={columns}
+                            dataSource={data}
+                            rowKey="id"
+                            loading={loading}
+                            pagination={false}
+                            bordered
+                        />
+
+                        <Modal
+                            title={editingItem ? 'Edit Email Config' : 'Add New Email Config'}
+                            open={modalVisible}
+                            onCancel={() => setModalVisible(false)}
+                            onOk={() => form.submit()}
+                            destroyOnHidden
+                            okText="Save"
+                        >
+                            <Form form={form} layout="vertical" onFinish={onFinish}>
+                                <Form.Item
+                                    name="stage"
+                                    //label="Workflow Stage Name" 
+                                    rules={[{ required: true, message: 'Please input stage name!' }]}
+                                    help="ตัวอย่าง: Eng Check หรือ CC_Eng Check"
+                                >
+                                    <Input placeholder="Enter stage name" />
+                                </Form.Item>
+                                <Form.Item
+                                    name="emails"
+                                    //label="Email Addresses (comma separated)" 
+                                    rules={[{ required: true, message: 'Please input at least one email!' }]}
+                                >
+                                    <Input.TextArea rows={4} placeholder="email1@example.com, email2@example.com" />
+                                </Form.Item>
+                            </Form>
+                        </Modal>
+                    </Card>
+                </Content>
             </Layout>
         </Layout>
     );

@@ -183,8 +183,8 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
             valuePropName="fileList"
             getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
           >
-            <Upload beforeUpload={() => false} multiple maxCount={10} accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg">
-              <Button icon={<UploadOutlined />}>เลือกไฟล์ (PDF / DWG / DXF / Image)</Button>
+            <Upload beforeUpload={() => false} multiple maxCount={10}>
+              <Button icon={<UploadOutlined />}>เลือกไฟล์ (ทุกประเภท)</Button>
             </Upload>
           </Form.Item>
           <Form.Item label="Drawing File Path (optional)" name="dwg_files">
@@ -267,8 +267,8 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
             valuePropName="fileList"
             getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
           >
-            <Upload beforeUpload={() => false} multiple maxCount={10} accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg">
-              <Button icon={<UploadOutlined />}>เลือกไฟล์ (PDF / DWG / DXF / Image)</Button>
+            <Upload beforeUpload={() => false} multiple maxCount={10}>
+              <Button icon={<UploadOutlined />}>เลือกไฟล์ (ทุกประเภท)</Button>
             </Upload>
           </Form.Item>
           <Form.Item label="Comment" name="comment">
@@ -616,7 +616,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
         <Divider orientation="left">Attachments & Machines</Divider>
         <Row gutter={16}>
           <Col span={12}>
-            <Form.Item label="Attach File (Image / PDF)" name="attachment" valuePropName="fileList" getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}>
+            <Form.Item label="Attach File" name="attachment" valuePropName="fileList" getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}>
               <Upload
                 beforeUpload={() => false}
                 maxCount={1}

@@ -8,18 +8,35 @@ const { buildCalcMap }                    = require('./partDataMapper');
 const { computeOkFlags, fetchToolingRows } = require('./machineQueryService');
 const { assembleResults, MAX_JAW_DEPTH }  = require('./fixtureAssembler');
 const { findDynamicFixtures }             = require('./dynamicLogic');
+const { LEGACY_MACHINES, TABLES }         = require('../mtcConstants');
+const engPool                             = require('../../../../instance/eng_db');
 
-// Legacy machines whose formulas are stored in tooling_formula.
-// Order is not significant — all run in parallel.
-const LEGACY_MACHINES = [
-  'KS-B22G',
-  'TSG-300ZNC',
-  'KS400B',
-  'KS-03A',
-  'KS500RD',
-  'KS-400B5',
-  'KS400B6',
-];
+// 5-min module-level cache for non-legacy machines sourced from tooling_formula DB.
+// Invalidated automatically on next tick after TTL expires — no restart needed.
+let _dynMachinesCache    = null;
+let _dynMachinesCacheAt  = 0;
+const DYN_CACHE_TTL      = 5 * 60 * 1000;
+
+async function getDynamicFormulaMachines() {
+  const now = Date.now();
+  if (_dynMachinesCache && now - _dynMachinesCacheAt < DYN_CACHE_TTL) {
+    return _dynMachinesCache;
+  }
+  try {
+    const { rows } = await engPool.query(
+      `SELECT DISTINCT machine_name FROM ${TABLES.TOOLING_FORMULA} WHERE machine_name IS NOT NULL ORDER BY machine_name`
+    );
+    const legacyNorm = new Set(LEGACY_MACHINES.map(m => m.toLowerCase().replace(/-/g, '')));
+    const dynamic = rows
+      .map(r => r.machine_name)
+      .filter(m => !legacyNorm.has(m.toLowerCase().replace(/-/g, '')));
+    _dynMachinesCache   = dynamic;
+    _dynMachinesCacheAt = now;
+    return dynamic;
+  } catch {
+    return [];
+  }
+}
 
 async function findFixtures(cnNumber) {
   const start    = Date.now();
@@ -35,16 +52,19 @@ async function findFixtures(cnNumber) {
   if (specResult._agentError) return { success: false, error: specResult.error };
   const partData = specResult;
 
-  // ── 2. Formula Swarm — all machines in parallel, partial failure OK ──────
+  // ── 2. Formula Swarm — legacy + any new machines added via UI, all in parallel
+  const dynamicMachines = await getDynamicFormulaMachines();
+  const allMachines     = [...LEGACY_MACHINES, ...dynamicMachines];
+
   const formulaSettled = await Promise.allSettled(
-    LEGACY_MACHINES.map(m => new FormulaAgent(m).execute({ partData }))
+    allMachines.map(m => new FormulaAgent(m).execute({ partData }))
   );
 
   const dynMap        = {};
   const formulaErrors = {};
 
   formulaSettled.forEach((r, i) => {
-    const m = LEGACY_MACHINES[i];
+    const m = allMachines[i];
     if (r.status === 'fulfilled' && !r.value._agentError) {
       dynMap[m] = r.value.result;
     } else {
@@ -61,9 +81,9 @@ async function findFixtures(cnNumber) {
       dynTSG300ZNC: dynMap['TSG-300ZNC'],
       dynKS400B:    dynMap['KS400B'],
       dynKS03A:     dynMap['KS-03A'],
-      dynKS500RD:   dynMap['KS500RD'],
+      dynKS500RD:   dynMap['KS-500RD'],
       dynKS400B5:   dynMap['KS-400B5'],
-      dynKS400B6:   dynMap['KS400B6'],
+      dynKS400B6:   dynMap['KS-400B6'],
     },
     partData
   );
@@ -77,13 +97,15 @@ async function findFixtures(cnNumber) {
     findDynamicFixtures(
       partData,
       {
+        // Spread all formula outputs (includes new machines added via UI),
+        // then override with adapted legacy calc maps for backward compat.
+        ...dynMap,
         ks400b:  calcs.ks400b_calc,
         ks03a:   calcs.ks03a_calc,
         ks500rd: calcs.ks500rd_calc,
         ks400b5: calcs.ks400b5_calc,
         ks400b6: calcs.ks400b6_calc,
         tsg:     calcs.calc,
-        ksb22g:  dynMap['KS-B22G'],
       },
       okFlags
     ),

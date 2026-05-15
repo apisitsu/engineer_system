@@ -8,7 +8,6 @@ router.delete('/tooling-inspect/:id', mtcController.deleteToolingInspect);
 router.post('/tooling-inspect/:id/blacklist', mtcController.blacklistToolingInspect);
 
 router.get('/tool-dwg-req', mtcController.getToolDWGRequest);
-router.get('/sds/pdf', mtcController.generateSdsPdf);
 router.get('/constants', mtcController.getConstants);
 
 module.exports = router;
