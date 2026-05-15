@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Action Priority (AP) Table - FMEA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f3f4f6;
+            padding: 20px;
+        }
+        .table-container {
+            margin: 0 auto;
+            width: fit-content;
+            background-color: white;
+            padding: 10px; 
+        }
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+        /* กำหนดเส้นขอบ 1px เท่ากันทั้งหมด และป้องกันคำตกบรรทัด */
+        th, td {
+            border: 1px solid black;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 14px;
+            white-space: nowrap;
+            padding: 4px;
+        }
+        /* ปรับขนาดเซลล์ AP ให้มีพื้นที่ ไม่ให้ข้อความบีบลงล่าง */
+        .ap-cell { 
+            width: 65px; 
+            height: 35px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: transform 0.1s; 
+        }
+        
+        .ap-cell:hover:not(.exporting) { 
+            transform: scale(1.1); 
+            box-shadow: 0 0 5px rgba(0,0,0,0.5); 
+            z-index: 10; 
+            position: relative; 
+        }
+        
+        .group-col { width: 65px; }
+        .main-header { background-color: #e7e6e6; font-weight: bold; }
+        .side-header { background-color: #e7e6e6; font-weight: bold; width: 90px; }
+        
+        /* สีของระดับความสำคัญ */
+        .bg-L { background-color: #00b050; color: black; } /* Low - Green */
+        .bg-M { background-color: #ffff00; color: black; } /* Medium - Yellow */
+        .bg-H { background-color: #ff0000; color: black; } /* High - Red */
+        
+        /* ขอบตารางแบบไม่มีเส้น (สำหรับมุมตาราง) */
+        .border-none { border: none !important; }
+        
+        /* Hilight Cell */
+        .highlighted-cell {
+            border: 3px solid #3b82f6 !important; 
+            position: relative;
+            z-index: 20;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+            transform: scale(1.1);
+        }
+
+        .exporting .highlighted-cell {
+            transform: none !important;
+            box-shadow: none !important;
+            border: 3px solid #3b82f6 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">FMEA Action Priority (AP) Generator</h1>
+
+        <!-- ส่วนคำนวณแบบ Manual -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8 max-w-2xl mx-auto">
+            <h2 class="text-xl font-semibold mb-4 text-center">คำนวณระดับ AP รายตัว (S, O, D: 1-10)</h2>
+            <div class="flex flex-wrap items-end justify-center gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Severity (S)</label>
+                    <input type="number" id="input-s" min="1" max="10" class="mt-1 block w-20 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" value="7">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Occurrence (O)</label>
+                    <input type="number" id="input-o" min="1" max="10" class="mt-1 block w-20 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" value="4">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Detection (D)</label>
+                    <input type="number" id="input-d" min="1" max="10" class="mt-1 block w-20 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" value="5">
+                </div>
+                <button onclick="checkManualAP()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                    คำนวณ
+                </button>
+            </div>
+            <div id="result-box" class="mt-4 text-center hidden">
+                <span class="text-lg font-medium">ผลลัพธ์ Action Priority: </span>
+                <span id="result-badge" class="inline-block px-4 py-1 rounded-full font-bold text-lg border border-black"></span>
+            </div>
+        </div>
+
+        <!-- ปุ่มสำหรับดาวน์โหลดรูปภาพ -->
+        <div class="flex justify-center mb-4">
+            <button onclick="downloadTableAsJPG()" id="download-btn" class="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors shadow-sm font-semibold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                ดาวน์โหลดตารางเป็น JPG
+            </button>
+        </div>
+
+        <!-- ส่วนแสดงผลตาราง -->
+        <div class="overflow-x-auto pb-10">
+            <div id="capture-area" class="table-container shadow-md">
+                <table id="ap-table">
+                    <thead>
+                        <!-- แถวที่ 1: หัวตารางส่วนบน -->
+                        <tr>
+                            <td colspan="2" rowspan="2" class="border-none"></td>
+                            <th colspan="5" class="main-header py-2">Occurrence</th>
+                            <td colspan="2" rowspan="2" class="border-none"></td>
+                        </tr>
+                        <!-- แถวที่ 2: กลุ่มตัวเลข Occurrence -->
+                        <tr>
+                            <th class="main-header group-col">1</th>
+                            <th class="main-header group-col">2-3</th>
+                            <th class="main-header group-col">4-5</th>
+                            <th class="main-header group-col">6-7</th>
+                            <th class="main-header group-col">8-10</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- โค้ด JS จะมาสร้างตารางที่นี่ -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function calculateActionPriority(s, o, d) {
+            s = parseInt(s); o = parseInt(o); d = parseInt(d);
+            if (isNaN(s) || isNaN(o) || isNaN(d)) return "";
+            if (s < 1 || s > 10 || o < 1 || o > 10 || d < 1 || d > 10) return "";
+
+            if (s === 1) return "L";
+            if (s >= 2 && s <= 3) {
+                if (o <= 7) return "L";
+                if (o >= 8) {
+                    if (d <= 4) return "L";
+                    return "M";
+                }
+            }
+            if (s >= 4 && s <= 6) {
+                if (o <= 3) return "L";
+                if (o >= 4 && o <= 5) {
+                    if (d <= 6) return "L";
+                    return "M";
+                }
+                if (o >= 6 && o <= 7) {
+                    if (d === 1) return "L";
+                    return "M";
+                }
+                if (o >= 8) {
+                    if (d <= 4) return "M";
+                    return "H";
+                }
+            }
+            if (s >= 7 && s <= 8) {
+                if (o === 1) return "L";
+                if (o >= 2 && o <= 3) {
+                    if (d <= 4) return "L";
+                    return "M";
+                }
+                if (o >= 4 && o <= 5) {
+                    if (d <= 6) return "M";
+                    return "H";
+                }
+                if (o >= 6 && o <= 7) {
+                    if (d === 1) return "M";
+                    return "H";
+                }
+                if (o >= 8) return "H";
+            }
+            if (s >= 9 && s <= 10) {
+                if (o === 1) return "L";
+                if (o >= 2 && o <= 3) {
+                    if (d <= 4) return "L";
+                    if (d >= 5 && d <= 6) return "M";
+                    return "H";
+                }
+                if (o >= 4 && o <= 5) {
+                    if (d === 1) return "M";
+                    return "H";
+                }
+                if (o >= 6) return "H";
+            }
+            return "";
+        }
+
+        const s_groups = [
+            { label: '1', val: 1 },
+            { label: '2-3', val: 2 },
+            { label: '4-6', val: 4 },
+            { label: '7-8', val: 7 },
+            { label: '9-10', val: 9 }
+        ];
+        
+        const o_groups = [
+            { label: '1', val: 1 },
+            { label: '2-3', val: 2 },
+            { label: '4-5', val: 4 },
+            { label: '6-7', val: 6 },
+            { label: '8-10', val: 8 }
+        ];
+        
+        const d_groups = [
+            { label: '1', val: 1 },
+            { label: '2-4', val: 2 },
+            { label: '5-6', val: 5 },
+            { label: '7-10', val: 7 }
+        ];
+
+        function generateTable() {
+            const tbody = document.getElementById('table-body');
+            let html = '';
+
+            for (let i = 0; i < s_groups.length; i++) {
+                const s = s_groups[i];
+
+                for (let j = 0; j < d_groups.length; j++) {
+                    const d = d_groups[j];
+                    html += `<tr>`;
+
+                    if (i === 0 && j === 0) {
+                        html += `<td rowspan="20" class="side-header">Severity</td>`;
+                    }
+
+                    if (j === 0) {
+                        html += `<td rowspan="4" class="main-header">${s.label}</td>`;
+                    }
+
+                    for (let k = 0; k < o_groups.length; k++) {
+                        const o = o_groups[k];
+                        const ap = calculateActionPriority(s.val, o.val, d.val);
+                        const colorClass = `bg-${ap}`;
+                        const cellId = `cell-s${s.label}-o${o.label}-d${d.label}`;
+
+                        html += `<td id="${cellId}" class="ap-cell ${colorClass}" title="S: ${s.label}, O: ${o.label}, D: ${d.label} => AP: ${ap}">${ap}</td>`;
+                    }
+
+                    html += `<td class="main-header group-col">${d.label}</td>`;
+
+                    if (i === 0 && j === 0) {
+                        html += `<td rowspan="20" class="side-header">Detection</td>`;
+                    }
+
+                    html += `</tr>`;
+                }
+            }
+
+            tbody.innerHTML = html;
+        }
+
+        function getGroupLabel(val, type) {
+            val = parseInt(val);
+            if (type === 'S') {
+                if (val === 1) return '1';
+                if (val >= 2 && val <= 3) return '2-3';
+                if (val >= 4 && val <= 6) return '4-6';
+                if (val >= 7 && val <= 8) return '7-8';
+                if (val >= 9 && val <= 10) return '9-10';
+            }
+            if (type === 'O') {
+                if (val === 1) return '1';
+                if (val >= 2 && val <= 3) return '2-3';
+                if (val >= 4 && val <= 5) return '4-5';
+                if (val >= 6 && val <= 7) return '6-7';
+                if (val >= 8 && val <= 10) return '8-10';
+            }
+            if (type === 'D') {
+                if (val === 1) return '1';
+                if (val >= 2 && val <= 4) return '2-4';
+                if (val >= 5 && val <= 6) return '5-6';
+                if (val >= 7 && val <= 10) return '7-10';
+            }
+            return '';
+        }
+
+        function checkManualAP() {
+            const s = document.getElementById('input-s').value;
+            const o = document.getElementById('input-o').value;
+            const d = document.getElementById('input-d').value;
+
+            const ap = calculateActionPriority(s, o, d);
+            
+            if(!ap) {
+                alert("กรุณาป้อนค่า S, O, D ให้อยู่ในช่วง 1 - 10");
+                return;
+            }
+
+            const resultBox = document.getElementById('result-box');
+            const resultBadge = document.getElementById('result-badge');
+            
+            resultBadge.textContent = ap;
+            resultBadge.className = `inline-block px-6 py-2 rounded-md font-bold text-xl border-2 border-black bg-${ap}`;
+            resultBox.classList.remove('hidden');
+
+            const oldHighlighted = document.querySelector('.highlighted-cell');
+            if (oldHighlighted) {
+                oldHighlighted.classList.remove('highlighted-cell');
+            }
+
+            const sLabel = getGroupLabel(s, 'S');
+            const oLabel = getGroupLabel(o, 'O');
+            const dLabel = getGroupLabel(d, 'D');
+
+            const cellId = `cell-s${sLabel}-o${oLabel}-d${dLabel}`;
+            const targetCell = document.getElementById(cellId);
+            
+            if (targetCell) {
+                targetCell.classList.add('highlighted-cell');
+                targetCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function downloadTableAsJPG() {
+            const captureArea = document.getElementById('capture-area');
+            const btn = document.getElementById('download-btn');
+            
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'กำลังประมวลผล...';
+            btn.disabled = true;
+
+            const cells = document.querySelectorAll('.ap-cell');
+            cells.forEach(cell => cell.classList.add('exporting'));
+
+            html2canvas(captureArea, {
+                scale: 2, 
+                backgroundColor: "#ffffff", 
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'FMEA_Action_Priority_Table.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 1.0);
+                link.click();
+
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                cells.forEach(cell => cell.classList.remove('exporting'));
+            }).catch(err => {
+                console.error("Error capturing table:", err);
+                alert("เกิดข้อผิดพลาดในการสร้างรูปภาพ");
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                cells.forEach(cell => cell.classList.remove('exporting'));
+            });
+        }
+
+        window.onload = generateTable;
+    </script>
+</body>
+</html>

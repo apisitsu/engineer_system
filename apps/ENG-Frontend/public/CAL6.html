@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมคำนวณพื้นที่และปริมาตรโครงสร้างจากแบบร่าง CAD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    
+    <!-- เพิ่ม Configuration ของ MathJax เพื่อบังคับให้แปลงสัญลักษณ์ $...$ เป็นสมการ Inline ได้ -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            chtml: {
+                displayAlign: 'center'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; }
+        .table-row-hover:hover { background-color: #f3f4f6; }
+        /* ลบระบบ Scrollbar ออก และบังคับให้ขยายเต็มพื้นที่โดยไม่ตัดขอบ */
+        .math-box { 
+            overflow: visible !important; 
+            white-space: normal; 
+            word-wrap: break-word; 
+        }
+        mjx-container { overflow: visible !important; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        
+        <!-- Header -->
+        <div class="bg-indigo-600 p-6 text-white text-center">
+            <h1 class="text-2xl md:text-3xl font-bold mb-2">โปรแกรมวิเคราะห์พื้นที่และจำลองโครงสร้าง (Area & Volume)</h1>
+            <p class="text-indigo-100">ตรวจสอบและยืนยัน Logic รูปทรงทางคณิตศาสตร์แบบ 100% Exact Math (พร้อมแสดงสมการแทนค่าทีละขั้นตอน)</p>
+        </div>
+
+        <div class="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- ด้านซ้าย: Input -->
+            <div class="lg:col-span-4 bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h2 class="text-xl font-bold text-slate-800 mb-4 border-b pb-2">พารามิเตอร์โครงสร้าง</h2>
+                
+                <div class="space-y-4">
+                    <!-- รูปร่างด้านบน -->
+                    <div class="border-l-4 border-teal-500 pl-3">
+                        <h3 class="text-sm font-bold text-teal-700 mb-2">รูปร่างด้านบน (Top Shape)</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-gray-600">Diameter วงนอก</label><input type="number" id="d_outer" value="23.83" step="0.01" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">Diameter วงใน (D)</label><input type="number" id="d_inner" value="18.5" step="0.01" class="w-full p-2 border rounded font-mono text-sm bg-white" title="ใช้เป็นขอบเขตวงกลมตัดในการหาพื้นที่ 2"></div>
+                        </div>
+                    </div>
+
+                    <!-- วงกลมใหญ่และฐาน -->
+                    <div class="border-l-4 border-blue-500 pl-3">
+                        <h3 class="text-sm font-bold text-blue-700 mb-2">ส่วนฐานและวงกลมใหญ่ (Bottom)</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-gray-600">Diameter ใหญ่ (D)</label><input type="number" id="d_large" value="15.8" step="0.1" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">ความกว้างฐานล่าง</label><input type="number" id="w_base" value="13.1559" step="0.0001" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">Y ฐานล่าง (เส้น H)</label><input type="number" id="y_base" value="3.13" step="0.01" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                        </div>
+                    </div>
+
+                    <!-- ขอบบนและรอยบากเอียง -->
+                    <div class="border-l-4 border-amber-500 pl-3">
+                        <h3 class="text-sm font-bold text-amber-700 mb-2">ส่วนขอบบนและรอยบากเอียง</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-gray-600">Y สูงสุดขอบนอก</label><input type="number" id="y_top" value="6.55" step="0.01" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">Y เส้นประบากลึก</label><input type="number" id="y_mid" value="5.705" step="0.001" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">ระยะห่างจุดหักมุมบน</label><input type="number" id="w_top" value="7" step="0.1" class="w-full p-2 border rounded font-mono text-sm bg-white" title="ระยะรวมระหว่างจุดเริ่มบากฝั่งซ้ายและขวา"></div>
+                            <div><label class="text-xs text-gray-600">มุมเอียงบาก (องศา)</label><input type="number" id="angle" value="15" step="0.1" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                        </div>
+                    </div>
+
+                    <!-- วงกลมเล็ก -->
+                    <div class="border-l-4 border-red-500 pl-3">
+                        <h3 class="text-sm font-bold text-red-700 mb-2">ส่วนหัว (วงกลมเล็กคู่)</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="text-xs text-gray-600">Y ศูนย์กลาง</label><input type="number" id="cy_small" value="7.217" step="0.001" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">ระยะห่างศูนย์กลาง</label><input type="number" id="c_dist" value="3.5" step="0.1" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                            <div><label class="text-xs text-gray-600">รัศมีวงกลม (r)</label><input type="number" id="r_small" value="2.05" step="0.01" class="w-full p-2 border rounded font-mono text-sm bg-white"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="calculate()" class="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition transform hover:scale-105">
+                    ประมวลผลและคำนวณใหม่
+                </button>
+                
+                <div id="error-msg" class="mt-4 text-red-600 text-sm font-bold hidden bg-red-100 p-3 rounded leading-relaxed border border-red-200 shadow-inner"></div>
+            </div>
+
+            <!-- ด้านขวา: Canvas & Result -->
+            <div class="lg:col-span-8 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <h2 class="text-xl font-bold text-slate-800 mb-2">ภาพจำลองโครงสร้าง (วาดตามสัดส่วนคณิตศาสตร์จริง)</h2>
+                
+                <!-- Canvas Container -->
+                <div class="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-2 relative w-full flex justify-center overflow-hidden" style="height: 380px; background-color: #f8fafc;">
+                    <canvas id="mathCanvas" width="600" height="380" class="rounded shadow-sm"></canvas>
+                </div>
+
+                <!-- Result Boxes -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <!-- กล่อง 1 -->
+                    <div class="bg-purple-50 p-4 rounded-lg border border-purple-200 text-center shadow-inner flex flex-col justify-center relative">
+                        <h3 class="text-gray-700 font-bold mb-1 text-sm">1: รูปล่างเดิม</h3>
+                        <div class="text-xs text-gray-500 mb-1">Area (พื้นที่)</div>
+                        <div id="area-1" class="text-2xl font-extrabold text-purple-700 tracking-tight">0.0000</div>
+                        <div class="text-xs text-gray-500 mt-2 mb-1 border-t border-purple-100 pt-1">Volume (ปริมาตรรอบแกน X)</div>
+                        <div id="vol-1" class="text-xl font-bold text-purple-600 tracking-tight">0.0000</div>
+                    </div>
+                    <!-- กล่อง 2 -->
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 text-center shadow-inner flex flex-col justify-center">
+                        <h3 class="text-gray-700 font-bold mb-1 text-sm">2: วงกลม D18.5 ตัดกรอบ</h3>
+                        <div class="text-xs text-gray-500 mb-1">Area (พื้นที่)</div>
+                        <div id="area-2" class="text-2xl font-extrabold text-blue-700 tracking-tight">0.0000</div>
+                        <div class="text-xs text-gray-500 mt-2 mb-1 border-t border-blue-100 pt-1">Volume (ปริมาตรรอบแกน X)</div>
+                        <div id="vol-2" class="text-xl font-bold text-blue-600 tracking-tight">0.0000</div>
+                    </div>
+                    <!-- กล่อง 3 -->
+                    <div class="bg-orange-50 p-4 rounded-lg border border-orange-200 text-center shadow-inner flex flex-col justify-center">
+                        <h3 class="text-gray-700 font-bold mb-1 text-sm">3: ช่องว่าง (Gap)</h3>
+                        <div class="text-xs text-gray-500 mb-1">Area (พื้นที่)</div>
+                        <div id="area-3" class="text-2xl font-extrabold text-orange-600 tracking-tight">0.0000</div>
+                        <div class="text-xs text-gray-500 mt-2 mb-1 border-t border-orange-100 pt-1">Volume (ปริมาตรรอบแกน X)</div>
+                        <div id="vol-3" class="text-xl font-bold text-orange-600 tracking-tight">0.0000</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white border-t border-gray-200 p-6 md:p-8">
+            <!-- Section: สมการและหลักการคำนวณที่เพิ่มเข้ามา -->
+            <div id="calculationTheory" class="mb-10">
+                <h2 class="text-xl font-bold text-slate-800 mb-4 border-l-4 border-emerald-500 pl-3">สมการแบบจำลองที่ใช้คำนวณ (Mathematical Models & Formulas)</h2>
+                <div class="bg-emerald-50 p-6 rounded-xl border border-emerald-200 text-gray-800 text-sm leading-relaxed shadow-inner">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- ฝั่งพื้นที่ -->
+                        <div class="space-y-6">
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">1. พื้นที่ 1: Line & Arc Integral</h3>
+                                <p>จาก <strong>Green's Theorem</strong> $A = \frac{1}{2} \oint_{C} (x\,dy - y\,dx)$ แตกเป็นสมการย่อย:</p>
+                                <div class="overflow-visible my-2 text-center bg-white p-3 rounded shadow-sm border border-emerald-100 math-box">
+                                    <p class="text-xs text-left font-bold text-gray-500 mb-1">สมการเส้นตรง (Line):</p>
+                                    $$ \Delta A_{line} = \frac{1}{2}(x_1 y_2 - x_2 y_1) $$
+                                </div>
+                                <div class="overflow-visible my-2 text-center bg-white p-3 rounded shadow-sm border border-emerald-100 math-box">
+                                    <p class="text-xs text-left font-bold text-gray-500 mb-1">สมการส่วนโค้ง (Arc):</p>
+                                    $$ \Delta A_{arc} = \left[ \frac{1}{2}(r c_x \sin\theta - r c_y \cos\theta + r^2 \theta) \right]_{\theta_1}^{\theta_2} $$
+                                </div>
+                            </div>
+        
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">2. พื้นที่ 2 (วงกลมตัดขอบ)</h3>
+                                <div class="text-center overflow-visible math-box bg-white p-3 rounded border border-emerald-100">
+                                    $$A_2 = (R_{in}^2 \cdot \theta_{in}) + (w_{half} \cdot y_{edge})$$
+                                </div>
+                            </div>
+        
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">3. พื้นที่ 3 (Gap Area)</h3>
+                                <div class="text-center overflow-visible math-box bg-white p-3 rounded border border-emerald-100">
+                                    $$ A_3 = A_2 - A_1 - (w_{base} \times y_{base}) $$
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ฝั่งปริมาตร -->
+                        <div class="space-y-6">
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">4. ปริมาตร 1: Volume of Revolution</h3>
+                                <p>จาก <strong>Pappus's Theorem</strong> $V = -\pi \oint_{C} y^2 \, dx$ แตกเป็นสมการย่อย:</p>
+                                <div class="overflow-visible my-2 text-center bg-white p-3 rounded shadow-sm border border-emerald-100 math-box">
+                                    <p class="text-xs text-left font-bold text-gray-500 mb-1">สมการเส้นตรง (Line):</p>
+                                    $$ \Delta V_{line} = -\frac{\pi(x_2 - x_1)}{3}(y_1^2 + y_1 y_2 + y_2^2) $$
+                                </div>
+                                <div class="overflow-visible my-2 text-center bg-white p-3 rounded shadow-sm border border-emerald-100 math-box">
+                                    <p class="text-xs text-left font-bold text-gray-500 mb-1">สมการส่วนโค้ง (Arc):</p>
+                                    $$ \Delta V_{arc} = \pi r \left[ -c_y^2 \cos\theta + r c_y \left(\theta - \frac{\sin 2\theta}{2}\right) + r^2 \left(\frac{\cos^3\theta}{3} - \cos\theta\right) \right]_{\theta_1}^{\theta_2} $$
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">5. ปริมาตร 2 (วงกลมตัดขอบ)</h3>
+                                <div class="text-center overflow-visible math-box bg-white p-3 rounded border border-emerald-100">
+                                    $$V_2 = \pi \cdot w_{base} \left( R_{in}^2 - \frac{w_{base}^2}{12} \right)$$
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-base font-bold text-emerald-800 mb-2 border-b border-emerald-200 pb-1">6. ปริมาตร 3 (Gap Volume)</h3>
+                                <div class="text-center overflow-visible math-box bg-white p-3 rounded border border-emerald-100">
+                                    $$ V_3 = V_2 - V_1 - (\pi \cdot y_{base}^2 \cdot w_{base}) $$
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Section: ตารางตรวจสอบพิกัด -->
+            <h2 class="text-xl font-bold text-slate-800 mb-4 border-l-4 border-blue-500 pl-3">ตารางพิกัดจุดยอด (Coordinate Debugger ของรูปล่างซีกขวา)</h2>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm mb-10">
+                <table class="min-w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-700 font-bold">
+                        <tr>
+                            <th class="px-4 py-3 border-b">จุด (Node)</th>
+                            <th class="px-4 py-3 border-b text-right">พิกัดแกน X</th>
+                            <th class="px-4 py-3 border-b text-right">พิกัดแกน Y</th>
+                            <th class="px-4 py-3 border-b">คำอธิบายเรขาคณิต</th>
+                        </tr>
+                    </thead>
+                    <tbody id="coordinate-table" class="divide-y divide-gray-100 bg-white text-gray-600">
+                        <!-- Table rows injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Section: วิธีการคำนวณ (Dynamic Steps) -->
+            <div id="calculationSteps">
+                <h2 class="text-xl font-bold text-slate-800 mb-4 border-l-4 border-purple-500 pl-3">การแทนค่าสมการทีละขั้นตอน (Step-by-Step Substitution)</h2>
+                <div id="math-content" class="space-y-4 text-gray-800 leading-relaxed text-sm">
+                    <!-- รอการประมวลผล... -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mathCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function updateMathJax() {
+            if (window.MathJax) MathJax.typesetPromise().catch((err) => console.log(err.message));
+        }
+
+        function showError(msg) {
+            const errDiv = document.getElementById('error-msg');
+            errDiv.innerHTML = `<strong>เกิดข้อผิดพลาด:</strong><br>${msg}`;
+            errDiv.classList.remove('hidden');
+            document.getElementById('area-1').innerText = "N/A";
+            document.getElementById('area-2').innerText = "N/A";
+            document.getElementById('area-3').innerText = "N/A";
+            document.getElementById('vol-1').innerText = "N/A";
+            document.getElementById('vol-2').innerText = "N/A";
+            document.getElementById('vol-3').innerText = "N/A";
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('math-content').innerHTML = "<p class='text-red-500'>ไม่สามารถประมวลผลได้</p>";
+            document.getElementById('coordinate-table').innerHTML = "";
+        }
+
+        // ==========================================
+        // ฟังก์ชันอินทิเกรตสำหรับหา **พื้นที่ (Area)**
+        // ==========================================
+        function lineIntegral(x1, y1, x2, y2) {
+            return 0.5 * (x1 * y2 - x2 * y1);
+        }
+
+        function arcIntegral(cx, cy, r, th1, th2, isCCW) {
+            let f = (th) => 0.5 * (r * cx * Math.sin(th) - r * cy * Math.cos(th) + r * r * th);
+            if (isCCW) {
+                while (th2 < th1) th2 += 2 * Math.PI;
+                while (th2 - th1 > 2 * Math.PI) th2 -= 2 * Math.PI;
+            } else {
+                while (th2 > th1) th2 -= 2 * Math.PI;
+                while (th1 - th2 > 2 * Math.PI) th2 += 2 * Math.PI;
+            }
+            return f(th2) - f(th1);
+        }
+
+        // ==========================================
+        // ฟังก์ชันอินทิเกรตสำหรับหา **ปริมาตร (Volume)** (หมุนรอบแกน X)
+        // ==========================================
+        function lineVolumeIntegral(x1, y1, x2, y2) {
+            return -Math.PI * ((x2 - x1) / 3.0) * (y1**2 + y1*y2 + y2**2);
+        }
+
+        function arcVolumeIntegral(cx, cy, r, th1, th2, isCCW) {
+            let f = (th) => {
+                let term1 = -(cy**2) * Math.cos(th); 
+                let term2 = r * cy * (th - (Math.sin(2 * th) / 2.0));
+                let term3 = r**2 * (-Math.cos(th) + (Math.pow(Math.cos(th), 3) / 3.0));
+                return Math.PI * r * (term1 + term2 + term3);
+            };
+            
+            if (isCCW) {
+                while (th2 < th1) th2 += 2 * Math.PI;
+                while (th2 - th1 > 2 * Math.PI) th2 -= 2 * Math.PI;
+            } else {
+                while (th2 > th1) th2 -= 2 * Math.PI;
+                while (th1 - th2 > 2 * Math.PI) th2 += 2 * Math.PI;
+            }
+            return f(th2) - f(th1);
+        }
+
+        function calculate() {
+            document.getElementById('error-msg').classList.add('hidden');
+
+            // อ่านค่าพารามิเตอร์ทั้งหมด
+            const D_outer = parseFloat(document.getElementById('d_outer').value);
+            const D_inner = parseFloat(document.getElementById('d_inner').value);
+
+            const R_large = parseFloat(document.getElementById('d_large').value) / 2;
+            const w_base = parseFloat(document.getElementById('w_base').value);
+            const y_base = parseFloat(document.getElementById('y_base').value);
+            const y_top = parseFloat(document.getElementById('y_top').value);
+            const w_top1 = parseFloat(document.getElementById('w_top').value);
+            const angleDeg = parseFloat(document.getElementById('angle').value);
+            const y_mid = parseFloat(document.getElementById('y_mid').value);
+            
+            const angleRad = angleDeg * Math.PI / 180;
+            let l_w_top = Math.tan(angleRad) * (y_top - y_mid); 
+            const w_top = parseFloat(w_top1 + (2 * l_w_top));
+            
+            const cy_small = parseFloat(document.getElementById('cy_small').value);
+            const cx_small = parseFloat(document.getElementById('c_dist').value) / 2;
+            const r_small = parseFloat(document.getElementById('r_small').value);
+
+            try {
+                // --- คำนวณพิกัดจุด (Nodes) รูปล่าง ---
+                const P0 = { x: 0, y: y_base, type: 'start', desc: "จุดกึ่งกลางฐานล่าง (Origin Axis)" };
+                const P1 = { x: w_base / 2, y: y_base, type: 'line', desc: "มุมขวาฐาน (จบเส้น H แนวนอน)" };
+                
+                const y_p2 = Math.sqrt(R_large**2 - P1.x**2);
+                if(isNaN(y_p2)) throw new Error("ความกว้างฐานกว้างกว่ารัศมีวงกลมใหญ่ ทำให้เส้นแนวตั้งไม่ชนวงกลม");
+                const P2 = { x: P1.x, y: y_p2, type: 'line', desc: "จุดชนวงกลมใหญ่ D" + (R_large*2) };
+                
+                const x_p3 = Math.sqrt(R_large**2 - y_top**2);
+                if(isNaN(x_p3)) throw new Error("ระดับความสูงขอบนอกสูงกว่าขอบวงกลมใหญ่");
+                const P3 = { x: x_p3, y: y_top, type: 'arc', c: {x:0, y:0}, r: R_large, ccw: true, desc: "ขอบบนสุดที่ตัดกับวงกลมใหญ่" };
+                
+                const P4 = { x: w_top / 2, y: y_top, type: 'line', desc: "จุดเริ่มหักมุมรอยบาก" };
+                
+                const dx_slope = (y_top - y_mid) * Math.tan(angleRad);
+                const x_p5 = P4.x - dx_slope;
+                const P5 = { x: x_p5, y: y_mid, type: 'line', desc: `ปลายมุมบาก ${angleDeg}°` };
+                
+                const dy_small = y_mid - cy_small;
+                const dx_small = Math.sqrt(r_small**2 - dy_small**2);
+                if(isNaN(dx_small)) throw new Error("เส้นประ (Y_mid) ไม่ตัดกับวงกลมเล็กด้านใน");
+                const x_p6 = cx_small + dx_small; 
+                const P6 = { x: x_p6, y: y_mid, type: 'line', desc: "จุดชนวงกลมเล็กฝั่งขวา" };
+                
+                const x_p7 = cx_small - dx_small; 
+                const P7 = { x: x_p7, y: y_mid, type: 'arc', c: {x:cx_small, y:cy_small}, r: r_small, ccw: false, desc: "จุดออกจากโค้งวงกลมเล็ก" };
+
+                const P8 = { x: 0, y: y_mid, type: 'line', desc: "จุดตัดราบกึ่งกลางแกน Y" };
+
+                const nodes = [P0, P1, P2, P3, P4, P5, P6, P7, P8];
+
+                // อัปเดตตาราง
+                let tableHTML = "";
+                nodes.forEach((n, idx) => {
+                    tableHTML += `
+                        <tr class="table-row-hover transition-colors">
+                            <td class="px-4 py-2 border-b font-bold text-indigo-600">P${idx}</td>
+                            <td class="px-4 py-2 border-b text-right font-mono text-gray-800">${n.x.toFixed(4)}</td>
+                            <td class="px-4 py-2 border-b text-right font-mono text-gray-800">${n.y.toFixed(4)}</td>
+                            <td class="px-4 py-2 border-b text-gray-500">${n.desc}</td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('coordinate-table').innerHTML = tableHTML;
+
+                // =========================================================================
+                // 1. คำนวณพื้นที่ 1 & ปริมาตร 1 (รูปล่าง) พร้อมสร้าง HTML อธิบายและสมการทีละขั้นตอน
+                // =========================================================================
+                let area_half = 0;
+                let vol_half = 0;
+                
+                let stepDetailsHTML = `
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6">
+                        <h3 class="font-bold text-lg text-indigo-700 mb-4 border-b-2 border-indigo-100 pb-2 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            ขั้นตอนที่ 1: คำนวณ Integral และแทนค่าทีละเส้นทาง (เฉพาะซีกขวา)
+                        </h3>
+                        <div class="space-y-4">
+                `;
+
+                for (let i = 0; i < nodes.length - 1; i++) {
+                    let n1 = nodes[i], n2 = nodes[i+1];
+                    let stepArea = 0, stepVol = 0;
+                    let methodDesc = "";
+                    let eqArea = "";
+                    let eqVol = "";
+
+                    if (n2.type === 'line') {
+                        stepArea = lineIntegral(n1.x, n1.y, n2.x, n2.y);
+                        stepVol = lineVolumeIntegral(n1.x, n1.y, n2.x, n2.y);
+                        methodDesc = "เส้นตรง (Line)";
+                        
+                        // แทนค่าลงสมการ Line
+                        eqArea = `\\frac{1}{2}((${n1.x.toFixed(4)})(${n2.y.toFixed(4)}) - (${n2.x.toFixed(4)})(${n1.y.toFixed(4)}))`;
+                        eqVol = `-\\frac{\\pi(${n2.x.toFixed(4)} - ${n1.x.toFixed(4)})}{3}(${n1.y.toFixed(4)}^2 + (${n1.y.toFixed(4)})(${n2.y.toFixed(4)}) + ${n2.y.toFixed(4)}^2)`;
+                    }
+                    else if (n2.type === 'arc') {
+                        let th1 = Math.atan2(n1.y - n2.c.y, n1.x - n2.c.x);
+                        let th2 = Math.atan2(n2.y - n2.c.y, n2.x - n2.c.x);
+                        stepArea = arcIntegral(n2.c.x, n2.c.y, n2.r, th1, th2, n2.ccw);
+                        stepVol = arcVolumeIntegral(n2.c.x, n2.c.y, n2.r, th1, th2, n2.ccw);
+                        methodDesc = `ส่วนโค้ง (Arc) R=${n2.r}`;
+                        
+                        // แทนค่าลงสมการ Arc (แสดงมุมเป็นองศาเพื่อให้ดูง่าย)
+                        let t1_deg = (th1 * 180 / Math.PI).toFixed(2);
+                        let t2_deg = (th2 * 180 / Math.PI).toFixed(2);
+                        eqArea = `\\left[ f_{A}(\\theta) \\right]_{${t1_deg}^\\circ}^{${t2_deg}^\\circ}`;
+                        eqVol = `\\left[ f_{V}(\\theta) \\right]_{${t1_deg}^\\circ}^{${t2_deg}^\\circ}`;
+                    }
+                    
+                    area_half += stepArea;
+                    vol_half += stepVol;
+
+                    // เพิ่มกล่องแสดงผลลัพธ์ย่อยพร้อมสมการแต่ละ Loop (ไม่มี overflow-x-auto)
+                    stepDetailsHTML += `
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
+                            <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                                <span class="font-bold text-indigo-800 bg-indigo-100 px-3 py-1 rounded shadow-sm text-sm border border-indigo-200">
+                                    Path: $P_{${i}}(${n1.x.toFixed(2)}, ${n1.y.toFixed(2)}) \\rightarrow P_{${i+1}}(${n2.x.toFixed(2)}, ${n2.y.toFixed(2)})$
+                                </span>
+                                <span class="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded border border-emerald-200">
+                                    ${methodDesc}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 text-sm mt-2">
+                                <div class="bg-white p-3 rounded border border-purple-100 border-l-4 border-l-purple-400">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-600 font-semibold">$\\Delta \\text{Area}$</span>
+                                        <span class="font-mono text-purple-700 font-bold text-base">${stepArea >= 0 ? '+' : ''}${stepArea.toFixed(6)}</span>
+                                    </div>
+                                    <div class="overflow-visible text-purple-800 bg-purple-50 px-3 py-2 rounded math-box text-xs w-full">
+                                        $$ = ${eqArea} $$
+                                    </div>
+                                </div>
+                                <div class="bg-white p-3 rounded border border-blue-100 border-l-4 border-l-blue-400">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-600 font-semibold">$\\Delta \\text{Volume}$</span>
+                                        <span class="font-mono text-blue-700 font-bold text-base">${stepVol >= 0 ? '+' : ''}${stepVol.toFixed(6)}</span>
+                                    </div>
+                                    <div class="overflow-visible text-blue-800 bg-blue-50 px-3 py-2 rounded math-box text-xs w-full">
+                                        $$ = ${eqVol} $$
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // ปิดลูปเส้นสุดท้ายกลับไปจุดเริ่มต้น
+                let n_last = nodes[nodes.length-1], n_first = nodes[0];
+                let stepAreaLast = lineIntegral(n_last.x, n_last.y, n_first.x, n_first.y);
+                let stepVolLast = lineVolumeIntegral(n_last.x, n_last.y, n_first.x, n_first.y);
+                
+                let eqAreaLast = `\\frac{1}{2}((${n_last.x.toFixed(4)})(${n_first.y.toFixed(4)}) - (${n_first.x.toFixed(4)})(${n_last.y.toFixed(4)}))`;
+                let eqVolLast = `-\\frac{\\pi(${n_first.x.toFixed(4)} - ${n_last.x.toFixed(4)})}{3}(${n_last.y.toFixed(4)}^2 + (${n_last.y.toFixed(4)})(${n_first.y.toFixed(4)}) + ${n_first.y.toFixed(4)}^2)`;
+
+                area_half += stepAreaLast;
+                vol_half += stepVolLast;
+
+                stepDetailsHTML += `
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors shadow-sm">
+                            <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                                <span class="font-bold text-indigo-800 bg-indigo-100 px-3 py-1 rounded shadow-sm text-sm border border-indigo-200">
+                                    Path: $P_{${nodes.length-1}}(${n_last.x.toFixed(2)}, ${n_last.y.toFixed(2)}) \\rightarrow P_{0}(${n_first.x.toFixed(2)}, ${n_first.y.toFixed(2)})$
+                                </span>
+                                <span class="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded border border-emerald-200">
+                                    ปิดลูปตามแนวแกน Y
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 text-sm mt-2">
+                                <div class="bg-white p-3 rounded border border-purple-100 border-l-4 border-l-purple-400">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-600 font-semibold">$\\Delta \\text{Area}$</span>
+                                        <span class="font-mono text-purple-700 font-bold text-base">${stepAreaLast >= 0 ? '+' : ''}${stepAreaLast.toFixed(6)}</span>
+                                    </div>
+                                    <div class="overflow-visible text-purple-800 bg-purple-50 px-3 py-2 rounded math-box text-xs w-full">
+                                        $$ = ${eqAreaLast} $$
+                                    </div>
+                                </div>
+                                <div class="bg-white p-3 rounded border border-blue-100 border-l-4 border-l-blue-400">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-600 font-semibold">$\\Delta \\text{Volume}$</span>
+                                        <span class="font-mono text-blue-700 font-bold text-base">${stepVolLast >= 0 ? '+' : ''}${stepVolLast.toFixed(6)}</span>
+                                    </div>
+                                    <div class="overflow-visible text-blue-800 bg-blue-50 px-3 py-2 rounded math-box text-xs w-full">
+                                        $$ = ${eqVolLast} $$
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                `;
+
+                const area_1 = Math.abs(area_half * 2);
+                const vol_1 = Math.abs(vol_half * 2);
+
+                stepDetailsHTML += `
+                        <div class="mt-4 p-5 bg-indigo-50 rounded-lg border border-indigo-200">
+                            <div class="flex flex-col space-y-2 text-sm text-gray-700 mb-3 border-b border-indigo-200 pb-3">
+                                <div class="flex justify-between items-center">
+                                    <span>ผลรวมพื้นที่ซีกขวา $\\sum \\Delta A$:</span>
+                                    <strong class="font-mono text-base">${area_half.toFixed(6)}</strong>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span>ผลรวมปริมาตรซีกขวา $\\sum \\Delta V$:</span>
+                                    <strong class="font-mono text-base">${vol_half.toFixed(6)}</strong>
+                                </div>
+                            </div>
+                            <div class="font-bold text-indigo-800 text-center mb-3">
+                                $\\rightarrow$ ทำการคูณ 2 (สมมาตรซ้าย-ขวา) จะได้สมการผลลัพธ์ Part 1
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-center">
+                                <div class="bg-white py-3 px-2 rounded shadow-sm border border-purple-100">
+                                    <div class="text-xs text-gray-500 mb-1 overflow-visible math-box">$$ A_1 = 2 \\times |${area_half.toFixed(5)}| $$</div>
+                                    <div class="text-xl font-bold text-purple-700">${area_1.toFixed(5)}</div>
+                                </div>
+                                <div class="bg-white py-3 px-2 rounded shadow-sm border border-blue-100">
+                                    <div class="text-xs text-gray-500 mb-1 overflow-visible math-box">$$ V_1 = 2 \\times |${vol_half.toFixed(5)}| $$</div>
+                                    <div class="text-xl font-bold text-blue-700">${vol_1.toFixed(5)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- ปิดกล่องขั้นตอนที่ 1 -->
+                `;
+
+                // =========================================================================
+                // 2. คำนวณพื้นที่ 2 & ปริมาตร 2 (วงกลมที่ถูกตัด) พร้อมสมการแทนค่า
+                // =========================================================================
+                const R_inner = D_inner / 2;
+                const w_half = w_base / 2;
+                if(R_inner < w_half) throw new Error("Diameter วงในเล็กกว่าความกว้างฐาน ไม่สามารถสร้างขอบเขตได้");
+                const y_edge_in = Math.sqrt(R_inner**2 - w_half**2);
+                const theta_in = Math.asin(w_half / R_inner);
+                
+                const area_2 = (R_inner**2 * theta_in) + (w_half * y_edge_in);
+                const vol_2 = Math.PI * w_base * (R_inner**2 - (w_base**2 / 12.0));
+
+                let stepPart2HTML = `
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6">
+                        <h3 class="font-bold text-lg text-blue-700 mb-4 border-b-2 border-blue-100 pb-2">
+                            ขั้นตอนที่ 2: แทนค่าสมการวงกลมถูกตัด (Part 2)
+                        </h3>
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white p-3 rounded text-gray-700 border border-blue-50 text-center">
+                                <div>$R_{in} = ${R_inner.toFixed(3)}$</div>
+                                <div>$w_{base} = ${w_base.toFixed(3)}$</div>
+                                <div>$\\theta_{in} = ${theta_in.toFixed(4)}\\text{ rad}$</div>
+                            </div>
+                            
+                            <div class="bg-white p-4 rounded border border-blue-50">
+                                <strong>แทนค่าหา Area 2:</strong>
+                                <div class="overflow-visible text-purple-700 mt-2 math-box">
+                                    $$ A_2 = (${R_inner.toFixed(2)}^2 \\cdot ${theta_in.toFixed(4)}) + (${w_half.toFixed(3)} \\cdot ${y_edge_in.toFixed(3)}) = ${area_2.toFixed(5)} $$
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white p-4 rounded border border-blue-50">
+                                <strong>แทนค่าหา Volume 2:</strong>
+                                <div class="overflow-visible text-blue-700 mt-2 math-box">
+                                    $$ V_2 = \\pi \\cdot ${w_base.toFixed(3)} \\left( ${R_inner.toFixed(2)}^2 - \\frac{${w_base.toFixed(3)}^2}{12} \\right) = ${vol_2.toFixed(5)} $$
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // =========================================================================
+                // 3. คำนวณพื้นที่ 3 & ปริมาตร 3 (Gap) พร้อมสมการแทนค่า
+                // =========================================================================
+                const area_base = w_base * y_base;
+                const area_3 = area_2 - area_1 - area_base;
+
+                const vol_base = Math.PI * (y_base**2) * w_base;
+                const vol_3 = vol_2 - vol_1 - vol_base;
+
+                let stepPart3HTML = `
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6">
+                        <h3 class="font-bold text-lg text-orange-700 mb-4 border-b-2 border-orange-100 pb-2">
+                            ขั้นตอนที่ 3: แทนค่าสมการหาช่องว่าง (Gap Part 3)
+                        </h3>
+                        <div class="bg-orange-50 p-4 rounded-lg border border-orange-100 text-sm space-y-4">
+                            
+                            <div class="bg-white p-4 rounded border border-orange-50">
+                                <strong class="text-gray-700">คำนวณส่วนฐานสี่เหลี่ยมด้านล่าง (Base):</strong>
+                                <div class="overflow-visible text-gray-600 mt-2 math-box text-xs w-full space-y-4">
+                                    <div>$$ A_{base} = ${w_base.toFixed(3)} \\times ${y_base.toFixed(3)} = ${area_base.toFixed(5)} $$</div>
+                                    <div>$$ V_{base} = \\pi \\cdot (${y_base.toFixed(3)})^2 \\cdot ${w_base.toFixed(3)} = ${vol_base.toFixed(5)} $$</div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white p-4 rounded border border-orange-200 border-l-4 border-l-orange-400">
+                                <strong>แทนค่าสมการ Gap Area (Area 3):</strong> 
+                                <div class="overflow-visible text-orange-600 mt-2 math-box font-bold">
+                                    $$ A_3 = ${area_2.toFixed(4)} - ${area_1.toFixed(4)} - ${area_base.toFixed(4)} = ${area_3.toFixed(5)} $$
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white p-4 rounded border border-orange-200 border-l-4 border-l-orange-400">
+                                <strong>แทนค่าสมการ Gap Volume (Volume 3):</strong>
+                                <div class="overflow-visible text-orange-600 mt-2 math-box font-bold">
+                                    $$ V_3 = ${vol_2.toFixed(4)} - ${vol_1.toFixed(4)} - ${vol_base.toFixed(4)} = ${vol_3.toFixed(5)} $$
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                `;
+
+                // อัปเดต UI หน้าจอ
+                document.getElementById('area-1').innerText = area_1.toFixed(4);
+                document.getElementById('vol-1').innerText = vol_1.toFixed(4);
+                
+                document.getElementById('area-2').innerText = area_2.toFixed(4);
+                document.getElementById('vol-2').innerText = vol_2.toFixed(4);
+                
+                document.getElementById('area-3').innerText = area_3.toFixed(4);
+                document.getElementById('vol-3').innerText = vol_3.toFixed(4);
+
+                // รวม HTML ของ Step-by-step ทั้งหมดเข้าด้วยกัน
+                document.getElementById('math-content').innerHTML = stepDetailsHTML + stepPart2HTML + stepPart3HTML;
+                
+                updateMathJax();
+
+                // --- วาด Canvas ---
+                const maxR = D_outer / 2;
+                drawCanvas(nodes, y_base, maxR, w_base, D_outer, D_inner);
+
+            } catch (e) {
+                showError(e.message);
+            }
+        }
+
+        function drawCanvas(nodes_bottom, y_base, maxR, w_base, D_outer, D_inner) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const w_half = w_base / 2;
+            const R_inner = D_inner / 2;
+            const R_outer = D_outer / 2;
+            const y_edge_in = Math.sqrt(R_inner**2 - w_half**2);
+            const y_edge_out = Math.sqrt(R_outer**2 - w_half**2);
+
+            let bounds = { minX: -maxR*1.15, maxX: maxR*1.15, minY: 0, maxY: R_outer*1.1 };
+            const scale = Math.min(canvas.width / (bounds.maxX - bounds.minX), canvas.height / (bounds.maxY - bounds.minY));
+            const offsetX = canvas.width / 2; 
+            const offsetY = canvas.height - 20;
+
+            const SX = (x) => offsetX + x * scale;
+            const SY = (y) => offsetY - y * scale;
+
+            // 1. วาดแกน
+            ctx.beginPath();
+            ctx.moveTo(SX(bounds.minX), SY(0)); ctx.lineTo(SX(bounds.maxX), SY(0));
+            ctx.moveTo(SX(0), SY(-2)); ctx.lineTo(SX(0), SY(bounds.maxY));
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1; ctx.stroke();
+
+            // 2. วาดพื้นที่สี่เหลี่ยมด้านล่าง Area Base (ถึง 0,0)
+            ctx.beginPath();
+            ctx.rect(SX(-w_half), SY(y_base), w_half*2 * scale, y_base * scale);
+            ctx.fillStyle = '#f8fafc';
+            ctx.fill();
+            // เส้นประขอบเขต
+            ctx.beginPath();
+            ctx.moveTo(SX(-w_half), SY(y_base)); ctx.lineTo(SX(-w_half), SY(0));
+            ctx.lineTo(SX(w_half), SY(0)); ctx.lineTo(SX(w_half), SY(y_base));
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#f97316'; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 3. ถมสีพื้นที่วงกลมทั้งหมด (Area 2 - พื้นหลังส้มอ่อนเพื่อให้กลายเป็นสี Gap)
+            ctx.beginPath();
+            ctx.moveTo(SX(-w_half), SY(y_edge_in));
+            ctx.lineTo(SX(-w_half), SY(0));
+            ctx.lineTo(SX(w_half), SY(0));
+            ctx.lineTo(SX(w_half), SY(y_edge_in));
+            let th_start = Math.atan2(y_edge_in, w_half);
+            let th_end = Math.atan2(y_edge_in, -w_half);
+            ctx.arc(SX(0), SY(0), R_inner * scale, -th_start, -th_end, true);
+            ctx.fillStyle = 'rgba(251, 146, 60, 0.2)'; // สีส้มอ่อน (สำหรับ Area 3 ที่จะโผล่มา)
+            ctx.fill();
+
+            // 4. วาดรูปล่าง (Area 1) ทับลงไป (จะบังสีส้มตรงที่มันอยู่ ทำให้เหลือ Gap ด้านบน)
+            ctx.beginPath();
+            ctx.moveTo(SX(nodes_bottom[0].x), SY(nodes_bottom[0].y));
+            // ซีกขวา
+            for (let i = 1; i < nodes_bottom.length; i++) {
+                if (nodes_bottom[i].type === 'line') ctx.lineTo(SX(nodes_bottom[i].x), SY(nodes_bottom[i].y));
+                else if (nodes_bottom[i].type === 'arc') {
+                    let t1 = Math.atan2(nodes_bottom[i-1].y - nodes_bottom[i].c.y, nodes_bottom[i-1].x - nodes_bottom[i].c.x);
+                    let t2 = Math.atan2(nodes_bottom[i].y - nodes_bottom[i].c.y, nodes_bottom[i].x - nodes_bottom[i].c.x);
+                    ctx.arc(SX(nodes_bottom[i].c.x), SY(nodes_bottom[i].c.y), nodes_bottom[i].r * scale, -t1, -t2, nodes_bottom[i].ccw);
+                }
+            }
+            // ซีกซ้าย
+            for (let i = nodes_bottom.length - 1; i >= 1; i--) {
+                let n1_mir = { ...nodes_bottom[i], x: -nodes_bottom[i].x };
+                let n0_mir = { ...nodes_bottom[i-1], x: -nodes_bottom[i-1].x };
+                if (nodes_bottom[i].type === 'line') ctx.lineTo(SX(n0_mir.x), SY(n0_mir.y));
+                else if (nodes_bottom[i].type === 'arc') {
+                    let cx_mir = -nodes_bottom[i].c.x, cy_mir = nodes_bottom[i].c.y;
+                    let t_st = Math.atan2(n1_mir.y - cy_mir, n1_mir.x - cx_mir);
+                    let t_en = Math.atan2(n0_mir.y - cy_mir, n0_mir.x - cx_mir);
+                    ctx.arc(SX(cx_mir), SY(cy_mir), nodes_bottom[i].r * scale, -t_st, -t_en, nodes_bottom[i].ccw);
+                }
+            }
+            ctx.closePath();
+            // ระบายสีทึบของรูป 1 ให้บังสีส้ม
+            ctx.fillStyle = 'rgba(216, 180, 255, 0.95)';
+            ctx.fill();
+            ctx.strokeStyle = '#9333ea';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 5. วาดรูปร่างด้านบน (Top Shape)
+            ctx.beginPath();
+            ctx.moveTo(SX(w_half), SY(y_edge_in));
+            ctx.lineTo(SX(w_half), SY(y_edge_out));
+            let th1_out = Math.atan2(y_edge_out, w_half);
+            let th2_out = Math.atan2(y_edge_out, -w_half);
+            ctx.arc(SX(0), SY(0), R_outer * scale, -th1_out, -th2_out, true); // โค้งบน D_outer
+            ctx.lineTo(SX(-w_half), SY(y_edge_in));
+            let th2_in = Math.atan2(y_edge_in, -w_half);
+            let th1_in = Math.atan2(y_edge_in, w_half);
+            ctx.arc(SX(0), SY(0), R_inner * scale, -th2_in, -th1_in, false); // โค้งล่าง D_inner (ย้อนกลับ)
+            ctx.closePath();
+            
+            ctx.fillStyle = 'rgba(186, 230, 253, 0.8)'; // ฟ้าใส
+            ctx.fill();
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 6. วาดเส้นประวงกลมเต็มวง D18.5 เล็กน้อยเพื่อให้ดูง่าย
+            ctx.beginPath();
+            ctx.arc(SX(0), SY(0), R_inner * scale, 0, Math.PI, true);
+            ctx.setLineDash([4, 6]);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        setTimeout(calculate, 300);
+    </script>
+</body>
+</html>
