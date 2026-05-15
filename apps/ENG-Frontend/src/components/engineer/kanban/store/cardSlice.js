@@ -8,11 +8,12 @@
  *          archive, auto-join, card detail UI
  */
 import axios from 'axios';
-import { server } from '../../../../constance/constance';
+import { server, GAS_DRIVE_URL } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
 import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
 import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
+import { uploadFileToDrive } from '../../../../utils/uploadFileToDrive';
 
 export const createCardSlice = (set, get) => ({
     // --- Card Data State ---
@@ -27,6 +28,7 @@ export const createCardSlice = (set, get) => ({
     // --- Notifications (In-App) ---
     notifications: [],
     unreadNotificationCount: 0,
+    isFetchingNotifications: false,
 
     // ====================================================================
     //  CARD CRUD
@@ -39,6 +41,8 @@ export const createCardSlice = (set, get) => ({
             set((state) => ({
                 cards: { ...state.cards, [listId]: cardsData }
             }));
+            // F3-13: Rebuild index after bulk card replacement
+            get()._rebuildCardIndex();
         } catch (err) {
             console.error(`Failed to fetch cards for list ${listId}`, err);
         }
@@ -74,13 +78,11 @@ export const createCardSlice = (set, get) => ({
 
                 set(state => {
                     const newCards = { ...state.cards };
-                    for (const listId in newCards) {
-                        const idx = newCards[listId].findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            newCards[listId] = [...newCards[listId]];
-                            newCards[listId][idx] = { ...newCards[listId][idx], ...refreshedCard };
-                            break;
-                        }
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], ...refreshedCard };
                     }
                     return { activeCardDetail: refreshedCard, cards: newCards };
                 });
@@ -99,13 +101,11 @@ export const createCardSlice = (set, get) => ({
                 const updatedCard = res.data.data;
                 set(state => {
                     const newCards = { ...state.cards };
-                    for (const [listId, listCards] of Object.entries(newCards)) {
-                        const idx = listCards.findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            newCards[listId] = [...listCards];
-                            newCards[listId][idx] = { ...newCards[listId][idx], ...updatedCard };
-                            break;
-                        }
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
+                    if (loc) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], ...updatedCard };
                     }
                     return {
                         cards: newCards,
@@ -130,19 +130,20 @@ export const createCardSlice = (set, get) => ({
             if (res.data?.data) {
                 set(state => {
                     const newCards = { ...state.cards };
+                    // F3-13: O(1) lookup via cardIndex
+                    const loc = get()._findCardList(cardId);
                     let movedCard = null;
-                    for (const [listId, listCards] of Object.entries(newCards)) {
-                        const idx = listCards.findIndex(c => c.id === cardId);
-                        if (idx >= 0) {
-                            movedCard = { ...listCards[idx], ...res.data.data };
-                            newCards[listId] = listCards.filter(c => c.id !== cardId);
-                            break;
-                        }
+                    if (loc) {
+                        movedCard = { ...newCards[loc.listId][loc.idx], ...res.data.data };
+                        newCards[loc.listId] = newCards[loc.listId].filter(c => c.id !== cardId);
                     }
                     if (movedCard) {
                         newCards[newListId] = [...(newCards[newListId] || []), movedCard];
                     }
-                    return { cards: newCards };
+                    // F3-13: Update index — old listId removed, new listId added
+                    const newIndex = new Map(state.cardIndex);
+                    newIndex.set(String(cardId), String(newListId));
+                    return { cards: newCards, cardIndex: newIndex };
                 });
                 get().checkAndAutoJoin('card', cardId);
                 return true;
@@ -176,18 +177,36 @@ export const createCardSlice = (set, get) => ({
 
     deleteCard: async (cardId) => {
         try {
+            // First, delete Google Drive attachments from the frontend to ensure auth context
+            const loc = get()._findCardList(cardId);
+            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
+            if (card && card.attachments) {
+                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                for (const att of card.attachments) {
+                    if (att.drive_file_id) {
+                        try {
+                            await deleteFileFromDrive(att.drive_file_id);
+                        } catch (err) {
+                            console.warn('Failed to delete Drive file from frontend:', att.drive_file_id, err);
+                        }
+                    }
+                }
+            }
+
             await axios.delete(`${server.KANBAN_CARDS}/${cardId}`);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const [listId, listCards] of Object.entries(newCards)) {
-                    const idx = listCards.findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        newCards[listId] = listCards.filter(c => c.id !== cardId);
-                        break;
-                    }
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    newCards[loc.listId] = newCards[loc.listId].filter(c => c.id !== cardId);
                 }
+                // F3-13: Remove from index
+                const newIndex = new Map(state.cardIndex);
+                newIndex.delete(String(cardId));
                 return {
                     cards: newCards,
+                    cardIndex: newIndex,
                     isCardDetailOpen: state.activeCardId === cardId ? false : state.isCardDetailOpen,
                     activeCardId: state.activeCardId === cardId ? null : state.activeCardId,
                     activeCardDetail: state.activeCardDetail?.id === cardId ? null : state.activeCardDetail
@@ -298,16 +317,13 @@ export const createCardSlice = (set, get) => ({
             get().fetchCardDetail(cardId);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const listId in newCards) {
-                    const idx = newCards[listId].findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        const ids = newCards[listId][idx].label_ids || [];
-                        if (!ids.includes(labelId) && !ids.includes(String(labelId))) {
-                            const updatedCard = { ...newCards[listId][idx], label_ids: [...ids, labelId] };
-                            newCards[listId] = [...newCards[listId]];
-                            newCards[listId][idx] = updatedCard;
-                        }
-                        break;
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    const ids = newCards[loc.listId][loc.idx].label_ids || [];
+                    if (!ids.includes(labelId) && !ids.includes(String(labelId))) {
+                        newCards[loc.listId] = [...newCards[loc.listId]];
+                        newCards[loc.listId][loc.idx] = { ...newCards[loc.listId][loc.idx], label_ids: [...ids, labelId] };
                     }
                 }
                 return { cards: newCards };
@@ -327,18 +343,15 @@ export const createCardSlice = (set, get) => ({
             get().fetchCardDetail(cardId);
             set(state => {
                 const newCards = { ...state.cards };
-                for (const listId in newCards) {
-                    const idx = newCards[listId].findIndex(c => c.id === cardId);
-                    if (idx >= 0) {
-                        const ids = newCards[listId][idx].label_ids || [];
-                        const updatedCard = {
-                            ...newCards[listId][idx],
-                            label_ids: ids.filter(id => id !== labelId && String(id) !== String(labelId))
-                        };
-                        newCards[listId] = [...newCards[listId]];
-                        newCards[listId][idx] = updatedCard;
-                        break;
-                    }
+                // F3-13: O(1) lookup via cardIndex
+                const loc = get()._findCardList(cardId);
+                if (loc) {
+                    const ids = newCards[loc.listId][loc.idx].label_ids || [];
+                    newCards[loc.listId] = [...newCards[loc.listId]];
+                    newCards[loc.listId][loc.idx] = {
+                        ...newCards[loc.listId][loc.idx],
+                        label_ids: ids.filter(id => id !== labelId && String(id) !== String(labelId))
+                    };
                 }
                 return { cards: newCards };
             });
@@ -459,7 +472,7 @@ export const createCardSlice = (set, get) => ({
         try {
             const res = await axios.post(`${server.KANBAN_TASK_LISTS}/${taskListId}/tasks`, { name });
             if (res.data?.data) {
-                if (cardId) get().fetchCardDetail(cardId);
+                if (cardId) await get().fetchCardDetail(cardId);
                 get().checkAndAutoJoin('card', cardId);
                 return res.data.data;
             }
@@ -474,7 +487,7 @@ export const createCardSlice = (set, get) => ({
         try {
             const res = await axios.patch(`${server.KANBAN_TASKS}/${taskId}`, data);
             if (res.data?.data) {
-                if (cardId) get().fetchCardDetail(cardId);
+                if (cardId) await get().fetchCardDetail(cardId);
                 return res.data.data;
             }
         } catch (err) {
@@ -487,7 +500,7 @@ export const createCardSlice = (set, get) => ({
     deleteTask: async (taskId, cardId) => {
         try {
             await axios.delete(`${server.KANBAN_TASKS}/${taskId}`);
-            if (cardId) get().fetchCardDetail(cardId);
+            if (cardId) await get().fetchCardDetail(cardId);
             return true;
         } catch (err) {
             console.error('Failed to delete task', err);
@@ -563,22 +576,51 @@ export const createCardSlice = (set, get) => ({
         return null;
     },
 
-    addFileAttachment: async (cardId, file) => {
+    addFileAttachment: async (cardId, file, popup) => {
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await axios.post(
-                `${server.KANBAN_CARDS}/${cardId}/attachments`,
-                formData,
-                { headers: { 'Content-Type': 'multipart/form-data' } }
-            );
-            if (res.data?.data) {
-                get().fetchCardDetail(cardId);
-                return res.data.data;
+            // ── Step 1: Upload to Google Drive via GAS popup ──
+            if (GAS_DRIVE_URL) {
+                const { activeProject, activeBoard } = get();
+                const projectId = activeProject?.id || 0;
+                const boardId = activeBoard?.id || 0;
+
+                const gasResult = await uploadFileToDrive(file, {
+                    projectId, boardId, cardId,
+                }, { popup });
+
+                // ── Step 2: Send Drive metadata to backend for DB storage ──
+                const res = await axios.post(
+                    `${server.KANBAN_CARDS}/${cardId}/attachments`,
+                    {
+                        drive_file_id: gasResult.fileId,
+                        drive_folder_path: gasResult.folderPath,
+                        file_name: file.name,
+                        file_size: file.size,
+                        mime_type: file.type || 'application/octet-stream',
+                    },
+                    { headers: { 'Content-Type': 'application/json' } }
+                );
+                if (res.data?.data) {
+                    get().fetchCardDetail(cardId);
+                    return res.data.data;
+                }
+            } else {
+                // Fallback: legacy multipart upload to local storage
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await axios.post(
+                    `${server.KANBAN_CARDS}/${cardId}/attachments`,
+                    formData,
+                    { headers: { 'Content-Type': 'multipart/form-data' } }
+                );
+                if (res.data?.data) {
+                    get().fetchCardDetail(cardId);
+                    return res.data.data;
+                }
             }
         } catch (err) {
             console.error('Failed to upload file attachment', err);
-            Swal.fire('Error', err.response?.data?.error || 'ไม่สามารถอัปโหลดไฟล์ได้', 'error');
+            Swal.fire('Error', err?.message || err?.response?.data?.error || 'ไม่สามารถอัปโหลดไฟล์ได้', 'error');
         }
         return null;
     },
@@ -599,10 +641,38 @@ export const createCardSlice = (set, get) => ({
 
     deleteAttachment: async (attachmentId, cardId) => {
         try {
+            // Find the attachment to get drive_file_id
+            const loc = get()._findCardList(cardId);
+            const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
+            let driveFileId = null;
+            if (card && card.attachments) {
+                const att = card.attachments.find(a => a.id === attachmentId);
+                if (att && att.drive_file_id) {
+                    driveFileId = att.drive_file_id;
+                }
+            }
+
+            // Show loading state
+            Swal.fire({
+                title: 'Deleting attachment...',
+                text: 'Waiting for Google Drive confirmation',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            // 1. Delete from Google Drive if it's a Drive file
+            if (driveFileId) {
+                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                await deleteFileFromDrive(driveFileId);
+            }
+
+            // 2. Delete from Database
             await axios.delete(`${server.KANBAN_ATTACHMENTS}/${attachmentId}`);
             if (cardId) get().fetchCardDetail(cardId);
+            Swal.close();
             return true;
         } catch (err) {
+            Swal.close();
             console.error('Failed to delete attachment', err);
             const status = err.response?.status;
             const errMsg = err.response?.data?.error || 'ไม่สามารถลบ attachment ได้';
@@ -636,6 +706,9 @@ export const createCardSlice = (set, get) => ({
     upsertCustomFieldValue: async (cardId, data) => {
         try {
             const res = await axios.post(`${server.KANBAN_CARDS}/${cardId}/custom-field-values`, data);
+            if (res.data?.data) {
+                await get().fetchCardDetail(cardId);
+            }
             return res.data?.data;
         } catch (err) {
             console.error('Failed to upsert custom field value', err);
@@ -664,7 +737,12 @@ export const createCardSlice = (set, get) => ({
 
     fetchNotifications: async () => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo || get().isFetchingNotifications) {
+                console.warn('[Auth/Guard] Skipping notification fetch (No user or already fetching)');
+                return [];
+            }
+            set({ isFetchingNotifications: true });
             const res = await axios.get(server.KANBAN_NOTIFICATIONS, {
                 params: { owner_u_code: empNo }
             });
@@ -675,12 +753,18 @@ export const createCardSlice = (set, get) => ({
         } catch (err) {
             console.error('Failed to fetch notifications', err);
             return [];
+        } finally {
+            set({ isFetchingNotifications: false });
         }
     },
 
     markAllNotificationsRead: async () => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo) {
+                console.warn('[Auth] No authenticated user — skipping mark-all-read');
+                return false;
+            }
             await axios.patch(`${server.KANBAN_NOTIFICATIONS}/read-all`, { owner_u_code: empNo });
             set(state => ({
                 notifications: state.notifications.map(n => ({ ...n, is_read: true })),
@@ -695,7 +779,11 @@ export const createCardSlice = (set, get) => ({
 
     markNotificationRead: async (id) => {
         try {
-            const empNo = useAuthStore.getState().empNo || 'LE131';
+            const empNo = useAuthStore.getState().empNo;
+            if (!empNo) {
+                console.warn('[Auth] No authenticated user — skipping mark-read');
+                return false;
+            }
             const res = await axios.patch(`${server.KANBAN_NOTIFICATIONS}/${id}/read`, { owner_u_code: empNo });
             if (res.data?.data) {
                 set(state => {
@@ -737,10 +825,13 @@ export const createCardSlice = (set, get) => ({
         const isAD = role === 'AD' || dept === 'AD';
         const isMgr = ['MGR', 'COORD'].includes(role);
 
-        // Only for AD, MGR, and COORD roles
-        if (!isAD && !isMgr) return;
-
         const { activeProject, projectManagers, activeBoard, activeBoardMembers, activeCardDetail } = get();
+
+        const isProjectOwner = projectManagers.some(m => m.u_code === uCode && m.role === 'owner');
+        const isProjectEditor = projectManagers.some(m => m.u_code === uCode && m.role === 'editor');
+
+        // Only for AD, MGR, and Project Managers (Owner/Editor)
+        if (!isAD && !isMgr && !isProjectOwner && !isProjectEditor) return;
 
         // MGR/COORD only auto-joins Public projects. AD joins everything.
         if (isMgr && activeProject?.is_private) return;

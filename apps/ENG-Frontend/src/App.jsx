@@ -26,6 +26,7 @@ import HomeEng from './components/engineer/home_eng';
 import HomeSystemEng from './components/engineer/system_eng/home_system';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
 import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import PdfMergerTool from './components/engineer/newprod_eng/tool/PdfMergerTool';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
 import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
 
@@ -39,7 +40,7 @@ import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
 
-import TumbleMain from './components/engineer/process_eng/tumble/tumble_main';
+import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
 
 import HomeMaterialsEng from './components/engineer/material_eng/home_materials';
 
@@ -47,10 +48,10 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
-import { SpecProcessManager } from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
+import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager.jsx';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage.jsx';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx';
+import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage.jsx';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
@@ -58,8 +59,11 @@ import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
+import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
+import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
+import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -286,7 +290,7 @@ const AppContent = () => {
                     <Route path="history" element={<EcntHistory />} />
                     <Route path="close/:id" element={<EcntClose />} />
                   </Route>
-                  <Route path="/eng/process_eng/tumble" element={<TumbleMain />} />
+                  <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
 
                   {/* ------ Materials Engineer ------ */}
                   <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />
@@ -305,13 +309,18 @@ const AppContent = () => {
 
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
+                  <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
+                  <Route path="/eng/kanban/guide" element={<UserGuideFullPage />} />
                   <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+
+                  {/* ------ User Guide ------ */}
+                  <Route path="/eng/user-guide" element={<UserGuidePage />} />
 
                 </Route>
               </Route>
@@ -321,8 +330,8 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
+                <Route path="/eng/template_tool" element={<TemplateTool />} />
               </Route>
-
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
                 <Route element={<MainLayout />}>

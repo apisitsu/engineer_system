@@ -8,9 +8,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -85,6 +85,11 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
 
+  // Template Tool (APQP Forms)
+  TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
+  TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
+  TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
+
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
 
@@ -123,6 +128,7 @@ export const server = {
   KANBAN_ISSUES: `${apiUrl}api/kanban/issues`,
   KANBAN_NOTIFICATIONS: `${apiUrl}api/kanban/notifications`,
   // New Feature endpoints
+  KANBAN_SETTINGS: `${apiUrl}api/kanban/settings`,
   KANBAN_USER_PREFERENCES: `${apiUrl}api/kanban/user-preferences`,
   KANBAN_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/custom-field-groups`,
   KANBAN_BASE_CUSTOM_FIELD_GROUPS: `${apiUrl}api/kanban/base-custom-field-groups`,
@@ -132,6 +138,7 @@ export const server = {
   KANBAN_BACKGROUND_IMAGES: `${apiUrl}api/kanban/background-images`,
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
   KANBAN_WORKLOAD: `${apiUrl}api/kanban/workload/team-workload`,
+  KANBAN_TEMPLATES: `${apiUrl}api/kanban/templates`,
 
 };
 
@@ -179,4 +186,12 @@ export const mm_safety = {
 }
 
 // Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
-export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
+export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwUQrPmEcyc3olb4TTBW3XxQ9D-iykOy-Hjx63I145jcqJ6TDAp7B-qg8MRY_u48Fv_nw/exec';
+
+// Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
+// ⚠️ Paste your deployed GAS URL here after deploying Code.gs
+
+// By Everyone
+export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
+// By me
+// export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwJzagUw233ty6O8pMBAUtmRXLYXqdkdpQcrog5Wr_d5ERjPZEk4WK0pG5_OaXGLb7a/exec';

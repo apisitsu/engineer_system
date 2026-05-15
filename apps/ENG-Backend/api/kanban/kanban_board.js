@@ -13,10 +13,19 @@ const {
 
 // ─── HELPERS ───────────────────────────────────────────────────────
 
+// Whitelist of allowed table/column pairs for position queries
+const ALLOWED_TABLES = {
+    kb_board: { table: 'kb_board', filterCol: 'project_id' },
+    kb_list:  { table: 'kb_list',  filterCol: 'board_id' },
+    kb_label: { table: 'kb_label', filterCol: 'board_id' },
+};
+
 // Compute next float position (insert at end)
-const getNextPosition = async (table, filterCol, filterVal) => {
+const getNextPosition = async (tableKey, _filterCol, filterVal) => {
+    const entry = ALLOWED_TABLES[tableKey];
+    if (!entry) throw new Error(`getNextPosition: unknown table key "${tableKey}"`);
     const r = await engPool.query(
-        `SELECT COALESCE(MAX(position), 0) + 65536 AS next_pos FROM ${table} WHERE ${filterCol} = $1`,
+        `SELECT COALESCE(MAX(position), 0) + 65536 AS next_pos FROM ${entry.table} WHERE ${entry.filterCol} = $1`,
         [filterVal]
     );
     return r.rows[0].next_pos;
@@ -43,7 +52,9 @@ const GetBoards = async (req, res) => {
         const query = `
             SELECT b.*,
                    mbr.role AS user_role,
-                   mbr.can_comment
+                   mbr.can_comment,
+                   (SELECT COUNT(*) FROM kb_card c JOIN kb_list l ON c.list_id = l.id WHERE l.board_id = b.id) AS total_cards,
+                   (SELECT COUNT(*) FROM kb_card c JOIN kb_list l ON c.list_id = l.id WHERE l.board_id = b.id AND (lower(l.name) LIKE '%done%' OR lower(l.name) LIKE '%completed%' OR lower(l.name) LIKE '%finish%' OR lower(l.name) LIKE '%เสร็จ%')) AS done_cards
             FROM kb_board b
             LEFT JOIN kb_board_membership mbr ON mbr.board_id = b.id AND mbr.u_code = $2
             WHERE b.project_id = $1
@@ -74,7 +85,8 @@ const CreateBoard = async (req, res) => {
         return res.status(403).json({ error: 'Only project managers can create boards' });
 
     const { name, default_view, default_card_type, limit_card_types,
-        always_display_card_creator, expand_task_lists_by_default, is_private } = req.body;
+        always_display_card_creator, expand_task_lists_by_default, is_private, status,
+        priority, start_date, due_date } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const client = await engPool.connect();
@@ -84,10 +96,12 @@ const CreateBoard = async (req, res) => {
         const position = await getNextPosition('kb_board', 'project_id', projectId);
         const { rows: [board] } = await client.query(`
             INSERT INTO kb_board (project_id, position, name, default_view, default_card_type, limit_card_types,
-                                  always_display_card_creator, expand_task_lists_by_default, is_private)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+                                  always_display_card_creator, expand_task_lists_by_default, is_private, status,
+                                  priority, start_date, due_date)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
         `, [projectId, position, name, default_view || 'kanban', default_card_type || 'task', limit_card_types || false,
-            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false]);
+            always_display_card_creator || false, expand_task_lists_by_default || false, is_private || false, status || 'pool',
+            priority || 'MEDIUM', start_date || new Date().toISOString(), due_date || null]);
 
         // Add creator as owner of this board
         await client.query(`
@@ -173,7 +187,8 @@ const UpdateBoard = async (req, res) => {
     const { name, default_view, default_card_type, limit_card_types, position,
         background_type, background_value,
         always_display_card_creator, expand_task_lists_by_default, is_private,
-        allow_add_list, allow_add_card } = req.body;
+        allow_add_list, allow_add_card, status,
+        priority, start_date, due_date } = req.body;
 
     // Support explicit removal: frontend sends '__REMOVE__' to clear a field
     const bgType = background_type === '__REMOVE__' ? null : background_type;
@@ -195,12 +210,17 @@ const UpdateBoard = async (req, res) => {
                 expand_task_lists_by_default = COALESCE($9, expand_task_lists_by_default),
                 is_private                   = COALESCE($10, is_private),
                 allow_add_list               = COALESCE($11, allow_add_list),
-                allow_add_card               = COALESCE($12, allow_add_card)
-            WHERE id=$13 RETURNING *
+                allow_add_card               = COALESCE($12, allow_add_card),
+                status                       = COALESCE($13, status),
+                priority                     = COALESCE($14, priority),
+                start_date                   = COALESCE($15, start_date),
+                due_date                     = COALESCE($16, due_date)
+            WHERE id=$17 RETURNING *
         `, [name, default_view, default_card_type, limit_card_types, position,
             bgType, bgValue,
             always_display_card_creator, expand_task_lists_by_default, is_private,
-            allow_add_list, allow_add_card, id]);
+            allow_add_list, allow_add_card, status,
+            priority, start_date, due_date, id]);
         res.json({ data: rows[0] });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -496,11 +516,24 @@ const UpdateLabel = async (req, res) => {
     res.json({ data: rows[0] });
 };
 
-// DELETE /api/kanban/labels/:id
 const DeleteLabel = async (req, res) => {
     const { id } = req.params;
-    await engPool.query('DELETE FROM kb_label WHERE id=$1', [id]);
-    res.json({ message: 'Label deleted' });
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const { rows: [label] } = await engPool.query('SELECT board_id FROM kb_label WHERE id=$1', [id]);
+        if (!label) return res.status(404).json({ error: 'Label not found' });
+
+        if (!(await canEditBoard(req, label.board_id))) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to delete labels from this board.' });
+        }
+
+        await engPool.query('DELETE FROM kb_label WHERE id=$1', [id]);
+        res.json({ message: 'Label deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 // ─── LIST REORDER (Drag & Drop) ────────────────────────────────────
@@ -703,15 +736,27 @@ const GetUserPreferences = async (req, res) => {
     const uCode = req.user?.empno;
     if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
     try {
-        const { rows } = await engPool.query(`
+        const { rows: profileRows } = await engPool.query(`
             SELECT subscribe_to_own_cards, subscribe_to_card_when_commenting,
                    turn_off_recent_card_highlighting, enable_favorites_by_default,
                    default_editor_mode, default_home_view, default_projects_order,
                    is_notification_off, pref_language
             FROM m_user_profile WHERE u_code=$1
         `, [uCode]);
-        if (!rows.length) return res.status(404).json({ error: 'User profile not found' });
-        res.json({ data: rows[0] });
+
+        if (!profileRows.length) return res.status(404).json({ error: 'User profile not found' });
+
+        const { rows: kbPrefsRows } = await engPool.query(`
+            SELECT kanban_tab_order, board_tab_orders, cf_group_preferences,
+                   board_groups, active_board_group
+            FROM kb_user_preferences WHERE u_code=$1
+        `, [uCode]);
+
+        const data = {
+            ...profileRows[0],
+            ...(kbPrefsRows[0] || {})
+        };
+        res.json({ data });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -725,10 +770,17 @@ const UpdateUserPreferences = async (req, res) => {
         subscribe_to_own_cards, subscribe_to_card_when_commenting,
         turn_off_recent_card_highlighting, enable_favorites_by_default,
         default_editor_mode, default_home_view, default_projects_order,
-        is_notification_off, pref_language
+        is_notification_off, pref_language,
+        kanban_tab_order, board_tab_orders, cf_group_preferences,
+        board_groups, active_board_group
     } = req.body;
+    
+    const client = await engPool.connect();
     try {
-        const { rows } = await engPool.query(`
+        await client.query('BEGIN');
+        let mergedData = {};
+
+        const { rows: profileRows } = await client.query(`
             UPDATE m_user_profile SET
                 subscribe_to_own_cards            = COALESCE($1, subscribe_to_own_cards),
                 subscribe_to_card_when_commenting = COALESCE($2, subscribe_to_card_when_commenting),
@@ -744,10 +796,41 @@ const UpdateUserPreferences = async (req, res) => {
             turn_off_recent_card_highlighting, enable_favorites_by_default,
             default_editor_mode, default_home_view, default_projects_order,
             is_notification_off, pref_language, uCode]);
-        if (!rows.length) return res.status(404).json({ error: 'User profile not found' });
-        res.json({ data: rows[0] });
+        
+        if (!profileRows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'User profile not found' });
+        }
+        Object.assign(mergedData, profileRows[0]);
+
+        const { rows: kbPrefsRows } = await client.query(`
+            INSERT INTO kb_user_preferences (u_code, kanban_tab_order, board_tab_orders, cf_group_preferences, board_groups, active_board_group)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (u_code) DO UPDATE SET
+                kanban_tab_order = COALESCE(EXCLUDED.kanban_tab_order, kb_user_preferences.kanban_tab_order),
+                board_tab_orders = COALESCE(EXCLUDED.board_tab_orders, kb_user_preferences.board_tab_orders),
+                cf_group_preferences = COALESCE(EXCLUDED.cf_group_preferences, kb_user_preferences.cf_group_preferences),
+                board_groups = COALESCE(EXCLUDED.board_groups, kb_user_preferences.board_groups),
+                active_board_group = COALESCE(EXCLUDED.active_board_group, kb_user_preferences.active_board_group),
+                updated_at = NOW()
+            RETURNING *
+        `, [
+            uCode,
+            kanban_tab_order !== undefined ? JSON.stringify(kanban_tab_order) : null,
+            board_tab_orders !== undefined ? JSON.stringify(board_tab_orders) : null,
+            cf_group_preferences !== undefined ? JSON.stringify(cf_group_preferences) : null,
+            board_groups !== undefined ? JSON.stringify(board_groups) : null,
+            active_board_group !== undefined ? JSON.stringify(active_board_group) : null
+        ]);
+        Object.assign(mergedData, kbPrefsRows[0]);
+
+        await client.query('COMMIT');
+        res.json({ data: mergedData });
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 

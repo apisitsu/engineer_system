@@ -1,19 +1,29 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Tabs, Select, Avatar } from 'antd';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineSetting, AiOutlineApi, AiOutlineBell } from 'react-icons/ai';
-import { RiInputField } from 'react-icons/ri';
-import { MdOutlineDashboard, MdOutlineLabel } from 'react-icons/md';
-import { IoSettingsOutline, IoArchiveOutline } from 'react-icons/io5';
+import React, { useState, useEffect } from 'react';
+import { Drawer, Typography, Form, Input, Button, Divider, Alert, Space, Popconfirm, Switch, Select, Avatar, Menu, DatePicker, Tooltip, Popover } from 'antd';
+import dayjs from 'dayjs';
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors, AiOutlineApi, AiOutlineQuestionCircle } from 'react-icons/ai';
+import { MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
+import { IoSettingsOutline, IoArchiveOutline, IoRocketOutline, IoLockClosedOutline, IoSaveOutline } from 'react-icons/io5';
+import { BsGrid1X2 } from 'react-icons/bs';
+import { FiUsers, FiTag } from 'react-icons/fi';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
+import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
-import Swal from 'sweetalert2';
+import TemplateBuilderDrawer from './TemplateBuilderDrawer';
+import {
+    DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors
+} from '@dnd-kit/core';
+import {
+    arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-const { Title, Text } = Typography;
-
+// Imports for Label Editing
 const LABEL_COLORS = [
     '#ef5350', '#ec407a', '#ab47bc', '#7e57c2', '#5c6bc0',
     '#42a5f5', '#29b6f6', '#26c6da', '#26a69a', '#66bb6a',
@@ -39,7 +49,16 @@ const GRADIENT_BGS = [
     'linear-gradient(135deg, #667db6 0%, #0082c8 50%, #0082c8 100%)',
 ];
 
-// ─── Section Header ────────────────────────────────────────────────
+const { Title, Text } = Typography;
+
+
+const PRIORITY_CONFIG = {
+    LOW: { label: 'Low', emoji: '🟢', color: '#52c41a', bgColor: '#f6ffed' },
+    MEDIUM: { label: 'Medium', emoji: '🔵', color: '#1677ff', bgColor: '#e6f4ff' },
+    HIGH: { label: 'High', emoji: '🟠', color: '#fa8c16', bgColor: '#fff7e6' },
+    URGENT: { label: 'Urgent', emoji: '🔴', color: '#f5222d', bgColor: '#fff2f0' },
+};
+
 const SectionLabel = ({ children, theme }) => (
     <Text strong style={{
         fontSize: 11, textTransform: 'uppercase', letterSpacing: 1,
@@ -49,7 +68,6 @@ const SectionLabel = ({ children, theme }) => (
     </Text>
 );
 
-// ─── Toggle Row ────────────────────────────────────────────────────
 const ToggleRow = ({ title, description, checked, onChange, theme }) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -70,60 +88,90 @@ const BoardSettingsDrawer = () => {
     const {
         isBoardSettingsOpen, closeBoardSettings,
         activeProject, activeBoard, boards,
-        fetchBoards, setActiveBoard,
         updateBoard, deleteBoard,
         labels, createLabel, updateLabel, deleteLabel,
         toggleBoardSubscription,
         baseCustomFieldGroups, fetchBaseCustomFieldGroups,
-        createBaseCustomFieldGroup, deleteBaseCustomFieldGroup,
-        customFields, fetchCustomFields, createCustomField, deleteCustomField,
         webhooks, fetchWebhooks, createWebhook, updateWebhook, deleteWebhook,
         notificationServices, fetchNotificationServices,
         createNotificationService, deleteNotificationService, users,
-        archivedCards, fetchArchivedCards, moveCard, lists
-    } = useKanbanStore();
+        archivedCards, fetchArchivedCards, moveCard, lists,
+        kanbanTabOrder, setKanbanTabOrder,
+        boardTabOrders, setBoardTabOrder,
+        cfGroupPreferences, setCfGroupPreference,
+        boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup,
+        createTemplateConfig // Add create template
+    } = useKanbanStore(
+        useShallow(state => ({
+            isBoardSettingsOpen: state.isBoardSettingsOpen, closeBoardSettings: state.closeBoardSettings,
+            activeProject: state.activeProject, activeBoard: state.activeBoard, boards: state.boards,
+            updateBoard: state.updateBoard, deleteBoard: state.deleteBoard,
+            labels: state.labels, createLabel: state.createLabel, updateLabel: state.updateLabel, deleteLabel: state.deleteLabel,
+            toggleBoardSubscription: state.toggleBoardSubscription,
+            baseCustomFieldGroups: state.baseCustomFieldGroups, fetchBaseCustomFieldGroups: state.fetchBaseCustomFieldGroups,
+            webhooks: state.webhooks, fetchWebhooks: state.fetchWebhooks,
+            createWebhook: state.createWebhook, updateWebhook: state.updateWebhook, deleteWebhook: state.deleteWebhook,
+            notificationServices: state.notificationServices, fetchNotificationServices: state.fetchNotificationServices,
+            createNotificationService: state.createNotificationService, deleteNotificationService: state.deleteNotificationService,
+            users: state.users, archivedCards: state.archivedCards, fetchArchivedCards: state.fetchArchivedCards,
+            moveCard: state.moveCard, lists: state.lists,
+            kanbanTabOrder: state.kanbanTabOrder, setKanbanTabOrder: state.setKanbanTabOrder,
+            boardTabOrders: state.boardTabOrders, setBoardTabOrder: state.setBoardTabOrder,
+            cfGroupPreferences: state.cfGroupPreferences, setCfGroupPreference: state.setCfGroupPreference,
+            boardGroups: state.boardGroups, activeBoardGroup: state.activeBoardGroup,
+            setBoardGroups: state.setBoardGroups, setActiveBoardGroup: state.setActiveBoardGroup,
+            createTemplateConfig: state.createTemplateConfig
+        }))
+    );
 
-    // Form
-    const [boardForm] = Form.useForm();
+    const projectBoardGroups = activeProject ? (boardGroups?.[activeProject.id] || []) : [];
+
+    const [activeTab, setActiveTab] = useState('board_info');
+
+    // Forms
     const [labelForm] = Form.useForm();
-    const [isCreatingBoard, setIsCreatingBoard] = useState(false);
     const [editingBoardId, setEditingBoardId] = useState(null);
     const [editingBoardName, setEditingBoardName] = useState('');
+    const [editingBoardStatus, setEditingBoardStatus] = useState('pool');
     const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
-
-    // Label Editing State
     const [editingLabelId, setEditingLabelId] = useState(null);
     const [editLabelName, setEditLabelName] = useState('');
     const [editLabelColor, setEditLabelColor] = useState(LABEL_COLORS[0]);
-
-    // Role Editing State
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
-
-    // Webhook
     const [webhookName, setWebhookName] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
-    // Notification
     const [nsUrl, setNsUrl] = useState('');
     const [nsFormat, setNsFormat] = useState('text');
-    // Custom fields
-    const [cfGroupName, setCfGroupName] = useState('');
-    const [cfNewFieldName, setCfNewFieldName] = useState({});
     const [isSubscribed, setIsSubscribed] = useState(false);
-
-    // Restore UI state
     const [restoringCardId, setRestoringCardId] = useState(null);
     const [restoreToListId, setRestoreToListId] = useState(null);
-
-    // Auth Store for Permission Checks
     const [memberSearch, setMemberSearch] = useState('');
-    const { user, empNo } = useAuthStore();
-    const currentUserCode = empNo || user?.u_code || 'LE131';
 
-    // Evaluate permissions
+    const [labelTemplates, setLabelTemplates] = useState([]);
+    const [fetchingLabels, setFetchingLabels] = useState(false);
+    const [importingLabels, setImportingLabels] = useState(false);
+    const [previewTemplateLabels, setPreviewTemplateLabels] = useState(null);
+    const [selectedLabelTemplateId, setSelectedLabelTemplateId] = useState(null);
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
+
+    useEffect(() => {
+        if (isBoardSettingsOpen && activeTab === 'labels') {
+            setFetchingLabels(true);
+            axios.get(`${server.KANBAN_TEMPLATES}?type=label`)
+                .then(res => setLabelTemplates(res.data?.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setFetchingLabels(false));
+        }
+    }, [isBoardSettingsOpen, activeTab]);
+
+    const { user, empNo } = useAuthStore();
+    const currentUserCode = empNo || user?.u_code || '';
+
     const {
-        canManageProject,
         canManageBoardMembers,
-        canManageBoardStructure
+        canManageBoardStructure,
+        canEditBoard,
+        canManageTemplates
     } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
@@ -139,22 +187,19 @@ const BoardSettingsDrawer = () => {
 
     useEffect(() => {
         if (activeBoard?.id) {
-            fetchWebhooks(activeBoard.id);
+            if (canManageBoardStructure) {
+                fetchWebhooks(activeBoard.id);
+            }
             if (activeProject?.id) fetchBaseCustomFieldGroups(activeProject.id);
         }
         fetchNotificationServices();
     }, [activeBoard?.id, activeProject?.id]);
 
-    // ─── Handlers ──────────────────────────────────────────────────
     const handleRemoveBoardMemberClick = (member) => {
         if (member.role === 'owner') {
             const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
             if (owners.length <= 1) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Cannot Remove Last Owner',
-                    text: 'This board must have at least one owner. Please assign another member as an owner before removing this user.'
-                });
+                Swal.fire({ icon: 'warning', title: 'Cannot Remove Last Owner', text: 'This board must have at least one owner.' });
                 return;
             }
         }
@@ -165,11 +210,7 @@ const BoardSettingsDrawer = () => {
         if (member.role === 'owner' && newRole !== 'owner') {
             const owners = useKanbanStore.getState().activeBoardMembers.filter(m => m.role === 'owner');
             if (owners.length <= 1) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Cannot Change Role',
-                    text: 'This board must have at least one owner. Please assign another member as an owner before demoting this user.'
-                });
+                Swal.fire({ icon: 'warning', title: 'Cannot Change Role', text: 'This board must have at least one owner.' });
                 return;
             }
         }
@@ -177,36 +218,35 @@ const BoardSettingsDrawer = () => {
         setEditingRoleUcode(null);
     };
 
-    const handleCreateBoard = async (values) => {
-        if (!activeProject) return;
-        setIsCreatingBoard(true);
-        try {
-            const res = await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/boards`, {
-                name: values.boardName, projectId: activeProject.id
-            });
-            if (res.data?.data) {
-                Swal.fire({ icon: 'success', title: 'Board Created', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-                boardForm.resetFields();
-                await fetchBoards(activeProject.id);
-                setActiveBoard(res.data.data);
-                closeBoardSettings();
-            }
-        } catch (err) {
-            Swal.fire('Error', err.response?.data?.error || 'Failed to create board', 'error');
-        } finally {
-            setIsCreatingBoard(false);
-        }
-    };
-
     const handleEditBoard = async (boardId) => {
         if (!editingBoardName.trim()) return;
-        await updateBoard(boardId, { name: editingBoardName.trim() });
-        setEditingBoardId(null); setEditingBoardName('');
+        await updateBoard(boardId, { name: editingBoardName.trim(), status: editingBoardStatus });
+        setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool');
     };
 
     const handleDeleteBoard = async (boardId) => {
         const ok = await deleteBoard(boardId);
-        if (ok) Swal.fire({ icon: 'success', title: 'Board Deleted', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+        if (ok) {
+            Swal.fire({ icon: 'success', title: 'Board Deleted', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            closeBoardSettings();
+        }
+    };
+
+    const handleApplyTemplateLabels = async () => {
+        if (!activeBoard || !previewTemplateLabels) return;
+        setImportingLabels(true);
+        try {
+            for (const lbl of previewTemplateLabels) {
+                await createLabel(activeBoard.id, lbl.name || '', lbl.color);
+            }
+            Swal.fire({ icon: 'success', title: 'Labels Imported', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            setPreviewTemplateLabels(null);
+            setSelectedLabelTemplateId(null);
+        } catch (e) {
+            Swal.fire('Error', 'Failed to import labels', 'error');
+        } finally {
+            setImportingLabels(false);
+        }
     };
 
     const handleCreateLabel = async (values) => {
@@ -222,110 +262,295 @@ const BoardSettingsDrawer = () => {
     };
 
     const startEditingLabel = (label) => {
-        setEditingLabelId(label.id);
-        setEditLabelName(label.name || '');
-        setEditLabelColor(label.color || LABEL_COLORS[0]);
+        setEditingLabelId(label.id); setEditLabelName(label.name || ''); setEditLabelColor(label.color || LABEL_COLORS[0]);
     };
 
-    // Card-style wrapper
+    const handleSaveBoardAsBlueprint = () => {
+        setShowTemplateBuilder(true);
+    };
+
     const Card = ({ children, style }) => (
         <div style={{
-            background: theme.colors.surface,
-            padding: theme.spacing.lg,
-            borderRadius: theme.borderRadius.lg,
-            border: `1px solid ${theme.colors.border}`,
-            marginBottom: theme.spacing.md,
-            ...style,
+            background: theme.colors.surface, padding: theme.spacing.lg,
+            borderRadius: theme.borderRadius.lg, border: `1px solid ${theme.colors.border}`,
+            marginBottom: theme.spacing.md, ...style,
         }}>
             {children}
         </div>
     );
 
-    // ─── Tab: General ──────────────────────────────────────────────
-    const GeneralTab = () => (
-        <div>
-            {/* Create Board (Only Project Owner or Global Admin can create Private boards) */}
-            <Card>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                    <MdOutlineDashboard size={18} color={theme.colors.primary} />
-                    <Title level={5} style={{ margin: 0, fontSize: 15 }}>Create New Board</Title>
-                </div>
-                <Form form={boardForm} layout="vertical" onFinish={handleCreateBoard}>
-                    <Form.Item name="boardName" rules={[{ required: true, message: 'Please input board name!' }]} style={{ marginBottom: theme.spacing.md }}>
-                        <Input placeholder="E.g., Sprint 1, Maintenance Tasks" style={{ borderRadius: theme.borderRadius.sm }} />
-                    </Form.Item>
-                    {canManageProject && (
-                        <Form.Item name="is_private" valuePropName="checked" style={{ marginBottom: theme.spacing.md }}>
-                            <ToggleRow
-                                title="Private Board"
-                                description="Only explicitly added members can view."
-                                theme={theme}
-                                checked={boardForm.getFieldValue('is_private')}
-                                onChange={(val) => boardForm.setFieldValue('is_private', val)}
-                            />
-                        </Form.Item>
-                    )}
-                    <Button type="primary" htmlType="submit" loading={isCreatingBoard} block
-                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm, height: 38 }}
-                    >Create Board</Button>
-                </Form>
-            </Card>
+    // ─── Menu Items ──────────────────────────────────────────────
+    const menuItems = [
+        { key: 'board_info', icon: <MdOutlineDashboard />, label: 'Board Info' },
+        { key: 'members', icon: <FiUsers />, label: 'Members' },
+        { key: 'labels', icon: <FiTag />, label: 'Labels' },
+        canManageBoardStructure && { key: 'permissions', icon: <IoLockClosedOutline />, label: 'Permissions' },
+        { key: 'appearance', icon: <AiOutlineBgColors />, label: 'Appearance' },
+        canManageBoardStructure && { key: 'groups', icon: <BsGrid1X2 />, label: 'Board Groups' },
+        { key: 'archive', icon: <IoArchiveOutline />, label: 'Archived Cards' },
+        canManageBoardStructure && { key: 'advanced', icon: <IoSettingsOutline />, label: 'Advanced Settings' },
+    ].filter(Boolean);
 
-            {/* Boards List */}
-            <SectionLabel theme={theme}>Boards</SectionLabel>
-            {boards.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: theme.spacing.lg, background: theme.colors.surface, borderRadius: theme.borderRadius.md, border: `1px dashed ${theme.colors.border}` }}>
-                    <Text type="secondary">No boards yet. Create one above!</Text>
+    // ─── Tab Components ──────────────────────────────────────────────
+
+    const BoardInfoTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <MdOutlineDashboard size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Information</Title>
+            </div>
+
+            <div style={{
+                padding: theme.spacing.md,
+                background: `${theme.colors.primary}08`,
+                borderRadius: theme.borderRadius.md,
+                border: `1px solid ${theme.colors.primary}20`,
+                marginBottom: theme.spacing.md
+            }}>
+                {editingBoardId === activeBoard.id ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                        <Input size="small" value={editingBoardName}
+                            onChange={(e) => setEditingBoardName(e.target.value)}
+                            onPressEnter={() => handleEditBoard(activeBoard.id)} autoFocus
+                            style={{ borderRadius: theme.borderRadius.sm, flex: 1 }}
+                        />
+                        <Button size="small" type="primary" icon={<AiOutlineCheck />}
+                            onClick={() => handleEditBoard(activeBoard.id)}
+                        />
+                        <Button size="small" icon={<AiOutlineClose />}
+                            onClick={() => { setEditingBoardId(null); setEditingBoardName(''); setEditingBoardStatus('pool'); }}
+                        />
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong style={{ fontSize: 16 }}>{activeBoard.name}</Text>
+                        {canManageBoardStructure && (
+                            <Button type="text" size="small" icon={<AiOutlineEdit />}
+                                onClick={() => { setEditingBoardId(activeBoard.id); setEditingBoardName(activeBoard.name); setEditingBoardStatus(activeBoard.status || 'pool'); }}
+                            />
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Priority & Dates Section */}
+            {canManageBoardStructure && (
+                <div style={{
+                    padding: theme.spacing.md,
+                    background: theme.colors.surfaceHover,
+                    borderRadius: theme.borderRadius.md,
+                    marginBottom: theme.spacing.md,
+                    display: 'flex', flexDirection: 'column', gap: 12,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Status</Text>
+                            <Select
+                                value={activeBoard.status || 'pool'}
+                                onChange={async (val) => await updateBoard(activeBoard.id, { status: val })}
+                                style={{ width: '100%' }}
+                                size="small"
+                                options={[
+                                    { value: 'pool', label: 'Waiting Pool' },
+                                    { value: 'active', label: 'Active Operations' },
+                                    { value: 'suspended', label: 'Suspended' },
+                                    { value: 'finished', label: 'Finished / Archived' },
+                                ]}
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Priority</Text>
+                            <Select
+                                value={activeBoard.priority || 'MEDIUM'}
+                                onChange={async (val) => await updateBoard(activeBoard.id, { priority: val })}
+                                style={{ width: '100%' }}
+                                size="small"
+                                options={Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => ({
+                                    value: key,
+                                    label: <span style={{ color: cfg.color, fontWeight: 500 }}>{cfg.emoji} {cfg.label}</span>
+                                }))}
+                            />
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Start Date</Text>
+                            <DatePicker
+                                size="small"
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                value={activeBoard.start_date ? dayjs(activeBoard.start_date) : null}
+                                disabled
+                                placeholder="Auto-assigned"
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Due Date</Text>
+                            <DatePicker
+                                size="small"
+                                style={{ width: '100%' }}
+                                format="DD MMM YYYY"
+                                placeholder="Not set"
+                                value={activeBoard.due_date ? dayjs(activeBoard.due_date) : null}
+                                onChange={async (date) => {
+                                    await updateBoard(activeBoard.id, {
+                                        due_date: date ? date.format('YYYY-MM-DD') : null,
+                                    });
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.xl }}>
-                    {boards.map(board => (
-                        <div key={board.id} style={{
-                            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                            background: activeBoard?.id === board.id
-                                ? `${theme.colors.primary}12`
-                                : theme.colors.surfaceHover,
-                            borderRadius: theme.borderRadius.md,
-                            border: `1px solid ${activeBoard?.id === board.id ? `${theme.colors.primary}40` : theme.colors.border}`,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            transition: `all ${theme.transitions.fast}`,
+            )}
+
+            {canManageBoardStructure && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <ToggleRow
+                        title="Private Board"
+                        description="Hide from non-members"
+                        theme={theme}
+                        checked={activeBoard.is_private}
+                        onChange={async (checked) => await updateBoard(activeBoard.id, { is_private: checked })}
+                    />
+                    <Divider style={{ margin: '8px 0' }} />
+                    <Text strong style={{ color: theme.colors.error }}>Danger Zone</Text>
+                    <Popconfirm
+                        title="Delete this board?"
+                        description="This action cannot be undone."
+                        onConfirm={() => handleDeleteBoard(activeBoard.id)}
+                        okText="Yes, delete it" cancelText="Cancel" okButtonProps={{ danger: true }}
+                    >
+                        <Button danger block icon={<AiOutlineDelete />}>Delete Board</Button>
+                    </Popconfirm>
+                </div>
+            )}
+
+            {canManageTemplates && (
+                <>
+                    <Divider style={{ margin: '16px 0' }} />
+                    <Button block icon={<IoSaveOutline />} onClick={handleSaveBoardAsBlueprint} style={{ color: theme.colors.primary, borderColor: theme.colors.primary }}>
+                        Save Board as Blueprint
+                    </Button>
+                </>
+            )}
+        </Card>
+    );
+
+    const MembersTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <FiUsers size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Members</Title>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ maxHeight: 350, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {useKanbanStore.getState().activeBoardMembers?.map(member => {
+                        const u = users.find(user => user.u_code?.toLowerCase() === member.u_code?.toLowerCase()) || { u_code: member.u_code, u_name: member.u_code };
+                        return (
+                            <div key={member.u_code} style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '6px 8px', borderRadius: theme.borderRadius.sm,
+                                background: `${theme.colors.info}10`,
+                            }}>
+                                <Space>
+                                    <Avatar size="small" src={u.profile_img_b64} style={{ backgroundColor: theme.colors.info }}>
+                                        {u.profile_img_b64 ? null : (u.u_name || u.u_code)[0].toUpperCase()}
+                                    </Avatar>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{u.u_name || u.u_nickname || u.u_code}</Text>
+                                        <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code}</Text>
+                                    </div>
+                                </Space>
+                                <Space>
+                                    {editingRoleUcode === member.u_code ? (
+                                        <>
+                                            <Select size="small" value={member.role} onChange={(newRole) => handleRoleChangeBoard(member, newRole)}
+                                                options={[{ label: 'Viewer', value: 'viewer' }, { label: 'Editor', value: 'editor' }, { label: 'Owner', value: 'owner' }]}
+                                                style={{ width: 85, fontSize: 11 }} />
+                                            <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>{member.role}</Text>
+                                            {canChangeRole && <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(member.u_code)} />}
+                                        </>
+                                    )}
+                                    {canManageBoardMembers && <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveBoardMemberClick(member)} />}
+                                </Space>
+                            </div>
+                        );
+                    })}
+                </div>
+                {useKanbanStore.getState().activeBoardMembers?.length === 0 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>No explicit members. Project members can view.</Text>
+                )}
+
+                {canManageBoardMembers && (
+                    <div style={{ marginTop: 8 }}>
+                        <Select
+                            showSearch placeholder="Add member to board..." style={{ width: '100%' }}
+                            onChange={(val) => { if (val) { useKanbanStore.getState().addBoardMember(activeBoard.id, val); } }}
+                            value={null}
+                            filterOption={(input, option) => {
+                                return (`${option.search_data}`.toLowerCase()).includes(input.toLowerCase());
+                            }}
+                        >
+                            {users.map(u => (
+                                <Select.Option key={u.u_code} value={u.u_code} search_data={`${u.u_code} ${u.u_name || ''} ${u.u_nickname || ''}`}>
+                                    <Space>
+                                        <Avatar size="small" src={u.profile_img_b64} />
+                                        <Text style={{ fontSize: 13 }}>{u.u_code} - {u.u_name || u.u_code}</Text>
+                                    </Space>
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+
+    const LabelsTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <FiTag size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Labels</Title>
+            </div>
+            {labels.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: theme.spacing.md }}>
+                    {labels.map(label => (
+                        <div key={label.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                            borderRadius: theme.borderRadius.sm, background: editingLabelId === label.id ? theme.colors.surfaceHover : 'transparent',
                         }}>
-                            {editingBoardId === board.id ? (
-                                <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-                                    <Input size="small" value={editingBoardName}
-                                        onChange={(e) => setEditingBoardName(e.target.value)}
-                                        onPressEnter={() => handleEditBoard(board.id)} autoFocus
-                                        style={{ borderRadius: theme.borderRadius.sm }}
-                                    />
-                                    <Button size="small" type="primary" icon={<AiOutlineCheck />}
-                                        onClick={() => handleEditBoard(board.id)}
-                                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}
-                                    />
-                                    <Button size="small" icon={<AiOutlineClose />}
-                                        onClick={() => { setEditingBoardId(null); setEditingBoardName(''); }}
-                                    />
+                            {editingLabelId === label.id ? (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <Input size="small" value={editLabelName} onChange={(e) => setEditLabelName(e.target.value)} placeholder="Label name (optional)" />
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                        {LABEL_COLORS.map(color => (
+                                            <div key={`edit-${color}`} onClick={() => setEditLabelColor(color)}
+                                                style={{
+                                                    width: 24, height: 20, borderRadius: 4, background: color, cursor: 'pointer',
+                                                    border: editLabelColor === color ? '2px solid #333' : '2px solid transparent',
+                                                }} />
+                                        ))}
+                                    </div>
+                                    <Space size={4}>
+                                        <Button size="small" type="primary" onClick={() => handleUpdateLabel(label.id)}>Save</Button>
+                                        <Button size="small" onClick={() => setEditingLabelId(null)}>Cancel</Button>
+                                    </Space>
                                 </div>
                             ) : (
                                 <>
-                                    <Text
-                                        strong
-                                        style={{ cursor: 'pointer', fontSize: 14 }}
-                                        onClick={() => { setActiveBoard(board); closeBoardSettings(); }}
-                                    >
-                                        {board.name}
-                                        {activeBoard?.id === board.id && (
-                                            <Text type="secondary" style={{ fontSize: 11 }}> (active)</Text>
-                                        )}
-                                    </Text>
+                                    <div style={{ flex: 1, height: 30, borderRadius: 6, background: label.color, display: 'flex', alignItems: 'center', padding: '0 12px', color: '#fff', fontSize: 13, fontWeight: 500 }}>
+                                        {label.name || ''}
+                                    </div>
                                     <Space size={2}>
-                                        {canManageBoardStructure && (
+                                        {canEditBoard && (
                                             <>
-                                                <Button type="text" size="small" icon={<AiOutlineEdit style={{ color: theme.colors.textSecondary }} />}
-                                                    onClick={() => { setEditingBoardId(board.id); setEditingBoardName(board.name); }}
-                                                />
-                                                <Popconfirm title="Delete this board?" description="All lists and cards will be deleted."
-                                                    onConfirm={() => handleDeleteBoard(board.id)} okText="Delete" okType="danger"
-                                                >
+                                                <Button type="text" size="small" icon={<AiOutlineEdit />} onClick={() => startEditingLabel(label)} />
+                                                <Popconfirm title="Delete label?" onConfirm={() => deleteLabel(label.id)} okText="Yes" cancelText="No">
                                                     <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
                                                 </Popconfirm>
                                             </>
@@ -338,633 +563,352 @@ const BoardSettingsDrawer = () => {
                 </div>
             )}
 
-            {/* Board Members Section */}
-            {activeBoard && (
-                <>
-                    <SectionLabel theme={theme}>Board Members</SectionLabel>
-                    <Card style={{ padding: '8px 12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                {useKanbanStore.getState().activeBoardMembers?.map(member => {
-                                    const u = users.find(user => user.u_code?.toLowerCase() === member.u_code?.toLowerCase()) || { u_code: member.u_code, u_name: member.u_code };
-                                    const words = (u.u_name || '').split(' ');
-                                    const initials = words.length >= 2
-                                        ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
-                                        : (u.u_nickname?.[0] || u.u_code[0]).toUpperCase();
-                                    return (
-                                        <div key={member.u_code} style={{
-                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                            padding: '6px 8px', borderRadius: theme.borderRadius.sm,
-                                            background: `${theme.colors.info}10`,
-                                        }}>
-                                            <Space>
-                                                {u.profile_img_b64 ? (
-                                                    <Avatar size="small" src={u.profile_img_b64} />
-                                                ) : (
-                                                    <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
-                                                        {initials}
-                                                    </Avatar>
-                                                )}
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <Text style={{ fontSize: 13, lineHeight: 1.2 }}>{u.u_name || u.u_nickname || u.u_code}</Text>
-                                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1 }}>{u.u_code}</Text>
-                                                </div>
-                                            </Space>
-                                            <Space>
-                                                {editingRoleUcode === member.u_code ? (
-                                                    <>
-                                                        <Select
-                                                            size="small"
-                                                            value={member.role}
-                                                            onChange={(newRole) => handleRoleChangeBoard(member, newRole)}
-                                                            options={[
-                                                                { label: 'Viewer', value: 'viewer' },
-                                                                { label: 'Editor', value: 'editor' },
-                                                                { label: 'Owner', value: 'owner' }
-                                                            ]}
-                                                            style={{ width: 85, fontSize: 11 }}
-                                                        />
-                                                        <Button type="text" size="small" icon={<AiOutlineClose />} onClick={() => setEditingRoleUcode(null)} />
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Text type="secondary" style={{ fontSize: 11 }}>{member.role}</Text>
-                                                        {canChangeRole && (
-                                                            <Button type="text" size="small" icon={<AiOutlineEdit style={{ fontSize: 12, color: theme.colors.textSecondary }} />} onClick={() => setEditingRoleUcode(member.u_code)} />
-                                                        )}
-                                                    </>
-                                                )}
-                                                {canManageBoardMembers && (
-                                                    <Button type="text" size="small" danger icon={<AiOutlineClose />} onClick={() => handleRemoveBoardMemberClick(member)} />
-                                                )}
-                                            </Space>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            {useKanbanStore.getState().activeBoardMembers?.length === 0 && (
-                                <Text type="secondary" style={{ fontSize: 12 }}>No explicit members. Project members can view.</Text>
-                            )}
-
-                            {/* Add Member Input */}
-                            {canManageBoardMembers && (
-                                <div style={{ marginTop: 8 }}>
-                                    <Select
-                                        showSearch
-                                        placeholder="Add member to board..."
-                                        style={{ width: '100%' }}
-                                        optionFilterProp="children"
-                                        onSearch={setMemberSearch}
-                                        onChange={(val) => {
-                                            if (val) {
-                                                useKanbanStore.getState().addBoardMember(activeBoard.id, val);
-                                                setMemberSearch(''); // Clear search after adding
-                                            }
-                                        }}
-                                        value={null}
-                                        filterOption={false}
-                                    >
-                                        {users.filter(u =>
-                                            u.u_code.toLowerCase().includes((memberSearch || '').toLowerCase()) ||
-                                            (u.u_name || '').toLowerCase().includes((memberSearch || '').toLowerCase()) ||
-                                            (u.u_nickname || '').toLowerCase().includes((memberSearch || '').toLowerCase())
-                                        ).map(u => (
-                                            <Select.Option key={u.u_code} value={u.u_code}>
-                                                <Space>
-                                                    {u.profile_img_b64 ? (
-                                                        <Avatar size="small" src={u.profile_img_b64} />
-                                                    ) : (
-                                                        <Avatar size="small" style={{ backgroundColor: theme.colors.info }}>
-                                                            {(u.u_name || u.u_code)[0].toUpperCase()}
-                                                        </Avatar>
-                                                    )}
-                                                    <Text style={{ fontSize: 13 }}>
-                                                        {u.u_code} - {u.u_name || u.u_nickname || u.u_code}
-                                                    </Text>
-                                                </Space>
-                                            </Select.Option>
-                                        ))}
-                                    </Select>
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-
-                    {/* Private Toggle (Existing board) */}
-                    {canManageBoardStructure && (
-                        <Card style={{ padding: '12px' }}>
-                            <ToggleRow
-                                title="Private Board"
-                                description="Hide from non-members"
-                                theme={theme}
-                                checked={activeBoard.is_private}
-                                onChange={async (checked) => {
-                                    await updateBoard(activeBoard.id, { is_private: checked });
-                                }}
-                            />
-                        </Card>
-                    )}
-
-                    {/* Board Permissions */}
-                    {canManageBoardStructure && (
-                        <>
-                            <SectionLabel theme={theme}>Board Permissions</SectionLabel>
-                            <Card style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                                <ToggleRow
-                                    title="Allow Adding Lists"
-                                    description={activeBoard.allow_add_list ? 'Members can create new lists' : 'Adding new lists is disabled'}
-                                    theme={theme}
-                                    checked={activeBoard.allow_add_list || false}
-                                    onChange={async (checked) => {
-                                        await updateBoard(activeBoard.id, { allow_add_list: checked });
-                                    }}
-                                />
-                                <ToggleRow
-                                    title="Allow Adding Cards"
-                                    description={activeBoard.allow_add_card !== false ? 'Members can create new cards' : 'Adding new cards is disabled'}
-                                    theme={theme}
-                                    checked={activeBoard.allow_add_card !== false}
-                                    onChange={async (checked) => {
-                                        await updateBoard(activeBoard.id, { allow_add_card: checked });
-                                    }}
-                                />
-                            </Card>
-                        </>
-                    )}
-
-                </>
-            )}
-
-            {/* Labels */}
-            {activeBoard && (
-                <>
-                    <SectionLabel theme={theme}>Board Labels</SectionLabel>
-                    {labels.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: theme.spacing.md }}>
-                            {labels.map(label => (
-                                <div key={label.id} style={{
-                                    display: 'flex', alignItems: 'center', gap: 8,
-                                    padding: '6px 10px',
-                                    borderRadius: theme.borderRadius.sm,
-                                    background: editingLabelId === label.id ? theme.colors.surfaceHover : 'transparent',
-                                }}>
-                                    {editingLabelId === label.id ? (
-                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                            <Input
-                                                size="small"
-                                                value={editLabelName}
-                                                onChange={(e) => setEditLabelName(e.target.value)}
-                                                placeholder="Label name (optional)"
-                                                style={{ borderRadius: theme.borderRadius.sm }}
-                                            />
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                                {LABEL_COLORS.map(color => (
-                                                    <div
-                                                        key={`edit-${color}`}
-                                                        onClick={() => setEditLabelColor(color)}
-                                                        style={{
-                                                            width: 24, height: 20,
-                                                            borderRadius: 4,
-                                                            background: color,
-                                                            cursor: 'pointer',
-                                                            border: editLabelColor === color ? '2px solid #333' : '2px solid transparent',
-                                                            transition: `all ${theme.transitions.fast}`,
-                                                        }}
-                                                    />
-                                                ))}
-                                            </div>
-                                            <Space size={4} style={{ marginTop: 4 }}>
-                                                <Button size="small" type="primary" onClick={() => handleUpdateLabel(label.id)}
-                                                    style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>Save</Button>
-                                                <Button size="small" onClick={() => setEditingLabelId(null)}>Cancel</Button>
-                                            </Space>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div style={{
-                                                flex: 1, height: 30, borderRadius: 6,
-                                                background: label.color,
-                                                display: 'flex', alignItems: 'center', padding: '0 12px',
-                                                color: '#fff', fontSize: 13, fontWeight: 500,
-                                            }}>
-                                                {label.name || ''}
-                                            </div>
-                                            <Space size={2}>
-                                                <Button type="text" size="small" icon={<AiOutlineEdit size={14} style={{ color: theme.colors.textSecondary }} />}
-                                                    onClick={() => startEditingLabel(label)} />
-                                                <Popconfirm title="Delete label?" onConfirm={() => deleteLabel(label.id)} okText="Yes" cancelText="No">
-                                                    <Button type="text" size="small" danger icon={<AiOutlineDelete size={14} />} />
-                                                </Popconfirm>
-                                            </Space>
-                                        </>
-                                    )}
-                                </div>
+            {canEditBoard && (
+                <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.md }}>
+                    <SectionLabel theme={theme}>Create New Label</SectionLabel>
+                    <Form form={labelForm} layout="vertical" onFinish={handleCreateLabel} size="small">
+                        <Form.Item name="labelName" style={{ marginBottom: 8 }}><Input placeholder="Label name (optional)" /></Form.Item>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                            {LABEL_COLORS.map(color => (
+                                <div key={color} onClick={() => setNewLabelColor(color)}
+                                    style={{ width: 28, height: 22, borderRadius: 4, background: color, cursor: 'pointer', border: newLabelColor === color ? '2px solid #333' : '2px solid transparent' }} />
                             ))}
                         </div>
-                    )}
-
-                    <Card>
-                        <Form form={labelForm} layout="vertical" onFinish={handleCreateLabel} size="small">
-                            <Form.Item name="labelName" style={{ marginBottom: 8 }}>
-                                <Input placeholder="Label name (optional)" style={{ borderRadius: theme.borderRadius.sm }} />
-                            </Form.Item>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                                {LABEL_COLORS.map(color => (
-                                    <div
-                                        key={color}
-                                        onClick={() => setNewLabelColor(color)}
-                                        style={{
-                                            width: 28, height: 22,
-                                            borderRadius: 4,
-                                            background: color,
-                                            cursor: 'pointer',
-                                            border: newLabelColor === color ? '2px solid #333' : '2px solid transparent',
-                                            transition: `all ${theme.transitions.fast}`,
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                            <Button type="primary" htmlType="submit" size="small" block
-                                style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}
-                            >Add Label</Button>
-                        </Form>
-                    </Card>
-
-                    {/* ─── Danger Zone ─── */}
-                    {canManageBoardStructure && (
-                        <div style={{ marginTop: theme.spacing.xl, paddingTop: theme.spacing.lg, borderTop: `1px solid ${theme.colors.border}` }}>
-                            <Text strong style={{ color: theme.colors.error, display: 'block', marginBottom: theme.spacing.sm }}>Danger Zone</Text>
-                            <Popconfirm
-                                title="Delete this board?"
-                                description="This action cannot be undone. All lists and cards will be permanently deleted."
-                                onConfirm={() => handleDeleteBoard(activeBoard.id)}
-                                okText="Yes, delete it"
-                                cancelText="Cancel"
-                                okButtonProps={{ danger: true }}
-                            >
-                                <Button danger block icon={<AiOutlineDelete />}>
-                                    Delete Board
-                                </Button>
-                            </Popconfirm>
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
-    );
-
-    // ─── Tab: Preferences ──────────────────────────────────────────
-    const PreferencesTab = () => (
-        <div>
-            {activeBoard ? (
-                <>
-
-                    {/* Board Background */}
-                    <Card>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                            <AiOutlineBgColors size={18} color={theme.colors.primary} />
-                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Background</Title>
-                        </div>
-
-                        <SectionLabel theme={theme}>Solid Colors</SectionLabel>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                            {SOLID_BG_COLORS.map(color => (
-                                <div
-                                    key={color}
-                                    onClick={() => updateBoard(activeBoard.id, { background_type: 'color', background_value: color })}
-                                    style={{
-                                        width: 46, height: 30,
-                                        borderRadius: 6,
-                                        background: color,
-                                        cursor: 'pointer',
-                                        border: activeBoard.background_type === 'color' && activeBoard.background_value === color
-                                            ? `3px solid ${theme.colors.surface}` : '2px solid transparent',
-                                        boxShadow: activeBoard.background_type === 'color' && activeBoard.background_value === color
-                                            ? `0 0 0 2px ${color}` : 'none',
-                                        transition: `all ${theme.transitions.fast}`,
-                                    }}
-                                />
-                            ))}
-                        </div>
-
-                        <SectionLabel theme={theme}>Gradients</SectionLabel>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                            {GRADIENT_BGS.map((grad, idx) => (
-                                <div
-                                    key={idx}
-                                    onClick={() => updateBoard(activeBoard.id, { background_type: 'gradient', background_value: grad })}
-                                    style={{
-                                        width: 46, height: 30,
-                                        borderRadius: 6,
-                                        background: grad,
-                                        cursor: 'pointer',
-                                        border: activeBoard.background_value === grad
-                                            ? `3px solid ${theme.colors.surface}` : '2px solid transparent',
-                                        boxShadow: activeBoard.background_value === grad
-                                            ? `0 0 0 2px ${theme.colors.primary}` : 'none',
-                                        transition: `all ${theme.transitions.fast}`,
-                                    }}
-                                />
-                            ))}
-                        </div>
-
-                        {activeBoard.background_type && (
-                            <Button size="small" block danger
-                                onClick={() => updateBoard(activeBoard.id, { background_type: '__REMOVE__', background_value: '__REMOVE__' })}
-                                style={{ borderRadius: theme.borderRadius.sm }}
-                            >Remove Background</Button>
-                        )}
-                    </Card>
-
-                    {/* Board Subscription */}
-                    <Card>
-                        <ToggleRow
-                            title="🔔 Subscribe to Board"
-                            description="Get notified of changes on this board"
-                            checked={isSubscribed}
-                            onChange={async (checked) => {
-                                const result = await toggleBoardSubscription(activeBoard.id);
-                                if (result) setIsSubscribed(checked);
-                            }}
-                            theme={theme}
-                        />
-                    </Card>
-
-                    {/* Custom Fields */}
-                    {activeProject && (
-                        <>
-                            <SectionLabel theme={theme}>Custom Field Groups</SectionLabel>
-                            {baseCustomFieldGroups.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
-                                    {baseCustomFieldGroups.map(g => {
-                                        const fields = customFields[g.id] || [];
-                                        return (
-                                            <Card key={g.id} style={{ padding: theme.spacing.md }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                                    <Text strong style={{ fontSize: 14 }}>{g.name}</Text>
-                                                    <Space size={4}>
-                                                        <Button type="link" size="small" onClick={() => fetchCustomFields(g.id)} style={{ fontSize: 12 }}>Load Fields</Button>
-                                                        <Popconfirm title="Delete group?" onConfirm={() => deleteBaseCustomFieldGroup(g.id)} okText="Yes">
-                                                            <Button type="text" size="small" danger icon={<AiOutlineDelete size={12} />} />
-                                                        </Popconfirm>
-                                                    </Space>
-                                                </div>
-                                                {fields.length > 0 && fields.map(f => (
-                                                    <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', marginLeft: 12 }}>
-                                                        <Text style={{ fontSize: 12 }}>{f.name}</Text>
-                                                        <Popconfirm title="Delete field?" onConfirm={() => deleteCustomField(f.id, g.id)} okText="Yes">
-                                                            <Button type="text" size="small" danger icon={<AiOutlineDelete size={10} />} />
-                                                        </Popconfirm>
-                                                    </div>
-                                                ))}
-                                                <div style={{ display: 'flex', gap: 4, marginTop: 6, marginLeft: 12 }}>
-                                                    <Input placeholder="New field name" size="small" style={{ flex: 1, borderRadius: theme.borderRadius.sm }}
-                                                        value={cfNewFieldName[g.id] || ''}
-                                                        onChange={e => setCfNewFieldName(prev => ({ ...prev, [g.id]: e.target.value }))}
-                                                    />
-                                                    <Button size="small" type="primary" onClick={async () => {
-                                                        const name = (cfNewFieldName[g.id] || '').trim();
-                                                        if (!name) return;
-                                                        await createCustomField(g.id, { name });
-                                                        setCfNewFieldName(prev => ({ ...prev, [g.id]: '' }));
-                                                    }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>+</Button>
-                                                </div>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <Input placeholder="New field group name" size="small"
-                                    value={cfGroupName} onChange={e => setCfGroupName(e.target.value)}
-                                    style={{ borderRadius: theme.borderRadius.sm }}
-                                />
-                                <Button size="small" type="primary" onClick={async () => {
-                                    if (!cfGroupName.trim()) return;
-                                    await createBaseCustomFieldGroup(activeProject.id, cfGroupName.trim());
-                                    setCfGroupName('');
-                                }} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>Add Group</Button>
-                            </div>
-                        </>
-                    )}
-                </>
-            ) : (
-                <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
-                    <Text type="secondary">Select a board to configure preferences.</Text>
+                        <Button type="primary" htmlType="submit" size="small" block>Add Label</Button>
+                    </Form>
                 </div>
             )}
-        </div>
-    );
 
-    // ─── Tab: Notifications ────────────────────────────────────────
-    const NotificationsTab = () => (
-        <div>
-            {/* Webhooks */}
-            {activeBoard && (
-                <>
-                    <Card>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                            <AiOutlineApi size={18} color={theme.colors.primary} />
-                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Webhooks</Title>
-                        </div>
-                        {webhooks.length > 0 && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
-                                {webhooks.map(wh => (
-                                    <div key={wh.id} style={{
-                                        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                                        background: theme.colors.surfaceHover,
-                                        borderRadius: theme.borderRadius.sm,
-                                        border: `1px solid ${theme.colors.border}`,
-                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                                    }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <Text strong style={{ fontSize: 13 }}>{wh.name || 'Unnamed'}</Text>
-                                            <br />
-                                            <Text type="secondary" style={{ fontSize: 11, wordBreak: 'break-all' }}>{wh.url}</Text>
-                                        </div>
-                                        <Space size={4}>
-                                            <Switch size="small" checked={wh.is_active !== false}
-                                                onChange={(checked) => updateWebhook(wh.id, { is_active: checked })}
-                                            />
-                                            <Popconfirm title="Delete webhook?" onConfirm={() => deleteWebhook(wh.id)} okText="Yes" cancelText="No">
-                                                <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
-                                            </Popconfirm>
-                                        </Space>
+            {canManageTemplates && (
+                <div style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md }}>
+                    <SectionLabel theme={theme}>Import Label Template</SectionLabel>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <Select
+                            style={{ flex: 1 }}
+                            placeholder="Select a label template to preview..."
+                            loading={fetchingLabels}
+                            options={labelTemplates.map(t => ({ value: t.id, label: t.name }))}
+                            onChange={(val) => {
+                                setSelectedLabelTemplateId(val);
+                                if (val) {
+                                    const template = labelTemplates.find(t => t.id === val);
+                                    if (template) {
+                                        const config = typeof template.config_data === 'string' ? JSON.parse(template.config_data) : template.config_data;
+                                        setPreviewTemplateLabels((config.labels || []).map((l, i) => ({ ...l, tempId: i })));
+                                    }
+                                } else {
+                                    setPreviewTemplateLabels(null);
+                                }
+                            }}
+                            value={selectedLabelTemplateId}
+                            disabled={importingLabels}
+                        />
+                    </div>
+
+                    {previewTemplateLabels && (
+                        <div style={{ marginTop: 12 }}>
+                            <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block' }}>Preview & Edit Labels</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4, marginBottom: 12 }}>
+                                {previewTemplateLabels.map((lbl, idx) => (
+                                    <div key={lbl.tempId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Popover
+                                            trigger="click"
+                                            placement="bottomLeft"
+                                            content={
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, width: 200 }}>
+                                                    {LABEL_COLORS.map(c => (
+                                                        <div
+                                                            key={c}
+                                                            onClick={() => {
+                                                                const newLabels = [...previewTemplateLabels];
+                                                                newLabels[idx].color = c;
+                                                                setPreviewTemplateLabels(newLabels);
+                                                            }}
+                                                            style={{
+                                                                width: 24, height: 20, borderRadius: 4, background: c, cursor: 'pointer',
+                                                                border: lbl.color === c ? '2px solid #333' : '2px solid transparent'
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            }
+                                        >
+                                            <div style={{
+                                                width: 24, height: 24, borderRadius: 4, background: lbl.color,
+                                                cursor: 'pointer', border: '1px solid #d9d9d9', flexShrink: 0
+                                            }} />
+                                        </Popover>
+                                        <Input
+                                            size="small"
+                                            value={lbl.name}
+                                            onChange={(e) => {
+                                                const newLabels = [...previewTemplateLabels];
+                                                newLabels[idx].name = e.target.value;
+                                                setPreviewTemplateLabels(newLabels);
+                                            }}
+                                            placeholder="Label name"
+                                            style={{ flex: 1 }}
+                                        />
+                                        <Button
+                                            type="text"
+                                            danger
+                                            size="small"
+                                            icon={<AiOutlineDelete />}
+                                            onClick={() => {
+                                                const newLabels = previewTemplateLabels.filter((_, i) => i !== idx);
+                                                setPreviewTemplateLabels(newLabels);
+                                            }}
+                                        />
                                     </div>
                                 ))}
                             </div>
-                        )}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <Input placeholder="Webhook name" size="small" value={webhookName}
-                                onChange={e => setWebhookName(e.target.value)}
-                                style={{ borderRadius: theme.borderRadius.sm }}
-                            />
-                            <Input placeholder="https://..." size="small" value={webhookUrl}
-                                onChange={e => setWebhookUrl(e.target.value)}
-                                style={{ borderRadius: theme.borderRadius.sm }}
-                            />
-                            <Button size="small" type="primary" disabled={!webhookUrl.trim()} block
-                                onClick={async () => {
-                                    await createWebhook(activeBoard.id, { name: webhookName, url: webhookUrl });
-                                    setWebhookName(''); setWebhookUrl('');
-                                }}
-                                style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}
-                            >Add Webhook</Button>
+                            <Space>
+                                <Button type="primary" size="small" onClick={handleApplyTemplateLabels} loading={importingLabels}>
+                                    Apply {previewTemplateLabels.length} Labels
+                                </Button>
+                                <Button size="small" onClick={() => { setPreviewTemplateLabels(null); setSelectedLabelTemplateId(null); }}>
+                                    Cancel
+                                </Button>
+                            </Space>
                         </div>
-                    </Card>
-                </>
+                    )}
+                </div>
+            )}
+        </Card>
+    );
+
+    const PermissionsTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <IoLockClosedOutline size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Permissions</Title>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <ToggleRow
+                    title="Allow Adding Lists"
+                    description={activeBoard.allow_add_list ? 'Members can create new lists' : 'Adding new lists is disabled'}
+                    theme={theme}
+                    checked={activeBoard.allow_add_list || false}
+                    onChange={async (checked) => await updateBoard(activeBoard.id, { allow_add_list: checked })}
+                />
+                <ToggleRow
+                    title="Allow Adding Cards"
+                    description={activeBoard.allow_add_card !== false ? 'Members can create new cards' : 'Adding new cards is disabled'}
+                    theme={theme}
+                    checked={activeBoard.allow_add_card !== false}
+                    onChange={async (checked) => await updateBoard(activeBoard.id, { allow_add_card: checked })}
+                />
+            </div>
+        </Card>
+    );
+
+    const AppearanceTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <AiOutlineBgColors size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Appearance</Title>
+            </div>
+
+            <SectionLabel theme={theme}>Solid Colors</SectionLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {SOLID_BG_COLORS.map(color => (
+                    <div key={color} onClick={() => updateBoard(activeBoard.id, { background_type: 'color', background_value: color })}
+                        style={{ width: 46, height: 30, borderRadius: 6, background: color, cursor: 'pointer', border: activeBoard.background_value === color ? `3px solid ${theme.colors.surface}` : '2px solid transparent', boxShadow: activeBoard.background_value === color ? `0 0 0 2px ${color}` : 'none' }} />
+                ))}
+            </div>
+
+            <SectionLabel theme={theme}>Gradients</SectionLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {GRADIENT_BGS.map((grad, idx) => (
+                    <div key={idx} onClick={() => updateBoard(activeBoard.id, { background_type: 'gradient', background_value: grad })}
+                        style={{ width: 46, height: 30, borderRadius: 6, background: grad, cursor: 'pointer', border: activeBoard.background_value === grad ? `3px solid ${theme.colors.surface}` : '2px solid transparent', boxShadow: activeBoard.background_value === grad ? `0 0 0 2px ${theme.colors.primary}` : 'none' }} />
+                ))}
+            </div>
+
+            {activeBoard.background_type && (
+                <Button size="small" block danger onClick={() => updateBoard(activeBoard.id, { background_type: '__REMOVE__', background_value: '__REMOVE__' })}>Remove Background</Button>
             )}
 
-            {/* Notification Services */}
+            <Divider />
+            <SectionLabel theme={theme}>Notifications</SectionLabel>
+            <ToggleRow
+                title="🔔 Subscribe to Board"
+                description="Get notified of changes on this board"
+                checked={isSubscribed}
+                onChange={async (checked) => { const result = await toggleBoardSubscription(activeBoard.id); if (result) setIsSubscribed(checked); }}
+                theme={theme}
+            />
+        </Card>
+    );
+
+    const GroupsTab = () => (
+        <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                <BsGrid1X2 size={18} color={theme.colors.primary} />
+                <Title level={5} style={{ margin: 0, fontSize: 15 }}>Board Groups</Title>
+            </div>
+            {projectBoardGroups.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
+                    {projectBoardGroups.map(g => (
+                        <div key={g.id} style={{ padding: theme.spacing.md, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.md, border: `1px solid ${theme.colors.border}` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                <Text strong style={{ fontSize: 14 }}>{g.name}</Text>
+                                <Popconfirm title="Delete group?" onConfirm={() => {
+                                    const newGroups = projectBoardGroups.filter(gr => gr.id !== g.id);
+                                    setBoardGroups(activeProject.id, newGroups);
+                                    if (activeBoardGroup?.[activeProject.id] === g.id) setActiveBoardGroup(activeProject.id, null);
+                                }} okText="Yes">
+                                    <Button type="text" size="small" danger icon={<AiOutlineDelete size={12} />} />
+                                </Popconfirm>
+                            </div>
+                            <div style={{ marginLeft: 12 }}>
+                                {boards.filter(b => (g.boardIds || []).includes(b.id)).map(b => (
+                                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', padding: '3px 0' }}><Text style={{ fontSize: 12 }}>• {b.name}</Text></div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>No board groups configured.</Text>
+            )}
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                Create and edit Board Groups from the filter dropdown next to the '+ Create Board' button on the top bar.
+            </Text>
+        </Card>
+    );
+
+    const ArchiveTab = () => {
+        useEffect(() => { if (activeTab === 'archive' && activeBoard) fetchArchivedCards(); }, [activeTab, activeBoard]);
+        const visibleLists = lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
+        const handleRestore = async (cardId) => {
+            if (!restoreToListId) return;
+            await moveCard(cardId, restoreToListId); setRestoringCardId(null); setRestoreToListId(null); await fetchArchivedCards();
+        };
+
+        return (
             <Card>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                    <AiOutlineBell size={18} color={theme.colors.primary} />
-                    <Title level={5} style={{ margin: 0, fontSize: 15 }}>Notification Services</Title>
+                    <IoArchiveOutline size={18} color={theme.colors.primary} />
+                    <Title level={5} style={{ margin: 0, fontSize: 15 }}>Archived Cards</Title>
                 </div>
-                {notificationServices.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
-                        {notificationServices.map(ns => (
-                            <div key={ns.id} style={{
-                                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-                                background: theme.colors.surfaceHover,
-                                borderRadius: theme.borderRadius.sm,
-                                border: `1px solid ${theme.colors.border}`,
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                            }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <Text type="secondary" style={{ fontSize: 11, wordBreak: 'break-all' }}>{ns.url}</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: 10 }}>Format: {ns.format}</Text>
+                {!archivedCards || archivedCards.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: theme.spacing.xl }}><Text type="secondary">No archived items found.</Text></div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {archivedCards.map(card => (
+                            <div key={card.id} style={{ padding: theme.spacing.sm, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.sm, border: `1px solid ${theme.colors.border}` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                    <Text strong style={{ fontSize: 13, flex: 1 }}>{card.name}</Text>
+                                    <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap', marginLeft: 8 }}>{new Date(card.updated_at).toLocaleDateString()}</Text>
                                 </div>
-                                <Popconfirm title="Delete service?" onConfirm={() => deleteNotificationService(ns.id)} okText="Yes" cancelText="No">
-                                    <Button type="text" size="small" danger icon={<AiOutlineDelete />} />
-                                </Popconfirm>
+                                {restoringCardId === card.id ? (
+                                    <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                                        <Select size="small" style={{ flex: 1 }} placeholder="Select list..." options={visibleLists.map(l => ({ label: l.name, value: l.id }))} onChange={setRestoreToListId} value={restoreToListId} />
+                                        <Button size="small" type="primary" onClick={() => handleRestore(card.id)} disabled={!restoreToListId}>Restore</Button>
+                                        <Button size="small" onClick={() => { setRestoringCardId(null); setRestoreToListId(null); }}>Cancel</Button>
+                                    </div>
+                                ) : (
+                                    <Button size="small" onClick={() => setRestoringCardId(card.id)} style={{ marginTop: 4 }}>Restore</Button>
+                                )}
                             </div>
                         ))}
                     </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <Input placeholder="Service URL" size="small" value={nsUrl}
-                        onChange={e => setNsUrl(e.target.value)}
-                        style={{ borderRadius: theme.borderRadius.sm }}
-                    />
-                    <Select
-                        size="small" value={nsFormat}
-                        onChange={val => setNsFormat(val)}
-                        options={[
-                            { label: 'Text', value: 'text' },
-                            { label: 'JSON', value: 'json' },
-                        ]}
-                        style={{ width: '100%' }}
-                    />
-                    <Button size="small" type="primary" disabled={!nsUrl.trim()} block
-                        onClick={async () => {
-                            await createNotificationService({ url: nsUrl, format: nsFormat, board_id: activeBoard?.id });
-                            setNsUrl(''); setNsFormat('text');
-                        }}
-                        style={{ background: theme.colors.primary, borderColor: theme.colors.primary, borderRadius: theme.borderRadius.sm }}
-                    >Add Service</Button>
-                </div>
             </Card>
-        </div>
-    );
+        );
+    };
 
-    // ─── Tab: Archived Items ───────────────────────────────────────
-    const ArchivedItemsTab = () => {
-        useEffect(() => {
-            if (activeBoard) {
-                fetchArchivedCards();
-            }
-        }, [activeBoard]);
+    const AdvancedTab = () => {
+        // Module UI Drag logic
+        const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+        const tabConfig = { dashboard: { label: 'Dashboard', icon: MdOutlineDashboard }, projects: { label: 'Projects', icon: IoRocketOutline }, reports: { label: 'Reports', icon: MdOutlineAssessment }, workload: { label: 'Workload', icon: BsGrid1X2 } };
 
-        const visibleLists = useMemo(() => {
-            return lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
-        }, [lists]);
+        const SortableTabItem = ({ id, label, icon: Icon, theme }) => {
+            const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+            const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : 1, marginBottom: 8 };
+            return (
+                <div ref={setNodeRef} style={style} {...attributes}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: theme.colors.surface, border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.lg }}>
+                        <div {...listeners} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}><MdDragIndicator size={20} color={theme.colors.textTertiary} /></div>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: `${theme.colors.primary}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.colors.primary }}><Icon size={18} /></div>
+                        <Text strong style={{ fontSize: 14, flex: 1 }}>{label}</Text>
+                    </div>
+                </div>
+            );
+        };
 
-        const handleRestore = async (cardId) => {
-            if (!restoreToListId) return;
-            await moveCard(cardId, restoreToListId);
-            setRestoringCardId(null);
-            setRestoreToListId(null);
-            // Optionally, immediately re-fetch to update
-            await fetchArchivedCards();
+        const handleDragEnd = (event) => {
+            const { active, over } = event;
+            if (!over || active.id === over.id) return;
+            const oldIndex = kanbanTabOrder.indexOf(active.id);
+            const newIndex = kanbanTabOrder.indexOf(over.id);
+            const newOrder = arrayMove(kanbanTabOrder, oldIndex, newIndex);
+            setKanbanTabOrder(newOrder);
         };
 
         return (
             <div>
-                {activeBoard ? (
-                    <Card>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
-                            <IoArchiveOutline size={18} color={theme.colors.primary} />
-                            <Title level={5} style={{ margin: 0, fontSize: 15 }}>Archived Cards</Title>
-                        </div>
-                        
-                        {!archivedCards || archivedCards.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
-                                <Text type="secondary">No archived items found.</Text>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {archivedCards.map(card => (
-                                    <div key={card.id} style={{
-                                        padding: theme.spacing.sm,
-                                        background: theme.colors.surfaceHover,
-                                        borderRadius: theme.borderRadius.sm,
-                                        border: `1px solid ${theme.colors.border}`,
-                                    }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                                            <Text strong style={{ fontSize: 13, flex: 1 }}>{card.name}</Text>
-                                            <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap', marginLeft: 8 }}>
-                                                {new Date(card.updated_at).toLocaleDateString()}
-                                            </Text>
-                                        </div>
-                                        
-                                        {restoringCardId === card.id ? (
-                                            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                                                <Select 
-                                                    size="small" 
-                                                    style={{ flex: 1 }}
-                                                    placeholder="Select list..."
-                                                    options={visibleLists.map(l => ({ label: l.name, value: l.id }))}
-                                                    onChange={setRestoreToListId}
-                                                    value={restoreToListId}
-                                                />
-                                                <Button size="small" type="primary" onClick={() => handleRestore(card.id)} disabled={!restoreToListId} style={{ background: theme.colors.primary, borderColor: theme.colors.primary }}>
-                                                    Confirm Restore
-                                                </Button>
-                                                <Button size="small" onClick={() => { setRestoringCardId(null); setRestoreToListId(null); }}>
-                                                    Cancel
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <Button 
-                                                size="small" 
-                                                onClick={() => setRestoringCardId(card.id)}
-                                                style={{ marginTop: 4, borderRadius: theme.borderRadius.sm }}
-                                            >
-                                                Restore
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
-                ) : (
-                    <div style={{ textAlign: 'center', padding: theme.spacing.xl }}>
-                        <Text type="secondary">Select a board to view archived items.</Text>
+                <Card>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: theme.spacing.md }}>
+                        <AiOutlineApi size={18} color={theme.colors.primary} />
+                        <Title level={5} style={{ margin: 0, fontSize: 15 }}>Webhooks</Title>
                     </div>
-                )}
+                    {webhooks.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: theme.spacing.md }}>
+                            {webhooks.map(wh => (
+                                <div key={wh.id} style={{ padding: theme.spacing.sm, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.sm, border: `1px solid ${theme.colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <Text strong style={{ fontSize: 13 }}>{wh.name || 'Unnamed'}</Text><br />
+                                        <Text type="secondary" style={{ fontSize: 11, wordBreak: 'break-all' }}>{wh.url}</Text>
+                                    </div>
+                                    <Space size={4}>
+                                        <Switch size="small" checked={wh.is_active !== false} onChange={(checked) => updateWebhook(wh.id, { is_active: checked })} />
+                                        <Popconfirm title="Delete webhook?" onConfirm={() => deleteWebhook(wh.id)} okText="Yes" cancelText="No"><Button type="text" size="small" danger icon={<AiOutlineDelete />} /></Popconfirm>
+                                    </Space>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <Input placeholder="Webhook name" size="small" value={webhookName} onChange={e => setWebhookName(e.target.value)} />
+                        <Input placeholder="https://..." size="small" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} />
+                        <Button size="small" type="primary" disabled={!webhookUrl.trim()} block onClick={async () => { await createWebhook(activeBoard.id, { name: webhookName, url: webhookUrl }); setWebhookName(''); setWebhookUrl(''); }}>Add Webhook</Button>
+                    </div>
+                </Card>
+
+                <Card>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SectionLabel theme={theme}>Navigation Tabs Order</SectionLabel>
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>Drag and drop to reorder the main tabs.</Text>
+                        <SortableContext items={kanbanTabOrder} strategy={verticalListSortingStrategy}>
+                            {kanbanTabOrder.map((id) => (
+                                <SortableTabItem key={id} id={id} label={tabConfig[id]?.label || id} icon={tabConfig[id]?.icon || MdOutlineDashboard} theme={theme} />
+                            ))}
+                        </SortableContext>
+                    </DndContext>
+                </Card>
             </div>
         );
     };
 
-    const tabItems = [
-        { key: 'general', label: 'General', children: <GeneralTab /> },
-        { key: 'preferences', label: 'Preferences', children: <PreferencesTab /> },
-        { key: 'notifications', label: 'Notifications', children: <NotificationsTab /> },
-        { key: 'archived', label: 'Archived', children: <ArchivedItemsTab /> },
-    ];
+    const renderActiveTab = () => {
+        if (!activeBoard && activeTab !== 'advanced') {
+            return <div style={{ textAlign: 'center', padding: theme.spacing.xl }}><Text type="secondary">Select a board to view its settings.</Text></div>;
+        }
+
+        switch (activeTab) {
+            case 'board_info': return <BoardInfoTab />;
+            case 'members': return <MembersTab />;
+            case 'labels': return <LabelsTab />;
+            case 'permissions': return <PermissionsTab />;
+            case 'appearance': return <AppearanceTab />;
+            case 'groups': return <GroupsTab />;
+            case 'archive': return <ArchiveTab />;
+            case 'advanced': return <AdvancedTab />;
+            default: return <BoardInfoTab />;
+        }
+    };
 
     return (
         <Drawer
@@ -976,10 +920,19 @@ const BoardSettingsDrawer = () => {
                     </span>
                 </Space>
             }
+            extra={
+                <Tooltip title="View User Guide">
+                    <Button
+                        type="text"
+                        icon={<AiOutlineQuestionCircle />}
+                        onClick={() => window.open('/eng/kanban/guide', '_blank')}
+                    />
+                </Tooltip>
+            }
             placement="right"
             onClose={closeBoardSettings}
             open={isBoardSettingsOpen}
-            width={460}
+            width={720}
             styles={{
                 body: { background: theme.colors.background, padding: 0 },
                 header: { background: theme.colors.surface, borderBottom: `1px solid ${theme.colors.border}` }
@@ -990,13 +943,31 @@ const BoardSettingsDrawer = () => {
                     <Alert message="Please select or create a project first." type="warning" showIcon />
                 </div>
             ) : (
-                <div style={{ padding: `0 ${theme.spacing.xl} ${theme.spacing.xl}` }}>
-                    <Tabs
-                        items={tabItems}
-                        defaultActiveKey="general"
-                        style={{ marginTop: theme.spacing.sm }}
-                    />
+                <div style={{ display: 'flex', height: '100%' }}>
+                    {/* Sidebar */}
+                    <div style={{ width: 220, borderRight: `1px solid ${theme.colors.border}`, background: theme.colors.surface, padding: '16px 8px' }}>
+                        <Menu
+                            mode="vertical"
+                            selectedKeys={[activeTab]}
+                            onClick={({ key }) => setActiveTab(key)}
+                            items={menuItems}
+                            style={{ border: 'none', background: 'transparent' }}
+                        />
+                    </div>
+                    {/* Content */}
+                    <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+                        {renderActiveTab()}
+                    </div>
                 </div>
+            )}
+
+            {showTemplateBuilder && activeProject && (
+                <TemplateBuilderDrawer
+                    open={showTemplateBuilder}
+                    onClose={() => setShowTemplateBuilder(false)}
+                    masterProject={activeProject}
+                    targetBoardId={activeBoard?.id}
+                />
             )}
         </Drawer>
     );

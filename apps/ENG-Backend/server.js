@@ -132,6 +132,29 @@ const newProducts = require('./api/engineer/new_prod/tool');
 
 app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
 
+//--------------------Template Tool (APQP Forms)---------------------//
+const templateTool = require('./api/engineer/new_prod/templateToolController');
+
+// Form Headers (Dashboard)
+app.get('/api/engineer/new_prod/forms', verifyToken, templateTool.listForms);
+app.post('/api/engineer/new_prod/forms', verifyToken, templateTool.createForm);
+app.delete('/api/engineer/new_prod/forms/:id', verifyToken, templateTool.deleteForm);
+
+// Form Data CRUD (generic for all form types)
+app.get('/api/engineer/new_prod/forms/:formType/:id', verifyToken, templateTool.getFormData);
+app.put('/api/engineer/new_prod/forms/:formType/:id', verifyToken, templateTool.saveFormData);
+app.put('/api/engineer/new_prod/forms/:formType/:id/status', verifyToken, templateTool.updateFormStatus);
+
+// Audit Trail
+app.get('/api/engineer/new_prod/forms/:id/audit', verifyToken, templateTool.getAuditTrail);
+
+// User Stamps
+app.get('/api/engineer/new_prod/stamps/:em_id', verifyToken, templateTool.getStamp);
+app.post('/api/engineer/new_prod/stamps', verifyToken, templateTool.upsertStamp);
+
+// Calculator Usage Log
+app.post('/api/engineer/new_prod/calc/log', verifyToken, templateTool.logCalcUsage);
+
 
 //--------------------User----------------------//
 const userController = require('./api/user/userModel');
@@ -146,6 +169,7 @@ app.route('/api/refresh-token').post(userController.RefreshToken)
 
 //------------------Process Engineer------------------//
 const engProcess = require('./api/engineer/process/eng_process_model');
+const engTumble = require('./api/engineer/process/eng_process_tumble');
 
 app.route('/api/ecr/getlist').get(verifyToken, engProcess.ecrGetList)
 app.route('/api/ecr/create').post(verifyToken, engProcess.ecrCreate)
@@ -157,15 +181,40 @@ app.post('/api/ecr/:id/tasks', verifyToken, engProcess.ecrSetTasks);
 app.get('/api/ecr/:id/tasks', verifyToken, engProcess.ecrGetTasks);
 app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
 
-// --------- GENERIC UPLOAD API FOR ECR FILES ---------
-app.route('/api/tumble/getAllCondition').get(engProcess.tumbleGetAllCondition)
-app.route('/api/tumble/createCondition').post(engProcess.tumbleCreateCondition)
-app.route('/api/tumble/updateCondition/:id').put(engProcess.tumbleUpdateCondition)
-app.route('/api/tumble/deleteCondition/:id').delete(engProcess.tumbleDeleteCondition)
-app.route('/api/tumble/getAllModel').get(engProcess.tumbleGetAllModel)
-app.route('/api/tumble/createModel').post(engProcess.tumbleCreateModel)
-app.route('/api/tumble/updateModel/:id').put(engProcess.tumbleUpdateModel)
-app.route('/api/tumble/deleteModel/:id').delete(engProcess.tumbleDeleteModel)
+// --------- Tumble System API ---------
+// Tumble Model
+app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);
+app.route('/api/tumble/model')
+  .get(engTumble.getAllTumbleModel)
+  .post(engTumble.createTumbleModel);
+app.route('/api/tumble/model/:id')
+  .put(engTumble.updateTumbleModel)
+  .delete(engTumble.deleteTumbleModel);
+
+// Tumble Condition
+app.route('/api/tumble/condition/search').get(engTumble.getTumbleConditionByCode);
+app.route('/api/tumble/condition')
+  .get(engTumble.getAllTumbleCondition)
+  .post(engTumble.createTumbleCondition);
+app.route('/api/tumble/condition/:id')
+  .put(engTumble.updateTumbleCondition)
+  .delete(engTumble.deleteTumbleCondition);
+
+// Tumble Condition Part
+app.route('/api/tumble/condition-part')
+  .get(engTumble.getAllTumbleConditionPart)
+  .post(engTumble.createTumbleConditionPart);
+app.route('/api/tumble/condition-part/:id')
+  .put(engTumble.updateTumbleConditionPart)
+  .delete(engTumble.deleteTumbleConditionPart);
+
+// MRP Data
+app.route('/api/tumble/mrp/:lotNo').get(engTumble.getMrpDataByLotNo);
+
+// Legacy Compatibility (if needed)
+app.route('/api/tumble/getAllCondition').get(engTumble.getAllTumbleCondition);
+app.route('/api/tumble/getAllModel').get(engTumble.getAllTumbleModel);
+
 
 // File Upload API
 app.post('/api/upload', (req, res) => {

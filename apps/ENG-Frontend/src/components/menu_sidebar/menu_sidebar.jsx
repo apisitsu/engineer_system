@@ -69,7 +69,7 @@ export const process = createMenu([
             { label: "History", path: "/eng/process_eng/ecnt/history" },
         ]
     },
-    { label: "Tumble", path: "/eng/process_eng/tumble" },
+    { label: "Tumble System", path: "/eng/process_eng/tumble", key: "tumble" },
 ]);
 
 export const newprod = createMenu([

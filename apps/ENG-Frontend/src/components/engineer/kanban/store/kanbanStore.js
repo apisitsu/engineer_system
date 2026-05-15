@@ -29,6 +29,45 @@ export const useKanbanStore = create((set, get) => ({
     // --- Global Users ---
     users: [],
 
+    // --- System Settings ---
+    systemSettings: [],
+
+    // --- Card Index (F3-13: O(1) lookup) ---
+    // Map<string(cardId), string(listId)> — maintained by card mutations
+    cardIndex: new Map(),
+
+    /**
+     * Rebuild the full cardIndex from the current `cards` state.
+     * Called after bulk replacements (board init, project switch, fetchCardsForList).
+     */
+    _rebuildCardIndex: () => {
+        const cards = get().cards;
+        const idx = new Map();
+        for (const [listId, listCards] of Object.entries(cards)) {
+            if (Array.isArray(listCards)) {
+                for (const card of listCards) {
+                    idx.set(String(card.id), String(listId));
+                }
+            }
+        }
+        set({ cardIndex: idx });
+    },
+
+    /**
+     * O(1) lookup: returns { listId, idx } for a given cardId,
+     * or null if the card is not in the current board's state.
+     */
+    _findCardList: (cardId) => {
+        const strId = String(cardId);
+        const listId = get().cardIndex.get(strId);
+        if (!listId) return null;
+        const listCards = get().cards[listId];
+        if (!listCards) return null;
+        const idx = listCards.findIndex(c => String(c.id) === strId);
+        if (idx < 0) return null;
+        return { listId, idx };
+    },
+
     // --- Board Toolbar State ---
     searchQuery: '',
     filterMembers: [],
@@ -65,6 +104,15 @@ export const useKanbanStore = create((set, get) => ({
             set({ users: res.data?.data || [] });
         } catch (err) {
             console.error("Failed to fetch users", err);
+        }
+    },
+
+    fetchSystemSettings: async () => {
+        try {
+            const res = await axios.get(server.KANBAN_SETTINGS);
+            set({ systemSettings: res.data?.data || [] });
+        } catch (err) {
+            console.error("Failed to fetch system settings", err);
         }
     },
 

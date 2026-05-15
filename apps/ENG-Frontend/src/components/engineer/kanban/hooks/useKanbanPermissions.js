@@ -8,16 +8,21 @@ export const useKanbanPermissions = ({
     cardRole = null,
     projectStatus = 'active',
 } = {}) => {
-    const globalRole = useAuthStore(state => state.userRole);
-    const globalDepartment = useAuthStore(state => state.userDepartment);
+    const globalRole = String(useAuthStore(state => state.userRole) || '').toUpperCase();
+    const globalDepartment = String(useAuthStore(state => state.userDepartment) || '').toUpperCase();
+    const globalAuth = String(useAuthStore(state => state.userAuth) || '').toUpperCase();
 
     // console.log(`User :`, globalRole, globalDepartment);
 
     return useMemo(() => {
         // ── 1. Global & Project Member Flags ──
         const isSuperAdmin = globalRole === 'AD' || globalDepartment === 'AD';
-        // console.log(`isSuperAdmin :`, isSuperAdmin);
-        const isManagerOrCoord = ['MGR', 'COORD'].includes(globalRole);
+        
+        // Check if MGR/COORD status exists in role, department, or auth group
+        const isManagerOrCoord = 
+            ['MGR', 'COORD'].includes(globalRole) || 
+            ['MGR', 'COORD'].includes(globalDepartment) || 
+            ['MGR', 'COORD'].includes(globalAuth);
 
         const isProjectOwner = projectRole === 'owner';
         const isProjectEditor = projectRole === 'editor';
@@ -41,10 +46,10 @@ export const useKanbanPermissions = ({
         const canManageBoardMembers = canManageProject || isBoardOwner;
 
         // 3.2 Manage Structure (Create/Move/Delete Boards): All the above + Public Project Editors
-        let canManageBoardStructure = canManageBoardMembers || (!isPrivateProject && isProjectEditor);
+        let canManageBoardStructure = canManageBoardMembers;
 
         // 3.3 Edit Board Content: All the above + Explicit Board Editors + Private Project Editors
-        let canEditBoard = canManageBoardStructure || isBoardEditor || (isPrivateProject && isProjectEditor);
+        let canEditBoard = canManageBoardStructure || isBoardEditor || isProjectEditor;
 
         const canViewBoard = canEditBoard || isBoardViewer || canViewProject;
 
@@ -70,6 +75,10 @@ export const useKanbanPermissions = ({
         const isReadOnly = !canEditCard;
         const canCreateProject = isSuperAdmin || isManagerOrCoord;
 
+        // ── 6. Template Management ──
+        // Admin-only for now, but extensible: add role checks here in the future
+        const canManageTemplates = isSuperAdmin;
+
         return {
             isSuperAdmin, isManagerOrCoord, globalRole,
             isProjectOwner, isProjectEditor, isProjectViewer, isProjectMember,
@@ -78,7 +87,7 @@ export const useKanbanPermissions = ({
             canManageBoardMembers, canManageBoardStructure, canEditBoard, canViewBoard,
             isCardOwner, isCardEditor, isCardViewer, isCardMember,
             canManageCard, canEditCard, canViewCard,
-            isReadOnly, canCreateProject,
+            isReadOnly, canCreateProject, canManageTemplates,
         };
-    }, [globalRole, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
+    }, [globalRole, globalDepartment, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
 };

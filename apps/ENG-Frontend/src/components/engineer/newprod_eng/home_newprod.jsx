@@ -7,7 +7,8 @@ import {
   SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  FilePdfOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../menu_sidebar/menu_template';
@@ -68,6 +69,26 @@ const HomeNewProd = () => {
       status: 'Active',
       tags: ['Simulation', 'FEA', 'Swage'],
       restricted: true
+    },
+    {
+      id: 'pdf-merger',
+      title: 'PDF Merger Tool',
+      description: 'Easily merge multiple PDF files into a single document with drag-and-drop support.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/pdf_merger_tool',
+      category: 'Utilities',
+      status: 'Active',
+      tags: ['PDF', 'Merge', 'Document']
+    },
+    {
+      id: 'template-tool',
+      title: 'Template Tool',
+      description: 'Create and manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans. With auto-save and approval workflows.',
+      icon: <FileSearchOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/template_tool',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['APQP', 'Forms', 'Templates']
     }
   ];
 
