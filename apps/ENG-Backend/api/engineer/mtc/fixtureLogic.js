@@ -256,7 +256,7 @@ async function findFixtures(cnNumber) {
     partData.isBallInner = (partData.type.includes('ABR') || partData.type.includes('BALL_INNER')) ? 1 : 0;
     partData.isABR       = (partData.type.includes('ABR') || partData.yBall === 'Y' || partData.yBall === 'B') ? 1 : 0;
     partData.isInner         = (partData.type.includes('INNER') || partData.yBall === 'Y') ? 1 : 0;
-    partData.isIDtoOD        = partData.process === 'ID→OD' ? 1 : 0;
+    partData.isIDtoOD        = partData.process === 'ID->OD' ? 1 : 0;
     partData.isNormalOrOther = (partData.type.includes('NORMAL') || partData.type.includes('OTHER')) ? 1 : 0;
 
     // --- NEW: Try Dynamic Formulas First ---

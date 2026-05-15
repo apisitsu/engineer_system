@@ -24,13 +24,24 @@ const REASON_OPTIONS = [
   { label: 'New tooling type', value: 'New tooling type' },
 ];
 
+const calculateWorkingDays = (startDateStr, endDateStr) => {
+  let count = 0;
+  let current = moment(startDateStr).startOf('day');
+  const end = moment(endDateStr).startOf('day');
+  while (current.isSameOrBefore(end)) {
+    if (current.isoWeekday() !== 7) count++; // exclude Sunday only (Saturday is working day)
+    current.add(1, 'days');
+  }
+  return count;
+};
+
 const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
   const { theme } = useTheme();
   const [form] = Form.useForm();
 
   const [conflictList, setConflictList] = useState([]);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
-  // const [pendingValues, setPendingValues] = useState(null);
+  const [pendingValues, setPendingValues] = useState(null);
   const [resolutions, setResolutions] = useState({});
 
   // Reset Form เมื่อเปิด Modal ใหม่
@@ -56,7 +67,6 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
     { name: 'issue_date', label: 'Issue Date', type: 'date', span: 12, required: false, placeholder: 'DD-MM-YYYY' },
     { name: 'measuring_tools', label: 'Measuring Tools', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: MEASURING_TOOL_OPTIONS },
     { name: 'judgement', label: 'Judgement', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: JUDGEMENT_OPTIONS },
-    { name: 'reason', label: 'Reason', type: 'select', span: 12, required: false, placeholder: '-- Select --', options: REASON_OPTIONS },
     { name: 'remark', label: 'Remark', type: 'textarea', span: 24, required: false, placeholder: 'Additional notes...' },
   ];
 
@@ -79,58 +89,61 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
     }
   };
 
-  const handleSave = () => {
-    form.validateFields().then((values) => {
-      // Clone values เพื่อป้องกันการแก้ไข Object โดยตรง (Best Practice)
-      const currentValues = { ...values };
-      // console.log(values)
+  const handleSave = async () => {
+    const values = await form.validateFields();
+    const currentValues = { ...values };
 
-      if (currentValues.issue_date) {
-        // Antd 5 DatePicker ส่งค่ามาเป็น dayjs object เสมอ
-        currentValues.issue_date = dayjs(currentValues.issue_date).format('YYYY-MM-DD');
+    if (currentValues.issue_date) {
+      currentValues.issue_date = dayjs(currentValues.issue_date).format('YYYY-MM-DD');
+    }
+
+    // Check for Delay: prompt reason only when status will be Delay
+    let reason = null;
+    if (currentValues.issue_date && initialData?.receive_date) {
+      const workingDays = calculateWorkingDays(initialData.receive_date, currentValues.issue_date);
+      if (workingDays > 3) {
+        const inputOptions = REASON_OPTIONS.reduce((acc, o) => ({ ...acc, [o.value]: o.label }), {});
+        const { value: selectedReason, isConfirmed } = await Swal.fire({
+          icon: 'warning',
+          title: 'Status: Delay',
+          html: `ใช้เวลา <b>${workingDays}</b> วันทำการ กรุณาระบุสาเหตุ`,
+          input: 'select',
+          inputOptions,
+          inputPlaceholder: '-- Select Reason --',
+          showCancelButton: true,
+          confirmButtonText: 'Submit',
+          cancelButtonText: 'Cancel',
+          inputValidator: (v) => !v && 'กรุณาเลือกสาเหตุ',
+        });
+        if (!isConfirmed) return;
+        reason = selectedReason;
       }
+    }
+    currentValues.reason = reason;
 
-      const fieldsToCheck = ['issue_date', 'measuring_tools', 'judgement', 'reason', 'remark'];
-      const conflicts = [];
+    const fieldsToCheck = ['issue_date', 'measuring_tools', 'judgement', 'remark'];
+    const conflicts = [];
 
-      fieldsToCheck.forEach((field) => {
-        const oldValue = initialData[field];
-        const newValue = currentValues[field];
-
-
-        // ตรวจสอบ: ต้องมีค่าทั้งคู่ และ ค่าต้องไม่เหมือนกัน
-        if (
-          oldValue && oldValue !== '' &&
-          newValue && newValue !== '' &&
-          oldValue !== newValue
-        ) {
-          conflicts.push({
-            field: field,
-            oldValue: oldValue,
-            newValue: newValue
-          });
-        }
-      });
-
-      if (conflicts.length > 0) {
-        // console.log("เจอ Conflict:", conflicts);
-        setConflictList(conflicts);
-        // setPendingValues(currentValues);
-        // console.log("Pending Values:", conflicts);
-        // console.log("Resolutions:", resolutions);
-
-        const initialResolutions = {};
-        conflicts.forEach(c => initialResolutions[c.field] = 'new'); // Default เลือก New
-        setResolutions(initialResolutions);
-
-        setIsConflictModalOpen(true);
-      } else {
-        const payload = { ...initialData, ...currentValues };
-        // console.log("Final Payload:", payload);
-        onSubmit(payload);
-        onCancel();
+    fieldsToCheck.forEach((field) => {
+      const oldValue = initialData[field];
+      const newValue = currentValues[field];
+      if (oldValue && oldValue !== '' && newValue && newValue !== '' && oldValue !== newValue) {
+        conflicts.push({ field, oldValue, newValue });
       }
     });
+
+    if (conflicts.length > 0) {
+      setConflictList(conflicts);
+      setPendingValues(currentValues);
+      const initialResolutions = {};
+      conflicts.forEach(c => initialResolutions[c.field] = 'new');
+      setResolutions(initialResolutions);
+      setIsConflictModalOpen(true);
+    } else {
+      const payload = { ...initialData, ...currentValues };
+      onSubmit(payload);
+      onCancel();
+    }
   };
 
   const onSubmit = async (payload) => {
@@ -167,26 +180,19 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
   };
 
   const handleConfirmResolution = () => {
-    const finalPayload = { ...initialData }; // คัดลอกข้อมูลเดิมก่อนแก้ไข เพื่อไม่ให้กระทบ prop โดยตรง
+    const finalPayload = { ...initialData, ...pendingValues };
 
     conflictList.forEach((conflict) => {
       const { field, oldValue, newValue } = conflict;
       const choice = resolutions[field];
-
-      if (choice === 'new') {
-        finalPayload[field] = newValue;
-      } else if (choice === 'old') {
-        finalPayload[field] = oldValue
-      } else if (choice === 'both') {
-        finalPayload[field] = `${oldValue} / ${newValue}`;
-      }
+      if (choice === 'new') finalPayload[field] = newValue;
+      else if (choice === 'old') finalPayload[field] = oldValue;
+      else if (choice === 'both') finalPayload[field] = `${oldValue} / ${newValue}`;
     });
-
-    // console.log(finalPayload)
 
     onSubmit(finalPayload);
     setIsConflictModalOpen(false);
-    // setPendingValues(null);
+    setPendingValues(null);
     onCancel();
   };
 

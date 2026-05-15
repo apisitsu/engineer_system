@@ -2,6 +2,17 @@
 
 const TOP_N_PER_MACHINE = 2;
 
+// ── Search tolerance constants ─────────────────────────────────────────────────
+const KSB22G_SEARCH = { MIN_JAW_DEPTH: 4.5, JAW_WIDTH_MAX_MARGIN: 10.0 };
+const KSB80_SEARCH  = {
+  MIN_JAW_DEPTH: 6.0, JAW_WIDTH_MAX_MARGIN: 10.0,
+  LARGE_JAW_THRESHOLD: 54, LARGE_JAW_E_OFFSET: 2.5,
+  BP_CLEARANCE_SMALL: 0.3, BP_CLEARANCE_LARGE: 0.6, BP_PCD_MIN_EXCESS: 1.0,
+};
+const JAW_A_CLEARANCE = { MIN: -0.015, MAX: 0.05 };
+const BP_A_MAX_EXCESS  = 2.5;
+const KS400B_PLUG      = { PA_F: 48, PB_F: 70 };
+
 function topNPerMachine(matches, n) {
   const groups = {};
   matches.forEach(m => {
@@ -23,8 +34,6 @@ function topNPerMachine(matches, n) {
 // ── KSB22G ──────────────────────────────────────────────────────────────────
 
 function searchKSB22G_Jaws(fixData, h, sheetName, calc, maxDepth) {
-  const MIN_JAW_DEPTH = 4.5;
-  const JAW_WIDTH_MAX_MARGIN = 10.0;
   const reqC = calc.baseC ? Math.ceil(calc.baseC * 2) / 2 : 30;
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
@@ -32,11 +41,11 @@ function searchKSB22G_Jaws(fixData, h, sheetName, calc, maxDepth) {
     const fixA = parseFloat(row[h('Dim_A')]);
     const fixD = parseFloat(row[h('Dim_D')]);
     const clearance = Math.round((fixA - calc.jawA) * 1000) / 1000;
-    if (clearance < -0.015 || clearance > 0.05) return false;
+    if (clearance < JAW_A_CLEARANCE.MIN || clearance > JAW_A_CLEARANCE.MAX) return false;
     if (!isNaN(fixD) && fixD > maxDepth) return false;
-    if (!isNaN(fixD) && fixD < MIN_JAW_DEPTH) return false;
+    if (!isNaN(fixD) && fixD < KSB22G_SEARCH.MIN_JAW_DEPTH) return false;
     const fixC = parseFloat(row[h('Dim_C')]);
-    if (!isNaN(fixC) && fixC > reqC + JAW_WIDTH_MAX_MARGIN) return false;
+    if (!isNaN(fixC) && fixC > reqC + KSB22G_SEARCH.JAW_WIDTH_MAX_MARGIN) return false;
     return true;
   }).map(row => ({
     no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName,
@@ -58,7 +67,7 @@ function searchKSB22G_BackPlates(fixData, h, sheetName, calc) {
     if (!toolType.includes('BACK PLATE')) return false;
     const sheetID = parseFloat(row[h('Dim_A')]);
     const sheetPCD = parseFloat(row[h('Dim_B')]);
-    if (sheetID < reqAA || sheetID > reqAA + 2.5) return false;
+    if (sheetID < reqAA || sheetID > reqAA + BP_A_MAX_EXCESS) return false;
     if (isNaN(sheetPCD) || sheetPCD < minPCD) return false;
     return true;
   }).map(row => ({
@@ -71,12 +80,10 @@ function searchKSB22G_BackPlates(fixData, h, sheetName, calc) {
 // ── KSB80 ────────────────────────────────────────────────────────────────────
 
 function searchKSB80_Jaws(fixData, h, sheetName, calc, maxDepth) {
-  const MIN_JAW_DEPTH = 6.0;
-  const JAW_WIDTH_MAX_MARGIN = 10.0;
   const reqC = Math.ceil(calc.baseC * 2) / 2;
   let reqE = null;
-  if (calc.jawA > 54 && calc.jawA <= 70) {
-    reqE = Math.ceil((calc.jawA + 2.5) * 2) / 2;
+  if (calc.jawA > KSB80_SEARCH.LARGE_JAW_THRESHOLD && calc.jawA <= 70) {
+    reqE = Math.ceil((calc.jawA + KSB80_SEARCH.LARGE_JAW_E_OFFSET) * 2) / 2;
   }
   return fixData.filter(row => {
     const toolType = String(row[h('Tooling_name')]).toUpperCase();
@@ -84,11 +91,11 @@ function searchKSB80_Jaws(fixData, h, sheetName, calc, maxDepth) {
     const fixA = parseFloat(row[h('Dim_A')]);
     const fixD = parseFloat(row[h('Dim_D')]);
     const clearance = Math.round((fixA - calc.jawA) * 1000) / 1000;
-    if (clearance < -0.015 || clearance > 0.05) return false;
+    if (clearance < JAW_A_CLEARANCE.MIN || clearance > JAW_A_CLEARANCE.MAX) return false;
     if (!isNaN(fixD) && fixD > maxDepth) return false;
-    if (!isNaN(fixD) && fixD < MIN_JAW_DEPTH) return false;
+    if (!isNaN(fixD) && fixD < KSB80_SEARCH.MIN_JAW_DEPTH) return false;
     const fixC = parseFloat(row[h('Dim_C')]);
-    if (!isNaN(fixC) && fixC > reqC + JAW_WIDTH_MAX_MARGIN) return false;
+    if (!isNaN(fixC) && fixC > reqC + KSB80_SEARCH.JAW_WIDTH_MAX_MARGIN) return false;
     if (reqE !== null) {
       const fixE = parseFloat(row[h('Dim_E')]);
       if (isNaN(fixE) || fixE < reqE) return false;
@@ -108,11 +115,11 @@ function searchKSB80_Jaws(fixData, h, sheetName, calc, maxDepth) {
 
 function searchKSB80_BackPlates(fixData, h, sheetName, calc) {
   let reqAA = 0, minPCD = 0, maxPCD = 100.0, checkPCD = true;
-  if (calc.jawA <= 54) {
-    reqAA = parseFloat((calc.ID_part + 0.3).toFixed(2));
-    minPCD = Math.ceil((reqAA + 1.0) * 10) / 10;
+  if (calc.jawA <= KSB80_SEARCH.LARGE_JAW_THRESHOLD) {
+    reqAA = parseFloat((calc.ID_part + KSB80_SEARCH.BP_CLEARANCE_SMALL).toFixed(2));
+    minPCD = Math.ceil((reqAA + KSB80_SEARCH.BP_PCD_MIN_EXCESS) * 10) / 10;
   } else {
-    reqAA = parseFloat((calc.ID_part + 0.6).toFixed(2));
+    reqAA = parseFloat((calc.ID_part + KSB80_SEARCH.BP_CLEARANCE_LARGE).toFixed(2));
     checkPCD = false;
   }
   return fixData.filter(row => {
@@ -120,7 +127,7 @@ function searchKSB80_BackPlates(fixData, h, sheetName, calc) {
     if (!toolType.includes('BACK PLATE')) return false;
     const sheetID = parseFloat(row[h('Dim_A')]);
     const sheetPCD = parseFloat(row[h('Dim_B')]);
-    if (sheetID < reqAA || sheetID > reqAA + 2.5) return false;
+    if (sheetID < reqAA || sheetID > reqAA + BP_A_MAX_EXCESS) return false;
     if (checkPCD && (isNaN(sheetPCD) || sheetPCD < minPCD || sheetPCD > maxPCD)) return false;
     return true;
   }).map(row => ({
@@ -336,7 +343,7 @@ function searchKS400B_PlugA(fixData, h, sheetName, calc) {
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pa_type,
       val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
-      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: 48,
+      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: KS400B_PLUG.PA_F,
       _diff: diffA + diffB + diffC + diffE
     };
   }).sort((a, b) => a._diff - b._diff);
@@ -353,7 +360,7 @@ function searchKS400B_PlugB(fixData, h, sheetName, calc) {
     if (isNaN(fixA) || isNaN(fixB)) {
       return {
         no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pb_type,
-        val1: '-', val2: '-', val3: '-', val4: '-', val5: '-', valF: 70,
+        val1: '-', val2: '-', val3: '-', val4: '-', val5: '-', valF: KS400B_PLUG.PB_F,
         _diffB: 99999, _diffA: 99999, _diffC: 99999, _diff: 99999
       };
     }
@@ -366,7 +373,7 @@ function searchKS400B_PlugB(fixData, h, sheetName, calc) {
     return {
       no: row[h('Tooling_no')], machine: row[h('Machine')] || sheetName, type: calc.pb_type,
       val1: row[h('Dim_A')], val2: row[h('Dim_B')], val3: row[h('Dim_C')],
-      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: 70,
+      val4: row[h('Dim_D')], val5: row[h('Dim_E')], valF: KS400B_PLUG.PB_F,
       _diffB: penalty + diffB, _diffA: diffA, _diffC: diffC, _diff: penalty + diffB
     };
   }).sort((a, b) => {

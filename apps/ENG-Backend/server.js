@@ -111,7 +111,7 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path === '/sds/test-puppeteer' || req.path.startsWith('/public')) {
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')) {
     return next();
   }
 
@@ -242,16 +242,14 @@ app.use('/api/engineer/mtc', mtcRoutes);
 const toolingSelectController = require('./api/engineer/mtc/controllers/toolingSelectController');
 app.use('/api/tooling-select', verifyToken, toolingSelectController);
 
-const formulaController = require('./api/engineer/mtc/controllers/formulaController');
 const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
-app.get('/api/mtc/formulas/:machineName', verifyToken, formulaController.getFormulasByMachine);
-app.post('/api/mtc/formulas', verifyToken, mtcIsAdmin, formulaController.createFormula);
-app.post('/api/mtc/formulas/test', verifyToken, mtcIsAdmin, formulaController.testFormula);
-app.put('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.updateFormula);
-app.delete('/api/mtc/formulas/:id', verifyToken, mtcIsAdmin, formulaController.deleteFormula);
-
-const sdsController = require('./api/engineer/mtc/controllers/sdsController');
-app.use('/api/sds', sdsController);
+const toolingFormulaController = require('./api/engineer/mtc/controllers/toolingFormulaController');
+app.post('/api/mtc/tooling-formula/test', verifyToken, toolingFormulaController.test);
+app.get('/api/mtc/tooling-formula/machines', verifyToken, toolingFormulaController.getMachines);
+app.get('/api/mtc/tooling-formula/:machineName', verifyToken, toolingFormulaController.getFormulas);
+app.post('/api/mtc/tooling-formula', verifyToken, mtcIsAdmin, toolingFormulaController.create);
+app.put('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.update);
+app.delete('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.remove);
 
 const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
 app.use('/api/sds/v2', sdsV2Controller);

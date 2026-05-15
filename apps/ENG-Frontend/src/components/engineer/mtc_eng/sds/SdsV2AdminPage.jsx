@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
-  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox,
+  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image,
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
@@ -41,7 +41,7 @@ const ParamsTab = ({ theme }) => {
     if (!cn.trim()) { message.warning('Enter C/N'); return; }
     setLoading(true);
     setSelectedMachine(null);
-        setFilteredMachineTypes([]);
+    setFilteredMachineTypes([]);
     setCnSearched(false);
     form.resetFields();
     try {
@@ -55,7 +55,7 @@ const ParamsTab = ({ theme }) => {
       setFilteredMachineTypes(filtered.length ? filtered : allMachineTypes);
       if (filtered.length === 1) {
         setSelectedMachine(filtered[0].machine_type_name);
-              }
+      }
       setCnSearched(true);
       if (!filtered.length) message.info('ไม่พบ machine type ที่ match — แสดงทั้งหมด');
     } catch (err) {
@@ -295,9 +295,7 @@ const ToolingImagesTab = ({ theme }) => {
         fd.append('description', selectedTool.tool_name);
       }
       fd.append('image', fileList[0].originFileObj);
-      await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd); // Let axios set the correct multipart boundary
       message.success('Uploaded');
       setDwgNo(''); setOptions([]); setFileList([]); setSelectedTool(null);
       load();
@@ -318,21 +316,46 @@ const ToolingImagesTab = ({ theme }) => {
     }
   };
 
-  const inferredMachineTag = (tool_dwg_no) => {
-    if (!tool_dwg_no) return <Tag>-</Tag>;
+  const inferredMachineName = (tool_dwg_no) => {
+    if (!tool_dwg_no) return '-';
+    if (!allMachineTypes || allMachineTypes.length === 0) {
+      // Temporary fallback until data loads
+      const match = tool_dwg_no.match(/(\d{3})/);
+      return <Text type="secondary">{match ? match[1] : tool_dwg_no}</Text>;
+    }
+    // 1. Try to find if any machine_type_code exists inside tool_dwg_no (case-insensitive)
+    const mt = allMachineTypes.find(m => {
+      const c = String(m.machine_type_code).trim().toLowerCase();
+      return c && tool_dwg_no.toLowerCase().includes(c);
+    });
+    if (mt) return <Text>{mt.machine_type_name || mt.machine_type_code}</Text>;
+
+    // 2. Fallback to legacy extraction
     let code = tool_dwg_no.substring(1, 4);
     if (/^\d/.test(tool_dwg_no)) {
       code = tool_dwg_no.substring(0, 3);
     }
-    const mt = allMachineTypes.find(m => m.machine_type_code === code);
-    return mt ? <Tag color="blue">{mt.machine_type_code} — {mt.machine_type_name || '(no name)'}</Tag> : <Tag>{code}</Tag>;
+    return <Text type="secondary">{code}</Text>;
   };
 
   const cols = [
+    {
+      title: 'Preview',
+      key: 'preview',
+      width: 100,
+      render: (_, row) => (
+        <Image
+          width={80}
+          height={60}
+          style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+          src={`${server.MTC_SDS_V2_IMAGES_TOOLING}/${encodeURIComponent(row.tool_dwg_no)}?token=${localStorage.getItem('token')}`}
+          fallback="/image_m.png"
+        />
+      ),
+    },
     { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 180 },
     { title: 'Tool Name', dataIndex: 'tool_name', render: v => v || <Text type="secondary">-</Text> },
-    { title: 'Machine Type', key: 'mt', width: 180, render: (_, row) => inferredMachineTag(row.tool_dwg_no) },
-    { title: 'File', dataIndex: 'file_name' },
+    { title: 'Machine Name', key: 'mt', width: 220, render: (_, row) => inferredMachineName(row.tool_dwg_no) },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -378,7 +401,7 @@ const ToolingImagesTab = ({ theme }) => {
             {selectedTool && (
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>{selectedTool.tool_name}</Text>
-                <span style={{ marginLeft: 8 }}>{inferredMachineTag(selectedTool.tool_dwg_no)}</span>
+                <span style={{ marginLeft: 8 }}>{inferredMachineName(selectedTool.tool_dwg_no)}</span>
               </div>
             )}
             {dwgNo && !selectedTool && !lookupLoading && (
@@ -445,12 +468,10 @@ const GrindingImagesTab = ({ theme }) => {
       const vals = await form.validateFields();
       setUploading(true);
       const fd = new FormData();
-      fd.append('cn_prefix', vals.cn_prefix);
+      fd.append('cn_prefixes', JSON.stringify(vals.cn_prefixes));
       if (vals.process_code) fd.append('process_code', vals.process_code);
       fd.append('image', fileList[0].originFileObj);
-      await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd);
       message.success('Uploaded');
       form.resetFields(); setFileList([]);
       load();
@@ -473,9 +494,30 @@ const GrindingImagesTab = ({ theme }) => {
   };
 
   const cols = [
-    { title: 'CN Prefix', dataIndex: 'cn_prefix', width: 100 },
+    {
+      title: 'Preview',
+      key: 'preview',
+      width: 100,
+      render: (_, row) => (
+        <Image
+          width={80}
+          height={60}
+          style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+          src={`${server.MTC_SDS_V2_IMAGES_GRINDING}/view/${row.id}?token=${localStorage.getItem('token')}`}
+          fallback="/image_m.png"
+        />
+      ),
+    },
+    {
+      title: 'CN Prefixes',
+      dataIndex: 'cn_prefixes',
+      render: (v) => (
+        <Space size={2} wrap>
+          {(Array.isArray(v) ? v : [v]).map(p => <Tag key={p}>{p}</Tag>)}
+        </Space>
+      ),
+    },
     { title: 'Process Code', dataIndex: 'process_code', width: 140, render: v => v || <Tag>default</Tag> },
-    { title: 'File', dataIndex: 'file_name' },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -493,8 +535,14 @@ const GrindingImagesTab = ({ theme }) => {
     <div>
       <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Upload Grinding Layout Image">
         <Form form={form} layout="inline">
-          <Form.Item name="cn_prefix" label="CN Prefix" rules={[{ required: true }]}>
-            <Select options={CN_PREFIX_OPTIONS} style={{ width: 160 }} />
+          <Form.Item name="cn_prefixes" label="CN Prefix" rules={[{ required: true, message: 'Select at least one CN Prefix' }]}>
+            <Select
+              mode="multiple"
+              options={CN_PREFIX_OPTIONS}
+              style={{ minWidth: 220 }}
+              placeholder="Select one or more"
+              maxTagCount="responsive"
+            />
           </Form.Item>
           <Form.Item name="process_code" label="Process Code">
             <Input placeholder="e.g. IDG001 (optional)" style={{ width: 160 }} />
@@ -758,7 +806,7 @@ const MachineConfigTab = ({ theme }) => {
           <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
             <Col><Text strong>{selectedMachine}</Text></Col>
             <Col flex="auto" />
-            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>มีการแก้ไขที่ยังไม่ได้ Save</Text></Col>}
+            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
             <Col>
               <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
                 Save
@@ -790,6 +838,8 @@ const AuditTab = ({ theme }) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
   const [activeCategory, setActiveCategory] = useState(null);
+  const [showNoPlan, setShowNoPlan] = useState(false);
+  const [showMissingTooling, setShowMissingTooling] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -805,19 +855,82 @@ const AuditTab = ({ theme }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Build dynamic category list from itemCounts
+  const categories = useMemo(() => {
+    const cats = [];
+    const ballTotal = data.totals?.ballTotal || 0;
+    const raceTotal = data.totals?.raceTotal || 0;
+    if (data.itemCounts.some(r => r.sub_class?.startsWith('C3')))
+      cats.push({ key: 'ball', label: 'Ball', prefix: 'C3', total: ballTotal, color: '#1677ff' });
+    if (data.itemCounts.some(r => r.sub_class?.startsWith('C2')))
+      cats.push({ key: 'race', label: 'Race', prefix: 'C2', total: raceTotal, color: '#52c41a' });
+    // Any other sub_class prefixes beyond C2/C3
+    const otherPrefixes = [...new Set(
+      data.itemCounts
+        .filter(r => r.sub_class && !r.sub_class.startsWith('C2') && !r.sub_class.startsWith('C3'))
+        .map(r => r.sub_class.substring(0, 2))
+    )];
+    otherPrefixes.forEach(prefix => {
+      const total = data.itemCounts.filter(r => r.sub_class?.startsWith(prefix)).reduce((s, r) => s + r.count, 0);
+      cats.push({ key: prefix, label: prefix, prefix, total, color: '#722ed1' });
+    });
+    return cats;
+  }, [data]);
+
+  const getCategoryPrefix = useCallback((catKey) => {
+    const cat = categories.find(c => c.key === catKey);
+    return cat?.prefix || catKey;
+  }, [categories]);
+
+  const handleCategoryClick = (key) => {
+    setActiveCategory(prev => prev === key ? null : key);
+    setShowNoPlan(false);
+    setShowMissingTooling(false);
+  };
+
+  const filteredNoPlan = useMemo(() => {
+    if (!activeCategory) return data.noProcessPlan;
+    const prefix = getCategoryPrefix(activeCategory);
+    return data.noProcessPlan.filter(r => r.sub_class?.startsWith(prefix));
+  }, [data.noProcessPlan, activeCategory, getCategoryPrefix]);
+
+  const filteredMissingTooling = useMemo(() => {
+    if (!activeCategory) return data.missingTooling;
+    const prefix = getCategoryPrefix(activeCategory);
+    return data.missingTooling.filter(r => r.sub_class?.startsWith(prefix));
+  }, [data.missingTooling, activeCategory, getCategoryPrefix]);
+
+  // Group missingTooling by CN for rowSpan display
+  const groupedMissingTooling = useMemo(() => {
+    const result = [];
+    const groups = {};
+    filteredMissingTooling.forEach(row => {
+      if (!groups[row.control_no]) groups[row.control_no] = [];
+      groups[row.control_no].push(row);
+    });
+    Object.values(groups).forEach(rows => {
+      rows.forEach((row, idx) => {
+        result.push({ ...row, _rowSpan: idx === 0 ? rows.length : 0, _key: `${row.control_no}_${row.process_code}` });
+      });
+    });
+    return result;
+  }, [filteredMissingTooling]);
+
   const noPlanCols = [
-    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
-    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
+    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
   ];
 
-  const toolingCols = [
-    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no.localeCompare(b.control_no) },
-    { title: 'Proc Code', dataIndex: 'process_code', key: 'process_code', width: 100 },
-    { title: 'Machine Code', dataIndex: 'machine_type_code', key: 'machine_type_code', width: 120, render: v => v ? <Tag color="blue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name' },
-    { title: 'WC', dataIndex: 'wc', key: 'wc', width: 80 },
+  const missingCols = [
+    {
+      title: 'CN',
+      dataIndex: 'control_no',
+      key: 'control_no',
+      render: (val, row) => ({ children: <Text strong>{val}</Text>, props: { rowSpan: row._rowSpan } }),
+    },
+    { title: 'Process Code', dataIndex: 'process_code', key: 'process_code', width: 120 },
   ];
+
+  const activeCat = categories.find(c => c.key === activeCategory);
 
   return (
     <div style={{ minHeight: 600 }}>
@@ -830,28 +943,31 @@ const AuditTab = ({ theme }) => {
               {data.totals?.grandTotal?.toLocaleString() || 0}
             </div>
             <Divider style={{ margin: '8px 0' }} />
-            <Space>
+            <Space wrap>
               <Button
-                type={activeCategory === 'ball' ? 'primary' : 'default'}
-                onClick={() => setActiveCategory(activeCategory === 'ball' ? null : 'ball')}
                 size="small"
+                type={activeCategory === null ? 'primary' : 'default'}
+                onClick={() => { setActiveCategory(null); setShowNoPlan(false); setShowMissingTooling(false); }}
               >
-                Ball: {data.totals?.ballTotal?.toLocaleString() || 0}
+                All
               </Button>
-              <Button
-                type={activeCategory === 'race' ? 'primary' : 'default'}
-                onClick={() => setActiveCategory(activeCategory === 'race' ? null : 'race')}
-                size="small"
-              >
-                Race: {data.totals?.raceTotal?.toLocaleString() || 0}
-              </Button>
+              {categories.map(cat => (
+                <Button
+                  key={cat.key}
+                  type={activeCategory === cat.key ? 'primary' : 'default'}
+                  onClick={() => handleCategoryClick(cat.key)}
+                  size="small"
+                >
+                  {cat.label}
+                </Button>
+              ))}
             </Space>
-            {activeCategory && (
+            {activeCat && (
               <div style={{ marginTop: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCategory === 'ball' ? '#1677ff' : '#52c41a' }}>
-                  {(activeCategory === 'ball' ? data.totals?.ballTotal : data.totals?.raceTotal)?.toLocaleString() || 0}
+                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCat.color }}>
+                  {activeCat.total.toLocaleString()}
                 </div>
-                <Text type="secondary">{activeCategory === 'ball' ? 'Ball (C3x)' : 'Race (C2x)'}</Text>
+                <Text type="secondary">{activeCat.label} ({activeCat.prefix}x)</Text>
               </div>
             )}
           </Card>
@@ -869,28 +985,66 @@ const AuditTab = ({ theme }) => {
             items={[
               {
                 key: 'no-plan',
-                label: <Tag color="error">Critical: No Process Plan ({data.noProcessPlan?.length})</Tag>,
+                label: <Tag color="error">Critical: No Process Plan ({filteredNoPlan.length})</Tag>,
                 children: (
                   <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                      รายการที่ยังไม่มีการลงทะเบียน Routing (Process Plan) ในระบบ LPB — จะไม่สามารถออก SDS ได้
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                      Incomplete Routing (Process Plan) from LPB — Can't generate SDS
                     </Text>
-                    <Table dataSource={data.noProcessPlan} columns={noPlanCols} size="small" loading={loading} bordered rowKey="control_no" pagination={{ pageSize: 15 }} />
+                    <Button
+                      size="small"
+                      type={showNoPlan ? 'primary' : 'default'}
+                      onClick={() => setShowNoPlan(v => !v)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {showNoPlan ? 'Hide List' : `Show List (${filteredNoPlan.length} CN)`}
+                    </Button>
+                    {showNoPlan && (
+                      <Table
+                        dataSource={filteredNoPlan}
+                        columns={noPlanCols}
+                        size="small"
+                        loading={loading}
+                        bordered
+                        rowKey="control_no"
+                        pagination={{ pageSize: 20, showSizeChanger: false }}
+                      />
+                    )}
                   </>
-                )
+                ),
               },
               {
                 key: 'missing-tool',
-                label: <Tag color="warning">Warning: Missing Tooling ({data.missingTooling?.length})</Tag>,
+                label: <Tag color="warning">Warning: Missing Tooling ({filteredMissingTooling.length})</Tag>,
                 children: (
                   <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                      มี Process Plan แล้วแต่ยังไม่ได้ผูกรายการ Tooling (แสดงเฉพาะ Process Code: 1011, 1012, 1021, 1022, 1041, 1042, 1061, 1062, 1181, 1182, 1241)
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                      Process Plan exists but missing Tooling
                     </Text>
-                    <Table dataSource={data.missingTooling} columns={toolingCols} size="small" loading={loading} bordered rowKey={(r, i) => `${r.control_no}_${r.process_code}_${i}`} pagination={{ pageSize: 15 }} />
+                    <Button
+                      size="small"
+                      type={showMissingTooling ? 'primary' : 'default'}
+                      onClick={() => setShowMissingTooling(v => !v)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {showMissingTooling
+                        ? 'Hide List'
+                        : `Show List (${new Set(filteredMissingTooling.map(r => r.control_no)).size} CN, ${filteredMissingTooling.length} rows)`}
+                    </Button>
+                    {showMissingTooling && (
+                      <Table
+                        dataSource={groupedMissingTooling}
+                        columns={missingCols}
+                        size="small"
+                        loading={loading}
+                        bordered
+                        rowKey="_key"
+                        pagination={{ pageSize: 30, showSizeChanger: false }}
+                      />
+                    )}
                   </>
-                )
-              }
+                ),
+              },
             ]}
           />
         </Col>
@@ -906,7 +1060,7 @@ const SdsV2AdminPage = () => {
 
   const tabItems = [
     { key: 'params', label: 'Per-record Params', children: <ParamsTab theme={theme} /> },
-    { key: 'machine-config', label: 'Machine Config', children: <MachineConfigTab theme={theme} /> },
+    { key: 'machine-config', label: 'Machine Parameter Config', children: <MachineConfigTab theme={theme} /> },
     {
       key: 'images',
       label: 'Images',
@@ -927,9 +1081,9 @@ const SdsV2AdminPage = () => {
     <Layout style={{ height: '100%' }}>
       <MenuTemplate type="MTC" />
       <Layout style={{ backgroundColor: theme.colors.background }}>
-        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto' }}>
+        <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
           <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-            SDS v2 — Admin
+            Setup Data Sheet Management
           </Title>
           <Card style={{ background: theme.colors.cardBackground }}>
             <Tabs items={tabItems} />
@@ -941,5 +1095,3 @@ const SdsV2AdminPage = () => {
 };
 
 export default SdsV2AdminPage;
-
-

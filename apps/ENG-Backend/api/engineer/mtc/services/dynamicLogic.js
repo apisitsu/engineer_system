@@ -8,6 +8,8 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TABLES } = require('../mtcConstants');
+const inventoryService = require('./inventoryService');
+const FormulaService  = require('./FormulaService');
 
 /**
  * Resolve ค่าจาก calc context โดยรองรับ nested key เช่น "rollerShoe.A"
@@ -39,6 +41,28 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
     );
     const rules = rulesRes.rows;
     if (rules.length === 0) return [];
+
+    // Auto-calculate formulas for any calc_context not yet in allCalcs.
+    // Uses the same normalization as /rules/validate: lowercase + strip hyphens.
+    // e.g. calc_context "ksx100" matches tooling_formula machine_name "KSX100" or "KS-X100".
+    const neededContexts = [...new Set(rules.map(r => r.calc_context).filter(Boolean))];
+    const missingContexts = neededContexts.filter(ctx => !(ctx in allCalcs));
+    if (missingContexts.length > 0) {
+      const formulaRes = await engPool.query(`SELECT DISTINCT machine_name FROM ${TABLES.TOOLING_FORMULA}`);
+      const formulaNameMap = {};
+      for (const { machine_name } of formulaRes.rows) {
+        formulaNameMap[machine_name.toLowerCase().replace(/-/g, '')] = machine_name;
+      }
+      const toCalc = missingContexts
+        .map(ctx => ({ ctx, machineName: formulaNameMap[ctx.toLowerCase().replace(/-/g, '')] }))
+        .filter(e => e.machineName);
+      if (toCalc.length > 0) {
+        const results = await Promise.all(
+          toCalc.map(({ machineName }) => FormulaService.calculateMachineParams(machineName, partData))
+        );
+        toCalc.forEach(({ ctx }, i) => { allCalcs[ctx] = results[i]; });
+      }
+    }
 
     // จัดกลุ่มกฎตาม machine + category
     const machineGroups = {};
@@ -86,6 +110,13 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
 
       for (const catName of Object.keys(mGroup.tools)) {
         const toolSpec = mGroup.tools[catName];
+
+        if (!await inventoryService.tableExists(toolSpec.table)) {
+          console.warn(`dynamicLogic: skipping unknown table "${toolSpec.table}" for ${mName}/${catName}`);
+          continue;
+        }
+        const validCols = await inventoryService.getValidColumns(toolSpec.table);
+
         const dims = toolSpec.dims;
         const legacyRules = toolSpec.legacyRules;
 
@@ -102,6 +133,10 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
           dims.forEach((dim, idx) => {
             const targetVal = resolveCalcKey(calcObj, dim.calc_key);
             if (targetVal === null) return;
+            if (!validCols.has(dim.tool_field)) {
+              console.warn(`dynamicLogic: unknown column "${dim.tool_field}" in "${toolSpec.table}", skipping dim`);
+              return;
+            }
             const tPlus  = parseFloat(dim.tol_plus  || 99);
             const tMinus = parseFloat(dim.tol_minus || 99);
             const pIdx = params.length;
@@ -143,6 +178,10 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
 
             const min = calcVal - (parseFloat(rule.tolerance_minus) || 0);
             const max = calcVal + (parseFloat(rule.tolerance_plus) || 0);
+            if (!validCols.has(rule.target_tool_field)) {
+              console.warn(`dynamicLogic: unknown legacy column "${rule.target_tool_field}" in "${toolSpec.table}", skipping`);
+              return;
+            }
             const pIdx = params.length;
             legacyConditions.push(`${rule.target_tool_field} BETWEEN $${pIdx + 1} AND $${pIdx + 2}`);
             params.push(min, max);

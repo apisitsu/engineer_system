@@ -1,0 +1,16 @@
+{
+  "model": "ollama/qwen3.5:latest",
+  "permissions": null,
+  "maxTokens": null,
+  "maxIterations": null,
+  "thinkingBudget": null,
+  "searchEngine": null,
+  "allowedTools": null,
+  "disallowedTools": null,
+  "windowWidth": null,
+  "windowHeight": null,
+  "guiScale": null,
+  "teamEnabled": true,
+  "showRawResponse": null,
+  "kms": null
+}
