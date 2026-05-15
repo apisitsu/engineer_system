@@ -474,7 +474,7 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
         okText="Save"
         okButtonProps={{ loading: saving }}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}

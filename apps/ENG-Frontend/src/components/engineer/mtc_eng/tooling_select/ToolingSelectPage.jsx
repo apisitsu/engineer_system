@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import {
   Input, Button, Typography, Card, Space, Spin, Alert,
-  Collapse, Table, Tag, Row, Col, Layout, Badge,
-  Select, Tooltip
+  Collapse, Table, Tag, Row, Col, Layout, Badge
 } from 'antd';
 import {
   SearchOutlined,
@@ -329,10 +328,10 @@ const ToolingSelectPage = () => {
                       )}
                     </Row>
                   </Card>
-                  <Collapse items={mData.map(m => ({
-                    key: m.name,
+                  <Collapse items={mData.map((m, idx) => ({
+                    key: `${m.name}-${idx}`,
                     label: (<Space><Text strong>{m.name}</Text><Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : m.group === 'DYNAMIC' ? 'geekblue' : 'purple'}>{m.group}</Tag>{m.found < m.required && (<Tag color="orange">{m.found}/{m.required} found</Tag>)}</Space>),
-                    children: (<div>{m.tools.map(t => (<div key={t.title}>{t.content}</div>))}</div>)
+                    children: (<div>{m.tools.map((t, tIdx) => (<div key={`${t.title}-${tIdx}`}>{t.content}</div>))}</div>)
                   }))} style={{ marginBottom: 16 }} />
                 </>
               ) : (!loading && (
