@@ -33,6 +33,7 @@ export const server = {
   ECR_RESUBMIT: `${apiUrl}api/ecr/`, // append id/resubmit
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
+  TOOLING_INSPECT_API: `${apiUrl}api/engineer/mtc/tooling-inspect`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/inspect_update`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_SYNC_CSV: `${apiUrl}api/tooling_inspect/sync_csv`,
@@ -57,12 +58,15 @@ export const server = {
   MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
   MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
   MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
-  MTC_FORMULAS: `${apiUrl}api/mtc/formulas`,
-  MTC_SDS_SEARCH: `${apiUrl}api/sds/search`,
-  MTC_SDS_COUNTS: `${apiUrl}api/sds/counts`,
-  MTC_SDS_PDF: `${apiUrl}api/sds/pdf`,
-  MTC_SDS_TEMPLATES: `${apiUrl}api/sds/templates`,
-  MTC_SDS_MAPPING: `${apiUrl}api/sds/mapping`,
+  MTC_TOOLING_RULES: `${apiUrl}api/tooling-select/rules`,
+  MTC_TOOLING_RULES_VALIDATE: `${apiUrl}api/tooling-select/rules/validate`,
+  MTC_MACHINE_CONFIG: `${apiUrl}api/tooling-select/machine-config`,
+  MTC_MACHINE_TABLE_CONFIG: `${apiUrl}api/tooling-select/machine-table-config`,
+  MTC_TOOLING_COLUMNS: `${apiUrl}api/tooling-select/columns`,
+  MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
+  MTC_TOOLING_FORMULA: `${apiUrl}api/mtc/tooling-formula`,
+  MTC_TOOLING_FORMULA_MACHINES: `${apiUrl}api/mtc/tooling-formula/machines`,
+  MTC_FORMULA_TEST: `${apiUrl}api/mtc/tooling-formula/test`,
   MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
   MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
   MTC_SDS_V2_PDF_CACHE: `${apiUrl}api/sds/v2/pdf/cache`,
@@ -73,6 +77,11 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
+
+  // Template Tool (APQP Forms)
+  TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
+  TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
+  TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

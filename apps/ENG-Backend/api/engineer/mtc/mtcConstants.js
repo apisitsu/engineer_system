@@ -54,6 +54,8 @@ const TABLES = {
 
   // Tooling Selection & Rules
   MTC_SELECTION_RULES: 'mtc_selection_rules',
+  MTC_MACHINE_CONFIG:  'mtc_machine_config',
+  TOOLING_FORMULA:     'tooling_formula',
   SPEC_PROCESS: 'spec_process',
 
   // Specific Tooling Tables

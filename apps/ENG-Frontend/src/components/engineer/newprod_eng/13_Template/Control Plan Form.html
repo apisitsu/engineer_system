@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Plan Form Editor</title>
+    <style>
+        /* ตั้งค่าพื้นฐาน */
+        :root {
+            --border-color: #000;
+            --header-bg: #e5e7eb;
+        }
+
+        body {
+            background-color: #525659;
+            display: flex;
+            justify-content: center;
+            padding: 70px 0 20px 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Sarabun';
+            font-size: 11px;
+            color: #000;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* Topbar เมนูควบคุมด้านบน */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 55px;
+            background-color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            box-sizing: border-box;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .topbar-left,
+        .topbar-right,
+        .topbar-center {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Toolbar สำหรับจัด Format ข้อความ */
+        .format-toolbar {
+            display: flex;
+            align-items: center;
+            background: #f0f2f5;
+            padding: 4px 6px;
+            border-radius: 5px;
+            gap: 2px;
+        }
+
+        .format-toolbar button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #333;
+            cursor: pointer;
+            padding: 4px 6px;
+            font-size: 13px;
+            border-radius: 4px;
+            outline: none;
+            height: 26px;
+            min-width: 26px;
+        }
+
+        .format-toolbar button svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .format-toolbar button:hover {
+            background: #d9e8ff;
+            border-color: #91caff;
+            color: #1677ff;
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 18px;
+            background: #ccc;
+            margin: 0 4px;
+        }
+
+        .zoom-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .zoom-control select {
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: 0.2s;
+        }
+
+        .btn-add {
+            background-color: #1677ff;
+        }
+
+        .btn-add:hover {
+            background-color: #4096ff;
+        }
+
+        .btn-export {
+            background-color: #52c41a;
+        }
+
+        .btn-export:hover {
+            background-color: #73d13d;
+        }
+
+        .btn-remove {
+            background-color: #ff4d4f;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 2px;
+            border: none;
+            color: white;
+        }
+
+        .topbar-title {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* Container สำหรับจัดการหลายๆ หน้า */
+        #pages-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+        }
+
+        /* รูปแบบกระดาษ A3 แนวนอน (Landscape) - ขนาดตายตัว */
+        .a3-page {
+            width: 420mm;
+            height: 297mm;
+            background-color: #fff;
+            padding: 10mm;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 5mm;
+            right: 10mm;
+            font-size: 11px;
+            font-weight: bold;
+            color: #555;
+            z-index: 10;
+        }
+
+        .page-content {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1;
+            position: relative;
+        }
+
+        /* หัวเอกสาร Control Plan */
+        .header-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .standard-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 11px;
+            border: 2px solid var(--border-color, #000);
+            background-color: #fff;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .header-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            flex: 1;
+            border-right: 2px solid var(--border-color, #000);
+            min-width: 0;
+        }
+
+        .header-col {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color, #000);
+            min-width: 0;
+        }
+
+        .header-col:last-child {
+            border-right: none;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color, #000);
+            padding: 2px 4px;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+        }
+
+        .header-row:last-child {
+            border-bottom: none;
+        }
+
+        .header-row label {
+            font-weight: bold;
+            margin-right: 5px;
+            white-space: nowrap;
+        }
+
+        .header-row input[type="text"],
+        .header-row input[type="date"] {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 11px;
+            min-width: 0;
+            text-overflow: ellipsis;
+        }
+
+        .approval-block {
+            display: flex;
+            width: 200px;
+            flex-shrink: 0;
+        }
+
+        .stamp-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color, #000);
+        }
+
+        .stamp-box:last-child {
+            border-right: none;
+        }
+
+        .stamp-title {
+            text-align: center;
+            font-weight: bold;
+            border-bottom: 1px solid var(--border-color, #000);
+            padding: 2px;
+            background-color: #f9f9f9;
+        }
+
+        .stamp-area {
+            flex: 1;
+            min-height: 40px;
+            cursor: text;
+            outline: none;
+            padding: 2px;
+            text-align: center;
+        }
+
+        /* ==============================================
+           ตารางข้อมูลหลัก Data Table
+           ============================================== */
+        table.data-table {
+            border-collapse: collapse !important;
+            width: 100%;
+            border: 2px solid var(--border-color);
+            table-layout: fixed;
+            /* เอา flex-grow ออกเพื่อไม่ให้ตารางพยายามยืดตัวเองเต็มหน้ากระดาษ */
+        }
+
+        table.data-table tbody tr {
+            height: 25px;
+            /* ล็อกความสูงเริ่มต้นของแต่ละแถว */
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color) !important;
+            padding: 2px 4px;
+            text-align: center;
+            vertical-align: middle;
+            word-wrap: break-word;
+            box-sizing: border-box;
+        }
+
+        table.data-table th {
+            background-color: var(--header-bg);
+            font-weight: bold;
+            position: relative;
+            font-size: 11px;
+        }
+
+        /* Content Editable Cell */
+        .editable-cell {
+            min-height: 20px;
+            width: 100%;
+            outline: none;
+            cursor: text;
+            text-align: center;
+            padding: 2px;
+            box-sizing: border-box;
+            word-break: break-word;
+        }
+
+        .editable-cell:focus {
+            background-color: #fff;
+            box-shadow: inset 0 0 0 2px #1677ff;
+        }
+
+        .editable-cell ul {
+            padding-left: 20px;
+            margin: 4px 0;
+            text-align: left;
+        }
+
+        .editable-cell li {
+            margin-bottom: 2px;
+        }
+
+        /* ตัวลากปรับขนาดคอลัมน์ (Resizer) */
+        .resizer {
+            position: absolute;
+            top: 0;
+            right: -3px;
+            width: 6px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 10;
+        }
+
+        .resizer:hover,
+        .resizer.resizing {
+            background-color: #1677ff;
+            opacity: 0.5;
+        }
+
+        /* ==============================================
+           การตั้งค่าสำหรับการพิมพ์ (Export PDF)
+           ============================================== */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            @page {
+                size: A3 landscape;
+                margin: 0;
+            }
+
+            body {
+                background: none;
+                padding: 0;
+                min-height: auto;
+                margin: 0;
+            }
+
+            #pages-container {
+                gap: 0;
+                zoom: 1 !important;
+                transform: none !important;
+                margin: 0 !important;
+            }
+
+            .a3-page {
+                box-shadow: none;
+                padding: 10mm;
+                margin: 0;
+                width: 420mm;
+                height: 297mm;
+                page-break-after: always;
+                page-break-inside: avoid;
+                overflow: visible;
+            }
+
+            .a3-page:last-child {
+                page-break-after: auto;
+            }
+
+            .page-content {
+                overflow: visible !important;
+            }
+
+            .resizer {
+                display: none !important;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            table.data-table {
+                border-collapse: collapse !important;
+                border: 2px solid #000 !important;
+                table-layout: fixed !important;
+                width: 100% !important;
+            }
+
+            th,
+            td {
+                border: 1px solid #000 !important;
+                background-clip: padding-box !important;
+            }
+
+            table.data-table th {
+                position: static !important;
+            }
+
+            .editable-cell {
+                box-shadow: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar no-print">
+        <div class="topbar-left">
+            <div class="topbar-title">Control Plan - Form Editor</div>
+        </div>
+
+        <div class="topbar-center format-toolbar">
+            <button onmousedown="event.preventDefault(); execCmd('bold')" title="ตัวหนา (Bold)"
+                style="font-weight:bold;">B</button>
+            <button onmousedown="event.preventDefault(); execCmd('italic')" title="ตัวเอียง (Italic)"
+                style="font-style:italic; font-family:serif;">I</button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); execCmd('justifyLeft')" title="จัดชิดซ้าย (Align Left)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="15" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <button onmousedown="event.preventDefault(); execCmd('justifyCenter')" title="จัดกึ่งกลาง (Align Center)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="7" y1="12" x2="17" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <button onmousedown="event.preventDefault(); execCmd('justifyRight')" title="จัดชิดขวา (Align Right)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="9" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); setVerticalAlign('top')" title="ชิดขอบบน (Align Top)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16" />
+                    <path d="M12 8v12" />
+                    <path d="M8 12l4-4 4 4" />
+                </svg>
+            </button>
+            <button onmousedown="event.preventDefault(); setVerticalAlign('middle')"
+                title="กึ่งกลางแนวตั้ง (Align Middle)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 12h16" />
+                    <path d="M12 4v16" />
+                    <path d="M8 8l4-4 4 4" />
+                    <path d="M8 16l4 4 4-4" />
+                </svg>
+            </button>
+            <button onmousedown="event.preventDefault(); setVerticalAlign('bottom')" title="ชิดขอบล่าง (Align Bottom)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 20h16" />
+                    <path d="M12 4v12" />
+                    <path d="M8 12l4 4 4-4" />
+                </svg>
+            </button>
+            <div class="toolbar-divider"></div>
+
+            <button onmousedown="event.preventDefault(); applyBullet('disc')" title="Bullet วงกลมทึบ"
+                style="font-size:14px; font-weight:bold;">●</button>
+            <button onmousedown="event.preventDefault(); applyBullet('circle')" title="Bullet วงกลมโปร่ง"
+                style="font-size:14px; font-weight:bold;">○</button>
+            <button onmousedown="event.preventDefault(); applyBullet('square')" title="Bullet สี่เหลี่ยมทึบ"
+                style="font-size:14px; font-weight:bold;">■</button>
+            <button onmousedown="event.preventDefault(); applyBullet('dash')" title="Bullet ขีด (-)"
+                style="font-size:14px; font-weight:bold;">-</button>
+
+            <button onmousedown="event.preventDefault(); applyBullet('')" title="นำ Bullet ออก" style="color:#ff4d4f;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <div class="topbar-right">
+            <div class="zoom-control">
+                <label for="zoom-select">Zoom:</label>
+                <select id="zoom-select" onchange="applyZoom(this.value)">
+                    <option value="0.50">50%</option>
+                    <option value="0.75">75%</option>
+                    <option value="0.90">90%</option>
+                    <option value="1" selected>100%</option>
+                    <option value="1.10">110%</option>
+                    <option value="1.25">125%</option>
+                    <option value="1.50">150%</option>
+                </select>
+            </div>
+            <button class="action-btn btn-add" onclick="addRow()">+ Add Row</button>
+            <button class="action-btn btn-export" onclick="window.print()">Export PDF</button>
+        </div>
+    </div>
+
+    <div id="pages-container">
+        <!-- Page 1 Template -->
+        <div class="a3-page" id="page-1">
+            <div class="page-number">Page 1 of 1</div>
+
+            <div class="page-content">
+                <div class="header-title">Control Plan</div>
+
+                <!-- Header Info Table -->
+                <div class="standard-header" id="main-standard-header">
+                    <div class="header-details">
+                        <div class="header-col">
+                            <div class="header-row"><label>PID Number:</label><input type="text"></div>
+                            <div class="header-row"><label>Customer P/N:</label><input type="text"></div>
+                            <div class="header-row"><label>NMB P/N:</label><input type="text"></div>
+                        </div>
+                        <div class="header-col">
+                            <div class="header-row"><label>CP No.:</label><input type="text"></div>
+                            <div class="header-row"><label>Prepare by:</label><input type="text"></div>
+                            <div class="header-row"><label>Check by:</label><input type="text"></div>
+                        </div>
+                        <div class="header-col">
+                            <div class="header-row"><label>REV.:</label><input type="text"></div>
+                            <div class="header-row"><label>Date Initiated:</label><input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"></div>
+                            <div class="header-row"><label>Target Date:</label><input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"></div>
+                        </div>
+                    </div>
+                    <div class="approval-block">
+                        <div class="stamp-box">
+                            <div class="stamp-title">Prepare</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                        <div class="stamp-box">
+                            <div class="stamp-title">Check by</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                        <div class="stamp-box">
+                            <div class="stamp-title">Approve</div>
+                            <div class="stamp-area" contenteditable="true"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Data Table -->
+                <table class="data-table">
+                    <colgroup class="table-colgroup">
+                        <col style="width: 5%;"> <!-- 0. Operation -->
+                        <col style="width: 14%;"> <!-- 1. Process Function -->
+                        <col style="width: 14%;"> <!-- 2. Machine -->
+                        <col style="width: 4%;"> <!-- 3. Char - DWG -->
+                        <col style="width: 8%;"> <!-- 4. Char - Product -->
+                        <col style="width: 8%;"> <!-- 5. Char - Process -->
+                        <col style="width: 5%;"> <!-- 6. Special Class -->
+                        <col style="width: 10%;"> <!-- 7. Methods - Req -->
+                        <col style="width: 9%;"> <!-- 8. Methods - Eval -->
+                        <col style="width: 5%;"> <!-- 9. Sample - Size -->
+                        <col style="width: 4%;"> <!-- 10. Sample - Freq -->
+                        <col style="width: 8%;"> <!-- 11. Control Method -->
+                        <col style="width: 6%;"> <!-- 12. Reaction Plan -->
+                        <col class="no-print" style="width: 3%;"> <!-- 13. Del -->
+                    </colgroup>
+                    <thead id="main-table-header">
+                        <tr>
+                            <th rowspan="2" data-col="0">Operation</th>
+                            <th rowspan="2" data-col="1">Process Function / Description</th>
+                            <th rowspan="2" data-col="2">Machine, Device, Jig,<br>Tools For Mfg.</th>
+                            <th colspan="3">Characteristics</th>
+                            <th rowspan="2" data-col="6">Special<br>Classification</th>
+                            <th colspan="5">Methods</th>
+                            <th rowspan="2" data-col="12">Reaction<br>Plan</th>
+                            <th rowspan="2" class="no-print" data-col="13">Del</th>
+                        </tr>
+                        <tr>
+                            <th data-col="3">DWG.<br>No.</th>
+                            <th data-col="4">Product</th>
+                            <th data-col="5">Process</th>
+                            <th data-col="7">Requirements</th>
+                            <th data-col="8">Evaluation /<br>Measurement</th>
+                            <th data-col="9">Sample Size</th>
+                            <th data-col="10">Freq.</th>
+                            <th data-col="11">Control<br>Method</th>
+                        </tr>
+                    </thead>
+                    <tbody class="table-body">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rowCount = 0;
+        let pageCount = 1;
+        let isResizing = false;
+
+        // ==========================================
+        // Text Formatting Functions (Rich Text)
+        // ==========================================
+        function execCmd(command, value = null) {
+            document.execCommand(command, false, value);
+        }
+
+        function setVerticalAlign(align) {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                let node = sel.anchorNode;
+                if (node && node.nodeType === 3) node = node.parentNode;
+                if (node) {
+                    const td = node.closest('td');
+                    if (td) td.style.verticalAlign = align;
+                }
+            }
+        }
+
+        function applyBullet(style) {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+
+            let node = sel.anchorNode;
+            if (node && node.nodeType === 3) node = node.parentNode;
+
+            let cell = node ? node.closest('.editable-cell') : null;
+            if (!cell) return;
+
+            let ul = node.closest('ul');
+
+            if (style === "") {
+                if (ul) document.execCommand('insertUnorderedList');
+                return;
+            }
+
+            if (!ul) {
+                document.execCommand('insertUnorderedList');
+                node = window.getSelection().anchorNode;
+                if (node && node.nodeType === 3) node = node.parentNode;
+                if (node) ul = node.closest('ul');
+            }
+
+            if (ul) {
+                if (style === 'dash') {
+                    ul.style.listStyleType = "'- '";
+                } else {
+                    ul.style.listStyleType = style;
+                }
+                ul.style.paddingLeft = '20px';
+                ul.style.margin = '4px 0';
+                ul.style.textAlign = 'left';
+            }
+        }
+
+        // ==========================================
+        // UI Helpers
+        // ==========================================
+        function applyZoom(scale) {
+            const container = document.getElementById('pages-container');
+            container.style.zoom = scale;
+            if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
+                container.style.transform = `scale(${scale})`;
+                container.style.marginBottom = scale > 1 ? `${(scale - 1) * 100}%` : '0';
+            }
+        }
+
+        function updatePageNumbers() {
+            const pages = document.querySelectorAll('.a3-page');
+            pages.forEach((page, index) => {
+                const pageNumEl = page.querySelector('.page-number');
+                if (pageNumEl) pageNumEl.innerText = `Page ${index + 1} of ${pages.length}`;
+            });
+        }
+
+        // ==========================================
+        // Pagination Reflow System (Push & Pull)
+        // ==========================================
+        function getNextPageTbody(currentPage) {
+            let nextPage = currentPage.nextElementSibling;
+            if (!nextPage || !nextPage.classList.contains('a3-page')) {
+                nextPage = createNewPageDOM();
+            }
+            return nextPage.querySelector('.table-body');
+        }
+
+        function reflowPagination() {
+            const activeEl = document.activeElement;
+            let pages = document.querySelectorAll('.a3-page');
+
+            for (let i = 0; i < pages.length; i++) {
+                let page = pages[i];
+                let content = page.querySelector('.page-content');
+                let tbody = page.querySelector('.table-body');
+
+                // 1. PUSH: ดันลงถ้าล้น
+                while (content.scrollHeight > content.clientHeight + 2 && tbody.children.length > 1) {
+                    let lastRow = tbody.lastElementChild;
+                    let nextPageTbody = getNextPageTbody(page);
+                    nextPageTbody.insertBefore(lastRow, nextPageTbody.firstElementChild);
+                }
+
+                // 2. PULL: ดึงขึ้นถ้าเหลือที่
+                let nextPage = page.nextElementSibling;
+                if (nextPage && nextPage.classList.contains('a3-page')) {
+                    let nextTbody = nextPage.querySelector('.table-body');
+
+                    while (content.scrollHeight <= content.clientHeight && nextTbody.children.length > 0) {
+                        let firstRowNext = nextTbody.firstElementChild;
+                        tbody.appendChild(firstRowNext);
+
+                        if (content.scrollHeight > content.clientHeight + 2) {
+                            nextTbody.insertBefore(firstRowNext, nextTbody.firstElementChild);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. ลบหน้ากระดาษที่ว่างเปล่าทิ้ง
+            pages = document.querySelectorAll('.a3-page');
+            pages.forEach(page => {
+                if (page.id !== 'page-1') {
+                    let tbody = page.querySelector('.table-body');
+                    if (!tbody || tbody.children.length === 0) {
+                        page.remove();
+                    }
+                }
+            });
+
+            updatePageNumbers();
+
+            if (activeEl && activeEl.classList.contains('editable-cell') && document.body.contains(activeEl)) {
+                activeEl.focus();
+            }
+        }
+
+        // ==========================================
+        // Table Rows Management
+        // ==========================================
+        function getNewRowHTML() {
+            return `
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td><div contenteditable="true" class="editable-cell" oninput="reflowPagination()"></div></td>
+                <td class="no-print"><button class="btn-remove" onclick="removeRow(this)">X</button></td>
+            `;
+        }
+
+        function createNewPageDOM() {
+            pageCount++;
+            const container = document.getElementById('pages-container');
+            const newPage = document.createElement('div');
+            newPage.className = 'a3-page';
+            newPage.id = `page-${pageCount}`;
+
+            const headerHTML = document.getElementById('main-table-header').innerHTML;
+            const colgroupHTML = document.querySelector('.table-colgroup').outerHTML;
+
+            // คัดลอกตารางข้อมูลส่วนหัวมาด้วย เพื่อให้หน้าต่อไปยังรู้ว่าเป็น Part อะไร
+            const infoHTML = document.getElementById('main-standard-header').outerHTML;
+
+            newPage.innerHTML = `
+                <div class="page-number"></div>
+                <div class="page-content">
+                    <div class="header-title">Control Plan</div>
+                    ${infoHTML}
+                    <table class="data-table">
+                        ${colgroupHTML}
+                        <thead>${headerHTML}</thead>
+                        <tbody class="table-body"></tbody>
+                    </table>
+                </div>
+            `;
+
+            container.appendChild(newPage);
+            updatePageNumbers();
+            initResizers(newPage);
+
+            // Sync input values (Optional: ทำให้ input หน้าถัดไปเป็นเหมือนหน้าแรก)
+            const firstPageInputs = document.querySelectorAll('#page-1 .standard-header input');
+            const newPageInputs = newPage.querySelectorAll('.standard-header input');
+            firstPageInputs.forEach((input, index) => {
+                if (input.type === 'checkbox') newPageInputs[index].checked = input.checked;
+                else newPageInputs[index].value = input.value;
+            });
+
+            // Sync stamp values
+            const firstPageStamps = document.querySelectorAll('#page-1 .standard-header .stamp-area');
+            const newPageStamps = newPage.querySelectorAll('.standard-header .stamp-area');
+            firstPageStamps.forEach((stamp, index) => {
+                newPageStamps[index].innerHTML = stamp.innerHTML;
+            });
+
+            return newPage;
+        }
+
+        function addRow() {
+            rowCount++;
+            const pages = document.querySelectorAll('.a3-page');
+            const lastPage = pages[pages.length - 1];
+            let tbody = lastPage.querySelector('.table-body');
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = getNewRowHTML();
+            tbody.appendChild(tr);
+
+            reflowPagination();
+        }
+
+        function removeRow(btn) {
+            const tr = btn.closest('tr');
+            tr.remove();
+            reflowPagination();
+        }
+
+        // ==========================================
+        // Adjacent Column Resizer
+        // ==========================================
+        function initResizers(container = document) {
+            const headers = container.querySelectorAll('th[data-col]');
+
+            headers.forEach(th => {
+                if (th.classList.contains('no-print')) return;
+                if (th.querySelector('.resizer')) return;
+
+                const resizer = document.createElement('div');
+                resizer.classList.add('resizer');
+                th.appendChild(resizer);
+
+                let startX, tableWidthPx, colIndex, nextColIndex;
+                let w1, w2;
+
+                resizer.addEventListener('mousedown', function (e) {
+                    isResizing = true;
+                    startX = e.clientX;
+                    colIndex = parseInt(th.getAttribute('data-col'));
+                    nextColIndex = colIndex + 1;
+
+                    const table = th.closest('table');
+                    tableWidthPx = table.offsetWidth;
+
+                    const colgroups = document.querySelectorAll('.table-colgroup');
+                    const targetCol = colgroups[0].children[colIndex];
+                    const nextCol = colgroups[0].children[nextColIndex];
+
+                    if (!targetCol || !nextCol) return; // กัน Error คอลัมน์สุดท้าย
+
+                    w1 = parseFloat(targetCol.style.width) || 0;
+                    w2 = parseFloat(nextCol.style.width) || 0;
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                    resizer.classList.add('resizing');
+                });
+
+                function onMouseMove(e) {
+                    if (!isResizing) return;
+
+                    const deltaX = e.clientX - startX;
+                    const deltaPct = (deltaX / tableWidthPx) * 100;
+
+                    if (w1 + deltaPct > 2 && w2 - deltaPct > 2) {
+                        const allColgroups = document.querySelectorAll('.table-colgroup');
+                        allColgroups.forEach(cg => {
+                            if (cg.children[colIndex] && cg.children[nextColIndex]) {
+                                cg.children[colIndex].style.width = (w1 + deltaPct) + '%';
+                                cg.children[nextColIndex].style.width = (w2 - deltaPct) + '%';
+                            }
+                        });
+                        reflowPagination();
+                    }
+                }
+
+                function onMouseUp() {
+                    isResizing = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    document.querySelectorAll('.resizer').forEach(r => r.classList.remove('resizing'));
+                }
+            });
+        }
+
+        // ==========================================
+        // Sync Header Inputs (เมื่อพิมพ์หน้าแรก ให้หน้าอื่นเปลี่ยนตาม)
+        // ==========================================
+        document.addEventListener('input', function (e) {
+            if (e.target.closest('.standard-header')) {
+                const header = e.target.closest('.standard-header');
+                
+                if (e.target.tagName === 'INPUT') {
+                    const allInputs = Array.from(header.querySelectorAll('input'));
+                    const inputIndex = allInputs.indexOf(e.target);
+
+                    const allHeaders = document.querySelectorAll('.standard-header');
+                    allHeaders.forEach(h => {
+                        if (h !== header) {
+                            const targetInput = h.querySelectorAll('input')[inputIndex];
+                            if (targetInput) {
+                                if (e.target.type === 'checkbox') targetInput.checked = e.target.checked;
+                                else targetInput.value = e.target.value;
+                            }
+                        }
+                    });
+                } else if (e.target.classList.contains('stamp-area')) {
+                    const allStamps = Array.from(header.querySelectorAll('.stamp-area'));
+                    const stampIndex = allStamps.indexOf(e.target);
+
+                    const allHeaders = document.querySelectorAll('.standard-header');
+                    allHeaders.forEach(h => {
+                        if (h !== header) {
+                            const targetStamp = h.querySelectorAll('.stamp-area')[stampIndex];
+                            if (targetStamp && targetStamp.innerHTML !== e.target.innerHTML) {
+                                targetStamp.innerHTML = e.target.innerHTML;
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        window.onload = () => {
+            initResizers(document);
+            // สร้าง Row เริ่มต้นให้เต็มหน้าแรกประมาณ 24 แถว (เหมือนต้นฉบับ)
+            for (let i = 0; i < 24; i++) addRow();
+
+            const defaultZoom = document.getElementById('zoom-select').value;
+            applyZoom(defaultZoom);
+            updatePageNumbers();
+        };
+
+        window.onbeforeprint = function () {
+            document.querySelectorAll('.editable-cell, input').forEach(el => el.blur());
+        };
+    </script>
+</body>
+
+</html>

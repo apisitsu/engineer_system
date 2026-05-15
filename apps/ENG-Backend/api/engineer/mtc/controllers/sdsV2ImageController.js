@@ -71,9 +71,10 @@ router.get('/tooling/:tool_dwg_no', async (req, res) => {
 router.post('/tooling', async (req, res) => {
   const { tool_dwg_no, description } = req.body;
   if (!tool_dwg_no?.trim()) return res.status(400).json({ error: 'tool_dwg_no is required' });
-  if (!req.files?.image) return res.status(400).json({ error: 'image file is required (field: image)' });
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
 
-  const file = req.files.image;
+  // express-fileupload: if multiple files with same name are uploaded, it becomes an array
+  const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
   const mime = file.mimetype || 'image/jpeg';
 
   try {
@@ -93,6 +94,7 @@ router.post('/tooling', async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error('SDS Tooling Upload Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -107,6 +109,7 @@ router.delete('/tooling/:tool_dwg_no', async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Image not found' });
     res.json({ success: true });
   } catch (err) {
+    console.error('SDS Tooling Delete Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -117,8 +120,8 @@ router.delete('/tooling/:tool_dwg_no', async (req, res) => {
 router.get('/grinding', async (_req, res) => {
   try {
     const result = await engPool.query(
-      `SELECT id, cn_prefix, process_code, label, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
-       FROM ${TABLES.SDS_V2_GRINDING_IMAGE} ORDER BY cn_prefix, process_code`
+      `SELECT id, cn_prefixes, process_code, label, mime_type, file_name, description, created_by, updated_by, created_at, updated_at
+       FROM ${TABLES.SDS_V2_GRINDING_IMAGE} ORDER BY cn_prefixes[1], process_code`
     );
     res.json(result.rows);
   } catch (err) {
@@ -127,7 +130,26 @@ router.get('/grinding', async (_req, res) => {
 });
 
 /**
- * GET /api/sds/v2/images/grinding/:cn_prefix — serve image binary
+ * GET /api/sds/v2/images/grinding/:id — serve image binary by record ID
+ */
+router.get('/grinding/view/:id', async (req, res) => {
+  try {
+    const result = await engPool.query(
+      `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE} WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Grinding image not found' });
+    const { image_data, mime_type, file_name } = result.rows[0];
+    res.setHeader('Content-Type', mime_type || 'image/jpeg');
+    if (file_name) res.setHeader('Content-Disposition', `inline; filename="${file_name}"`);
+    res.send(image_data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/sds/v2/images/grinding/:cn_prefix — serve image binary (Legacy/Lookup)
  * Optional ?process_code=IDG001 to get process-specific image; falls back to default (process_code IS NULL)
  */
 router.get('/grinding/:cn_prefix', async (req, res) => {
@@ -138,20 +160,20 @@ router.get('/grinding/:cn_prefix', async (req, res) => {
     if (process_code) {
       result = await engPool.query(
         `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE cn_prefix = $1 AND process_code = $2 LIMIT 1`,
+         WHERE $1 = ANY(cn_prefixes) AND process_code = $2 LIMIT 1`,
         [cn_prefix, process_code]
       );
       if (!result.rows[0]) {
         result = await engPool.query(
           `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-           WHERE cn_prefix = $1 AND process_code IS NULL LIMIT 1`,
+           WHERE $1 = ANY(cn_prefixes) AND process_code IS NULL LIMIT 1`,
           [cn_prefix]
         );
       }
     } else {
       result = await engPool.query(
         `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE cn_prefix = $1 AND process_code IS NULL LIMIT 1`,
+         WHERE $1 = ANY(cn_prefixes) AND process_code IS NULL LIMIT 1`,
         [cn_prefix]
       );
     }
@@ -165,32 +187,46 @@ router.get('/grinding/:cn_prefix', async (req, res) => {
   }
 });
 
-/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefix, process_code, file) */
+/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_code, file) */
 router.post('/grinding', async (req, res) => {
-  const { cn_prefix, process_code } = req.body;
-  if (!cn_prefix?.trim()) return res.status(400).json({ error: 'cn_prefix is required' });
-  if (!req.files?.image) return res.status(400).json({ error: 'image file is required (field: image)' });
-  const label = process_code?.trim() ? `${cn_prefix.trim()} — ${process_code.trim()}` : cn_prefix.trim();
+  const { cn_prefixes: cn_prefixes_raw, process_code } = req.body;
+  if (!cn_prefixes_raw) return res.status(400).json({ error: 'cn_prefixes is required' });
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
 
-  const file = req.files.image;
+  let cn_prefixes;
+  try {
+    cn_prefixes = typeof cn_prefixes_raw === 'string' ? JSON.parse(cn_prefixes_raw) : cn_prefixes_raw;
+  } catch (_) {
+    return res.status(400).json({ error: 'cn_prefixes must be a JSON array' });
+  }
+  if (!Array.isArray(cn_prefixes) || !cn_prefixes.length) {
+    return res.status(400).json({ error: 'cn_prefixes must be a non-empty array' });
+  }
+
+  const prefixes = cn_prefixes.map(p => String(p).trim()).filter(Boolean);
+  const process_code_val = process_code?.trim() || null;
+  const label = prefixes.join(', ') + (process_code_val ? ` — ${process_code_val}` : '');
+
+  const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
   const mime = file.mimetype || 'image/jpeg';
 
   try {
+    // Replace any existing records that overlap with the same prefixes + process_code
+    await engPool.query(
+      `DELETE FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
+       WHERE cn_prefixes && $1::text[]
+         AND (process_code IS NOT DISTINCT FROM $2)`,
+      [prefixes, process_code_val]
+    );
+
     const result = await engPool.query(
       `INSERT INTO ${TABLES.SDS_V2_GRINDING_IMAGE}
-         (cn_prefix, process_code, label, image_data, mime_type, file_name, created_by, updated_by)
+         (cn_prefixes, process_code, label, image_data, mime_type, file_name, created_by, updated_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-       ON CONFLICT (cn_prefix, COALESCE(process_code, '')) DO UPDATE SET
-         label      = EXCLUDED.label,
-         image_data = EXCLUDED.image_data,
-         mime_type  = EXCLUDED.mime_type,
-         file_name  = EXCLUDED.file_name,
-         updated_by = EXCLUDED.updated_by,
-         updated_at = NOW()
-       RETURNING id, cn_prefix, process_code, label, mime_type, file_name, updated_at`,
+       RETURNING id, cn_prefixes, process_code, label, mime_type, file_name, updated_at`,
       [
-        cn_prefix.trim(),
-        process_code?.trim() || null,
+        prefixes,
+        process_code_val,
         label,
         file.data,
         mime,
@@ -200,6 +236,7 @@ router.post('/grinding', async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error('SDS Grinding Upload Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

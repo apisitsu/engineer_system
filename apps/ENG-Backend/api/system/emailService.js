@@ -33,16 +33,17 @@ function getProxyAgent() {
  */
 const sendEmailViaAS = async (to, subject, htmlContent) => {
     try {
-        const agent = getProxyAgent();
+        // Test: Disable proxy for internal GAS endpoint
+        // const agent = getProxyAgent();
 
         const response = await axios.post(GAS_EMAIL_URL, {
             to,
             subject,
             htmlContent
         }, {
-            httpAgent: agent,
-            httpsAgent: agent,
-            proxy: false, // Disable axios built-in proxy (we use agent instead)
+            // httpAgent: agent,
+            // httpsAgent: agent,
+            proxy: false, // Ensure axios doesn't use environment variables either
             maxRedirects: 5,
             headers: { 'Content-Type': 'application/json' },
             timeout: 30000
@@ -111,8 +112,24 @@ const sendEmail = async (userRefreshToken, to, subject, htmlContent) => {
     }
 };
 
+/**
+ * Send email with fallback logic (Wraps GAS method for general system use)
+ * @param {string} to - Recipient email(s)
+ * @param {string} subject - Email subject
+ * @param {string} htmlContent - HTML body
+ */
+const sendEmailWithFallback = async (to, subject, htmlContent) => {
+    try {
+        // Primary: GAS Web App (Doesn't require individual OAuth tokens)
+        return await sendEmailViaAS(to, subject, htmlContent);
+    } catch (error) {
+        console.error('❌ sendEmailWithFallback Error:', error.message);
+        throw error;
+    }
+};
+
 const mailPermitRecord = async (u_code,) => {
 
 }
 
-module.exports = { sendEmail, sendEmailViaAS };
+module.exports = { sendEmail, sendEmailViaAS, sendEmailWithFallback };

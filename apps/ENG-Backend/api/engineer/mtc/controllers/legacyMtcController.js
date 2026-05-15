@@ -49,7 +49,7 @@ const ToolingInspectGetlist = async (req, res) => {
     }
 
     if (startDate && endDate) {
-        baseSql += ` AND NULLIF(TRIM(receive_date::TEXT), '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1}`;
+        baseSql += ` AND (NULLIF(TRIM(receive_date::TEXT), '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1} OR NULLIF(TRIM(issue_date::TEXT), '')::DATE BETWEEN $${paramCount} AND $${paramCount + 1})`;
         params.push(startDate, endDate);
         paramCount += 2;
     }
@@ -62,9 +62,26 @@ const ToolingInspectGetlist = async (req, res) => {
         const dataSql = `SELECT * ${baseSql} ORDER BY receive_date DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         const dataRes = await engPool.query(dataSql, [...params, limitNum, offset]);
 
+        let dateActivity = null;
+        if (startDate && endDate) {
+            const actParams = [startDate, endDate];
+            let actWhere = `WHERE (NULLIF(TRIM(receive_date::TEXT), '')::DATE BETWEEN $1 AND $2 OR NULLIF(TRIM(issue_date::TEXT), '')::DATE BETWEEN $1 AND $2)`;
+            if (search) {
+                actWhere += ` AND (po_no ILIKE $3 OR item_name ILIKE $3)`;
+                actParams.push(`%${search}%`);
+            }
+            const actSql = `SELECT
+                COUNT(CASE WHEN NULLIF(TRIM(receive_date::TEXT), '')::DATE BETWEEN $1 AND $2 THEN 1 END) as received,
+                COUNT(CASE WHEN NULLIF(TRIM(issue_date::TEXT), '')::DATE BETWEEN $1 AND $2 THEN 1 END) as issued
+                FROM ${TABLES.TI_LIST} ${actWhere}`;
+            const actRes = await engPool.query(actSql, actParams);
+            dateActivity = { received: Number(actRes.rows[0].received), issued: Number(actRes.rows[0].issued) };
+        }
+
         res.json({
             data: dataRes.rows,
-            pagination: { total, page: pageNum, limit: limitNum }
+            pagination: { total, page: pageNum, limit: limitNum },
+            dateActivity
         });
     } catch (err) {
         console.error('Error fetching tooling inspect list:', err.message);

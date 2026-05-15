@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <title>PID Form - Rod End Bearing Division</title>
+    <style>
+        /* ตั้งค่าพื้นฐานและการรีเซ็ต */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #525659;
+            display: flex;
+            justify-content: center;
+            /* เว้นพื้นที่ด้านบนให้ Topbar */
+            padding: 70px 0 20px 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Sarabun';
+            font-size: 11px;
+            color: #000;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* Topbar เมนูควบคุมด้านบน */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            background-color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .topbar-title {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .topbar-actions {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .zoom-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .zoom-control select {
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        /* การตั้งค่าหน้ากระดาษ A4 */
+        .a4-container {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            padding: 12mm 15mm;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ส่วนหัวเอกสาร */
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 16pt;
+            margin-bottom: 5px;
+        }
+
+        .header h2 {
+            font-size: 14pt;
+            font-weight: normal;
+        }
+
+        /* ตารางข้อมูลโปรเจกต์ */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 20px;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+
+        .input-group label {
+            font-weight: bold;
+            margin-right: 10px;
+            white-space: nowrap;
+        }
+
+        /* แก้ไข CSS ของ input */
+        .input-group input {
+            flex: 1;
+            border: none;
+            border-bottom: 1px dotted #000;
+            outline: none;
+            font-family: inherit;
+            font-size: 11pt;
+            padding: 2px 5px;
+            background: transparent;
+        }
+
+        input::placeholder {
+            color: #999;
+        }
+
+        button {
+            padding: 8px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: 0.2s;
+        }
+
+        /* ปุ่ม Export PDF */
+
+        .btn-export {
+            background-color: #52c41a;
+        }
+
+        .btn-export:hover {
+            background-color: #73d13d;
+        }
+
+        /* ส่วนเลือก Category */
+        .category-section {
+            margin-bottom: 15px;
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .category-section h3 {
+            font-size: 11pt;
+            margin-bottom: 8px;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 10.5pt;
+        }
+
+        .radio-label input[type="radio"] {
+            margin-right: 8px;
+            transform: scale(1.2);
+        }
+
+        /* ส่วน Checklist ของเฟสต่างๆ */
+        .checklist-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .checklist-section h3 {
+            font-size: 11pt;
+            margin-bottom: 5px;
+            text-decoration: underline;
+        }
+
+        .instructions {
+            font-size: 9.5pt;
+            font-style: italic;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        /* จัดแบ่ง Checklist เป็น 2 คอลัมน์เพื่อให้พอดีหน้า */
+        .phases-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 20px;
+        }
+
+        .phase-block {
+            margin-bottom: 10px;
+        }
+
+        .phase-title {
+            font-weight: bold;
+            background: #eee;
+            padding: 3px 5px;
+            margin-bottom: 5px;
+            font-size: 10.5pt;
+            border-left: 3px solid #333;
+        }
+
+        .reference {
+            display: block;
+            font-weight: normal;
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 4px;
+            padding-left: 5px;
+            font-size: 10pt;
+        }
+
+        .check-item input[type="checkbox"] {
+            margin-right: 8px;
+            margin-top: 3px;
+        }
+
+        .check-item.disabled {
+            opacity: 0.4;
+            text-decoration: line-through;
+            pointer-events: none;
+        }
+
+        /* ส่วนการอนุมัติ (Signatures) */
+        .approval-section {
+            margin-top: auto;
+            border-top: 2px solid #000;
+            padding-top: 10px;
+        }
+
+        .approval-section h3 {
+            font-size: 11pt;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .approval-text {
+            font-size: 9.5pt;
+            text-align: justify;
+            margin-bottom: 15px;
+        }
+
+        .signatures-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            text-align: center;
+        }
+
+        .sign-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .sign-line {
+            width: 80%;
+            border-bottom: 1px solid #000;
+            margin-bottom: 5px;
+            height: 30px;
+        }
+
+        .sign-label {
+            font-weight: bold;
+            font-size: 10pt;
+        }
+
+        .date-line {
+            display: flex;
+            align-items: center;
+            margin-top: 5px;
+            font-size: 10pt;
+        }
+
+        .date-line input {
+            width: 90px;
+            border: none;
+            border-bottom: 1px dotted #000;
+            margin-left: 5px;
+            font-family: inherit;
+        }
+
+        /* CSS สำหรับการพิมพ์ (Export PDF) */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
+
+            body {
+                background-color: transparent;
+                padding: 0;
+            }
+
+            .export-btn {
+                display: none;
+            }
+
+            #pages-container {
+                gap: 0;
+                zoom: 1 !important;
+                transform: none !important;
+                margin: 0 !important;
+            }
+
+            .a4-container {
+                box-shadow: none;
+                margin: 0;
+                padding: 10mm 15mm;
+                width: 210mm;
+                height: 297mm;
+                page-break-after: avoid;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            input::placeholder {
+                color: transparent;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar no-print">
+        <div class="topbar-title">Design Review - Form Editor</div>
+        <div class="topbar-actions">
+            <div class="zoom-control">
+                <label for="zoom-select">Zoom:</label>
+                <select id="zoom-select" onchange="applyZoom(this.value)">
+                    <option value="0.75">75%</option>
+                    <option value="0.90">90%</option>
+                    <option value="1">100%</option>
+                    <option value="1.10">110%</option>
+                    <option value="1.25" selected>125%</option>
+                    <option value="1.50">150%</option>
+                </select>
+            </div>
+            <button class="btn-export" onclick="window.print()">Export to PDF</button>
+        </div>
+    </div>
+
+    <div id="pages-container">
+        <div class="a4-container">
+            <div class="header">
+                <h1>Rod End Bearing Division</h1>
+                <h2>Project Initiation Document (PID)</h2>
+            </div>
+
+            <div class="info-grid">
+                <div class="input-group">
+                    <label>PID Number:</label>
+                    <input type="text" placeholder="Input PID Number">
+                </div>
+                <div class="input-group">
+                    <label>Date Initiated:</label>
+                    <input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"
+                        placeholder="Input date">
+                </div>
+                <div class="input-group">
+                    <label>Customer:</label>
+                    <input type="text" placeholder="Input Customer">
+                </div>
+                <div class="input-group">
+                    <label>Target Date:</label>
+                    <input type="text" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'"
+                        placeholder="Input date">
+                </div>
+                <div class="input-group">
+                    <label>Prepare by:</label>
+                    <input type="text" placeholder="Input Name of Prepare">
+                </div>
+                <div class="input-group">
+                    <label>Check by:</label>
+                    <input type="text" placeholder="Input Name of checker">
+                </div>
+                <div class="input-group">
+                    <label>Customer P/N:</label>
+                    <input type="text" placeholder="Input series of Customer P/N">
+                </div>
+                <div class="input-group">
+                    <label>NHBB P/N:</label>
+                    <input type="text" placeholder="Input series of NHBB PN">
+                </div>
+            </div>
+
+            <div class="category-section">
+                <h3>Project Category Selection (Check one box to determine required phases):</h3>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="category" value="opt1" onchange="updateChecklist()">
+                        1. Full APQP (With Product Design) : Execute Phases 1, 2, 3, 4, 5
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="category" value="opt2" onchange="updateChecklist()">
+                        2. Full APQP (Build-to-print) : Execute Phases 1, 3, 4, 5 (Skip Ph 2)
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="category" value="opt3" onchange="updateChecklist()">
+                        3. New Model (Standard Case) : Execute Phases 3, 4, 5 (Skip Ph 1, 2)
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="category" value="opt4" onchange="updateChecklist()">
+                        4. New Model (Missing Doc) : Execute Phases 3, 5 (Skip Ph 1, 2, 4)
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="category" value="opt5" onchange="updateChecklist()">
+                        5. New Variant (Similarity) : Execute Phase 5 Only
+                    </label>
+                </div>
+            </div>
+
+            <div class="checklist-section">
+                <h3>PHASE EXECUTION CHECKLIST</h3>
+                <div class="instructions">
+                    (Instructions: Check the box "N/A" if the phase is skipped. Otherwise, mark "Done" and attach the
+                    document behind this PID when completed).
+                </div>
+
+                <div class="phases-grid">
+                    <div>
+                        <div class="phase-block" id="phase1">
+                            <div class="phase-title">
+                                PHASE 1: Planning
+                                <span class="reference">(Ref: PD-DV-EN-111001)</span>
+                            </div>
+                            <label class="check-item"><input type="checkbox"> Feasibility and Specification Review
+                                Record</label>
+                            <label class="check-item"><input type="checkbox"> Preliminary Project Plan /
+                                Timeline</label>
+                            <label class="check-item"><input type="checkbox"> Preliminary BOM</label>
+                        </div>
+
+                        <div class="phase-block" id="phase2">
+                            <div class="phase-title">
+                                PHASE 2: Product Design
+                                <span class="reference">(Ref: PD-DV-EN-12001)</span>
+                            </div>
+                            <label class="check-item"><input type="checkbox"> Internal Engineering Drawing</label>
+                            <label class="check-item"><input type="checkbox"> DFMEA (Only if Customer requires)</label>
+                        </div>
+
+                        <div class="phase-block" id="phase3">
+                            <div class="phase-title">
+                                PHASE 3: Process Design
+                                <span class="reference">(Ref: PD-DV-EN-111002, 111003, 111004, 111005)</span>
+                            </div>
+                            <label class="check-item"><input type="checkbox"> Process Flow Diagram (PFD)</label>
+                            <label class="check-item"><input type="checkbox"> Process FMEA (PFMEA)</label>
+                            <label class="check-item"><input type="checkbox"> Pre-Launch Control Plan</label>
+                            <label class="check-item"><input type="checkbox"> Tooling / Jig Design Drawing</label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="phase-block" id="phase4">
+                            <div class="phase-title">
+                                PHASE 4: Validation
+                                <span class="reference">(Ref: PD-DV-EN-111006, 111007)</span>
+                            </div>
+                            <label class="check-item"><input type="checkbox"> First Article Inspection Report
+                                (FAIR)</label>
+                            <label class="check-item"><input type="checkbox"> MSA (GR&R) and Capability Study (Cpk/Ppk)
+                                Report</label>
+                            <label class="check-item"><input type="checkbox"> Packaging Standard Document</label>
+                            <label class="check-item"><input type="checkbox"> Production Readiness Review (PRR)
+                                Checklist</label>
+                            <label class="check-item"><input type="checkbox"> PPAP Approval Form (Signed by
+                                Customer)</label>
+                        </div>
+
+                        <div class="phase-block" id="phase5">
+                            <div class="phase-title">PHASE 5: Mass Production</div>
+                            <label class="check-item"><input type="checkbox"> Mass Production Control Plan</label>
+                            <label class="check-item"><input type="checkbox"> Work Instructions / Standard Operating
+                                Procedures (SOP)</label>
+                            <label class="check-item"><input type="checkbox"> Lessons Learned Record (Update to PFMEA if
+                                any
+                                issues)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="approval-section">
+                <h3>FINAL APPROVAL</h3>
+                <div class="approval-text">
+                    By signing below, the cross-functional team and management confirm that all required deliverables
+                    checked above have been verified, attached, and the project is formally closed and handed over to
+                    mass
+                    production.
+                </div>
+                <div class="signatures-grid">
+                    <div class="sign-box">
+                        <div class="sign-line"></div>
+                        <div class="sign-label">Prepare</div>
+                        <div class="date-line">Date: <input type="text" onfocus="(this.type='date')"
+                                onblur="if(!this.value)this.type='text'"></div>
+                    </div>
+                    <div class="sign-box">
+                        <div class="sign-line"></div>
+                        <div class="sign-label">Check</div>
+                        <div class="date-line">Date: <input type="text" onfocus="(this.type='date')"
+                                onblur="if(!this.value)this.type='text'"></div>
+                    </div>
+                    <div class="sign-box">
+                        <div class="sign-line"></div>
+                        <div class="sign-label">Approve</div>
+                        <div class="date-line">Date: <input type="text" onfocus="(this.type='date')"
+                                onblur="if(!this.value)this.type='text'"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function applyZoom(scale) {
+            const container = document.getElementById('pages-container');
+            container.style.zoom = scale;
+
+            // ชดเชยสำหรับ Firefox ที่ไม่รองรับ property zoom
+            if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
+                container.style.transform = `scale(${scale})`;
+                if (scale > 1) {
+                    container.style.marginBottom = `${(scale - 1) * 100}%`;
+                } else {
+                    container.style.marginBottom = '0';
+                }
+            }
+        }
+
+        function updateChecklist() {
+            const selected = document.querySelector('input[name="category"]:checked');
+            if (!selected) return;
+            const val = selected.value;
+
+            const setPhaseState = (phaseId, isActive) => {
+                const phase = document.getElementById(phaseId);
+                const items = phase.querySelectorAll('.check-item');
+                const checkboxes = phase.querySelectorAll('input[type="checkbox"]');
+
+                items.forEach(item => {
+                    if (isActive) {
+                        item.classList.remove('disabled');
+                    } else {
+                        item.classList.add('disabled');
+                    }
+                });
+
+                checkboxes.forEach(cb => {
+                    cb.disabled = !isActive;
+                    if (!isActive) cb.checked = false;
+                });
+            };
+
+            [1, 2, 3, 4, 5].forEach(num => setPhaseState(`phase${num}`, true));
+
+            if (val === 'opt2') {
+                setPhaseState('phase2', false);
+            } else if (val === 'opt3') {
+                setPhaseState('phase1', false);
+                setPhaseState('phase2', false);
+            } else if (val === 'opt4') {
+                setPhaseState('phase1', false);
+                setPhaseState('phase2', false);
+                setPhaseState('phase4', false);
+            } else if (val === 'opt5') {
+                setPhaseState('phase1', false);
+                setPhaseState('phase2', false);
+                setPhaseState('phase3', false);
+                setPhaseState('phase4', false);
+            }
+        }
+
+        window.onload = () => {
+            const defaultZoom = document.getElementById('zoom-select').value;
+            applyZoom(defaultZoom);
+        };
+    </script>
+</body>
+
+</html>
