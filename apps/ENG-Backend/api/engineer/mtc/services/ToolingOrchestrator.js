@@ -96,17 +96,30 @@ async function findFixtures(cnNumber) {
     fetchToolingRows(okFlags, calcs.calc),
     findDynamicFixtures(
       partData,
-      {
+      (() => {
         // Spread all formula outputs (includes new machines added via UI),
         // then override with adapted legacy calc maps for backward compat.
-        ...dynMap,
-        ks400b:  calcs.ks400b_calc,
-        ks03a:   calcs.ks03a_calc,
-        ks500rd: calcs.ks500rd_calc,
-        ks400b5: calcs.ks400b5_calc,
-        ks400b6: calcs.ks400b6_calc,
-        tsg:     calcs.calc,
-      },
+        const ks6Raw = dynMap['KS-400B6'] || {};
+        const ks6    = calcs.ks400b6_calc || {};
+        // KS-400B6 FRONT/REAR SHOE: the adapter converts A/D to 'Need V'/'-' when isInner=true.
+        // resolveCalcKey returns null for non-numeric strings → dim skipped (no SQL filter,
+        // no score contribution) — same ranking as legacy's fixed 50/0 penalty for those dims.
+        const ks400b6ForDynamic = {
+          ...ks6Raw,
+          'FRONT SHOE': { ...ks6Raw['FRONT SHOE'], A: ks6.frontShoe?.A, D: ks6.frontShoe?.D },
+          'REAR SHOE':  { ...ks6Raw['REAR SHOE'],  A: ks6.rearShoe?.A,  B: ks6.rearShoe?.B  },
+        };
+        return {
+          ...dynMap,
+          ks400b:  calcs.ks400b_calc,
+          ks03a:   calcs.ks03a_calc,
+          ks500rd: calcs.ks500rd_calc,
+          ks400b5: calcs.ks400b5_calc,
+          ks400b6: calcs.ks400b6_calc,
+          tsg:     calcs.calc,
+          'KS-400B6': ks400b6ForDynamic,
+        };
+      })(),
       okFlags
     ),
   ]);

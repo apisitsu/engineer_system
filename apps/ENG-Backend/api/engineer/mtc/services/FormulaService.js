@@ -42,7 +42,15 @@ class FormulaService {
     // These N-variants are pure custom functions → expr-eval accepts N args.
     this.parser.functions.roundN = (x, n) => {
       if (n === undefined || n === null) return Math.round(x);
-      const f = Math.pow(10, n); return Math.round(x * f) / f;
+      // n<=1: match legacy Math.round(x*10)/10 pattern (multiply before rounding)
+      // n>=2: match legacy parseFloat(x.toFixed(n)) pattern
+      if (n <= 1) { const f = Math.pow(10, n); return Math.round(x * f) / f; }
+      return parseFloat(x.toFixed(n));
+    };
+    // roundStr: always uses parseFloat(x.toFixed(n)) — for formulas that match legacy toFixed behavior at n=1
+    this.parser.functions.roundStr = (x, n) => {
+      if (n === undefined || n === null) return Math.round(x);
+      return parseFloat(x.toFixed(n));
     };
     this.parser.functions.ceilN = (x, n) => {
       if (n === undefined || n === null) return Math.ceil(x);
@@ -206,7 +214,9 @@ class FormulaService {
 
     const idAft = parseFloat(base.idAft || 0);
     const idAftP = parseFloat(base.idTolPlus || base.idAftTolPlus || 0);
-    const idAftM = parseFloat(base.idTolMinus || base.idAftTolMinus || 0);
+    // id_aft_min in spec can store large positive non-tolerance values for ID-grind parts;
+    // minus tolerance must be ≤ 0, so cap it to avoid corrupting idAft_min context.
+    const idAftM = Math.min(0, parseFloat(base.idTolMinus || base.idAftTolMinus || 0));
     ctx.idAft_max = idAft + idAftP;
     ctx.idAft_min = idAft + idAftM;
     ctx.idTolPlus = idAftP; // Ensure both names exist
@@ -302,7 +312,10 @@ class FormulaService {
             const factor = Math.pow(10, prec);
             if (rounding_rule === 'ceil')  value = Math.ceil(value  * factor) / factor;
             else if (rounding_rule === 'floor') value = Math.floor(value * factor) / factor;
-            else if (rounding_rule === 'round') value = Math.round(value * factor) / factor;
+            else if (rounding_rule === 'round') {
+              // prec<=1: match legacy Math.round(x*10)/10; prec>=2: match legacy parseFloat(toFixed)
+              value = prec <= 1 ? Math.round(value * factor) / factor : parseFloat(value.toFixed(prec));
+            }
           }
 
           const pName = String(parameter_name || '').trim();

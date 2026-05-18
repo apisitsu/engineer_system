@@ -133,6 +133,29 @@ function adaptDynamicCalcCommon(dynKSB22G, dynTSG300ZNC, partData) {
   const ch  = dynTSG300ZNC?.['CHUTE COVER']  || {};
   const ca  = dynTSG300ZNC?.['CARRIER']      || {};
   const caw = dynTSG300ZNC?.['CARRIER W']    || {};
+
+  // Fields derived from partData — were in legacy calculationLogic.calculateToolingParams()
+  // but were not carried over when adapters became DB-driven.
+  // searchFunctions.js still references these directly via the calc object.
+  const ID_part = (partData.idAft || 0) + (partData.idTolPlus || 0); // for KSB80 back-plate
+  const wVal = (partData.wAft || 0) * 0.55;
+  let maxCarrierD; // for TSG-300ZNC carrier depth filter
+  if      (wVal <= 2.5)  maxCarrierD = 2.5;
+  else if (wVal <= 3.0)  maxCarrierD = 3.0;
+  else if (wVal <= 4.0)  maxCarrierD = 4.0;
+  else if (wVal <= 4.5)  maxCarrierD = 4.5;
+  else if (wVal <= 5.0)  maxCarrierD = 5.0;
+  else if (wVal <= 6.0)  maxCarrierD = 6.0;
+  else if (wVal <= 7.0)  maxCarrierD = 7.0;
+  else if (wVal <= 8.0)  maxCarrierD = 8.0;
+  else if (wVal <= 9.0)  maxCarrierD = 9.0;
+  else if (wVal <= 10.0) maxCarrierD = 10.0;
+  else if (wVal <= 12.0) maxCarrierD = 12.0;
+  else                   maxCarrierD = Math.round(wVal);
+  const wRounded  = Math.ceil((partData.wAft || 0) * 10) / 10;
+  const tsgW_Emin = parseFloat((wRounded * 0.6).toFixed(2)); // for TSG-300W carrier E filter
+  const tsgW_Emax = parseFloat((wRounded * 0.9).toFixed(2));
+
   return {
     jawA:         jaw.A    ?? 0,
     jawB:         jaw.B    ?? 0,
@@ -148,6 +171,10 @@ function adaptDynamicCalcCommon(dynKSB22G, dynTSG300ZNC, partData) {
     carrierCalcC: ca.C     ?? 0,
     tsgW_Amin:    caw.Amin ?? 0,
     tsgW_Amax:    caw.Amax ?? 0,
+    ID_part,
+    maxCarrierD,
+    tsgW_Emin,
+    tsgW_Emax,
   };
 }
 

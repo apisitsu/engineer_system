@@ -140,7 +140,8 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
             const tPlus  = parseFloat(dim.tol_plus  || 99);
             const tMinus = parseFloat(dim.tol_minus || 99);
             const pIdx = params.length;
-            dimConditions.push(`${dim.tool_field} BETWEEN $${pIdx + 1} AND $${pIdx + 2}`);
+            const betweenClause = `${dim.tool_field} BETWEEN $${pIdx + 1} AND $${pIdx + 2}`;
+            dimConditions.push(dim.null_ok ? `(${dim.tool_field} IS NULL OR ${betweenClause})` : betweenClause);
             params.push(targetVal - tMinus, targetVal + tPlus);
             targets.push(targetVal.toFixed(3));
             headers.push(dim.label || dim.tool_field.replace('dim_', 'Dim ').toUpperCase());
@@ -157,9 +158,11 @@ async function findDynamicFixtures(partData, allCalcs = {}, okFlags = {}) {
               const targetVal = resolveCalcKey(calcObj, dim.calc_key);
               if (targetVal === null) return;
               const rowVal = parseFloat(row[dim.tool_field]);
-              if (isNaN(rowVal)) { totalDiff += 100; return; }
+              if (isNaN(rowVal)) { if (!dim.null_ok) totalDiff += 100; return; }
               const diff = Math.abs(rowVal - targetVal);
-              const penalty = (dim.penalty_over && diff > parseFloat(dim.penalty_over)) ? 10000 : 0;
+              let penalty = (dim.penalty_over && diff > parseFloat(dim.penalty_over)) ? 10000 : 0;
+              if (dim.penalty_below != null && rowVal < targetVal - Math.abs(parseFloat(dim.penalty_below))) penalty += 10000;
+              if (dim.penalty_above != null && rowVal > targetVal + Math.abs(parseFloat(dim.penalty_above))) penalty += 10000;
               totalDiff += diff * (dim.sort_priority || 1) + penalty;
             });
             return totalDiff;
