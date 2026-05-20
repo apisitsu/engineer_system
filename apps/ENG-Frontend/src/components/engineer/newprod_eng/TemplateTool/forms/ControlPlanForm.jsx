@@ -177,13 +177,13 @@ export default function ControlPlanForm({ formId, onBack }) {
                 const res = await axios.put(`${server.TT_FORMS}/control_plan/${formId}`, {
                     header: h, rows: r, deletedRowIds: deleted,
                 }, { headers: { Authorization: `Bearer ${token}` } });
-                
+
                 if (res.data?.data?.rows) {
                     const idMap = {};
                     res.data.data.rows.forEach(dbRow => { if (dbRow._key && dbRow.id) idMap[dbRow._key] = dbRow.id; });
                     setRows(prev => prev.map(pr => (pr._key && idMap[pr._key] && !pr.id) ? { ...pr, id: idMap[pr._key] } : pr));
                 }
-                
+
                 setDeletedRowIds(prev => prev.filter(id => !deleted.includes(id)));
             } catch (err) { console.error('Auto-save error:', err); }
         }, 3000),
@@ -280,22 +280,22 @@ export default function ControlPlanForm({ formId, onBack }) {
             <tr>
                 <th rowSpan={2} style={{ width: COLUMNS[0].width }}>{COLUMNS[0].title}</th>
                 <th rowSpan={2} style={{ width: COLUMNS[1].width }}>{COLUMNS[1].title}</th>
-                <th rowSpan={2} style={{ width: COLUMNS[2].width }}>Machine, Device, Jig,<br/>Tools For Mfg.</th>
+                <th rowSpan={2} style={{ width: COLUMNS[2].width }}>Machine, Device, Jig,<br />Tools For Mfg.</th>
                 <th colSpan={3}>Characteristics</th>
-                <th rowSpan={2} style={{ width: COLUMNS[6].width }}>Special<br/>Classification</th>
+                <th rowSpan={2} style={{ width: COLUMNS[6].width }}>Special<br />Classification</th>
                 <th colSpan={5}>Methods</th>
-                <th rowSpan={2} style={{ width: COLUMNS[12].width }}>Reaction<br/>Plan</th>
+                <th rowSpan={2} style={{ width: COLUMNS[12].width }}>Reaction<br />Plan</th>
                 {!isApproved && <th rowSpan={2} className="cp-no-print" style={{ width: '3%' }}>Del</th>}
             </tr>
             <tr>
-                <th style={{ width: COLUMNS[3].width }}>DWG.<br/>No.</th>
+                <th style={{ width: COLUMNS[3].width }}>DWG.<br />No.</th>
                 <th style={{ width: COLUMNS[4].width }}>Product</th>
                 <th style={{ width: COLUMNS[5].width }}>Process</th>
                 <th style={{ width: COLUMNS[7].width }}>Requirements</th>
-                <th style={{ width: COLUMNS[8].width }}>Evaluation /<br/>Measurement</th>
+                <th style={{ width: COLUMNS[8].width }}>Evaluation /<br />Measurement</th>
                 <th style={{ width: COLUMNS[9].width }}>Sample Size</th>
                 <th style={{ width: COLUMNS[10].width }}>Freq.</th>
-                <th style={{ width: COLUMNS[11].width }}>Control<br/>Method</th>
+                <th style={{ width: COLUMNS[11].width }}>Control<br />Method</th>
             </tr>
         </thead>
     );
@@ -314,7 +314,7 @@ export default function ControlPlanForm({ formId, onBack }) {
     const getGlobalIndex = (pageIdx, localIdx) => pageIdx === 0 ? localIdx : ROWS_PAGE_1 + (pageIdx - 1) * ROWS_PAGE_N + localIdx;
 
     return (
-        <div className="cp-body" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <div className="cp-body" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', margin: 0 }}>
             {/* Topbar */}
             <div className="cp-topbar">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -351,7 +351,7 @@ export default function ControlPlanForm({ formId, onBack }) {
             <div className="cp-pages" ref={pagesContainerRef} style={{ zoom }}>
                 {pages.map((pageRows, pageIdx) => (
                     <div className="cp-a3-page" key={pageIdx}>
-                        <div className="cp-page-number">Page {pageIdx+1} of {pages.length}</div>
+                        <div className="cp-page-number">Page {pageIdx + 1} of {pages.length}</div>
                         <div className="cp-page-content">
                             {pageIdx === 0 && (
                                 <>
