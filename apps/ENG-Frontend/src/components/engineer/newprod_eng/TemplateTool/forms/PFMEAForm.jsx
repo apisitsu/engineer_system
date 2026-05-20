@@ -62,11 +62,11 @@ table.pfmea-data-table th { background:#f0f0f0; font-weight:bold; vertical-align
 .pfmea-btn-remove { background:#ff4d4f; padding:2px 6px; font-size:10px; border-radius:2px; border:none; color:white; cursor:pointer; }
 @media print {
   * { -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
-  @page { size:420mm 594mm; margin:5mm; }
+  @page { size:A2 landscape; margin:5mm; }
   body { background:none!important; }
   .pfmea-topbar,.pfmea-no-print { display:none!important; }
   .pfmea-pages { gap:0!important; zoom:1!important; padding:0!important; }
-  .pfmea-a2-page { width:420mm!important; height:594mm!important; box-shadow:none; margin:0; page-break-after:always; overflow:hidden; padding:5mm; }
+  .pfmea-a2-page { width:594mm!important; height:420mm!important; box-shadow:none; margin:0; page-break-after:always; overflow:hidden; padding:5mm; }
   .pfmea-a2-page:last-child { page-break-after:auto; }
   .pfmea-page-content { overflow:hidden!important; }
   .pfmea-editable-cell { box-shadow:none!important; }

@@ -48,7 +48,7 @@ const ContentEditable = ({ html, disabled, onChange, className, style }) => {
 /* ─────────────── CSS (injected once) ─────────────── */
 const FORM_STYLES = `
 /* Control Plan Form - A3 Landscape */
-.cp-body { background:#525659; display:flex; justify-content:center; padding:0; font-family:'Segoe UI',Tahoma,sans-serif; font-size:11px; color:#000; }
+.cp-body { background:#525659; display:flex; padding:0; font-family:'Segoe UI',Tahoma,sans-serif; font-size:11px; color:#000; }
 .cp-topbar { position:sticky; top:0; z-index:1000; background:#2c3e50; display:flex; justify-content:space-between; align-items:center; padding:8px 15px; box-shadow:0 2px 10px rgba(0,0,0,.3); gap:10px; flex-wrap:wrap; }
 .cp-topbar-title { color:#fff; font-size:15px; font-weight:bold; white-space:nowrap; }
 .cp-toolbar { display:flex; align-items:center; background:#f0f2f5; padding:3px 6px; border-radius:5px; gap:2px; }

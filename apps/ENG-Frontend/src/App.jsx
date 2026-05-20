@@ -60,6 +60,10 @@ import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
+import TemplateFormEditor from './components/engineer/newprod_eng/TemplateTool/TemplateFormEditor';
+import AreaVolumeCalc from './components/engineer/newprod_eng/calculators/AreaVolumeCalc';
+import RPNLookupCalc from './components/engineer/newprod_eng/calculators/RPNLookupCalc';
+import GeometricRadiusCalc from './components/engineer/newprod_eng/calculators/GeometricRadiusCalc';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
@@ -327,10 +331,16 @@ const AppContent = () => {
 
               {/* ------ (Standalone - Full Viewport) ------ */}
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/template_tool" element={<TemplateTool />} />
+                  <Route path="/eng/calculators/area" element={<AreaVolumeCalc />} />
+                  <Route path="/eng/calculators/rpn" element={<RPNLookupCalc />} />
+                  <Route path="/eng/calculators/geometric" element={<GeometricRadiusCalc />} />
+                </Route>
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
-                <Route path="/eng/template_tool" element={<TemplateTool />} />
+                <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>

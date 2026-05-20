@@ -89,6 +89,36 @@ const HomeNewProd = () => {
       category: 'Engineering',
       status: 'Active',
       tags: ['APQP', 'Forms', 'Templates']
+    },
+    {
+      id: 'calc-area-volume',
+      title: 'Area & Volume',
+      description: 'Calculate Area and Volume using exact math integration methods.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/area',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['Math', 'Calculators', 'Area', 'Volume']
+    },
+    {
+      id: 'calc-rpn',
+      title: 'RPN Action Priority',
+      description: 'FMEA Action Priority (AP) Generator. Lookup severity, occurrence, and detection ratings.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/rpn',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['FMEA', 'Calculators', 'RPN', 'APQP']
+    },
+    {
+      id: 'calc-geometric',
+      title: 'Geometric Radius',
+      description: 'Calculate target radius from complex geometric dimensions.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/geometric',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['Math', 'Calculators', 'Radius', 'Geometry']
     }
   ];
 
