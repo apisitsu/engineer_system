@@ -69,6 +69,14 @@ import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaS
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
+// PDF Hub
+import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
+import SignStampTool from './components/engineer/system_eng/pdf_hub/SignStamp/SignStampTool';
+import PdfMergerWrapper from './components/engineer/system_eng/pdf_hub/PdfMergerWrapper';
+import PdfToImageWrapper from './components/engineer/system_eng/pdf_hub/PdfToImageWrapper';
+import DwgCheckWrapper from './components/engineer/system_eng/pdf_hub/DwgCheckWrapper';
+import PdfEditorTool from './components/engineer/system_eng/pdf_hub/PdfEditor/PdfEditorTool';
+
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
   const { isAuthenticated, userDepartment } = useAuthStore();
@@ -341,6 +349,22 @@ const AppContent = () => {
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
                 <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
+
+                {/* ------ PDF Management Hub ------ */}
+                {/* Workstation: fullscreen, no sidebar */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub" element={<PdfEditorTool />} />
+                </Route>
+                {/* Legacy tools (backward compat, uses sidebar layout) */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub/tools" element={<PdfHubLayout />}>
+                    <Route index element={<Navigate to="sign-stamp" replace />} />
+                    <Route path="sign-stamp" element={<SignStampTool />} />
+                    <Route path="merge" element={<PdfMergerWrapper />} />
+                    <Route path="to-image" element={<PdfToImageWrapper />} />
+                    <Route path="dwg-check" element={<DwgCheckWrapper />} />
+                  </Route>
+                </Route>
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>

@@ -83,6 +83,9 @@ export const server = {
   TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
   TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
 
+  // PDF Hub (Sign & Stamp)
+  PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
 

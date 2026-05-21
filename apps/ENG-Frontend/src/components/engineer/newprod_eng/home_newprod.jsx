@@ -81,6 +81,16 @@ const HomeNewProd = () => {
       tags: ['PDF', 'Merge', 'Document']
     },
     {
+      id: 'pdf-hub',
+      title: 'PDF Management Hub',
+      description: 'All-in-one PDF toolkit — Sign & Stamp, Merge, Convert to Image, and Drawing Check in one place.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/pdf-hub',
+      category: 'Utilities',
+      status: 'Active',
+      tags: ['PDF', 'Sign', 'Stamp', 'Merge', 'Convert']
+    },
+    {
       id: 'template-tool',
       title: 'Template Tool',
       description: 'Create and manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans. With auto-save and approval workflows.',
