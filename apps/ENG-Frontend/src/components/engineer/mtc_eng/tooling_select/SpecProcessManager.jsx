@@ -20,7 +20,7 @@ import ScrollbarStyle from '../../../common/scrollbar';
 const { Text, Title } = Typography;
 const { Content } = Layout;
 
-export const SpecProcessManager = () => {
+export const SpecProcessManager = ({ embedded = false }) => {
   const { message } = App.useApp();
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -132,16 +132,16 @@ export const SpecProcessManager = () => {
     { title: 'C/N', dataIndex: 'cn', key: 'cn', width: 120, fixed: 'left', render: v => <Text strong>{v}</Text> },
     { title: 'Type', dataIndex: 'type', key: 'type', width: 100 },
     { title: 'Process', dataIndex: 'process', key: 'process', width: 100, render: v => (v || '').replace('→', '->').replace('???', '->') },
-    { 
-      title: 'Dimensions (Bf)', 
+    {
+      title: 'Dimensions (Bf)',
       children: [
         { title: 'OD', dataIndex: 'od_bf', key: 'od_bf', width: 70 },
         { title: 'ID', dataIndex: 'id_bf', key: 'id_bf', width: 70 },
         { title: 'W', dataIndex: 'w_bf', key: 'w_bf', width: 70 },
       ]
     },
-    { 
-      title: 'Dimensions (Aft)', 
+    {
+      title: 'Dimensions (Aft)',
       children: [
         { title: 'OD', dataIndex: 'od_aft', key: 'od_aft', width: 70 },
         { title: 'ID', dataIndex: 'id_aft', key: 'id_aft', width: 70 },
@@ -165,26 +165,24 @@ export const SpecProcessManager = () => {
     }
   ];
 
-  return (
-    <Layout style={{ height: '100%' }}>
-      <MenuTemplate type={"MTC"} defaultSelectedKeys={"4"} defaultOpenKeys={"sub1"} />
-      <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
-        <ScrollbarStyle primary={colors.primary} />
-        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Space size={16}>
-              <Button 
-                icon={<ArrowLeftOutlined />} 
-                onClick={() => navigate(MTC_PATHS.TOOLING_SELECT)}
-              />
-              <Title level={4} style={{ margin: 0, color: colors.primary }}>
-                Part Specification Management (spec_process)
-              </Title>
-            </Space>
+  const content = (
+    <div style={{ padding: embedded ? 0 : '24px', overflowY: embedded ? undefined : 'auto', height: embedded ? undefined : 'calc(100vh - 64px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        {!embedded && (
+          <Space size={16}>
+            <Button
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate(MTC_PATHS.TOOLING_SELECT)}
+            />
+            <Title level={4} style={{ margin: 0, color: colors.primary }}>
+              Part Management
+            </Title>
+          </Space>
+        )}
             <Space>
-              <Input 
-                placeholder="Search CN, Type, Process..." 
-                value={searchText} 
+              <Input
+                placeholder="Search CN, Type, Process..."
+                value={searchText}
                 onChange={e => setSearchText(e.target.value)}
                 onPressEnter={handleSearch}
                 prefix={<SearchOutlined />}
@@ -384,18 +382,25 @@ export const SpecProcessManager = () => {
 
               <Row gutter={12}>
                 <Col span={12}>
-                  <Form.Item name="sd" label="SD (Before)">
-                    <InputNumber style={{ width: '100%' }} precision={4} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="sd_aft" label="SD (After)">
+                  <Form.Item name="sd" label="SD (Ball Diameter)">
                     <InputNumber style={{ width: '100%' }} precision={4} />
                   </Form.Item>
                 </Col>
               </Row>
             </Form>
           </Modal>
+    </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <Layout style={{ height: '100%' }}>
+      <MenuTemplate type={"MTC"} defaultSelectedKeys={"4"} defaultOpenKeys={"sub1"} />
+      <Layout style={{ backgroundColor: colors.background || '#f5f5f5' }}>
+        <ScrollbarStyle primary={colors.primary} />
+        <Content className="kb-vscroll" style={{ padding: '24px', overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
+          {content}
         </Content>
       </Layout>
     </Layout>

@@ -1,0 +1,450 @@
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const { engPool } = require('../../../../instance/eng_db');
+const { maqPool } = require('../../../../instance/maq_db');
+const { TABLES } = require('../mtcConstants');
+const cache = require('../services/agents/CacheAgent');
+const invalidateCache = (cn) => cache.invalidate(`tooling:${String(cn).trim().toUpperCase()}`);
+const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { searchByCn } = require('../services/sdsV2SearchService');
+
+// ── Derivation constants ──────────────────────────────────────────────────────
+
+const ID_GRIND_PROCESS_CODES = new Set(['1061', '1062']);
+const OD_GRIND_PROCESS_CODES = new Set(['1041', '1042']);
+const YBALL_Y_CLASSES = new Set(['35']);
+
+function deriveProcess(processInfo) {
+  const sorted = [...(processInfo || [])].sort((a, b) => (parseInt(a.seq_no) || 0) - (parseInt(b.seq_no) || 0));
+  for (const row of sorted) {
+    const code = String(row.process_code || '');
+    if (ID_GRIND_PROCESS_CODES.has(code)) return 'ID->OD';
+    if (OD_GRIND_PROCESS_CODES.has(code)) return 'OD->ID';
+  }
+  return null;
+}
+
+function deriveYBall(cn) {
+  const s = String(cn || '').trim().toUpperCase();
+  const classCode = /^\d{6}$/.test(s) ? s.slice(0, 2) : s.slice(1, 3);
+  return YBALL_Y_CLASSES.has(classCode) ? 'Y' : 'N';
+}
+
+function mapFactoryDimToSpec(dim) {
+  const d = dim || {};
+  const pf = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  const findTol = (base, sign) => {
+    for (const key of [`${base}_${sign}`, `${base}_tol_${sign}`, `${base}${sign.toUpperCase()}`])
+      if (d[key] !== undefined) return pf(d[key]);
+    return null;
+  };
+  return {
+    od_aft:     pf(d.od)    ?? pf(d.od_aft),
+    id_aft:     pf(d.id)    ?? pf(d.id_aft),
+    w_aft:      pf(d.w)     ?? pf(d.w_aft),
+    od_aft_max: findTol('od', 'max') ?? findTol('od', 'h') ?? pf(d.od_aft_max),
+    od_aft_min: findTol('od', 'min') ?? findTol('od', 'l') ?? pf(d.od_aft_min),
+    id_aft_max: findTol('id', 'max') ?? findTol('id', 'h') ?? pf(d.id_aft_max),
+    id_aft_min: findTol('id', 'min') ?? findTol('id', 'l') ?? pf(d.id_aft_min),
+    w_aft_max:  findTol('w',  'max') ?? findTol('w',  'h') ?? pf(d.w_aft_max),
+    w_aft_min:  findTol('w',  'min') ?? findTol('w',  'l') ?? pf(d.w_aft_min),
+    od_bf:      pf(d.od_bf),
+    id_bf:      pf(d.id_bf),
+    w_bf:       pf(d.w_bf),
+    od_bf_max:  findTol('od_bf', 'max') ?? findTol('od_bf', 'h') ?? pf(d.od_bf_max),
+    od_bf_min:  findTol('od_bf', 'min') ?? findTol('od_bf', 'l') ?? pf(d.od_bf_min),
+    id_bf_max:  findTol('id_bf', 'max') ?? findTol('id_bf', 'h') ?? pf(d.id_bf_max),
+    id_bf_min:  findTol('id_bf', 'min') ?? findTol('id_bf', 'l') ?? pf(d.id_bf_min),
+    w_bf_max:   findTol('w_bf',  'max') ?? findTol('w_bf',  'h') ?? pf(d.w_bf_max),
+    w_bf_min:   findTol('w_bf',  'min') ?? findTol('w_bf',  'l') ?? pf(d.w_bf_min),
+    sd:         pf(d.sd),
+  };
+}
+
+function normalizeCn(raw) {
+  const s = String(raw || '').trim().toUpperCase();
+  if (/^\d{6}$/.test(s)) {
+    const cls = s.slice(0, 2);
+    const pfx = cls >= '41' && cls <= '49' ? 'A' : 'C';
+    return `${pfx}${cls}-0${s.slice(2)}`;
+  }
+  return s;
+}
+
+const PREFIX_TABLE_MAP = {
+  C31: TABLES.LPB_ENG_BALL,  C32: TABLES.LPB_ENG_BALL,  C33: TABLES.LPB_ENG_BALL,
+  C34: TABLES.LPB_ENG_BALL,  C35: TABLES.LPB_ENG_BALL,  C37: TABLES.LPB_ENG_BALL,
+  C38: TABLES.LPB_ENG_BALL,  C39: TABLES.LPB_ENG_BALL,
+  C21: TABLES.LPB_ENG_RACE,  C22: TABLES.LPB_ENG_RACE,  C23: TABLES.LPB_ENG_RACE,
+  C24: TABLES.LPB_ENG_RACE,  C25: TABLES.LPB_ENG_RACE,  C26: TABLES.LPB_ENG_RACE,
+  C27: TABLES.LPB_ENG_RACE,  C28: TABLES.LPB_ENG_RACE,  C29: TABLES.LPB_ENG_RACE,
+  C11: TABLES.LPB_ENG_BODY,  C12: TABLES.LPB_ENG_BODY,  C13: TABLES.LPB_ENG_BODY,
+  C14: TABLES.LPB_ENG_BODY,  C15: TABLES.LPB_ENG_BODY,  C16: TABLES.LPB_ENG_BODY,
+  C17: TABLES.LPB_ENG_BODY,  C18: TABLES.LPB_ENG_BODY,  C19: TABLES.LPB_ENG_BODY,
+  C51: TABLES.LPB_ENG_BODY,  C52: TABLES.LPB_ENG_BODY,  C53: TABLES.LPB_ENG_BODY,
+  C54: TABLES.LPB_ENG_BODY,  C55: TABLES.LPB_ENG_BODY,  C56: TABLES.LPB_ENG_BODY,
+  C57: TABLES.LPB_ENG_BODY,  C58: TABLES.LPB_ENG_BODY,  C59: TABLES.LPB_ENG_BODY,
+  C61: TABLES.LPB_ENG_SLEEVE, C62: TABLES.LPB_ENG_SLEEVE, C63: TABLES.LPB_ENG_SLEEVE,
+  C64: TABLES.LPB_ENG_SLEEVE, C69: TABLES.LPB_ENG_SLEEVE,
+  A41: TABLES.LPB_ENG_SPH,   A42: TABLES.LPB_ENG_SPH,   A43: TABLES.LPB_ENG_SPH,
+  A44: TABLES.LPB_ENG_SPH,   A48: TABLES.LPB_ENG_SPH,   A49: TABLES.LPB_ENG_SPH,
+};
+
+// ── CRUD ──────────────────────────────────────────────────────────────────────
+
+router.get('/', async (req, res) => {
+  try {
+    const { q } = req.query;
+    const safePage  = Math.max(1, parseInt(req.query.page)  || 1);
+    const safeLimit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset    = (safePage - 1) * safeLimit;
+    let query = `SELECT * FROM ${TABLES.SPEC_PROCESS}`;
+    let countQuery = `SELECT COUNT(*) FROM ${TABLES.SPEC_PROCESS}`;
+    const params = [];
+    if (q) {
+      query      += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
+      countQuery += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
+      params.push(`%${q}%`);
+    }
+    query += ` ORDER BY cn LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const [dataRes, countRes] = await Promise.all([
+      engPool.query(query, [...params, safeLimit, offset]),
+      engPool.query(countQuery, params),
+    ]);
+    res.json({ success: true, data: dataRes.rows, total: parseInt(countRes.rows[0].count), page: safePage, limit: safeLimit });
+  } catch (err) {
+    console.error('Fetch spec error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+router.post('/', isAdmin, async (req, res) => {
+  const {
+    cn, od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
+    od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
+    type, yball, process, sd,
+  } = req.body;
+  if (!cn) return res.status(400).json({ success: false, error: 'CN Number is required' });
+  try {
+    const r = await engPool.query(
+      `INSERT INTO ${TABLES.SPEC_PROCESS}
+       (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
+        od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
+        type, yball, process, sd)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+       RETURNING *`,
+      [cn, od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
+       w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
+       id_aft||0,id_aft_max||0,id_aft_min||0, w_aft||0,w_aft_max||0,w_aft_min||0,
+       type, yball, process, sd||0]
+    );
+    res.json({ success: true, data: r.rows[0] });
+  } catch (err) {
+    console.error('Create spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:cn', isAdmin, async (req, res) => {
+  const { cn } = req.params;
+  const {
+    od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
+    od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
+    type, yball, process, sd,
+  } = req.body;
+  try {
+    const r = await engPool.query(
+      `UPDATE ${TABLES.SPEC_PROCESS} SET
+       od_bf=$1,od_bf_max=$2,od_bf_min=$3, id_bf=$4,id_bf_max=$5,id_bf_min=$6,
+       w_bf=$7,w_bf_max=$8,w_bf_min=$9, od_aft=$10,od_aft_max=$11,od_aft_min=$12,
+       id_aft=$13,id_aft_max=$14,id_aft_min=$15, w_aft=$16,w_aft_max=$17,w_aft_min=$18,
+       type=$19, yball=$20, process=$21, sd=$22
+       WHERE cn=$23 RETURNING *`,
+      [od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
+       w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
+       id_aft||0,id_aft_max||0,id_aft_min||0, w_aft||0,w_aft_max||0,w_aft_min||0,
+       type, yball, process, sd||0, cn]
+    );
+    if (!r.rows.length) return res.status(404).json({ success: false, error: 'Spec not found' });
+    invalidateCache(cn);
+    res.json({ success: true, data: r.rows[0] });
+  } catch (err) {
+    console.error('Update spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:cn', isAdmin, async (req, res) => {
+  const { cn } = req.params;
+  try {
+    const r = await engPool.query(`DELETE FROM ${TABLES.SPEC_PROCESS} WHERE cn=$1 RETURNING *`, [cn]);
+    if (!r.rows.length) return res.status(404).json({ success: false, error: 'Spec not found' });
+    invalidateCache(cn);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete spec error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── Factory Sync ──────────────────────────────────────────────────────────────
+
+router.get('/factory-preview/:cn', isAdmin, async (req, res) => {
+  const cn = req.params.cn.trim().toUpperCase();
+  try {
+    const { pool: rodpcPool } = require('../../../../instance/instance');
+    const searchData = await searchByCn(cn, maqPool, rodpcPool);
+    const dim = searchData.dimension || {};
+    const proposed = mapFactoryDimToSpec(dim);
+    proposed.yball   = deriveYBall(searchData.cn);
+    proposed.process = deriveProcess(searchData.process_info || []);
+    if (!proposed.sd) {
+      const od = proposed.od_aft || 0;
+      const w  = proposed.w_aft  || 0;
+      if (od > w && w > 0) proposed.sd = Math.sqrt(od * od - w * w);
+    }
+
+    const existingRes = await engPool.query(
+      `SELECT * FROM ${TABLES.SPEC_PROCESS} WHERE TRIM(cn) = $1 LIMIT 1`, [cn]
+    );
+    const synced_fields = Object.entries(proposed)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k]) => k);
+    const process_info_summary = (searchData.process_info || [])
+      .sort((a, b) => (parseInt(a.seq_no) || 0) - (parseInt(b.seq_no) || 0))
+      .map(r => ({ seq_no: r.seq_no, process_code: r.process_code, process_name: r.process_name || r.process_eng || null }));
+
+    res.json({
+      success: true,
+      cn: searchData.cn,
+      part_type: searchData.part_type,
+      factory_columns: Object.keys(dim).filter(k => k !== 'control_no'),
+      proposed,
+      existing: existingRes.rows[0] || null,
+      synced_fields,
+      manual_fields: ['type'],
+      derived_fields: { yball: proposed.yball, process: proposed.process },
+      process_info_summary,
+    });
+  } catch (err) {
+    console.error('Factory preview error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sync/:cn', isAdmin, async (req, res) => {
+  const cn = req.params.cn.trim().toUpperCase();
+  const v = req.body.confirmed_values || {};
+  try {
+    const existingRes = await engPool.query(
+      `SELECT * FROM ${TABLES.SPEC_PROCESS} WHERE TRIM(cn) = $1 LIMIT 1`, [cn]
+    );
+    const vals = [
+      v.od_bf||0, v.od_bf_max||0, v.od_bf_min||0,
+      v.id_bf||0, v.id_bf_max||0, v.id_bf_min||0,
+      v.w_bf||0,  v.w_bf_max||0,  v.w_bf_min||0,
+      v.od_aft||0, v.od_aft_max||0, v.od_aft_min||0,
+      v.id_aft||0, v.id_aft_max||0, v.id_aft_min||0,
+      v.w_aft||0,  v.w_aft_max||0,  v.w_aft_min||0,
+      v.sd||0,
+    ];
+    const yball   = v.yball   || null;
+    const process = v.process || null;
+    let r;
+    if (!existingRes.rows.length) {
+      r = await engPool.query(
+        `INSERT INTO ${TABLES.SPEC_PROCESS}
+         (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
+          od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
+          sd, type, yball, process)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         RETURNING *`,
+        [cn, ...vals, null, yball || 'N', process]
+      );
+    } else {
+      const setParts = [
+        'od_bf=$1,od_bf_max=$2,od_bf_min=$3, id_bf=$4,id_bf_max=$5,id_bf_min=$6, w_bf=$7,w_bf_max=$8,w_bf_min=$9',
+        'od_aft=$10,od_aft_max=$11,od_aft_min=$12, id_aft=$13,id_aft_max=$14,id_aft_min=$15, w_aft=$16,w_aft_max=$17,w_aft_min=$18',
+        'sd=$19',
+      ];
+      const updateVals = [...vals, cn];
+      let paramIdx = 21;
+      if (yball)   { setParts.push(`yball=$${paramIdx++}`);   updateVals.splice(-1, 0, yball); }
+      if (process) { setParts.push(`process=$${paramIdx++}`); updateVals.splice(-1, 0, process); }
+      r = await engPool.query(
+        `UPDATE ${TABLES.SPEC_PROCESS} SET ${setParts.join(', ')} WHERE cn=$20 RETURNING *`,
+        updateVals
+      );
+    }
+    invalidateCache(cn);
+    res.json({
+      success: true,
+      data: r.rows[0],
+      action: existingRes.rows.length === 0 ? 'created' : 'updated',
+      preserved: existingRes.rows.length > 0
+        ? ['type', ...(!yball ? ['yball'] : []), ...(!process ? ['process'] : [])]
+        : [],
+    });
+  } catch (err) {
+    console.error('Sync spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/sync-new', isAdmin, async (req, res) => {
+  try {
+    const dimTables = [...new Set(Object.values(PREFIX_TABLE_MAP))];
+    const tableResults = await Promise.allSettled(
+      dimTables.map(t => maqPool.query(`SELECT DISTINCT control_no FROM ${t} LIMIT 20000`))
+    );
+    const tableStatus = dimTables.map((t, i) => {
+      const r = tableResults[i];
+      if (r.status === 'fulfilled') return { table: t, ok: true, count: r.value.rows.length };
+      console.error(`[sync-new] table ${t} failed:`, r.reason?.message);
+      return { table: t, ok: false, error: r.reason?.message };
+    });
+    const allFactoryCns = [...new Set(
+      tableResults
+        .filter(r => r.status === 'fulfilled')
+        .flatMap(r => r.value.rows.map(row => normalizeCn(row.control_no)))
+        .filter(cn => cn && PREFIX_TABLE_MAP[cn.slice(0, 3)])
+    )].sort();
+
+    const specRes  = await engPool.query(`SELECT cn FROM ${TABLES.SPEC_PROCESS}`);
+    const existing = new Set(specRes.rows.map(r => r.cn?.trim().toUpperCase()));
+    const newCns   = allFactoryCns.filter(cn => !existing.has(cn));
+
+    if (!newCns.length) {
+      return res.json({ success: true, total_found: 0, synced: 0, failed: 0, errors: [], table_status: tableStatus });
+    }
+
+    // Bulk-fetch dims
+    const byTable = {};
+    for (const cn of newCns) {
+      const tbl = PREFIX_TABLE_MAP[cn.slice(0, 3)];
+      if (!byTable[tbl]) byTable[tbl] = [];
+      byTable[tbl].push(cn);
+    }
+    const dimRowsMap = {};
+    await Promise.all(
+      Object.entries(byTable).map(async ([tbl, cns]) => {
+        try {
+          const r = await maqPool.query(`SELECT * FROM ${tbl} WHERE control_no = ANY($1)`, [cns]);
+          for (const row of r.rows) {
+            const key = row.control_no?.trim().toUpperCase();
+            if (key) dimRowsMap[key] = row;
+          }
+        } catch (e) {
+          console.error(`[sync-new] dim fetch failed for ${tbl}:`, e.message);
+        }
+      })
+    );
+
+    // Bulk-fetch process codes
+    const cnToPlanNos = {};
+    try {
+      const piRes = await maqPool.query(
+        `SELECT control_no, process_plan_no FROM ${TABLES.LPB_ENG_R_PI_ITEM} WHERE control_no = ANY($1)`,
+        [newCns]
+      );
+      for (const row of piRes.rows) {
+        const cn = row.control_no?.trim().toUpperCase();
+        if (!cnToPlanNos[cn]) cnToPlanNos[cn] = [];
+        cnToPlanNos[cn].push(row.process_plan_no);
+      }
+    } catch (e) {
+      console.error('[sync-new] pi_item fetch failed:', e.message);
+    }
+
+    const allPlanNos = [...new Set(Object.values(cnToPlanNos).flat())];
+    const planToProcs = {};
+    if (allPlanNos.length > 0) {
+      try {
+        const procRes = await maqPool.query(
+          `SELECT process_plan_no, seq_no, process_code FROM ${TABLES.LPB_ENG_PROCESS_INFO} WHERE process_plan_no = ANY($1)`,
+          [allPlanNos]
+        );
+        for (const row of procRes.rows) {
+          if (!planToProcs[row.process_plan_no]) planToProcs[row.process_plan_no] = [];
+          planToProcs[row.process_plan_no].push(row);
+        }
+      } catch (e) {
+        console.error('[sync-new] process_info fetch failed:', e.message);
+      }
+    }
+
+    // Build value rows
+    const rows = newCns.map(cn => {
+      const proposed = mapFactoryDimToSpec(dimRowsMap[cn] || {});
+      proposed.yball   = deriveYBall(cn);
+      const procRows   = (cnToPlanNos[cn] || []).flatMap(pno => planToProcs[pno] || []);
+      proposed.process = deriveProcess(procRows);
+      if (!proposed.sd) {
+        const od = proposed.od_aft || 0;
+        const w  = proposed.w_aft  || 0;
+        if (od > w && w > 0) proposed.sd = Math.sqrt(od * od - w * w);
+      }
+      return [
+        cn,
+        proposed.od_bf||0, proposed.od_bf_max||0, proposed.od_bf_min||0,
+        proposed.id_bf||0, proposed.id_bf_max||0, proposed.id_bf_min||0,
+        proposed.w_bf||0,  proposed.w_bf_max||0,  proposed.w_bf_min||0,
+        proposed.od_aft||0, proposed.od_aft_max||0, proposed.od_aft_min||0,
+        proposed.id_aft||0, proposed.id_aft_max||0, proposed.id_aft_min||0,
+        proposed.w_aft||0,  proposed.w_aft_max||0,  proposed.w_aft_min||0,
+        proposed.sd||0,
+        null, proposed.yball || 'N', proposed.process,
+      ];
+    });
+
+    // Multi-row INSERT in chunks of 2000
+    const COLS = 23;
+    let synced = 0, failed = 0;
+    const errors = [];
+    const CHUNK_ROWS = 2000;
+    for (let i = 0; i < rows.length; i += CHUNK_ROWS) {
+      const chunk = rows.slice(i, i + CHUNK_ROWS);
+      const placeholders = chunk.map((_, ri) =>
+        `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
+      ).join(',');
+      try {
+        const result = await engPool.query(
+          `INSERT INTO ${TABLES.SPEC_PROCESS}
+           (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
+            od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
+            sd, type, yball, process)
+           VALUES ${placeholders}`,
+          chunk.flat()
+        );
+        synced += result.rowCount;
+      } catch (e) {
+        console.error(`[sync-new] chunk insert failed (rows ${i}-${i + chunk.length}):`, e.message);
+        for (let j = 0; j < chunk.length; j++) {
+          try {
+            await engPool.query(
+              `INSERT INTO ${TABLES.SPEC_PROCESS}
+               (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
+                od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
+                sd, type, yball, process)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+              chunk[j]
+            );
+            synced++;
+          } catch (e2) {
+            failed++;
+            errors.push({ cn: chunk[j][0], error: e2.message });
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, total_found: newCns.length, synced, failed, errors, table_status: tableStatus });
+  } catch (err) {
+    console.error('sync-new spec error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+module.exports = router;

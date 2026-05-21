@@ -48,12 +48,10 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
-import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager.jsx';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage.jsx';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage.jsx';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page.jsx';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage.jsx';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
@@ -300,9 +298,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_INSPECT} element={<ToolingInspect />} />
                   <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
-                  <Route path={MTC_PATHS.TOOLING_SPEC} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
-                  <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
