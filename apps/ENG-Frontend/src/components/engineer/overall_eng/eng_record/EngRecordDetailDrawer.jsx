@@ -15,7 +15,7 @@ const CASE_TAG_MAP = {
     'Special': { color: 'cyan' },
 };
 
-function EngRecordDetailDrawer() {
+function EngRecordDetailDrawer({ isViewer = false }) {
     const { theme } = useTheme();
     const { modal, message } = App.useApp();
     const {
@@ -68,12 +68,12 @@ function EngRecordDetailDrawer() {
             onClose={closeDrawer}
             footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    {permissions?.canDelete && (
+                    {!isViewer && permissions?.canDelete && (
                         <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
                             Delete
                         </Button>
                     )}
-                    {permissions?.canUpdate && (
+                    {!isViewer && permissions?.canUpdate && (
                         <Button
                             icon={<EditOutlined />}
                             onClick={() => { closeDrawer(); openFormModal(record); }}
@@ -81,7 +81,7 @@ function EngRecordDetailDrawer() {
                             Edit
                         </Button>
                     )}
-                    {permissions?.canFinish && !record.finish_date && (
+                    {!isViewer && permissions?.canFinish && !record.finish_date && (
                         <Button
                             type="primary"
                             icon={<CheckOutlined />}

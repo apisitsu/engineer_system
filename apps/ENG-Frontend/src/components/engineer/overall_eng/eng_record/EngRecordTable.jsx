@@ -173,7 +173,7 @@ function ConditionalFilterDropdown({ setSelectedKeys, selectedKeys, confirm, cle
 
 // ─── Main Table Component ──────────────────────────────────
 
-function EngRecordTable() {
+function EngRecordTable({ isViewer = false }) {
     const { theme } = useTheme();
     const { message } = App.useApp();
     const globalSearch = useRef('');
@@ -278,11 +278,10 @@ function EngRecordTable() {
                 return;
             }
 
-            const headers = ['Record No', 'Date', 'Request By', 'Lot No', 'CN', 'PN', 'Case Type', 'Spec/Problem', 'Judge/Revise', 'Responsible', 'Wait (days)', 'Plan Start'];
+            const headers = ['No.', 'Date', 'Lot No.', 'CN', 'PN', 'Case', 'Spec / Problem', 'Judge / Revise', 'Responsible', 'Judgment By', 'Wait (d)', 'Finish', 'T/S Flag', 'Plan Start', 'Remark'];
             const csvContent = exportData.map(r => [
                 r.record_no,
                 r.request_date ? dayjs(r.request_date).format('DD/MM/YYYY') : '',
-                r.request_by,
                 r.lot_no,
                 r.cn,
                 r.pn,
@@ -290,8 +289,12 @@ function EngRecordTable() {
                 `"${(r.spec_problem || '').replace(/"/g, '""')}"`,
                 `"${(r.judge_revise || '').replace(/"/g, '""')}"`,
                 r.responsible,
-                r.waiting_time_days || '',
-                r.plan_start_date ? dayjs(r.plan_start_date).format('DD/MM/YYYY') : ''
+                r.judgment_by || '',
+                r.waiting_time_days !== null && r.waiting_time_days !== undefined ? r.waiting_time_days : '',
+                r.finish_date ? dayjs(r.finish_date).format('DD/MM/YYYY') : '',
+                r.ts_flag || '',
+                r.plan_start_date ? dayjs(r.plan_start_date).format('DD/MM/YYYY') : '',
+                `"${(r.remark || '').replace(/"/g, '""')}"`
             ].join(','));
 
             const csvText = [headers.join(','), ...csvContent].join('\n');
@@ -445,7 +448,7 @@ function EngRecordTable() {
             ) : (
                 <Space>
                     <Tag color="warning" style={{ fontSize: 10 }}>Pending</Tag>
-                    {permissions?.canFinish && (
+                    {!isViewer && permissions?.canFinish && (
                         <Button
                             size="small"
                             type="primary"
@@ -530,7 +533,7 @@ function EngRecordTable() {
                         <Tooltip title="Export to CSV">
                             <Button icon={<DownloadOutlined />} onClick={handleExportCSV} />
                         </Tooltip>
-                        {permissions?.canCreate && (
+                        {!isViewer && permissions?.canCreate && (
                             <>
                                 <Button
                                     type="dashed"

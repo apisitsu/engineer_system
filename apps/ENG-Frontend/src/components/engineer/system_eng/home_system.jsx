@@ -29,13 +29,6 @@ function HomeSystemEng() {
       path: "/eng/system_eng/tool/gallery",
       gradient: `linear-gradient(135deg, ${(theme.colors.success || '#52c41a')}15, ${(theme.colors.success || '#52c41a')}05)`,
     },
-    {
-      title: "Engineer Record",
-      description: "ระบบบันทึกคำขอวิศวกรรม — ติดตาม Drawing Request, Judgment Spec และ Change Request",
-      icon: <FileSearchOutlined style={{ fontSize: 40, color: '#722ed1' }} />,
-      path: "/eng/system_eng/eng-record",
-      gradient: `linear-gradient(135deg, #722ed115, #722ed105)`,
-    },
   ];
 
   return (

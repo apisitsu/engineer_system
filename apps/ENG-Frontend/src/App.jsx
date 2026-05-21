@@ -70,7 +70,8 @@ import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
 // Engineer Record
-import EngRecordLayout from './components/engineer/system_eng/eng_record/EngRecordLayout';
+import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
+import EngRecordViewerLayout from './components/engineer/overall_eng/eng_record/EngRecordViewerLayout';
 
 // PDF Hub
 import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
@@ -282,6 +283,7 @@ const AppContent = () => {
             <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
             <Route element={<ProtectedRoute />}>
+              <Route path="/eng/viewer/eng-record" element={<EngRecordViewerLayout />} />
 
               <Route element={<MainLayout />}>
                 <Route path="/home" element={<Home />} />
@@ -328,6 +330,7 @@ const AppContent = () => {
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+                  <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
@@ -377,8 +380,6 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
-                  <Route path="/eng/system_eng/eng-record" element={<EngRecordLayout />} />
-
 
                   {/* ------ For Test Only ------ */}
 

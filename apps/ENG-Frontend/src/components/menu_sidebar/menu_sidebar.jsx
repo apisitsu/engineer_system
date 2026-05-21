@@ -55,7 +55,6 @@ export const system = createMenu([
     { label: "Home", path: "/eng/system_eng", key: "1" },
     { label: "User Management", path: "/eng/system_eng/user_management", key: "2" },
     { label: "Tools", path: "/eng/system_eng/tool/gallery", key: "3" },
-    { label: "Engineer Record", path: "/eng/system_eng/eng-record", key: "4" },
 ]);
 
 export const process = createMenu([
@@ -86,5 +85,6 @@ export const mtc = createMenu([
 ]);
 
 export const all = createMenu([
-    { label: "Organization", path: "/eng/all_eng" },
+    { label: "Organization", path: "/eng/overall_eng", key: "1" },
+    { label: "Engineer Record", path: "/eng/overall_eng/eng-record", key: "2" },
 ]);

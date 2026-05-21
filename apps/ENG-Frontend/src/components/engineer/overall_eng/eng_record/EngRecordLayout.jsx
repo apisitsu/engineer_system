@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Segmented } from 'antd';
+import { Layout, Segmented, Button } from 'antd';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { useTheme } from '../../../../theme';
 import ScrollbarStyle from '../../../common/scrollbar';
@@ -16,6 +16,7 @@ import {
     DashboardOutlined,
     TableOutlined,
     SyncOutlined,
+    LinkOutlined,
 } from '@ant-design/icons';
 
 const { Content } = Layout;
@@ -41,8 +42,9 @@ function EngRecordLayout() {
     }
 
     return (
+        // <Layout style={{ minHeight: '100vh' }}>
         <Layout style={{ minHeight: 100, display: 'flex' }}>
-            <MenuTemplate type={'System'} defaultSelectedKeys={'4'} />
+            <MenuTemplate type="ALL" defaultSelectedKeys={["2"]} />
             <Layout style={{ backgroundColor: theme.colors.background }}>
                 <ScrollbarStyle primary={theme.colors.primary} />
                 <Content
@@ -55,7 +57,7 @@ function EngRecordLayout() {
                 >
                     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
                         {/* Tab Navigation */}
-                        <div style={{ marginBottom: 24 }}>
+                        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Segmented
                                 options={tabOptions}
                                 value={activeTab}
@@ -66,6 +68,13 @@ function EngRecordLayout() {
                                     borderRadius: 12,
                                 }}
                             />
+                            <Button
+                                type="dashed"
+                                icon={<LinkOutlined />}
+                                onClick={() => window.open('/eng/viewer/eng-record', '_blank')}
+                            >
+                                Open Viewer Page
+                            </Button>
                         </div>
 
                         {/* Tab Content */}
