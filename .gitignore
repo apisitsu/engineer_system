@@ -49,3 +49,6 @@ apps/run.ps1
 claude-skills/
 # --- Temporary & Local Files ---
 tmp/
+
+CLAUDE.md
+GEMINI.md
