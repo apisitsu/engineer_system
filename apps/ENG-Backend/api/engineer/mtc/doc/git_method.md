@@ -31,7 +31,7 @@ git checkout dev
 git pull origin dev
 
 // 10. merge
-git merge feature/mtc
+git merge mtc
 
 // 11. push to origin
 git push origin dev
