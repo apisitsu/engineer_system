@@ -1,6 +1,6 @@
 const { engPool } = require('../../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
-const { sendEmailWithFallback } = require('../../../system/emailService');
+const { sendMtcEmail } = require('../utils/emailHelper');
 const path = require('path');
 const { TABLES, PATHS } = require('../mtcConstants');
 
@@ -293,13 +293,13 @@ const createToolRequest = async (req, res) => {
                 if (recipients.length > 0) {
                     const subject = `[New Request] ${request_item}: ${title}`;
                     const html = renderEmail({
-                        stage: 'New Request',
-                        decision: 'submitted',
-                        request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category },
+                        stage: 'eng_check',
+                        decision: 'submit',
+                        request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category, status: WORKFLOW_STATUS.PENDING_ENG_CHECK, req_due_date: req_due_date },
                         extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
                         actionBy: requester,
                     });
-                    await sendEmailWithFallback(recipients.join(','), subject, html);
+                    await sendMtcEmail(recipients.join(','), subject, html);
                 } else {
                     logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
                 }
@@ -587,7 +587,7 @@ const submitAction = async (req, res) => {
             if (recipients.length > 0) {
                 const subject = generateSubject(stage, decision, request);
                 const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
-                sendEmailWithFallback(recipients.join(','), subject, html).catch(err => logger.error('Email failed', { error: err.message }));
+                sendMtcEmail(recipients.join(','), subject, html).catch(err => logger.error('Email failed', { error: err.message }));
             }
         } catch (emailErr) {
             logger.warn('Email failed', { error: emailErr.message });
@@ -663,6 +663,49 @@ const deleteEmailConfig = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/engineer/mtc/tool-requests/test-email
+ * Send a test email to verify the notification system is working.
+ * Body: { to: "email@example.com" }  (optional — defaults to ENG_CHECK recipients)
+ */
+const testEmail = async (req, res) => {
+    try {
+        let { to } = req.body;
+        if (!to) {
+            const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
+            if (recipients.length === 0) {
+                return res.status(400).json({ error: 'No recipients configured in tr_email_config for ENG_CHECK. Pass "to" in request body.' });
+            }
+            to = recipients.join(',');
+        }
+
+        const subject = '[Test] General DWG Request — Email Notification Test';
+        const html = renderEmail({
+            stage: 'eng_check',
+            decision: 'submitted',
+            request: {
+                request_item: 'ITEM-TEST-001',
+                req_no: 'TEST-REQ-001',
+                requester: req.user?.userName || 'Test User',
+                department: 'MTC Engineering',
+                type_of_request: 'Draft Drawing',
+                title: 'Email Notification Test',
+                status: 'Pending Eng Check',
+                req_due_date: new Date(Date.now() + 7 * 86400000).toISOString(),
+            },
+            extra: { comment: 'นี่คืออีเมล์ทดสอบระบบแจ้งเตือน General DWG Request' },
+            actionBy: req.user?.userName || 'Test User',
+        });
+
+        await sendMtcEmail(to, subject, html);
+        logger.info('Test email sent', { to });
+        res.json({ success: true, message: `Test email sent to: ${to}` });
+    } catch (err) {
+        logger.error('Test email failed', { error: err.message });
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     getToolRequests,
     getToolRequestById,
@@ -676,4 +719,5 @@ module.exports = {
     updateEmailConfig,
     createEmailConfig,
     deleteEmailConfig,
+    testEmail,
 };

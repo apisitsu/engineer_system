@@ -1,5 +1,5 @@
 ﻿'use strict';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Input, Button, Typography, Card, Space, Layout,
   Select, Form, message, Popconfirm,
@@ -31,11 +31,11 @@ const isEmpty = (v) => v === null || v === undefined || v === '' || v === '-';
 // These mirror the tooling_formula DB rows for KS-B22G and are used ONLY in the
 // test simulation panel (formula edit view). The source of truth at runtime is the DB.
 const LEGACY_JAW_SIM = {
-  NORMAL_BASE_C_BASE:   18.5,  // normalBaseC = BASE + (wAft/2) + HALF_W_ADD
-  NORMAL_BASE_C_ADD:    3,
-  SPECIAL_BASE_C_BASE:  18.5,  // specialBaseC = BASE + wAft + W_ADD
+  NORMAL_BASE_C_BASE: 18.5,  // normalBaseC = BASE + (wAft/2) + HALF_W_ADD
+  NORMAL_BASE_C_ADD: 3,
+  SPECIAL_BASE_C_BASE: 18.5,  // specialBaseC = BASE + wAft + W_ADD
   SPECIAL_BASE_C_W_ADD: -2,
-  JAW_B_OFFSET:         -0.4,  // jawB = jawA + OFFSET
+  JAW_B_OFFSET: -0.4,  // jawB = jawA + OFFSET
 };
 
 const ToolManagementPage = () => {
@@ -69,11 +69,11 @@ const ToolManagementPage = () => {
   const [isTestModeOpen, setIsTestModeOpen] = useState(false);
   const [testContext, setTestContext] = useState({
     odBf: 10, odBfTolPlus: 0, odBfTolMinus: 0,
-    idBf: 5,  idBfTolPlus: 0, idBfTolMinus: 0,
-    wBf:  2,  wBfTolPlus:  0, wBfTolMinus:  0,
+    idBf: 5, idBfTolPlus: 0, idBfTolMinus: 0,
+    wBf: 2, wBfTolPlus: 0, wBfTolMinus: 0,
     odAft: 10, odAftTolPlus: 0, odAftTolMinus: 0,
-    idAft: 5,  idTolPlus: 0, idTolMinus: 0,
-    wAft: 2,   wAftTolPlus: 0, wAftTolMinus: 0,
+    idAft: 5, idTolPlus: 0, idTolMinus: 0,
+    wAft: 2, wAftTolPlus: 0, wAftTolMinus: 0,
     type: 'NORMAL', yBall: 'N', process: 'OD->ID',
     sd: 0, sdAft: 0,
   });
@@ -112,9 +112,14 @@ const ToolManagementPage = () => {
   const [machineConfigLoading, setMachineConfigLoading] = useState(false);
   const [machineConfigEdits, setMachineConfigEdits] = useState({}); // { id: { conditions, use_dynamic_rules } }
   const [machineConfigSaving, setMachineConfigSaving] = useState(null); // id being saved
+  const [addMachineConfigOpen, setAddMachineConfigOpen] = useState(false);
+  const [addMachineConfigSaving, setAddMachineConfigSaving] = useState(false);
+  const [addMachineConfigForm] = Form.useForm();
 
   // ── Machine / table config ───────────────────────────────────────────────
   const [toolingTables, setToolingTables] = useState([]);
+  const [allFormulaMachines, setAllFormulaMachines] = useState([]);
+  const [machineTableMap, setMachineTableMap] = useState({});
 
   useEffect(() => {
     axios.get(server.MTC_MACHINE_TABLE_CONFIG).then(res => {
@@ -122,23 +127,62 @@ const ToolManagementPage = () => {
       setToolingTables(res.data.configs.map(cfg => ({
         ...cfg,
         mf: cfg.machineFilter === 'W'
-          ? r =>  String(r.machine || '').toUpperCase().includes('W')
+          ? r => String(r.machine || '').toUpperCase().includes('W')
           : cfg.machineFilter === 'NOT_W'
-          ? r => !String(r.machine || '').toUpperCase().includes('W')
-          : null,
+            ? r => !String(r.machine || '').toUpperCase().includes('W')
+            : null,
       })));
     }).catch(() => message.error('Failed to load machine table config'));
   }, []);
 
-  const invTableConfig = toolingTables.find(t => t.key === invKey);
+  // Fetch all formula machines + build machine→table map from selection rules
+  useEffect(() => {
+    Promise.all([
+      axios.get(server.MTC_TOOLING_FORMULA_MACHINES),
+      axios.get(server.MTC_TOOLING_RULES),
+    ]).then(([fmRes, rulesRes]) => {
+      setAllFormulaMachines(fmRes.data.machines || []);
+      const tMap = {};
+      (rulesRes.data.rules || []).forEach(r => {
+        if (r.machine_name && r.target_tool_table && !tMap[r.machine_name]) {
+          tMap[r.machine_name] = r.target_tool_table;
+        }
+      });
+      setMachineTableMap(tMap);
+    }).catch(() => {});
+  }, []);
+
+  // Merge legacy machines with non-legacy machines that have formula rows
+  const allMachinesForDropdown = useMemo(() => {
+    const legacyTfMachines = new Set(toolingTables.map(t => t.tfMachine).filter(Boolean));
+    const nonLegacy = allFormulaMachines
+      .filter(m => !legacyTfMachines.has(m))
+      .map(m => ({
+        key: m,
+        label: m,
+        tfMachine: m,
+        table: machineTableMap[m] || null,
+        mf: null,
+        isDynamic: true,
+      }));
+    return [...toolingTables, ...nonLegacy];
+  }, [toolingTables, allFormulaMachines, machineTableMap]);
+
+  const invTableConfig = allMachinesForDropdown.find(t => t.key === invKey);
 
   const colors = theme?.colors || {};
 
   // ── Inventory helpers ────────────────────────────────────────────────────
 
   const fetchToolList = async (key) => {
-    const cfg = toolingTables.find(t => t.key === key);
+    const cfg = allMachinesForDropdown.find(t => t.key === key);
     if (!cfg) { setInvData([]); setInvToolingName(null); return; }
+    if (!cfg.table) {
+      setInvData([]);
+      setInvToolingName(null);
+      message.info(`ตาราง inventory ของ ${cfg.label} ยังไม่ได้กำหนด — ใช้ Add Tool เพื่อเพิ่ม record`);
+      return;
+    }
     setInvLoading(true);
     setInvToolingName(null);
     try {
@@ -152,7 +196,7 @@ const ToolManagementPage = () => {
   };
 
   const invIsEditing = (record) => record.id === invEditingKey;
-  const invEdit   = (record) => { invForm.setFieldsValue({ ...record }); setInvEditingKey(record.id); };
+  const invEdit = (record) => { invForm.setFieldsValue({ ...record }); setInvEditingKey(record.id); };
   const invCancel = () => setInvEditingKey('');
 
   const invSave = async (id) => {
@@ -163,7 +207,7 @@ const ToolManagementPage = () => {
       message.success('Updated');
       setInvEditingKey('');
       fetchToolList(invKey);
-    } catch {}
+    } catch { }
   };
 
   const invFiltered = !invToolingName ? [] : invData.filter(item => {
@@ -329,6 +373,27 @@ const ToolManagementPage = () => {
     }
   };
 
+  // Open formula view for ANY machine directly (not gated by legacy machine dropdown)
+  const openFormulaManagementDirect = async (machineName) => {
+    if (!machineName) return;
+    setFormulaEdits({});
+    setFormulaAllData([]);
+    setIsTfAddOpen(false);
+    setIsTestModeOpen(false);
+    setFormulaMachine(machineName);
+    setFormulaToolingName(null);
+    setActiveView('formula');
+    setFormulaSettingLoading(true);
+    try {
+      const res = await axios.get(`${server.MTC_TOOLING_FORMULA}/${encodeURIComponent(machineName)}`);
+      setFormulaAllData(res.data.formulas || []);
+    } catch {
+      message.error('Failed to load formula settings');
+    } finally {
+      setFormulaSettingLoading(false);
+    }
+  };
+
   const saveFormulaSettings = async () => {
     const edits = Object.entries(formulaEdits);
     if (!edits.length) { message.info('No changes'); return; }
@@ -350,14 +415,13 @@ const ToolManagementPage = () => {
   const nextParamSuggestion = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(l => !existingParamSet.has(l)) || '';
 
   const addToolingFormula = async () => {
-    const cfg = toolingTables.find(t => t.key === invKey);
-    if (!cfg) return;
+    if (!formulaMachine) return;
     try {
       const vals = await tfAddForm.validateFields();
       setTfAddLoading(true);
       const res = await axios.post(server.MTC_TOOLING_FORMULA, {
-        machine_name: cfg.tfMachine,
-        tooling_name: invToolingName,
+        machine_name: formulaMachine,
+        tooling_name: formulaToolingName || null,
         ...vals,
       });
       setFormulaAllData(prev => [...prev, res.data.formula]);
@@ -428,14 +492,14 @@ const ToolManagementPage = () => {
       const specialBaseC = SPECIAL_BASE_C_BASE + wAft + SPECIAL_BASE_C_W_ADD;
       const isSpecialC = (b.yBall === 'Y' || b.yBall === 'B' || (b.type && !b.type.includes('NORMAL') && !b.type.includes('OTHER')));
       const legacyBaseC = isSpecialC ? specialBaseC : normalBaseC;
-      const legacyJawA  = (b.process === 'ID->OD') ? odBf : odAft;
+      const legacyJawA = (b.process === 'ID->OD') ? odBf : odAft;
       const context = {
         ...b,
         baseC: legacyBaseC, jawA: legacyJawA, jawB: legacyJawA + JAW_B_OFFSET, ID_part: idAft + idAftP,
         odAft_max: odAft + odAftP, odAft_min: odAft + parseFloat(b.odAftTolMinus || 0),
         idAft_max: idAft + idAftP, idAft_min: idAft + parseFloat(b.idTolMinus || 0),
-        wAft_max: wAft + wAftP,    wAft_min: wAft + parseFloat(b.wAftTolMinus || 0),
-        odBf_max: odBf + odBfP,    odBf_min: odBf + parseFloat(b.odBfTolMinus || 0),
+        wAft_max: wAft + wAftP, wAft_min: wAft + parseFloat(b.wAftTolMinus || 0),
+        odBf_max: odBf + odBfP, odBf_min: odBf + parseFloat(b.odBfTolMinus || 0),
         W_max: wAft + wAftP, T1: wAft, OD: odAft, ID: idAft,
         Dwg: b.parts_no || b.drawing_no || 'Check Dwg', Type: b.type || 'NORMAL',
         Process: b.process || 'OD->ID', YBall: b.yBall || 'N',
@@ -451,10 +515,10 @@ const ToolManagementPage = () => {
       for (const formula of formulaAllData) {
         const edit = formulaEdits[formula.id] || {};
         const fValue = String((edit.formula_value ?? formula.formula_value) || '').trim();
-        const pName  = String((edit.parameter_name ?? formula.parameter_name) || '').trim();
-        const rRule  = edit.rounding_rule ?? formula.rounding_rule;
-        const rPrec  = edit.rounding_precision ?? formula.rounding_precision;
-        const fType  = edit.formula_type ?? formula.formula_type;
+        const pName = String((edit.parameter_name ?? formula.parameter_name) || '').trim();
+        const rRule = edit.rounding_rule ?? formula.rounding_rule;
+        const rPrec = edit.rounding_precision ?? formula.rounding_precision;
+        const fType = edit.formula_type ?? formula.formula_type;
         if (!fValue || !pName) continue;
         if (fType === 'limit') { results[formula.id] = { success: true, value: '—' }; continue; }
         const res = await axios.post(server.MTC_FORMULA_TEST, { formula: fValue, context: currentContext });
@@ -462,7 +526,7 @@ const ToolManagementPage = () => {
           let val = res.data.result;
           if (val != null && typeof val === 'number' && rRule && rRule !== 'none') {
             const factor = Math.pow(10, rPrec ?? 2);
-            if (rRule === 'ceil')  val = Math.ceil(val * factor) / factor;
+            if (rRule === 'ceil') val = Math.ceil(val * factor) / factor;
             else if (rRule === 'floor') val = Math.floor(val * factor) / factor;
             else if (rRule === 'round') val = Math.round(val * factor) / factor;
           }
@@ -563,6 +627,28 @@ const ToolManagementPage = () => {
     }
   };
 
+  const handleAddMachineConfig = async () => {
+    try {
+      const vals = await addMachineConfigForm.validateFields();
+      setAddMachineConfigSaving(true);
+      await axios.post(server.MTC_MACHINE_CONFIG, {
+        machine_name: vals.machine_name,
+        ok_flag_key: vals.ok_flag_key || null,
+        conditions: [],
+        use_dynamic_rules: false,
+      });
+      message.success(`Added machine config for ${vals.machine_name}`);
+      setAddMachineConfigOpen(false);
+      const res = await axios.get(server.MTC_MACHINE_CONFIG);
+      setMachineConfigs(res.data.configs || []);
+    } catch (err) {
+      if (err?.errorFields) return;
+      message.error(err.response?.data?.error || 'Failed to add machine config');
+    } finally {
+      setAddMachineConfigSaving(false);
+    }
+  };
+
   const getConfigDraft = (cfg) => machineConfigEdits[cfg.id] || {
     conditions: cfg.conditions || [],
     use_dynamic_rules: cfg.use_dynamic_rules || false,
@@ -596,7 +682,7 @@ const ToolManagementPage = () => {
   const addCondition = (id) =>
     updateConfigDraft(id, {
       conditions: [...(getConfigDraft({ id, conditions: [] }).conditions),
-        { key: '', source: 'partData', op: '<=', value: 0, label: '' }],
+      { key: '', source: 'partData', op: '<=', value: 0, label: '' }],
     });
 
   const removeCondition = (id, idx) => {
@@ -630,7 +716,10 @@ const ToolManagementPage = () => {
                 </Title>
               </Space>
               <Space>
-                <Badge count={auditResult?.issue_count ?? 0} size="small">
+                <Badge
+                  count={(auditResult?.issue_count ?? 0) + (auditResult?.machine_sync?.in_formula_not_sds?.length ?? 0)}
+                  size="small"
+                >
                   <Button icon={<AuditOutlined />} loading={auditLoading} onClick={runAudit}>
                     Health Check
                   </Button>
@@ -654,8 +743,15 @@ const ToolManagementPage = () => {
               <Space size={16}>
                 <Button icon={<ArrowLeftOutlined />} onClick={() => { setActiveView('main'); setExpandedFormulaIds([]); }} />
                 <Title level={4} style={{ margin: 0, color: colors.primary }}>Formula Setting</Title>
-                <Tag color="blue">{formulaMachine}</Tag>
-                <Tag color="green">{formulaToolingName}</Tag>
+                <Select
+                  value={formulaMachine}
+                  style={{ width: 180 }}
+                  showSearch
+                  placeholder="Select machine"
+                  onChange={(val) => openFormulaManagementDirect(val)}
+                  options={allFormulaMachines.map(m => ({ value: m, label: m }))}
+                />
+                {formulaToolingName && <Tag color="green">{formulaToolingName}</Tag>}
               </Space>
               <Space>
                 <Button
@@ -692,11 +788,20 @@ const ToolManagementPage = () => {
 
           {/* ── Header: Machine Limits ── */}
           {activeView === 'machineLimits' && (
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 16 }}>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveView('main')} />
-              <Title level={4} style={{ margin: 0, color: colors.primary }}>
-                Machine Eligibility Limits
-              </Title>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Space size={16}>
+                <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveView('main')} />
+                <Title level={4} style={{ margin: 0, color: colors.primary }}>
+                  Machine Eligibility Limits
+                </Title>
+              </Space>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => { addMachineConfigForm.resetFields(); setAddMachineConfigOpen(true); }}
+              >
+                Add Machine
+              </Button>
             </div>
           )}
 
@@ -718,12 +823,20 @@ const ToolManagementPage = () => {
                   <Space wrap>
                     <Select
                       value={invKey}
-                      style={{ width: 160 }}
+                      style={{ width: 180 }}
                       onChange={(val) => { setInvKey(val); fetchToolList(val); setInvEditingKey(''); setInvToolingName(null); }}
                       placeholder="Machine"
                       allowClear
+                      showSearch
                     >
-                      {toolingTables.map(t => <Select.Option key={t.key} value={t.key}>{t.label}</Select.Option>)}
+                      {allMachinesForDropdown.map(t => (
+                        <Select.Option key={t.key} value={t.key}>
+                          <Space size={4}>
+                            {t.label}
+                            {t.isDynamic && <Tag color="geekblue" style={{ fontSize: 9, padding: '0 3px', lineHeight: '14px' }}>NEW</Tag>}
+                          </Space>
+                        </Select.Option>
+                      ))}
                     </Select>
                     <Select
                       placeholder="Tool Name"
@@ -764,7 +877,7 @@ const ToolManagementPage = () => {
                     pagination={{ pageSize: 20, onChange: invCancel, showSizeChanger: true }}
                     scroll={{ x: 'max-content', y: 'calc(100vh - 330px)' }}
                     rowClassName="editable-row"
-                    locale={{ emptyText: invKey ? (invToolingName ? 'ไม่พบข้อมูล' : 'กรุณาเลือก Tool Name') : 'กรุณาเลือก Machine' }}
+                    locale={{ emptyText: invKey ? (invToolingName ? 'Can not load...' : 'Please select Tool Name') : 'Please select Machine' }}
                   />
                 </Form>
               </Card>
@@ -786,7 +899,7 @@ const ToolManagementPage = () => {
                       <Row gutter={12}>
                         <Col><Form.Item label="odAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.odAft} onChange={v => setTestContext({ ...testContext, odAft: v })} style={{ width: 70 }} /></Form.Item></Col>
                         <Col><Form.Item label="idAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.idAft} onChange={v => setTestContext({ ...testContext, idAft: v })} style={{ width: 70 }} /></Form.Item></Col>
-                        <Col><Form.Item label="wAft"  style={{ marginBottom: 0 }}><InputNumber value={testContext.wAft}  onChange={v => setTestContext({ ...testContext, wAft:  v })} style={{ width: 70 }} /></Form.Item></Col>
+                        <Col><Form.Item label="wAft" style={{ marginBottom: 0 }}><InputNumber value={testContext.wAft} onChange={v => setTestContext({ ...testContext, wAft: v })} style={{ width: 70 }} /></Form.Item></Col>
                         <Col>
                           <Form.Item label="Type" style={{ marginBottom: 0 }}>
                             <Select value={testContext.type} onChange={v => setTestContext({ ...testContext, type: v })} style={{ width: 100 }}>
@@ -819,10 +932,10 @@ const ToolManagementPage = () => {
                   <div style={{ marginTop: 8, fontSize: 10, color: '#666' }}>
                     <Tooltip title={
                       <div style={{ fontSize: 11 }}>
-                        <b>Example Formulas:</b><br/>
-                        • Basic: <Text code style={{ color: '#fff' }}>odAft + 0.5</Text><br/>
-                        • Conditional: <Text code style={{ color: '#fff' }}>type == NORMAL ? odAft : 30</Text><br/>
-                        • Rounding: <Text code style={{ color: '#fff' }}>round05(baseC)</Text> (round to nearest 0.5)<br/>
+                        <b>Example Formulas:</b><br />
+                        • Basic: <Text code style={{ color: '#fff' }}>odAft + 0.5</Text><br />
+                        • Conditional: <Text code style={{ color: '#fff' }}>type == NORMAL ? odAft : 30</Text><br />
+                        • Rounding: <Text code style={{ color: '#fff' }}>round05(baseC)</Text> (round to nearest 0.5)<br />
                         • Sequential: <Text code style={{ color: '#fff' }}>(A * 2) / 2</Text> (Use Param from prev row)
                       </div>
                     }>
@@ -1242,74 +1355,120 @@ const ToolManagementPage = () => {
         destroyOnHidden
       >
         <Spin spinning={auditLoading || auditFixing}>
-          {auditResult && !auditLoading && (
-            auditResult.issue_count === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', display: 'block', marginBottom: 12 }} />
-                <Text strong style={{ fontSize: 16 }}>ทุก Selection Rule ถูกต้อง</Text>
-                <br />
-                <Text type="secondary">
-                  ตรวจสอบ {auditResult.total_rules_checked} rules — ไม่พบ calc_key ที่ไม่ตรงกับ formula
-                </Text>
-              </div>
-            ) : (
+          {auditResult && !auditLoading && (() => {
+            const syncOk    = auditResult.machine_sync?.ok !== false;
+            const rulesOk   = auditResult.issue_count === 0;
+            const inFormula = auditResult.machine_sync?.in_formula_not_sds || [];
+            const inSds     = auditResult.machine_sync?.in_sds_not_formula  || [];
+            return (
               <>
-                <Space style={{ marginBottom: 12 }}>
-                  <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
-                  <Text type="danger">
-                    พบ <strong>{auditResult.issue_count}</strong> ปัญหา
-                    จาก {auditResult.total_rules_checked} rules
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    เลือก "Replace with" แต่ละแถวแล้วกด Apply Fixes
-                  </Text>
-                </Space>
-                <Table
-                  size="small"
-                  dataSource={auditResult.issues.map((item, i) => ({ ...item, key: i }))}
-                  pagination={false}
-                  scroll={{ y: 380 }}
-                  columns={[
-                    { title: 'Machine', dataIndex: 'machine_name', width: 120 },
-                    { title: 'Category', dataIndex: 'tool_category', width: 100 },
-                    { title: 'calc_context', dataIndex: 'calc_context', width: 110 },
-                    {
-                      title: 'Bad calc_key',
-                      dataIndex: 'bad_calc_key',
-                      width: 130,
-                      render: v => <Tag color="error">{v}</Tag>,
-                    },
-                    { title: 'Tool Field', dataIndex: 'tool_field', width: 110 },
-                    {
-                      title: 'Replace with',
-                      render: (_, record, idx) => {
-                        const formulaKeys = (auditResult.valid_keys_by_context?.[record.calc_context] || [])
-                          .map(k => ({ value: k, label: k }));
-                        const enrichedKeys = (auditResult.enriched_context_keys || [])
-                          .map(k => ({ value: k, label: k }));
-                        const options = [
-                          ...(formulaKeys.length ? [{ label: 'Formula Parameters', options: formulaKeys }] : []),
-                          { label: 'Enriched Context', options: enrichedKeys },
-                        ];
-                        return (
-                          <Select
-                            size="small"
-                            style={{ width: '100%', minWidth: 160 }}
-                            placeholder="เลือก key ใหม่"
-                            value={auditFixes[idx] || undefined}
-                            onChange={v => setAuditFixes(prev => ({ ...prev, [idx]: v }))}
-                            allowClear
-                            showSearch
-                            options={options}
-                          />
-                        );
-                      },
-                    },
-                  ]}
-                />
+                {/* ── Machine Sync Section ───────────────────────────────── */}
+                {!syncOk && (
+                  <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
+                    <Space style={{ marginBottom: 8 }}>
+                      <ExclamationCircleOutlined style={{ color: '#faad14' }} />
+                      <Text strong style={{ color: '#d48806' }}>Machine Name ไม่ตรงกัน — Tooling Select ↔ SDS</Text>
+                    </Space>
+                    {inFormula.length > 0 && (
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="danger" style={{ fontSize: 12 }}>
+                          มี Formula แต่ไม่มีใน SDS Machine Type (SDS PDF จะว่างเปล่าสำหรับเครื่องเหล่านี้):
+                        </Text>
+                        <div style={{ marginTop: 4 }}>
+                          {inFormula.map(n => <Tag key={n} color="error">{n}</Tag>)}
+                        </div>
+                      </div>
+                    )}
+                    {inSds.length > 0 && (
+                      <div>
+                        <Text style={{ fontSize: 12, color: '#8c6d00' }}>
+                          มีใน SDS แต่ไม่มี Formula (Tooling Select จะไม่คำนวณสำหรับเครื่องเหล่านี้):
+                        </Text>
+                        <div style={{ marginTop: 4 }}>
+                          {inSds.map(n => <Tag key={n} color="warning">{n}</Tag>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Selection Rule Issues Section ─────────────────────── */}
+                {rulesOk && syncOk ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                    <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', display: 'block', marginBottom: 12 }} />
+                    <Text strong style={{ fontSize: 16 }}>ทุกอย่างถูกต้อง</Text>
+                    <br />
+                    <Text type="secondary">
+                      ตรวจสอบ {auditResult.total_rules_checked} rules — ไม่พบปัญหา
+                    </Text>
+                  </div>
+                ) : rulesOk ? (
+                  <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                    <CheckCircleOutlined style={{ fontSize: 32, color: '#52c41a', display: 'block', marginBottom: 8 }} />
+                    <Text type="secondary" style={{ fontSize: 13 }}>
+                      Selection Rules ถูกต้องทั้ง {auditResult.total_rules_checked} rules
+                    </Text>
+                  </div>
+                ) : (
+                  <>
+                    <Space style={{ marginBottom: 12 }}>
+                      <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+                      <Text type="danger">
+                        พบ <strong>{auditResult.issue_count}</strong> ปัญหาใน Selection Rules
+                        จาก {auditResult.total_rules_checked} rules
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        เลือก "Replace with" แต่ละแถวแล้วกด Apply Fixes
+                      </Text>
+                    </Space>
+                    <Table
+                      size="small"
+                      dataSource={auditResult.issues.map((item, i) => ({ ...item, key: i }))}
+                      pagination={false}
+                      scroll={{ y: 340 }}
+                      columns={[
+                        { title: 'Machine', dataIndex: 'machine_name', width: 120 },
+                        { title: 'Category', dataIndex: 'tool_category', width: 100 },
+                        { title: 'calc_context', dataIndex: 'calc_context', width: 110 },
+                        {
+                          title: 'Bad calc_key',
+                          dataIndex: 'bad_calc_key',
+                          width: 130,
+                          render: v => <Tag color="error">{v}</Tag>,
+                        },
+                        { title: 'Tool Field', dataIndex: 'tool_field', width: 110 },
+                        {
+                          title: 'Replace with',
+                          render: (_, record, idx) => {
+                            const formulaKeys = (auditResult.valid_keys_by_context?.[record.calc_context] || [])
+                              .map(k => ({ value: k, label: k }));
+                            const enrichedKeys = (auditResult.enriched_context_keys || [])
+                              .map(k => ({ value: k, label: k }));
+                            const options = [
+                              ...(formulaKeys.length ? [{ label: 'Formula Parameters', options: formulaKeys }] : []),
+                              { label: 'Enriched Context', options: enrichedKeys },
+                            ];
+                            return (
+                              <Select
+                                size="small"
+                                style={{ width: '100%', minWidth: 160 }}
+                                placeholder="เลือก key ใหม่"
+                                value={auditFixes[idx] || undefined}
+                                onChange={v => setAuditFixes(prev => ({ ...prev, [idx]: v }))}
+                                allowClear
+                                showSearch
+                                options={options}
+                              />
+                            );
+                          },
+                        },
+                      ]}
+                    />
+                  </>
+                )}
               </>
-            )
-          )}
+            );
+          })()}
           {!auditResult && !auditLoading && (
             <div style={{ textAlign: 'center', padding: 32, color: '#999' }}>กำลังโหลด...</div>
           )}
@@ -1439,6 +1598,35 @@ const ToolManagementPage = () => {
             </div>
           ))}
         </div>
+      </Modal>
+
+      {/* ── Add Machine Config Modal ─────────────────────────────────────────── */}
+      <Modal
+        title={<Space><PlusOutlined /> Add Machine Config</Space>}
+        open={addMachineConfigOpen}
+        onOk={handleAddMachineConfig}
+        onCancel={() => setAddMachineConfigOpen(false)}
+        okText="Add"
+        okButtonProps={{ loading: addMachineConfigSaving }}
+        width={420}
+        destroyOnHidden
+      >
+        <Form form={addMachineConfigForm} layout="vertical" size="small">
+          <Form.Item
+            name="machine_name"
+            label="Machine Name"
+            rules={[{ required: true, message: 'Required' }]}
+          >
+            <Input placeholder="e.g. KSX100" />
+          </Form.Item>
+          <Form.Item
+            name="ok_flag_key"
+            label="OK Flag Key"
+            extra="Key used by computeOkFlags for eligibility check (e.g. ksx100OK). Leave blank to always eligible."
+          >
+            <Input placeholder="e.g. ksx100OK (optional)" />
+          </Form.Item>
+        </Form>
       </Modal>
     </Layout>
   );

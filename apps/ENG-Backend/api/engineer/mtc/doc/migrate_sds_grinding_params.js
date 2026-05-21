@@ -5,7 +5,7 @@
  *
  * Reads old SDS Excel templates (A16:I55 zone) and populates sds_parameter:
  *   - Plain text cells  → cn=NULL  (static layout: labels, units, row headers)
- *   - {{param_key}} cells → per-CN values from setup_parameter_value
+ *   - {{param_key}} cells → per-CN values from sds_setup_parameter_value
  *
  * Run from apps/ENG-Backend/:
  *   node api/engineer/mtc/doc/migrate_sds_grinding_params.js
@@ -30,7 +30,7 @@ function itemNoToCN(itemNo) {
 }
 
 // Template file → machine groups
-// old: name used in setup_sheet.machine
+// old: name used in sds_setup_sheet.machine
 // new: machine_type_name used in sds_machine_type_code / sds_parameter
 const MACHINE_GROUPS = [
   {
@@ -120,8 +120,8 @@ async function migrateTemplate(templateFile, machineGroup) {
     for (const m of machineGroup) {
       const result = await engPool.query(
         `SELECT DISTINCT ON (ss.cn) ss.cn, COALESCE(v.param_value, '') AS param_value
-         FROM ${TABLES.SETUP_SHEET} ss
-         LEFT JOIN ${TABLES.SETUP_PARAMETER_VALUE} v
+         FROM sds_setup_sheet ss
+         LEFT JOIN sds_setup_parameter_value v
            ON v.setup_sheet_id = ss.id AND v.param_key = $1
          WHERE ss.machine = $2
          ORDER BY ss.cn, ss.setup_data_sheet_rev DESC NULLS LAST`,

@@ -7,7 +7,7 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ApartmentOutlined,
   QuestionCircleOutlined, CheckCircleOutlined, InfoCircleOutlined,
-  WarningOutlined, ThunderboltOutlined,
+  WarningOutlined, ThunderboltOutlined, CopyOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
@@ -28,7 +28,7 @@ const COMMON_TOOL_CATEGORIES = [
 
 const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
   const [formulaParams, setFormulaParams] = useState([]);
-  const [tableColumns,  setTableColumns]  = useState([]);
+  const [tableColumns, setTableColumns] = useState([]);
 
   // Load formula parameter_names whenever machineName changes
   useEffect(() => {
@@ -49,13 +49,13 @@ const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
       .catch(() => setTableColumns([]));
   }, [targetTable]);
 
-  const add    = () => onChange([...value, { calc_key: '', tool_field: '', tol_plus: 0.1, tol_minus: 0.1, label: '', sort_priority: 1 }]);
+  const add = () => onChange([...value, { calc_key: '', tool_field: '', tol_plus: 0.1, tol_minus: 0.1, label: '', sort_priority: 1 }]);
   const remove = (i) => onChange(value.filter((_, idx) => idx !== i));
   const update = (i, field, val) => onChange(value.map((d, idx) => idx === i ? { ...d, [field]: val } : d));
 
   // Highlight mismatches
-  const calcKeyInvalid  = (key)   => key && formulaParams.length > 0 && !formulaParams.includes(key);
-  const toolFieldInvalid = (field) => field && tableColumns.length > 0  && !tableColumns.includes(field);
+  const calcKeyInvalid = (key) => key && formulaParams.length > 0 && !formulaParams.includes(key);
+  const toolFieldInvalid = (field) => field && tableColumns.length > 0 && !tableColumns.includes(field);
 
   return (
     <div>
@@ -69,7 +69,7 @@ const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
       )}
 
       {value.map((dim, i) => {
-        const badCalcKey   = calcKeyInvalid(dim.calc_key);
+        const badCalcKey = calcKeyInvalid(dim.calc_key);
         const badToolField = toolFieldInvalid(dim.tool_field);
         return (
           <div
@@ -89,8 +89,8 @@ const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
                   label={
                     badCalcKey
                       ? <Tooltip title={`"${dim.calc_key}" ไม่มีใน tooling_formula ของ ${machineName}`}>
-                          <Text type="danger" style={{ fontSize: 12 }}>Calc Key <WarningOutlined /></Text>
-                        </Tooltip>
+                        <Text type="danger" style={{ fontSize: 12 }}>Calc Key <WarningOutlined /></Text>
+                      </Tooltip>
                       : 'Calc Key'
                   }
                   style={{ marginBottom: 4 }}
@@ -118,8 +118,8 @@ const DimsEditor = ({ value = [], onChange, machineName, targetTable }) => {
                   label={
                     badToolField
                       ? <Tooltip title={`"${dim.tool_field}" ไม่มีใน ${targetTable}`}>
-                          <Text type="danger" style={{ fontSize: 12 }}>Tool Column <WarningOutlined /></Text>
-                        </Tooltip>
+                        <Text type="danger" style={{ fontSize: 12 }}>Tool Column <WarningOutlined /></Text>
+                      </Tooltip>
                       : 'Tool Column'
                   }
                   style={{ marginBottom: 4 }}
@@ -193,7 +193,7 @@ const ResultFieldsEditor = ({ value = [], onChange, targetTable }) => {
       .catch(() => setTableColumns([]));
   }, [targetTable]);
 
-  const add    = () => onChange([...value, { tool_field: '', label: '' }]);
+  const add = () => onChange([...value, { tool_field: '', label: '' }]);
   const remove = (i) => onChange(value.filter((_, idx) => idx !== i));
   const update = (i, field, val) => onChange(value.map((d, idx) => idx === i ? { ...d, [field]: val } : d));
 
@@ -208,7 +208,7 @@ const ResultFieldsEditor = ({ value = [], onChange, targetTable }) => {
               size="small" showSearch allowClear style={{ width: '100%' }}
               value={rf.tool_field || undefined}
               onChange={v => update(i, 'tool_field', v || '')}
-              placeholder={tableColumns.length ? 'เลือก column' : 'tool_field...'}
+              placeholder={tableColumns.length ? 'Select Column' : 'tool_field...'}
               status={fieldInvalid(rf.tool_field) ? 'error' : ''}
               options={tableColumns.map(c => ({ value: c, label: c }))}
             />
@@ -230,21 +230,22 @@ const ResultFieldsEditor = ({ value = [], onChange, targetTable }) => {
 
 export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
   const { message, modal } = App.useApp();
-  const [rules,            setRules]            = useState([]);
-  const [loading,          setLoading]          = useState(false);
-  const [saving,           setSaving]           = useState(false);
-  const [isFormOpen,       setIsFormOpen]       = useState(false);
-  const [editingRecord,    setEditingRecord]    = useState(null);
-  const [dimsValue,        setDimsValue]        = useState([]);
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [isCopyMode, setIsCopyMode] = useState(false);
+  const [dimsValue, setDimsValue] = useState([]);
   const [resultFieldsValue, setResultFieldsValue] = useState([]);
   // Watch form fields for live validation in sub-editors
-  const [watchMachine,     setWatchMachine]     = useState('');
-  const [watchTable,       setWatchTable]       = useState('');
+  const [watchMachine, setWatchMachine] = useState('');
+  const [watchTable, setWatchTable] = useState('');
   const [availableMachines, setAvailableMachines] = useState([]);
-  const [availableTables,   setAvailableTables]   = useState([]);
-  const [machineConfigs,    setMachineConfigs]    = useState([]);
+  const [availableTables, setAvailableTables] = useState([]);
+  const [machineConfigs, setMachineConfigs] = useState([]);
   const [machineTableConfigs, setMachineTableConfigs] = useState([]);
-  const [autoFillInfo,      setAutoFillInfo]      = useState(null);
+  const [autoFillInfo, setAutoFillInfo] = useState(null);
   const [form] = Form.useForm();
 
   const fetchRules = useCallback(async () => {
@@ -264,16 +265,16 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
     fetchRules();
     axios.get(`${server.MTC_TOOLING_FORMULA}/machines`)
       .then(r => setAvailableMachines(r.data.machines || []))
-      .catch(() => {});
+      .catch(() => { });
     axios.get(server.MTC_TOOLING_TABLES)
       .then(r => setAvailableTables((r.data.tables || []).map(t => t.table_name)))
-      .catch(() => {});
+      .catch(() => { });
     axios.get(server.MTC_MACHINE_CONFIG)
       .then(r => setMachineConfigs(r.data.configs || []))
-      .catch(() => {});
+      .catch(() => { });
     axios.get(server.MTC_MACHINE_TABLE_CONFIG)
       .then(r => setMachineTableConfigs(r.data.configs || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [open, inline, fetchRules]);
 
   const autoFillFromMachine = useCallback((machineName) => {
@@ -303,6 +304,7 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
 
   const openAdd = () => {
     setEditingRecord(null);
+    setIsCopyMode(false);
     setDimsValue([]);
     setResultFieldsValue([]);
     setWatchMachine('');
@@ -313,6 +315,7 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
   };
 
   const openEdit = (record) => {
+    setIsCopyMode(false);
     setEditingRecord(record);
     setDimsValue(Array.isArray(record.dims) ? record.dims : []);
     setResultFieldsValue(Array.isArray(record.result_fields) ? record.result_fields : []);
@@ -324,10 +327,32 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
       table: record.target_tool_table,
     });
     form.setFieldsValue({
-      machine_name:         record.machine_name,
-      tool_category:        record.tool_category,
-      target_tool_table:    record.target_tool_table,
-      calc_context:         record.calc_context,
+      machine_name: record.machine_name,
+      tool_category: record.tool_category,
+      target_tool_table: record.target_tool_table,
+      calc_context: record.calc_context,
+      machine_ok_condition: record.machine_ok_condition,
+    });
+    setIsFormOpen(true);
+  };
+
+  const openCopy = (record) => {
+    setEditingRecord(null);
+    setIsCopyMode(true);
+    setDimsValue(Array.isArray(record.dims) ? record.dims.map(d => ({ ...d })) : []);
+    setResultFieldsValue(Array.isArray(record.result_fields) ? record.result_fields.map(f => ({ ...f })) : []);
+    setWatchMachine(record.machine_name || '');
+    setWatchTable(record.target_tool_table || '');
+    setAutoFillInfo({
+      calcContext: record.calc_context,
+      okCondition: record.machine_ok_condition,
+      table: record.target_tool_table,
+    });
+    form.setFieldsValue({
+      machine_name: record.machine_name,
+      tool_category: record.tool_category,
+      target_tool_table: record.target_tool_table,
+      calc_context: record.calc_context,
       machine_ok_condition: record.machine_ok_condition,
     });
     setIsFormOpen(true);
@@ -339,7 +364,7 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
       setSaving(true);
       const payload = {
         ...values,
-        dims:          dimsValue.length > 0        ? dimsValue        : null,
+        dims: dimsValue.length > 0 ? dimsValue : null,
         result_fields: resultFieldsValue.length > 0 ? resultFieldsValue : null,
       };
       if (editingRecord?.id) {
@@ -380,17 +405,20 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
   }, {});
 
   const tableColumns = [
-    { title: 'Category',    dataIndex: 'tool_category',    key: 'category', render: v => <Tag color="cyan">{v}</Tag> },
-    { title: 'Table',       dataIndex: 'target_tool_table', key: 'table',   render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
-    { title: 'Calc Context', dataIndex: 'calc_context',    key: 'ctx',      render: v => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">-</Text> },
-    { title: 'Dims', dataIndex: 'dims', key: 'dims', width: 60,
+    { title: 'Category', dataIndex: 'tool_category', key: 'category', render: v => <Tag color="cyan">{v}</Tag> },
+    { title: 'Table', dataIndex: 'target_tool_table', key: 'table', render: v => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Calc Context', dataIndex: 'calc_context', key: 'ctx', render: v => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">-</Text> },
+    {
+      title: 'Dims', dataIndex: 'dims', key: 'dims', width: 60,
       render: v => Array.isArray(v) && v.length > 0
         ? <Badge count={v.length} color="#52c41a" />
-        : <Text type="secondary" style={{ fontSize: 11 }}>Legacy</Text> },
+        : <Text type="secondary" style={{ fontSize: 11 }}>Legacy</Text>
+    },
     {
-      title: '', key: 'action', width: 80,
+      title: '', key: 'action', width: 110,
       render: (_, record) => (
         <Space size={4}>
+          <Tooltip title="Copy rule"><Button size="small" icon={<CopyOutlined />} onClick={() => openCopy(record)} /></Tooltip>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
         </Space>
@@ -419,11 +447,11 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
         message={
           <Paragraph style={{ marginBottom: 0, fontSize: 12 }}>
             <InfoCircleOutlined style={{ marginRight: 6 }} />
-            Rule เชื่อม <strong>Formula output</strong> → ค้นหาจาก <strong>Inventory Table</strong>{' '}
-            ต้องตั้งครบ 3 ขั้นตอนสำหรับ machine ใหม่:
+            {/* Rule <strong>Formula output</strong> → From <strong>Inventory Table</strong>{' '} */}
+            {/* Must be setup complete 3 steps for new machine: */}
             {' '}<Tag color="green"><CheckCircleOutlined /> Add Tool</Tag>
             <Tag color="green"><CheckCircleOutlined /> Formula Setting</Tag>
-            <Tag color="blue"><ApartmentOutlined /> Selection Rule (ที่นี่)</Tag>
+            <Tag color="blue"><ApartmentOutlined /> Selection Rule (Here)</Tag>
           </Paragraph>
         }
       />
@@ -439,10 +467,10 @@ export const SelectionRuleDrawer = ({ open, onClose, inline = false }) => {
 
       {/* ── Add/Edit Modal ── */}
       <Modal
-        title={editingRecord ? 'Edit Rule' : 'Add Selection Rule'}
+        title={editingRecord ? 'Edit Rule' : isCopyMode ? 'Copy Rule (Save as New)' : 'Add Selection Rule'}
         open={isFormOpen}
         onOk={handleSave}
-        onCancel={() => setIsFormOpen(false)}
+        onCancel={() => { setIsFormOpen(false); setIsCopyMode(false); }}
         okText="Save"
         okButtonProps={{ loading: saving }}
         width={720}

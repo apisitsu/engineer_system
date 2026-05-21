@@ -58,8 +58,8 @@ function getNestedValue(obj, path) {
  *   1. Search API data  (cn, parts_no, dwg_rev, material, dimension, production, process_info, process_plan)
  *   2. sds_parameter    (per-record if cn given, machine-config if cn=NULL)
  *   3. sds_machine_type_code.grinding_area_label
- *   4. tooling image buffers from sds_v2_tooling_image
- *   5. grinding image buffer from sds_v2_grinding_image
+ *   4. tooling image buffers from sds_tooling_image
+ *   5. grinding image buffer from sds_grinding_image
  */
 const PART_CATEGORY = {
   BALL: 'Ball Parts', RACE: 'Race Parts', BODY: 'Body Parts',
@@ -104,7 +104,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   }
 
   // Tooling slots T01–T20
-  // When sds_v2_machine_tool has entries for this machine+process, use them as the
+  // When sds_machine_tool has entries for this machine+process, use them as the
   // authoritative whitelist+order. Otherwise fall back to machineTypeCode prefix filter.
   let tools = searchData.process_plan || [];
   if (process_code) tools = tools.filter(t => String(t.process_code) === String(process_code));
@@ -121,7 +121,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   }
 
   if (mtRows.length > 0) {
-    // Whitelist filter: keep only tools whose tool_dwg_no matches an entry in sds_v2_machine_tool
+    // Whitelist filter: keep only tools whose tool_dwg_no matches an entry in sds_machine_tool
     // (supports prefix matching: '4664-01' in table matches '4664-01-0001' in process_plan)
     const allowedKeys = mtRows.map(r => r.tool_drawing_no);
     const matchesAllowed = (dwgNo) => {
@@ -205,8 +205,14 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const grindingQ = await engPool.query(
     `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
      WHERE $1 = ANY(cn_prefixes)
-       AND (process_code IS NULL OR process_code = $2)
-     ORDER BY (process_code = $2) DESC NULLS LAST
+       AND ($2 IS NULL
+            OR process_codes IS NULL
+            OR process_codes = '{}'
+            OR $2 = ANY(process_codes))
+     ORDER BY ($2 IS NOT NULL
+               AND process_codes IS NOT NULL
+               AND process_codes != '{}'
+               AND $2 = ANY(process_codes)) DESC NULLS LAST
      LIMIT 1`,
     [cnPrefix, process_code || null]
   );
@@ -316,7 +322,10 @@ async function fillTemplate(workbook, mappings, valueMap) {
   }
 }
 
-// ── sds_parameter A16:I55 rows ─────────────────────────────────────────────
+// ── sds_parameter A16:I55 + AN50:AV55 rows ────────────────────────────────────
+
+const GW_COL_LETTERS = ['AN','AO','AP','AQ','AR','AS','AT','AU','AV'];
+const GW_ROW_RANGE_SET = new Set([50, 51, 52, 53, 54, 55]);
 
 async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   const rows = await engPool.query(
@@ -327,28 +336,54 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   );
   console.log(`[PDF fillMachineConfigSection] machine=${machine_type_name}, cn=${cn}, rows returned=${rows.rows.length}`);
 
-  const config = {};      // row_N_X → value
-  const headerRows = {};  // rowNum → true
-  const valueTypes = {};  // 'row_N_X' → 'value'
+  const config = {};      // row_N_X → value  (A:I section)
+  const headerRows = {};  // rowNum → true     (A:I section)
+  const valueTypes = {};  // 'row_N_X' → 'value' (A:I section)
+
+  const gwConfig = {};      // gw_row_N_COL → value  (AN:AV section)
+  const gwHeaderRows = {};  // rowNum → true          (AN:AV section)
+  const gwValueTypes = {};  // 'gw_row_N_COL' → 'value' (AN:AV section)
 
   rows.rows.forEach(r => {
     const val = r.param_value !== null ? String(r.param_value).trim().toLowerCase() : '';
-    
+
+    // ── A:I section ──────────────────────────────────────────────────────────
     const hdrMatch = r.param_key.match(/^row_(\d+)_is_header$/);
-    if (hdrMatch) { 
+    if (hdrMatch) {
       console.log(`[HDR ROW] cn=${JSON.stringify(r.cn)}, key=${r.param_key}, val='${val}', cn!==null=${r.cn !== null}`);
       if (r.cn !== null) return;
       const parsedHdr = parseInt(hdrMatch[1]);
-      headerRows[parsedHdr] = (val === '1' || val === 'true'); 
+      headerRows[parsedHdr] = (val === '1' || val === 'true');
       console.log(`[HDR SET] headerRows[${parsedHdr}] = ${headerRows[parsedHdr]}`);
-      return; 
+      return;
     }
 
     const typeMatch = r.param_key.match(/^row_(\d+)_([A-I])_type$/i);
-    if (typeMatch) { 
+    if (typeMatch) {
       if (r.cn !== null) return;
-      valueTypes[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value; 
-      return; 
+      valueTypes[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value;
+      return;
+    }
+
+    // ── AN:AV section (gw_ prefix) ────────────────────────────────────────────
+    const gwHdrMatch = r.param_key.match(/^gw_row_(\d+)_is_header$/);
+    if (gwHdrMatch) {
+      if (r.cn !== null) return;
+      gwHeaderRows[parseInt(gwHdrMatch[1])] = (val === '1' || val === 'true');
+      return;
+    }
+
+    const gwTypeMatch = r.param_key.match(/^gw_row_(\d+)_([A-Z]{1,3})_type$/i);
+    if (gwTypeMatch) {
+      if (r.cn !== null) return;
+      gwValueTypes[`gw_row_${gwTypeMatch[1]}_${gwTypeMatch[2].toUpperCase()}`] = r.param_value;
+      return;
+    }
+
+    const gwCellMatch = r.param_key.match(/^gw_row_(\d+)_([A-Z]{1,3})$/i);
+    if (gwCellMatch) {
+      gwConfig[r.param_key] = r.param_value || '';
+      return;
     }
 
     config[r.param_key] = r.param_value || '';
@@ -356,10 +391,9 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   console.log('[HEADER ROWS FINAL]', JSON.stringify(headerRows));
 
   const COL_LETTERS_RANGE = ['A','B','C','D','E','F','G','H','I'];
-  const GRAY_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' }, bgColor: { argb: 'FFD9D9D9' } };
   const RED_FONT  = { color: { argb: 'FFFF0000' } };
 
-  // Write cell values
+  // ── Write A:I cell values ─────────────────────────────────────────────────
   for (const [key, val] of Object.entries(config)) {
     const m = key.match(/^row_(\d+)_([A-I])$/i);
     if (!m) continue;
@@ -395,7 +429,7 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
   }
   console.log('[POST-HDR-FILL] A24:', ws.getCell('A24').fill?.pattern, '| A16:', ws.getCell('A16').fill?.pattern, '| A18:', ws.getCell('A18').fill?.pattern);
 
-  // Apply red font to value-type cells
+  // Apply red font to A:I value-type cells
   for (const [cellKey, type] of Object.entries(valueTypes)) {
     if (type !== 'value') continue;
     const m = cellKey.match(/^row_(\d+)_([A-I])$/i);
@@ -405,6 +439,55 @@ async function fillMachineConfigSection(ws, machine_type_name, cn, engPool) {
     if (rowNum < 16 || rowNum > 55) continue;
     const cell = ws.getCell(`${colLetter}${rowNum}`);
     // Also use full style setter here to avoid mutating shared XF
+    const s = cell.style || {};
+    cell.style = {
+      numFmt:     s.numFmt     || '',
+      font:       { ...(s.font ? JSON.parse(JSON.stringify(s.font)) : {}), ...RED_FONT },
+      alignment:  s.alignment  ? JSON.parse(JSON.stringify(s.alignment))  : {},
+      border:     s.border     ? JSON.parse(JSON.stringify(s.border))     : {},
+      protection: s.protection ? JSON.parse(JSON.stringify(s.protection)) : {},
+      fill:       s.fill       ? JSON.parse(JSON.stringify(s.fill))       : {},
+    };
+  }
+
+  // ── Write AN:AV cell values (gw_ prefix) ─────────────────────────────────
+  for (const [key, val] of Object.entries(gwConfig)) {
+    const m = key.match(/^gw_row_(\d+)_([A-Z]{1,3})$/i);
+    if (!m) continue;
+    const rowNum = parseInt(m[1]);
+    const colLetter = m[2].toUpperCase();
+    if (!GW_ROW_RANGE_SET.has(rowNum) || !GW_COL_LETTERS.includes(colLetter)) continue;
+    ws.getCell(`${colLetter}${rowNum}`).value = val;
+  }
+
+  // Apply GW header row gray fill
+  for (const [rowNumStr, isHdr] of Object.entries(gwHeaderRows)) {
+    if (!isHdr) continue;
+    const n = parseInt(rowNumStr);
+    if (!GW_ROW_RANGE_SET.has(n)) continue;
+    for (const c of GW_COL_LETTERS) {
+      const cell = ws.getCell(`${c}${n}`);
+      const s = cell.style || {};
+      cell.style = {
+        numFmt:     s.numFmt     || '',
+        font:       s.font       ? JSON.parse(JSON.stringify(s.font))       : {},
+        alignment:  s.alignment  ? JSON.parse(JSON.stringify(s.alignment))  : {},
+        border:     s.border     ? JSON.parse(JSON.stringify(s.border))     : {},
+        protection: s.protection ? JSON.parse(JSON.stringify(s.protection)) : {},
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' }, bgColor: { argb: 'FFD9D9D9' } },
+      };
+    }
+  }
+
+  // Apply GW red font to value-type cells
+  for (const [cellKey, type] of Object.entries(gwValueTypes)) {
+    if (type !== 'value') continue;
+    const m = cellKey.match(/^gw_row_(\d+)_([A-Z]{1,3})$/i);
+    if (!m) continue;
+    const rowNum = parseInt(m[1]);
+    const colLetter = m[2].toUpperCase();
+    if (!GW_ROW_RANGE_SET.has(rowNum) || !GW_COL_LETTERS.includes(colLetter)) continue;
+    const cell = ws.getCell(`${colLetter}${rowNum}`);
     const s = cell.style || {};
     cell.style = {
       numFmt:     s.numFmt     || '',
@@ -432,17 +515,8 @@ router.get('/pdf', async (req, res) => {
   }
 
   const safe = (s) => String(s || '').replace(/[^\w\-]/g, '_');
-  const cacheKey = `${safe(cn)}_${safe(machine_type_name)}_${safe(process_code || 'all')}`;
   ensureDir(OUTPUT_DIR);
-  const pdfPath     = path.join(OUTPUT_DIR, `${cacheKey}.pdf`);
-  const tempXlsPath = path.join(OUTPUT_DIR, `__tmp_${Date.now()}_${cacheKey}.xlsx`);
-
-  // Serve cached PDF if template hasn't changed
-  if (fs.existsSync(pdfPath)) {
-    const pdfMtime = fs.statSync(pdfPath).mtimeMs;
-    const tplMtime = fs.statSync(TEMPLATE_PATH).mtimeMs;
-    if (pdfMtime > tplMtime) return res.sendFile(path.resolve(pdfPath));
-  }
+  const tempXlsPath = path.join(OUTPUT_DIR, `__tmp_${Date.now()}_${safe(cn)}_${safe(machine_type_name)}.xlsx`);
 
   try {
     // 1. Fetch search data
@@ -496,10 +570,9 @@ router.get('/pdf', async (req, res) => {
       if (!fs.existsSync(generatedPath)) {
         return res.status(500).json({ error: 'PDF file not created after conversion' });
       }
-      try { fs.renameSync(generatedPath, pdfPath); } catch (_) {}
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="SDS_${safe(cn)}.pdf"`);
-      return res.sendFile(path.resolve(pdfPath));
+      res.sendFile(path.resolve(generatedPath), () => safeUnlink(generatedPath));
     });
   } catch (err) {
     safeUnlink(tempXlsPath);
@@ -507,22 +580,6 @@ router.get('/pdf', async (req, res) => {
     const status = err.message.startsWith('Unknown CN') || err.message.startsWith('Cannot convert') ? 400 : 500;
     res.status(status).json({ error: err.message });
   }
-});
-
-/**
- * DELETE /api/sds/v2/pdf/cache?cn=&machine_type_name=&process_code=
- * Invalidate cached PDF so next GET regenerates it.
- */
-router.delete('/pdf/cache', async (req, res) => {
-  const { cn, machine_type_name, process_code } = req.query;
-  if (!cn?.trim() || !machine_type_name?.trim()) {
-    return res.status(400).json({ error: 'cn and machine_type_name are required' });
-  }
-  const safe = (s) => String(s || '').replace(/[^\w\-]/g, '_');
-  const cacheKey = `${safe(cn)}_${safe(machine_type_name)}_${safe(process_code || 'all')}`;
-  const pdfPath = path.join(OUTPUT_DIR, `${cacheKey}.pdf`);
-  safeUnlink(pdfPath);
-  res.json({ success: true, cleared: cacheKey });
 });
 
 module.exports = router;

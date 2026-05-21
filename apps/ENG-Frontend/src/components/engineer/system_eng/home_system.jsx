@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Layout, Spin, Row, Col, Card, Typography } from "antd";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from '../../../theme';
-import { TeamOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { TeamOutlined, AppstoreOutlined, FileSearchOutlined } from '@ant-design/icons';
 import ScrollbarStyle from '../../common/scrollbar';
 import { useNavigate } from 'react-router-dom';
 

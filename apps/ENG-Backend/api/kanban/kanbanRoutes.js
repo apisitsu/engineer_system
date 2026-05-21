@@ -2,8 +2,7 @@
  * kanbanRoutes.js
  * All Kanban API routes, mounted at /api/kanban
  */
-const express = require('express');
-const router = express.Router();
+const router = require('express-promise-router')();
 
 const Project = require('./kanban_project');
 const Board = require('./kanban_board');

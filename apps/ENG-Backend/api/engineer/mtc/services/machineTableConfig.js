@@ -34,9 +34,9 @@ const MACHINE_TABLE_CONFIG = [
   },
   {
     key: 'tsg300w',
-    label: 'TSG300W',
+    label: 'TSG-300W',
     table: TABLES.TOOLING_TSG300,
-    tfMachine: 'TSG300W',
+    tfMachine: 'TSG-300W',
     machineFilter: 'W',
   },
   {
@@ -62,23 +62,23 @@ const MACHINE_TABLE_CONFIG = [
   },
   {
     key: 'ks500rd',
-    label: 'KS500RD',
+    label: 'KS-500RD',
     table: TABLES.TOOLING_KS500RD,
-    tfMachine: 'KS500RD',
+    tfMachine: 'KS-500RD',
     machineFilter: 'KS500RD',
   },
   {
     key: 'ks400b5',
-    label: 'KS400B5',
+    label: 'KS-400B5',
     table: TABLES.TOOLING_KS400B5,
     tfMachine: 'KS-400B5',
     machineFilter: 'KS400B5',
   },
   {
     key: 'ks400b6',
-    label: 'KS400B6',
+    label: 'KS-400B6',
     table: TABLES.TOOLING_KS400B6,
-    tfMachine: 'KS400B6',
+    tfMachine: 'KS-400B6',
     machineFilter: 'KS400B6',
   },
 ];

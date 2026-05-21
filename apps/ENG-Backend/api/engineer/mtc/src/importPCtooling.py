@@ -42,9 +42,27 @@ df_master.columns = df_master.columns.str.strip()
 df_master = df_master.rename(columns={'Date รับงาน': 'Receive Date', 'TIME': "Time", 'NAME': 'Item Name', 'Spec': 'DWG. No', 'วันที่ Insp เสร็จ': 'Issue Date'})
 df_master = df_master.dropna(subset=['PO No.'])
 
-# Fix Date parsing to avoid swapping Day and Month (using dayfirst=True)
+# Fix Date parsing and calculate FYE
 if 'Receive Date' in df_master.columns:
-    df_master['Receive Date'] = pd.to_datetime(df_master['Receive Date'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
+    # 1. Convert DateTime to get Month and Year
+    temp_date = pd.to_datetime(df_master['Receive Date'], dayfirst=True, errors='coerce')
+    
+    # 2. Function calculate FYE (if month >= 4, take year + 1, if < 4, take year)
+    def calculate_fye(dt):
+        if pd.isna(dt):
+            return ""
+        year = dt.year
+        month = dt.month
+        # If month >= 4, take year + 1, if < 4, take year
+        fye_year = year + 1 if month >= 4 else year
+        # Take the last 2 digits of the year and append FYE
+        return f"FYE{str(fye_year)[-2:]}"
+    
+    # 3. Create FYE column
+    df_master['FYE'] = temp_date.apply(calculate_fye)
+    
+    # 4. Convert back to String (YYYY-MM-DD)
+    df_master['Receive Date'] = temp_date.dt.strftime('%Y-%m-%d')
 
 # If 'Issue Date' exists, format it correctly as well
 if 'Issue Date' in df_master.columns:
@@ -72,7 +90,12 @@ if 'Time' in df_master.columns:
 if 'W/C' in df_master.columns:
     temp_wc = df_master.pop('W/C')
     df_master.insert(2, 'W/C', temp_wc)
-    
+
+if 'Remark' in df_master.columns:
+    df_master['Remark'] = df_master['Remark'].fillna('')
+    df_master['Remark'] = df_master['Remark'].astype(str)
+    df_master['Remark'] = df_master['Remark'].str.replace(r'\.0$', '', regex=True).str.strip()
+
 # NOTE: Removed the line `df_master = df_master.loc[:, :"Q'ty"]` 
 # to keep all trailing columns for the Web Application.
 
@@ -107,12 +130,14 @@ rename_mapping = {
     'PO No.': 'po_no',
     'Item Name': 'item_name',
     'DWG. No': 'dwg_no',
-    "Q'ty": 'qty'
+    "Q'ty": 'qty',
+    'Remark': 'remark',
+    'FYE': 'fye'
 }
 df_master = df_master.rename(columns=rename_mapping)
 
-if 'qty' in df_master.columns:
-    df_master = df_master.loc[:, :"qty"]
+#if 'qty' in df_master.columns:
+#    df_master = df_master.loc[:, :"qty"]
 
 if 'qty' in df_master.columns:
     df_master['qty'] = pd.to_numeric(df_master['qty'], errors='coerce').astype('Int64')
@@ -204,7 +229,12 @@ try:
         #print("Saving new records to the database...")
         df_new_records = df_new_records.drop(columns=['uid'])
 
-        db_columns = ['receive_date', 'time', 'w_c', 'po_no', 'item_name', 'dwg_no', 'qty']
+        if 'remark' not in df_new_records.columns:
+            df_new_records['remark'] = ""
+        if 'fye' not in df_new_records.columns:
+            df_new_records['fye'] = ""
+
+        db_columns = ['receive_date', 'time', 'w_c', 'po_no', 'item_name', 'dwg_no', 'qty', 'remark', 'fye']
         df_new_records = df_new_records[db_columns]
 
         # Sync PostgreSQL auto-increment sequence ID to prevent UniqueViolation error
@@ -234,7 +264,7 @@ except Exception as e:
 # ==========================================
 print("\n=== Exporting Data FROM Database to CSV in Drive G =>=>=>")
 
-output_filename = "ToolingInspection_LookerStudio.csv"
+output_filename = "ToolingInspection.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 try:
@@ -245,6 +275,9 @@ try:
 
     cols_to_exclude = ['id', 'updated_at']
     df_export = df_export.drop(columns=cols_to_exclude, errors='ignore')
+
+    if 'remark' in df_export.columns:
+        df_export['remark'] = df_export['remark'].fillna('').astype(str).str.strip()
 
     df_export.to_csv(path_csv / output_filename, index=False, encoding='utf-8-sig')
     print(f"=>=>=> Successfully exported {len(df_export)} rows from Database to Drive G! ===")

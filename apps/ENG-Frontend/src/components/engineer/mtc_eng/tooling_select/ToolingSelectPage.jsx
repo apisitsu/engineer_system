@@ -125,7 +125,7 @@ const ToolingSelectPage = () => {
       });
       const wFound = res.carriersW?.length ? 1 : 0;
       mData.push({
-        name: 'TSG300W', group: 'FACE', found: wFound, required: 1, tools: [
+        name: 'TSG-300W', group: 'FACE', found: wFound, required: 1, tools: [
           { title: 'CHUTE', content: <ToolingTable title="CHUTE" dataSource={wChutes} columns={['valA', 'valB', 'valC', 'valD']} headers={['A', 'B', 'C', 'D']} targets={[c?.chuteA, c?.chuteB, c?.chuteC, c?.chuteD]} icon={<SwapOutlined />} /> },
           { title: 'CARRIER', content: <ToolingTable title="CARRIER" dataSource={res.carriersW} columns={['valA', 'valB']} headers={['A', 'E']} targets={[c?.carrierA, '']} icon={<SettingOutlined />} /> },
         ]
@@ -213,15 +213,50 @@ const ToolingSelectPage = () => {
       mData.push({ name: machineName, group: 'ID', found, required: 9, tools: ks3Tools });
     }
 
-    if (res.jaws?.length || res.bps?.length) {
-      const found = (res.jaws?.length ? 1 : 0) + (res.bps?.length ? 1 : 0);
+    if (res.ksb22g?.jaws?.length || res.ksb22g?.bps?.length) {
+      const found = (res.ksb22g.jaws?.length ? 1 : 0) + (res.ksb22g.bps?.length ? 1 : 0);
       mData.push({
-        name: 'KS-B22G / KS-B80', group: 'ID', found, required: 2, tools: [
-          { title: 'JAW', content: <ToolingTable title="JAW" dataSource={res.jaws} columns={['val1', 'val2', 'val3', 'valD', 'valE']} headers={['A', 'B', 'C', 'D', 'E']} targets={[c.A, c.B, c.C, c.D_Limit, '']} icon={<ToolOutlined />} /> },
-          { title: 'BACK PLATE', content: <ToolingTable title="BACK PLATE" dataSource={res.bps} columns={['val1', 'val2']} headers={['A', 'B']} targets={[c.AA, c.BB]} icon={<BlockOutlined />} /> },
+        name: 'KS-B22G', group: 'ID', found, required: 2, tools: [
+          { title: 'JAW', content: <ToolingTable title="JAW" dataSource={res.ksb22g.jaws} columns={['val1', 'val2', 'val3', 'valD', 'valE']} headers={['A', 'B', 'C', 'D', 'E']} targets={[c.A, c.B, c.C, c.D_Limit, '']} icon={<ToolOutlined />} /> },
+          { title: 'BACK PLATE', content: <ToolingTable title="BACK PLATE" dataSource={res.ksb22g.bps} columns={['val1', 'val2']} headers={['A', 'B']} targets={[c.AA, c.BB]} icon={<BlockOutlined />} /> },
         ]
       });
     }
+
+    if (res.ksb80?.jaws?.length || res.ksb80?.bps?.length) {
+      const found = (res.ksb80.jaws?.length ? 1 : 0) + (res.ksb80.bps?.length ? 1 : 0);
+      mData.push({
+        name: 'KS-B80', group: 'ID', found, required: 2, tools: [
+          { title: 'JAW', content: <ToolingTable title="JAW" dataSource={res.ksb80.jaws} columns={['val1', 'val2', 'val3', 'valD', 'valE']} headers={['A', 'B', 'C', 'D', 'E']} targets={[c.A, c.B, c.C, c.D_Limit, '']} icon={<ToolOutlined />} /> },
+          { title: 'BACK PLATE', content: <ToolingTable title="BACK PLATE" dataSource={res.ksb80.bps} columns={['val1', 'val2']} headers={['A', 'B']} targets={[c.AA, c.BB]} icon={<BlockOutlined />} /> },
+        ]
+      });
+    }
+
+    if (res.dynamicFixtures?.length) {
+      for (const dynMachine of res.dynamicFixtures) {
+        mData.push({
+          name:     dynMachine.name,
+          group:    dynMachine.group || 'DYNAMIC',
+          found:    dynMachine.foundCount,
+          required: dynMachine.requiredCount,
+          tools:    dynMachine.dynamicContent.map(cat => ({
+            title:   cat.title,
+            content: (
+              <ToolingTable
+                title={cat.title}
+                dataSource={cat.dataSource}
+                columns={cat.columns}
+                headers={cat.headers}
+                targets={cat.targets}
+                icon={<ToolOutlined />}
+              />
+            )
+          }))
+        });
+      }
+    }
+
     return mData;
   };
 
@@ -296,7 +331,7 @@ const ToolingSelectPage = () => {
                   </Card>
                   <Collapse items={mData.map(m => ({
                     key: m.name,
-                    label: (<Space><Text strong>{m.name}</Text><Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : 'purple'}>{m.group}</Tag>{m.found < m.required && (<Tag color="orange">{m.found}/{m.required} found</Tag>)}</Space>),
+                    label: (<Space><Text strong>{m.name}</Text><Tag color={m.group === 'FACE' ? 'blue' : m.group === 'OD' ? 'green' : m.group === 'DYNAMIC' ? 'geekblue' : 'purple'}>{m.group}</Tag>{m.found < m.required && (<Tag color="orange">{m.found}/{m.required} found</Tag>)}</Space>),
                     children: (<div>{m.tools.map(t => (<div key={t.title}>{t.content}</div>))}</div>)
                   }))} style={{ marginBottom: 16 }} />
                 </>
