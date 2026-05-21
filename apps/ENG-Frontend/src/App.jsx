@@ -69,6 +69,9 @@ import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaS
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
+// Engineer Record
+import EngRecordLayout from './components/engineer/system_eng/eng_record/EngRecordLayout';
+
 // PDF Hub
 import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
 import SignStampTool from './components/engineer/system_eng/pdf_hub/SignStamp/SignStampTool';
@@ -374,6 +377,7 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
+                  <Route path="/eng/system_eng/eng-record" element={<EngRecordLayout />} />
 
 
                   {/* ------ For Test Only ------ */}
