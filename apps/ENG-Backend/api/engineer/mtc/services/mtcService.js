@@ -1,9 +1,5 @@
 const moment = require('moment');
 const mtcModel = require('../models/mtcModel');
-const ExcelJS = require('exceljs');
-const fs = require('fs');
-const path = require('path');
-const { execFile } = require('child_process');
 
 const buildTiListBaseSql = (options = {}) => {
     const search = options.search || '';
@@ -90,66 +86,6 @@ const getToolDWGRequestService = async () => {
     };
 };
 
-const processSdsExcel = async (setupId, templatePath) => {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(templatePath);
-
-    const mappingResult = await mtcModel.getTemplateMapping(setupId);
-    
-    mappingResult.rows.forEach(row => {
-        const ws = row.sheet_name ? workbook.getWorksheet(row.sheet_name) : workbook.worksheets[0];
-        if (ws && row.cell_address && row.param_key) {
-            const cell = ws.getCell(row.cell_address);
-            const current = cell.value;
-            const placeholder = `{{${row.param_key}}}`;
-            if (typeof current === 'string' && current.includes(placeholder)) {
-                cell.value = current.replace(placeholder, row.param_value);
-            } else {
-                cell.value = row.param_value;
-            }
-        }
-    });
-
-    return workbook;
-};
-
-const generateSdsPdfService = async ({ cn, process_code, machine, templateDir, cacheDir, sofficePath }) => {
-    const setupResult = await mtcModel.getSetupSheetByParams(cn, process_code, machine);
-    if (setupResult.rows.length === 0) return { type: 'error', status: 404, message: 'Setup sheet not found' };
-    const setup = setupResult.rows[0];
-
-    const tplResult = await mtcModel.getExcelTemplateBySetupId(setup.id);
-    const excelFileName = tplResult.rows[0]?.excel_file_name;
-    if (!excelFileName) return { type: 'error', status: 500, message: 'Excel template not defined' };
-
-    const templatePath = path.join(templateDir, excelFileName);
-    if (!fs.existsSync(templatePath)) return { type: 'error', status: 500, message: 'Template file not found' };
-
-    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-    const pdfPath = path.join(cacheDir, `${setup.id}_${setup.setup_data_sheet_rev}.pdf`);
-
-    if (fs.existsSync(pdfPath)) return { type: 'file', path: pdfPath };
-
-    const workbook = await processSdsExcel(setup.id, templatePath);
-    
-    const outputDir = './output';
-    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-    const tempExcelPath = path.join(outputDir, `__temp_${Date.now()}_${setup.id}.xlsx`);
-    await workbook.xlsx.writeFile(tempExcelPath);
-
-    return new Promise((resolve) => {
-        execFile(sofficePath, ['--headless', '--convert-to', 'pdf', tempExcelPath, '--outdir', cacheDir], (error) => {
-            if (fs.existsSync(tempExcelPath)) fs.unlinkSync(tempExcelPath);
-            if (error) return resolve({ type: 'error', status: 500, message: 'PDF conversion failed' });
-            
-            const generatedPdfPath = path.join(cacheDir, path.basename(tempExcelPath).replace(/\.xlsx$/, '.pdf'));
-            if (!fs.existsSync(generatedPdfPath)) return resolve({ type: 'error', status: 500, message: 'Generated PDF not found' });
-            fs.renameSync(generatedPdfPath, pdfPath);
-            resolve({ type: 'file', path: pdfPath });
-        });
-    });
-};
-
 module.exports = {
     getToolingInspectListService,
     getToolingInspectStatsService,
@@ -157,7 +93,5 @@ module.exports = {
     blacklistToolingInspectService,
     deleteToolingInspectService,
     getToolDWGRequestService,
-    processSdsExcel,
-    generateSdsPdfService
 };
 

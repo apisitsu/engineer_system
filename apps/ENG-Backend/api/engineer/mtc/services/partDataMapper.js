@@ -6,7 +6,7 @@ const { calculateSD } = require('./calculationLogic');
 
 // ── Machine dimension constants ────────────────────────────────────────────
 // Named thresholds for each machine's adapter logic.
-// Eligibility conditions (that admin can tune) live in mtc_machine_config.conditions.
+// Eligibility conditions (that admin can tune) live in tooling_machine_config.conditions.
 // These constants cover type-selection and display logic inside the adapters.
 
 const KS03A_PARAMS = {

@@ -29,16 +29,22 @@ function assembleResults(rows, okFlags, calcs, partData) {
   const { calc, ks03a_calc, ks400b_calc, ks500rd_calc, ks400b5_calc, ks400b6_calc } = calcs;
   const { ksb22g, ksb80, tsg300, ks03a, ks400b, ks500rd, ks400b5, ks400b6 } = rows;
 
-  // ── KSB22G / KSB80 ───────────────────────────────────────────────────────
-  const allJawMatches = [];
-  const allBpMatches = [];
+  // ── KS-B22G ───────────────────────────────────────────────────────────────
+  let ksb22g_results = {};
   if (ksb22gOK) {
-    allJawMatches.push(...searchKSB22G_Jaws(ksb22g, h, 'KS-B22G', calc, MAX_JAW_DEPTH));
-    allBpMatches.push(...searchKSB22G_BackPlates(ksb22g, h, 'KS-B22G', calc));
+    ksb22g_results = {
+      jaws: topNPerMachine(searchKSB22G_Jaws(ksb22g, h, 'KS-B22G', calc, MAX_JAW_DEPTH), TOP_N),
+      bps:  topNPerMachine(searchKSB22G_BackPlates(ksb22g, h, 'KS-B22G', calc), TOP_N),
+    };
   }
+
+  // ── KS-B80 ────────────────────────────────────────────────────────────────
+  let ksb80_results = {};
   if (ksb80OK) {
-    allJawMatches.push(...searchKSB80_Jaws(ksb80, h, 'KS-B80', calc, MAX_JAW_DEPTH));
-    allBpMatches.push(...searchKSB80_BackPlates(ksb80, h, 'KS-B80', calc));
+    ksb80_results = {
+      jaws: topNPerMachine(searchKSB80_Jaws(ksb80, h, 'KS-B80', calc, MAX_JAW_DEPTH), TOP_N),
+      bps:  topNPerMachine(searchKSB80_BackPlates(ksb80, h, 'KS-B80', calc), TOP_N),
+    };
   }
 
   // ── TSG300 ────────────────────────────────────────────────────────────────
@@ -125,8 +131,8 @@ function assembleResults(rows, okFlags, calcs, partData) {
   }
 
   return {
-    jaws:        topNPerMachine(allJawMatches, TOP_N),
-    bps:         topNPerMachine(allBpMatches, TOP_N),
+    ksb22g:      ksb22g_results,
+    ksb80:       ksb80_results,
     chutes:      topNPerMachine(allChuteMatches, TOP_N),
     carriersZNC: topNPerMachine(allCarrierZncMatches, TOP_N),
     carriersW:   topNPerMachine(allCarrierWMatches, TOP_N),

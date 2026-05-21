@@ -36,19 +36,12 @@ apps/ENG-Backend/files/output/pdf-cache/
 
 # Template excel files for setup data sheet
 apps/ENG-Backend/files/template/
-
 apps/run.ps1
-
-OldProject/
+.thclaws/
 .claude/
 tmp/
-.thclaws/
 CLAUDE.md
 CLAUDE.md.tpl
 GEMINI.md
-GEMINI.md.tpl   
-.claude
-.claude/
-GEMINI.md
-GEMINI.md.tpl   
+GEMINI.md.tpl
 .clawsignore

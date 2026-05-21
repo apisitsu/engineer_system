@@ -48,10 +48,10 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
-import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager.jsx';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage.jsx';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage.jsx';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage.jsx';
+import { SpecProcessManager } from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage';
+import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
@@ -60,10 +60,26 @@ import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
+import TemplateFormEditor from './components/engineer/newprod_eng/TemplateTool/TemplateFormEditor';
+import AreaVolumeCalc from './components/engineer/newprod_eng/calculators/AreaVolumeCalc';
+import RPNLookupCalc from './components/engineer/newprod_eng/calculators/RPNLookupCalc';
+import GeometricRadiusCalc from './components/engineer/newprod_eng/calculators/GeometricRadiusCalc';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
+
+// Engineer Record
+import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
+import EngRecordViewerLayout from './components/engineer/overall_eng/eng_record/EngRecordViewerLayout';
+
+// PDF Hub
+import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
+import SignStampTool from './components/engineer/system_eng/pdf_hub/SignStamp/SignStampTool';
+import PdfMergerWrapper from './components/engineer/system_eng/pdf_hub/PdfMergerWrapper';
+import PdfToImageWrapper from './components/engineer/system_eng/pdf_hub/PdfToImageWrapper';
+import DwgCheckWrapper from './components/engineer/system_eng/pdf_hub/DwgCheckWrapper';
+import PdfEditorTool from './components/engineer/system_eng/pdf_hub/PdfEditor/PdfEditorTool';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -267,6 +283,7 @@ const AppContent = () => {
             <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
             <Route element={<ProtectedRoute />}>
+              <Route path="/eng/viewer/eng-record" element={<EngRecordViewerLayout />} />
 
               <Route element={<MainLayout />}>
                 <Route path="/home" element={<Home />} />
@@ -313,6 +330,7 @@ const AppContent = () => {
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+                  <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
@@ -327,10 +345,32 @@ const AppContent = () => {
 
               {/* ------ (Standalone - Full Viewport) ------ */}
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/template_tool" element={<TemplateTool />} />
+                  <Route path="/eng/calculators/area" element={<AreaVolumeCalc />} />
+                  <Route path="/eng/calculators/rpn" element={<RPNLookupCalc />} />
+                  <Route path="/eng/calculators/geometric" element={<GeometricRadiusCalc />} />
+                </Route>
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
-                <Route path="/eng/template_tool" element={<TemplateTool />} />
+                <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
+
+                {/* ------ PDF Management Hub ------ */}
+                {/* Workstation: fullscreen, no sidebar */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub" element={<PdfEditorTool />} />
+                </Route>
+                {/* Legacy tools (backward compat, uses sidebar layout) */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub/tools" element={<PdfHubLayout />}>
+                    <Route index element={<Navigate to="sign-stamp" replace />} />
+                    <Route path="sign-stamp" element={<SignStampTool />} />
+                    <Route path="merge" element={<PdfMergerWrapper />} />
+                    <Route path="to-image" element={<PdfToImageWrapper />} />
+                    <Route path="dwg-check" element={<DwgCheckWrapper />} />
+                  </Route>
+                </Route>
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
@@ -340,7 +380,6 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
-
 
                   {/* ------ For Test Only ------ */}
 

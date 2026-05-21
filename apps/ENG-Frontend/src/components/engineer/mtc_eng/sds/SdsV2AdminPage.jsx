@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
-  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image,
+  Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image, Modal,
+  InputNumber,
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
+  SettingOutlined, DownOutlined, UpOutlined, EditOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -29,11 +31,15 @@ const ParamsTab = ({ theme }) => {
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showRevLog, setShowRevLog] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
     axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
-      .then(r => setAllMachineTypes(r.data.filter(m => m.is_active)))
+      .then(r => {
+        const seen = new Set();
+        setAllMachineTypes(r.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
+      })
       .catch(() => { });
   }, []);
 
@@ -57,7 +63,7 @@ const ParamsTab = ({ theme }) => {
         setSelectedMachine(filtered[0].machine_type_name);
       }
       setCnSearched(true);
-      if (!filtered.length) message.info('ไม่พบ machine type ที่ match — แสดงทั้งหมด');
+      if (!filtered.length) message.info('No machine type found — Show all');
     } catch (err) {
       message.error(err.response?.data?.error || 'CN not found');
     } finally {
@@ -119,7 +125,7 @@ const ParamsTab = ({ theme }) => {
           <Button icon={<SearchOutlined />} onClick={searchCn}>Search CN</Button>
         </Col>
         <Col>
-          <Select showSearch placeholder={cnSearched ? `Machine Type (${(filteredMachineTypes.length || allMachineTypes.length)} รายการ)` : 'Machine Type'}
+          <Select showSearch placeholder={cnSearched ? `Machine Type (${(filteredMachineTypes.length || allMachineTypes.length)} Item)` : 'Machine Type'}
             value={selectedMachine} onChange={handleMachineSelect}
             style={{ width: 300 }}
             filterOption={(inp, opt) => opt.label.toLowerCase().includes(inp.toLowerCase())}
@@ -143,8 +149,19 @@ const ParamsTab = ({ theme }) => {
           ))}
         </Row>
 
-        <Divider orientation="left" plain>Revision Log</Divider>
-        {REV_ROWS.map(n => (
+        <Divider orientation="left" plain>
+          Revision Log{' '}
+          <Button
+            type="link"
+            size="small"
+            icon={showRevLog ? <UpOutlined /> : <DownOutlined />}
+            onClick={() => setShowRevLog(v => !v)}
+            style={{ padding: '0 4px' }}
+          >
+            {showRevLog ? 'Hide' : 'Show'}
+          </Button>
+        </Divider>
+        {showRevLog && REV_ROWS.map(n => (
           <Row key={n} gutter={8} align="middle" style={{ marginBottom: 8 }}>
             <Col flex="none"><Text type="secondary" style={{ width: 24, display: 'inline-block' }}>#{n}</Text></Col>
             {['rev', 'ecn_no', 'date', 'description', 'remark'].map(field => (
@@ -390,7 +407,7 @@ const ToolingImagesTab = ({ theme }) => {
               style={{ width: 280 }}
             >
               <Input.Search
-                placeholder="e.g. 4866-01 (Type to search)"
+                //placeholder="e.g. 4866-01 (Type to search)"
                 loading={lookupLoading}
                 enterButton={<SearchOutlined />}
                 onSearch={handleLookup}
@@ -440,6 +457,8 @@ const ToolingImagesTab = ({ theme }) => {
   );
 };
 
+const CN_PREFIX_LABEL_MAP = Object.fromEntries(CN_PREFIX_OPTIONS.map(o => [o.value, o.label]));
+
 const GrindingImagesTab = ({ theme }) => {
   const { message } = App.useApp();
   const [rows, setRows] = useState([]);
@@ -469,7 +488,7 @@ const GrindingImagesTab = ({ theme }) => {
       setUploading(true);
       const fd = new FormData();
       fd.append('cn_prefixes', JSON.stringify(vals.cn_prefixes));
-      if (vals.process_code) fd.append('process_code', vals.process_code);
+      fd.append('process_codes', JSON.stringify(vals.process_codes || []));
       fd.append('image', fileList[0].originFileObj);
       await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd);
       message.success('Uploaded');
@@ -513,11 +532,20 @@ const GrindingImagesTab = ({ theme }) => {
       dataIndex: 'cn_prefixes',
       render: (v) => (
         <Space size={2} wrap>
-          {(Array.isArray(v) ? v : [v]).map(p => <Tag key={p}>{p}</Tag>)}
+          {(Array.isArray(v) ? v : [v]).map(p => (
+            <Tag key={p}>{CN_PREFIX_LABEL_MAP[p] || p}</Tag>
+          ))}
         </Space>
       ),
     },
-    { title: 'Process Code', dataIndex: 'process_code', width: 140, render: v => v || <Tag>default</Tag> },
+    {
+      title: 'Process Codes',
+      dataIndex: 'process_codes',
+      width: 180,
+      render: v => (Array.isArray(v) && v.length > 0)
+        ? <Space size={2} wrap>{v.map(c => <Tag key={c}>{c}</Tag>)}</Space>
+        : <Tag>default</Tag>,
+    },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -540,12 +568,18 @@ const GrindingImagesTab = ({ theme }) => {
               mode="multiple"
               options={CN_PREFIX_OPTIONS}
               style={{ minWidth: 220 }}
-              placeholder="Select one or more"
               maxTagCount="responsive"
+              optionFilterProp="label"
             />
           </Form.Item>
-          <Form.Item name="process_code" label="Process Code">
-            <Input placeholder="e.g. IDG001 (optional)" style={{ width: 160 }} />
+          <Form.Item name="process_codes" label="Process Code">
+            <Select
+              mode="tags"
+              style={{ minWidth: 200 }}
+              placeholder="e.g. 1011, IDG001"
+              tokenSeparators={[',']}
+              maxTagCount="responsive"
+            />
           </Form.Item>
           <Form.Item>
             <Upload accept="image/*" maxCount={1} fileList={fileList} beforeUpload={() => false}
@@ -571,25 +605,570 @@ const GrindingImagesTab = ({ theme }) => {
   );
 };
 
-// ── Tab 4: Machine Config (A16:I55) ──────────────────────────────────────────
+// ── Tab: Excel Column Mapping (sds_excel_mapping) ────────────────────────────
+
+const TOOL_SLOTS = Array.from({ length: 20 }, (_, i) => `T${String(i + 1).padStart(2, '0')}`);
+const KNOWN_PARAM_KEYS = [
+  // Part info
+  'cn', 'parts_no', 'dwg_rev', 'part_type', 'category', 'material',
+  // Process
+  'process_code', 'process_name', 'process_eng', 'ct', 'machine_type_name',
+  // Production
+  'model', 'customer', 'cust_dwg_no',
+  // SDS Header
+  'program_no', 'program_name', 'sds_rev', 'grinding_area_label',
+  'stamp_prepared', 'stamp_checked', 'stamp_approved',
+  // Tooling slots
+  ...TOOL_SLOTS.map(s => `tool_name_${s}`),
+  ...TOOL_SLOTS.map(s => `tool_dwg_no_${s}`),
+  ...TOOL_SLOTS.map(s => `tool_image_${s}`),
+  'grinding_layout_image',
+  // Revision log
+  ...[1, 2, 3, 4, 5].flatMap(n => [`rev_${n}`, `ecn_no_${n}`, `date_${n}`, `description_${n}`, `remark_${n}`]),
+];
+
+const ExcelMappingManager = ({ theme }) => {
+  const { message } = App.useApp();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form] = Form.useForm();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_MAPPINGS, { params: { machine_type_name: 'null' } });
+      setRows(res.data);
+    } catch (err) {
+      message.error('Load failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = () => {
+    setEditingRow(null);
+    form.resetFields();
+    form.setFieldsValue({ sort_order: 0 });
+    setModalOpen(true);
+  };
+
+  const openEdit = (row) => {
+    setEditingRow(row);
+    form.setFieldsValue({
+      cell_address: row.cell_address,
+      param_key: row.param_key,
+      description: row.description || '',
+      sort_order: row.sort_order ?? 0,
+    });
+    setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      const vals = await form.validateFields();
+      setSaving(true);
+      const payload = {
+        machine_type_name: null,
+        cell_address: vals.cell_address.trim().toUpperCase(),
+        param_key: vals.param_key.trim(),
+        description: vals.description?.trim() || null,
+        sort_order: vals.sort_order ?? 0,
+        is_active: true,
+      };
+      if (editingRow) {
+        await axios.put(`${server.MTC_SDS_V2_ADMIN_MAPPINGS}/${editingRow.id}`, payload);
+        message.success('Updated');
+      } else {
+        await axios.post(server.MTC_SDS_V2_ADMIN_MAPPINGS, payload);
+        message.success('Added');
+      }
+      setModalOpen(false);
+      load();
+    } catch (err) {
+      if (err.errorFields) return;
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`${server.MTC_SDS_V2_ADMIN_MAPPINGS}/${id}`);
+      message.success('Deleted');
+      load();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Cell Address',
+      dataIndex: 'cell_address',
+      width: 220,
+      render: v => <Text code style={{ fontSize: 13 }}>{v}</Text>,
+    },
+    {
+      title: 'Param Key',
+      dataIndex: 'param_key',
+      width: 220,
+      render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    {
+      title: 'Description',
+      dataIndex: 'description',
+      render: v => v || <Text type="secondary" style={{ fontSize: 12 }}>—</Text>,
+    },
+    { title: 'Order', dataIndex: 'sort_order', width: 70, align: 'center' },
+    {
+      title: '',
+      key: 'actions',
+      width: 90,
+      render: (_, row) => (
+        <Space size={4}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} />
+          <Popconfirm
+            title="Delete this mapping?"
+            onConfirm={() => handleDelete(row.id)}
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
+        <Col><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Col>
+        <Col flex="auto" />
+        <Col>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+            Add Mapping
+          </Button>
+        </Col>
+      </Row>
+
+      <Table
+        loading={loading}
+        dataSource={rows.map(r => ({ ...r, key: r.id }))}
+        columns={columns}
+        size="small"
+        bordered
+        pagination={{ pageSize: 30, showSizeChanger: false }}
+        scroll={{ x: 'max-content' }}
+      />
+
+      <Modal
+        title={editingRow ? 'Edit Mapping' : 'Add Mapping'}
+        open={modalOpen}
+        onOk={handleSave}
+        onCancel={() => setModalOpen(false)}
+        okText={editingRow ? 'Save' : 'Add'}
+        confirmLoading={saving}
+        width={540}
+        destroyOnHidden
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+          <Row gutter={12}>
+            <Col span={10}>
+              <Form.Item
+                name="cell_address"
+                label="Cell Address"
+                rules={[{ required: true, message: 'Required' }, {
+                  pattern: /^[A-Za-z]{1,3}\d+$/,
+                  message: 'Format: B5, AB12 ฯลฯ',
+                }]}
+              >
+                <Input
+                  //placeholder="เช่น B5, C7"
+                  style={{ textTransform: 'uppercase' }}
+                  onChange={e => form.setFieldValue('cell_address', e.target.value.toUpperCase())}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={14}>
+              <Form.Item name="sort_order" label="Sort Order">
+                <InputNumber style={{ width: '100%' }} min={0} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item
+            name="param_key"
+            label="Param Key"
+            rules={[{ required: true, message: 'Required' }]}
+          //extra="เลือกจากรายการหรือพิมพ์ค่าเอง"
+          >
+            <AutoComplete
+              options={KNOWN_PARAM_KEYS.map(k => ({ value: k }))}
+              filterOption={(inp, opt) => opt.value.toLowerCase().includes(inp.toLowerCase())}
+            //placeholder="เช่น cn, parts_no, tool_name_T01"
+            />
+          </Form.Item>
+          <Form.Item name="description" label="Description">
+            <Input placeholder="Description" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+};
+
+// ── Tab: Machine Tool Config (sds_v2_machine_tool) ────────────────────────────
+
+const TOOL_NUMBER_SLOTS = Array.from({ length: 20 }, (_, i) => `T${i + 1}`);
+
+const MachineToolManager = ({ theme, visibleMachineNames }) => {
+  const { message } = App.useApp();
+
+  const [machineTypeOpts, setMachineTypeOpts] = useState([]);
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
+      .then(r => {
+        const seen = new Set();
+        setMachineTypeOpts(r.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
+      })
+      .catch(() => { });
+  }, []);
+
+  // Combo list state
+  const [combos, setCombos] = useState([]);
+  const [combosLoading, setCombosLoading] = useState(false);
+  const [filterMachine, setFilterMachine] = useState('__all__');
+
+  // Reset filter when selected machine is hidden by Configure Visible
+  useEffect(() => {
+    if (filterMachine !== '__all__' && visibleMachineNames && !visibleMachineNames.has(filterMachine)) {
+      setFilterMachine('__all__');
+    }
+  }, [visibleMachineNames, filterMachine]);
+
+  // Slot editor state
+  const [selectedCombo, setSelectedCombo] = useState(null); // { machine_type, process_code }
+  const [slots, setSlots] = useState({}); // tool_number → tool_drawing_no
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  // New combo modal
+  const [newComboOpen, setNewComboOpen] = useState(false);
+  const [newComboForm] = Form.useForm();
+
+  const loadCombos = useCallback(async () => {
+    setCombosLoading(true);
+    try {
+      const params = {};
+      if (filterMachine && filterMachine !== '__all__') params.machine_type = filterMachine;
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS_COMBOS, { params });
+      setCombos(res.data);
+    } catch (err) {
+      message.error('Load combos failed');
+    } finally {
+      setCombosLoading(false);
+    }
+  }, [filterMachine, message]);
+
+  useEffect(() => { loadCombos(); }, [loadCombos]);
+
+  const loadSlots = useCallback(async (machine_type, process_code) => {
+    setEditorLoading(true);
+    setSlots({});
+    setDirty(false);
+    try {
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS, {
+        params: { machine_type, process_code },
+      });
+      const map = {};
+      res.data.forEach(r => { map[r.tool_number] = r.tool_drawing_no; });
+      setSlots(map);
+    } catch (err) {
+      message.error('Load tools failed');
+    } finally {
+      setEditorLoading(false);
+    }
+  }, [message]);
+
+  const selectCombo = (combo) => {
+    setSelectedCombo(combo);
+    loadSlots(combo.machine_type, combo.process_code);
+  };
+
+  const handleSlotChange = (toolNumber, val) => {
+    setSlots(prev => ({ ...prev, [toolNumber]: val }));
+    setDirty(true);
+  };
+
+  const saveSlots = async () => {
+    if (!selectedCombo) return;
+    setSaving(true);
+    try {
+      const rows = TOOL_NUMBER_SLOTS.map(tn => ({
+        tool_number: tn,
+        tool_drawing_no: slots[tn]?.trim() || '',
+      }));
+      await axios.put(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS_BULK, {
+        machine_type: selectedCombo.machine_type,
+        process_code: selectedCombo.process_code,
+        rows,
+      });
+      message.success('Saved');
+      setDirty(false);
+      loadCombos();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCombo = async (machine_type, process_code) => {
+    try {
+      await axios.delete(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS_COMBO_DEL, {
+        params: { machine_type, process_code },
+      });
+      message.success('Deleted');
+      if (selectedCombo?.machine_type === machine_type && selectedCombo?.process_code === process_code) {
+        setSelectedCombo(null);
+        setSlots({});
+        setDirty(false);
+      }
+      loadCombos();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const openNewCombo = () => {
+    newComboForm.resetFields();
+    setNewComboOpen(true);
+  };
+
+  const createNewCombo = async () => {
+    try {
+      const vals = await newComboForm.validateFields();
+      setNewComboOpen(false);
+      const combo = { machine_type: vals.machine_type, process_code: String(vals.process_code).trim() };
+      setSelectedCombo(combo);
+      setSlots({});
+      setDirty(false);
+      setEditorLoading(false);
+    } catch (_) { }
+  };
+
+  const machineOptions = [
+    { value: '__all__', label: 'All Machine Type' },
+    ...machineTypeOpts
+      .filter(m => !visibleMachineNames || visibleMachineNames.has(m.machine_type_name))
+      .map(m => ({ value: m.machine_type_name, label: `${m.machine_type_code} — ${m.machine_type_name}` })),
+  ];
+
+  const comboColumns = [
+    { title: 'Machine Type Name', dataIndex: 'machine_type', width: 200 },
+    {
+      title: 'Process Code', dataIndex: 'process_code', width: 130,
+      render: v => <Tag>{v}</Tag>
+    },
+    {
+      title: 'Tools', dataIndex: 'tool_count', width: 70, align: 'center',
+      render: v => <Tag color="blue">{v}</Tag>
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 120,
+      render: (_, row) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            type={selectedCombo?.machine_type === row.machine_type && selectedCombo?.process_code === row.process_code ? 'primary' : 'default'}
+            onClick={() => selectCombo(row)}
+          >
+            Edit
+          </Button>
+          <Popconfirm
+            title={`Delete tool of ${row.machine_type} / ${row.process_code}?`}
+            onConfirm={() => deleteCombo(row.machine_type, row.process_code)}
+            okText="Delete" okButtonProps={{ danger: true }}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const filledCount = TOOL_NUMBER_SLOTS.filter(tn => slots[tn]?.trim()).length;
+
+  return (
+    <Row gutter={16}>
+      {/* Left: Combo list */}
+      <Col span={10}>
+        <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
+          <Col flex="auto">
+            <Select
+              showSearch
+              value={filterMachine}
+              onChange={v => setFilterMachine(v)}
+              options={machineOptions}
+              style={{ width: '100%' }}
+              placeholder="Filter by Machine"
+              filterOption={(inp, opt) => opt.label.toLowerCase().includes(inp.toLowerCase())}
+            />
+          </Col>
+          <Col><Button icon={<ReloadOutlined />} onClick={loadCombos} /></Col>
+          <Col>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openNewCombo}>
+              New
+            </Button>
+          </Col>
+        </Row>
+        <Table
+          loading={combosLoading}
+          dataSource={combos.map((r, i) => ({ ...r, key: `${r.machine_type}_${r.process_code}_${i}` }))}
+          columns={comboColumns}
+          size="small"
+          bordered
+          pagination={{ pageSize: 15, showSizeChanger: false }}
+          rowClassName={row =>
+            selectedCombo?.machine_type === row.machine_type && selectedCombo?.process_code === row.process_code
+              ? 'ant-table-row-selected' : ''
+          }
+        />
+      </Col>
+
+      {/* Right: Slot editor */}
+      <Col span={14}>
+        {!selectedCombo ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: '#bfbfbf' }}>
+            {/* <Text type="secondary">เลือก Combo จากตารางซ้าย หรือกด New</Text> */}
+          </div>
+        ) : (
+          <Spin spinning={editorLoading}>
+            <Row align="middle" style={{ marginBottom: 10 }}>
+              <Col flex="auto">
+                <Space>
+                  <Tag color="blue">{selectedCombo.machine_type}</Tag>
+                  <Tag>{selectedCombo.process_code}</Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {filledCount} tool{filledCount !== 1 ? 's' : ''} Active
+                  </Text>
+                </Space>
+              </Col>
+              {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
+              <Col>
+                <Button type="primary" icon={<SaveOutlined />} onClick={saveSlots} loading={saving} disabled={!dirty}>
+                  Save
+                </Button>
+              </Col>
+            </Row>
+
+            <Table
+              dataSource={TOOL_NUMBER_SLOTS.map(tn => ({ key: tn, tool_number: tn }))}
+              size="small"
+              bordered
+              pagination={false}
+              scroll={{ y: 520 }}
+              columns={[
+                {
+                  title: 'Slot',
+                  dataIndex: 'tool_number',
+                  width: 60,
+                  render: v => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+                },
+                {
+                  title: 'Tool Drawing No',
+                  dataIndex: 'tool_number',
+                  render: (tn) => (
+                    <Input
+                      size="small"
+                      value={slots[tn] || ''}
+                      onChange={e => handleSlotChange(tn, e.target.value)}
+                      //placeholder="เช่น 4866-01"
+                      style={{ fontFamily: 'monospace' }}
+                      allowClear
+                    />
+                  ),
+                },
+              ]}
+            />
+          </Spin>
+        )}
+      </Col>
+
+      {/* New combo modal */}
+      <Modal
+        title="เพิ่ม Combo ใหม่"
+        open={newComboOpen}
+        onOk={createNewCombo}
+        onCancel={() => setNewComboOpen(false)}
+        okText="เริ่มแก้ไข"
+        width={440}
+        destroyOnHidden
+      >
+        <Form form={newComboForm} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item name="machine_type" label="Machine Type" rules={[{ required: true, message: 'Required' }]}>
+            <Select
+              options={machineTypeOpts.map(m => ({
+                value: m.machine_type_name,
+                label: `${m.machine_type_code} — ${m.machine_type_name}`,
+              }))}
+              //placeholder="เลือก Machine Type"
+              showSearch
+              filterOption={(inp, opt) => opt.label.toLowerCase().includes(inp.toLowerCase())}
+            />
+          </Form.Item>
+          <Form.Item name="process_code" label="Process Code" rules={[{ required: true, message: 'Required' }]}>
+            {/* <Input placeholder="เช่น 1011, 1021, IDG001" /> */}
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Row>
+  );
+};
+
+// ── Tab 4: Machine Config (A16:I55 + AN50:AV55) ──────────────────────────────
 
 const COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const EXCLUDED_ROWS = new Set([17, 27, 37, 47]);
 const ROW_RANGE = Array.from({ length: 40 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
 
+const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
+const GW_ROW_RANGE = [50, 51, 52, 53, 54, 55];
+
 const MachineConfigTab = ({ theme }) => {
   const { message } = App.useApp();
   const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [fullMachineTypes, setFullMachineTypes] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [cellData, setCellData] = useState({});  // row_N_X → text value
   const [cellTypes, setCellTypes] = useState({});  // row_N_X → 'value' | '' (label/unit)
   const [rowHeaders, setRowHeaders] = useState({});  // rowNum → true/false
+  const [gwCellData, setGwCellData] = useState({});    // gw_row_N_COL → text value (AN:AV)
+  const [gwCellTypes, setGwCellTypes] = useState({});  // gw_row_N_COL → 'value' | ''
+  const [gwRowHeaders, setGwRowHeaders] = useState({});// rowNum → true/false
   const [origKeys, setOrigKeys] = useState(new Set());
   const [listLoading, setListLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [visibleMachineNames, setVisibleMachineNames] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sds_admin_visible_machines');
+      return saved ? new Set(JSON.parse(saved)) : null;
+    } catch { return null; }
+  });
+  const [tempChecked, setTempChecked] = useState([]);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -597,7 +1176,8 @@ const MachineConfigTab = ({ theme }) => {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, {
         params: search ? { search } : {},
       });
-      setAllMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name));
+      const seen = new Set();
+      setAllMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
     } catch (err) {
       message.error(err.response?.data?.error || 'Load failed');
     } finally {
@@ -607,12 +1187,26 @@ const MachineConfigTab = ({ theme }) => {
 
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Load the complete unfiltered list once — used by Configure Visible modal so the
+  // isAll check is never fooled by an active search filter.
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
+      .then(res => {
+        const seen = new Set();
+        setFullMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
+      })
+      .catch(() => {});
+  }, []);
+
   const loadConfig = useCallback(async (machineName) => {
     setSelectedMachine(machineName);
     setConfigLoading(true);
     setCellData({});
     setCellTypes({});
     setRowHeaders({});
+    setGwCellData({});
+    setGwCellTypes({});
+    setGwRowHeaders({});
     setOrigKeys(new Set());
     setDirty(false);
     try {
@@ -620,6 +1214,7 @@ const MachineConfigTab = ({ theme }) => {
         params: { cn: 'null', machine_type_name: machineName },
       });
       const map = {}, types = {}, headers = {}, keys = new Set();
+      const gwMap = {}, gwTypes = {}, gwHeaders = {};
       res.data.forEach(r => {
         keys.add(r.param_key);
         // row_N_is_header
@@ -628,12 +1223,23 @@ const MachineConfigTab = ({ theme }) => {
         // row_N_X_type
         const typeMatch = r.param_key.match(/^row_(\d+)_([A-I])_type$/i);
         if (typeMatch) { types[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value || ''; return; }
+        // gw_row_N_is_header
+        const gwHdrMatch = r.param_key.match(/^gw_row_(\d+)_is_header$/);
+        if (gwHdrMatch) { gwHeaders[parseInt(gwHdrMatch[1])] = r.param_value === '1'; return; }
+        // gw_row_N_COL_type
+        const gwTypeMatch = r.param_key.match(/^gw_row_(\d+)_([A-Z]{1,3})_type$/i);
+        if (gwTypeMatch) { gwTypes[`gw_row_${gwTypeMatch[1]}_${gwTypeMatch[2].toUpperCase()}`] = r.param_value || ''; return; }
+        // gw_row_N_COL (cell value)
+        if (/^gw_row_\d+_[A-Z]{1,3}$/i.test(r.param_key)) { gwMap[r.param_key] = r.param_value || ''; return; }
         // row_N_X  (cell value)
         map[r.param_key] = r.param_value || '';
       });
       setCellData(map);
       setCellTypes(types);
       setRowHeaders(headers);
+      setGwCellData(gwMap);
+      setGwCellTypes(gwTypes);
+      setGwRowHeaders(gwHeaders);
       setOrigKeys(keys);
     } catch (err) {
       message.error(err.response?.data?.error || 'Load failed');
@@ -643,6 +1249,20 @@ const MachineConfigTab = ({ theme }) => {
   }, [message]);
 
   const markDirty = () => setDirty(true);
+
+  const handleGwCellChange = (rowNum, c, val) => {
+    setGwCellData(prev => ({ ...prev, [`gw_row_${rowNum}_${c}`]: val }));
+    markDirty();
+  };
+  const handleGwTypeToggle = (rowNum, c) => {
+    const key = `gw_row_${rowNum}_${c}`;
+    setGwCellTypes(prev => ({ ...prev, [key]: prev[key] === 'value' ? '' : 'value' }));
+    markDirty();
+  };
+  const handleGwHeaderToggle = (rowNum, checked) => {
+    setGwRowHeaders(prev => ({ ...prev, [rowNum]: checked }));
+    markDirty();
+  };
 
   const handleCellChange = (rowNum, c, val) => {
     setCellData(prev => ({ ...prev, [`row_${rowNum}_${c}`]: val }));
@@ -687,6 +1307,29 @@ const MachineConfigTab = ({ theme }) => {
         const hdrVal = rowHeaders[rowNum] ? '1' : '';
         if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
       }
+      // GW cell values (AN50:AV55)
+      for (const rowNum of GW_ROW_RANGE) {
+        for (const c of GW_COL_LETTERS) {
+          const key = `gw_row_${rowNum}_${c}`;
+          const val = gwCellData[key] || '';
+          if (val || origKeys.has(key)) params.push({ param_key: key, param_value: val || null });
+        }
+      }
+      // GW cell types
+      for (const rowNum of GW_ROW_RANGE) {
+        for (const c of GW_COL_LETTERS) {
+          const cellKey = `gw_row_${rowNum}_${c}`;
+          const typeKey = `${cellKey}_type`;
+          const typeVal = gwCellTypes[cellKey] || '';
+          if (typeVal || origKeys.has(typeKey)) params.push({ param_key: typeKey, param_value: typeVal || null });
+        }
+      }
+      // GW row header flags
+      for (const rowNum of GW_ROW_RANGE) {
+        const hdrKey = `gw_row_${rowNum}_is_header`;
+        const hdrVal = gwRowHeaders[rowNum] ? '1' : '';
+        if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
+      }
 
       await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
         cn: null, machine_type_name: selectedMachine, params,
@@ -702,8 +1345,8 @@ const MachineConfigTab = ({ theme }) => {
   };
 
   const machineListCols = [
-    { title: 'Code', dataIndex: 'machine_type_code', width: 90 },
-    { title: 'Machine Name', dataIndex: 'machine_type_name' },
+    { title: 'Machine Type Code', dataIndex: 'machine_type_code', width: 300 },
+    { title: 'Machine Type Name', dataIndex: 'machine_type_name' },
     {
       title: '',
       key: 'action',
@@ -718,6 +1361,47 @@ const MachineConfigTab = ({ theme }) => {
         </Button>
       ),
     },
+  ];
+
+  const gwConfigGridCols = [
+    {
+      title: 'Row', dataIndex: 'rowNum', width: 50, fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: gwRowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: v => <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text>,
+    },
+    {
+      title: 'Hdr', key: 'hdr', width: 44, fixed: 'left',
+      onCell: (record) => ({ style: { backgroundColor: gwRowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: (_, record) => (
+        <Checkbox
+          checked={!!gwRowHeaders[record.rowNum]}
+          onChange={e => handleGwHeaderToggle(record.rowNum, e.target.checked)}
+        />
+      ),
+    },
+    ...GW_COL_LETTERS.map(c => ({
+      title: c, key: c, width: 130,
+      onCell: (record) => ({ style: { backgroundColor: gwRowHeaders[record.rowNum] ? '#d9d9d9' : undefined } }),
+      render: (_, record) => {
+        const cellKey = `gw_row_${record.rowNum}_${c}`;
+        const isValue = gwCellTypes[cellKey] === 'value';
+        return (
+          <Input
+            size="small"
+            value={gwCellData[cellKey] || ''}
+            onChange={e => handleGwCellChange(record.rowNum, c, e.target.value)}
+            style={{ fontSize: 11, color: isValue ? '#ff4d4f' : undefined, backgroundColor: gwRowHeaders[record.rowNum] ? '#f5f5f5' : undefined }}
+            suffix={
+              <span
+                title="Toggle: Label / Value"
+                onClick={() => handleGwTypeToggle(record.rowNum, c)}
+                style={{ cursor: 'pointer', fontSize: 10, fontWeight: 'bold', color: isValue ? '#ff4d4f' : '#bfbfbf', userSelect: 'none' }}
+              >V</span>
+            }
+          />
+        );
+      },
+    })),
   ];
 
   const configGridCols = [
@@ -775,8 +1459,36 @@ const MachineConfigTab = ({ theme }) => {
     })),
   ];
 
-  return (
-    <div>
+  const displayedMachineTypes = visibleMachineNames
+    ? allMachineTypes.filter(m => visibleMachineNames.has(m.machine_type_name))
+    : allMachineTypes;
+
+  const openConfigModal = () => {
+    const list = fullMachineTypes.length ? fullMachineTypes : allMachineTypes;
+    setTempChecked(
+      visibleMachineNames
+        ? list.filter(m => visibleMachineNames.has(m.machine_type_name)).map(m => m.machine_type_name)
+        : list.map(m => m.machine_type_name)
+    );
+    setConfigModalOpen(true);
+  };
+
+  const applyConfig = () => {
+    // Use fullMachineTypes so isAll is never fooled by an active search filter
+    const list = fullMachineTypes.length ? fullMachineTypes : allMachineTypes;
+    const allNames = list.map(m => m.machine_type_name);
+    const isAll = tempChecked.length === allNames.length && allNames.every(n => tempChecked.includes(n));
+    const next = isAll ? null : new Set(tempChecked);
+    setVisibleMachineNames(next);
+    try {
+      if (next) localStorage.setItem('sds_admin_visible_machines', JSON.stringify([...next]));
+      else localStorage.removeItem('sds_admin_visible_machines');
+    } catch { }
+    setConfigModalOpen(false);
+  };
+
+  const machineListBlock = (
+    <>
       <Row gutter={8} style={{ marginBottom: 12 }}>
         <Col>
           <Input.Search
@@ -793,14 +1505,19 @@ const MachineConfigTab = ({ theme }) => {
       </Row>
       <Table
         loading={listLoading}
-        dataSource={allMachineTypes.map(r => ({ ...r, key: r.id }))}
+        dataSource={displayedMachineTypes.map(r => ({ ...r, key: r.id }))}
         columns={machineListCols}
         size="small"
         pagination={{ pageSize: 15, showSizeChanger: false }}
         rowClassName={row => row.machine_type_name === selectedMachine ? 'ant-table-row-selected' : ''}
         style={{ marginBottom: 24 }}
       />
+    </>
+  );
 
+  const cellGridContent = (
+    <div>
+      {machineListBlock}
       {selectedMachine && (
         <Spin spinning={configLoading}>
           <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
@@ -829,6 +1546,112 @@ const MachineConfigTab = ({ theme }) => {
       )}
     </div>
   );
+
+  const gwConfigContent = (
+    <div>
+      {machineListBlock}
+      {selectedMachine && (
+        <Spin spinning={configLoading}>
+          <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
+            <Col><Text strong>{selectedMachine}</Text></Col>
+            <Col flex="auto" />
+            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
+            <Col>
+              <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
+                Save
+              </Button>
+            </Col>
+          </Row>
+          <Table
+            className="sds-config-grid"
+            dataSource={GW_ROW_RANGE.map(rowNum => ({ key: rowNum, rowNum }))}
+            columns={gwConfigGridCols}
+            pagination={false}
+            size="small"
+            scroll={{ x: 'max-content', y: 300 }}
+            bordered
+            style={{ fontFamily: 'monospace' }}
+            rowClassName={record => gwRowHeaders[record.rowNum] ? 'sds-hdr-row' : ''}
+          />
+        </Spin>
+      )}
+    </div>
+  );
+
+  const configVisibleBtn = (
+    <Button icon={<SettingOutlined />} size="small" onClick={openConfigModal}>
+      Configure Visible
+      {visibleMachineNames && (
+        <Tag color="blue" style={{ marginLeft: 4 }}>{visibleMachineNames.size}</Tag>
+      )}
+    </Button>
+  );
+
+  return (
+    <>
+      <Tabs
+        size="small"
+        tabBarExtraContent={configVisibleBtn}
+        items={[
+          {
+            key: 'grid',
+            label: 'Excel Parameter Config',
+            children: cellGridContent,
+          },
+          {
+            key: 'gw-config',
+            label: 'Excel Grinding Wheel Config',
+            children: gwConfigContent,
+          },
+          {
+            key: 'mapping',
+            label: 'Excel Column Mapping',
+            children: <ExcelMappingManager theme={theme} />,
+          },
+          {
+            key: 'machine-tool',
+            label: 'Machine Tool Config',
+            children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} />,
+          },
+        ]}
+      />
+      <Modal
+        title="Machine Name"
+        open={configModalOpen}
+        onOk={applyConfig}
+        onCancel={() => setConfigModalOpen(false)}
+        okText="Apply"
+        cancelText="Cancel"
+        width={480}
+      >
+        <Space style={{ marginBottom: 12 }}>
+          <Button size="small" onClick={() => setTempChecked((fullMachineTypes.length ? fullMachineTypes : allMachineTypes).map(m => m.machine_type_name))}>
+            Select All
+          </Button>
+          <Button size="small" onClick={() => setTempChecked([])}>
+            Deselect All
+          </Button>
+        </Space>
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          <Checkbox.Group
+            value={tempChecked}
+            onChange={setTempChecked}
+            style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+          >
+            {(fullMachineTypes.length ? fullMachineTypes : allMachineTypes).map(m => (
+              <Checkbox key={m.id ?? m.machine_type_name} value={m.machine_type_name}>
+                <Text style={{ fontSize: 13 }}>
+                  <Text type="secondary">{m.machine_type_code}</Text>
+                  {' — '}
+                  {m.machine_type_name}
+                </Text>
+              </Checkbox>
+            ))}
+          </Checkbox.Group>
+        </div>
+      </Modal>
+    </>
+  );
 };
 
 // ── Tab 4: Audit (Data Integrity) ─────────────────────────────────────────────
@@ -839,7 +1662,7 @@ const AuditTab = ({ theme }) => {
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
   const [activeCategory, setActiveCategory] = useState(null);
   const [showNoPlan, setShowNoPlan] = useState(false);
-  const [showMissingTooling, setShowMissingTooling] = useState(false);
+  const [expandedProcessCodes, setExpandedProcessCodes] = useState(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -885,7 +1708,7 @@ const AuditTab = ({ theme }) => {
   const handleCategoryClick = (key) => {
     setActiveCategory(prev => prev === key ? null : key);
     setShowNoPlan(false);
-    setShowMissingTooling(false);
+    setExpandedProcessCodes(new Set());
   };
 
   const filteredNoPlan = useMemo(() => {
@@ -900,34 +1723,37 @@ const AuditTab = ({ theme }) => {
     return data.missingTooling.filter(r => r.sub_class?.startsWith(prefix));
   }, [data.missingTooling, activeCategory, getCategoryPrefix]);
 
-  // Group missingTooling by CN for rowSpan display
-  const groupedMissingTooling = useMemo(() => {
-    const result = [];
+  // Group missingTooling by process_code for per-PC expandable sections
+  const missingByProcessCode = useMemo(() => {
     const groups = {};
     filteredMissingTooling.forEach(row => {
-      if (!groups[row.control_no]) groups[row.control_no] = [];
-      groups[row.control_no].push(row);
+      const pc = row.process_code || '(none)';
+      if (!groups[pc]) groups[pc] = [];
+      groups[pc].push(row);
     });
-    Object.values(groups).forEach(rows => {
-      rows.forEach((row, idx) => {
-        result.push({ ...row, _rowSpan: idx === 0 ? rows.length : 0, _key: `${row.control_no}_${row.process_code}` });
-      });
-    });
-    return result;
+    return groups;
   }, [filteredMissingTooling]);
+
+  const sortedProcessCodes = useMemo(() =>
+    Object.keys(missingByProcessCode).sort(),
+    [missingByProcessCode]
+  );
+
+  const toggleProcessCode = (pc) => {
+    setExpandedProcessCodes(prev => {
+      const next = new Set(prev);
+      if (next.has(pc)) next.delete(pc);
+      else next.add(pc);
+      return next;
+    });
+  };
 
   const noPlanCols = [
     { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
   ];
 
-  const missingCols = [
-    {
-      title: 'CN',
-      dataIndex: 'control_no',
-      key: 'control_no',
-      render: (val, row) => ({ children: <Text strong>{val}</Text>, props: { rowSpan: row._rowSpan } }),
-    },
-    { title: 'Process Code', dataIndex: 'process_code', key: 'process_code', width: 120 },
+  const missingCnCols = [
+    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
   ];
 
   const activeCat = categories.find(c => c.key === activeCategory);
@@ -947,7 +1773,7 @@ const AuditTab = ({ theme }) => {
               <Button
                 size="small"
                 type={activeCategory === null ? 'primary' : 'default'}
-                onClick={() => { setActiveCategory(null); setShowNoPlan(false); setShowMissingTooling(false); }}
+                onClick={() => { setActiveCategory(null); setShowNoPlan(false); setExpandedProcessCodes(new Set()); }}
               >
                 All
               </Button>
@@ -1015,33 +1841,66 @@ const AuditTab = ({ theme }) => {
               },
               {
                 key: 'missing-tool',
-                label: <Tag color="warning">Warning: Missing Tooling ({filteredMissingTooling.length})</Tag>,
+                label: <Tag color="warning">Warning: Missing Tooling ({new Set(filteredMissingTooling.map(r => r.control_no)).size} CN)</Tag>,
                 children: (
                   <>
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      Process Plan exists but missing Tooling
+                      Process Plan exists but missing Tooling — Click Process Code to see items
                     </Text>
-                    <Button
-                      size="small"
-                      type={showMissingTooling ? 'primary' : 'default'}
-                      onClick={() => setShowMissingTooling(v => !v)}
-                      style={{ marginBottom: 12 }}
-                    >
-                      {showMissingTooling
-                        ? 'Hide List'
-                        : `Show List (${new Set(filteredMissingTooling.map(r => r.control_no)).size} CN, ${filteredMissingTooling.length} rows)`}
-                    </Button>
-                    {showMissingTooling && (
-                      <Table
-                        dataSource={groupedMissingTooling}
-                        columns={missingCols}
-                        size="small"
-                        loading={loading}
-                        bordered
-                        rowKey="_key"
-                        pagination={{ pageSize: 30, showSizeChanger: false }}
-                      />
-                    )}
+                    <Space wrap style={{ marginBottom: 16 }}>
+                      {expandedProcessCodes.size > 0 && (
+                        <Button
+                          size="small"
+                          danger
+                          onClick={() => setExpandedProcessCodes(new Set())}
+                        >
+                          Collapse All
+                        </Button>
+                      )}
+                      {sortedProcessCodes.map(pc => {
+                        const isExpanded = expandedProcessCodes.has(pc);
+                        const cnCount = new Set(missingByProcessCode[pc].map(r => r.control_no)).size;
+                        return (
+                          <Button
+                            key={pc}
+                            size="small"
+                            type={isExpanded ? 'primary' : 'default'}
+                            onClick={() => toggleProcessCode(pc)}
+                          >
+                            {pc}
+                            <Tag
+                              color={isExpanded ? 'white' : 'default'}
+                              style={{ marginLeft: 4, color: isExpanded ? '#1677ff' : undefined }}
+                            >
+                              {cnCount}
+                            </Tag>
+                          </Button>
+                        );
+                      })}
+                    </Space>
+                    {sortedProcessCodes.filter(pc => expandedProcessCodes.has(pc)).map(pc => {
+                      const rows = missingByProcessCode[pc];
+                      const uniqCns = [...new Set(rows.map(r => r.control_no))].sort();
+                      return (
+                        <div key={pc} style={{ marginBottom: 16 }}>
+                          <Row align="middle" style={{ marginBottom: 6 }}>
+                            <Col>
+                              <Text strong>Process Code: </Text>
+                              <Tag color="blue">{pc}</Tag>
+                              <Text type="secondary" style={{ fontSize: 12 }}>{uniqCns.length} CN</Text>
+                            </Col>
+                          </Row>
+                          <Table
+                            dataSource={uniqCns.map(cn => ({ control_no: cn, key: cn }))}
+                            columns={missingCnCols}
+                            size="small"
+                            loading={loading}
+                            bordered
+                            pagination={{ pageSize: 20, showSizeChanger: false }}
+                          />
+                        </div>
+                      );
+                    })}
                   </>
                 ),
               },

@@ -292,7 +292,7 @@ const SdsV2Page = () => {
         onOk={handleGeneratePdf}
         okText="Generate PDF"
         okButtonProps={{ loading: pdfLoading, icon: <FilePdfOutlined /> }}
-        destroyOnClose
+        destroyOnHidden
       >
         <Select
           showSearch
