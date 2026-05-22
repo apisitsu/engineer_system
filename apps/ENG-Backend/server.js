@@ -247,17 +247,9 @@ app.post('/api/upload', (req, res) => {
 const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
 app.use('/api/engineer/mtc', mtcRoutes);
 
-const toolingSelectController = require('./api/engineer/mtc/controllers/toolingSelectController');
-app.use('/api/tooling-select', verifyToken, toolingSelectController);
+const toolingSelectRoutes = require('./api/engineer/mtc/tsv2Routes');
+app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 
-const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
-const toolingFormulaController = require('./api/engineer/mtc/controllers/toolingFormulaController');
-app.post('/api/mtc/tooling-formula/test', verifyToken, toolingFormulaController.test);
-app.get('/api/mtc/tooling-formula/machines', verifyToken, toolingFormulaController.getMachines);
-app.get('/api/mtc/tooling-formula/:machineName', verifyToken, toolingFormulaController.getFormulas);
-app.post('/api/mtc/tooling-formula', verifyToken, mtcIsAdmin, toolingFormulaController.create);
-app.put('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.update);
-app.delete('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.remove);
 
 const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
 app.use('/api/sds/v2', sdsV2Controller);
