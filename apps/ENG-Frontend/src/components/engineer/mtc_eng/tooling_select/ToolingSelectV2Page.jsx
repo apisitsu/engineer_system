@@ -221,32 +221,43 @@ export default function ToolingSelectV2Page() {
   const isIncomplete  = toolingErrors.length > 0;
   const machineGroups = hasResults ? groupByMachine(result.results) : [];
 
-  const collapseItems = machineGroups.map(group => ({
-    key: group.machine,
-    label: (
-      <Space>
-        <Text strong>{group.machine}</Text>
-        {group.machineLabel && group.machineLabel !== group.machine && (
-          <Tag color="default">{group.machineLabel}</Tag>
-        )}
-        <Tag color="geekblue">{group.toolings.length} tooling{group.toolings.length !== 1 ? 's' : ''}</Tag>
-      </Space>
-    ),
-    children: (
-      <div>
-        {group.toolings.map(t => (
-          <ToolingMatchCard
-            key={t.tooling}
-            tooling={t.tooling}
-            matches={t.matches}
-            computed={t.computed}
-            columnMap={t.columnMap}
-            primaryColor={primaryColor}
-          />
-        ))}
-      </div>
-    ),
-  }));
+  // Per-machine found/total counts for collapse labels
+  const machineToolingCounts = {};
+  for (const g of machineGroups) {
+    const found = g.toolings.filter(t => t.matches?.length > 0).length;
+    const errCount = toolingErrors.filter(w => w.machine === g.machine).length;
+    machineToolingCounts[g.machine] = { found, total: g.toolings.length + errCount };
+  }
+
+  const collapseItems = machineGroups.map(group => {
+    const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
+    return {
+      key: group.machine,
+      label: (
+        <Space>
+          <Text strong>{group.machine}</Text>
+          {group.machineLabel && group.machineLabel !== group.machine && (
+            <Tag color="default">{group.machineLabel}</Tag>
+          )}
+          <Tag color={found < total ? 'orange' : 'geekblue'}>{found} / {total} Tooling</Tag>
+        </Space>
+      ),
+      children: (
+        <div>
+          {group.toolings.map(t => (
+            <ToolingMatchCard
+              key={t.tooling}
+              tooling={t.tooling}
+              matches={t.matches}
+              computed={t.computed}
+              columnMap={t.columnMap}
+              primaryColor={primaryColor}
+            />
+          ))}
+        </div>
+      ),
+    };
+  });
 
   return (
     <Layout style={{ height: '100%' }}>
@@ -333,12 +344,12 @@ export default function ToolingSelectV2Page() {
                     <Alert
                       type="warning"
                       style={{ marginBottom: 16 }}
-                      message="Some machines skipped — spec out of eligible range"
+                      //message="Some machines skipped — spec out of eligible range"
                       description={
                         <ul style={{ margin: 0, paddingLeft: 16 }}>
                           {machineSkips.map((w, i) => (
                             <li key={i}>
-                              {w.machine}: {w.reason}
+                              {w.machine}: {w.reason} --- Spec out of limit on this Machine !!!
                             </li>
                           ))}
                         </ul>
@@ -353,7 +364,7 @@ export default function ToolingSelectV2Page() {
 
                   {hasResults && (
                     <Collapse
-                      defaultActiveKey={machineGroups.slice(0, 3).map(g => g.machine)}
+                      defaultActiveKey={[]}
                       items={collapseItems}
                       style={{ marginBottom: 16 }}
                     />

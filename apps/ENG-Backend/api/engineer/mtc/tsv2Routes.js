@@ -10,6 +10,7 @@ const formulaCtrl     = require('./controllers/formulaController');
 const searchRuleCtrl  = require('./controllers/searchRuleController');
 const searchCtrl      = require('./controllers/searchController');
 const specCtrl        = require('./controllers/specController');
+const inventoryCtrl   = require('./controllers/inventoryController');
 
 // ── Search ─────────────────────────────────────────────────────────────────
 router.post('/search', searchCtrl.search);
@@ -45,6 +46,12 @@ router.get('/machines/:machineId/search-rules',              searchRuleCtrl.list
 router.post('/machines/:machineId/search-rules', isAdmin,    searchRuleCtrl.create);
 router.put('/search-rules/:id',     isAdmin,                 searchRuleCtrl.update);
 router.delete('/search-rules/:id',  isAdmin,                 searchRuleCtrl.remove);
+
+// ── Inventory (Tool List) ────────────────────────────────────────────────────
+router.get('/inventory/:table',         inventoryCtrl.list);
+router.post('/inventory/:table',        isAdmin, inventoryCtrl.create);
+router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);
+router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
 
 // ── Spec (Part Management) ──────────────────────────────────────────────────
 router.use('/spec', specCtrl);

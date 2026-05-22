@@ -55,6 +55,7 @@ export const server = {
   // Tooling Select
   TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
+  TSV2_INVENTORY:       `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
   TSV2_COLUMNS:       `${apiUrl}api/tooling-select/columns`,
   TSV2_LIMITS:        `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
   TSV2_FORMULAS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas

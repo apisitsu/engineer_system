@@ -12,6 +12,7 @@ import V2MachineManager from './V2MachineManager';
 import V2LimitManager from './V2LimitManager';
 import V2FormulaManager from './V2FormulaManager';
 import V2SearchRuleManager from './V2SearchRuleManager';
+import V2InventoryManager from './V2InventoryManager';
 import SpecProcessManager from './SpecProcessManager';
 
 const { Content } = Layout;
@@ -56,6 +57,11 @@ export default function V2AdminPage() {
             key: 'rules',
             label: 'Search Rules',
             children: <V2SearchRuleManager machine={selectedMachine} token={token} />,
+          },
+          {
+            key: 'inventory',
+            label: 'Tool List',
+            children: <V2InventoryManager machine={selectedMachine} token={token} />,
           },
         ]}
       />
