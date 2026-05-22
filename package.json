@@ -5,7 +5,7 @@
   "workspaces": [
     "apps/*"
   ],
-    "scripts": {
+  "scripts": {
     "build": "npm run build --workspaces --if-present",
     "dev:backend": "npm run dev --workspace=apps/ENG-Backend",
     "dev:frontend": "npm run dev --workspace=apps/ENG-Frontend",
@@ -22,6 +22,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
     "cypress": "^15.13.0",
+    "fabric": "^6.9.1",
     "html2canvas": "^1.4.1",
     "react-icons": "^5.5.0",
     "three": "^0.184.0",

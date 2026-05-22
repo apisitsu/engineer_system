@@ -21,7 +21,7 @@ axios.interceptors.request.use(async (config) => {
 
   // console.log(config);
 
-  config.timeout = 10000; // 10 Second
+  config.timeout = config.timeout || 10000; // 10 Second default (allow per-request override)
   return config;
 });
 

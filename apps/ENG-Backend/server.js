@@ -122,9 +122,17 @@ app.use('/api', (req, res, next) => {
 const pdfConverter = require('./api/engineer/system/pdfConverter');
 app.use('/api/engineer/system', pdfConverter);
 
+//--------------------PDF Hub (Sign & Stamp)---------------------//
+const pdfHubController = require('./api/engineer/system/pdfHubController');
+app.use('/api/engineer/pdf-hub', pdfHubController);
+
 // Global File Upload Middleware (for routes not using multer)
 app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
 
+//--------------------Engineer Record (Rod End Request)---------------------//
+// Must be AFTER fileupload middleware so req.files is available for sync uploads
+const engRecordRoutes = require('./api/engineer/eng_record/engRecordRoutes');
+app.use('/api/engineer/eng-record', engRecordRoutes);
 
 
 //--------------------User----------------------//
