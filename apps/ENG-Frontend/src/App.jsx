@@ -66,6 +66,7 @@ import RPNLookupCalc from './components/engineer/newprod_eng/calculators/RPNLook
 import GeometricRadiusCalc from './components/engineer/newprod_eng/calculators/GeometricRadiusCalc';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
+import CadJobDashboard from './components/engineer/newprod_eng/3d_pdf/CadJobDashboard';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
@@ -354,6 +355,8 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
+                <Route path="/eng/3d_pdf" element={<CadJobDashboard />} />
+                <Route path="/drawing/:jobId" element={<CadJobDashboard />} />
                 <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
 
                 {/* ------ PDF Management Hub ------ */}
