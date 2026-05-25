@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Table,
-  InputNumber, Row, Col, Tag, Popconfirm, Card, Layout, Select,
-  Alert, Spin,
+  InputNumber, Row, Col, Popconfirm, Card, Layout, Select,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined,
   SearchOutlined, ReloadOutlined, ArrowLeftOutlined, DownOutlined, UpOutlined,
-  SyncOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -57,7 +56,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
 
   useEffect(() => {
     if (tableVisible) fetchSpecs(pagination.current, pagination.pageSize, searchText);
-  }, [fetchSpecs, tableVisible, pagination.current, pagination.pageSize]);
+  }, [fetchSpecs, tableVisible, pagination, searchText]);
 
   const handleTableChange = (pag) => {
     setPagination(pag);
@@ -129,23 +128,44 @@ export const SpecProcessManager = ({ embedded = false }) => {
   };
 
   const columns = [
-    { title: 'C/N', dataIndex: 'cn', key: 'cn', width: 120, fixed: 'left', render: v => <Text strong>{v}</Text> },
-    { title: 'Type', dataIndex: 'type', key: 'type', width: 100 },
-    { title: 'Process', dataIndex: 'process', key: 'process', width: 100, render: v => (v || '').replace('→', '->').replace('???', '->') },
+    { 
+      title: 'C/N', 
+      dataIndex: 'cn', 
+      key: 'cn', 
+      width: 120, 
+      fixed: 'left', 
+      render: v => <Text strong>{v}</Text>,
+      sorter: (a, b) => (a.cn || '').localeCompare(b.cn || ''),
+    },
+    { 
+      title: 'Type', 
+      dataIndex: 'type', 
+      key: 'type', 
+      width: 100,
+      sorter: (a, b) => (a.type || '').localeCompare(b.type || ''),
+    },
+    { 
+      title: 'Process', 
+      dataIndex: 'process', 
+      key: 'process', 
+      width: 100, 
+      render: v => (v || '').replace('→', '->').replace('???', '->'),
+      sorter: (a, b) => (a.process || '').localeCompare(b.process || ''),
+    },
     {
       title: 'Dimensions (Bf)',
       children: [
-        { title: 'OD', dataIndex: 'od_bf', key: 'od_bf', width: 70 },
-        { title: 'ID', dataIndex: 'id_bf', key: 'id_bf', width: 70 },
-        { title: 'W', dataIndex: 'w_bf', key: 'w_bf', width: 70 },
+        { title: 'OD', dataIndex: 'od_bf', key: 'od_bf', width: 70, sorter: (a, b) => (a.od_bf || 0) - (b.od_bf || 0) },
+        { title: 'ID', dataIndex: 'id_bf', key: 'id_bf', width: 70, sorter: (a, b) => (a.id_bf || 0) - (b.id_bf || 0) },
+        { title: 'W', dataIndex: 'w_bf', key: 'w_bf', width: 70, sorter: (a, b) => (a.w_bf || 0) - (b.w_bf || 0) },
       ]
     },
     {
       title: 'Dimensions (Aft)',
       children: [
-        { title: 'OD', dataIndex: 'od_aft', key: 'od_aft', width: 70 },
-        { title: 'ID', dataIndex: 'id_aft', key: 'id_aft', width: 70 },
-        { title: 'W', dataIndex: 'w_aft', key: 'w_aft', width: 70 },
+        { title: 'OD', dataIndex: 'od_aft', key: 'od_aft', width: 70, sorter: (a, b) => (a.od_aft || 0) - (b.od_aft || 0) },
+        { title: 'ID', dataIndex: 'id_aft', key: 'id_aft', width: 70, sorter: (a, b) => (a.id_aft || 0) - (b.id_aft || 0) },
+        { title: 'W', dataIndex: 'w_aft', key: 'w_aft', width: 70, sorter: (a, b) => (a.w_aft || 0) - (b.w_aft || 0) },
       ]
     },
     {
@@ -408,4 +428,3 @@ export const SpecProcessManager = ({ embedded = false }) => {
 };
 
 export default SpecProcessManager;
-

@@ -182,6 +182,13 @@ const SdsV2Page = () => {
       if (p && !sdsPrefixToNo[p]) sdsPrefixToNo[p] = no;
     });
 
+    // machines configured for this process in sds_machine_tool — always relevant for T-Select
+    // (needed here so machines whose tools are fully absent from the SDS plan are not filtered out)
+    const configForProcess = machineToolsConfig.filter(
+      c => String(c.process_code) === String(processRow.process_code)
+    );
+    const configMachineNames = new Set(configForProcess.map(c => c.machine_type?.trim()).filter(Boolean));
+
     const matchMap = {};
     const extraRows = [];
 
@@ -189,6 +196,7 @@ const SdsV2Page = () => {
       for (const result of tsData.results) {
         if (!result.matches?.length) continue;
         const isRelevant = processMachineNames.has(result.machine) ||
+          configMachineNames.has(result.machine) ||
           result.matches.some(m => {
             const no = getMatchNo(m);
             return no && processToolPrefixes.has(no.substring(1, 4));
@@ -229,6 +237,99 @@ const SdsV2Page = () => {
       ...extraRows,
     ];
 
+    // Build machine sets for validation
+    const eligibleMachines = tsData?.results ? new Set(tsData.results.map(r => r.machine)) : null;
+
+    // Unique Grouping Logic: Ensure one tool belongs to only one machine
+    const groupedData = {};
+    const unmapped = [];
+
+    // Build Tool -> Machine candidates mapping
+    // A tool might belong to multiple machines in config or by prefix (collisions like 559 vs 4559)
+    const toolCandidatesMap = {};
+    
+    // Collect from config
+    configForProcess.forEach(c => {
+      const prefix = dwgPrefix(c.tool_drawing_no);
+      if (!prefix) return;
+      if (!toolCandidatesMap[prefix]) toolCandidatesMap[prefix] = new Set();
+      toolCandidatesMap[prefix].add(c.machine_type);
+    });
+
+    // Assign each row from dataSource to exactly one group
+    dataSource.forEach(row => {
+      let assignedMachine = null;
+      
+      if (row._isExtra) {
+        assignedMachine = row.tool_name.split(' · ')[0];
+      } else {
+        const prefix = dwgPrefix(row.tool_dwg_no);
+        const toolCode = row.tool_dwg_no?.substring(1, 4);
+        
+        // Find all possible machine names for this tool
+        const candidates = new Set(toolCandidatesMap[prefix] || []);
+        allMachineTypes.forEach(m => {
+          if (m.machine_type_code === toolCode) candidates.add(m.machine_type_name);
+        });
+
+        // Smart Selection Logic:
+        const candidateList = [...candidates];
+        if (candidateList.length === 1) {
+          assignedMachine = candidateList[0];
+        } else if (candidateList.length > 1) {
+          // Priority 1: Pick machine that is ELIGIBLE in Tooling Select V2
+          const eligibleOnes = candidateList.filter(m => eligibleMachines?.has(m));
+          
+          if (eligibleOnes.length > 0) {
+            // Priority 2: Tie-break with Production Model if exists
+            const prodModel = data?.production?.model;
+            assignedMachine = eligibleOnes.find(m => m === prodModel) || eligibleOnes[0];
+          } else {
+            // Fallback: Just pick first one if none are eligible
+            assignedMachine = candidateList[0];
+          }
+        }
+      }
+
+      if (assignedMachine) {
+        if (!groupedData[assignedMachine]) groupedData[assignedMachine] = [];
+        groupedData[assignedMachine].push(row);
+      } else {
+        unmapped.push(row);
+      }
+    });
+
+    // 3. Calculate Machine Status based on UNIQUE assignments
+    const machineStatus = {};
+
+    // We consider machines that are either Eligible OR have tools assigned
+    const allRelevantMachines = new Set([
+      ...configMachineNames,
+      ...Object.keys(groupedData)
+    ]);
+
+    allRelevantMachines.forEach(machineName => {
+      const isEligible = !eligibleMachines || eligibleMachines.has(machineName);
+      const toolsInThisGroup = groupedData[machineName] || [];
+      const hasTools = toolsInThisGroup.length > 0;
+
+      if (isEligible || hasTools) {
+        // Count only tools that were actually assigned to THIS machine group
+        // To find "Total", we check how many tools are CONFIGURED for this machine
+        const configuredForThisMachine = configForProcess.filter(c => c.machine_type === machineName);
+        const total = configuredForThisMachine.length;
+        
+        // "Found" is the count of SDS tools (not extras) assigned to this machine that match the config
+        const found = toolsInThisGroup.filter(t => !t._isExtra).length;
+        
+        machineStatus[machineName] = { 
+          total, 
+          found, 
+          missing: Math.max(0, total - found) 
+        };
+      }
+    });
+
     const columns = [
       { title: 'Rev', dataIndex: 'rev', width: 60 },
       { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 150 },
@@ -267,55 +368,58 @@ const SdsV2Page = () => {
       ] : []),
     ];
 
-    // Validate Tool DWG Nos against Machine Tool Config
-    const configForProcess = machineToolsConfig.filter(
-      c => String(c.process_code) === String(processRow.process_code)
-    );
-
-    const sdsPrefixSet = new Set([...sdsNosSet].map(dwgPrefix).filter(Boolean));
-
-    // Compare SDS process plan tools against sds_machine_tool config (per machine type)
-    // machineStatus: { [machine]: missingCount }  — 0 = complete, >0 = missing
-    const machineStatus = {};
-    if (configForProcess.length > 0) {
-      const grouped = {};
-      configForProcess.forEach(c => {
-        const machine = c.machine_type?.trim();
-        const dwgNo = c.tool_drawing_no?.trim();
-        if (!machine || !dwgNo) return;
-        if (!grouped[machine]) grouped[machine] = [];
-        grouped[machine].push(dwgNo);
-      });
-      Object.entries(grouped).forEach(([machineType, configuredNos]) => {
-        machineStatus[machineType] = configuredNos.filter(no => !sdsPrefixSet.has(dwgPrefix(no))).length;
-      });
-    }
-
     return (
-      <>
+      <div style={{ padding: '8px', background: '#f9f9f9', borderRadius: '4px' }}>
         {Object.keys(machineStatus).length > 0 && (
-          <div style={{ marginBottom: 8 }}>
-            {Object.entries(machineStatus).map(([machine, missing]) => missing > 0
-              ? (
-                <Tag key={machine} icon={<WarningOutlined />} color="warning" style={{ marginBottom: 4 }}>
-                  {machine}: ขาด {missing} รายการ
-                </Tag>
-              ) : (
-                <Tag key={machine} color="success" style={{ marginBottom: 4 }}>
-                  {machine}: ครบ
-                </Tag>
-              )
-            )}
+          <div style={{ marginBottom: 12 }}>
+            {Object.entries(machineStatus).map(([machine, stat]) => (
+              <Tag 
+                key={machine} 
+                icon={stat.missing > 0 ? <WarningOutlined /> : null} 
+                color={stat.missing > 0 ? 'warning' : 'success'} 
+                style={{ marginBottom: 4 }}
+              >
+                {machine}: {stat.found} / {stat.total} Items
+              </Tag>
+            ))}
           </div>
         )}
-        <Table
-          dataSource={dataSource}
-          columns={columns}
-          pagination={false}
-          size="small"
-          scroll={{ x: 'max-content' }}
-        />
-      </>
+
+        {/* Grouped Tables (Sync with machineStatus) */}
+        {Object.keys(machineStatus).sort().map(machineName => {
+          const rows = groupedData[machineName] || [];
+          return (
+            <div key={machineName} style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 8, paddingLeft: 8, borderLeft: `4px solid ${theme.colors.primary}` }}>
+                <Text strong>{machineName}</Text>
+                {rows.length === 0 && <Text type="secondary" style={{ marginLeft: 8, fontSize: '12px' }}>(No tools in current plan)</Text>}
+              </div>
+              <Table
+                dataSource={rows}
+                columns={columns}
+                pagination={false}
+                size="small"
+                scroll={{ x: 'max-content' }}
+              />
+            </div>
+          );
+        })}
+
+        {unmapped.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 8, paddingLeft: 8, borderLeft: '4px solid #d9d9d9' }}>
+              <Text strong type="secondary">General / Unmapped Tools</Text>
+            </div>
+            <Table
+              dataSource={unmapped}
+              columns={columns}
+              pagination={false}
+              size="small"
+              scroll={{ x: 'max-content' }}
+            />
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -415,7 +519,14 @@ const SdsV2Page = () => {
                   </Card>
 
                   <Card
-                    title={<Text strong style={{ color: theme.colors.text }}>Process Info</Text>}
+                    title={
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong style={{ color: theme.colors.text }}>Process Info</Text>
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          {data.process_info?.length || 0} / {data.process_info?.length || 0} Items
+                        </Text>
+                      </div>
+                    }
                     style={{ marginBottom: 16, background: theme.colors.cardBackground }}
                   >
                     <Table

@@ -23,7 +23,6 @@ export default function V2InventoryManager({ machine, token }) {
   const [searchText,    setSearchText]    = useState('');     // free-text search
   const [form] = Form.useForm();
 
-  const headers     = { Authorization: `Bearer ${token}` };
   const table       = machine.inventory_table;
   const machineFilter = machine.inventory_machine_filter;
 
@@ -31,6 +30,7 @@ export default function V2InventoryManager({ machine, token }) {
   const loadCols = useCallback(async () => {
     if (!table) return;
     try {
+      const headers = { Authorization: `Bearer ${token}` };
       const r = await axios.get(`${server.TSV2_COLUMNS}/${table}`, { headers });
       const colDefs = (r.data.columns || []).map(name => ({
         name,
@@ -47,6 +47,7 @@ export default function V2InventoryManager({ machine, token }) {
     if (!table) return;
     setLoading(true);
     try {
+      const headers = { Authorization: `Bearer ${token}` };
       const params = machineFilter ? { machine: machineFilter } : {};
       const r = await axios.get(`${server.TSV2_INVENTORY}/${table}`, { headers, params });
       setRows(r.data.rows || []);
@@ -85,10 +86,6 @@ export default function V2InventoryManager({ machine, token }) {
     return data;
   }, [rows, toolingFilter, searchText]);
 
-  if (!table) {
-    return <Empty description="No inventory table configured for this machine" />;
-  }
-
   // ── Modal helpers ───────────────────────────────────────────────────────────
   const openCreate = () => {
     form.resetFields();
@@ -100,14 +97,15 @@ export default function V2InventoryManager({ machine, token }) {
     setModal({ open: true, record: null });
   };
 
-  const openEdit = (record) => {
+  const openEdit = useCallback((record) => {
     form.setFieldsValue(record);
     setModal({ open: true, record });
-  };
+  }, [form]);
 
   const save = async () => {
     const values = await form.validateFields();
     try {
+      const headers = { Authorization: `Bearer ${token}` };
       if (modal.record) {
         await axios.put(`${server.TSV2_INVENTORY}/${table}/${modal.record.id}`, values, { headers });
         message.success('Updated');
@@ -122,48 +120,68 @@ export default function V2InventoryManager({ machine, token }) {
     }
   };
 
-  const remove = async (id) => {
+  const remove = useCallback(async (id) => {
     try {
+      const headers = { Authorization: `Bearer ${token}` };
       await axios.delete(`${server.TSV2_INVENTORY}/${table}/${id}`, { headers });
       message.success('Deleted');
       load();
     } catch (err) {
       message.error(err.response?.data?.error || 'Delete failed');
     }
-  };
+  }, [token, table, load]);
 
   // ── Table columns ───────────────────────────────────────────────────────────
-  const visibleCols = cols.filter(c => !HIDE_COLS.has(c.name));
-  const orderedCols = [
-    ...PIN_FIRST.map(p => visibleCols.find(c => c.name === p)).filter(Boolean),
-    ...visibleCols.filter(c => !PIN_FIRST.includes(c.name)),
-  ];
+  const tableCols = useMemo(() => {
+    const visibleCols = cols.filter(c => !HIDE_COLS.has(c.name));
+    const orderedCols = [
+      ...PIN_FIRST.map(p => visibleCols.find(c => c.name === p)).filter(Boolean),
+      ...visibleCols.filter(c => !PIN_FIRST.includes(c.name)),
+    ];
 
-  const tableCols = [
-    ...orderedCols.map(c => ({
+    // Only show columns that have at least one non-blank value in the CURRENT filtered data
+    const colsWithData = orderedCols.filter(c => 
+      filtered.some(r => r[c.name] !== null && r[c.name] !== undefined && String(r[c.name]).trim() !== '')
+    );
+
+    const baseCols = colsWithData.map(c => ({
       title:     fmtLabel(c.name),
       dataIndex: c.name,
       key:       c.name,
       width:     c.name === 'tooling_no' ? 160 : c.name.startsWith('dim_') ? 90 : 140,
+      sorter:    (a, b) => {
+        const valA = a[c.name];
+        const valB = b[c.name];
+        if (c.name.startsWith('dim_')) return (Number(valA) || 0) - (Number(valB) || 0);
+        return String(valA || '').localeCompare(String(valB || ''));
+      },
       render:    v => (v !== null && v !== undefined && v !== '')
         ? String(v)
         : <Text type="secondary">—</Text>,
-    })),
-    {
-      title: 'Actions',
-      key:   'actions',
-      width: 100,
-      fixed: 'right',
-      render: (_, r) => (
-        <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-          <Popconfirm title="Delete this row?" onConfirm={() => remove(r.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
+    }));
+
+    return [
+      ...baseCols,
+      {
+        title: 'Actions',
+        key:   'actions',
+        width: 100,
+        fixed: 'right',
+        render: (_, r) => (
+          <Space>
+            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+            <Popconfirm title="Delete this row?" onConfirm={() => remove(r.id)}>
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Space>
+        ),
+      }
+    ];
+  }, [cols, filtered, openEdit, remove]);
+
+  if (!table) {
+    return <Empty description="No inventory table configured for this machine" />;
+  }
 
   const formCols = cols.filter(c => c.name !== 'id');
 

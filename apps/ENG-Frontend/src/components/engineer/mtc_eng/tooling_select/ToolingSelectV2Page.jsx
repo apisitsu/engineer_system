@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   Input, Button, Card, Table, Tag, Typography, Space,
-  Collapse, Empty, Spin, Alert, Row, Col, Badge, Layout
+  Collapse, Empty, Spin, Alert, Row, Col, Badge, Layout, Tooltip
 } from 'antd';
 import {
-  SearchOutlined, SettingOutlined, SwapOutlined,
-  ToolOutlined, DatabaseOutlined,
+  SearchOutlined, SwapOutlined,
+  ToolOutlined, DatabaseOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -35,8 +35,49 @@ function RankBadge({ rank }) {
   return <span>{rank}</span>;
 }
 
+function NewDesignCard({ tooling, computed }) {
+  const dims = Object.entries(computed || {})
+    .filter(([k]) => /^[A-Z]$/.test(k) && computed[k] !== 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  return (
+    <Card
+      size="small"
+      title={
+        <Space>
+          <WarningOutlined style={{ color: '#ff4d4f' }} />
+          <span style={{ color: '#ff4d4f', fontWeight: 700 }}>{tooling}</span>
+          <Tag color="error">NEW DESIGN REQUIRED</Tag>
+        </Space>
+      }
+      style={{
+        marginBottom: 12, borderRadius: 8,
+        border: '1.5px solid #ff4d4f',
+        background: '#fff2f0',
+      }}
+    >
+      <Space wrap>
+        <Tag color="default" style={{ fontWeight: 600 }}>Required dimensions:</Tag>
+        {dims.length > 0
+          ? dims.map(([k, v]) => (
+            <Tooltip key={k} title={`Dim ${k} = ${Number(v).toFixed(3)}`}>
+              <Tag color="red" style={{ fontFamily: 'monospace' }}>
+                {k} = {Number(v).toFixed(2)}
+              </Tag>
+            </Tooltip>
+          ))
+          : <Tag>—</Tag>
+        }
+      </Space>
+      <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>
+        ไม่พบ tooling ที่เหมาะสมในสต๊อก — กรุณา New Design ตามขนาดที่คำนวณได้
+      </div>
+    </Card>
+  );
+}
+
 function ToolingMatchCard({ tooling, matches, computed, columnMap, primaryColor }) {
-  if (!matches?.length) return null;
+  if (!matches?.length) return <NewDesignCard tooling={tooling} computed={computed} />;
 
   const allKeys = new Set();
   matches.forEach(m => Object.keys(m).forEach(k => allKeys.add(k)));
@@ -192,7 +233,6 @@ export default function ToolingSelectV2Page() {
   const [error, setError]     = useState(null);
 
   const colors  = theme?.colors  || {};
-  const shadows = theme?.shadows || {};
   const primaryColor = colors.primary || '#1677ff';
 
   const headers = { Authorization: `Bearer ${token}` };
