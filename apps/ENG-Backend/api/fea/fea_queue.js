@@ -8,8 +8,8 @@ const getRedisConnection = () => {
     port: process.env.REDIS_PORT || 6379,
     maxRetriesPerRequest: null,
     retryStrategy: function (times) {
-      // Retry exponentially up to every 10 seconds to allow auto-reconnect
-      return Math.min(times * 1000, 10000);
+      // Disable infinite retries to prevent console spam when Redis is offline
+      return null;
     }
   });
 

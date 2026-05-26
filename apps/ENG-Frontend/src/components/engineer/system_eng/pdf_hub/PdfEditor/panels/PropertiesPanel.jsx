@@ -14,6 +14,17 @@ import { PDFDocument } from 'pdf-lib';
 
 const { Text, Title } = Typography;
 
+const COLOR_PRESETS = [
+    {
+        label: 'Recommended',
+        colors: [
+            '#000000', '#F5222D', '#FA8C16', '#FADB14', 
+            '#8CE600', '#52C41A', '#13A8A8', '#1677FF', 
+            '#2F54EB', '#722ED1', '#EB2F96', '#FFFFFF'
+        ],
+    }
+];
+
 /**
  * PropertiesPanel — Context-sensitive right sidebar.
  *
@@ -228,8 +239,9 @@ const PropertiesPanel = ({
                         <SectionTitle>Stroke Color</SectionTitle>
                         <ColorPicker
                             value={store.strokeColor}
-                            onChange={(_, hex) => store.setStrokeColor(hex)}
+                            onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
                             size="small"
+                            presets={COLOR_PRESETS}
                         />
                     </div>
 
@@ -264,8 +276,9 @@ const PropertiesPanel = ({
                         <PropRow label="Color">
                             <ColorPicker
                                 value={store.strokeColor}
-                                onChange={(_, hex) => store.setStrokeColor(hex)}
+                                onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
                                 size="small"
+                                presets={COLOR_PRESETS}
                             />
                         </PropRow>
                         <PropRow label="Width">
@@ -282,9 +295,10 @@ const PropertiesPanel = ({
                         <PropRow label="Color">
                             <ColorPicker
                                 value={store.fillColor === 'transparent' ? '#ffffff00' : store.fillColor}
-                                onChange={(_, hex) => store.setFillColor(hex)}
+                                onChangeComplete={(color) => store.setFillColor(color.toHexString())}
                                 size="small"
                                 allowClear
+                                presets={COLOR_PRESETS}
                             />
                         </PropRow>
                     </div>
@@ -369,8 +383,9 @@ const PropertiesPanel = ({
                         <PropRow label="Color">
                             <ColorPicker
                                 value={store.strokeColor}
-                                onChange={(_, hex) => store.setStrokeColor(hex)}
+                                onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
                                 size="small"
+                                presets={COLOR_PRESETS}
                             />
                         </PropRow>
                     </div>
