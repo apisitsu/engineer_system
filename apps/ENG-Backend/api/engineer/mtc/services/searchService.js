@@ -133,7 +133,9 @@ async function getTableColumns(table) {
  * Returns top 2 rows.
  */
 async function searchInventory(machine, rules, computedDims) {
-  const { inventory_table: table, inventory_machine_filter: machineFilter } = machine;
+  const tableOverride = rules[0]?.inventory_table_override || null;
+  const { inventory_table: baseTable, inventory_machine_filter: machineFilter } = machine;
+  const table = tableOverride || baseTable;
   if (!table) return [];
 
   await assertTableExists(table);
@@ -150,10 +152,11 @@ async function searchInventory(machine, rules, computedDims) {
   }
 
   // Optional inventory tooling_name filter (from search rule inventory_tooling_filter)
+  // Exact case-insensitive match — prevents e.g. 'LOADER' from matching 'NYLON LOADER'
   const inventoryToolingFilter = rules.find(r => r.inventory_tooling_filter)?.inventory_tooling_filter;
   if (inventoryToolingFilter && validCols.has('tooling_name')) {
     conditions.push(`"tooling_name" ILIKE $${pi++}`);
-    params.push(`%${inventoryToolingFilter}%`);
+    params.push(inventoryToolingFilter);
   }
 
   const withTol    = rules.filter(r => r.tol_plus !== null || r.tol_minus !== null);
@@ -237,14 +240,27 @@ async function search(cn) {
     `SELECT * FROM ${TSV2_TABLES.MACHINE} WHERE enabled = true ORDER BY machine_name ASC`
   );
 
+  // Deduplicate grouped machines: for machines sharing the same machine_group,
+  // run search once using the first representative and label results with the group name.
+  const seenGroups = new Set();
+  const searchMachines = machinesRes.rows.reduce((acc, m) => {
+    if (!m.machine_group) { acc.push(m); return acc; }
+    if (!seenGroups.has(m.machine_group)) {
+      seenGroups.add(m.machine_group);
+      acc.push({ ...m, _displayName: m.machine_group });
+    }
+    return acc;
+  }, []);
+
   const results = [];
   const warnings = [];
 
-  await Promise.all(machinesRes.rows.map(async (machine) => {
+  await Promise.all(searchMachines.map(async (machine) => {
+    const displayName = machine._displayName || machine.machine_name;
     try {
       const limitCheck = await checkMachineLimits(machine.id, specCtx);
       if (!limitCheck.ok) {
-        warnings.push({ machine: machine.machine_name, reason: limitCheck.reason });
+        warnings.push({ machine: displayName, reason: limitCheck.reason });
         return;
       }
 
@@ -274,19 +290,19 @@ async function search(cn) {
           for (const r of rulesRes.rows) columnMap[r.output_key] = r.inventory_column;
 
           results.push({
-            machine:      machine.machine_name,
-            machineLabel: machine.label,
+            machine:      displayName,
+            machineLabel: machine._displayName ? null : machine.label,
             tooling:      tooling_name,
             computed:     computedDims,
             columnMap,
             matches,
           });
         } catch (err) {
-          warnings.push({ machine: machine.machine_name, tooling: tooling_name, reason: err.message });
+          warnings.push({ machine: displayName, tooling: tooling_name, reason: err.message });
         }
       }));
     } catch (err) {
-      warnings.push({ machine: machine.machine_name, reason: err.message });
+      warnings.push({ machine: displayName, reason: err.message });
     }
   }));
 

@@ -15,6 +15,7 @@ export default function V2SearchRuleManager({ machine, token }) {
   const [rules, setRules] = useState([]);
   const [toolings, setToolings] = useState([]);
   const [columns, setColumns] = useState([]);
+  const [invTables, setInvTables] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState({ open: false, record: null });
   const [toolingFilter, setToolingFilter] = useState('');
@@ -26,12 +27,14 @@ export default function V2SearchRuleManager({ machine, token }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rRes, tRes] = await Promise.all([
+      const [rRes, tRes, iRes] = await Promise.all([
         axios.get(baseUrl, { headers }),
         axios.get(`${server.TSV2_TOOLINGS}/${machine.id}/toolings`, { headers }),
+        axios.get(server.TSV2_INVENTORY_TABLES, { headers }),
       ]);
       setRules(rRes.data.rules || []);
       setToolings(tRes.data.toolings || []);
+      setInvTables(iRes.data.tables || []);
     } catch {
       message.error('Failed to load data');
     } finally {
@@ -62,7 +65,8 @@ export default function V2SearchRuleManager({ machine, token }) {
       ...record,
       tol_plus:  record.tol_plus  !== null ? record.tol_plus  : undefined,
       tol_minus: record.tol_minus !== null ? record.tol_minus : undefined,
-      inventory_tooling_filter: record.inventory_tooling_filter || undefined,
+      inventory_tooling_filter:  record.inventory_tooling_filter  || undefined,
+      inventory_table_override:  record.inventory_table_override  || undefined,
     });
     setModal({ open: true, record });
   };
@@ -71,6 +75,7 @@ export default function V2SearchRuleManager({ machine, token }) {
     const values = await form.validateFields();
     values.tol_plus  = values.tol_plus  !== '' && values.tol_plus  !== undefined ? values.tol_plus  : null;
     values.tol_minus = values.tol_minus !== '' && values.tol_minus !== undefined ? values.tol_minus : null;
+    values.inventory_table_override = values.inventory_table_override || null;
     try {
       if (modal.record) {
         await axios.put(`${server.TSV2_RULE_ITEM}/${modal.record.id}`, values, { headers });
@@ -113,6 +118,8 @@ export default function V2SearchRuleManager({ machine, token }) {
     { title: 'Inventory Column', dataIndex: 'inventory_column', key: 'inventory_column', width: 160 },
     { title: 'Inventory Filter', dataIndex: 'inventory_tooling_filter', key: 'inventory_tooling_filter', width: 160,
       render: v => v ? <Tag color="cyan">{v}</Tag> : <span style={{ color: '#bbb' }}>—</span> },
+    { title: 'Table Override', dataIndex: 'inventory_table_override', key: 'inventory_table_override', width: 160,
+      render: v => v ? <Tag color="volcano">{v}</Tag> : <span style={{ color: '#bbb' }}>—</span> },
     { title: 'Tolerance / Strategy', key: 'tol', width: 160, render: (_, r) => tolLabel(r) },
     { title: 'Priority', dataIndex: 'sort_priority', key: 'sort_priority', width: 70 },
     { title: 'Label', dataIndex: 'label', key: 'label' },
@@ -183,6 +190,15 @@ export default function V2SearchRuleManager({ machine, token }) {
             extra="Specify a tooling_name value to restrict the search to that tooling only — e.g. CARRIER, CHUTE COVER"
           >
             <Input placeholder="e.g. CARRIER or CHUTE COVER (leave empty to skip filter)" allowClear />
+          </Form.Item>
+          <Form.Item
+            name="inventory_table_override"
+            label="Inventory Table Override (optional — overrides machine's default inventory table for this tooling)"
+            extra="Use when this tooling type is stored in a different table, e.g. PILOT PIN in tooling_ks400b6"
+          >
+            <Select allowClear showSearch placeholder="Leave empty to use machine's default table">
+              {invTables.map(t => <Select.Option key={t} value={t}>{t}</Select.Option>)}
+            </Select>
           </Form.Item>
           <div style={{ background: '#f6f8fa', padding: 12, borderRadius: 6, marginBottom: 12 }}>
             <p style={{ margin: '0 0 8px', fontSize: 12, color: '#555' }}>

@@ -175,6 +175,14 @@ const SdsV2Page = () => {
       allMachineTypes.filter(m => processToolPrefixes.has(m.machine_type_code)).map(m => m.machine_type_name)
     );
 
+    // group name → representative machine_type_name
+    // T-Select returns result.machine = machine_group when grouped; SDS side uses machine_type_name
+    const groupToRep = {};
+    for (const m of allMachineTypes) {
+      if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
+    }
+    const resolveMachine = (name) => groupToRep[name] || name;
+
     // prefix → full DWG no map for SDS tools (first match wins)
     const sdsPrefixToNo = {};
     sdsNosSet.forEach(no => {
@@ -195,8 +203,9 @@ const SdsV2Page = () => {
     if (tsData?.results) {
       for (const result of tsData.results) {
         if (!result.matches?.length) continue;
-        const isRelevant = processMachineNames.has(result.machine) ||
-          configMachineNames.has(result.machine) ||
+        const resolvedMachine = resolveMachine(result.machine);
+        const isRelevant = processMachineNames.has(resolvedMachine) ||
+          configMachineNames.has(resolvedMachine) ||
           result.matches.some(m => {
             const no = getMatchNo(m);
             return no && processToolPrefixes.has(no.substring(1, 4));
@@ -237,8 +246,8 @@ const SdsV2Page = () => {
       ...extraRows,
     ];
 
-    // Build machine sets for validation
-    const eligibleMachines = tsData?.results ? new Set(tsData.results.map(r => r.machine)) : null;
+    // Build machine sets for validation — resolve group names to representative machine_type_name
+    const eligibleMachines = tsData?.results ? new Set(tsData.results.map(r => resolveMachine(r.machine))) : null;
 
     // Unique Grouping Logic: Ensure one tool belongs to only one machine
     const groupedData = {};
@@ -261,7 +270,7 @@ const SdsV2Page = () => {
       let assignedMachine = null;
       
       if (row._isExtra) {
-        assignedMachine = row.tool_name.split(' · ')[0];
+        assignedMachine = resolveMachine(row.tool_name.split(' · ')[0]);
       } else {
         const prefix = dwgPrefix(row.tool_dwg_no);
         const toolCode = row.tool_dwg_no?.substring(1, 4);
@@ -573,7 +582,7 @@ const SdsV2Page = () => {
           }
           options={filteredMachineTypes.map(m => ({
             value: m.machine_type_name,
-            label: m.machine_type_name,
+            label: m.machine_group || m.machine_type_name,
           }))}
         />
       </Modal>
