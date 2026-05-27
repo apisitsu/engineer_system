@@ -8,6 +8,23 @@ This file provides guidance to Gemini when working with code in this repository.
 
 `OldProject/` contains retired Google Apps Script prototypes — do not modify.
 
+## Multi-Agent Orchestration
+
+This project utilizes Gemini CLI, Claude Code, and thClaws in a unified terminal workflow.
+- **Single Source of Truth:** All agents must follow the instructions in this `GEMINI.md` and `.claude/rules/agent-alignment.md`.
+- **Coordination:** Gemini CLI acts as the orchestrator. Complex refactoring is delegated to Claude Code, while local tool-specific tasks are handled by thClaws.
+- **Context Sharing:** Always verify session state and current goals before executing cross-cutting changes.
+- **Custom Commands:**
+  - `gemini update project status`: Triggers an automated sync where Gemini summarizes recent work, updates the "Current Status" in this file, and notifies all agents via shared context.
+
+## Current Project Status
+- **Last Update:** 2026-05-25
+- **Recent Changes:**
+  - **SDS V2 Logic Overhaul:** Implemented "Strict Unique Ownership" and "Eligibility-Aware Grouping" to ensure tools are assigned only to machines physically capable of running the part (syncing with Tooling Select V2 limits).
+  - **UI/UX Optimization:** Enabled column sorting in Part Management and Tool Inventory. Added auto-hiding for empty columns in the Tool Inventory table to reduce clutter.
+  - **Dashboard Reliability:** Fixed auto-sync bug in Tooling Inspection Dashboard; stats now refresh immediately after data updates (Sync CSV, Record Update, etc.).
+- **Active Goal:** Maintaining multi-agent alignment and monitoring system stability after logic synchronization.
+
 ## Commands
 
 ### Root (run from `D:\Projects\EngineerSystem`)

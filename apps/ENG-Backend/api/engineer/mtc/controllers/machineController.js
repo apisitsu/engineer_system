@@ -16,17 +16,17 @@ const list = async (req, res) => {
 };
 
 const create = async (req, res) => {
-  const { machine_name, label, inventory_table, inventory_machine_filter, enabled } = req.body;
+  const { machine_name, label, inventory_table, inventory_machine_filter, enabled, machine_group } = req.body;
   if (!machine_name?.trim()) {
     return res.status(400).json({ success: false, error: 'machine_name is required' });
   }
   try {
     const { rows } = await engPool.query(
       `INSERT INTO ${TSV2_TABLES.MACHINE}
-         (machine_name, label, inventory_table, inventory_machine_filter, enabled)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+         (machine_name, label, inventory_table, inventory_machine_filter, enabled, machine_group)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [machine_name.trim(), label || null, inventory_table || null,
-       inventory_machine_filter || null, enabled !== false]
+       inventory_machine_filter || null, enabled !== false, machine_group || null]
     );
     res.json({ success: true, machine: rows[0] });
   } catch (err) {
@@ -40,7 +40,7 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   const { id } = req.params;
-  const { machine_name, label, inventory_table, inventory_machine_filter, enabled } = req.body;
+  const { machine_name, label, inventory_table, inventory_machine_filter, enabled, machine_group } = req.body;
   try {
     const { rows } = await engPool.query(
       `UPDATE ${TSV2_TABLES.MACHINE}
@@ -49,10 +49,11 @@ const update = async (req, res) => {
               inventory_table = $3,
               inventory_machine_filter = $4,
               enabled = COALESCE($5, enabled),
+              machine_group = $6,
               updated_at = NOW()
-        WHERE id = $6 RETURNING *`,
+        WHERE id = $7 RETURNING *`,
       [machine_name?.trim() || null, label || null, inventory_table || null,
-       inventory_machine_filter || null, enabled, Number(id)]
+       inventory_machine_filter || null, enabled, machine_group || null, Number(id)]
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, machine: rows[0] });

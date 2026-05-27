@@ -75,6 +75,7 @@ export default function V2MachineManager({ token, onMachineSelect }) {
 
   const columns = [
     { title: 'Machine Name', dataIndex: 'machine_name', key: 'machine_name', width: 140 },
+    { title: 'Group', dataIndex: 'machine_group', key: 'machine_group', width: 160, render: (v) => v || '—' },
     { title: 'Label', dataIndex: 'label', key: 'label' },
     { title: 'Inventory Table', dataIndex: 'inventory_table', key: 'inventory_table', width: 180 },
     { title: 'Machine Filter', dataIndex: 'inventory_machine_filter', key: 'inventory_machine_filter', width: 140 },
@@ -130,6 +131,9 @@ export default function V2MachineManager({ token, onMachineSelect }) {
           </Form.Item>
           <Form.Item name="inventory_machine_filter" label="Machine Filter (value in Machine column)">
             <Input placeholder="e.g. KS-B22G (leave empty to skip filter)" />
+          </Form.Item>
+          <Form.Item name="machine_group" label="Machine Group (groups identical machines in search results)">
+            <Input placeholder="e.g. KS-400B1/B2/B7" />
           </Form.Item>
           <Form.Item name="enabled" label="Enabled" valuePropName="checked" initialValue={true}>
             <Switch />

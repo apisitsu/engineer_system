@@ -110,7 +110,7 @@ const ParamsTab = ({ theme }) => {
 
   const machineOptions = (cnSearched ? filteredMachineTypes : allMachineTypes).map(m => ({
     value: m.machine_type_name,
-    label: `${m.machine_type_code} — ${m.machine_type_name || '(no name)'}`,
+    label: `${m.machine_type_code} — ${m.machine_group || m.machine_type_name || '(no name)'}`,
   }));
 
   return (
@@ -345,7 +345,7 @@ const ToolingImagesTab = ({ theme }) => {
       const c = String(m.machine_type_code).trim().toLowerCase();
       return c && tool_dwg_no.toLowerCase().includes(c);
     });
-    if (mt) return <Text>{mt.machine_type_name || mt.machine_type_code}</Text>;
+    if (mt) return <Text>{mt.machine_group || mt.machine_type_name || mt.machine_type_code}</Text>;
 
     // 2. Fallback to legacy extraction
     let code = tool_dwg_no.substring(1, 4);
@@ -968,11 +968,12 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
     { value: '__all__', label: 'All Machine Type' },
     ...machineTypeOpts
       .filter(m => !visibleMachineNames || visibleMachineNames.has(m.machine_type_name))
-      .map(m => ({ value: m.machine_type_name, label: `${m.machine_type_code} — ${m.machine_type_name}` })),
+      .map(m => ({ value: m.machine_type_name, label: `${m.machine_type_code} — ${m.machine_group || m.machine_type_name}` })),
   ];
 
   const comboColumns = [
-    { title: 'Machine Type Name', dataIndex: 'machine_type', width: 200 },
+    { title: 'Machine Type Name', dataIndex: 'machine_type', width: 200,
+      render: v => { const m = machineTypeOpts.find(o => o.machine_type_name === v); return m?.machine_group || v; } },
     {
       title: 'Process Code', dataIndex: 'process_code', width: 130,
       render: v => <Tag>{v}</Tag>
@@ -1119,7 +1120,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
             <Select
               options={machineTypeOpts.map(m => ({
                 value: m.machine_type_name,
-                label: `${m.machine_type_code} — ${m.machine_type_name}`,
+                label: `${m.machine_type_code} — ${m.machine_group || m.machine_type_name}`,
               }))}
               //placeholder="เลือก Machine Type"
               showSearch
@@ -1346,7 +1347,7 @@ const MachineConfigTab = ({ theme }) => {
 
   const machineListCols = [
     { title: 'Machine Type Code', dataIndex: 'machine_type_code', width: 300 },
-    { title: 'Machine Type Name', dataIndex: 'machine_type_name' },
+    { title: 'Machine Type Name', dataIndex: 'machine_type_name', render: (v, r) => r.machine_group || v },
     {
       title: '',
       key: 'action',
@@ -1643,7 +1644,7 @@ const MachineConfigTab = ({ theme }) => {
                 <Text style={{ fontSize: 13 }}>
                   <Text type="secondary">{m.machine_type_code}</Text>
                   {' — '}
-                  {m.machine_type_name}
+                  {m.machine_group || m.machine_type_name}
                 </Text>
               </Checkbox>
             ))}

@@ -71,13 +71,14 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   // Resolve machine_type_code for tool filtering (use tool_code_filter when available)
   const mtcRow2 = await engPool.query(
-    `SELECT machine_type_code, tool_code_filter FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE machine_type_name = $1 LIMIT 1`,
+    `SELECT machine_type_code, tool_code_filter, machine_group FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE machine_type_name = $1 LIMIT 1`,
     [machine_type_name]
   );
   const mtcRow2Data = mtcRow2.rows[0];
   const machineTypeCode = mtcRow2Data
     ? (mtcRow2Data.tool_code_filter || mtcRow2Data.machine_type_code)
     : null;
+  const machineDisplayName = mtcRow2Data?.machine_group || machine_type_name;
 
   // 1. Static fields from Search API
   const firstProcessInfo = process_code
@@ -94,7 +95,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['process_name']     = firstProcessInfo?.process_eng  || firstProcessInfo?.process_name || '';
   map['process_eng']      = firstProcessInfo?.process_eng  || '';
   map['ct']               = firstProcessInfo?.ct != null ? String(firstProcessInfo.ct) : '';
-  map['machine_type_name'] = machine_type_name || '';
+  map['machine_type_name'] = machineDisplayName || '';
 
   // Production fields
   if (searchData.production) {
