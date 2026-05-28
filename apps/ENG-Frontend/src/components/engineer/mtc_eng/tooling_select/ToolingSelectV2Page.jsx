@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   SearchOutlined, SwapOutlined,
-  ToolOutlined, DatabaseOutlined, WarningOutlined,
+  ToolOutlined, SettingOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -319,11 +319,9 @@ export default function ToolingSelectV2Page() {
                   <Text type="secondary">DB-driven tooling calculation and selection</Text>
                 </div>
               </div>
-              <Space>
-                <Button icon={<DatabaseOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_MANAGEMENT)}>
-                  Admin
-                </Button>
-              </Space>
+              <Button icon={<SettingOutlined />} size="large" onClick={() => navigate(MTC_PATHS.TOOLING_MANAGEMENT)}>
+                Setting
+              </Button>
             </div>
 
             {/* Search Card */}

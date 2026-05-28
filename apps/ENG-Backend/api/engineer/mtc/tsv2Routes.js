@@ -9,7 +9,7 @@ const limitCtrl       = require('./controllers/limitController');
 const formulaCtrl     = require('./controllers/formulaController');
 const searchRuleCtrl  = require('./controllers/searchRuleController');
 const searchCtrl      = require('./controllers/searchController');
-const specCtrl        = require('./controllers/specController');
+const { router: specCtrl, syncNewCns } = require('./controllers/specController');
 const inventoryCtrl   = require('./controllers/inventoryController');
 
 // ── Search ─────────────────────────────────────────────────────────────────
@@ -56,4 +56,4 @@ router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
 // ── Spec (Part Management) ──────────────────────────────────────────────────
 router.use('/spec', specCtrl);
 
-module.exports = router;
+module.exports = { router, syncNewCns };

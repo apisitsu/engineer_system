@@ -457,7 +457,7 @@ const SdsV2Page = () => {
                     size="large"
                     onClick={() => navigate('/eng/mtc_eng/sds-v2/admin')}
                   >
-                    Machine Template
+                    Setting
                   </Button>
                 )}
               </div>

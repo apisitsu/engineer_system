@@ -194,7 +194,7 @@ function InspectionReport() {
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 60 }} />
                   <div style={{ padding: '16px' }}>
-                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection Record System</Title>
+                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection</Title>
                     <Text type="secondary">Manage and track tooling inspection records</Text>
                   </div>
                 </div>
