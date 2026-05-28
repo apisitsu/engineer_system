@@ -10,6 +10,62 @@ const invalidateCache = (cn) => cache.invalidate(`tooling:${String(cn).trim().to
 const { isAdmin } = require('../../../../middleware/mtcAuth');
 const { searchByCn } = require('../services/sdsV2SearchService');
 
+// ── Body-specific column list ─────────────────────────────────────────────────
+
+const BODY_COLS = [
+  'final_id','head_width','thread_length','shape_code','nipple','key_groove',
+  'blank_head','blank_f_dim','blank_r2','blank_r3','female_shankdia','female_shank',
+  'female_id_dim','thread_name','thread_max_od','thread_min_od','pre_thread',
+  'female_flange_d','female_flange_h',
+];
+
+function extractBodyFields(body) {
+  const pf = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  return {
+    final_id:        pf(body.final_id)        ?? null,
+    head_width:      pf(body.head_width)       ?? null,
+    thread_length:   pf(body.thread_length)    ?? null,
+    shape_code:      body.shape_code           || null,
+    nipple:          body.nipple               || null,
+    key_groove:      body.key_groove           || null,
+    blank_head:      pf(body.blank_head)       ?? null,
+    blank_f_dim:     pf(body.blank_f_dim)      ?? null,
+    blank_r2:        pf(body.blank_r2)         ?? null,
+    blank_r3:        pf(body.blank_r3)         ?? null,
+    female_shankdia: pf(body.female_shankdia)  ?? null,
+    female_shank:    pf(body.female_shank)     ?? null,
+    female_id_dim:   pf(body.female_id_dim)    ?? null,
+    thread_name:     body.thread_name          || null,
+    thread_max_od:   pf(body.thread_max_od)    ?? null,
+    thread_min_od:   pf(body.thread_min_od)    ?? null,
+    pre_thread:      pf(body.pre_thread)       ?? null,
+    female_flange_d: pf(body.female_flange_d)  ?? null,
+    female_flange_h: pf(body.female_flange_h)  ?? null,
+  };
+}
+
+// Fetch body-specific data from factory and return as spec fields
+async function fetchBodySpecFromFactory(cxx) {
+  try {
+    const res = await maqPool.query(`
+      SELECT b.control_no,
+             b.final_id, b.head_width, b.thread_length, b.shape_code, b.nipple, b.key_groove,
+             bl.head AS blank_head, bl.f_dimension AS blank_f_dim,
+             bl.body_r_2 AS blank_r2, bl.body_r_3 AS blank_r3,
+             bl.female_shankdia, bl.female_keyhole_male_shank AS female_shank,
+             bl.female_keyholedepth_male_idimension AS female_id_dim,
+             bl.female_flange_d, bl.female_flange_h,
+             th.thread_name, th.max_od AS thread_max_od, th.min_od AS thread_min_od, th.pre_thread
+      FROM lpb.eng_body b
+      LEFT JOIN lpb.eng_body_blank  bl ON bl.body_blank_cn = b.body_blank_cn
+      LEFT JOIN lpb.eng_body_thread th ON th.thread_cn     = b.thread_cn
+      WHERE b.control_no = $1 LIMIT 1
+    `, [cxx]);
+    if (!res.rows.length) return null;
+    return extractBodyFields(res.rows[0]);
+  } catch { return null; }
+}
+
 // ── Derivation constants ──────────────────────────────────────────────────────
 
 const ID_GRIND_PROCESS_CODES = new Set(['1061', '1062']);
@@ -63,14 +119,26 @@ function mapFactoryDimToSpec(dim) {
   };
 }
 
+// Normalize any CN form to the canonical 6-digit format stored in tooling_spec_process.
+// Factory may return either:
+//   - 6-digit numeric  "314047"       → return as-is
+//   - Cxx-0yyyy form   "C31-04047"    → return "314047"  (class + 4-digit suffix)
+//   - Axx-0yyyy form   "A41-00001"    → return "410001"
 function normalizeCn(raw) {
   const s = String(raw || '').trim().toUpperCase();
-  if (/^\d{6}$/.test(s)) {
-    const cls = s.slice(0, 2);
-    const pfx = cls >= '41' && cls <= '49' ? 'A' : 'C';
-    return `${pfx}${cls}-0${s.slice(2)}`;
-  }
+  if (/^\d{6}$/.test(s)) return s;
+  const m = s.match(/^[A-Z](\d{2})-0?(\d{4})$/);
+  if (m) return m[1] + m[2];
   return s;
+}
+
+// Reconstruct the 3-char prefix key (e.g. "C31") used in PREFIX_TABLE_MAP
+// from a normalized 6-digit CN.
+function cnToPrefix(cn) {
+  if (!/^\d{6}$/.test(cn)) return cn.slice(0, 3);
+  const cls = cn.slice(0, 2);
+  const pfx = parseInt(cls, 10) >= 41 && parseInt(cls, 10) <= 49 ? 'A' : 'C';
+  return pfx + cls;
 }
 
 const PREFIX_TABLE_MAP = {
@@ -88,8 +156,7 @@ const PREFIX_TABLE_MAP = {
   C57: TABLES.LPB_ENG_BODY,  C58: TABLES.LPB_ENG_BODY,  C59: TABLES.LPB_ENG_BODY,
   C61: TABLES.LPB_ENG_SLEEVE, C62: TABLES.LPB_ENG_SLEEVE, C63: TABLES.LPB_ENG_SLEEVE,
   C64: TABLES.LPB_ENG_SLEEVE, C69: TABLES.LPB_ENG_SLEEVE,
-  A41: TABLES.LPB_ENG_SPH,   A42: TABLES.LPB_ENG_SPH,   A43: TABLES.LPB_ENG_SPH,
-  A44: TABLES.LPB_ENG_SPH,   A48: TABLES.LPB_ENG_SPH,   A49: TABLES.LPB_ENG_SPH,
+  // A41–A49 (Spherical) excluded — no tooling formulas configured; omitted to prevent sync-new from re-inserting
 };
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -127,18 +194,27 @@ router.post('/', isAdmin, async (req, res) => {
     type, yball, process, sd,
   } = req.body;
   if (!cn) return res.status(400).json({ success: false, error: 'CN Number is required' });
+  const bf = extractBodyFields(req.body);
   try {
     const r = await engPool.query(
       `INSERT INTO ${TABLES.SPEC_PROCESS}
        (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
         od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
-        type, yball, process, sd)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+        type, yball, process, sd,
+        final_id,head_width,thread_length,shape_code,nipple,key_groove,
+        blank_head,blank_f_dim,blank_r2,blank_r3,female_shankdia,female_shank,female_id_dim,
+        thread_name,thread_max_od,thread_min_od,pre_thread,female_flange_d,female_flange_h)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
+               $24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42)
        RETURNING *`,
       [cn, od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
        w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
        id_aft||0,id_aft_max||0,id_aft_min||0, w_aft||0,w_aft_max||0,w_aft_min||0,
-       type, yball, process, sd||0]
+       type, yball, process, sd||0,
+       bf.final_id,bf.head_width,bf.thread_length,bf.shape_code,bf.nipple,bf.key_groove,
+       bf.blank_head,bf.blank_f_dim,bf.blank_r2,bf.blank_r3,bf.female_shankdia,bf.female_shank,
+       bf.female_id_dim,bf.thread_name,bf.thread_max_od,bf.thread_min_od,bf.pre_thread,
+       bf.female_flange_d,bf.female_flange_h]
     );
     res.json({ success: true, data: r.rows[0] });
   } catch (err) {
@@ -154,18 +230,27 @@ router.put('/:cn', isAdmin, async (req, res) => {
     od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
     type, yball, process, sd,
   } = req.body;
+  const bf = extractBodyFields(req.body);
   try {
     const r = await engPool.query(
       `UPDATE ${TABLES.SPEC_PROCESS} SET
        od_bf=$1,od_bf_max=$2,od_bf_min=$3, id_bf=$4,id_bf_max=$5,id_bf_min=$6,
        w_bf=$7,w_bf_max=$8,w_bf_min=$9, od_aft=$10,od_aft_max=$11,od_aft_min=$12,
        id_aft=$13,id_aft_max=$14,id_aft_min=$15, w_aft=$16,w_aft_max=$17,w_aft_min=$18,
-       type=$19, yball=$20, process=$21, sd=$22
+       type=$19, yball=$20, process=$21, sd=$22,
+       final_id=$24,head_width=$25,thread_length=$26,shape_code=$27,nipple=$28,key_groove=$29,
+       blank_head=$30,blank_f_dim=$31,blank_r2=$32,blank_r3=$33,female_shankdia=$34,
+       female_shank=$35,female_id_dim=$36,thread_name=$37,thread_max_od=$38,thread_min_od=$39,
+       pre_thread=$40,female_flange_d=$41,female_flange_h=$42
        WHERE cn=$23 RETURNING *`,
       [od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
        w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
        id_aft||0,id_aft_max||0,id_aft_min||0, w_aft||0,w_aft_max||0,w_aft_min||0,
-       type, yball, process, sd||0, cn]
+       type, yball, process, sd||0, cn,
+       bf.final_id,bf.head_width,bf.thread_length,bf.shape_code,bf.nipple,bf.key_groove,
+       bf.blank_head,bf.blank_f_dim,bf.blank_r2,bf.blank_r3,bf.female_shankdia,bf.female_shank,
+       bf.female_id_dim,bf.thread_name,bf.thread_max_od,bf.thread_min_od,bf.pre_thread,
+       bf.female_flange_d,bf.female_flange_h]
     );
     if (!r.rows.length) return res.status(404).json({ success: false, error: 'Spec not found' });
     invalidateCache(cn);
@@ -252,16 +337,31 @@ router.post('/sync/:cn', isAdmin, async (req, res) => {
     ];
     const yball   = v.yball   || null;
     const process = v.process || null;
+
+    // For body CNs (C1x), also fetch body-specific dimensions
+    const isBodyCn = /^1\d{5}$/.test(cn.replace(/[^0-9]/g, '')) || /^C1/.test(cn);
+    const bodyCxx  = /^C1/.test(cn) ? cn : 'C' + cn.slice(0, 2) + '-0' + cn.slice(2);
+    const bf = isBodyCn ? (await fetchBodySpecFromFactory(bodyCxx)) || {} : {};
+
     let r;
     if (!existingRes.rows.length) {
       r = await engPool.query(
         `INSERT INTO ${TABLES.SPEC_PROCESS}
          (cn, od_bf,od_bf_max,od_bf_min, id_bf,id_bf_max,id_bf_min, w_bf,w_bf_max,w_bf_min,
           od_aft,od_aft_max,od_aft_min, id_aft,id_aft_max,id_aft_min, w_aft,w_aft_max,w_aft_min,
-          sd, type, yball, process)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          sd, type, yball, process,
+          final_id,head_width,thread_length,shape_code,nipple,key_groove,
+          blank_head,blank_f_dim,blank_r2,blank_r3,female_shankdia,female_shank,female_id_dim,
+          thread_name,thread_max_od,thread_min_od,pre_thread,female_flange_d,female_flange_h)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
+                 $24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42)
          RETURNING *`,
-        [cn, ...vals, null, yball || 'N', process]
+        [cn, ...vals, null, yball || 'N', process,
+         bf.final_id||null,bf.head_width||null,bf.thread_length||null,bf.shape_code||null,
+         bf.nipple||null,bf.key_groove||null,bf.blank_head||null,bf.blank_f_dim||null,
+         bf.blank_r2||null,bf.blank_r3||null,bf.female_shankdia||null,bf.female_shank||null,
+         bf.female_id_dim||null,bf.thread_name||null,bf.thread_max_od||null,bf.thread_min_od||null,
+         bf.pre_thread||null,bf.female_flange_d||null,bf.female_flange_h||null]
       );
     } else {
       const setParts = [
@@ -273,6 +373,14 @@ router.post('/sync/:cn', isAdmin, async (req, res) => {
       let paramIdx = 21;
       if (yball)   { setParts.push(`yball=$${paramIdx++}`);   updateVals.splice(-1, 0, yball); }
       if (process) { setParts.push(`process=$${paramIdx++}`); updateVals.splice(-1, 0, process); }
+      if (isBodyCn && Object.keys(bf).length) {
+        BODY_COLS.forEach(col => {
+          if (bf[col] !== undefined) {
+            setParts.push(`${col}=$${paramIdx++}`);
+            updateVals.splice(-1, 0, bf[col]);
+          }
+        });
+      }
       r = await engPool.query(
         `UPDATE ${TABLES.SPEC_PROCESS} SET ${setParts.join(', ')} WHERE cn=$20 RETURNING *`,
         updateVals
@@ -293,9 +401,10 @@ router.post('/sync/:cn', isAdmin, async (req, res) => {
   }
 });
 
-router.post('/sync-new', isAdmin, async (req, res) => {
+// ── Sync-new core logic (called from route AND cron scheduler) ────────────────
+async function syncNewCns() {
   try {
-    const dimTables = [...new Set(Object.values(PREFIX_TABLE_MAP))];
+  const dimTables = [...new Set(Object.values(PREFIX_TABLE_MAP))];
     const tableResults = await Promise.allSettled(
       dimTables.map(t => maqPool.query(`SELECT DISTINCT control_no FROM ${t} LIMIT 20000`))
     );
@@ -309,7 +418,7 @@ router.post('/sync-new', isAdmin, async (req, res) => {
       tableResults
         .filter(r => r.status === 'fulfilled')
         .flatMap(r => r.value.rows.map(row => normalizeCn(row.control_no)))
-        .filter(cn => cn && PREFIX_TABLE_MAP[cn.slice(0, 3)])
+        .filter(cn => cn && /^\d{6}$/.test(cn) && PREFIX_TABLE_MAP[cnToPrefix(cn)])
     )].sort();
 
     const specRes  = await engPool.query(`SELECT cn FROM ${TABLES.SPEC_PROCESS}`);
@@ -317,13 +426,13 @@ router.post('/sync-new', isAdmin, async (req, res) => {
     const newCns   = allFactoryCns.filter(cn => !existing.has(cn));
 
     if (!newCns.length) {
-      return res.json({ success: true, total_found: 0, synced: 0, failed: 0, errors: [], table_status: tableStatus });
+      return { success: true, total_found: 0, synced: 0, failed: 0, errors: [], table_status: tableStatus };
     }
 
     // Bulk-fetch dims
     const byTable = {};
     for (const cn of newCns) {
-      const tbl = PREFIX_TABLE_MAP[cn.slice(0, 3)];
+      const tbl = PREFIX_TABLE_MAP[cnToPrefix(cn)];
       if (!byTable[tbl]) byTable[tbl] = [];
       byTable[tbl].push(cn);
     }
@@ -331,9 +440,19 @@ router.post('/sync-new', isAdmin, async (req, res) => {
     await Promise.all(
       Object.entries(byTable).map(async ([tbl, cns]) => {
         try {
-          const r = await maqPool.query(`SELECT * FROM ${tbl} WHERE control_no = ANY($1)`, [cns]);
+          // Factory may store control_no as either "314047" (6-digit) or "C31-04047" (Cxx form).
+          // Query with both forms so either storage format is matched.
+          const cxxForms = cns.map(cn => {
+            const cls = cn.slice(0, 2);
+            const pfx = parseInt(cls, 10) >= 41 && parseInt(cls, 10) <= 49 ? 'A' : 'C';
+            return `${pfx}${cls}-0${cn.slice(2)}`;
+          });
+          const r = await maqPool.query(
+            `SELECT * FROM ${tbl} WHERE control_no = ANY($1)`,
+            [[...new Set([...cns, ...cxxForms])]]
+          );
           for (const row of r.rows) {
-            const key = row.control_no?.trim().toUpperCase();
+            const key = normalizeCn(row.control_no);
             if (key) dimRowsMap[key] = row;
           }
         } catch (e) {
@@ -345,12 +464,17 @@ router.post('/sync-new', isAdmin, async (req, res) => {
     // Bulk-fetch process codes
     const cnToPlanNos = {};
     try {
+      const cxxForms = newCns.map(cn => {
+        const cls = cn.slice(0, 2);
+        const pfx = parseInt(cls, 10) >= 41 && parseInt(cls, 10) <= 49 ? 'A' : 'C';
+        return `${pfx}${cls}-0${cn.slice(2)}`;
+      });
       const piRes = await maqPool.query(
         `SELECT control_no, process_plan_no FROM ${TABLES.LPB_ENG_R_PI_ITEM} WHERE control_no = ANY($1)`,
-        [newCns]
+        [[...new Set([...newCns, ...cxxForms])]]
       );
       for (const row of piRes.rows) {
-        const cn = row.control_no?.trim().toUpperCase();
+        const cn = normalizeCn(row.control_no);
         if (!cnToPlanNos[cn]) cnToPlanNos[cn] = [];
         cnToPlanNos[cn].push(row.process_plan_no);
       }
@@ -440,11 +564,63 @@ router.post('/sync-new', isAdmin, async (req, res) => {
       }
     }
 
-    res.json({ success: true, total_found: newCns.length, synced, failed, errors, table_status: tableStatus });
+    // Body CNs (C1x): batch-fetch body-specific data and UPDATE after insert
+    const bodyCnsNew = newCns.filter(cn => /^1/.test(cn));
+    if (bodyCnsNew.length > 0) {
+      try {
+        const cxxForms = bodyCnsNew.map(cn => 'C' + cn.slice(0,2) + '-0' + cn.slice(2));
+        const bodyRes = await maqPool.query(`
+          SELECT b.control_no,
+                 b.final_id, b.head_width, b.thread_length, b.shape_code, b.nipple, b.key_groove,
+                 bl.head AS blank_head, bl.f_dimension AS blank_f_dim,
+                 bl.body_r_2 AS blank_r2, bl.body_r_3 AS blank_r3,
+                 bl.female_shankdia, bl.female_keyhole_male_shank AS female_shank,
+                 bl.female_keyholedepth_male_idimension AS female_id_dim,
+                 bl.female_flange_d, bl.female_flange_h,
+                 th.thread_name, th.max_od AS thread_max_od, th.min_od AS thread_min_od, th.pre_thread
+          FROM lpb.eng_body b
+          LEFT JOIN lpb.eng_body_blank  bl ON bl.body_blank_cn = b.body_blank_cn
+          LEFT JOIN lpb.eng_body_thread th ON th.thread_cn     = b.thread_cn
+          WHERE b.control_no = ANY($1)
+        `, [cxxForms]);
+        const bodyMap = {};
+        bodyRes.rows.forEach(row => {
+          const m = row.control_no.match(/^[A-Z](\d{2})-0?(\d{4})$/);
+          if (m) bodyMap[m[1] + m[2]] = extractBodyFields(row);
+        });
+        for (const cn of bodyCnsNew) {
+          const bf = bodyMap[cn];
+          if (!bf) continue;
+          try {
+            await engPool.query(`
+              UPDATE ${TABLES.SPEC_PROCESS} SET
+                final_id=$1,head_width=$2,thread_length=$3,shape_code=$4,nipple=$5,key_groove=$6,
+                blank_head=$7,blank_f_dim=$8,blank_r2=$9,blank_r3=$10,female_shankdia=$11,
+                female_shank=$12,female_id_dim=$13,thread_name=$14,thread_max_od=$15,
+                thread_min_od=$16,pre_thread=$17,female_flange_d=$18,female_flange_h=$19
+              WHERE cn=$20`,
+              [bf.final_id,bf.head_width,bf.thread_length,bf.shape_code,bf.nipple,bf.key_groove,
+               bf.blank_head,bf.blank_f_dim,bf.blank_r2,bf.blank_r3,bf.female_shankdia,
+               bf.female_shank,bf.female_id_dim,bf.thread_name,bf.thread_max_od,bf.thread_min_od,
+               bf.pre_thread,bf.female_flange_d,bf.female_flange_h, cn]);
+          } catch (e) { console.error('[sync-new] body update failed for', cn, e.message); }
+        }
+      } catch (e) {
+        console.error('[sync-new] body batch fetch failed:', e.message);
+      }
+    }
+
+    return { success: true, total_found: newCns.length, synced, failed, errors, table_status: tableStatus };
   } catch (err) {
-    console.error('sync-new spec error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('[sync-new] error:', err.message);
+    return { success: false, error: err.message };
   }
+}
+
+router.post('/sync-new', isAdmin, async (req, res) => {
+  const result = await syncNewCns();
+  if (!result.success) return res.status(500).json(result);
+  res.json(result);
 });
 
-module.exports = router;
+module.exports = { router, syncNewCns };

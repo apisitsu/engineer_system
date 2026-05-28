@@ -239,8 +239,20 @@ app.post('/api/upload', (req, res) => {
 const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
 app.use('/api/engineer/mtc', mtcRoutes);
 
-const toolingSelectRoutes = require('./api/engineer/mtc/tsv2Routes');
+const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
 app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
+
+// ── Auto sync: insert new factory CNs into tooling_spec_process every day at 08:00 ──
+const cron = require('node-cron');
+cron.schedule('0 8 * * *', async () => {
+  console.log('[cron] sync-new CNs starting...');
+  const result = await syncNewCns();
+  if (result.success) {
+    console.log(`[cron] sync-new done: ${result.synced} inserted, ${result.failed} failed (total_found=${result.total_found})`);
+  } else {
+    console.error('[cron] sync-new failed:', result.error);
+  }
+}, { timezone: 'Asia/Bangkok' });
 
 
 const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');

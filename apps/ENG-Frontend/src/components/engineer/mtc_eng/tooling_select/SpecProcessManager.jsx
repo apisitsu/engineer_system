@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Table,
   InputNumber, Row, Col, Popconfirm, Card, Layout, Select,
-  Alert,
+  Alert, Tag,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined,
@@ -19,6 +19,33 @@ import ScrollbarStyle from '../../../common/scrollbar';
 const { Text, Title } = Typography;
 const { Content } = Layout;
 
+// Reusable OD/ID/W dimension group (Bf or Aft)
+const DimCard = ({ label, prefix }) => (
+  <Card title={label} size="small" style={{ marginBottom: 12 }}>
+    <Row gutter={8}>
+      {['od','id','w'].map(dim => (
+        <Col span={8} key={dim}>
+          <Form.Item name={`${dim}_${prefix}`} label={`${dim.toUpperCase()} ${prefix === 'bf' ? 'Bf' : 'Aft'}`}>
+            <InputNumber style={{ width: '100%' }} precision={4} />
+          </Form.Item>
+          <Row gutter={4}>
+            <Col span={12}>
+              <Form.Item name={`${dim}_${prefix}_max`} label="Max">
+                <InputNumber style={{ width: '100%' }} precision={4} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name={`${dim}_${prefix}_min`} label="Min">
+                <InputNumber style={{ width: '100%' }} precision={4} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Col>
+      ))}
+    </Row>
+  </Card>
+);
+
 export const SpecProcessManager = ({ embedded = false }) => {
   const { message } = App.useApp();
   const { theme } = useTheme();
@@ -33,6 +60,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
   const [tableVisible, setTableVisible] = useState(false);
   const [form] = Form.useForm();
+  const watchedCn = Form.useWatch('cn', form);
 
   const [syncNewLoading, setSyncNewLoading] = useState(false);
   const [syncNewResult, setSyncNewResult] = useState(null);  // { synced, failed, errors[] }
@@ -127,28 +155,54 @@ export const SpecProcessManager = ({ embedded = false }) => {
     }
   };
 
+  const getPartType = (cn) => {
+    if (!cn) return null;
+    const s = String(cn).replace(/\D/g, '');
+    const cls = parseInt(s.slice(0, 2), 10);
+    if (cls >= 11 && cls <= 19) return 'BODY';
+    if (cls >= 21 && cls <= 29) return 'RACE';
+    if (cls >= 31 && cls <= 39) return 'BALL';
+    if (cls >= 41 && cls <= 49) return 'SPHERICAL';
+    if (cls >= 51 && cls <= 59) return 'BODY';
+    if (cls >= 61 && cls <= 69) return 'SLEEVE';
+    return null;
+  };
+
+  const PART_TYPE_COLOR = { BALL: 'blue', RACE: 'green', BODY: 'orange', SLEEVE: 'purple', SPHERICAL: 'red' };
+
+  const isBodyCn = (cn) => ['BODY'].includes(getPartType(cn));
+
   const columns = [
-    { 
-      title: 'C/N', 
-      dataIndex: 'cn', 
-      key: 'cn', 
-      width: 120, 
-      fixed: 'left', 
+    {
+      title: 'C/N',
+      dataIndex: 'cn',
+      key: 'cn',
+      width: 120,
+      fixed: 'left',
       render: v => <Text strong>{v}</Text>,
       sorter: (a, b) => (a.cn || '').localeCompare(b.cn || ''),
     },
-    { 
-      title: 'Type', 
-      dataIndex: 'type', 
-      key: 'type', 
-      width: 100,
+    {
+      title: 'Part Type',
+      key: 'part_type',
+      width: 90,
+      render: (_, r) => {
+        const pt = getPartType(r.cn);
+        return pt ? <Tag color={PART_TYPE_COLOR[pt]}>{pt}</Tag> : null;
+      },
+    },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type',
+      width: 90,
       sorter: (a, b) => (a.type || '').localeCompare(b.type || ''),
     },
-    { 
-      title: 'Process', 
-      dataIndex: 'process', 
-      key: 'process', 
-      width: 100, 
+    {
+      title: 'Process',
+      dataIndex: 'process',
+      key: 'process',
+      width: 100,
       render: v => (v || '').replace('→', '->').replace('???', '->'),
       sorter: (a, b) => (a.process || '').localeCompare(b.process || ''),
     },
@@ -166,6 +220,40 @@ export const SpecProcessManager = ({ embedded = false }) => {
         { title: 'OD', dataIndex: 'od_aft', key: 'od_aft', width: 70, sorter: (a, b) => (a.od_aft || 0) - (b.od_aft || 0) },
         { title: 'ID', dataIndex: 'id_aft', key: 'id_aft', width: 70, sorter: (a, b) => (a.id_aft || 0) - (b.id_aft || 0) },
         { title: 'W', dataIndex: 'w_aft', key: 'w_aft', width: 70, sorter: (a, b) => (a.w_aft || 0) - (b.w_aft || 0) },
+      ]
+    },
+    {
+      title: 'Body Spec',
+      children: [
+        { title: 'Final ID', dataIndex: 'final_id', key: 'final_id', width: 80 },
+        { title: 'Head W', dataIndex: 'head_width', key: 'head_width', width: 80 },
+        { title: 'Thread L', dataIndex: 'thread_length', key: 'thread_length', width: 80 },
+        { title: 'Shape', dataIndex: 'shape_code', key: 'shape_code', width: 65 },
+        { title: 'Nipple', dataIndex: 'nipple', key: 'nipple', width: 65 },
+        { title: 'Key Gr.', dataIndex: 'key_groove', key: 'key_groove', width: 65 },
+      ]
+    },
+    {
+      title: 'Body Blank',
+      children: [
+        { title: 'Head', dataIndex: 'blank_head', key: 'blank_head', width: 70 },
+        { title: 'F Dim', dataIndex: 'blank_f_dim', key: 'blank_f_dim', width: 70 },
+        { title: 'R2', dataIndex: 'blank_r2', key: 'blank_r2', width: 60 },
+        { title: 'R3', dataIndex: 'blank_r3', key: 'blank_r3', width: 60 },
+        { title: 'Shank Dia', dataIndex: 'female_shankdia', key: 'female_shankdia', width: 85 },
+        { title: 'Shank', dataIndex: 'female_shank', key: 'female_shank', width: 70 },
+        { title: 'ID Dim', dataIndex: 'female_id_dim', key: 'female_id_dim', width: 70 },
+        { title: 'Flange D', dataIndex: 'female_flange_d', key: 'female_flange_d', width: 75 },
+        { title: 'Flange H', dataIndex: 'female_flange_h', key: 'female_flange_h', width: 75 },
+      ]
+    },
+    {
+      title: 'Body Thread',
+      children: [
+        { title: 'Thread', dataIndex: 'thread_name', key: 'thread_name', width: 120 },
+        { title: 'OD Max', dataIndex: 'thread_max_od', key: 'thread_max_od', width: 75 },
+        { title: 'OD Min', dataIndex: 'thread_min_od', key: 'thread_min_od', width: 75 },
+        { title: 'Pre-Thread', dataIndex: 'pre_thread', key: 'pre_thread', width: 85 },
       ]
     },
     {
@@ -238,7 +326,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
               loading={loading}
               size="small"
               bordered
-              scroll={{ x: 1200, y: 'calc(100vh - 250px)' }}
+              scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
               pagination={{
                 ...pagination,
                 total,
@@ -299,114 +387,165 @@ export const SpecProcessManager = ({ embedded = false }) => {
             onCancel={() => setIsFormOpen(false)}
             okText="Save"
             confirmLoading={saving}
-            width={800}
+            width={isBodyCn(watchedCn || editingRecord?.cn) ? 1000 : 800}
             destroyOnHidden
           >
             <Form form={form} layout="vertical" size="small">
-              <Row gutter={12}>
+              {/* ── CN + Part Type indicator ── */}
+              <Row gutter={12} align="middle" style={{ marginBottom: 8 }}>
                 <Col span={6}>
-                  <Form.Item name="cn" label="C/N Number" rules={[{ required: true }]}>
-                    <Input disabled={!!editingRecord} placeholder="e.g. 1001-A" />
+                  <Form.Item name="cn" label="C/N Number" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
+                    <Input disabled={!!editingRecord} placeholder="e.g. 314047" />
                   </Form.Item>
                 </Col>
-                <Col span={6}>
-                  <Form.Item name="type" label="Type">
-                    <Select allowClear placeholder="เลือก Type">
-                      <Select.Option value="NORMAL">NORMAL</Select.Option>
-                      <Select.Option value="ABR">ABR</Select.Option>
-                      <Select.Option value="OTHER">OTHER</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={6}>
-                  <Form.Item name="process" label="Process">
-                    <Select allowClear placeholder="เลือก Process">
-                      <Select.Option value="OD->ID">OD→ID</Select.Option>
-                      <Select.Option value="ID->OD">ID→OD</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={6}>
-                  <Form.Item name="yball" label="Y-Ball" initialValue="N">
-                    <Select>
-                      <Select.Option value="N">N</Select.Option>
-                      <Select.Option value="Y">Y</Select.Option>
-                    </Select>
-                  </Form.Item>
+                <Col span={6} style={{ paddingTop: 24 }}>
+                  {getPartType(watchedCn || editingRecord?.cn)
+                    ? <Tag color={PART_TYPE_COLOR[getPartType(watchedCn || editingRecord?.cn)]}>
+                        {getPartType(watchedCn || editingRecord?.cn)}
+                      </Tag>
+                    : <Tag color="default">—</Tag>
+                  }
                 </Col>
               </Row>
 
-              <Card title="Before Process (Bf)" size="small" style={{ marginBottom: 12 }}>
-                <Row gutter={8}>
-                  <Col span={8}>
-                    <Form.Item name="od_bf" label="OD Bf">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="od_bf_max" label="OD Bf Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="od_bf_min" label="OD Bf Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="id_bf" label="ID Bf">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="id_bf_max" label="ID Bf Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="id_bf_min" label="ID Bf Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="w_bf" label="W Bf">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="w_bf_max" label="W Bf Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="w_bf_min" label="W Bf Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                </Row>
-              </Card>
+              {/* ── BALL (C3x) ── OD/ID/W + Type + YBall + SD + Process ── */}
+              {(getPartType(watchedCn || editingRecord?.cn) === 'BALL' || !getPartType(watchedCn || editingRecord?.cn)) && (
+                <>
+                  <Row gutter={12}>
+                    <Col span={6}>
+                      <Form.Item name="type" label="Type">
+                        <Select allowClear placeholder="Type">
+                          <Select.Option value="NORMAL">NORMAL</Select.Option>
+                          <Select.Option value="ABR">ABR</Select.Option>
+                          <Select.Option value="OTHER">OTHER</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={6}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                          <Select.Option value="OD Only">OD Only</Select.Option>
+                          <Select.Option value="ID Only">ID Only</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={6}>
+                      <Form.Item name="yball" label="Y-Ball" initialValue="N">
+                        <Select>
+                          <Select.Option value="N">N</Select.Option>
+                          <Select.Option value="Y">Y</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={6}>
+                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <DimCard label="Before Process (Bf)" prefix="bf" />
+                  <DimCard label="After Process (Aft)" prefix="aft" />
+                </>
+              )}
 
-              <Card title="After Process (Aft)" size="small" style={{ marginBottom: 12 }}>
-                <Row gutter={8}>
-                  <Col span={8}>
-                    <Form.Item name="od_aft" label="OD Aft">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="od_aft_max" label="OD Aft Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="od_aft_min" label="OD Aft Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="id_aft" label="ID Aft">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="id_aft_max" label="ID Aft Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="id_aft_min" label="ID Aft Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="w_aft" label="W Aft">
-                      <InputNumber style={{ width: '100%' }} precision={4} />
-                    </Form.Item>
-                    <Row gutter={4}>
-                      <Col span={12}><Form.Item name="w_aft_max" label="W Aft Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                      <Col span={12}><Form.Item name="w_aft_min" label="W Aft Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
-                    </Row>
-                  </Col>
-                </Row>
-              </Card>
+              {/* ── RACE (C2x) ── OD/ID/W + Process + SD ── */}
+              {getPartType(watchedCn || editingRecord?.cn) === 'RACE' && (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <DimCard label="Before Process (Bf)" prefix="bf" />
+                  <DimCard label="After Process (Aft)" prefix="aft" />
+                </>
+              )}
 
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Form.Item name="sd" label="SD (Ball Diameter)">
-                    <InputNumber style={{ width: '100%' }} precision={4} />
-                  </Form.Item>
-                </Col>
-              </Row>
+              {/* ── SLEEVE (C6x) ── OD/ID/W + Process ── */}
+              {getPartType(watchedCn || editingRecord?.cn) === 'SLEEVE' && (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <DimCard label="Before Process (Bf)" prefix="bf" />
+                  <DimCard label="After Process (Aft)" prefix="aft" />
+                </>
+              )}
+
+              {/* ── BODY (C1x / C5x) ── Body-specific fields only ── */}
+              {getPartType(watchedCn || editingRecord?.cn) === 'BODY' && (
+                <>
+                  <Row gutter={12} style={{ marginBottom: 8 }}>
+                    <Col span={8}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Card title="Body Dimensions" size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={8}>
+                      <Col span={6}><Form.Item name="final_id" label="Final ID"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                      <Col span={6}><Form.Item name="head_width" label="Head Width"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                      <Col span={6}><Form.Item name="thread_length" label="Thread Length"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                      <Col span={3}><Form.Item name="shape_code" label="Shape"><Input /></Form.Item></Col>
+                      <Col span={3}><Form.Item name="nipple" label="Nipple"><Input /></Form.Item></Col>
+                      <Col span={3}><Form.Item name="key_groove" label="Key Groove"><Input /></Form.Item></Col>
+                    </Row>
+                  </Card>
+                  <Card title="Body Blank" size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={8}>
+                      {[
+                        ['blank_head','Head'],['blank_f_dim','F Dim'],
+                        ['blank_r2','R2'],['blank_r3','R3'],
+                        ['female_shankdia','Shank Dia'],['female_shank','Shank'],
+                        ['female_id_dim','ID Dim'],['female_flange_d','Flange D'],
+                        ['female_flange_h','Flange H'],
+                      ].map(([name, label]) => (
+                        <Col span={6} key={name}>
+                          <Form.Item name={name} label={label}>
+                            <InputNumber style={{ width: '100%' }} precision={4} />
+                          </Form.Item>
+                        </Col>
+                      ))}
+                    </Row>
+                  </Card>
+                  <Card title="Body Thread" size="small" style={{ marginBottom: 12 }}>
+                    <Row gutter={8}>
+                      <Col span={8}><Form.Item name="thread_name" label="Thread Name"><Input placeholder="e.g. M12*1.25" /></Form.Item></Col>
+                      <Col span={5}><Form.Item name="thread_max_od" label="OD Max"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                      <Col span={5}><Form.Item name="thread_min_od" label="OD Min"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                      <Col span={6}><Form.Item name="pre_thread" label="Pre-Thread"><InputNumber style={{ width: '100%' }} precision={4} /></Form.Item></Col>
+                    </Row>
+                  </Card>
+                </>
+              )}
             </Form>
           </Modal>
     </div>

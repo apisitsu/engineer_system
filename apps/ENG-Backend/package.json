@@ -47,6 +47,7 @@
     "jsonwebtoken": "^9.0.3",
     "moment-timezone": "^0.5.46",
     "multer": "^1.4.3",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "os": "^0.1.2",
     "pdf-lib": "^1.17.1",
@@ -68,13 +69,15 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11",
     "jest": "^29.7.0",
+    "nodemon": "^3.1.11",
     "supertest": "^7.0.0"
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.js"],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
     "collectCoverageFrom": [
       "api/engineer/mtc/services/**/*.js",
       "api/engineer/mtc/controllers/**/*.js",
