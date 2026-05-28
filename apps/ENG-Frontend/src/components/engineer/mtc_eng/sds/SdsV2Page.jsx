@@ -371,7 +371,9 @@ const SdsV2Page = () => {
           render: (_, r) => {
             const key = r.tool_dwg_no?.trim();
             const m = r._isExtra ? r._tsM2 : matchMap[key]?.m2;
-            return m ? <Tag color="geekblue">{m}</Tag> : <span style={{ color: '#bbb' }}>-</span>;
+            if (!m) return <span style={{ color: '#bbb' }}>-</span>;
+            const isSame = !r._isExtra && m === key;
+            return <Tag color={isSame ? 'default' : 'geekblue'}>{m}</Tag>;
           },
         },
       ] : []),
