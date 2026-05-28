@@ -44,7 +44,7 @@ function InspectionReport() {
   const [selectedMonth, setSelectedMonth] = useState(moment().format('MM-YYYY'));
 
   const fetchDashboardData = useCallback(async (monthYear) => {
-    const month = monthYear || selectedMonth;
+    const month = monthYear || moment().format('MM-YYYY');
     try {
       const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${month}`);
       setDashboardData(response.data);
@@ -53,7 +53,7 @@ function InspectionReport() {
       console.error("Fetch Dashboard Error:", error);
       setDashboardData({});
     }
-  }, [selectedMonth]);
+  }, []);
 
   const fetchToolingInspectData = useCallback(async () => {
     if (filterType === 'date' && !selectedDate) {
@@ -176,7 +176,7 @@ function InspectionReport() {
     }));
     setTimelineDashboard(monthOptions);
     fetchDashboardData(moment().format('MM-YYYY'));
-  }, [fetchDashboardData]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchToolingInspectData();

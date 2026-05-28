@@ -223,6 +223,45 @@ async function searchInventory(machine, rules, computedDims) {
   return rows;
 }
 
+// ── Post-processing: suffix-link SUPPORT BLOCK to LOADING CHUTE ─────────────
+//
+// SUPPORT BLOCK (4664-03-XXXX) and LOADING CHUTE (4664-02-XXXX) are designed
+// as matched pairs sharing the same 4-digit suffix XXXX. Independent
+// dimension-based searches can return mismatched suffixes, so after all
+// tooling searches complete we pin the SUPPORT BLOCK to the exact item whose
+// suffix matches the best LOADING CHUTE result.
+//
+// Falls back to the dimension-based result when no suffix match exists.
+async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
+  // Group results by machine
+  const byMachine = {};
+  for (const r of results) {
+    if (!byMachine[r.machine]) byMachine[r.machine] = {};
+    byMachine[r.machine][r.tooling] = r;
+  }
+
+  for (const [machineName, toolings] of Object.entries(byMachine)) {
+    const lc = toolings['LOADING CHUTE'];
+    const sb = toolings['SUPPORT BLOCK'];
+    if (!lc?.matches?.[0] || !sb) continue;
+
+    const lcNo = lc.matches[0].tooling_no;
+    if (!lcNo || !/^4664-02-/.test(lcNo)) continue;
+
+    const sbNo = lcNo.replace('4664-02-', '4664-03-');
+    const table = machineByDisplay[machineName]?.inventory_table;
+    if (!table) continue;
+
+    const { rows } = await engPool.query(
+      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+      [sbNo]
+    );
+    if (rows.length > 0) {
+      sb.matches = rows;
+    }
+  }
+}
+
 // ── Main Search ──────────────────────────────────────────────────────────────
 
 async function search(cn) {
@@ -305,6 +344,13 @@ async function search(cn) {
       warnings.push({ machine: displayName, reason: err.message });
     }
   }));
+
+  // Build displayName → machine config map for post-processing
+  const machineByDisplay = {};
+  for (const m of searchMachines) {
+    machineByDisplay[m._displayName || m.machine_name] = m;
+  }
+  await _linkSupportBlockToLoadingChute(results, machineByDisplay);
 
   results.sort((a, b) =>
     a.machine.localeCompare(b.machine) || a.tooling.localeCompare(b.tooling)
