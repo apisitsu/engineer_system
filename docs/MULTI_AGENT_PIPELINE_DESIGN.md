@@ -47,7 +47,7 @@ ToolingOrchestrator.findFixtures(cnNumber)
   │
   ├─ 3. Formula Swarm — Promise.allSettled (parallel, partial-failure OK)
   │        FormulaAgent('KS-B22G').execute()    → timeout 8s
-  │        FormulaAgent('TSG-300ZNC').execute() → timeout 8s
+  │        FormulaAgent('TSG-300').execute()    → timeout 8s
   │        FormulaAgent('KS400B').execute()     → timeout 8s
   │        FormulaAgent('KS-03A').execute()     → timeout 8s
   │        FormulaAgent('KS500RD').execute()    → timeout 8s
