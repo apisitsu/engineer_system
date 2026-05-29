@@ -52,6 +52,9 @@ export default function usePdfEditor() {
     // ── Per-page Fabric.js annotation JSON ──
     const [pageAnnotations, setPageAnnotations] = useState({});
 
+    // ── Per-page highlight data (plain objects, rendered on blend canvas) ──
+    const [pageHighlights, setPageHighlights] = useState({});
+
     // ── History (undo/redo) ──
     const historyRef = useRef({ past: [], future: [] });
 
@@ -64,8 +67,8 @@ export default function usePdfEditor() {
     // ── History version for reactivity ──
     const [historyVersion, setHistoryVersion] = useState(0);
 
-    // ── Fabric canvas ref (set by EditorCanvas) ──
-    const fabricCanvasRef = useRef(null);
+    // ── Fabric canvas refs map (for continuous scroll) ──
+    const fabricCanvasRefs = useRef({});
 
     // ── Page size cache ──
     const [pageSize, setPageSize] = useState({ width: 612, height: 792 }); // Default letter
@@ -95,6 +98,7 @@ export default function usePdfEditor() {
 
             setPdfFile(file);
             setPageAnnotations({});
+            setPageHighlights({});
             setThumbnails({});
             historyRef.current = { past: [], future: [] };
 
@@ -138,6 +142,7 @@ export default function usePdfEditor() {
 
             setPdfFile({ name: filename, size: uint8.length });
             setPageAnnotations({});
+            setPageHighlights({});
             setThumbnails({});
             historyRef.current = { past: [], future: [] };
 
@@ -167,14 +172,7 @@ export default function usePdfEditor() {
     const goToPage = useCallback(async (pageNum) => {
         if (!pdfDoc || pageNum < 1 || pageNum > totalPages) return;
 
-        // Save current page's Fabric.js state before navigating
-        if (fabricCanvasRef.current) {
-            const json = fabricCanvasRef.current.toJSON(['customData']);
-            json._canvasWidth = fabricCanvasRef.current.width;
-            json._canvasHeight = fabricCanvasRef.current.height;
-            setPageAnnotations(prev => ({ ...prev, [currentPage]: json }));
-        }
-
+        // Note: The actual DOM scrolling will be handled by the continuous scroll container
         setCurrentPage(pageNum);
 
         // Update page size for the target page
@@ -198,57 +196,118 @@ export default function usePdfEditor() {
     const zoomTo = useCallback((val) => setZoom(Math.max(0.25, Math.min(3.0, val))), []);
 
     // ══════════════════════════════════════════════════════════════════
-    // Undo / Redo (snapshot-based)
+    // Undo / Redo (snapshot-based per page)
     // ══════════════════════════════════════════════════════════════════
-    const pushHistory = useCallback(() => {
-        if (!fabricCanvasRef.current) return;
-        const snapshot = fabricCanvasRef.current.toJSON(['customData']);
-        historyRef.current.past.push(snapshot);
+    const pushHistory = useCallback((pageNum) => {
+        const fc = fabricCanvasRefs?.current?.[pageNum];
+        if (!fc) return;
+        const fabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        // Snapshot highlights for this page too
+        const highlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        historyRef.current.past.push({ pageNum, fabricSnapshot, highlightSnapshot });
         historyRef.current.future = []; // Clear redo stack
         // Cap at 50 entries
         if (historyRef.current.past.length > 50) {
             historyRef.current.past.shift();
         }
         setHistoryVersion(v => v + 1);
-    }, []);
+    }, [pageHighlights]);
 
     const undo = useCallback(() => {
         const { past, future } = historyRef.current;
-        if (past.length === 0 || !fabricCanvasRef.current) return;
-        const current = fabricCanvasRef.current.toJSON(['customData']);
-        future.push(current);
-        const prev = past.pop();
-        fabricCanvasRef.current.loadFromJSON(prev, () => {
-            fabricCanvasRef.current.renderAll();
-            setHistoryVersion(v => v + 1);
+        if (past.length === 0) return;
+
+        const prevEntry = past.pop();
+        const { pageNum, fabricSnapshot, highlightSnapshot } = prevEntry;
+        const fc = fabricCanvasRefs?.current?.[pageNum];
+        
+        if (!fc) {
+            // Put it back if canvas isn't rendered
+            past.push(prevEntry);
+            return;
+        }
+
+        // Save current state to future (redo)
+        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const currentHighlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        future.push({ pageNum, fabricSnapshot: currentFabricSnapshot, highlightSnapshot: currentHighlightSnapshot });
+
+        // Restore fabric
+        const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        fc.loadFromJSON(parsedSnapshot, () => {
+            fc.requestRenderAll();
         });
-    }, []);
+
+        // Restore highlights
+        if (highlightSnapshot) {
+            const restoredHL = typeof highlightSnapshot === 'string' ? JSON.parse(highlightSnapshot) : highlightSnapshot;
+            setPageHighlights(prev => ({ ...prev, [pageNum]: restoredHL }));
+        }
+
+        setHistoryVersion(v => v + 1);
+        setCurrentPage(pageNum);
+    }, [pageHighlights]);
 
     const redo = useCallback(() => {
         const { past, future } = historyRef.current;
-        if (future.length === 0 || !fabricCanvasRef.current) return;
-        const current = fabricCanvasRef.current.toJSON(['customData']);
-        past.push(current);
-        const next = future.pop();
-        fabricCanvasRef.current.loadFromJSON(next, () => {
-            fabricCanvasRef.current.renderAll();
-            setHistoryVersion(v => v + 1);
+        if (future.length === 0) return;
+
+        const nextEntry = future.pop();
+        const { pageNum, fabricSnapshot, highlightSnapshot } = nextEntry;
+        const fc = fabricCanvasRefs?.current?.[pageNum];
+        
+        if (!fc) {
+            future.push(nextEntry);
+            return;
+        }
+
+        // Save current state to past (undo)
+        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const currentHighlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        past.push({ pageNum, fabricSnapshot: currentFabricSnapshot, highlightSnapshot: currentHighlightSnapshot });
+
+        // Restore fabric
+        const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        fc.loadFromJSON(parsedSnapshot, () => {
+            fc.requestRenderAll();
         });
-    }, []);
+
+        // Restore highlights
+        if (highlightSnapshot) {
+            const restoredHL = typeof highlightSnapshot === 'string' ? JSON.parse(highlightSnapshot) : highlightSnapshot;
+            setPageHighlights(prev => ({ ...prev, [pageNum]: restoredHL }));
+        }
+
+        setHistoryVersion(v => v + 1);
+        setCurrentPage(pageNum);
+    }, [pageHighlights]);
 
     const canUndo = historyRef.current.past.length > 0;
     const canRedo = historyRef.current.future.length > 0;
 
     // ══════════════════════════════════════════════════════════════════
-    // Save Current Page State
+    // Save Current Page State (All active canvases)
     // ══════════════════════════════════════════════════════════════════
     const saveCurrentPageState = useCallback(() => {
-        if (!fabricCanvasRef.current) return;
-        const json = fabricCanvasRef.current.toJSON(['customData']);
-        json._canvasWidth = fabricCanvasRef.current.width;
-        json._canvasHeight = fabricCanvasRef.current.height;
-        setPageAnnotations(prev => ({ ...prev, [currentPage]: json }));
-    }, [currentPage]);
+        setPageAnnotations(prev => {
+            const next = { ...prev };
+            Object.entries(fabricCanvasRefs.current).forEach(([pageNumStr, fc]) => {
+                if (fc) {
+                    const json = fc.toJSON(['customData']);
+                    json._canvasWidth = fc.width;
+                    json._canvasHeight = fc.height;
+                    next[pageNumStr] = json;
+                }
+            });
+            return next;
+        });
+    }, []);
 
     // ══════════════════════════════════════════════════════════════════
     // Get Annotation Count
@@ -261,38 +320,7 @@ export default function usePdfEditor() {
     const totalAnnotations = Object.values(pageAnnotations)
         .reduce((sum, data) => sum + (data?.objects?.length || 0), 0);
 
-    // ══════════════════════════════════════════════════════════════════
-    // Keyboard Shortcuts
-    // ══════════════════════════════════════════════════════════════════
-    useEffect(() => {
-        const handler = (e) => {
-            // Skip if inside input/textarea
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-                e.preventDefault();
-                undo();
-            }
-            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
-                e.preventDefault();
-                redo();
-            }
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (fabricCanvasRef.current) {
-                    const active = fabricCanvasRef.current.getActiveObjects();
-                    if (active.length > 0) {
-                        e.preventDefault();
-                        pushHistory();
-                        active.forEach(obj => fabricCanvasRef.current.remove(obj));
-                        fabricCanvasRef.current.discardActiveObject();
-                        fabricCanvasRef.current.renderAll();
-                    }
-                }
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [undo, redo, pushHistory]);
+    // Keyboard Shortcuts listener removed - now handled by ShortcutsHandler.jsx
 
     // ══════════════════════════════════════════════════════════════════
     // Return
@@ -311,6 +339,9 @@ export default function usePdfEditor() {
         pageAnnotations, setPageAnnotations,
         saveCurrentPageState, getAnnotationCount, totalAnnotations,
 
+        // Highlights (blend layer)
+        pageHighlights, setPageHighlights,
+
         // History
         pushHistory, undo, redo, canUndo, canRedo, historyVersion,
 
@@ -323,8 +354,8 @@ export default function usePdfEditor() {
         // Thumbnails
         thumbnails, setThumbnails,
 
-        // Fabric ref
-        fabricCanvasRef,
+        // Fabric refs map
+        fabricCanvasRefs,
 
         // Container ref for fit-to-width
         canvasWrapperRef,

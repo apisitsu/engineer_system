@@ -16,7 +16,7 @@ const ShortcutsHandler = ({
     onZoomOut,
     onDelete,
     onSave,
-    fabricCanvasRef,
+    fabricCanvasRefs,
 }) => {
     const store = usePdfEditorStore();
 
@@ -26,30 +26,36 @@ const ShortcutsHandler = ({
         if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
 
         // Also ignore when Fabric.js IText is being edited
-        const fc = fabricCanvasRef?.current;
-        if (fc) {
-            const active = fc.getActiveObject();
-            if (active && active.isEditing) return;
+        let isEditingText = false;
+        if (fabricCanvasRefs?.current) {
+            Object.values(fabricCanvasRefs.current).forEach(fc => {
+                if (fc) {
+                    const active = fc.getActiveObject();
+                    if (active && active.isEditing) isEditingText = true;
+                }
+            });
         }
+        if (isEditingText) return;
 
         const ctrl = e.ctrlKey || e.metaKey;
         const shift = e.shiftKey;
-        const key = e.key.toLowerCase();
+        const code = e.code?.toLowerCase();
+        const key = e.key?.toLowerCase();
 
         // ── Undo / Redo ──
-        if (ctrl && !shift && key === 'z') {
+        if (ctrl && !shift && (code === 'keyz' || key === 'z')) {
             e.preventDefault();
             onUndo?.();
             return;
         }
-        if (ctrl && (key === 'y' || (shift && key === 'z'))) {
+        if (ctrl && (code === 'keyy' || key === 'y' || (shift && (code === 'keyz' || key === 'z')))) {
             e.preventDefault();
             onRedo?.();
             return;
         }
 
         // ── Save (Ctrl+S) ──
-        if (ctrl && key === 's') {
+        if (ctrl && (code === 'keys' || key === 's')) {
             e.preventDefault();
             onSave?.();
             return;
@@ -89,9 +95,15 @@ const ShortcutsHandler = ({
         // ── Escape — deselect or switch to select tool ──
         if (key === 'escape') {
             e.preventDefault();
-            if (fc) fc.discardActiveObject();
+            if (fabricCanvasRefs?.current) {
+                Object.values(fabricCanvasRefs.current).forEach(fc => {
+                    if (fc) {
+                        fc.discardActiveObject();
+                        fc.renderAll();
+                    }
+                });
+            }
             store.setActiveTool('select');
-            fc?.renderAll();
             return;
         }
 
@@ -129,7 +141,7 @@ const ShortcutsHandler = ({
                     break;
             }
         }
-    }, [store, fabricCanvasRef, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave]);
+    }, [store, fabricCanvasRefs, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
