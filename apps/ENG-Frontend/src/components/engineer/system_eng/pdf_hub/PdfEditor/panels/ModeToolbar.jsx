@@ -8,8 +8,10 @@ import {
     FormOutlined, SignatureOutlined, SafetyCertificateOutlined,
     CalendarOutlined, MergeCellsOutlined, FileImageOutlined,
     SelectOutlined, DragOutlined, ColumnHeightOutlined,
+    CheckOutlined, CloseOutlined, CheckCircleOutlined, IdcardOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
+import { useAuthStore } from '../../../../../../stores/authStore';
 import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
 
 /**
@@ -20,6 +22,9 @@ import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
 const ModeToolbar = () => {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
+    const { userDepartment } = useAuthStore();
+    
+    const isAdOrEng = userDepartment === 'AD' || userDepartment === 'ENG';
 
     const ToolBtn = ({ tool, icon, label, danger }) => {
         const isActive = store.activeTool === tool;
@@ -103,6 +108,19 @@ const ModeToolbar = () => {
                     </div>
                     <ToolDivider />
                     <div className="pdf-ws-toolbar-group">
+                        <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
+                        <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
+                        <ToolBtn tool="stampCircle" icon={
+                            <span style={{
+                                display: 'inline-flex', width: 14, height: 14,
+                                borderRadius: '50%', border: '2px solid currentColor',
+                                boxSizing: 'border-box',
+                            }} />
+                        } label="Circle (○)" />
+                        <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
+                    </div>
+                    <ToolDivider />
+                    <div className="pdf-ws-toolbar-group">
                         <ToolBtn tool="ruler" icon={<ColumnWidthOutlined />} label="Measurement Ruler" />
                     </div>
                 </div>
@@ -135,6 +153,9 @@ const ModeToolbar = () => {
                         <ToolBtn tool="formFill" icon={<FormOutlined />} label="Fill Form Fields" />
                         <ToolBtn tool="signature" icon={<EditOutlined />} label="Add Signature" />
                         <ToolBtn tool="stamp" icon={<SafetyCertificateOutlined />} label="Add Stamp / Approve" />
+                        {isAdOrEng && (
+                            <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                        )}
                         <ToolBtn tool="date" icon={<CalendarOutlined />} label="Add Date" />
                     </div>
                 </div>

@@ -66,13 +66,54 @@ async function embedImage(doc, base64Data) {
  * @param {Uint8Array} pdfBytes - Original PDF file bytes
  * @param {Object} pageAnnotations - { [pageNum]: { objects, _canvasWidth, _canvasHeight } }
  * @param {Object} formValues - Optional { [fieldName]: value } for AcroForm filling
+ * @param {Object} pageHighlights - Optional { [pageNum]: [ { x, y, width, height, color } ] }
  * @returns {Promise<Uint8Array>} - Modified PDF bytes
  */
-export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null) {
+export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
     const doc = await PDFDocument.load(pdfBytes);
     const pages = doc.getPages();
 
-    // ── Commit annotations per page ──
+    // ── Commit highlights per page (drawn first so text stays on top) ──
+    if (pageHighlights) {
+        for (const [pageNumStr, highlights] of Object.entries(pageHighlights)) {
+            const pageIdx = parseInt(pageNumStr) - 1;
+            if (pageIdx < 0 || pageIdx >= pages.length || !highlights?.length) continue;
+
+            const page = pages[pageIdx];
+            const { width: pW, height: pH } = page.getSize();
+
+            // Get canvas dimensions from the annotation data for this page, or use PDF dims
+            const fabricData = pageAnnotations[pageNumStr];
+            const cW = fabricData?._canvasWidth || pW;
+            const cH = fabricData?._canvasHeight || pH;
+
+            for (const hl of highlights) {
+                const color = hexToRgb(hl.color || '#ffeb3b');
+                if (!color) continue;
+
+                let x, y, w, h;
+                if (hl.normX !== undefined) {
+                    x = hl.normX * pW;
+                    y = pH - ((hl.normY + hl.normH) * pH);
+                    w = hl.normW * pW;
+                    h = hl.normH * pH;
+                } else {
+                    x = toPdf(hl.x, cW, pW);
+                    y = toPdfY(hl.y + hl.height, cH, pH);
+                    w = toPdf(hl.width, cW, pW);
+                    h = toPdf(hl.height, cH, pH);
+                }
+
+                page.drawRectangle({
+                    x, y, width: w, height: h,
+                    color,
+                    opacity: 0.35,
+                });
+            }
+        }
+    }
+
+    // ── Commit Fabric.js annotations per page ──
     for (const [pageNumStr, fabricData] of Object.entries(pageAnnotations)) {
         const pageIdx = parseInt(pageNumStr) - 1;
         if (pageIdx < 0 || pageIdx >= pages.length) continue;
@@ -176,7 +217,7 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             page.drawLine({
                 start: { x: x1, y: y1 },
                 end: { x: x2, y: y2 },
-                thickness: toPdf(obj.strokeWidth || 2, cW, pW),
+                thickness: toPdf((obj.strokeWidth * (obj.scaleY || 1)) || 2, cW, pW),
                 color: hexToRgb(obj.stroke) || rgb(0, 0, 0),
                 opacity: obj.opacity ?? 1,
             });
@@ -242,30 +283,109 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         }
 
         case 'path': {
-            // Freehand drawing — convert Fabric.js path to PDF
-            // Simplified: draw each segment as lines
+            // Freehand drawing — parse Fabric.js SVG path commands properly
             if (obj.path) {
                 const color = hexToRgb(obj.stroke) || rgb(0, 0, 0);
                 const thickness = toPdf(obj.strokeWidth || 2, cW, pW);
                 const offsetX = obj.left || 0;
                 const offsetY = obj.top || 0;
 
-                for (let i = 0; i < obj.path.length - 1; i++) {
-                    const curr = obj.path[i];
-                    const next = obj.path[i + 1];
-                    if (curr.length >= 3 && next.length >= 3) {
-                        const x1 = toPdf(curr[curr.length - 2] + offsetX, cW, pW);
-                        const y1 = toPdfY(curr[curr.length - 1] + offsetY, cH, pH);
-                        const x2 = toPdf(next[next.length - 2] + offsetX, cW, pW);
-                        const y2 = toPdfY(next[next.length - 1] + offsetY, cH, pH);
+                let curX = 0, curY = 0;
 
-                        page.drawLine({
-                            start: { x: x1, y: y1 },
-                            end: { x: x2, y: y2 },
-                            thickness,
-                            color,
-                            opacity: obj.opacity ?? 1,
-                        });
+                for (const seg of obj.path) {
+                    const cmd = seg[0];
+
+                    switch (cmd) {
+                        case 'M': // MoveTo
+                            curX = seg[1];
+                            curY = seg[2];
+                            break;
+
+                        case 'L': { // LineTo
+                            const x1 = toPdf(curX + offsetX, cW, pW);
+                            const y1 = toPdfY(curY + offsetY, cH, pH);
+                            const x2 = toPdf(seg[1] + offsetX, cW, pW);
+                            const y2 = toPdfY(seg[2] + offsetY, cH, pH);
+
+                            page.drawLine({
+                                start: { x: x1, y: y1 },
+                                end: { x: x2, y: y2 },
+                                thickness, color,
+                                opacity: obj.opacity ?? 1,
+                            });
+                            curX = seg[1];
+                            curY = seg[2];
+                            break;
+                        }
+
+                        case 'Q': { // Quadratic Bézier — approximate with 2 line segments
+                            const cpX = seg[1], cpY = seg[2];
+                            const endQX = seg[3], endQY = seg[4];
+
+                            // Segment 1: current → control point
+                            page.drawLine({
+                                start: { x: toPdf(curX + offsetX, cW, pW), y: toPdfY(curY + offsetY, cH, pH) },
+                                end: { x: toPdf(cpX + offsetX, cW, pW), y: toPdfY(cpY + offsetY, cH, pH) },
+                                thickness, color, opacity: obj.opacity ?? 1,
+                            });
+                            // Segment 2: control point → end
+                            page.drawLine({
+                                start: { x: toPdf(cpX + offsetX, cW, pW), y: toPdfY(cpY + offsetY, cH, pH) },
+                                end: { x: toPdf(endQX + offsetX, cW, pW), y: toPdfY(endQY + offsetY, cH, pH) },
+                                thickness, color, opacity: obj.opacity ?? 1,
+                            });
+                            curX = endQX;
+                            curY = endQY;
+                            break;
+                        }
+
+                        case 'C': { // Cubic Bézier — approximate with 4 line segments
+                            const cp1X = seg[1], cp1Y = seg[2];
+                            const cp2X = seg[3], cp2Y = seg[4];
+                            const endCX = seg[5], endCY = seg[6];
+                            const steps = 4;
+
+                            let prevPx = curX, prevPy = curY;
+                            for (let t = 1; t <= steps; t++) {
+                                const s = t / steps;
+                                const inv = 1 - s;
+                                // Cubic Bézier formula: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+                                const px = inv*inv*inv*curX + 3*inv*inv*s*cp1X + 3*inv*s*s*cp2X + s*s*s*endCX;
+                                const py = inv*inv*inv*curY + 3*inv*inv*s*cp1Y + 3*inv*s*s*cp2Y + s*s*s*endCY;
+
+                                page.drawLine({
+                                    start: { x: toPdf(prevPx + offsetX, cW, pW), y: toPdfY(prevPy + offsetY, cH, pH) },
+                                    end: { x: toPdf(px + offsetX, cW, pW), y: toPdfY(py + offsetY, cH, pH) },
+                                    thickness, color, opacity: obj.opacity ?? 1,
+                                });
+                                prevPx = px;
+                                prevPy = py;
+                            }
+                            curX = endCX;
+                            curY = endCY;
+                            break;
+                        }
+
+                        case 'Z': // ClosePath — line back to start (rarely used in freehand)
+                        case 'z':
+                            break;
+
+                        default:
+                            // Fallback: treat last two values as endpoint
+                            if (seg.length >= 3) {
+                                const fx1 = toPdf(curX + offsetX, cW, pW);
+                                const fy1 = toPdfY(curY + offsetY, cH, pH);
+                                const fx2 = toPdf(seg[seg.length - 2] + offsetX, cW, pW);
+                                const fy2 = toPdfY(seg[seg.length - 1] + offsetY, cH, pH);
+                                page.drawLine({
+                                    start: { x: fx1, y: fy1 },
+                                    end: { x: fx2, y: fy2 },
+                                    thickness, color, opacity: obj.opacity ?? 1,
+                                });
+                                curX = seg[seg.length - 2];
+                                curY = seg[seg.length - 1];
+                            }
+                            break;
                     }
                 }
             }
