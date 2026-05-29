@@ -71,10 +71,22 @@ function sortBySeq(a, b) {
  */
 async function searchByCn(cn, maqPool, rodpcPool) {
   let cnUpper = cn.trim().toUpperCase();
+
   if (/^\d{6}$/.test(cnUpper)) {
+    // 6-digit numeric "250235" → "C25-00235"
     const converted = itemNoToCN(cnUpper);
     if (!converted) throw new Error(`Cannot convert item_no: ${cnUpper}`);
     cnUpper = converted;
+  } else {
+    // "Cxx-0235" or "Cxx-00235" → normalize to canonical "Cxx-00235" via 6-digit intermediate
+    // Factory DB stores format Cxx-0YYYY (5-digit suffix) but users often type Cxx-YYYY (4-digit)
+    const m = cnUpper.match(/^([A-Z])(\d{2})-0*(\d{4})$/);
+    if (m) {
+      const numeric = m[2] + m[3]; // e.g. "25" + "0235" = "250235"
+      const converted = itemNoToCN(numeric);
+      if (!converted) throw new Error(`Cannot convert: ${cnUpper}`);
+      cnUpper = converted;
+    }
   }
 
   const prefix = cnUpper.slice(0, 3);

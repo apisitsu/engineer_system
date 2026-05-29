@@ -1,0 +1,380 @@
+/* ============================================================================
+   DrawingBoard — A4 Engineering Drawing Layout Styles
+   ============================================================================ */
+
+/* ---- Container ---- */
+.drawing-board-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  background: #e8e8e8;
+  min-height: 100%;
+  overflow: auto;
+}
+
+.drawing-board {
+  background: #ffffff;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    0 8px 32px rgba(0, 0, 0, 0.1);
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ---- Borders (Engineering Drawing Standard) ---- */
+.drawing-border-outer {
+  position: absolute;
+  inset: 5px;
+  border: 3px solid #000;
+}
+
+.drawing-border-inner {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid #000;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Main Content Layout ---- */
+.drawing-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ---- 3D Viewport Area ---- */
+.drawing-viewport {
+  flex: 7;
+  min-width: 0;
+  border-right: 1px solid #000;
+  position: relative;
+}
+
+/* ---- Right Panel (Parameters + Notes) ---- */
+.drawing-right-panel {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  max-width: 320px;
+  overflow: hidden;
+}
+
+.drawing-param-header,
+.drawing-notes-header {
+  background: #f0f0f0;
+  border-bottom: 1px solid #000;
+  padding: 3px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #333;
+}
+
+.drawing-param-table {
+  flex: 1;
+  overflow: auto;
+  border-bottom: 1px solid #000;
+}
+
+.drawing-param-table .ant-table {
+  font-size: 10px !important;
+}
+
+.drawing-param-table .ant-table-thead > tr > th {
+  background: #f5f5f5 !important;
+  font-size: 9px !important;
+  padding: 2px 6px !important;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #ccc !important;
+}
+
+.drawing-param-table .ant-table-tbody > tr > td {
+  padding: 1px 6px !important;
+  border-bottom: 1px solid #eee !important;
+}
+
+.drawing-param-table .ant-table-tbody > tr:hover > td {
+  background: #fafafa !important;
+}
+
+.param-row {
+  font-size: 10px;
+}
+
+.param-more {
+  text-align: center;
+  font-size: 9px;
+  color: #999;
+  padding: 4px;
+  font-style: italic;
+}
+
+/* ---- Notes Section ---- */
+.drawing-notes {
+  border-top: 1px solid #000;
+}
+
+.drawing-notes-content {
+  padding: 4px 8px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.drawing-notes-content p {
+  margin: 0;
+}
+
+/* ---- Title Block Area ---- */
+.drawing-title-block-area {
+  border-top: 1px solid #000;
+  flex-shrink: 0;
+}
+
+/* ---- Title Block Component Styles ---- */
+.title-block {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Arial', 'Helvetica', sans-serif;
+}
+
+.tb-company-row {
+  display: flex;
+  border-bottom: 1px solid #000;
+  height: 36px;
+}
+
+.tb-company-logo {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 8px;
+  border-right: 1px solid #000;
+  background: #f8f8f8;
+}
+
+.tb-company-name {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #1a1a2e;
+}
+
+.tb-company-sub {
+  font-size: 7px;
+  color: #666;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.tb-drawing-title {
+  flex: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #000;
+}
+
+.tb-part-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #000;
+  text-align: center;
+}
+
+.tb-revision-box {
+  flex: 0 0 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f8f8f8;
+}
+
+.tb-rev-label {
+  font-size: 7px;
+  font-weight: 600;
+  color: #666;
+  letter-spacing: 1px;
+}
+
+.tb-rev-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+/* ---- Title Block Info Grid ---- */
+.tb-info-grid {
+  display: flex;
+  min-height: 52px;
+}
+
+.tb-signatures {
+  flex: 2;
+  border-right: 1px solid #000;
+}
+
+.tb-sig-row {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  height: 17px;
+  align-items: center;
+}
+
+.tb-sig-row:last-child {
+  border-bottom: none;
+}
+
+.tb-sig-label {
+  width: 54px;
+  font-size: 8px;
+  font-weight: 600;
+  padding: 0 4px;
+  color: #555;
+  border-right: 1px solid #ddd;
+}
+
+.tb-sig-name {
+  flex: 1;
+  font-size: 8px;
+  padding: 0 4px;
+  color: #000;
+  border-right: 1px solid #ddd;
+}
+
+.tb-sig-date {
+  width: 60px;
+  font-size: 8px;
+  padding: 0 4px;
+  color: #666;
+  text-align: center;
+}
+
+.tb-details {
+  flex: 4;
+  border-right: 1px solid #000;
+}
+
+.tb-details .tb-descriptions {
+  height: 100%;
+}
+
+.tb-details .ant-descriptions-bordered .ant-descriptions-item-label,
+.tb-details .ant-descriptions-bordered .ant-descriptions-item-content {
+  padding: 2px 6px !important;
+}
+
+.tb-drawing-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.tb-info-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+  padding: 0 6px;
+}
+
+.tb-info-item:last-child {
+  border-bottom: none;
+}
+
+.tb-info-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: #555;
+  width: 36px;
+}
+
+.tb-info-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: #000;
+}
+
+/* ============================================================================
+   Print Styles — For Puppeteer PDF generation
+   ============================================================================ */
+@media print {
+  /* Reset page */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+  /* Remove web UI elements */
+  .drawing-board-container {
+    padding: 0;
+    background: white;
+    overflow: visible;
+  }
+
+  .drawing-board {
+    box-shadow: none;
+    width: 100% !important;
+    height: 100vh !important;
+  }
+
+  /* Hide interactive elements */
+  .viewer-toolbar,
+  .toolbar-btn,
+  .view-preset-label,
+  .ant-btn,
+  [data-no-print],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ensure borders print */
+  .drawing-border-outer {
+    border-color: #000 !important;
+  }
+
+  .drawing-border-inner {
+    border-color: #000 !important;
+  }
+
+  /* Force 3D viewport to render as image for print */
+  .drawing-viewport canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+/* ---- Print Mode Class (injected by Puppeteer) ---- */
+body.print-mode .drawing-board-container {
+  padding: 0;
+  background: white;
+}
+
+body.print-mode .drawing-board {
+  box-shadow: none;
+}
+
+body.print-mode .viewer-toolbar,
+body.print-mode .toolbar-btn,
+body.print-mode [data-no-print] {
+  display: none !important;
+}

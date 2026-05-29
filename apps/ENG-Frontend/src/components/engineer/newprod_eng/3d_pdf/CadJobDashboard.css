@@ -1,0 +1,225 @@
+/* ============================================================================
+   CadJobDashboard — Main Dashboard Styles
+   ============================================================================ */
+
+/* ---- Layout ---- */
+.cad-dashboard-layout {
+  min-height: 100vh;
+  background: #141422;
+}
+
+.cad-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+  padding: 0 24px !important;
+  height: 64px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.header-subtitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-tag {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Form Overrides for Dark Theme ---- */
+.cad-dashboard-content .ant-form-item-label > label {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.cad-dashboard-content .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ff4d4f !important;
+}
+
+/* Upload Dragger Text */
+.cad-dashboard-content .ant-upload-drag {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+.cad-dashboard-content .ant-upload-text {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.cad-dashboard-content .ant-upload-hint {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.cad-dashboard-content .ant-upload-drag-icon .anticon {
+  color: #1890ff !important;
+}
+.cad-dashboard-content .ant-upload-list-item-name,
+.cad-dashboard-content .ant-upload-list-item .anticon {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.cad-dashboard-content .ant-upload-list-item:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Input and Textarea Text */
+.cad-dashboard-content .ant-input {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+  border-color: #d9d9d9 !important;
+}
+.cad-dashboard-content .ant-select-selector {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+  border-color: #d9d9d9 !important;
+}
+.cad-dashboard-content .ant-select-selection-item {
+  color: #000000 !important;
+}
+
+/* ---- Content ---- */
+.cad-dashboard-content {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ---- Tabs ---- */
+.dashboard-tabs .ant-tabs-nav {
+  margin-bottom: 0 !important;
+}
+
+.dashboard-tabs .ant-tabs-tab {
+  padding: 12px 20px !important;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dashboard-tabs .ant-tabs-content-holder {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+.dashboard-tab-content {
+  padding: 24px;
+}
+
+/* ---- Submit Tab ---- */
+.submit-btn {
+  height: 48px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #1890ff, #0050b3) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+.submit-btn:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(24, 144, 255, 0.4) !important;
+}
+
+/* ---- Progress Tab ---- */
+.progress-job-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  width: fit-content;
+}
+
+/* ---- Preview Tab ---- */
+.preview-tab {
+  padding: 16px !important;
+}
+
+.preview-controls {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-content {
+  min-height: 600px;
+}
+
+.standalone-viewer {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ---- History Tab ---- */
+.dashboard-tab-content .ant-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .cad-dashboard-content {
+    padding: 16px;
+  }
+
+  .dashboard-tab-content {
+    padding: 16px;
+  }
+
+  .header-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-title {
+    font-size: 14px;
+  }
+
+  .preview-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* ---- Animations ---- */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(24, 144, 255, 0); }
+  50% { box-shadow: 0 0 0 8px rgba(24, 144, 255, 0.15); }
+}
+
+.ant-progress-bg {
+  transition: width 0.5s ease !important;
+}

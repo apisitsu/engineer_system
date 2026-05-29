@@ -70,7 +70,7 @@ const PdfEditorTool = () => {
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
-        pushHistory, undo, redo, canUndo, canRedo,
+        pushHistory, undo, redo, canUndo, canRedo, historyVersion,
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
         thumbnails, setThumbnails,
@@ -152,8 +152,8 @@ const PdfEditorTool = () => {
             // Include current page
             if (fabricCanvasRef.current) {
                 const json = fabricCanvasRef.current.toJSON(['customData']);
-                json._canvasWidth = fabricCanvasRef.current.getWidth();
-                json._canvasHeight = fabricCanvasRef.current.getHeight();
+                json._canvasWidth = fabricCanvasRef.current.width;
+                json._canvasHeight = fabricCanvasRef.current.height;
                 finalAnnotations[currentPage] = json;
             }
 
@@ -223,8 +223,8 @@ const PdfEditorTool = () => {
             const allAnnotations = { ...pageAnnotations };
             if (fabricCanvasRef.current) {
                 const json = fabricCanvasRef.current.toJSON(['customData']);
-                json._canvasWidth = fabricCanvasRef.current.getWidth();
-                json._canvasHeight = fabricCanvasRef.current.getHeight();
+                json._canvasWidth = fabricCanvasRef.current.width;
+                json._canvasHeight = fabricCanvasRef.current.height;
                 allAnnotations[currentPage] = json;
             }
 
@@ -618,7 +618,7 @@ const PdfEditorTool = () => {
                     <Tooltip title="Apply & Download PDF">
                         <Button size="small" type="primary" icon={<DownloadOutlined />}
                             onClick={handleApplyAndDownload}
-                            disabled={totalAnnotations === 0 && store.activeMode !== 'merge'}
+                            disabled={(totalAnnotations === 0 && !canUndo && !(fabricCanvasRef.current && fabricCanvasRef.current.getObjects().length > 0)) && store.activeMode !== 'merge'}
                             style={{ borderRadius: 7, fontWeight: 600 }}>
                             Save
                         </Button>

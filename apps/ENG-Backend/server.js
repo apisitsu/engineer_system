@@ -127,7 +127,7 @@ const pdfHubController = require('./api/engineer/system/pdfHubController');
 app.use('/api/engineer/pdf-hub', pdfHubController);
 
 // Global File Upload Middleware (for routes not using multer)
-app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+app.use(fileupload({ createParentPath: true, limits: { fileSize: 500 * 1024 * 1024 } }));
 
 //--------------------Engineer Record (Rod End Request)---------------------//
 // Must be AFTER fileupload middleware so req.files is available for sync uploads
@@ -247,17 +247,21 @@ app.post('/api/upload', (req, res) => {
 const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
 app.use('/api/engineer/mtc', mtcRoutes);
 
-const toolingSelectController = require('./api/engineer/mtc/controllers/toolingSelectController');
-app.use('/api/tooling-select', verifyToken, toolingSelectController);
+const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
+app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 
-const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
-const toolingFormulaController = require('./api/engineer/mtc/controllers/toolingFormulaController');
-app.post('/api/mtc/tooling-formula/test', verifyToken, toolingFormulaController.test);
-app.get('/api/mtc/tooling-formula/machines', verifyToken, toolingFormulaController.getMachines);
-app.get('/api/mtc/tooling-formula/:machineName', verifyToken, toolingFormulaController.getFormulas);
-app.post('/api/mtc/tooling-formula', verifyToken, mtcIsAdmin, toolingFormulaController.create);
-app.put('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.update);
-app.delete('/api/mtc/tooling-formula/:id', verifyToken, mtcIsAdmin, toolingFormulaController.remove);
+// ── Auto sync: insert new factory CNs into tooling_spec_process every day at 08:00 ──
+const cron = require('node-cron');
+cron.schedule('0 8 * * *', async () => {
+  console.log('[cron] sync-new CNs starting...');
+  const result = await syncNewCns();
+  if (result.success) {
+    console.log(`[cron] sync-new done: ${result.synced} inserted, ${result.failed} failed (total_found=${result.total_found})`);
+  } else {
+    console.error('[cron] sync-new failed:', result.error);
+  }
+}, { timezone: 'Asia/Bangkok' });
+
 
 const sdsV2Controller = require('./api/engineer/mtc/controllers/sdsV2Controller');
 app.use('/api/sds/v2', sdsV2Controller);
@@ -361,6 +365,16 @@ require('./api/fea/fea_worker');
 app.use('/api/fea', feaSimulation);
 // Expose the output directory so the frontend can fetch the generated JSON files
 app.use('/output', express.static(path.join(__dirname, 'output')));
+
+//--------------------CAD Generation Module---------------------//
+const cadRouter = require('./api/cad/cad_router');
+// Initialize CAD worker so it starts listening for jobs
+require('./api/cad/cad_worker');
+app.use('/api/cad', cadRouter);
+// Serve exported CAD files (STEP, 3DXML, glTF, viewport images)
+app.use('/cad-output', express.static(path.join(__dirname, 'output', 'cad_results')));
+// Serve generated PDFs
+app.use('/cad-pdfs', express.static(path.join(__dirname, 'output', 'cad_pdfs')));
 
 // const { HttpsProxyAgent } = require('https-proxy-agent');
 // const proxyUrl = 'http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080';

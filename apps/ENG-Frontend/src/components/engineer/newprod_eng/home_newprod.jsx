@@ -71,6 +71,16 @@ const HomeNewProd = () => {
       restricted: true
     },
     {
+      id: '3d-cad-pdf',
+      title: '3D CAD PDF Generator',
+      description: 'Automate CATIA V5 3D model updates, generate interactive 3D previews with PMI annotations, and export engineering PDF drawings.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/3d_pdf',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['CATIA', '3D', 'PDF', 'CAD', 'PMI']
+    },
+    {
       id: 'pdf-merger',
       title: 'PDF Merger Tool',
       description: 'Easily merge multiple PDF files into a single document with drag-and-drop support.',

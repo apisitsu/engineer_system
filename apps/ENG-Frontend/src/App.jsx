@@ -48,12 +48,10 @@ import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
-import { SpecProcessManager } from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectPage';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/ToolManagementPage';
-import ToolingInventoryPage from './components/engineer/mtc_eng/tooling_select/ToolingInventoryPage';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page.jsx';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage.jsx';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
@@ -66,6 +64,7 @@ import RPNLookupCalc from './components/engineer/newprod_eng/calculators/RPNLook
 import GeometricRadiusCalc from './components/engineer/newprod_eng/calculators/GeometricRadiusCalc';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
+import CadJobDashboard from './components/engineer/newprod_eng/3d_pdf/CadJobDashboard';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
 
@@ -317,9 +316,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_INSPECT} element={<ToolingInspect />} />
                   <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
-                  <Route path={MTC_PATHS.TOOLING_SPEC} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
-                  <Route path={MTC_PATHS.TOOLING_INVENTORY} element={<ToolingInventoryPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
@@ -336,6 +333,7 @@ const AppContent = () => {
                   <Route path="/eng/kanban" element={<KanbanMain />} />
                   <Route path="/eng/kanban/guide" element={<UserGuideFullPage />} />
                   <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+                  <Route path="/eng/kanban/:projectId/:boardId" element={<KanbanMain />} />
 
                   {/* ------ User Guide ------ */}
                   <Route path="/eng/user-guide" element={<UserGuidePage />} />
@@ -354,6 +352,8 @@ const AppContent = () => {
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
+                <Route path="/eng/3d_pdf" element={<CadJobDashboard />} />
+                <Route path="/drawing/:jobId" element={<CadJobDashboard />} />
                 <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
 
                 {/* ------ PDF Management Hub ------ */}
@@ -423,15 +423,15 @@ const NotFound = () => {
 // Outer App component with ThemeProvider
 export default function App() {
   return (
-    <CacheBuster
-      currentVersion={packageInfo.version}
-      isEnabled={true}
-      isVerboseMode={false}
-      metaFileDirectory={"."}
-    >
-      <ThemeProvider>  {/* Wrap entire app with theme provider */}
+    <ThemeProvider>  {/* Wrap entire app with theme provider */}
+      <CacheBuster
+        currentVersion={packageInfo.version}
+        isEnabled={true}
+        isVerboseMode={false}
+        metaFileDirectory={"."}
+      >
         <AppContent />
-      </ThemeProvider>
-    </CacheBuster>
+      </CacheBuster>
+    </ThemeProvider>
   );
 }
