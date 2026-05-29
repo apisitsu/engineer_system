@@ -41,11 +41,14 @@ function InspectionReport() {
   const [toolingReturn, setToolingReturn] = useState(false);
   const [dwgRequestOpen, setDwgRequestOpen] = useState(false);
   const [updateFormOpen, setUpdateFormOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(moment().format('MM-YYYY'));
 
   const fetchDashboardData = useCallback(async (monthYear) => {
+    const month = monthYear || moment().format('MM-YYYY');
     try {
-      const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${monthYear}`);
+      const response = await axios.get(`${server.TOOLING_DASHBOARD_STATS_GET}?month=${month}`);
       setDashboardData(response.data);
+      if (monthYear) setSelectedMonth(monthYear);
     } catch (error) {
       console.error("Fetch Dashboard Error:", error);
       setDashboardData({});
@@ -95,12 +98,13 @@ function InspectionReport() {
       await axios.post(server.TOOLING_SYNC_CSV);
       message.success('Data updated successfully');
       fetchToolingInspectData();
+      fetchDashboardData(selectedMonth);
     } catch (e) {
       message.error('Failed to update data');
     } finally {
       setLoading(false);
     }
-  }, [fetchToolingInspectData]);
+  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth]);
 
   const handleUpdateRecord = useCallback((record) => {
     setSelectedData(record);
@@ -122,11 +126,12 @@ function InspectionReport() {
         await axios.post(`${server.TOOLING_INSPECT_API}/${id}/blacklist`, { reason: '' });
         message.success('Item blacklisted and deleted');
         fetchToolingInspectData();
+        fetchDashboardData(selectedMonth);
       } catch (e) {
         message.error('Failed to blacklist');
       }
     }
-  }, [fetchToolingInspectData]);
+  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth]);
 
   const { displayData, duplicatePoNos } = useMemo(() => {
     const count = {};
@@ -171,7 +176,7 @@ function InspectionReport() {
     }));
     setTimelineDashboard(monthOptions);
     fetchDashboardData(moment().format('MM-YYYY'));
-  }, [fetchDashboardData]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchToolingInspectData();
@@ -189,7 +194,7 @@ function InspectionReport() {
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 60 }} />
                   <div style={{ padding: '16px' }}>
-                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection Record System</Title>
+                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection</Title>
                     <Text type="secondary">Manage and track tooling inspection records</Text>
                   </div>
                 </div>
@@ -258,9 +263,9 @@ function InspectionReport() {
           </Content>
         </Spin>
       </Layout>
-      <ToolingReturnForm open={toolingReturn} onCancel={() => setToolingReturn(false)} onSuccess={() => { setToolingReturn(false); fetchToolingInspectData(); }} />
+      <ToolingReturnForm open={toolingReturn} onCancel={() => setToolingReturn(false)} onSuccess={() => { setToolingReturn(false); fetchToolingInspectData(); fetchDashboardData(selectedMonth); }} />
       <DWGRequestForm open={dwgRequestOpen} onCancel={() => setDwgRequestOpen(false)} />
-      <UpdateFormModal open={updateFormOpen} initialData={selectedData} onCancel={() => setUpdateFormOpen(false)} onSuccess={fetchToolingInspectData} />
+      <UpdateFormModal open={updateFormOpen} initialData={selectedData} onCancel={() => setUpdateFormOpen(false)} onSuccess={() => { fetchToolingInspectData(); fetchDashboardData(selectedMonth); }} />
     </Layout>
   );
 }

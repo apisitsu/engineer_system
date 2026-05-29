@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -52,24 +52,24 @@ export const server = {
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
 
-  // Tooling Select & SDS
-  MTC_TOOLING_SELECT_SEARCH: `${apiUrl}api/tooling-select/search`,
-  MTC_TOOLING_INVENTORY: `${apiUrl}api/tooling-select/inventory`,
-  MTC_TOOLING_TABLES: `${apiUrl}api/tooling-select/tables`,
-  MTC_TOOLING_NAMES: `${apiUrl}api/tooling-select/tooling-names`,
-  MTC_TOOLING_CREATE_TABLE: `${apiUrl}api/tooling-select/create-table`,
-  MTC_TOOLING_RULES: `${apiUrl}api/tooling-select/rules`,
-  MTC_TOOLING_RULES_VALIDATE: `${apiUrl}api/tooling-select/rules/validate`,
-  MTC_MACHINE_CONFIG: `${apiUrl}api/tooling-select/machine-config`,
-  MTC_MACHINE_TABLE_CONFIG: `${apiUrl}api/tooling-select/machine-table-config`,
-  MTC_TOOLING_COLUMNS: `${apiUrl}api/tooling-select/columns`,
+  // Tooling Select
+  TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
+  TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
+  TSV2_INVENTORY:       `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
+  TSV2_COLUMNS:       `${apiUrl}api/tooling-select/columns`,
+  TSV2_LIMITS:        `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
+  TSV2_FORMULAS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
+  TSV2_TOOLINGS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/toolings
+  TSV2_FORMULA_ITEM:  `${apiUrl}api/tooling-select/formulas`,         // append /:id
+  TSV2_LIMIT_ITEM:    `${apiUrl}api/tooling-select/limits`,           // append /:id
+  TSV2_SEARCH_RULES:  `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
+  TSV2_RULE_ITEM:     `${apiUrl}api/tooling-select/search-rules`,     // append /:id
+  TSV2_FORMULA_TEST:  `${apiUrl}api/tooling-select/formula/test`,
+  TSV2_SEARCH:        `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_FACTORY_PREVIEW: `${apiUrl}api/tooling-select/spec/factory-preview`,
   MTC_TOOLING_SPEC_SYNC: `${apiUrl}api/tooling-select/spec/sync`,
   MTC_TOOLING_SPEC_SYNC_NEW: `${apiUrl}api/tooling-select/spec/sync-new`,
-  MTC_TOOLING_FORMULA: `${apiUrl}api/mtc/tooling-formula`,
-  MTC_TOOLING_FORMULA_MACHINES: `${apiUrl}api/mtc/tooling-formula/machines`,
-  MTC_FORMULA_TEST: `${apiUrl}api/mtc/tooling-formula/test`,
   MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
   MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
   MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,

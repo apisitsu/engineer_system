@@ -371,15 +371,6 @@ const ToolRequestContent = () => {
                                     </div>
                                 </div>
                                 <Space>
-                                    {isAdmin && (
-                                        <Button
-                                            icon={<SettingOutlined />}
-                                            size="large"
-                                            onClick={() => navigate('/eng/mtc/email-config')}
-                                        >
-                                            Email Config
-                                        </Button>
-                                    )}
                                     <Button
                                         type="primary"
                                         icon={<PlusOutlined />}
@@ -388,6 +379,15 @@ const ToolRequestContent = () => {
                                     >
                                         Create New Request
                                     </Button>
+                                    {isAdmin && (
+                                        <Button
+                                            icon={<SettingOutlined />}
+                                            size="large"
+                                            onClick={() => navigate('/eng/mtc/email-config')}
+                                        >
+                                            Setting
+                                        </Button>
+                                    )}
                                 </Space>
                             </div>
 

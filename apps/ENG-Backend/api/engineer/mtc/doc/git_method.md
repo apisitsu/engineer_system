@@ -4,34 +4,39 @@ git add .
 // 2. commit
 git commit -m "comment"
 
-// 3. push to origin
+// ============================== //
+
+// 3. push to origin mtc
 git push origin mtc
 
-// 4. push to github
-git push github mtc
-
-// 5. pull from github
-git checkout dev
-git pull github dev
-
-// 6. merge with github
-git merge mtc
-type :wq
-
-// 7. push to github
-git push github dev
-
-// 8. push to github dev:main --force
-git push github dev:main --force
-
-//////////////////////////////
-
-// 9. pull from origin
+// 4. pull from origin dev
 git checkout dev
 git pull origin dev
 
-// 10. merge
-git merge feature/plbmp118
+// 5. merge to origin dev
+git merge mtc
+(esc => type :wq)
 
-// 11. push to origin
+// 6. push to origin dev
 git push origin dev
+
+// ============================== //
+
+// 3. push to github mtc
+git push github mtc
+
+// 4. pull from github dev
+git checkout dev
+git pull github dev
+
+// 5. merge with github
+git merge mtc
+type :wq
+
+// 6. push to github
+git push github dev
+
+// 7. push to github dev:main --force
+git push github dev:main --force
+
+// ============================== //

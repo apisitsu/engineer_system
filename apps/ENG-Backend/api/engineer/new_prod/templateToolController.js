@@ -154,7 +154,7 @@ const saveFormData = async (req, res) => {
 
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
-                const colValues = cols.map(c => row[c] !== undefined ? row[c] : null);
+                const colValues = cols.map(c => (row[c] !== undefined && row[c] !== '') ? row[c] : null);
 
                 if (row.id && row.id > 0) {
                     // Update existing

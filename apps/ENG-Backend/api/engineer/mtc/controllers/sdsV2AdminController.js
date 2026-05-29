@@ -14,7 +14,7 @@ const router = express.Router();
 router.get('/machine-types', async (req, res) => {
   const { search } = req.query;
   try {
-    let sql = `SELECT id, machine_type_code, machine_type_name, grinding_area_label, tool_code_filter, is_active, created_at
+    let sql = `SELECT id, machine_type_code, machine_type_name, grinding_area_label, tool_code_filter, is_active, created_at, machine_group
                FROM ${TABLES.SDS_MACHINE_TYPE_CODE}`;
     const params = [];
     if (search?.trim()) {
@@ -23,7 +23,28 @@ router.get('/machine-types', async (req, res) => {
     }
     sql += ' ORDER BY machine_type_code';
     const result = await engPool.query(sql, params);
-    res.json(result.rows);
+
+    // Deduplicate grouped machines: return one representative per machine_group.
+    // Pick the row with the lowest id within each group (machine_type_code ORDER BY is string-based
+    // so '1000' < '664' — id is the reliable tiebreak for canonically-primary machine).
+    const groupRepMap = {};
+    for (const m of result.rows) {
+      if (!m.machine_group) continue;
+      if (!groupRepMap[m.machine_group] || m.id < groupRepMap[m.machine_group].id) {
+        groupRepMap[m.machine_group] = m;
+      }
+    }
+    const seenGroups = new Set();
+    const deduped = result.rows.reduce((acc, m) => {
+      if (!m.machine_group) { acc.push(m); return acc; }
+      if (!seenGroups.has(m.machine_group) && groupRepMap[m.machine_group].id === m.id) {
+        seenGroups.add(m.machine_group);
+        acc.push(m);
+      }
+      return acc;
+    }, []);
+
+    res.json(deduped);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -588,30 +588,24 @@ const EditorCanvas = ({
                 }
 
                 case 'sticky': {
-                    const noteSize = 28;
-                    const bg = new fabric.Rect({
-                        width: noteSize,
-                        height: noteSize,
-                        fill: '#fff3cd',
-                        stroke: '#ffc107',
-                        strokeWidth: 1.5,
-                        rx: 4,
-                        ry: 4,
-                    });
-                    const icon = new fabric.FabricText('📝', {
-                        fontSize: 16,
-                        left: 6,
-                        top: 4,
-                        selectable: false,
-                        evented: false,
-                    });
-                    const group = new fabric.Group([bg, icon], {
+                    const sticky = new fabric.Textbox('Note...', {
                         left: pointer.x,
                         top: pointer.y,
-                        customData: { type: 'sticky', note: '' },
+                        width: 150,
+                        fontSize: 14,
+                        fontFamily: store.fontFamily || 'Helvetica',
+                        fill: '#333333',
+                        backgroundColor: '#fff3cd',
+                        borderColor: '#ffc107',
+                        editingBorderColor: '#ffc107',
+                        padding: 8,
+                        editable: true,
+                        customData: { type: 'sticky' },
                     });
-                    fc.add(group);
-                    fc.setActiveObject(group);
+                    fc.add(sticky);
+                    fc.setActiveObject(sticky);
+                    sticky.enterEditing();
+                    sticky.selectAll();
                     break;
                 }
 

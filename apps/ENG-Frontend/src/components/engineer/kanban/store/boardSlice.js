@@ -997,6 +997,43 @@ export const createBoardSlice = (set, get) => ({
     },
 
     // ====================================================================
+    //  BLUEPRINT / TEMPLATE ACTIONS (Feature 14)
+    // ====================================================================
+
+    saveBoardAsBlueprint: async (boardId, templateName) => {
+        try {
+            const res = await axios.post(`${server.KANBAN_BOARDS}/${boardId}/save-as-blueprint`, { template_name: templateName });
+            if (res.data?.data) {
+                Swal.fire('Success', 'บันทึกเป็น Blueprint สำเร็จ', 'success');
+                return res.data.data;
+            }
+        } catch (err) {
+            console.error('Failed to save board as blueprint', err);
+            Swal.fire('Error', err.response?.data?.error || 'ไม่สามารถบันทึก Blueprint ได้', 'error');
+            return null;
+        }
+    },
+
+    stampBoardData: async (boardId, templateId, targetListId = null) => {
+        try {
+            const payload = { board_id: boardId };
+            if (targetListId) payload.target_list_id = targetListId;
+            
+            const res = await axios.post(`${server.KANBAN_TEMPLATES}/${templateId}/stamp-board-data`, payload);
+            if (res.status === 201) {
+                // Refresh board details
+                await get().fetchBoardDetails(boardId);
+                Swal.fire('Success', 'โหลดข้อมูลจาก Template สำเร็จ', 'success');
+                return true;
+            }
+        } catch (err) {
+            console.error('Failed to stamp board data', err);
+            Swal.fire('Error', err.response?.data?.error || 'ไม่สามารถโหลดข้อมูลจาก Template ได้', 'error');
+            return false;
+        }
+    },
+
+    // ====================================================================
     //  BOARD UI ACTIONS
     // ====================================================================
 

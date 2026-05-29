@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Space, Typography, Avatar, Tooltip, Popover, Select, Button, Input, Badge, Dropdown, Tag } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
+import { useAuthStore } from '../../../../stores/authStore';
 import { useShallow } from 'zustand/react/shallow';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -11,8 +12,10 @@ import {
 } from 'react-icons/io5';
 import { AiOutlineClose, AiOutlineCheck } from 'react-icons/ai';
 import { MdOutlinePeople, MdOutlineLabel, MdOutlineAssessment } from 'react-icons/md';
+import { BsCopy } from 'react-icons/bs';
 
 import UserGuideDrawer from '../UserGuide/UserGuideDrawer';
+import SaveBoardBlueprintModal from './SaveBoardBlueprintModal';
 
 dayjs.extend(relativeTime);
 
@@ -71,6 +74,12 @@ const BoardToolbar = ({ theme, activeProject }) => {
     const [memberSearch, setMemberSearch] = useState('');
     const [memberFilterSearch, setMemberFilterSearch] = useState('');
     const [showAllNotifs, setShowAllNotifs] = useState(false);
+    const [showSaveBlueprintModal, setShowSaveBlueprintModal] = useState(false);
+
+    const userInfo = useAuthStore(state => state.userInfo) || {};
+    const userDepartment = useAuthStore(state => state.userDepartment);
+    const currentUserDept = userDepartment || userInfo.u_dept || '';
+    const isAD = currentUserDept.toUpperCase() === 'AD';
 
     useEffect(() => {
         if (activeProject?.id) { fetchProjectManagers(activeProject.id); }
@@ -509,13 +518,29 @@ const BoardToolbar = ({ theme, activeProject }) => {
                         onClick={() => setShowBoardGuide(true)} style={{ color: theme.colors.textSecondary }} />
                 </Tooltip>
 
+                {/* Save as Blueprint */}
+                {activeBoard && isAD && (
+                    <Tooltip title="Save Board as Blueprint">
+                        <Button type="text" size="small" icon={<BsCopy size={14} />}
+                            onClick={() => setShowSaveBlueprintModal(true)} style={{ color: theme.colors.textSecondary }} />
+                    </Tooltip>
+                )}
+
                 {/* Board Settings */}
                 <Button type="text" size="small" icon={<IoSettingsOutline size={16} />}
                     onClick={() => openBoardSettings()} style={{ color: theme.colors.textSecondary }} />
             </Space>
 
             <UserGuideDrawer open={showBoardGuide} onClose={() => setShowBoardGuide(false)} theme={theme} context="board" />
-
+            
+            {activeBoard && (
+                <SaveBoardBlueprintModal
+                    open={showSaveBlueprintModal}
+                    onClose={() => setShowSaveBlueprintModal(false)}
+                    boardId={activeBoard.id}
+                    theme={theme}
+                />
+            )}
         </div >
     );
 };
