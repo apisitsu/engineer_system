@@ -96,8 +96,8 @@ npm run cypress:open # Cypress E2E
 ### Machine Name Hyphen Convention (MTC)
 Machine names **must use hyphens**. A missing hyphen causes silent SQL misses.
 
-Canonical names: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B2`, `KS-400B5`, `KS-400B6`, `KS-400B7`, `KS-500RD`, `TSG-300ZNC`, `TSG-300W`
-Exception: `KS400B` intentionally has no hyphen (legacy).
+Canonical names: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B2`, `KS-400B5`, `KS-400B6`, `KS-400B7`, `KS-500RD`, `TSG-300`, `5b`
+Exceptions (no hyphen): `KS400B` (retired — legacy SQL skipped via `use_dynamic_rules=true`); `5b` (Machine Type Code 564, active — replaces TSG-300W).
 
 ### Bulk DB operations
 - **Fetch:** `WHERE col = ANY($1)` with array param

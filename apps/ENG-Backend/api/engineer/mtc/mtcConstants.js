@@ -107,7 +107,7 @@ const CATEGORIES = {
 // Adding a new entry requires a matching adapter in partDataMapper.buildCalcMap().
 const LEGACY_MACHINES = [
   'KS-B22G',
-  'TSG-300ZNC',
+  'TSG-300',
   'KS400B',
   'KS-03A',
   'KS-500RD',
