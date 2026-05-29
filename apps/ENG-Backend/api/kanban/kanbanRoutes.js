@@ -44,6 +44,7 @@ router.post('/templates/:id/stamp-card', Template.StampCard);
 router.post('/templates/:id/stamp-list', Template.StampList);
 router.post('/templates/:id/stamp-checklist', Template.StampChecklist);
 router.post('/templates/:id/stamp-labels', Template.StampLabels);
+router.post('/templates/:id/stamp-board-data', Template.StampBoardData);
 
 // ─── BOARD ROUTES ──────────────────────────────────────────────────
 router.get('/projects/:projectId/boards', Board.GetBoards);
@@ -51,6 +52,7 @@ router.post('/projects/:projectId/boards', Board.CreateBoard);
 router.get('/boards/:id', Board.GetBoard);
 router.patch('/boards/:id', Board.UpdateBoard);
 router.delete('/boards/:id', Board.DeleteBoard);
+router.post('/boards/:id/save-as-blueprint', Board.SaveBoardAsBlueprint);
 router.get('/boards/:id/members', Board.GetBoardMembers);
 router.post('/boards/:id/members', Board.AddBoardMember);
 router.delete('/boards/:id/members', Board.RemoveBoardMember);

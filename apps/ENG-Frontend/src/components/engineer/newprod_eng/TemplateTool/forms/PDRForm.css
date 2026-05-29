@@ -1,0 +1,350 @@
+/* ═══════════════════════════════════════════════════════════
+   PDR Form — Product Design Review
+   ═══════════════════════════════════════════════════════════ */
+
+.pdr-body {
+    background: #525659;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    font-size: 11px;
+    color: #000;
+}
+
+.pdr-pages-container {
+    flex: 1;
+    width: 100%;
+    overflow: auto;
+}
+
+.pdr-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #2c3e50;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 15px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.pdr-topbar-title {
+    color: #fff;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+/* ─── Page Layout ─── */
+.pdr-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px 0;
+    align-items: flex-start;
+    min-width: max-content;
+}
+
+.pdr-a4-page {
+    margin: 0 auto;
+    width: 297mm;
+    height: 210mm;
+    background: #fff;
+    padding: 8mm;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.pdr-page-content {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.pdr-page-number {
+    position: absolute;
+    bottom: 4mm;
+    right: 8mm;
+    font-size: 11px;
+    font-weight: bold;
+    color: #555;
+}
+
+/* ─── Header ─── */
+.pdr-header-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.pdr-std-header {
+    display: flex;
+    margin-bottom: 15px;
+    border: 2px solid #000;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pdr-header-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    flex: 1;
+    border-right: 2px solid #000;
+}
+
+.pdr-header-col {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #000;
+}
+
+.pdr-header-col:last-child {
+    border-right: none;
+}
+
+.pdr-header-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #000;
+    padding: 2px 4px;
+    flex: 1;
+    white-space: nowrap;
+}
+
+.pdr-header-row:last-child {
+    border-bottom: none;
+}
+
+.pdr-header-row label {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.pdr-header-row input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 11px;
+    min-width: 0;
+}
+
+/* ─── Approval Block ─── */
+.pdr-approval-block {
+    display: flex;
+    width: 200px;
+    flex-shrink: 0;
+}
+
+.pdr-stamp-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #000;
+}
+
+.pdr-stamp-box:last-child {
+    border-right: none;
+}
+
+.pdr-stamp-title {
+    text-align: center;
+    font-weight: bold;
+    border-bottom: 1px solid #000;
+    padding: 2px;
+    background: #f9f9f9;
+}
+
+.pdr-stamp-area {
+    flex: 1;
+    min-height: 40px;
+    padding: 2px;
+    text-align: center;
+    outline: none;
+}
+
+/* ─── Data Table ─── */
+table.pdr-data-table {
+    border-collapse: collapse !important;
+    width: 100%;
+    border: 1px solid #000;
+    table-layout: fixed;
+}
+
+table.pdr-data-table th,
+table.pdr-data-table td {
+    border: 1px solid #000 !important;
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: middle;
+    word-wrap: break-word;
+}
+
+table.pdr-data-table th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+/* ─── Editable Cell (textarea-based) ─── */
+.pdr-editable-cell {
+    min-height: 20px;
+    width: 100%;
+    text-align: center;
+    padding: 2px 4px;
+    word-break: break-word;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    border: none;
+    outline: none;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    box-sizing: border-box;
+    line-height: 1.4;
+}
+
+.pdr-editable-cell:focus {
+    background: #fff;
+    box-shadow: inset 0 -2px 0 0 #1677ff;
+}
+
+.pdr-editable-cell:disabled {
+    cursor: default;
+    color: #000;
+}
+
+/* ─── Custom Inputs ─── */
+.pdr-select-applied {
+    border: none;
+    font-size: 11px;
+    text-align: center;
+    cursor: pointer;
+    outline: none;
+    width: 100%;
+    background: transparent;
+}
+
+.pdr-applied-yes {
+    background: #e6ffed;
+    color: #28a745;
+    font-weight: bold;
+}
+
+.pdr-applied-no {
+    background: #fff1f0;
+    color: #f5222d;
+    font-weight: bold;
+}
+
+.pdr-applied-na {
+    background: #f0f0f0;
+    color: #555;
+}
+
+.pdr-select-applied {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    text-align: center;
+    text-align-last: center;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    outline: none;
+    cursor: pointer;
+}
+
+/* ─── Remove Button ─── */
+.pdr-btn-remove {
+    background: #ff4d4f;
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 2px;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+.pdr-btn-remove:hover {
+    background: #ff7875;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Print Styles
+   ═══════════════════════════════════════════════════════════ */
+@media print {
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    @page {
+        size: A4 landscape;
+        margin: 5mm;
+    }
+
+    body {
+        background: none !important;
+        padding: 0 !important;
+    }
+
+    .pdr-topbar,
+    .pdr-no-print {
+        display: none !important;
+    }
+
+    .pdr-pages-container {
+        overflow: visible !important;
+        height: auto !important;
+    }
+
+    .pdr-pages {
+        gap: 0 !important;
+        zoom: 1 !important;
+        transform: none !important;
+        padding: 0 !important;
+    }
+
+    .pdr-a4-page {
+        width: 297mm !important;
+        height: 210mm !important;
+        box-shadow: none;
+        margin: 0;
+        page-break-after: always;
+        overflow: hidden;
+        padding: 5mm;
+    }
+
+    .pdr-a4-page:last-child {
+        page-break-after: auto;
+    }
+
+    .pdr-page-content {
+        overflow: hidden !important;
+    }
+
+    .pdr-editable-cell {
+        box-shadow: none !important;
+    }
+
+    table.pdr-data-table tr {
+        page-break-inside: avoid;
+    }
+}

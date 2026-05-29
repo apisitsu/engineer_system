@@ -834,9 +834,169 @@ const UpdateUserPreferences = async (req, res) => {
     }
 };
 
+// ─── BLUEPRINT / TEMPLATE (Feature 14) ────────────────────────────
+
+// POST /api/kanban/boards/:id/save-as-blueprint
+const SaveBoardAsBlueprint = async (req, res) => {
+    const { id } = req.params;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { template_name } = req.body;
+    if (!template_name) return res.status(400).json({ error: 'template_name is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Verify original board exists and user has access
+        const { rows: [originalBoard] } = await client.query('SELECT * FROM kb_board WHERE id=$1', [id]);
+        if (!originalBoard) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Board not found' });
+        }
+
+        if (!(await canEditBoard(req, id))) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: 'Editor permission required' });
+        }
+
+        // 2. Ensure Project 12 exists
+        const masterProjectId = 12;
+        let { rows: [masterProject] } = await client.query('SELECT id, name FROM kb_project WHERE id=$1', [masterProjectId]);
+        if (!masterProject) {
+            const { rows: [newProj] } = await client.query(`
+                INSERT INTO kb_project (id, owner_u_code, name, description, status, is_permanent)
+                VALUES ($1, 'SYSTEM', 'Master Template of System', 'System Blueprint Templates', 'active', true)
+                RETURNING id, name
+            `, [masterProjectId]);
+            masterProject = newProj;
+            
+            await client.query(`INSERT INTO kb_project_membership (project_id, u_code, role) VALUES ($1, 'SYSTEM', 'owner')`, [masterProjectId]);
+        }
+
+        // 3. Clone Board to Project 12
+        const posRes = await client.query('SELECT COALESCE(MAX(position), 0) + 65536 AS pos FROM kb_board WHERE project_id=$1', [masterProjectId]);
+        const boardPos = posRes.rows[0].pos;
+
+        const { rows: [newBoard] } = await client.query(`
+            INSERT INTO kb_board (project_id, position, name, default_view, default_card_type, limit_card_types,
+                                  always_display_card_creator, expand_task_lists_by_default, is_private, status,
+                                  priority, due_date)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
+        `, [
+            masterProjectId, boardPos, originalBoard.name, originalBoard.default_view, originalBoard.default_card_type,
+            originalBoard.limit_card_types, originalBoard.always_display_card_creator, originalBoard.expand_task_lists_by_default,
+            originalBoard.is_private, 'pool', originalBoard.priority, originalBoard.due_date
+        ]);
+
+        const configData = { board_ids: [newBoard.id], list_ids: [], card_ids: [], task_ids: [] };
+        const newBoardId = newBoard.id;
+
+        // 4. Clone Labels
+        const labelMap = {};
+        const { rows: originalLabels } = await client.query('SELECT * FROM kb_label WHERE board_id=$1 ORDER BY position ASC', [originalBoard.id]);
+        for (const ol of originalLabels) {
+            const { rows: [newLabel] } = await client.query(
+                'INSERT INTO kb_label (board_id, position, name, color) VALUES ($1,$2,$3,$4) RETURNING id',
+                [newBoardId, ol.position, ol.name, ol.color]
+            );
+            labelMap[ol.id] = newLabel.id;
+        }
+
+        // 5. Clone Lists
+        const listMap = {};
+        const { rows: originalLists } = await client.query("SELECT * FROM kb_list WHERE board_id=$1 AND list_type IN ('active', 'closed') ORDER BY position ASC", [originalBoard.id]);
+        for (const ol of originalLists) {
+            const { rows: [newList] } = await client.query(`
+                INSERT INTO kb_list (board_id, list_type, position, name, color)
+                VALUES ($1,$2,$3,$4,$5) RETURNING id
+            `, [newBoardId, ol.list_type, ol.position, ol.name, ol.color]);
+            listMap[ol.id] = newList.id;
+            configData.list_ids.push(newList.id);
+        }
+
+        // 6. Clone Cards
+        const cardMap = {};
+        const clonedCards = [];
+
+        for (const ol of originalLists) {
+            const newListId = listMap[ol.id];
+            const { rows: originalCards } = await client.query('SELECT * FROM kb_card WHERE list_id=$1 ORDER BY position ASC', [ol.id]);
+            
+            for (const oc of originalCards) {
+                const { rows: [newCard] } = await client.query(`
+                    INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, 
+                                         due_date, is_private, estimated_hours, priority, parent_id, is_closed, is_suspended, list_changed_at)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()) RETURNING id
+                `, [
+                    newBoardId, newListId, uCode, oc.card_type, oc.position, oc.name, oc.description,
+                    oc.due_date, oc.is_private, oc.estimated_hours, oc.priority, oc.parent_id,
+                    false, false
+                ]);
+                cardMap[oc.id] = newCard.id;
+                configData.card_ids.push(newCard.id);
+                clonedCards.push({ oldId: oc.id, newId: newCard.id, oldParentId: oc.parent_id });
+
+                await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [newCard.id, uCode]);
+
+                const { rows: cardLabels } = await client.query('SELECT label_id FROM kb_card_label WHERE card_id=$1', [oc.id]);
+                for (const cl of cardLabels) {
+                    const newLabelId = labelMap[cl.label_id];
+                    if (newLabelId) {
+                        await client.query('INSERT INTO kb_card_label (card_id, label_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [newCard.id, newLabelId]);
+                    }
+                }
+
+                const { rows: taskLists } = await client.query('SELECT * FROM kb_task_list WHERE card_id=$1 ORDER BY position', [oc.id]);
+                for (const tl of taskLists) {
+                    const { rows: [newTl] } = await client.query(`
+                        INSERT INTO kb_task_list (card_id, name, position, show_on_front, hide_completed_tasks)
+                        VALUES ($1,$2,$3,$4,$5) RETURNING id
+                    `, [newCard.id, tl.name, tl.position, tl.show_on_front, tl.hide_completed_tasks]);
+
+                    const { rows: tasks } = await client.query('SELECT * FROM kb_task WHERE task_list_id=$1 ORDER BY position', [tl.id]);
+                    for (const t of tasks) {
+                        const { rows: [newTask] } = await client.query(`
+                            INSERT INTO kb_task (task_list_id, name, position, is_completed)
+                            VALUES ($1,$2,$3,$4) RETURNING id
+                        `, [newTl.id, t.name, t.position, false]);
+                        configData.task_ids.push(newTask.id);
+                    }
+                }
+            }
+        }
+
+        // 7. Update Parent/Child Dependencies
+        for (const card of clonedCards) {
+            if (card.oldParentId && cardMap[card.oldParentId]) {
+                const newParentId = cardMap[card.oldParentId];
+                await client.query('UPDATE kb_card SET parent_id=$1 WHERE id=$2', [newParentId, card.newId]);
+            } else if (card.oldParentId) {
+                await client.query('UPDATE kb_card SET parent_id=NULL WHERE id=$1', [card.newId]);
+            }
+        }
+
+        // 8. Create Template Config
+        const { rows: [template] } = await client.query(`
+            INSERT INTO kb_template_config (name, master_project_id, config_data, created_by, master_project_name, template_type)
+            VALUES ($1, $2, $3, $4, $5, 'project') RETURNING *
+        `, [template_name, masterProjectId, JSON.stringify(configData), uCode, masterProject.name]);
+
+        await client.query('COMMIT');
+        res.status(201).json({ data: template, message: 'Board saved as Blueprint successfully' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('SaveBoardAsBlueprint error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     // Board
-    GetBoards, CreateBoard, GetBoard, UpdateBoard, DeleteBoard,
+    GetBoards, CreateBoard, GetBoard, UpdateBoard, DeleteBoard, SaveBoardAsBlueprint,
     // Board Members
     GetBoardMembers, AddBoardMember, RemoveBoardMember,
     // Board Subscription

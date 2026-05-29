@@ -504,6 +504,16 @@ const UpdateCard = async (req, res) => {
             await logAction(client, id, uCode, 'card_moved', {
                 from_list_id: card.list_id, to_list_id: newListId
             });
+            
+            // Feature: Auto-update board status from "Waiting Pool" to "Active Operations"
+            const { rows: [destList] } = await client.query('SELECT name FROM kb_list WHERE id=$1', [newListId]);
+            const destName = destList?.name?.toLowerCase() || '';
+            if (!destName.includes('to do') && !destName.includes('backlog')) {
+                const { rows: [boardRec] } = await client.query("SELECT status FROM kb_board WHERE id=$1", [card.board_id]);
+                if (boardRec && boardRec.status === 'pool') {
+                    await client.query("UPDATE kb_board SET status='active' WHERE id=$1", [card.board_id]);
+                }
+            }
         }
         if (due_date !== undefined && due_date !== card.due_date) {
             await logAction(client, id, uCode, 'due_date_changed', { new_date: due_date });

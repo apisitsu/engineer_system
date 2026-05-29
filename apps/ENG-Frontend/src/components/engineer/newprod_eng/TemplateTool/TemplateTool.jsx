@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Select, Tag, Input, message, Card, Space, Typography, Empty, Layout } from 'antd';
-import { PlusOutlined, ArrowLeftOutlined, SearchOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Select, Tag, Input, message, Card, Space, Typography, Empty, Layout, Divider } from 'antd';
+import { PlusOutlined, ArrowLeftOutlined, SearchOutlined, DeleteOutlined, ExclamationCircleOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -95,9 +95,15 @@ export default function TemplateTool({ onBack }) {
     };
 
     const columns = [
-        { title: 'ID', dataIndex: 'id', width: 60, sorter: (a, b) => a.id - b.id },
         {
-            title: 'Form Type', dataIndex: 'form_type', width: 200,
+            title: 'ID', dataIndex: 'id', width: 60, sorter: (a, b) => a.id - b.id, fixed: 'left'
+        },
+        {
+            title: 'Form No.', dataIndex: 'form_number', width: 140, fixed: 'left'
+        },
+        { title: 'PID Number', dataIndex: 'pid_number', width: 140 },
+        {
+            title: 'Form Type', dataIndex: 'form_type', width: 220,
             render: (v) => {
                 const ft = FORM_TYPES.find(t => t.value === v);
                 return ft ? <span>{ft.icon} {ft.label}</span> : v;
@@ -105,26 +111,24 @@ export default function TemplateTool({ onBack }) {
             filters: FORM_TYPES.map(t => ({ text: t.label, value: t.value })),
             onFilter: (value, record) => record.form_type === value,
         },
-        { title: 'PID Number', dataIndex: 'pid_number', width: 120 },
-        { title: 'Form No.', dataIndex: 'form_number', width: 120 },
-        { title: 'Customer P/N', dataIndex: 'customer_pn', width: 120 },
+        { title: 'Customer P/N', dataIndex: 'customer_pn', width: 140 },
         {
-            title: 'Status', dataIndex: 'status', width: 110,
+            title: 'Status', dataIndex: 'status', width: 120,
             render: (v) => <Tag color={v === 'Approved' ? 'green' : 'blue'}>{v}</Tag>,
         },
-        { title: 'Created By', dataIndex: 'created_by', width: 100 },
+        { title: 'Created By', dataIndex: 'created_by', width: 130 },
         {
-            title: 'Last Modified', dataIndex: 'updated_at', width: 160,
+            title: 'Last Modified', dataIndex: 'updated_at', width: 180,
             render: (v) => v ? new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-',
             sorter: (a, b) => new Date(a.updated_at) - new Date(b.updated_at),
             defaultSortOrder: 'descend',
         },
         {
-            title: 'Action', width: 140, fixed: 'right',
+            title: 'Action', width: 90, fixed: 'right',
             render: (_, record) => (
                 <Space>
-                    <Button size="small" type="primary" onClick={() => navigate(`/eng/template_tool/${record.form_type}/${record.id}`)}>Open</Button>
-                    {record.status !== 'Approved' && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />}
+                    <Button size="small" type="primary" icon={<FolderOpenOutlined />} onClick={() => navigate(`/eng/template_tool/${record.form_type}/${record.id}`)} title="Open Form" />
+                    {record.status !== 'Approved' && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} title="Delete Form" />}
                 </Space>
             ),
         },
@@ -132,6 +136,20 @@ export default function TemplateTool({ onBack }) {
 
     return (
         <Layout style={{ minHeight: '100vh', display: 'flex' }}>
+            <style>{`
+                #template-tool-table .ant-table-cell-fix-left,
+                #template-tool-table .ant-table-cell-fix-right {
+                    background-color: ${theme.colors.surface} !important;
+                }
+                #template-tool-table .ant-table-thead > tr > th.ant-table-cell-fix-left,
+                #template-tool-table .ant-table-thead > tr > th.ant-table-cell-fix-right {
+                    background-color: ${theme.colors.hover} !important;
+                }
+                #template-tool-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-left,
+                #template-tool-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-right {
+                    background-color: ${theme.colors.surfaceHover || '#fafafa'} !important;
+                }
+            `}</style>
             <MenuTemplate type={"NewProd"} defaultSelectedKeys={"1"} />
             <Layout style={{ backgroundColor: theme.colors.background }}>
                 <ScrollbarStyle primary={theme.colors.primary} />
@@ -142,33 +160,33 @@ export default function TemplateTool({ onBack }) {
                     position: 'relative'
                 }}>
                     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-                        <div style={{
-                            marginBottom: '40px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: '24px',
-                            padding: '24px',
-                            background: theme.colors.surface,
-                            borderRadius: '16px',
-                            boxShadow: theme.shadows.sm
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                {onBack && <Button icon={<ArrowLeftOutlined />} onClick={onBack} />}
-                                <div>
-                                    <Title level={3} style={{ margin: 0, color: theme.colors.textPrimary }}>📋 Template Tool</Title>
-                                    <Text style={{ color: theme.colors.textSecondary }}>Manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans</Text>
+                        <div style={{ background: theme.colors.surface, borderRadius: '16px', padding: '24px', boxShadow: theme.shadows.sm }}>
+
+                            {/* Header Section */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                                flexWrap: 'wrap',
+                                gap: '24px',
+                                marginBottom: '24px',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    {onBack && <Button icon={<ArrowLeftOutlined />} onClick={onBack} />}
+                                    <div>
+                                        <Title level={3} style={{ margin: 0, color: theme.colors.textPrimary }}>📋 Template Tool</Title>
+                                        <Text style={{ color: theme.colors.textSecondary }}>Manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans</Text>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 12 }}>
+                                    <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => setCreateModalOpen(true)}>
+                                        Create New Form
+                                    </Button>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 12 }}>
-                                <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => setCreateModalOpen(true)}>
-                                    Create New Form
-                                </Button>
-                            </div>
-                        </div>
 
-                        <div style={{ background: theme.colors.surface, borderRadius: '16px', padding: '24px', boxShadow: theme.shadows.sm }}>
+                            <div style={{ height: 1, background: '#f0f0f0', margin: '0 0 24px 0' }} />
+
                             {/* Filters */}
                             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                                 <Input placeholder="Search PID, Customer P/N, NMB P/N..." prefix={<SearchOutlined />} style={{ width: 300 }} value={search} onChange={e => setSearch(e.target.value)} allowClear />
@@ -178,11 +196,12 @@ export default function TemplateTool({ onBack }) {
 
                             {/* Table */}
                             <Table
+                                id="template-tool-table"
+                                columns={columns.map(col => ({ ...col, align: 'center' }))}
                                 dataSource={forms}
-                                columns={columns}
                                 rowKey="id"
                                 loading={loading}
-                                scroll={{ x: 1100 }}
+                                scroll={{ x: 'max-content' }}
                                 pagination={{ pageSize: 15, showSizeChanger: true, showTotal: (t) => `Total ${t} forms` }}
                                 locale={{ emptyText: <Empty description="No forms yet. Click 'Create New Form' to start." /> }}
                                 onRow={(record) => ({

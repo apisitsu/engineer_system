@@ -7,9 +7,8 @@ const getRedisConnection = () => {
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: process.env.REDIS_PORT || 6379,
     maxRetriesPerRequest: null,
-    enableOfflineQueue: false, // Prevents hanging when Redis is down
     retryStrategy: function (times) {
-      // Return null to stop retrying completely. This kills the ECONNREFUSED spam.
+      // Disable infinite retries to prevent console spam when Redis is offline
       return null;
     }
   });

@@ -121,13 +121,15 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
  * Commit a single Fabric.js object into a PDF page.
  */
 async function commitObject(doc, page, obj, cW, cH, pW, pH) {
+    if (!obj) return;
     const type = obj.customData?.type || obj.type;
 
     // Scale factors
     const scaleObjX = obj.scaleX || 1;
     const scaleObjY = obj.scaleY || 1;
+    const fabricType = (obj.type || '').toLowerCase();
 
-    switch (obj.type) {
+    switch (fabricType) {
         case 'rect': {
             const x = toPdf(obj.left, cW, pW);
             const y = toPdfY(obj.top + obj.height * scaleObjY, cH, pH);
@@ -185,6 +187,26 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         case 'textbox':
         case 'text': {
             if (!obj.text) break;
+            
+            // Draw background if present (e.g., for sticky notes)
+            if (obj.backgroundColor) {
+                const bgX = toPdf(obj.left, cW, pW);
+                const bgY = toPdfY(obj.top + (obj.height * scaleObjY), cH, pH);
+                const bgW = toPdf(obj.width * scaleObjX, cW, pW);
+                const bgH = toPdf(obj.height * scaleObjY, cH, pH);
+                const bgColor = hexToRgb(obj.backgroundColor);
+                if (bgColor) {
+                    page.drawRectangle({
+                        x: bgX,
+                        y: bgY,
+                        width: bgW,
+                        height: bgH,
+                        color: bgColor,
+                        opacity: obj.opacity ?? 1,
+                    });
+                }
+            }
+            
             const font = await getFont(doc, obj.fontFamily);
             const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
             const x = toPdf(obj.left, cW, pW);
@@ -348,9 +370,16 @@ export async function mergePdfFiles(files) {
     const mergedDoc = await PDFDocument.create();
 
     for (const file of files) {
-        const arrayBuffer = file instanceof ArrayBuffer
-            ? file
-            : await file.arrayBuffer();
+        let arrayBuffer;
+        if (file instanceof ArrayBuffer) {
+            arrayBuffer = file;
+        } else if (file instanceof Uint8Array) {
+            arrayBuffer = file.buffer;
+        } else if (typeof file.arrayBuffer === 'function') {
+            arrayBuffer = await file.arrayBuffer();
+        } else {
+            throw new Error('Unsupported file type for merge');
+        }
 
         const pdf = await PDFDocument.load(arrayBuffer);
         const pages = await mergedDoc.copyPages(pdf, pdf.getPageIndices());

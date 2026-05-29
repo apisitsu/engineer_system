@@ -61,6 +61,9 @@ export default function usePdfEditor() {
     // ── Export mode state ──
     const [exportedImages, setExportedImages] = useState([]);
 
+    // ── History version for reactivity ──
+    const [historyVersion, setHistoryVersion] = useState(0);
+
     // ── Fabric canvas ref (set by EditorCanvas) ──
     const fabricCanvasRef = useRef(null);
 
@@ -167,8 +170,8 @@ export default function usePdfEditor() {
         // Save current page's Fabric.js state before navigating
         if (fabricCanvasRef.current) {
             const json = fabricCanvasRef.current.toJSON(['customData']);
-            json._canvasWidth = fabricCanvasRef.current.getWidth();
-            json._canvasHeight = fabricCanvasRef.current.getHeight();
+            json._canvasWidth = fabricCanvasRef.current.width;
+            json._canvasHeight = fabricCanvasRef.current.height;
             setPageAnnotations(prev => ({ ...prev, [currentPage]: json }));
         }
 
@@ -206,6 +209,7 @@ export default function usePdfEditor() {
         if (historyRef.current.past.length > 50) {
             historyRef.current.past.shift();
         }
+        setHistoryVersion(v => v + 1);
     }, []);
 
     const undo = useCallback(() => {
@@ -216,6 +220,7 @@ export default function usePdfEditor() {
         const prev = past.pop();
         fabricCanvasRef.current.loadFromJSON(prev, () => {
             fabricCanvasRef.current.renderAll();
+            setHistoryVersion(v => v + 1);
         });
     }, []);
 
@@ -227,6 +232,7 @@ export default function usePdfEditor() {
         const next = future.pop();
         fabricCanvasRef.current.loadFromJSON(next, () => {
             fabricCanvasRef.current.renderAll();
+            setHistoryVersion(v => v + 1);
         });
     }, []);
 
@@ -239,8 +245,8 @@ export default function usePdfEditor() {
     const saveCurrentPageState = useCallback(() => {
         if (!fabricCanvasRef.current) return;
         const json = fabricCanvasRef.current.toJSON(['customData']);
-        json._canvasWidth = fabricCanvasRef.current.getWidth();
-        json._canvasHeight = fabricCanvasRef.current.getHeight();
+        json._canvasWidth = fabricCanvasRef.current.width;
+        json._canvasHeight = fabricCanvasRef.current.height;
         setPageAnnotations(prev => ({ ...prev, [currentPage]: json }));
     }, [currentPage]);
 
@@ -306,7 +312,7 @@ export default function usePdfEditor() {
         saveCurrentPageState, getAnnotationCount, totalAnnotations,
 
         // History
-        pushHistory, undo, redo, canUndo, canRedo,
+        pushHistory, undo, redo, canUndo, canRedo, historyVersion,
 
         // Merge
         mergeFiles, setMergeFiles,
