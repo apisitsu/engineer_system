@@ -67,7 +67,7 @@ const SdsV2Page = () => {
     try {
       const [searchRes, mtRes, tsRes, mtConfigRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
-        allMachineTypes.length ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES),
+        allMachineTypes.length ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } }),
         axios.post(server.TSV2_SEARCH, { cn: cnVal }).catch(() => null),
         axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS).catch(() => null),
       ]);
@@ -175,13 +175,19 @@ const SdsV2Page = () => {
       allMachineTypes.filter(m => processToolPrefixes.has(m.machine_type_code)).map(m => m.machine_type_name)
     );
 
-    // group name → representative machine_type_name
+    // group name → representative machine_type_name (for internal logic)
     // T-Select returns result.machine = machine_group when grouped; SDS side uses machine_type_name
     const groupToRep = {};
+    // representative machine_type_name → display name (machine_group if grouped, else same name)
+    const repToGroup = {};
     for (const m of allMachineTypes) {
-      if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
+      if (m.machine_group) {
+        groupToRep[m.machine_group] = m.machine_type_name;
+        repToGroup[m.machine_type_name] = m.machine_group;
+      }
     }
     const resolveMachine = (name) => groupToRep[name] || name;
+    const displayMachine = (name) => repToGroup[name] || name;
 
     // prefix → full DWG no map for SDS tools (first match wins)
     const sdsPrefixToNo = {};
@@ -390,7 +396,7 @@ const SdsV2Page = () => {
                 color={stat.missing > 0 ? 'warning' : 'success'} 
                 style={{ marginBottom: 4 }}
               >
-                {machine}: {stat.found} / {stat.total} Items
+                {displayMachine(machine)}: {stat.found} / {stat.total} Items
               </Tag>
             ))}
           </div>
@@ -402,7 +408,7 @@ const SdsV2Page = () => {
           return (
             <div key={machineName} style={{ marginBottom: 20 }}>
               <div style={{ marginBottom: 8, paddingLeft: 8, borderLeft: `4px solid ${theme.colors.primary}` }}>
-                <Text strong>{machineName}</Text>
+                <Text strong>{displayMachine(machineName)}</Text>
                 {rows.length === 0 && <Text type="secondary" style={{ marginLeft: 8, fontSize: '12px' }}>(No tools in current plan)</Text>}
               </div>
               <Table
