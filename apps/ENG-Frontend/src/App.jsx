@@ -427,15 +427,15 @@ const NotFound = () => {
 // Outer App component with ThemeProvider
 export default function App() {
   return (
-    <CacheBuster
-      currentVersion={packageInfo.version}
-      isEnabled={true}
-      isVerboseMode={false}
-      metaFileDirectory={"."}
-    >
-      <ThemeProvider>  {/* Wrap entire app with theme provider */}
+    <ThemeProvider>  {/* Wrap entire app with theme provider */}
+      <CacheBuster
+        currentVersion={packageInfo.version}
+        isEnabled={true}
+        isVerboseMode={false}
+        metaFileDirectory={"."}
+      >
         <AppContent />
-      </ThemeProvider>
-    </CacheBuster>
+      </CacheBuster>
+    </ThemeProvider>
   );
 }
