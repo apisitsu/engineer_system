@@ -71,6 +71,7 @@ const PdfEditorTool = () => {
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
+        pageHighlights, setPageHighlights,
         pushHistory, undo, redo, canUndo, canRedo, historyVersion,
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
@@ -202,7 +203,7 @@ const PdfEditorTool = () => {
                 }
             });
 
-            const finalBytes = await commitAllToPdf(pdfBytes, finalAnnotations);
+            const finalBytes = await commitAllToPdf(pdfBytes, finalAnnotations, null, pageHighlights);
             const blob = new Blob([finalBytes], { type: 'application/pdf' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -747,6 +748,8 @@ const PdfEditorTool = () => {
                                                 pdfDoc={pdfDoc}
                                                 zoom={zoom}
                                                 pageAnnotations={pageAnnotations}
+                                                pageHighlights={pageHighlights}
+                                                setPageHighlights={setPageHighlights}
                                                 fabricCanvasRefs={fabricCanvasRefs}
                                                 pushHistory={pushHistory}
                                                 overlayPdfDoc={overlayPdfDoc}
@@ -762,6 +765,8 @@ const PdfEditorTool = () => {
                                             pdfDoc={pdfDoc}
                                             zoom={zoom}
                                             pageAnnotations={pageAnnotations}
+                                            pageHighlights={pageHighlights}
+                                            setPageHighlights={setPageHighlights}
                                             fabricCanvasRefs={fabricCanvasRefs}
                                             pushHistory={pushHistory}
                                             overlayPdfDoc={overlayPdfDoc}

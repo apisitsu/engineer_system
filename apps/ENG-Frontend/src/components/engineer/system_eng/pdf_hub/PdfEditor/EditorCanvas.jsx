@@ -1,20 +1,25 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as fabric from 'fabric';
+import * as pdfjsLib from 'pdfjs-dist';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
 import { useAuthStore } from '../../../../../stores/authStore';
 
 /**
- * EditorCanvas — Dual-Layer rendering engine.
+ * EditorCanvas — Multi-Layer rendering engine.
  *
- *   Layer 1: <canvas> rendered by PDF.js (read-only pixel buffer)
- *   Layer 2: Fabric.js interactive canvas (transparent overlay)
+ *   Layer 1:    <canvas> rendered by PDF.js (read-only pixel buffer)
+ *   Layer 1.5h: <canvas> highlight layer (mix-blend-mode: multiply)
+ *   Layer 1.5:  <canvas> overlay compare PDF
+ *   Layer 2:    Fabric.js interactive canvas (transparent overlay)
  *
  * Props:
  *   pdfDoc          — pdfjs-dist document for rendering
  *   pageNum         — 1-indexed page number for this specific canvas
  *   zoom            — float zoom level
  *   pageAnnotations — { [pageNum]: fabricJSON }
+ *   pageHighlights  — { [pageNum]: [ { id, x, y, width, height, color } ] }
+ *   setPageHighlights — setter for highlight state
  *   fabricCanvasRefs— ref object to store Fabric.Canvas instances by pageNum
  *   pushHistory     — callback to snapshot before mutations
  *   onPageRendered  — callback after PDF page renders (sends pageSize)
@@ -24,6 +29,8 @@ const EditorCanvas = ({
     pdfDoc,
     zoom,
     pageAnnotations,
+    pageHighlights,
+    setPageHighlights,
     fabricCanvasRefs,
     pushHistory,
     onPageRendered,
@@ -31,16 +38,21 @@ const EditorCanvas = ({
 }) => {
     const { theme } = useTheme();
     const pdfCanvasRef = useRef(null);
+    const highlightCanvasRef = useRef(null);
     const overlayCanvasRef = useRef(null);
+    const textLayerRef = useRef(null);
     const fabricElRef = useRef(null);
     const containerRef = useRef(null);
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+    // Render task ref for proper cancellation
+    const renderTaskRef = useRef(null);
 
     const store = usePdfEditorStore();
     const { userName, userDepartment } = useAuthStore();
 
     // ── Constants ──
-    const RENDER_SCALE = 1.5; // Super-sample for sharpness
+    const RENDER_SCALE = Math.max(window.devicePixelRatio || 1, 1.5); // DPR-aware super-sample
 
     // ══════════════════════════════════════════════════════════════════
     // Initialize Fabric.js Canvas (once)
@@ -51,7 +63,7 @@ const EditorCanvas = ({
         const canvas = new fabric.Canvas(fabricElRef.current, {
             selection: true,
             preserveObjectStacking: true,
-            enableRetinaScaling: false,
+            enableRetinaScaling: true, // DPR-aware: crisp annotations on Retina displays
             stopContextMenu: true,
             fireRightClick: true,
         });
@@ -157,7 +169,40 @@ const EditorCanvas = ({
                     }
                 }
 
-                await page.render({ canvasContext: ctx, viewport }).promise;
+                const renderTask = page.render({ canvasContext: ctx, viewport });
+                renderTaskRef.current = renderTask;
+                await renderTask.promise;
+
+                // ── Extract text items for snap-to-text & render Native Text Layer ──
+                if (!cancelled) {
+                    try {
+                        const textContent = await page.getTextContent();
+                        
+                        // Render native TextLayer
+                        const textLayerDiv = textLayerRef.current;
+                        if (textLayerDiv) {
+                            textLayerDiv.innerHTML = ''; // clear previous
+                            
+                            // Scale text layer to match CSS display size
+                            // The viewport used for textLayer should be scaled down by RENDER_SCALE
+                            const textViewport = page.getViewport({ scale: zoom });
+                            
+                            // Adjust size
+                            textLayerDiv.style.width = `${displayW}px`;
+                            textLayerDiv.style.height = `${displayH}px`;
+                            textLayerDiv.style.setProperty('--scale-factor', textViewport.scale);
+
+                            pdfjsLib.renderTextLayer({
+                                textContentSource: textContent,
+                                container: textLayerDiv,
+                                viewport: textViewport,
+                                textDivs: []
+                            });
+                        }
+                    } catch (textErr) {
+                        console.warn('Text extraction failed:', textErr);
+                    }
+                }
 
                 // ── Load annotations for this page ──
                 if (!cancelled && fabricCanvasRefs.current[pageNum]) {
@@ -196,7 +241,13 @@ const EditorCanvas = ({
         };
 
         renderPage();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            if (renderTaskRef.current) {
+                renderTaskRef.current.cancel();
+                renderTaskRef.current = null;
+            }
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc, pageNum, zoom]);
 
@@ -353,32 +404,8 @@ const EditorCanvas = ({
                     });
                     break;
 
-                case 'highlight':
-                    tempObj = new fabric.Rect({
-                        ...commonProps,
-                        top: startY - 10,
-                        width: 0,
-                        height: 20,
-                        fill: store.highlightColor,
-                        stroke: 'transparent',
-                        strokeWidth: 0,
-                        opacity: 0.35,
-                        rx: 2,
-                        ry: 2,
-                        customData: { type: 'highlight' },
-                    });
-                    break;
-
-                case 'underline':
-                case 'strikethrough':
-                    tempObj = new fabric.Line([startX, startY, startX, startY], {
-                        stroke: store.strokeColor,
-                        strokeWidth: 2,
-                        opacity: store.opacity,
-                        selectable: true,
-                        customData: { type: tool },
-                    });
-                    break;
+                // Highlight, Underline, and Strikethrough are handled on the dedicated blend layer
+                // See highlight mouseDown handler below
 
                 case 'circle':
                     tempObj = new fabric.Ellipse({
@@ -418,6 +445,9 @@ const EditorCanvas = ({
             const tool = store.activeTool;
             if (!tool || tool === 'select' || tool === 'pan' || tool === 'freehand') return;
 
+            // Highlight/Underline/Strikethrough are handled on the dedicated blend layer, skip Fabric.js flow
+            if (['highlight', 'underline', 'strikethrough'].includes(tool)) return;
+
             // One-click placement tools
             if (['addText', 'sticky', 'stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
                 handleOneClickTool(opt.pointer, tool);
@@ -447,15 +477,7 @@ const EditorCanvas = ({
                     });
                     break;
                 }
-                case 'highlight': {
-                    const wHL = Math.abs(pointer.x - startX);
-                    tempObj.set({
-                        width: wHL,
-                        left: Math.min(startX, pointer.x),
-                        // top remains locked to startY - 10 for a straight line
-                    });
-                    break;
-                }
+                // highlight case removed — handled on blend layer
 
                 case 'circle':
                     const rx = Math.abs(pointer.x - startX) / 2;
@@ -602,6 +624,7 @@ const EditorCanvas = ({
                     fc.setActiveObject(text);
                     text.enterEditing();
                     text.selectAll();
+                    setTimeout(() => store.setActiveTool('select'), 50);
                     break;
                 }
 
@@ -624,6 +647,7 @@ const EditorCanvas = ({
                     fc.setActiveObject(sticky);
                     sticky.enterEditing();
                     sticky.selectAll();
+                    setTimeout(() => store.setActiveTool('select'), 50);
                     break;
                 }
 
@@ -648,7 +672,7 @@ const EditorCanvas = ({
                     const checkText = new fabric.FabricText('✓', {
                         left: pointer.x,
                         top: pointer.y,
-                        fontSize: 40,
+                        fontSize: store.fontSize * 2.5,
                         fill: store.strokeColor || '#27ae60',
                         fontWeight: 'bold',
                         originX: 'center',
@@ -664,7 +688,7 @@ const EditorCanvas = ({
                     const crossText = new fabric.FabricText('✕', {
                         left: pointer.x,
                         top: pointer.y,
-                        fontSize: 40,
+                        fontSize: store.fontSize * 2.5,
                         fill: store.strokeColor || '#e74c3c',
                         fontWeight: 'bold',
                         originX: 'center',
@@ -680,7 +704,7 @@ const EditorCanvas = ({
                     const circleShape = new fabric.Circle({
                         left: pointer.x,
                         top: pointer.y,
-                        radius: 15,
+                        radius: store.fontSize,
                         fill: 'transparent',
                         stroke: store.strokeColor || '#3498db',
                         strokeWidth: store.strokeWidth || 3,
@@ -695,7 +719,7 @@ const EditorCanvas = ({
 
                 case 'stampOk': {
                     const okCircle = new fabric.Circle({
-                        radius: 18,
+                        radius: store.fontSize * 1.2,
                         fill: 'transparent',
                         stroke: store.strokeColor || '#3498db',
                         strokeWidth: store.strokeWidth || 3,
@@ -703,7 +727,7 @@ const EditorCanvas = ({
                         originY: 'center',
                     });
                     const okText = new fabric.FabricText('OK', {
-                        fontSize: 16,
+                        fontSize: store.fontSize * 1.1,
                         fontWeight: 'bold',
                         fill: store.strokeColor || '#3498db',
                         originX: 'center',
@@ -750,10 +774,11 @@ const EditorCanvas = ({
                     const line2 = new fabric.Line([-46, 14, 46, 14], { stroke: color, strokeWidth: 2, objectCaching: false });
 
                     // Use scaleX to create a condensed font look similar to the physical stamp
+                    const baseScale = (store.fontSize / 16) * 0.75;
                     const fontProps = {
                         fontWeight: 'bold', fill: color, fontFamily: 'Arial',
                         originX: 'center', originY: 'center',
-                        scaleX: 0.75, objectCaching: false
+                        scaleX: baseScale, objectCaching: false
                     };
 
                     const deptText = new fabric.FabricText(dept, {
@@ -791,8 +816,8 @@ const EditorCanvas = ({
                         top: pointer.y,
                         originX: 'center',
                         originY: 'center',
-                        scaleX: 0.75, // Stamp scale relative to canvas
-                        scaleY: 0.75,
+                        scaleX: baseScale, // Stamp scale relative to canvas
+                        scaleY: baseScale,
                         objectCaching: false,
                         customData: { type: 'stampUserDate' },
                     });
@@ -833,16 +858,308 @@ const EditorCanvas = ({
         store.rulerScale, store.rulerUnit,
     ]);
 
+    // ══════════════════════════════════════════════════════════════════
+    // Live update active object when store properties change
+    // ══════════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const fc = fabricCanvasRefs.current[pageNum];
+        if (!fc) return;
+        const activeObj = fc.getActiveObject();
+        if (!activeObj) return;
+
+        let changed = false;
+
+        // Skip highlights as they are not standard Fabric objects
+        if (activeObj.customData?.type !== 'highlight') {
+            const isText = activeObj.type === 'i-text' || activeObj.type === 'textbox' || activeObj.type === 'text';
+            const isSticky = activeObj.customData?.type === 'sticky';
+            const isStamp = activeObj.customData?.type && activeObj.customData.type.startsWith('stamp');
+
+            // --- Color Update ---
+            if (!isSticky) {
+                if (isText) {
+                    if (activeObj.fill !== store.strokeColor) {
+                        activeObj.set('fill', store.strokeColor);
+                        changed = true;
+                    }
+                } else if (!isStamp) {
+                    // Regular shapes
+                    if (activeObj.stroke !== undefined && activeObj.stroke !== store.strokeColor) {
+                        activeObj.set('stroke', store.strokeColor);
+                        changed = true;
+                    }
+                    if (activeObj.fill !== undefined && activeObj.fill !== store.fillColor) {
+                        activeObj.set('fill', store.fillColor);
+                        changed = true;
+                    }
+                } else {
+                    // Stamps: change all child objects if it's a group, or just the object
+                    if (activeObj.type === 'group') {
+                        activeObj.getObjects().forEach(child => {
+                            if (child.stroke) child.set('stroke', store.strokeColor);
+                            if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') {
+                                child.set('fill', store.strokeColor);
+                            }
+                        });
+                        changed = true;
+                    } else {
+                        if (activeObj.fill && activeObj.fill !== 'transparent') {
+                            activeObj.set('fill', store.strokeColor);
+                        }
+                        if (activeObj.stroke) {
+                            activeObj.set('stroke', store.strokeColor);
+                        }
+                        changed = true;
+                    }
+                }
+            }
+
+            // --- Stroke Width ---
+            if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== store.strokeWidth) {
+                if (!isText && !isSticky) {
+                    activeObj.set('strokeWidth', store.strokeWidth);
+                    changed = true;
+                }
+            }
+
+            // --- Opacity ---
+            if (activeObj.opacity !== undefined && activeObj.opacity !== store.opacity) {
+                activeObj.set('opacity', store.opacity);
+                changed = true;
+            }
+
+            // --- Font Size (and Stamp Size) ---
+            if (isText || isSticky) {
+                if (activeObj.fontSize !== store.fontSize) {
+                    activeObj.set('fontSize', store.fontSize);
+                    changed = true;
+                }
+                if (activeObj.fontFamily !== store.fontFamily) {
+                    activeObj.set('fontFamily', store.fontFamily);
+                    changed = true;
+                }
+            } else if (isStamp) {
+                // Resize stamps dynamically
+                if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
+                    activeObj.set('fontSize', store.fontSize * 2.5);
+                    changed = true;
+                } else if (activeObj.customData.type === 'stampCircle') {
+                    activeObj.set('radius', store.fontSize);
+                    changed = true;
+                } else if (activeObj.customData.type === 'stampOk') {
+                    activeObj.getObjects()[0].set('radius', store.fontSize * 1.2);
+                    activeObj.getObjects()[1].set('fontSize', store.fontSize * 1.1);
+                    activeObj.addWithUpdate(); // Recalculate group bounds
+                    changed = true;
+                } else if (activeObj.customData.type === 'stampUserDate') {
+                    const scale = (store.fontSize / 16) * 0.75;
+                    activeObj.set({ scaleX: scale, scaleY: scale });
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            fc.renderAll();
+        }
+    }, [
+        store.strokeColor, store.fillColor, store.strokeWidth, 
+        store.opacity, store.fontSize, store.fontFamily, pageNum
+    ]);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Highlight Layer — Drawing, Rendering, Deletion
+    // ══════════════════════════════════════════════════════════════════
+
+    // Sync highlight canvas size with PDF canvas size (DPR-aware) AND Redraw highlights
+    useEffect(() => {
+        const hlCanvas = highlightCanvasRef.current;
+        if (!hlCanvas || canvasSize.width === 0) return;
+        const dpr = window.devicePixelRatio || 1;
+        
+        // 1. Resize canvas (Note: resizing a canvas automatically clears its content)
+        hlCanvas.width = canvasSize.width * dpr;
+        hlCanvas.height = canvasSize.height * dpr;
+        hlCanvas.style.width = `${canvasSize.width}px`;
+        hlCanvas.style.height = `${canvasSize.height}px`;
+
+        // 2. Render highlights
+        const ctx = hlCanvas.getContext('2d');
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, hlCanvas.width, hlCanvas.height);
+
+        // Apply DPR scale so all drawing ops use CSS coordinates
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const cssW = canvasSize.width;
+        const cssH = canvasSize.height;
+
+        const highlights = (pageHighlights || {})[pageNum] || [];
+        highlights.forEach(hl => {
+            // Convert normalized ratios → CSS pixels
+            const hx = hl.normX * cssW;
+            const hy = hl.normY * cssH;
+            const hw = hl.normW * cssW;
+            const hh = hl.normH * cssH;
+            ctx.fillStyle = hl.color || '#ffeb3b';
+            ctx.fillRect(hx, hy, hw, hh);
+        });
+    }, [pageHighlights, pageNum, canvasSize]);
+
+    // ── Native Text Selection Handler ──
+    const handleTextSelectionEnd = useCallback((e) => {
+        const activeTool = store.activeTool;
+        if (!['highlight', 'underline', 'strikethrough'].includes(activeTool)) return;
+
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return;
+
+        const textLayerDiv = textLayerRef.current;
+        if (!textLayerDiv || !textLayerDiv.contains(selection.anchorNode)) return;
+
+        const cssW = canvasSize.width;
+        const cssH = canvasSize.height;
+        if (cssW === 0 || cssH === 0) return;
+
+        const containerRect = textLayerDiv.getBoundingClientRect();
+        
+        // Push history only once for the entire batch
+        pushHistory(pageNum);
+
+        // We can have multiple rects if text spans multiple lines
+        const rects = selection.getRangeAt(0).getClientRects();
+        
+        const newHighlights = [];
+        const fc = fabricCanvasRefs.current[pageNum];
+        
+        for (let i = 0; i < rects.length; i++) {
+            const rect = rects[i];
+            
+            // Map DOM ClientRect to CSS coordinates relative to the container
+            const x = rect.left - containerRect.left;
+            const y = rect.top - containerRect.top;
+            const w = rect.width;
+            const h = rect.height;
+
+            if (w < 2 || h < 2) continue; // Ignore tiny artifacts
+
+            if (activeTool === 'highlight') {
+                newHighlights.push({
+                    id: `hl_${Date.now()}_${Math.random().toString(36).substr(2, 5)}_${i}`,
+                    normX: x / cssW,
+                    // Fix native highlight Y position so it doesn't float too high
+                    normY: (y + 1) / cssH,
+                    normW: w / cssW,
+                    normH: (h + 1) / cssH,
+                    color: store.highlightColor || '#ffeb3b',
+                });
+            } else if (activeTool === 'underline' || activeTool === 'strikethrough') {
+                if (fc) {
+                    // Dynamic thickness based on text height (approx 8%)
+                    const dynamicThickness = Math.max(1.5, h * 0.08);
+
+                    const lineY = activeTool === 'underline'
+                        ? y + h + (dynamicThickness / 2)
+                        : y + h / 2 + (dynamicThickness / 2);
+
+                    const line = new fabric.Line(
+                        [x, lineY, x + w, lineY],
+                        {
+                            stroke: store.strokeColor || '#000000',
+                            strokeWidth: dynamicThickness,
+                            opacity: store.opacity,
+                            selectable: true,
+                            customData: { type: activeTool },
+                        }
+                    );
+                    fc.add(line);
+                }
+            }
+        }
+
+        if (activeTool === 'highlight' && newHighlights.length > 0) {
+            setPageHighlights(prev => ({
+                ...prev,
+                [pageNum]: [...(prev[pageNum] || []), ...newHighlights],
+            }));
+        }
+
+        if (fc && (activeTool === 'underline' || activeTool === 'strikethrough')) {
+            fc.renderAll();
+        }
+
+        // Clear selection so user can select again immediately
+        selection.removeAllRanges();
+
+    }, [pageNum, store, canvasSize, setPageHighlights, pushHistory, fabricCanvasRefs]);
+
+    // Handle right-click delete on the highlight canvas
+    const handleHighlightCanvasContextMenu = useCallback((e) => {
+        if (store.activeTool !== 'highlight') return;
+        e.preventDefault();
+        
+        const rect = highlightCanvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const cssW = canvasSize.width;
+        const cssH = canvasSize.height;
+        if (cssW === 0 || cssH === 0) return;
+
+        const highlights = (pageHighlights || {})[pageNum] || [];
+        const hitIdx = highlights.findIndex(hl => {
+            const hx = hl.normX * cssW;
+            const hy = hl.normY * cssH;
+            const hw = hl.normW * cssW;
+            const hh = hl.normH * cssH;
+            return x >= hx && x <= hx + hw && y >= hy && y <= hy + hh;
+        });
+
+        if (hitIdx !== -1) {
+            pushHistory(pageNum);
+            setPageHighlights(prev => {
+                const updated = [...(prev[pageNum] || [])];
+                updated.splice(hitIdx, 1);
+                return { ...prev, [pageNum]: updated };
+            });
+        }
+    }, [store.activeTool, pageNum, pageHighlights, pushHistory, setPageHighlights, canvasSize]);
+
+    // Determine if a text-selection drag tool is active
+    const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
+
     return (
         <div
             ref={containerRef}
             className="pdf-ws-canvas-container"
+            onContextMenu={(e) => { if (isDragTool) e.preventDefault(); }}
         >
             {/* Layer 1: PDF Rendering */}
             <canvas
                 ref={pdfCanvasRef}
                 className="pdf-ws-pdf-layer"
                 style={{ pointerEvents: 'none' }}
+            />
+
+            {/* Layer 1.5h: Highlight Blend Layer (mix-blend-mode: multiply) */}
+            <canvas
+                ref={highlightCanvasRef}
+                className="pdf-ws-highlight-layer"
+                style={{ pointerEvents: 'auto' }}
+                onContextMenu={handleHighlightCanvasContextMenu}
+            />
+
+            {/* Layer 1.75: Native Text Layer for Selection */}
+            <div
+                ref={textLayerRef}
+                className="pdf-ws-text-layer"
+                style={{
+                    pointerEvents: isDragTool ? 'auto' : 'none',
+                    cursor: isDragTool ? 'text' : 'default',
+                }}
+                onMouseUp={handleTextSelectionEnd}
             />
 
             {/* Layer 1.5: Overlay Compare PDF */}

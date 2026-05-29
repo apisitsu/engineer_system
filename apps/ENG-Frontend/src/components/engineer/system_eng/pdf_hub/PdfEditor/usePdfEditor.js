@@ -52,6 +52,9 @@ export default function usePdfEditor() {
     // ── Per-page Fabric.js annotation JSON ──
     const [pageAnnotations, setPageAnnotations] = useState({});
 
+    // ── Per-page highlight data (plain objects, rendered on blend canvas) ──
+    const [pageHighlights, setPageHighlights] = useState({});
+
     // ── History (undo/redo) ──
     const historyRef = useRef({ past: [], future: [] });
 
@@ -95,6 +98,7 @@ export default function usePdfEditor() {
 
             setPdfFile(file);
             setPageAnnotations({});
+            setPageHighlights({});
             setThumbnails({});
             historyRef.current = { past: [], future: [] };
 
@@ -138,6 +142,7 @@ export default function usePdfEditor() {
 
             setPdfFile({ name: filename, size: uint8.length });
             setPageAnnotations({});
+            setPageHighlights({});
             setThumbnails({});
             historyRef.current = { past: [], future: [] };
 
@@ -196,22 +201,26 @@ export default function usePdfEditor() {
     const pushHistory = useCallback((pageNum) => {
         const fc = fabricCanvasRefs?.current?.[pageNum];
         if (!fc) return;
-        const snapshot = JSON.stringify(fc.toJSON(['customData']));
-        historyRef.current.past.push({ pageNum, snapshot });
+        const fabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        // Snapshot highlights for this page too
+        const highlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        historyRef.current.past.push({ pageNum, fabricSnapshot, highlightSnapshot });
         historyRef.current.future = []; // Clear redo stack
         // Cap at 50 entries
         if (historyRef.current.past.length > 50) {
             historyRef.current.past.shift();
         }
         setHistoryVersion(v => v + 1);
-    }, []);
+    }, [pageHighlights]);
 
     const undo = useCallback(() => {
         const { past, future } = historyRef.current;
         if (past.length === 0) return;
 
         const prevEntry = past.pop();
-        const { pageNum, snapshot: prevSnapshot } = prevEntry;
+        const { pageNum, fabricSnapshot, highlightSnapshot } = prevEntry;
         const fc = fabricCanvasRefs?.current?.[pageNum];
         
         if (!fc) {
@@ -220,24 +229,35 @@ export default function usePdfEditor() {
             return;
         }
 
-        const currentSnapshot = JSON.stringify(fc.toJSON(['customData']));
-        future.push({ pageNum, snapshot: currentSnapshot });
+        // Save current state to future (redo)
+        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const currentHighlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        future.push({ pageNum, fabricSnapshot: currentFabricSnapshot, highlightSnapshot: currentHighlightSnapshot });
 
-        const parsedSnapshot = typeof prevSnapshot === 'string' ? JSON.parse(prevSnapshot) : prevSnapshot;
-
+        // Restore fabric
+        const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
         fc.loadFromJSON(parsedSnapshot, () => {
             fc.requestRenderAll();
-            setHistoryVersion(v => v + 1);
-            setCurrentPage(pageNum); // Auto-scroll to where undo happened
         });
-    }, []);
+
+        // Restore highlights
+        if (highlightSnapshot) {
+            const restoredHL = typeof highlightSnapshot === 'string' ? JSON.parse(highlightSnapshot) : highlightSnapshot;
+            setPageHighlights(prev => ({ ...prev, [pageNum]: restoredHL }));
+        }
+
+        setHistoryVersion(v => v + 1);
+        setCurrentPage(pageNum);
+    }, [pageHighlights]);
 
     const redo = useCallback(() => {
         const { past, future } = historyRef.current;
         if (future.length === 0) return;
 
         const nextEntry = future.pop();
-        const { pageNum, snapshot: nextSnapshot } = nextEntry;
+        const { pageNum, fabricSnapshot, highlightSnapshot } = nextEntry;
         const fc = fabricCanvasRefs?.current?.[pageNum];
         
         if (!fc) {
@@ -245,17 +265,28 @@ export default function usePdfEditor() {
             return;
         }
 
-        const currentSnapshot = JSON.stringify(fc.toJSON(['customData']));
-        past.push({ pageNum, snapshot: currentSnapshot });
+        // Save current state to past (undo)
+        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const currentHighlightSnapshot = JSON.stringify(
+            (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
+        );
+        past.push({ pageNum, fabricSnapshot: currentFabricSnapshot, highlightSnapshot: currentHighlightSnapshot });
 
-        const parsedSnapshot = typeof nextSnapshot === 'string' ? JSON.parse(nextSnapshot) : nextSnapshot;
-
+        // Restore fabric
+        const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
         fc.loadFromJSON(parsedSnapshot, () => {
             fc.requestRenderAll();
-            setHistoryVersion(v => v + 1);
-            setCurrentPage(pageNum); // Auto-scroll to where redo happened
         });
-    }, []);
+
+        // Restore highlights
+        if (highlightSnapshot) {
+            const restoredHL = typeof highlightSnapshot === 'string' ? JSON.parse(highlightSnapshot) : highlightSnapshot;
+            setPageHighlights(prev => ({ ...prev, [pageNum]: restoredHL }));
+        }
+
+        setHistoryVersion(v => v + 1);
+        setCurrentPage(pageNum);
+    }, [pageHighlights]);
 
     const canUndo = historyRef.current.past.length > 0;
     const canRedo = historyRef.current.future.length > 0;
@@ -307,6 +338,9 @@ export default function usePdfEditor() {
         // Annotations
         pageAnnotations, setPageAnnotations,
         saveCurrentPageState, getAnnotationCount, totalAnnotations,
+
+        // Highlights (blend layer)
+        pageHighlights, setPageHighlights,
 
         // History
         pushHistory, undo, redo, canUndo, canRedo, historyVersion,

@@ -264,6 +264,50 @@
     display: block;
 }
 
+/* Highlight layer — sits between PDF canvas and Fabric.js overlay.
+   mix-blend-mode: multiply preserves text darkness while showing color. */
+.pdf-ws-highlight-layer {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    mix-blend-mode: multiply;
+    z-index: 1;
+}
+
+/* Native DOM Text Layer for true Word-like text selection */
+.pdf-ws-text-layer {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    line-height: 1.0;
+    z-index: 2; /* Sits above highlight layer so we can select it */
+}
+
+/* 
+ * The spans are created by PDF.js renderTextLayer 
+ * They must be transparent and selectable.
+ */
+.pdf-ws-text-layer > span {
+    color: transparent;
+    position: absolute;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+}
+
+/* Native browser selection highlight */
+.pdf-ws-text-layer ::selection {
+    background: rgba(0, 120, 215, 0.3); /* Windows 10/11 default blue selection */
+}
+.pdf-ws-text-layer ::-moz-selection {
+    background: rgba(0, 120, 215, 0.3);
+}
+
 /*
  * CRITICAL: Fabric.js wraps its <canvas> in a <div class="canvas-container">.
  * Without this, the wrapper sits in normal flow BELOW the PDF canvas,

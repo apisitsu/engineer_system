@@ -288,6 +288,13 @@ const PropertiesPanel = ({
                                 size="small" style={{ width: 60 }}
                             />
                         </PropRow>
+                        <PropRow label="Symbol Size">
+                            <InputNumber
+                                min={8} max={72} value={store.fontSize}
+                                onChange={store.setFontSize}
+                                size="small" style={{ width: 60 }}
+                            />
+                        </PropRow>
                     </div>
 
                     <div className="pdf-ws-prop-section">

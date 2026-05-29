@@ -8,7 +8,7 @@ import {
     FormOutlined, SignatureOutlined, SafetyCertificateOutlined,
     CalendarOutlined, MergeCellsOutlined, FileImageOutlined,
     SelectOutlined, DragOutlined, ColumnHeightOutlined,
-    CheckOutlined, CloseOutlined, StopOutlined, CheckCircleOutlined, IdcardOutlined,
+    CheckOutlined, CloseOutlined, CheckCircleOutlined, IdcardOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import { useAuthStore } from '../../../../../../stores/authStore';
@@ -110,7 +110,13 @@ const ModeToolbar = () => {
                     <div className="pdf-ws-toolbar-group">
                         <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
                         <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
-                        <ToolBtn tool="stampCircle" icon={<StopOutlined />} label="Circle (○)" />
+                        <ToolBtn tool="stampCircle" icon={
+                            <span style={{
+                                display: 'inline-flex', width: 14, height: 14,
+                                borderRadius: '50%', border: '2px solid currentColor',
+                                boxSizing: 'border-box',
+                            }} />
+                        } label="Circle (○)" />
                         <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
                     </div>
                     <ToolDivider />
