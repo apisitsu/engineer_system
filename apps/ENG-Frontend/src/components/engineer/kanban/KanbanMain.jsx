@@ -47,7 +47,7 @@ const KanbanMain = () => {
     const { theme } = useTheme();
     const { empNo } = useAuthStore();
     const navigate = useNavigate();
-    const { projectId: projectIdParam } = useParams();
+    const { projectId: projectIdParam, boardId: boardIdParam } = useParams();
 
     const {
         projects, activeProject, boards, activeBoard, isLoading, error,
@@ -178,15 +178,25 @@ const KanbanMain = () => {
 
     // Auto-select first board in filtered list if current activeBoard is not in the list
     useEffect(() => {
+        if (!projectIdParam) return; // Prevent auto-select if we are not in a project route
+
         if (!isInitLoading && isGroupInitialized && filteredOrderedBoards.length > 0) {
+            // If there's a URL param for board, don't auto-select here, let the other effect handle it
+            if (boardIdParam) return;
+            
             // ONLY auto-select if the project is not permanent!
             if (!activeProject?.is_permanent) {
                 if (!activeBoard || !filteredOrderedBoards.find(b => b.id === activeBoard.id)) {
-                    setActiveBoard(filteredOrderedBoards[0]);
+                    const firstBoard = filteredOrderedBoards[0];
+                    setActiveBoard(firstBoard);
+                    navigate(`/eng/kanban/${activeProject.id}/${firstBoard.id}`, { replace: true });
                 }
+            } else if (!activeBoard && !boardIdParam) {
+                // If it's a permanent project and no board is active, default to dashboard
+                navigate(`/eng/kanban/${activeProject.id}/dashboard`, { replace: true });
             }
         }
-    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized, activeProject?.is_permanent]);
+    }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized, activeProject?.is_permanent, boardIdParam, navigate, activeProject?.id]);
 
     // On mount: fetch all projects and user preferences
     useEffect(() => {
@@ -209,16 +219,56 @@ const KanbanMain = () => {
 
     // Handle initial selection from URL params
     useEffect(() => {
-        if (projectIdParam && projects.length > 0 && !isLoading) {
-            const currentId = activeProject?.id ? String(activeProject.id) : null;
-            if (currentId !== String(projectIdParam)) {
-                const p = projects.find(pr => String(pr.id) === String(projectIdParam));
-                if (p) {
-                    setActiveProject(p);
+        if (projectIdParam) {
+            if (projects.length > 0 && !isLoading) {
+                const currentId = activeProject?.id ? String(activeProject.id) : null;
+                if (currentId !== String(projectIdParam)) {
+                    const p = projects.find(pr => String(pr.id) === String(projectIdParam));
+                    if (p) {
+                        setActiveProject(p);
+                    }
+                }
+            }
+        } else {
+            if (activeProject) setActiveProject(null);
+            if (activeBoard) setActiveBoard(null);
+        }
+    }, [projectIdParam, projects, activeProject, setActiveProject, activeBoard, setActiveBoard, isLoading]);
+
+    // Sync boardId from URL to state
+    useEffect(() => {
+        if (boardIdParam && boards.length > 0) {
+            const currentActiveBoard = useKanbanStore.getState().activeBoard;
+            if (boardIdParam === 'dashboard') {
+                if (currentActiveBoard) {
+                    setActiveBoard(null);
+                }
+            } else {
+                const currentBoardId = currentActiveBoard?.id ? String(currentActiveBoard.id) : null;
+                if (currentBoardId !== String(boardIdParam)) {
+                    const b = boards.find(br => String(br.id) === String(boardIdParam));
+                    if (b) {
+                        setActiveBoard(b);
+                    }
                 }
             }
         }
-    }, [projectIdParam, projects, activeProject, setActiveProject, isLoading]);
+    }, [boardIdParam, boards, setActiveBoard]);
+
+    // Sync state to URL if board changes (e.g. from UI click)
+    useEffect(() => {
+        if (projectIdParam && activeProject && !isLoading && isInitLoading === false) {
+            if (activeBoard) {
+                if (boardIdParam !== String(activeBoard.id)) {
+                    navigate(`/eng/kanban/${activeProject.id}/${activeBoard.id}`, { replace: true });
+                }
+            } else if (activeProject.is_permanent) {
+                if (boardIdParam !== 'dashboard') {
+                    navigate(`/eng/kanban/${activeProject.id}/dashboard`, { replace: true });
+                }
+            }
+        }
+    }, [activeBoard, activeProject, navigate, isLoading, isInitLoading, boardIdParam, projectIdParam]);
 
     // WebSocket lifecycle — connect on board change, cleanup listeners on transition
     useEffect(() => {
@@ -246,7 +296,11 @@ const KanbanMain = () => {
 
     const handleSelectProject = (project) => {
         setActiveProject(project);
-        navigate(`/eng/kanban/${project.id}`);
+        if (project.is_permanent) {
+            navigate(`/eng/kanban/${project.id}/dashboard`);
+        } else {
+            navigate(`/eng/kanban/${project.id}`);
+        }
     };
 
     const handleBackToProjects = () => {
@@ -344,7 +398,7 @@ const KanbanMain = () => {
                         ) : viewMode === 'report' ? (
                             <ReportsTab theme={theme} />
                         ) : activeProject?.is_permanent && !activeBoard ? (
-                            <BoardDashboard boards={boards} onSelectBoard={setActiveBoard} onOpenBoardSettings={(board) => openBoardSettings(board)} />
+                            <BoardDashboard boards={filteredOrderedBoards} onSelectBoard={setActiveBoard} onOpenBoardSettings={(board) => openBoardSettings(board)} />
                         ) : activeBoard ? (
                             <BoardView />
                         ) : (

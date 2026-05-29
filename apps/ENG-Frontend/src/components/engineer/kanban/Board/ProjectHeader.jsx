@@ -32,6 +32,7 @@ const ProjectHeader = ({ theme, activeProject }) => {
         const { activeBoard, setActiveBoard } = useKanbanStore.getState();
         if (activeProject?.is_permanent && activeBoard) {
             setActiveBoard(null);
+            navigate(`/eng/kanban/${activeProject.id}/dashboard`);
         } else {
             navigate('/eng/kanban');
         }
@@ -46,7 +47,8 @@ const ProjectHeader = ({ theme, activeProject }) => {
                 {/* Back button */}
                 <Button type="text" icon={<IoChevronBackOutline size={18} />}
                     onClick={handleBackToProjects}
-                    style={{ color: theme.colors.textSecondary, padding: '4px 8px' }} />
+                    style={{ color: theme.colors.textSecondary, padding: '4px 8px' }}
+                />
 
                 {/* Project selector dropdown — bold & larger */}
                 <div style={{ display: 'flex', alignItems: 'center' }}>

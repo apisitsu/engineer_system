@@ -337,6 +337,7 @@ const AppContent = () => {
                   <Route path="/eng/kanban" element={<KanbanMain />} />
                   <Route path="/eng/kanban/guide" element={<UserGuideFullPage />} />
                   <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+                  <Route path="/eng/kanban/:projectId/:boardId" element={<KanbanMain />} />
 
                   {/* ------ User Guide ------ */}
                   <Route path="/eng/user-guide" element={<UserGuidePage />} />
