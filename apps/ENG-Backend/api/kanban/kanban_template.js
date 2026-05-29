@@ -813,6 +813,163 @@ const StampLabels = async (req, res) => {
 };
 
 
+// ─── POST /api/kanban/templates/:id/stamp-board-data ────────────────
+// Loads lists, cards, tasks, and labels from a Blueprint into an existing board
+const StampBoardData = async (req, res) => {
+    const { id } = req.params;
+    const { board_id, target_list_id } = req.body;
+    const uCode = req.user?.empno;
+    if (!uCode) return res.status(401).json({ error: 'Unauthorized' });
+    if (!board_id) return res.status(400).json({ error: 'board_id is required' });
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        if (!(await canEditBoard(req, board_id))) {
+            throw new Error('Editor permission required');
+        }
+
+        // Fetch Template
+        const { rows: [tmpl] } = await client.query('SELECT * FROM kb_template_config WHERE id = $1', [id]);
+        if (!tmpl) throw new Error('Template not found');
+        const config = tmpl.config_data;
+
+        // Ensure it has list_ids and card_ids
+        const listIds = config.list_ids || [];
+        const cardIds = config.card_ids || [];
+        const taskIds = config.task_ids || [];
+
+        if (listIds.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Template has no lists to load' });
+        }
+
+        // We also need the original board ID so we can copy labels if needed
+        const templateBoardId = config.board_ids && config.board_ids.length > 0 ? config.board_ids[0] : null;
+
+        // 1. Clone Labels (if they don't already exist by name)
+        const labelMap = {}; // old_id -> new_id
+        if (templateBoardId) {
+            const { rows: masterLabels } = await client.query('SELECT * FROM kb_label WHERE board_id=$1', [templateBoardId]);
+            const { rows: currentLabels } = await client.query('SELECT * FROM kb_label WHERE board_id=$1', [board_id]);
+            
+            const posRes = await client.query('SELECT COALESCE(MAX(position),0) AS pos FROM kb_label WHERE board_id=$1', [board_id]);
+            let labelPos = posRes.rows[0].pos;
+
+            for (const ml of masterLabels) {
+                const existing = currentLabels.find(cl => cl.name === ml.name && cl.color === ml.color);
+                if (existing) {
+                    labelMap[ml.id] = existing.id;
+                } else {
+                    labelPos += 65536;
+                    const { rows: [newLabel] } = await client.query(
+                        'INSERT INTO kb_label (board_id, position, name, color) VALUES ($1,$2,$3,$4) RETURNING id',
+                        [board_id, labelPos, ml.name, ml.color]
+                    );
+                    labelMap[ml.id] = newLabel.id;
+                }
+            }
+        }
+
+        // 2. Clone Lists (if target_list_id is not provided)
+        const listMap = {};
+        if (!target_list_id) {
+            const posRes = await client.query('SELECT COALESCE(MAX(position),0) AS pos FROM kb_list WHERE board_id=$1', [board_id]);
+            let listPos = posRes.rows[0].pos;
+
+            const { rows: masterLists } = await client.query(`
+                SELECT * FROM kb_list WHERE id = ANY($1::int[]) ORDER BY position ASC
+            `, [listIds]);
+
+            for (const ml of masterLists) {
+                listPos += 65536;
+                const { rows: [newList] } = await client.query(`
+                    INSERT INTO kb_list (board_id, name, position, list_type, color)
+                    VALUES ($1,$2,$3,$4,$5) RETURNING id
+                `, [board_id, ml.name, listPos, ml.list_type, ml.color]);
+                listMap[ml.id] = newList.id;
+            }
+        }
+
+        // 3. Clone Cards
+        const cardMap = {};
+        const clonedCards = [];
+
+        if (cardIds.length > 0) {
+            const { rows: masterCards } = await client.query(`
+                SELECT * FROM kb_card WHERE id = ANY($1::int[]) ORDER BY position ASC
+            `, [cardIds]);
+
+            for (const mc of masterCards) {
+                const targetListId = target_list_id || listMap[mc.list_id];
+                if (!targetListId) continue;
+
+                const cardPosRes = await client.query('SELECT COALESCE(MAX(position),0) + 65536 AS pos FROM kb_card WHERE list_id=$1', [targetListId]);
+                const cardPos = cardPosRes.rows[0].pos;
+
+                const { rows: [newCard] } = await client.query(`
+                    INSERT INTO kb_card (board_id, list_id, creator_u_code, card_type, position, name, description, 
+                                         due_date, estimated_hours, priority, is_private, is_due_completed, is_closed, is_suspended, list_changed_at)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,FALSE,FALSE,FALSE,NOW()) RETURNING id
+                `, [board_id, targetListId, uCode, mc.card_type, cardPos, mc.name, mc.description, mc.due_date, mc.estimated_hours, mc.priority, mc.is_private]);
+                
+                cardMap[mc.id] = newCard.id;
+                clonedCards.push({ oldId: mc.id, newId: newCard.id, oldParentId: mc.parent_id });
+
+                await client.query("INSERT INTO kb_card_membership (card_id, u_code, role) VALUES ($1, $2, 'owner')", [newCard.id, uCode]);
+
+                const { rows: cardLabels } = await client.query('SELECT label_id FROM kb_card_label WHERE card_id=$1', [mc.id]);
+                for (const cl of cardLabels) {
+                    const newLabelId = labelMap[cl.label_id];
+                    if (newLabelId) {
+                        await client.query('INSERT INTO kb_card_label (card_id, label_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [newCard.id, newLabelId]);
+                    }
+                }
+
+                const { rows: taskLists } = await client.query('SELECT * FROM kb_task_list WHERE card_id=$1 ORDER BY position', [mc.id]);
+                for (const tl of taskLists) {
+                    const { rows: [newTl] } = await client.query(`
+                        INSERT INTO kb_task_list (card_id, name, position, show_on_front, hide_completed_tasks)
+                        VALUES ($1,$2,$3,$4,$5) RETURNING id
+                    `, [newCard.id, tl.name, tl.position, tl.show_on_front, tl.hide_completed_tasks]);
+
+                    if (taskIds.length > 0) {
+                        await client.query(`
+                            INSERT INTO kb_task (task_list_id, name, position, is_completed)
+                            SELECT $1, name, position, FALSE FROM kb_task WHERE task_list_id=$2 AND id = ANY($3::int[])
+                            ON CONFLICT DO NOTHING
+                        `, [newTl.id, tl.id, taskIds]);
+                    }
+                }
+            }
+        }
+
+        // 4. Update Parent/Child Dependencies
+        for (const card of clonedCards) {
+            if (card.oldParentId && cardMap[card.oldParentId]) {
+                const newParentId = cardMap[card.oldParentId];
+                await client.query('UPDATE kb_card SET parent_id=$1 WHERE id=$2', [newParentId, card.newId]);
+            }
+        }
+
+        await client.query('COMMIT');
+
+        const io = req.app.get('io');
+        if (io && board_id) {
+            io.to(`board:${board_id}`).emit('boardReload');
+        }
+
+        res.status(201).json({ message: 'Template data loaded successfully' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('StampBoardData error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     GetTemplates,
     GetTemplateById,
@@ -824,5 +981,6 @@ module.exports = {
     StampList,
     StampChecklist,
     StampLabels,
+    StampBoardData,
 };
 
