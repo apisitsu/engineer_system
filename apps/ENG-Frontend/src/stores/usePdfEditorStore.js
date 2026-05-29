@@ -46,6 +46,9 @@ export const usePdfEditorStore = create((set, get) => ({
     overlayOpacity: 0.5,   // 0..1
     overlayBlend: 'difference', // difference | multiply | normal
 
+    // ── View Mode (continuous vs single) ──
+    viewMode: 'continuous', // 'continuous' | 'single'
+
     // ── Actions ──
     setActiveMode: (mode) => set({
         activeMode: mode,
@@ -81,4 +84,7 @@ export const usePdfEditorStore = create((set, get) => ({
     setOverlayEnabled: (v) => set({ overlayEnabled: v }),
     setOverlayOpacity: (v) => set({ overlayOpacity: v }),
     setOverlayBlend: (v) => set({ overlayBlend: v }),
+
+    // View Mode
+    setViewMode: (v) => set({ viewMode: v }),
 }));

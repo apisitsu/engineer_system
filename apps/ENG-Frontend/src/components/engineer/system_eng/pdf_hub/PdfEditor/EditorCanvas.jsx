@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as fabric from 'fabric';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
+import { useAuthStore } from '../../../../../stores/authStore';
 
 /**
  * EditorCanvas — Dual-Layer rendering engine.
@@ -11,19 +12,19 @@ import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
  *
  * Props:
  *   pdfDoc          — pdfjs-dist document for rendering
- *   currentPage     — 1-indexed page number
+ *   pageNum         — 1-indexed page number for this specific canvas
  *   zoom            — float zoom level
  *   pageAnnotations — { [pageNum]: fabricJSON }
- *   fabricCanvasRef — ref to set the Fabric.Canvas instance
+ *   fabricCanvasRefs— ref object to store Fabric.Canvas instances by pageNum
  *   pushHistory     — callback to snapshot before mutations
  *   onPageRendered  — callback after PDF page renders (sends pageSize)
  */
 const EditorCanvas = ({
+    pageNum,
     pdfDoc,
-    currentPage,
     zoom,
     pageAnnotations,
-    fabricCanvasRef,
+    fabricCanvasRefs,
     pushHistory,
     onPageRendered,
     overlayPdfDoc,
@@ -36,6 +37,7 @@ const EditorCanvas = ({
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
     const store = usePdfEditorStore();
+    const { userName, userDepartment } = useAuthStore();
 
     // ── Constants ──
     const RENDER_SCALE = 1.5; // Super-sample for sharpness
@@ -44,7 +46,7 @@ const EditorCanvas = ({
     // Initialize Fabric.js Canvas (once)
     // ══════════════════════════════════════════════════════════════════
     useEffect(() => {
-        if (!fabricElRef.current || fabricCanvasRef.current) return;
+        if (!fabricElRef.current || fabricCanvasRefs.current[pageNum]) return;
 
         const canvas = new fabric.Canvas(fabricElRef.current, {
             selection: true,
@@ -54,7 +56,7 @@ const EditorCanvas = ({
             fireRightClick: true,
         });
 
-        fabricCanvasRef.current = canvas;
+        fabricCanvasRefs.current[pageNum] = canvas;
 
         // ── Object selection events ──
         canvas.on('selection:created', (e) => {
@@ -97,15 +99,15 @@ const EditorCanvas = ({
 
         // ── Modification tracking for undo ──
         canvas.on('object:modified', () => {
-            if (pushHistory) pushHistory();
+            if (pushHistory) pushHistory(pageNum);
         });
 
         return () => {
             canvas.dispose();
-            fabricCanvasRef.current = null;
+            delete fabricCanvasRefs.current[pageNum];
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [pageNum]);
 
     // ══════════════════════════════════════════════════════════════════
     // Render PDF Page (Layer 1)
@@ -116,7 +118,7 @@ const EditorCanvas = ({
 
         const renderPage = async () => {
             try {
-                const page = await pdfDoc.getPage(currentPage);
+                const page = await pdfDoc.getPage(pageNum);
                 const viewport = page.getViewport({ scale: zoom * RENDER_SCALE });
 
                 const canvas = pdfCanvasRef.current;
@@ -136,8 +138,8 @@ const EditorCanvas = ({
                     setCanvasSize({ width: displayW, height: displayH });
 
                     // Sync Fabric.js canvas size
-                    if (fabricCanvasRef.current) {
-                        fabricCanvasRef.current.setDimensions({
+                    if (fabricCanvasRefs.current[pageNum]) {
+                        fabricCanvasRefs.current[pageNum].setDimensions({
                             width: displayW,
                             height: displayH,
                         });
@@ -158,9 +160,9 @@ const EditorCanvas = ({
                 await page.render({ canvasContext: ctx, viewport }).promise;
 
                 // ── Load annotations for this page ──
-                if (!cancelled && fabricCanvasRef.current) {
-                    const fc = fabricCanvasRef.current;
-                    const saved = pageAnnotations[currentPage];
+                if (!cancelled && fabricCanvasRefs.current[pageNum]) {
+                    const fc = fabricCanvasRefs.current[pageNum];
+                    const saved = pageAnnotations[pageNum];
 
                     fc.clear();
 
@@ -196,7 +198,7 @@ const EditorCanvas = ({
         renderPage();
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pdfDoc, currentPage, zoom]);
+    }, [pdfDoc, pageNum, zoom]);
 
     // ══════════════════════════════════════════════════════════════════
     // Render Overlay PDF (Layer 1.5)
@@ -215,8 +217,8 @@ const EditorCanvas = ({
 
         const renderOverlay = async () => {
             try {
-                const pageNum = Math.min(currentPage, overlayPdfDoc.numPages);
-                const page = await overlayPdfDoc.getPage(pageNum);
+                const overlayPageNum = Math.min(pageNum, overlayPdfDoc.numPages);
+                const page = await overlayPdfDoc.getPage(overlayPageNum);
                 const viewport = page.getViewport({ scale: zoom * RENDER_SCALE });
 
                 const canvas = overlayCanvasRef.current;
@@ -241,13 +243,13 @@ const EditorCanvas = ({
         renderOverlay();
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [overlayPdfDoc, currentPage, zoom, store.overlayEnabled]);
+    }, [overlayPdfDoc, pageNum, zoom, store.overlayEnabled]);
 
     // ══════════════════════════════════════════════════════════════════
     // Configure Fabric.js for active tool
     // ══════════════════════════════════════════════════════════════════
     useEffect(() => {
-        const fc = fabricCanvasRef.current;
+        const fc = fabricCanvasRefs.current[pageNum];
         if (!fc) return;
 
         const tool = store.activeTool;
@@ -289,6 +291,11 @@ const EditorCanvas = ({
             case 'maskReplace':
             case 'sticky':
             case 'stamp':
+            case 'stampCheckmark':
+            case 'stampCross':
+            case 'stampCircle':
+            case 'stampOk':
+            case 'stampUserDate':
             case 'signature':
             case 'date':
                 fc.selection = false;
@@ -301,13 +308,13 @@ const EditorCanvas = ({
         }
 
         fc.renderAll();
-    }, [store.activeTool, store.strokeColor, store.strokeWidth, fabricCanvasRef]);
+    }, [store.activeTool, store.strokeColor, store.strokeWidth, pageNum, fabricCanvasRefs]);
 
     // ══════════════════════════════════════════════════════════════════
     // Mouse handlers for shape drawing
     // ══════════════════════════════════════════════════════════════════
     useEffect(() => {
-        const fc = fabricCanvasRef.current;
+        const fc = fabricCanvasRefs.current[pageNum];
         if (!fc) return;
 
         let isDrawing = false;
@@ -326,6 +333,7 @@ const EditorCanvas = ({
                 originX: 'left',
                 originY: 'top',
                 strokeUniform: true,
+                objectCaching: false, // Prevents blurriness when scaled
                 customData: { type: tool, createdAt: Date.now() },
             };
 
@@ -348,6 +356,7 @@ const EditorCanvas = ({
                 case 'highlight':
                     tempObj = new fabric.Rect({
                         ...commonProps,
+                        top: startY - 10,
                         width: 0,
                         height: 20,
                         fill: store.highlightColor,
@@ -410,13 +419,13 @@ const EditorCanvas = ({
             if (!tool || tool === 'select' || tool === 'pan' || tool === 'freehand') return;
 
             // One-click placement tools
-            if (['addText', 'sticky', 'stamp', 'signature', 'date'].includes(tool)) {
+            if (['addText', 'sticky', 'stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
                 handleOneClickTool(opt.pointer, tool);
                 return;
             }
 
             isDrawing = true;
-            pushHistory();
+            pushHistory(pageNum);
             createObject(opt.pointer);
         };
 
@@ -427,17 +436,26 @@ const EditorCanvas = ({
 
             switch (tool) {
                 case 'rect':
-                case 'maskReplace':
-                case 'highlight':
+                case 'maskReplace': {
                     const w = Math.abs(pointer.x - startX);
-                    const h = tool === 'highlight' ? 20 : Math.abs(pointer.y - startY);
+                    const h = Math.abs(pointer.y - startY);
                     tempObj.set({
                         width: w,
                         height: h,
                         left: Math.min(startX, pointer.x),
-                        top: tool === 'highlight' ? startY : Math.min(startY, pointer.y),
+                        top: Math.min(startY, pointer.y),
                     });
                     break;
+                }
+                case 'highlight': {
+                    const wHL = Math.abs(pointer.x - startX);
+                    tempObj.set({
+                        width: wHL,
+                        left: Math.min(startX, pointer.x),
+                        // top remains locked to startY - 10 for a straight line
+                    });
+                    break;
+                }
 
                 case 'circle':
                     const rx = Math.abs(pointer.x - startX) / 2;
@@ -568,7 +586,7 @@ const EditorCanvas = ({
 
         // ── One-click tools ──
         const handleOneClickTool = (pointer, tool) => {
-            pushHistory();
+            pushHistory(pageNum);
             switch (tool) {
                 case 'addText': {
                     const text = new fabric.IText('Type here...', {
@@ -626,17 +644,173 @@ const EditorCanvas = ({
                     break;
                 }
 
+                case 'stampCheckmark': {
+                    const checkText = new fabric.FabricText('✓', {
+                        left: pointer.x,
+                        top: pointer.y,
+                        fontSize: 40,
+                        fill: store.strokeColor || '#27ae60',
+                        fontWeight: 'bold',
+                        originX: 'center',
+                        originY: 'center',
+                        customData: { type: 'stampCheckmark' },
+                    });
+                    fc.add(checkText);
+                    fc.setActiveObject(checkText);
+                    break;
+                }
+
+                case 'stampCross': {
+                    const crossText = new fabric.FabricText('✕', {
+                        left: pointer.x,
+                        top: pointer.y,
+                        fontSize: 40,
+                        fill: store.strokeColor || '#e74c3c',
+                        fontWeight: 'bold',
+                        originX: 'center',
+                        originY: 'center',
+                        customData: { type: 'stampCross' },
+                    });
+                    fc.add(crossText);
+                    fc.setActiveObject(crossText);
+                    break;
+                }
+
+                case 'stampCircle': {
+                    const circleShape = new fabric.Circle({
+                        left: pointer.x,
+                        top: pointer.y,
+                        radius: 15,
+                        fill: 'transparent',
+                        stroke: store.strokeColor || '#3498db',
+                        strokeWidth: store.strokeWidth || 3,
+                        originX: 'center',
+                        originY: 'center',
+                        customData: { type: 'stampCircle' },
+                    });
+                    fc.add(circleShape);
+                    fc.setActiveObject(circleShape);
+                    break;
+                }
+
+                case 'stampOk': {
+                    const okCircle = new fabric.Circle({
+                        radius: 18,
+                        fill: 'transparent',
+                        stroke: store.strokeColor || '#3498db',
+                        strokeWidth: store.strokeWidth || 3,
+                        originX: 'center',
+                        originY: 'center',
+                    });
+                    const okText = new fabric.FabricText('OK', {
+                        fontSize: 16,
+                        fontWeight: 'bold',
+                        fill: store.strokeColor || '#3498db',
+                        originX: 'center',
+                        originY: 'center',
+                    });
+                    const okGroup = new fabric.Group([okCircle, okText], {
+                        left: pointer.x,
+                        top: pointer.y,
+                        originX: 'center',
+                        originY: 'center',
+                        customData: { type: 'stampOk' },
+                    });
+                    fc.add(okGroup);
+                    fc.setActiveObject(okGroup);
+                    break;
+                }
+
+                case 'stampUserDate': {
+                    const dept = 'ROD ENG';
+                    const name = userName || 'USER';
+
+                    // Format Name: Last name initial + dot + first name (no space)
+                    let formattedName = name;
+                    const nameParts = name.trim().split(/\s+/);
+                    if (nameParts.length > 1) {
+                        formattedName = `${nameParts[1].charAt(0).toUpperCase()}.${nameParts[0].toUpperCase()}`;
+                    } else {
+                        formattedName = name.toUpperCase();
+                    }
+
+                    // Format Date: DD MMM YYYY
+                    const d = new Date();
+                    const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+                    const dateVal = `${d.getDate().toString().padStart(2, '0')} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+
+                    const color = store.strokeColor || '#e74c3c';
+
+                    const bgCircle = new fabric.Circle({
+                        radius: 48, fill: '#ffffff', stroke: color, strokeWidth: 3,
+                        originX: 'center', originY: 'center',
+                        left: 0, top: 0, objectCaching: false
+                    });
+                    const line1 = new fabric.Line([-46, -14, 46, -14], { stroke: color, strokeWidth: 2, objectCaching: false });
+                    const line2 = new fabric.Line([-46, 14, 46, 14], { stroke: color, strokeWidth: 2, objectCaching: false });
+
+                    // Use scaleX to create a condensed font look similar to the physical stamp
+                    const fontProps = {
+                        fontWeight: 'bold', fill: color, fontFamily: 'Arial',
+                        originX: 'center', originY: 'center',
+                        scaleX: 0.75, objectCaching: false
+                    };
+
+                    const deptText = new fabric.FabricText(dept, {
+                        ...fontProps,
+                        fontSize: 16, top: -27, left: 0
+                    });
+                    
+                    const dateTextObj = new fabric.FabricText(dateVal, {
+                        ...fontProps,
+                        fontSize: 16, top: 0, left: 0
+                    });
+
+                    // Curved Name Text: Fixed max sweep angle to prevent overflowing
+                    const nameChars = formattedName.split('');
+                    const maxSweep = 110; // Max allowed degrees (e.g. from 145 to 35)
+                    const charAngle = Math.min(13, maxSweep / (nameChars.length - 1 || 1));
+                    const actualSweep = charAngle * (nameChars.length - 1);
+                    const startA = 90 + (actualSweep / 2); // Center around bottom (90 deg)
+                    const nameRadius = 38; // Radius for text path
+                    
+                    const nameObjects = nameChars.map((char, i) => {
+                        const a = startA - (i * charAngle);
+                        const rad = a * (Math.PI / 180);
+                        return new fabric.FabricText(char, {
+                            ...fontProps,
+                            fontSize: 14,
+                            left: nameRadius * Math.cos(rad),
+                            top: nameRadius * Math.sin(rad),
+                            angle: a - 90
+                        });
+                    });
+
+                    const userDateGroup = new fabric.Group([bgCircle, line1, line2, deptText, dateTextObj, ...nameObjects], {
+                        left: pointer.x,
+                        top: pointer.y,
+                        originX: 'center',
+                        originY: 'center',
+                        scaleX: 0.75, // Stamp scale relative to canvas
+                        scaleY: 0.75,
+                        objectCaching: false,
+                        customData: { type: 'stampUserDate' },
+                    });
+                    fc.add(userDateGroup);
+                    fc.setActiveObject(userDateGroup);
+                    break;
+                }
+
                 default:
                     break;
             }
             fc.renderAll();
         };
 
-        // ── Freehand path created ──
         const onPathCreated = (opt) => {
             if (opt.path) {
                 opt.path.set('customData', { type: 'freehand' });
-                pushHistory();
+                pushHistory(pageNum);
             }
         };
 

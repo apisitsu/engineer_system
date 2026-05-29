@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Segmented, Button, Tooltip, Upload, Typography, Spin, Tag,
     Select, Space, message,
@@ -10,6 +10,7 @@ import {
     LeftOutlined, RightOutlined, ZoomInOutlined, ZoomOutOutlined,
     UndoOutlined, RedoOutlined, DownloadOutlined, DeleteOutlined,
     ToolOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
+    AppstoreOutlined, InsertRowAboveOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -74,9 +75,13 @@ const PdfEditorTool = () => {
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
         thumbnails, setThumbnails,
-        fabricCanvasRef,
+        fabricCanvasRefs,
         canvasWrapperRef,
     } = editor;
+
+    // ── Continuous Scroll ──
+    const pageRefs = useRef({});
+    const isProgrammaticScroll = useRef(false);
 
     // ── Panel visibility ──
     const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -98,6 +103,44 @@ const PdfEditorTool = () => {
     // ── Overlay/Compare ──
     const [overlayPdfDoc, setOverlayPdfDoc] = useState(null);
     const [overlayFile, setOverlayFile] = useState(null);
+
+    // ── Continuous Scroll Observer ──
+    useEffect(() => {
+        if (store.viewMode !== 'continuous' || !pdfDoc) return;
+        
+        const observer = new IntersectionObserver((entries) => {
+            if (isProgrammaticScroll.current) return; // Skip if we are auto-scrolling
+            
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                    const page = Number(entry.target.dataset.page);
+                    if (page !== currentPage) {
+                        goToPage(page);
+                    }
+                }
+            });
+        }, { threshold: 0.5 });
+
+        Object.values(pageRefs.current).forEach(node => {
+            if (node) observer.observe(node);
+        });
+
+        return () => observer.disconnect();
+    }, [pdfDoc, store.viewMode, currentPage, goToPage]);
+
+    // Override manual navigation for smooth scroll
+    const handleGoToPage = useCallback((pageNum) => {
+        goToPage(pageNum);
+        if (store.viewMode === 'continuous' && pageRefs.current[pageNum]) {
+            isProgrammaticScroll.current = true;
+            pageRefs.current[pageNum].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Release lock after scroll completes
+            setTimeout(() => { isProgrammaticScroll.current = false; }, 600);
+        }
+    }, [goToPage, store.viewMode]);
+
+    const handleNextPage = () => handleGoToPage(currentPage + 1);
+    const handlePrevPage = () => handleGoToPage(currentPage - 1);
 
     // ── Initialize export selection when entering export mode ──
     useEffect(() => {
@@ -149,13 +192,15 @@ const PdfEditorTool = () => {
 
         try {
             const finalAnnotations = { ...pageAnnotations };
-            // Include current page
-            if (fabricCanvasRef.current) {
-                const json = fabricCanvasRef.current.toJSON(['customData']);
-                json._canvasWidth = fabricCanvasRef.current.width;
-                json._canvasHeight = fabricCanvasRef.current.height;
-                finalAnnotations[currentPage] = json;
-            }
+            // Include all active canvases
+            Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
+                if (fc) {
+                    const json = fc.toJSON(['customData']);
+                    json._canvasWidth = fc.width;
+                    json._canvasHeight = fc.height;
+                    finalAnnotations[pageNumStr] = json;
+                }
+            });
 
             const finalBytes = await commitAllToPdf(pdfBytes, finalAnnotations);
             const blob = new Blob([finalBytes], { type: 'application/pdf' });
@@ -173,7 +218,7 @@ const PdfEditorTool = () => {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
-    }, [pdfBytes, pageAnnotations, currentPage, fabricCanvasRef, pdfFile, saveCurrentPageState]);
+    }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -221,12 +266,14 @@ const PdfEditorTool = () => {
         try {
             const results = [];
             const allAnnotations = { ...pageAnnotations };
-            if (fabricCanvasRef.current) {
-                const json = fabricCanvasRef.current.toJSON(['customData']);
-                json._canvasWidth = fabricCanvasRef.current.width;
-                json._canvasHeight = fabricCanvasRef.current.height;
-                allAnnotations[currentPage] = json;
-            }
+            Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
+                if (fc) {
+                    const json = fc.toJSON(['customData']);
+                    json._canvasWidth = fc.width;
+                    json._canvasHeight = fc.height;
+                    allAnnotations[pageNumStr] = json;
+                }
+            });
 
             for (const pageNum of exportSelectedPages) {
                 const blob = await exportPageToImage(
@@ -258,7 +305,7 @@ const PdfEditorTool = () => {
         } finally {
             setExportLoading(false);
         }
-    }, [pdfDoc, exportSelectedPages, pageAnnotations, currentPage, fabricCanvasRef, pdfFile, saveCurrentPageState, setExportedImages]);
+    }, [pdfDoc, exportSelectedPages, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, setExportedImages]);
 
     // ══════════════════════════════════════════════════════════════════
     // Batch ZIP Download
@@ -316,8 +363,9 @@ const PdfEditorTool = () => {
     // Place Stamp / Signature on Canvas
     // ══════════════════════════════════════════════════════════════════
     const placeImageOnCanvas = useCallback(async (src, customData = {}) => {
-        if (!fabricCanvasRef.current) return;
-        pushHistory();
+        const fc = fabricCanvasRefs?.current?.[currentPage];
+        if (!fc) return;
+        pushHistory(currentPage);
 
         const imgEl = new Image();
         imgEl.src = src;
@@ -331,11 +379,11 @@ const PdfEditorTool = () => {
                 opacity: 0.85,
                 customData,
             });
-            fabricCanvasRef.current.add(fImg);
-            fabricCanvasRef.current.setActiveObject(fImg);
-            fabricCanvasRef.current.renderAll();
+            fc.add(fImg);
+            fc.setActiveObject(fImg);
+            fc.renderAll();
         };
-    }, [fabricCanvasRef, pushHistory]);
+    }, [fabricCanvasRefs, currentPage, pushHistory]);
 
     const handlePlaceStamp = useCallback(async (type) => {
         if (!stampData) return;
@@ -355,14 +403,17 @@ const PdfEditorTool = () => {
 
     // ── Delete selected objects ──
     const handleDeleteSelected = useCallback(() => {
-        if (!fabricCanvasRef.current) return;
-        const active = fabricCanvasRef.current.getActiveObjects();
-        if (active.length === 0) return;
-        pushHistory();
-        active.forEach(obj => fabricCanvasRef.current.remove(obj));
-        fabricCanvasRef.current.discardActiveObject();
-        fabricCanvasRef.current.renderAll();
-    }, [fabricCanvasRef, pushHistory]);
+        Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
+            if (!fc) return;
+            const active = fc.getActiveObjects();
+            if (active.length > 0) {
+                pushHistory(Number(pageNumStr));
+                active.forEach(obj => fc.remove(obj));
+                fc.discardActiveObject();
+                fc.renderAll();
+            }
+        });
+    }, [fabricCanvasRefs, pushHistory]);
 
     // ══════════════════════════════════════════════════════════════════
     // CSS Variables for theme
@@ -469,13 +520,13 @@ const PdfEditorTool = () => {
             <ShortcutsHandler
                 onUndo={undo}
                 onRedo={redo}
-                onPrevPage={prevPage}
-                onNextPage={nextPage}
+                onPrevPage={handlePrevPage}
+                onNextPage={handleNextPage}
                 onZoomIn={zoomIn}
                 onZoomOut={zoomOut}
                 onDelete={handleDeleteSelected}
                 onSave={handleApplyAndDownload}
-                fabricCanvasRef={fabricCanvasRef}
+                fabricCanvasRefs={fabricCanvasRefs}
             />
 
             {/* ── Signature Pad Modal ── */}
@@ -526,10 +577,21 @@ const PdfEditorTool = () => {
 
                 {/* ── Global actions ── */}
                 <Space size={4}>
+                    {/* View Toggle */}
+                    <Tooltip title={store.viewMode === 'continuous' ? "Switch to Single Page" : "Switch to Continuous"}>
+                        <Button size="small" 
+                            icon={store.viewMode === 'continuous' ? <AppstoreOutlined /> : <InsertRowAboveOutlined />}
+                            onClick={() => store.setViewMode(store.viewMode === 'continuous' ? 'single' : 'continuous')}
+                            style={{ borderRadius: 7 }} 
+                        />
+                    </Tooltip>
+
+                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
+
                     {/* Page nav */}
                     <Tooltip title="Previous page">
                         <Button size="small" icon={<LeftOutlined />}
-                            disabled={currentPage <= 1} onClick={prevPage}
+                            disabled={currentPage <= 1} onClick={handlePrevPage}
                             style={{ borderRadius: 7 }} />
                     </Tooltip>
                     <span className="pdf-ws-page-pill" style={{
@@ -540,7 +602,7 @@ const PdfEditorTool = () => {
                     </span>
                     <Tooltip title="Next page">
                         <Button size="small" icon={<RightOutlined />}
-                            disabled={currentPage >= totalPages} onClick={nextPage}
+                            disabled={currentPage >= totalPages} onClick={handleNextPage}
                             style={{ borderRadius: 7 }} />
                     </Tooltip>
 
@@ -618,7 +680,7 @@ const PdfEditorTool = () => {
                     <Tooltip title="Apply & Download PDF">
                         <Button size="small" type="primary" icon={<DownloadOutlined />}
                             onClick={handleApplyAndDownload}
-                            disabled={(totalAnnotations === 0 && !canUndo && !(fabricCanvasRef.current && fabricCanvasRef.current.getObjects().length > 0)) && store.activeMode !== 'merge'}
+                            disabled={(totalAnnotations === 0 && !canUndo && Object.values(fabricCanvasRefs?.current || {}).every(fc => !fc || fc.getObjects().length === 0)) && store.activeMode !== 'merge'}
                             style={{ borderRadius: 7, fontWeight: 600 }}>
                             Save
                         </Button>
@@ -650,7 +712,7 @@ const PdfEditorTool = () => {
                         pdfDoc={pdfDoc}
                         totalPages={totalPages}
                         currentPage={currentPage}
-                        goToPage={goToPage}
+                        goToPage={handleGoToPage}
                         getAnnotationCount={getAnnotationCount}
                         thumbnails={thumbnails}
                         setThumbnails={setThumbnails}
@@ -671,15 +733,42 @@ const PdfEditorTool = () => {
                         style={{ background: theme.colors.background }}
                     >
                         {pdfDoc && store.activeMode !== 'merge' ? (
-                            <EditorCanvas
-                                pdfDoc={pdfDoc}
-                                currentPage={currentPage}
-                                zoom={zoom}
-                                pageAnnotations={pageAnnotations}
-                                fabricCanvasRef={fabricCanvasRef}
-                                pushHistory={pushHistory}
-                                overlayPdfDoc={overlayPdfDoc}
-                            />
+                            store.viewMode === 'continuous' ? (
+                                <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', alignItems: 'center' }}>
+                                    {Array.from({ length: totalPages }).map((_, i) => (
+                                        <div 
+                                            key={i+1} 
+                                            data-page={i+1} 
+                                            ref={el => pageRefs.current[i+1] = el}
+                                            style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                        >
+                                            <EditorCanvas
+                                                pageNum={i+1}
+                                                pdfDoc={pdfDoc}
+                                                zoom={zoom}
+                                                pageAnnotations={pageAnnotations}
+                                                fabricCanvasRefs={fabricCanvasRefs}
+                                                pushHistory={pushHistory}
+                                                overlayPdfDoc={overlayPdfDoc}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{ padding: 24, display: 'flex', justifyContent: 'center' }}>
+                                    <div style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                        <EditorCanvas
+                                            pageNum={currentPage}
+                                            pdfDoc={pdfDoc}
+                                            zoom={zoom}
+                                            pageAnnotations={pageAnnotations}
+                                            fabricCanvasRefs={fabricCanvasRefs}
+                                            pushHistory={pushHistory}
+                                            overlayPdfDoc={overlayPdfDoc}
+                                        />
+                                    </div>
+                                </div>
+                            )
                         ) : store.activeMode === 'merge' ? (
                             <MergePreview mergeFiles={mergeFiles} />
                         ) : null}
