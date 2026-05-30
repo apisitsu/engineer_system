@@ -406,6 +406,33 @@ const EditorCanvas = ({
                         ry: 2,
                     });
                     break;
+                    
+                case 'addText':
+                    // Transparent box just to show the drag bounds
+                    tempObj = new fabric.Rect({
+                        ...commonProps,
+                        width: 0,
+                        height: 0,
+                        fill: 'transparent',
+                        stroke: '#999999',
+                        strokeDashArray: [5, 5],
+                        strokeWidth: 1,
+                        opacity: store.opacity,
+                    });
+                    break;
+                    
+                case 'sticky':
+                    // Preview box for sticky note
+                    tempObj = new fabric.Rect({
+                        ...commonProps,
+                        width: 0,
+                        height: 0,
+                        fill: '#fff3cd',
+                        stroke: '#ffc107',
+                        strokeWidth: 1,
+                        opacity: 0.8,
+                    });
+                    break;
 
                 // Highlight, Underline, and Strikethrough are handled on the dedicated blend layer
                 // See highlight mouseDown handler below
@@ -452,7 +479,7 @@ const EditorCanvas = ({
             if (['highlight', 'underline', 'strikethrough'].includes(tool)) return;
 
             // One-click placement tools
-            if (['addText', 'sticky', 'stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
+            if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
                 handleOneClickTool(opt.pointer, tool);
                 return;
             }
@@ -469,7 +496,9 @@ const EditorCanvas = ({
 
             switch (tool) {
                 case 'rect':
-                case 'maskReplace': {
+                case 'maskReplace':
+                case 'addText':
+                case 'sticky': {
                     const w = Math.abs(pointer.x - startX);
                     const h = Math.abs(pointer.y - startY);
                     tempObj.set({
@@ -605,6 +634,66 @@ const EditorCanvas = ({
                 textBox.enterEditing();
             }
 
+            // Add Text / Sticky Note (Drag to define width)
+            if ((tool === 'addText' || tool === 'sticky') && tempObj) {
+                const finalX = tempObj.left;
+                const finalY = tempObj.top;
+                const drawnWidth = tempObj.width;
+                const finalWidth = Math.max(drawnWidth, 150); // Minimum 150px
+                
+                fc.remove(tempObj);
+
+                let textObj;
+                if (tool === 'addText') {
+                    textObj = new fabric.Textbox(' ', { // Space prevents auto-deletion while keeping it empty visually
+                        left: finalX,
+                        top: finalY,
+                        width: finalWidth,
+                        fontSize: store.fontSize,
+                        fontFamily: store.fontFamily,
+                        fill: store.strokeColor,
+                        editable: true,
+                        customData: { type: 'text-overlay' },
+                    });
+                } else {
+                    textObj = new fabric.Textbox(' ', {
+                        left: finalX,
+                        top: finalY,
+                        width: finalWidth,
+                        fontSize: 16,
+                        lineHeight: 1.2,
+                        fontFamily: store.fontFamily || 'Helvetica',
+                        fill: '#333333',
+                        backgroundColor: '#fff3cd',
+                        borderColor: '#ffc107',
+                        editingBorderColor: '#ffc107',
+                        padding: 12,
+                        editable: true,
+                        angle: (Math.random() * 2) - 1, // Random tilt between -1 and +1 deg
+                        shadow: new fabric.Shadow({
+                            color: 'rgba(0,0,0,0.15)',
+                            blur: 10,
+                            offsetX: 2,
+                            offsetY: 4
+                        }),
+                        customData: { type: 'sticky' },
+                    });
+                }
+
+                fc.add(textObj);
+                fc.setActiveObject(textObj);
+                fc.renderAll();
+
+                store.setActiveTool('select');
+                
+                requestAnimationFrame(() => {
+                    textObj.enterEditing();
+                    textObj.selectAll();
+                });
+
+                tempObj = null;
+            }
+
             tempObj = null;
             fc.renderAll();
         };
@@ -613,46 +702,6 @@ const EditorCanvas = ({
         const handleOneClickTool = (pointer, tool) => {
             pushHistory(pageNum);
             switch (tool) {
-                case 'addText': {
-                    const text = new fabric.IText('Type here...', {
-                        left: pointer.x,
-                        top: pointer.y,
-                        fontSize: store.fontSize,
-                        fontFamily: store.fontFamily,
-                        fill: store.strokeColor,
-                        editable: true,
-                        customData: { type: 'text-overlay' },
-                    });
-                    fc.add(text);
-                    fc.setActiveObject(text);
-                    text.enterEditing();
-                    text.selectAll();
-                    setTimeout(() => store.setActiveTool('select'), 50);
-                    break;
-                }
-
-                case 'sticky': {
-                    const sticky = new fabric.Textbox('Note...', {
-                        left: pointer.x,
-                        top: pointer.y,
-                        width: 150,
-                        fontSize: 14,
-                        fontFamily: store.fontFamily || 'Helvetica',
-                        fill: '#333333',
-                        backgroundColor: '#fff3cd',
-                        borderColor: '#ffc107',
-                        editingBorderColor: '#ffc107',
-                        padding: 8,
-                        editable: true,
-                        customData: { type: 'sticky' },
-                    });
-                    fc.add(sticky);
-                    fc.setActiveObject(sticky);
-                    sticky.enterEditing();
-                    sticky.selectAll();
-                    setTimeout(() => store.setActiveTool('select'), 50);
-                    break;
-                }
 
                 case 'date': {
                     const today = new Date().toLocaleDateString('en-GB', {
@@ -1288,8 +1337,7 @@ const EditorCanvas = ({
             <canvas
                 ref={highlightCanvasRef}
                 className="pdf-ws-highlight-layer"
-                style={{ pointerEvents: 'auto' }}
-                onContextMenu={handleHighlightCanvasContextMenu}
+                style={{ pointerEvents: 'none' }}
             />
 
             {/* Layer 1.75: Native Text Layer for Selection / Freehand Fallback */}
@@ -1304,6 +1352,7 @@ const EditorCanvas = ({
                 onMouseDown={handleHybridMouseDown}
                 onMouseMove={handleHybridMouseMove}
                 onMouseUp={handleHybridMouseUp}
+                onContextMenu={handleHighlightCanvasContextMenu}
             />
 
             {/* Layer 1.5: Overlay Compare PDF */}
