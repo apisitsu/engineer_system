@@ -85,10 +85,36 @@ const SdsV2Page = () => {
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
     setSelectedMachine(null);
+
     const toolsForProcess = (data?.process_plan || []).filter(t => t.process_code === processRow.process_code);
     const codes = [...new Set(toolsForProcess.map(t => t.tool_dwg_no?.substring(1, 4)).filter(Boolean))];
-    const filtered = allMachineTypes.filter(m => codes.includes(m.machine_type_code));
-    const list = filtered.length ? filtered : allMachineTypes;
+
+    // Primary: machines with sds_machine_tool config for this process (authoritative — has SDS data)
+    const configuredNames = new Set(
+      machineToolsConfig
+        .filter(c => String(c.process_code) === String(processRow.process_code))
+        .map(c => c.machine_type?.trim())
+        .filter(Boolean)
+    );
+    const byConfig = allMachineTypes.filter(m => configuredNames.has(m.machine_type_name));
+
+    // Groups already covered by a config-backed machine — exclude their siblings from byCode
+    const configuredGroups = new Set(byConfig.map(m => m.machine_group).filter(Boolean));
+
+    // Secondary: machines matched by tool DWG code prefix, but skip if their group already
+    // has a config-backed representative (avoids offering TSG-300W when TSG-300ZNC has all data)
+    const byCode = allMachineTypes.filter(m => {
+      if (!codes.includes(m.machine_type_code)) return false;
+      if (m.machine_group && configuredGroups.has(m.machine_group)) return false;
+      return true;
+    });
+
+    // Merge: config-backed first, then unmatched code-prefix machines
+    const mergedMap = {};
+    [...byConfig, ...byCode].forEach(m => { mergedMap[m.machine_type_name] = m; });
+    const merged = Object.values(mergedMap);
+
+    const list = merged.length ? merged : allMachineTypes;
     setFilteredMachineTypes(list);
     if (list.length === 1) setSelectedMachine(list[0].machine_type_name);
     setPdfModal(true);
@@ -590,7 +616,7 @@ const SdsV2Page = () => {
           }
           options={filteredMachineTypes.map(m => ({
             value: m.machine_type_name,
-            label: m.machine_group || m.machine_type_name,
+            label: m.machine_type_name,
           }))}
         />
       </Modal>

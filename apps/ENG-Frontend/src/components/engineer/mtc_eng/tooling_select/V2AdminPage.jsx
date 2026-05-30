@@ -72,7 +72,7 @@ export default function V2AdminPage() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.TOOLING_SELECT)}>
           Back to Search
         </Button>
-        <Title level={3} style={{ margin: 0 }}>Tooling Select — Admin</Title>
+        <Title level={3} style={{ margin: 0 }}>Tooling Select Management</Title>
       </div>
       <Tabs
         activeKey={activeTab}

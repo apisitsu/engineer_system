@@ -153,10 +153,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     map[`tool_dwg_no_${slot}`] = t?.tool_dwg_no || '';
   }
 
-  // 2. sds_parameter — per-record (cn specific)
+  // 2. sds_parameter — machine-config (cn IS NULL) as defaults, cn-specific overwrites
   const paramRows = await engPool.query(
     `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
-     WHERE cn = $1 AND machine_type_name = $2`,
+     WHERE machine_type_name = $2 AND (cn IS NULL OR cn = $1)
+     ORDER BY (cn IS NULL) DESC`,
     [searchData.cn, machine_type_name]
   );
   paramRows.rows.forEach(r => { map[r.param_key] = r.param_value || ''; });
@@ -206,14 +207,14 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const grindingQ = await engPool.query(
     `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
      WHERE $1 = ANY(cn_prefixes)
-       AND ($2 IS NULL
+       AND ($2::text IS NULL
             OR process_codes IS NULL
             OR process_codes = '{}'
-            OR $2 = ANY(process_codes))
-     ORDER BY ($2 IS NOT NULL
+            OR $2::text = ANY(process_codes))
+     ORDER BY ($2::text IS NOT NULL
                AND process_codes IS NOT NULL
                AND process_codes != '{}'
-               AND $2 = ANY(process_codes)) DESC NULLS LAST
+               AND $2::text = ANY(process_codes)) DESC NULLS LAST
      LIMIT 1`,
     [cnPrefix, process_code || null]
   );

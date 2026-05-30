@@ -161,21 +161,65 @@ const PREFIX_TABLE_MAP = {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
+const PART_TYPE_SQL = {
+  BALL:      `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '31' AND '39'`,
+  RACE:      `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '21' AND '29'`,
+  BODY:      `(SUBSTRING(cn FROM 1 FOR 2) BETWEEN '11' AND '19' OR SUBSTRING(cn FROM 1 FOR 2) BETWEEN '51' AND '59')`,
+  SPHERICAL: `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '41' AND '49'`,
+  SLEEVE:    `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '61' AND '69'`,
+};
+
+router.get('/counts', async (req, res) => {
+  try {
+    const r = await engPool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '31' AND '39') AS ball,
+        COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '21' AND '29') AS race,
+        COUNT(*) FILTER (WHERE (SUBSTRING(cn FROM 1 FOR 2) BETWEEN '11' AND '19'
+                               OR SUBSTRING(cn FROM 1 FOR 2) BETWEEN '51' AND '59')) AS body,
+        COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '41' AND '49') AS spherical,
+        COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '61' AND '69') AS sleeve,
+        COUNT(*) AS total
+      FROM ${TABLES.SPEC_PROCESS}
+    `);
+    const row = r.rows[0];
+    res.json({
+      total: parseInt(row.total),
+      counts: {
+        BALL:      parseInt(row.ball),
+        RACE:      parseInt(row.race),
+        BODY:      parseInt(row.body),
+        SLEEVE:    parseInt(row.sleeve),
+        SPHERICAL: parseInt(row.spherical),
+      },
+    });
+  } catch (err) {
+    console.error('[Spec counts]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
-    const { q } = req.query;
+    const { q, partType } = req.query;
     const safePage  = Math.max(1, parseInt(req.query.page)  || 1);
     const safeLimit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
     const offset    = (safePage - 1) * safeLimit;
-    let query = `SELECT * FROM ${TABLES.SPEC_PROCESS}`;
-    let countQuery = `SELECT COUNT(*) FROM ${TABLES.SPEC_PROCESS}`;
+
+    const conditions = [];
     const params = [];
     if (q) {
-      query      += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
-      countQuery += ` WHERE cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1`;
+      conditions.push(`(cn ILIKE $1 OR type ILIKE $1 OR process ILIKE $1)`);
       params.push(`%${q}%`);
     }
-    query += ` ORDER BY cn LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    if (partType && PART_TYPE_SQL[partType]) {
+      conditions.push(PART_TYPE_SQL[partType]);
+    }
+
+    const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+    const query      = `SELECT * FROM ${TABLES.SPEC_PROCESS}${whereClause} ORDER BY cn LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const countQuery = `SELECT COUNT(*) FROM ${TABLES.SPEC_PROCESS}${whereClause}`;
+
     const [dataRes, countRes] = await Promise.all([
       engPool.query(query, [...params, safeLimit, offset]),
       engPool.query(countQuery, params),
