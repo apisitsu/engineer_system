@@ -37,7 +37,9 @@ export const server = {
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
-  
+  TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
+  TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
+
   // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,

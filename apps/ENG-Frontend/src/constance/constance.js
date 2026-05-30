@@ -7,9 +7,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 
 // // // ----------- DEV -----------
-// export const apiUrl = "http://localhost:2005/";
+export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -51,6 +51,8 @@ export const server = {
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
+  TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
+  TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
 
   // Tooling Select
   TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,

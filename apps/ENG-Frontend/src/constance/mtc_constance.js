@@ -6,6 +6,7 @@
 export const MTC_PATHS = {
   HOME: '/eng/mtc_eng',
   TOOLING_INSPECT: '/eng/mtc_eng/tooling',
+  TOOLING_RESULT_DASHBOARD: '/eng/mtc_eng/tooling-result-dashboard',
   TOOL_REQUEST: '/eng/mtc_eng/tool-request',
   TOOLING_SELECT: '/eng/mtc_eng/tooling-select',
   TOOLING_MANAGEMENT: '/eng/mtc_eng/tooling-management',
