@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography, Space, Button, Form, Input, Modal, App, Table,
   InputNumber, Row, Col, Popconfirm, Card, Layout, Select,
-  Alert, Tag,
+  Alert, Tag, Divider,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, DatabaseOutlined,
-  SearchOutlined, ReloadOutlined, ArrowLeftOutlined, DownOutlined, UpOutlined,
+  SearchOutlined, ReloadOutlined, ArrowLeftOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -58,21 +58,22 @@ export const SpecProcessManager = ({ embedded = false }) => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
-  const [tableVisible, setTableVisible] = useState(false);
+  const [selectedPartType, setSelectedPartType] = useState(null);
   const [form] = Form.useForm();
   const watchedCn = Form.useWatch('cn', form);
 
   const [syncNewLoading, setSyncNewLoading] = useState(false);
   const [syncNewResult, setSyncNewResult] = useState(null);  // { synced, failed, errors[] }
+  const [specCounts, setSpecCounts] = useState({ total: 0, counts: {} });
 
   const colors = theme?.colors || {};
 
-  const fetchSpecs = useCallback(async (page = 1, pageSize = 20, q = '') => {
+  const fetchSpecs = useCallback(async (page = 1, pageSize = 20, q = '', partType = null) => {
     setLoading(true);
     try {
-      const res = await axios.get(server.MTC_TOOLING_SPEC, {
-        params: { q, page, limit: pageSize }
-      });
+      const params = { q, page, limit: pageSize };
+      if (partType) params.partType = partType;
+      const res = await axios.get(server.MTC_TOOLING_SPEC, { params });
       setData(res.data.data || []);
       setTotal(res.data.total || 0);
     } catch (err) {
@@ -82,17 +83,40 @@ export const SpecProcessManager = ({ embedded = false }) => {
     }
   }, [message]);
 
+  const fetchCounts = useCallback(async () => {
+    try {
+      const res = await axios.get(server.MTC_TOOLING_SPEC_COUNTS);
+      setSpecCounts(res.data);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchCounts(); }, [fetchCounts]);
+
   useEffect(() => {
-    if (tableVisible) fetchSpecs(pagination.current, pagination.pageSize, searchText);
-  }, [fetchSpecs, tableVisible, pagination, searchText]);
+    if (selectedPartType !== null) {
+      fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
+    }
+  }, [fetchSpecs, selectedPartType, pagination, searchText]);
 
   const handleTableChange = (pag) => {
     setPagination(pag);
   };
 
   const handleSearch = () => {
+    if (selectedPartType === null) return;
     setPagination({ ...pagination, current: 1 });
-    fetchSpecs(1, pagination.pageSize, searchText);
+    fetchSpecs(1, pagination.pageSize, searchText, selectedPartType);
+  };
+
+  const handlePartTypeSelect = (pt) => {
+    if (selectedPartType === pt) {
+      setSelectedPartType(null);
+      setData([]);
+      setTotal(0);
+    } else {
+      setSelectedPartType(pt);
+      setPagination({ current: 1, pageSize: 20 });
+    }
   };
 
   const openAdd = () => {
@@ -122,7 +146,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
         message.success('Specification created');
       }
       setIsFormOpen(false);
-      fetchSpecs(pagination.current, pagination.pageSize, searchText);
+      fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
     } catch (err) {
       if (err?.errorFields) return;
       message.error(err.response?.data?.error || 'Save failed');
@@ -135,7 +159,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
     try {
       await axios.delete(`${server.MTC_TOOLING_SPEC}/${cn}`);
       message.success('Specification deleted');
-      fetchSpecs(pagination.current, pagination.pageSize, searchText);
+      fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
     } catch (err) {
       message.error('Delete failed');
     }
@@ -147,7 +171,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
     try {
       const res = await axios.post(server.MTC_TOOLING_SPEC_SYNC_NEW);
       setSyncNewResult(res.data);
-      if (res.data.synced > 0) fetchSpecs(1, pagination.pageSize, searchText);
+      if (res.data.synced > 0) fetchSpecs(1, pagination.pageSize, searchText, selectedPartType);
     } catch (err) {
       message.error(err.response?.data?.error || 'Sync ล้มเหลว');
     } finally {
@@ -168,7 +192,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
     return null;
   };
 
-  const PART_TYPE_COLOR = { BALL: 'blue', RACE: 'green', BODY: 'orange', SLEEVE: 'purple', SPHERICAL: 'red' };
+  const PART_TYPE_COLOR = { BALL: '#1677ff', RACE: '#52c41a', BODY: '#fa8c16', SLEEVE: '#722ed1', SPHERICAL: '#f5222d' };
 
   const isBodyCn = (cn) => ['BODY'].includes(getPartType(cn));
 
@@ -287,55 +311,102 @@ export const SpecProcessManager = ({ embedded = false }) => {
             </Title>
           </Space>
         )}
-            <Space>
-              <Input
-                placeholder="Search CN, Type, Process..."
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-                onPressEnter={handleSearch}
-                prefix={<SearchOutlined />}
-                style={{ width: 300 }}
-                allowClear
-              />
+        <Space>
+          <Input
+            placeholder="Search CN, Type, Process..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            onPressEnter={handleSearch}
+            prefix={<SearchOutlined />}
+            style={{ width: 300 }}
+            allowClear
+          />
+          {selectedPartType !== null && (
+            <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
+          )}
+          <Popconfirm
+            title="Sync New CNs จาก Factory"
+            description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
+            onConfirm={runSyncNew}
+            okText="Sync เลย"
+            cancelText="Cancel"
+          >
+            <Button icon={<DatabaseOutlined />} loading={syncNewLoading}>Sync New CNs</Button>
+          </Popconfirm>
+          <Button icon={<PlusOutlined />} type="primary" onClick={openAdd}>Add Spec</Button>
+        </Space>
+      </div>
+      <Title level={5} style={{ marginBottom: 8 }}><SearchOutlined /> Item Counts</Title>
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Row gutter={16} align="middle">
+          <Col flex="none">
+            <Text type="secondary" style={{ fontSize: 12 }}>Total</Text>
+            <div style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary, lineHeight: 1.2 }}>
+              {specCounts.total.toLocaleString()}
+            </div>
+          </Col>
+          <Col flex="none"><Divider type="vertical" style={{ height: 48 }} /></Col>
+          <Col flex="auto">
+            <Space wrap>
               <Button
-                icon={tableVisible ? <UpOutlined /> : <DownOutlined />}
-                onClick={() => setTableVisible(v => !v)}
+                size="small"
+                type={selectedPartType === null ? 'primary' : 'default'}
+                onClick={() => { setSelectedPartType(null); setData([]); setTotal(0); }}
               >
-                {tableVisible ? 'Hide Table' : 'Show Table'}
+                All
               </Button>
-              {tableVisible && (
-                <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText)} />
-              )}
-              <Popconfirm
-                title="Sync New CNs จาก Factory"
-                description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
-                onConfirm={runSyncNew}
-                okText="Sync เลย"
-                cancelText="Cancel"
-              >
-                <Button icon={<DatabaseOutlined />} loading={syncNewLoading}>Sync New CNs</Button>
-              </Popconfirm>
-              <Button icon={<PlusOutlined />} type="primary" onClick={openAdd}>Add Spec</Button>
+              {Object.entries(PART_TYPE_COLOR).map(([pt, color]) => (
+                <Button
+                  key={pt}
+                  size="small"
+                  type={selectedPartType === pt ? 'primary' : 'default'}
+                  style={selectedPartType === pt
+                    ? { background: color, borderColor: color }
+                    : { borderColor: color, color }}
+                  onClick={() => handlePartTypeSelect(pt)}
+                >
+                  {pt}{' '}
+                  <span style={{ fontSize: 11, opacity: 0.85 }}>({(specCounts.counts?.[pt] || 0).toLocaleString()})</span>
+                </Button>
+              ))}
             </Space>
-          </div>
-
-          {tableVisible && <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
-            <Table
-              dataSource={data.map(r => ({ ...r, key: r.cn }))}
-              columns={columns}
-              loading={loading}
-              size="small"
-              bordered
-              scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
-              pagination={{
-                ...pagination,
-                total,
-                showSizeChanger: true,
-                showTotal: (total) => `Total ${total} items`
-              }}
-              onChange={handleTableChange}
-            />
-          </Card>}
+          </Col>
+          {selectedPartType && (
+            <>
+              <Col flex="none"><Divider type="vertical" style={{ height: 48 }} /></Col>
+              <Col flex="none" style={{ textAlign: 'center', minWidth: 80 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>{selectedPartType}</Text>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: PART_TYPE_COLOR[selectedPartType], lineHeight: 1.2 }}>
+                  {(specCounts.counts?.[selectedPartType] || 0).toLocaleString()}
+                </div>
+              </Col>
+            </>
+          )}
+        </Row>
+      </Card>
+      {selectedPartType !== null ? (
+        <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
+          <Table
+            dataSource={data.map(r => ({ ...r, key: r.cn }))}
+            columns={columns}
+            loading={loading}
+            size="small"
+            bordered
+            scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
+            pagination={{
+              ...pagination,
+              total,
+              showSizeChanger: true,
+              showTotal: (total) => `Total ${total} items`
+            }}
+            onChange={handleTableChange}
+          />
+        </Card>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#bfbfbf' }}>
+          Select a Part Type to view specs
+        </div>
+      )}
 
           {/* ── Sync New CNs — Result Modal ──────────────────────────────── */}
           <Modal

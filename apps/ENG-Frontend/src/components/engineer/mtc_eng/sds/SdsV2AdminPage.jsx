@@ -7,10 +7,12 @@ import {
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
-  SettingOutlined, DownOutlined, UpOutlined, EditOutlined, PlusOutlined,
+  SettingOutlined, DownOutlined, UpOutlined, EditOutlined, PlusOutlined, ArrowLeftOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
+import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 
@@ -1145,31 +1147,30 @@ const ROW_RANGE = Array.from({ length: 40 }, (_, i) => i + 16).filter(r => !EXCL
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
 const GW_ROW_RANGE = [50, 51, 52, 53, 54, 55];
 
-const MachineConfigTab = ({ theme }) => {
+const MachineConfigTab = ({ theme, visibleMachineNames }) => {
   const { message } = App.useApp();
   const [allMachineTypes, setAllMachineTypes] = useState([]);
-  const [fullMachineTypes, setFullMachineTypes] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [cellData, setCellData] = useState({});  // row_N_X → text value
-  const [cellTypes, setCellTypes] = useState({});  // row_N_X → 'value' | '' (label/unit)
-  const [rowHeaders, setRowHeaders] = useState({});  // rowNum → true/false
-  const [gwCellData, setGwCellData] = useState({});    // gw_row_N_COL → text value (AN:AV)
-  const [gwCellTypes, setGwCellTypes] = useState({});  // gw_row_N_COL → 'value' | ''
-  const [gwRowHeaders, setGwRowHeaders] = useState({});// rowNum → true/false
+  // Machine-default state (cn IS NULL)
+  const [cellData, setCellData] = useState({});
+  const [cellTypes, setCellTypes] = useState({});
+  const [rowHeaders, setRowHeaders] = useState({});
+  const [gwCellData, setGwCellData] = useState({});
+  const [gwCellTypes, setGwCellTypes] = useState({});
+  const [gwRowHeaders, setGwRowHeaders] = useState({});
   const [origKeys, setOrigKeys] = useState(new Set());
+  // CN Override state
+  const [cnInput, setCnInput] = useState('');
+  const [selectedCn, setSelectedCn] = useState(null);
+  const [cnOverrideData, setCnOverrideData] = useState({});
+  const [cnGwOverrideData, setCnGwOverrideData] = useState({});
+  const [cnRowIds, setCnRowIds] = useState({});
+  // UI state
   const [listLoading, setListLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [visibleMachineNames, setVisibleMachineNames] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sds_admin_visible_machines');
-      return saved ? new Set(JSON.parse(saved)) : null;
-    } catch { return null; }
-  });
-  const [tempChecked, setTempChecked] = useState([]);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -1188,19 +1189,14 @@ const MachineConfigTab = ({ theme }) => {
 
   useEffect(() => { loadList(); }, [loadList]);
 
-  // Load the complete unfiltered list once — used by Configure Visible modal so the
-  // isAll check is never fooled by an active search filter.
-  useEffect(() => {
-    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
-      .then(res => {
-        const seen = new Set();
-        setFullMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
-      })
-      .catch(() => {});
-  }, []);
-
   const loadConfig = useCallback(async (machineName) => {
     setSelectedMachine(machineName);
+    // Reset CN override mode when switching machines
+    setSelectedCn(null);
+    setCnInput('');
+    setCnOverrideData({});
+    setCnGwOverrideData({});
+    setCnRowIds({});
     setConfigLoading(true);
     setCellData({});
     setCellTypes({});
@@ -1218,21 +1214,15 @@ const MachineConfigTab = ({ theme }) => {
       const gwMap = {}, gwTypes = {}, gwHeaders = {};
       res.data.forEach(r => {
         keys.add(r.param_key);
-        // row_N_is_header
         const hdrMatch = r.param_key.match(/^row_(\d+)_is_header$/);
         if (hdrMatch) { headers[parseInt(hdrMatch[1])] = r.param_value === '1'; return; }
-        // row_N_X_type
         const typeMatch = r.param_key.match(/^row_(\d+)_([A-I])_type$/i);
         if (typeMatch) { types[`row_${typeMatch[1]}_${typeMatch[2].toUpperCase()}`] = r.param_value || ''; return; }
-        // gw_row_N_is_header
         const gwHdrMatch = r.param_key.match(/^gw_row_(\d+)_is_header$/);
         if (gwHdrMatch) { gwHeaders[parseInt(gwHdrMatch[1])] = r.param_value === '1'; return; }
-        // gw_row_N_COL_type
         const gwTypeMatch = r.param_key.match(/^gw_row_(\d+)_([A-Z]{1,3})_type$/i);
         if (gwTypeMatch) { gwTypes[`gw_row_${gwTypeMatch[1]}_${gwTypeMatch[2].toUpperCase()}`] = r.param_value || ''; return; }
-        // gw_row_N_COL (cell value)
         if (/^gw_row_\d+_[A-Z]{1,3}$/i.test(r.param_key)) { gwMap[r.param_key] = r.param_value || ''; return; }
-        // row_N_X  (cell value)
         map[r.param_key] = r.param_value || '';
       });
       setCellData(map);
@@ -1249,34 +1239,84 @@ const MachineConfigTab = ({ theme }) => {
     }
   }, [message]);
 
+  const loadCnConfig = useCallback(async (cn) => {
+    if (!selectedMachine) return;
+    const trimmed = cn.trim().toUpperCase();
+    setSelectedCn(trimmed);
+    setConfigLoading(true);
+    setCnOverrideData({});
+    setCnGwOverrideData({});
+    setCnRowIds({});
+    setDirty(false);
+    try {
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_PARAMETERS, {
+        params: { cn: trimmed, machine_type_name: selectedMachine },
+      });
+      const overrides = {}, gwOverrides = {}, ids = {};
+      res.data.forEach(r => {
+        ids[r.param_key] = r.id;
+        // Only load cell value keys — is_header and _type are machine-level (read-only per CN)
+        if (/^gw_row_\d+_[A-Z]{1,3}$/i.test(r.param_key)) { gwOverrides[r.param_key] = r.param_value || ''; return; }
+        if (/^row_\d+_[A-I]$/i.test(r.param_key)) { overrides[r.param_key] = r.param_value || ''; }
+      });
+      setCnOverrideData(overrides);
+      setCnGwOverrideData(gwOverrides);
+      setCnRowIds(ids);
+    } catch (err) {
+      message.error('Load CN failed');
+      setSelectedCn(null);
+    } finally {
+      setConfigLoading(false);
+    }
+  }, [selectedMachine, message]);
+
+  const exitCnMode = () => {
+    setSelectedCn(null);
+    setCnInput('');
+    setCnOverrideData({});
+    setCnGwOverrideData({});
+    setCnRowIds({});
+    setDirty(false);
+  };
+
   const markDirty = () => setDirty(true);
 
   const handleGwCellChange = (rowNum, c, val) => {
-    setGwCellData(prev => ({ ...prev, [`gw_row_${rowNum}_${c}`]: val }));
+    if (selectedCn) {
+      setCnGwOverrideData(prev => ({ ...prev, [`gw_row_${rowNum}_${c}`]: val }));
+    } else {
+      setGwCellData(prev => ({ ...prev, [`gw_row_${rowNum}_${c}`]: val }));
+    }
     markDirty();
   };
   const handleGwTypeToggle = (rowNum, c) => {
+    if (selectedCn) return; // type is machine-level only
     const key = `gw_row_${rowNum}_${c}`;
     setGwCellTypes(prev => ({ ...prev, [key]: prev[key] === 'value' ? '' : 'value' }));
     markDirty();
   };
   const handleGwHeaderToggle = (rowNum, checked) => {
+    if (selectedCn) return; // header is machine-level only
     setGwRowHeaders(prev => ({ ...prev, [rowNum]: checked }));
     markDirty();
   };
 
   const handleCellChange = (rowNum, c, val) => {
-    setCellData(prev => ({ ...prev, [`row_${rowNum}_${c}`]: val }));
+    if (selectedCn) {
+      setCnOverrideData(prev => ({ ...prev, [`row_${rowNum}_${c}`]: val }));
+    } else {
+      setCellData(prev => ({ ...prev, [`row_${rowNum}_${c}`]: val }));
+    }
     markDirty();
   };
-
   const handleTypeToggle = (rowNum, c) => {
+    if (selectedCn) return; // type is machine-level only
     const key = `row_${rowNum}_${c}`;
     setCellTypes(prev => ({ ...prev, [key]: prev[key] === 'value' ? '' : 'value' }));
     markDirty();
   };
-
   const handleHeaderToggle = (rowNum, checked) => {
+    if (selectedCn) return; // header is machine-level only
     setRowHeaders(prev => ({ ...prev, [rowNum]: checked }));
     markDirty();
   };
@@ -1284,60 +1324,93 @@ const MachineConfigTab = ({ theme }) => {
   const saveConfig = async () => {
     setSaving(true);
     try {
-      const params = [];
-      // Cell values
-      for (const rowNum of ROW_RANGE) {
-        for (const c of COL_LETTERS) {
-          const key = `row_${rowNum}_${c}`;
-          const val = cellData[key] || '';
-          if (val || origKeys.has(key)) params.push({ param_key: key, param_value: val || null });
+      if (selectedCn) {
+        // ── CN Override save ──────────────────────────────────────────────────
+        const upsertParams = [];
+        const deleteIds = [];
+        for (const rowNum of ROW_RANGE) {
+          for (const c of COL_LETTERS) {
+            const key = `row_${rowNum}_${c}`;
+            const val = cnOverrideData[key] ?? '';
+            if (val.trim()) {
+              upsertParams.push({ param_key: key, param_value: val.trim() });
+            } else if (cnRowIds[key]) {
+              deleteIds.push(cnRowIds[key]);
+            }
+          }
         }
-      }
-      // Cell types
-      for (const rowNum of ROW_RANGE) {
-        for (const c of COL_LETTERS) {
-          const cellKey = `row_${rowNum}_${c}`;
-          const typeKey = `${cellKey}_type`;
-          const typeVal = cellTypes[cellKey] || '';
-          if (typeVal || origKeys.has(typeKey)) params.push({ param_key: typeKey, param_value: typeVal || null });
+        for (const rowNum of GW_ROW_RANGE) {
+          for (const c of GW_COL_LETTERS) {
+            const key = `gw_row_${rowNum}_${c}`;
+            const val = cnGwOverrideData[key] ?? '';
+            if (val.trim()) {
+              upsertParams.push({ param_key: key, param_value: val.trim() });
+            } else if (cnRowIds[key]) {
+              deleteIds.push(cnRowIds[key]);
+            }
+          }
         }
-      }
-      // Row header flags
-      for (const rowNum of ROW_RANGE) {
-        const hdrKey = `row_${rowNum}_is_header`;
-        const hdrVal = rowHeaders[rowNum] ? '1' : '';
-        if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
-      }
-      // GW cell values (AN50:AV55)
-      for (const rowNum of GW_ROW_RANGE) {
-        for (const c of GW_COL_LETTERS) {
-          const key = `gw_row_${rowNum}_${c}`;
-          const val = gwCellData[key] || '';
-          if (val || origKeys.has(key)) params.push({ param_key: key, param_value: val || null });
+        if (upsertParams.length) {
+          await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
+            cn: selectedCn, machine_type_name: selectedMachine, params: upsertParams,
+          });
         }
-      }
-      // GW cell types
-      for (const rowNum of GW_ROW_RANGE) {
-        for (const c of GW_COL_LETTERS) {
-          const cellKey = `gw_row_${rowNum}_${c}`;
-          const typeKey = `${cellKey}_type`;
-          const typeVal = gwCellTypes[cellKey] || '';
-          if (typeVal || origKeys.has(typeKey)) params.push({ param_key: typeKey, param_value: typeVal || null });
+        await Promise.all(deleteIds.map(id =>
+          axios.delete(`${server.MTC_SDS_V2_ADMIN_PARAMETERS}/${id}`)
+        ));
+        message.success(`Saved CN override for ${selectedCn}`);
+        setDirty(false);
+        await loadCnConfig(selectedCn); // refresh IDs
+      } else {
+        // ── Machine-default save ──────────────────────────────────────────────
+        const params = [];
+        for (const rowNum of ROW_RANGE) {
+          for (const c of COL_LETTERS) {
+            const key = `row_${rowNum}_${c}`;
+            const val = cellData[key] || '';
+            if (val || origKeys.has(key)) params.push({ param_key: key, param_value: val || null });
+          }
         }
+        for (const rowNum of ROW_RANGE) {
+          for (const c of COL_LETTERS) {
+            const cellKey = `row_${rowNum}_${c}`;
+            const typeKey = `${cellKey}_type`;
+            const typeVal = cellTypes[cellKey] || '';
+            if (typeVal || origKeys.has(typeKey)) params.push({ param_key: typeKey, param_value: typeVal || null });
+          }
+        }
+        for (const rowNum of ROW_RANGE) {
+          const hdrKey = `row_${rowNum}_is_header`;
+          const hdrVal = rowHeaders[rowNum] ? '1' : '';
+          if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
+        }
+        for (const rowNum of GW_ROW_RANGE) {
+          for (const c of GW_COL_LETTERS) {
+            const key = `gw_row_${rowNum}_${c}`;
+            const val = gwCellData[key] || '';
+            if (val || origKeys.has(key)) params.push({ param_key: key, param_value: val || null });
+          }
+        }
+        for (const rowNum of GW_ROW_RANGE) {
+          for (const c of GW_COL_LETTERS) {
+            const cellKey = `gw_row_${rowNum}_${c}`;
+            const typeKey = `${cellKey}_type`;
+            const typeVal = gwCellTypes[cellKey] || '';
+            if (typeVal || origKeys.has(typeKey)) params.push({ param_key: typeKey, param_value: typeVal || null });
+          }
+        }
+        for (const rowNum of GW_ROW_RANGE) {
+          const hdrKey = `gw_row_${rowNum}_is_header`;
+          const hdrVal = gwRowHeaders[rowNum] ? '1' : '';
+          if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
+        }
+        await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
+          cn: null, machine_type_name: selectedMachine, params,
+        });
+        message.success('Saved');
+        setDirty(false);
+        setOrigKeys(new Set(params.filter(p => p.param_value).map(p => p.param_key)));
       }
-      // GW row header flags
-      for (const rowNum of GW_ROW_RANGE) {
-        const hdrKey = `gw_row_${rowNum}_is_header`;
-        const hdrVal = gwRowHeaders[rowNum] ? '1' : '';
-        if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
-      }
-
-      await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
-        cn: null, machine_type_name: selectedMachine, params,
-      });
-      message.success(`Saved`);
-      setDirty(false);
-      setOrigKeys(new Set(params.filter(p => p.param_value).map(p => p.param_key)));
     } catch (err) {
       message.error(err.response?.data?.error || 'Save failed');
     } finally {
@@ -1376,6 +1449,7 @@ const MachineConfigTab = ({ theme }) => {
       render: (_, record) => (
         <Checkbox
           checked={!!gwRowHeaders[record.rowNum]}
+          disabled={!!selectedCn}
           onChange={e => handleGwHeaderToggle(record.rowNum, e.target.checked)}
         />
       ),
@@ -1386,17 +1460,33 @@ const MachineConfigTab = ({ theme }) => {
       render: (_, record) => {
         const cellKey = `gw_row_${record.rowNum}_${c}`;
         const isValue = gwCellTypes[cellKey] === 'value';
+        const hasOverride = !!selectedCn && cnGwOverrideData[cellKey] !== undefined;
+        const displayValue = selectedCn
+          ? (cnGwOverrideData[cellKey] ?? gwCellData[cellKey] ?? '')
+          : (gwCellData[cellKey] || '');
         return (
           <Input
             size="small"
-            value={gwCellData[cellKey] || ''}
+            value={displayValue}
             onChange={e => handleGwCellChange(record.rowNum, c, e.target.value)}
-            style={{ fontSize: 11, color: isValue ? '#ff4d4f' : undefined, backgroundColor: gwRowHeaders[record.rowNum] ? '#f5f5f5' : undefined }}
+            style={{
+              fontSize: 11,
+              color: isValue ? '#ff4d4f' : undefined,
+              backgroundColor: hasOverride ? '#e6f4ff' : (gwRowHeaders[record.rowNum] ? '#f5f5f5' : undefined),
+              borderColor: hasOverride ? '#1677ff' : undefined,
+            }}
             suffix={
               <span
-                title="Toggle: Label / Value"
+                title={selectedCn ? 'Type set at machine level' : 'Toggle: Label / Value'}
                 onClick={() => handleGwTypeToggle(record.rowNum, c)}
-                style={{ cursor: 'pointer', fontSize: 10, fontWeight: 'bold', color: isValue ? '#ff4d4f' : '#bfbfbf', userSelect: 'none' }}
+                style={{
+                  cursor: selectedCn ? 'default' : 'pointer',
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                  color: isValue ? '#ff4d4f' : '#bfbfbf',
+                  userSelect: 'none',
+                  opacity: selectedCn ? 0.4 : 1,
+                }}
               >V</span>
             }
           />
@@ -1423,6 +1513,7 @@ const MachineConfigTab = ({ theme }) => {
       render: (_, record) => (
         <Checkbox
           checked={!!rowHeaders[record.rowNum]}
+          disabled={!!selectedCn}
           onChange={e => handleHeaderToggle(record.rowNum, e.target.checked)}
         />
       ),
@@ -1435,22 +1526,32 @@ const MachineConfigTab = ({ theme }) => {
       render: (_, record) => {
         const cellKey = `row_${record.rowNum}_${c}`;
         const isValue = cellTypes[cellKey] === 'value';
+        const hasOverride = !!selectedCn && cnOverrideData[cellKey] !== undefined;
+        const displayValue = selectedCn
+          ? (cnOverrideData[cellKey] ?? cellData[cellKey] ?? '')
+          : (cellData[cellKey] || '');
         return (
           <Input
             size="small"
-            value={cellData[cellKey] || ''}
+            value={displayValue}
             onChange={e => handleCellChange(record.rowNum, c, e.target.value)}
-            style={{ fontSize: 11, color: isValue ? '#ff4d4f' : undefined, backgroundColor: rowHeaders[record.rowNum] ? '#f5f5f5' : undefined }}
+            style={{
+              fontSize: 11,
+              color: isValue ? '#ff4d4f' : undefined,
+              backgroundColor: hasOverride ? '#e6f4ff' : (rowHeaders[record.rowNum] ? '#f5f5f5' : undefined),
+              borderColor: hasOverride ? '#1677ff' : undefined,
+            }}
             suffix={
               <span
-                title="Toggle: Label / Value"
+                title={selectedCn ? 'Type set at machine level' : 'Toggle: Label / Value'}
                 onClick={() => handleTypeToggle(record.rowNum, c)}
                 style={{
-                  cursor: 'pointer',
+                  cursor: selectedCn ? 'default' : 'pointer',
                   fontSize: 10,
                   fontWeight: 'bold',
                   color: isValue ? '#ff4d4f' : '#bfbfbf',
                   userSelect: 'none',
+                  opacity: selectedCn ? 0.4 : 1,
                 }}
               >V</span>
             }
@@ -1463,30 +1564,6 @@ const MachineConfigTab = ({ theme }) => {
   const displayedMachineTypes = visibleMachineNames
     ? allMachineTypes.filter(m => visibleMachineNames.has(m.machine_type_name))
     : allMachineTypes;
-
-  const openConfigModal = () => {
-    const list = fullMachineTypes.length ? fullMachineTypes : allMachineTypes;
-    setTempChecked(
-      visibleMachineNames
-        ? list.filter(m => visibleMachineNames.has(m.machine_type_name)).map(m => m.machine_type_name)
-        : list.map(m => m.machine_type_name)
-    );
-    setConfigModalOpen(true);
-  };
-
-  const applyConfig = () => {
-    // Use fullMachineTypes so isAll is never fooled by an active search filter
-    const list = fullMachineTypes.length ? fullMachineTypes : allMachineTypes;
-    const allNames = list.map(m => m.machine_type_name);
-    const isAll = tempChecked.length === allNames.length && allNames.every(n => tempChecked.includes(n));
-    const next = isAll ? null : new Set(tempChecked);
-    setVisibleMachineNames(next);
-    try {
-      if (next) localStorage.setItem('sds_admin_visible_machines', JSON.stringify([...next]));
-      else localStorage.removeItem('sds_admin_visible_machines');
-    } catch { }
-    setConfigModalOpen(false);
-  };
 
   const machineListBlock = (
     <>
@@ -1516,21 +1593,81 @@ const MachineConfigTab = ({ theme }) => {
     </>
   );
 
+  // CN Override toolbar — shared between both grid tabs
+  const cnModeBar = selectedMachine && (
+    <Row gutter={8} align="middle" style={{ marginBottom: 12, padding: '8px 12px', background: selectedCn ? '#e6f4ff' : '#fafafa', borderRadius: 6, border: '1px solid #d9d9d9' }}>
+      {selectedCn ? (
+        <>
+          <Col>
+            <Tag color="blue" style={{ fontSize: 13, padding: '2px 10px' }}>
+              CN Override: {selectedCn}
+            </Tag>
+          </Col>
+          <Col>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              แก้ค่า cell ที่ต้องการ — cell สีน้ำเงิน = override, สีปกติ = ใช้ค่า machine default
+            </Text>
+          </Col>
+          <Col flex="auto" />
+          <Col>
+            <Button size="small" onClick={exitCnMode}>
+              ← Machine Default
+            </Button>
+          </Col>
+        </>
+      ) : (
+        <>
+          <Col>
+            <Space.Compact>
+              <Input
+                placeholder="CN Override เช่น C25-0190"
+                value={cnInput}
+                onChange={e => setCnInput(e.target.value)}
+                onPressEnter={() => cnInput.trim() && loadCnConfig(cnInput)}
+                style={{ width: 220 }}
+                allowClear
+              />
+              <Button
+                onClick={() => cnInput.trim() && loadCnConfig(cnInput)}
+                disabled={!cnInput.trim()}
+              >
+                Load CN
+              </Button>
+            </Space.Compact>
+          </Col>
+          <Col>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              ว่าง = แก้ค่า standard (ทุก CN)
+            </Text>
+          </Col>
+        </>
+      )}
+    </Row>
+  );
+
+  const saveBar = selectedMachine && (
+    <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
+      <Col>
+        <Text strong>{selectedMachine}</Text>
+        {selectedCn && <Tag color="blue" style={{ marginLeft: 8 }}>{selectedCn}</Tag>}
+      </Col>
+      <Col flex="auto" />
+      {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
+      <Col>
+        <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
+          Save{selectedCn ? ' CN Override' : ''}
+        </Button>
+      </Col>
+    </Row>
+  );
+
   const cellGridContent = (
     <div>
       {machineListBlock}
       {selectedMachine && (
         <Spin spinning={configLoading}>
-          <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
-            <Col><Text strong>{selectedMachine}</Text></Col>
-            <Col flex="auto" />
-            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
-            <Col>
-              <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
-                Save
-              </Button>
-            </Col>
-          </Row>
+          {cnModeBar}
+          {saveBar}
           <style>{`.sds-config-grid .sds-hdr-row td { background-color: #d9d9d9 !important; }`}</style>
           <Table
             className="sds-config-grid"
@@ -1553,16 +1690,8 @@ const MachineConfigTab = ({ theme }) => {
       {machineListBlock}
       {selectedMachine && (
         <Spin spinning={configLoading}>
-          <Row gutter={8} align="middle" style={{ marginBottom: 12 }}>
-            <Col><Text strong>{selectedMachine}</Text></Col>
-            <Col flex="auto" />
-            {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}
-            <Col>
-              <Button type="primary" icon={<SaveOutlined />} onClick={saveConfig} loading={saving} disabled={!dirty}>
-                Save
-              </Button>
-            </Col>
-          </Row>
+          {cnModeBar}
+          {saveBar}
           <Table
             className="sds-config-grid"
             dataSource={GW_ROW_RANGE.map(rowNum => ({ key: rowNum, rowNum }))}
@@ -1579,97 +1708,93 @@ const MachineConfigTab = ({ theme }) => {
     </div>
   );
 
-  const configVisibleBtn = (
-    <Button icon={<SettingOutlined />} size="small" onClick={openConfigModal}>
-      Configure Visible
-      {visibleMachineNames && (
-        <Tag color="blue" style={{ marginLeft: 4 }}>{visibleMachineNames.size}</Tag>
-      )}
-    </Button>
-  );
-
   return (
-    <>
-      <Tabs
-        size="small"
-        tabBarExtraContent={configVisibleBtn}
-        items={[
-          {
-            key: 'grid',
-            label: 'Excel Parameter Config',
-            children: cellGridContent,
-          },
-          {
-            key: 'gw-config',
-            label: 'Excel Grinding Wheel Config',
-            children: gwConfigContent,
-          },
-          {
-            key: 'mapping',
-            label: 'Excel Column Mapping',
-            children: <ExcelMappingManager theme={theme} />,
-          },
-          {
-            key: 'machine-tool',
-            label: 'Machine Tool Config',
-            children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} />,
-          },
-        ]}
-      />
-      <Modal
-        title="Machine Name"
-        open={configModalOpen}
-        onOk={applyConfig}
-        onCancel={() => setConfigModalOpen(false)}
-        okText="Apply"
-        cancelText="Cancel"
-        width={480}
-      >
-        <Space style={{ marginBottom: 12 }}>
-          <Button size="small" onClick={() => setTempChecked((fullMachineTypes.length ? fullMachineTypes : allMachineTypes).map(m => m.machine_type_name))}>
-            Select All
-          </Button>
-          <Button size="small" onClick={() => setTempChecked([])}>
-            Deselect All
-          </Button>
-        </Space>
-        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-          <Checkbox.Group
-            value={tempChecked}
-            onChange={setTempChecked}
-            style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
-          >
-            {(fullMachineTypes.length ? fullMachineTypes : allMachineTypes).map(m => (
-              <Checkbox key={m.id ?? m.machine_type_name} value={m.machine_type_name}>
-                <Text style={{ fontSize: 13 }}>
-                  <Text type="secondary">{m.machine_type_code}</Text>
-                  {' — '}
-                  {m.machine_group || m.machine_type_name}
-                </Text>
-              </Checkbox>
-            ))}
-          </Checkbox.Group>
-        </div>
-      </Modal>
-    </>
+    <Tabs
+      size="small"
+      items={[
+        {
+          key: 'grid',
+          label: 'Excel Parameter Config',
+          children: cellGridContent,
+        },
+        {
+          key: 'gw-config',
+          label: 'Excel Grinding Wheel Config',
+          children: gwConfigContent,
+        },
+        {
+          key: 'mapping',
+          label: 'Excel Column Mapping',
+          children: <ExcelMappingManager theme={theme} />,
+        },
+        {
+          key: 'machine-tool',
+          label: 'Machine Tool Config',
+          children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} />,
+        },
+      ]}
+    />
   );
 };
 
 // ── Tab 4: Audit (Data Integrity) ─────────────────────────────────────────────
 
-const AuditTab = ({ theme }) => {
+const AUDIT_STATIC_PART_TYPES = [
+  { key: 'ball',      label: 'Ball',      prefixes: ['C3'],       color: '#1677ff' },
+  { key: 'race',      label: 'Race',      prefixes: ['C2'],       color: '#52c41a' },
+  { key: 'body',      label: 'Body',      prefixes: ['C1', 'C5'], color: '#fa8c16' },
+  { key: 'sleeve',    label: 'Sleeve',    prefixes: ['C6'],       color: '#722ed1' },
+  { key: 'spherical', label: 'Spherical', prefixes: ['A4'],       color: '#f5222d' },
+];
+
+const loadSavedExpandedPcs = (catKey) => {
+  if (!catKey) return new Set();
+  try {
+    const saved = localStorage.getItem(`sds_audit_pcs_${catKey}`);
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch { return new Set(); }
+};
+
+const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
-  const [activeCategory, setActiveCategory] = useState(null);
+  const [activeCategory, setActiveCategory] = useState(() => localStorage.getItem('sds_audit_category') || null);
   const [showNoPlan, setShowNoPlan] = useState(false);
-  const [expandedProcessCodes, setExpandedProcessCodes] = useState(new Set());
+  const [expandedProcessCodes, setExpandedProcessCodes] = useState(() =>
+    loadSavedExpandedPcs(localStorage.getItem('sds_audit_category') || null)
+  );
+
+  // ── Config (Process Codes + Visible Machines) ──
+  const [auditConfig, setAuditConfig] = useState({ process_codes: [], sub_class_patterns: [] });
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configDraft, setConfigDraft] = useState([]);
+  const [processMasterOpts, setProcessMasterOpts] = useState([]);
+  const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [visibleTempChecked, setVisibleTempChecked] = useState([]);
+
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
+      .then(r => {
+        const seen = new Set();
+        setAllMachineTypes(r.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
+      })
+      .catch(() => {});
+    axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER)
+      .then(r => setProcessMasterOpts(r.data.map(row => ({
+        value: row.process_code,
+        label: `${row.process_code} — ${row.process_eng || ''}`,
+      }))))
+      .catch(() => {});
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT);
       setData(res.data);
+      if (res.data.config) setAuditConfig(res.data.config);
     } catch (err) {
       message.error('Load audit data failed');
     } finally {
@@ -1679,50 +1804,88 @@ const AuditTab = ({ theme }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Build dynamic category list from itemCounts
+  const openConfig = () => {
+    setConfigDraft([...(auditConfig.process_codes || [])]);
+    setVisibleTempChecked(
+      visibleMachineNames
+        ? allMachineTypes.filter(m => visibleMachineNames.has(m.machine_type_name)).map(m => m.machine_type_name)
+        : allMachineTypes.map(m => m.machine_type_name)
+    );
+    setConfigOpen(true);
+  };
+
+  const saveConfig = async () => {
+    setConfigSaving(true);
+    try {
+      const [auditRes] = await Promise.all([
+        axios.put(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG, {
+          process_codes: configDraft,
+          sub_class_patterns: auditConfig.sub_class_patterns,
+        }),
+        (() => {
+          const allNames = allMachineTypes.map(m => m.machine_type_name);
+          const isAll = visibleTempChecked.length === allNames.length && allNames.every(n => visibleTempChecked.includes(n));
+          const next = isAll ? null : visibleTempChecked;
+          setVisibleMachineNames(next ? new Set(next) : null);
+          return axios.put(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES, { visible_machines: next });
+        })(),
+      ]);
+      setAuditConfig(auditRes.data.data);
+      setConfigOpen(false);
+      message.success('Settings saved');
+      loadData();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  // Static categories with counts derived from itemCounts
   const categories = useMemo(() => {
-    const cats = [];
-    const ballTotal = data.totals?.ballTotal || 0;
-    const raceTotal = data.totals?.raceTotal || 0;
-    if (data.itemCounts.some(r => r.sub_class?.startsWith('C3')))
-      cats.push({ key: 'ball', label: 'Ball', prefix: 'C3', total: ballTotal, color: '#1677ff' });
-    if (data.itemCounts.some(r => r.sub_class?.startsWith('C2')))
-      cats.push({ key: 'race', label: 'Race', prefix: 'C2', total: raceTotal, color: '#52c41a' });
-    // Any other sub_class prefixes beyond C2/C3
+    const staticCats = AUDIT_STATIC_PART_TYPES.map(cat => {
+      const total = data.itemCounts
+        .filter(r => cat.prefixes.some(p => r.sub_class?.startsWith(p)))
+        .reduce((s, r) => s + Number(r.count || 0), 0);
+      return { ...cat, total };
+    });
+    // Any other prefixes not covered by static categories
     const otherPrefixes = [...new Set(
       data.itemCounts
-        .filter(r => r.sub_class && !r.sub_class.startsWith('C2') && !r.sub_class.startsWith('C3'))
+        .filter(r => r.sub_class && !AUDIT_STATIC_PART_TYPES.some(c => c.prefixes.some(p => r.sub_class.startsWith(p))))
         .map(r => r.sub_class.substring(0, 2))
     )];
-    otherPrefixes.forEach(prefix => {
-      const total = data.itemCounts.filter(r => r.sub_class?.startsWith(prefix)).reduce((s, r) => s + r.count, 0);
-      cats.push({ key: prefix, label: prefix, prefix, total, color: '#722ed1' });
+    const otherCats = otherPrefixes.map(pfx => {
+      const total = data.itemCounts.filter(r => r.sub_class?.startsWith(pfx)).reduce((s, r) => s + Number(r.count || 0), 0);
+      return { key: pfx, label: pfx, prefixes: [pfx], total, color: '#595959' };
     });
-    return cats;
+    return [...staticCats, ...otherCats];
   }, [data]);
 
-  const getCategoryPrefix = useCallback((catKey) => {
+  const getCategoryPrefixes = useCallback((catKey) => {
     const cat = categories.find(c => c.key === catKey);
-    return cat?.prefix || catKey;
+    return cat?.prefixes || [catKey];
   }, [categories]);
 
   const handleCategoryClick = (key) => {
-    setActiveCategory(prev => prev === key ? null : key);
+    const next = activeCategory === key ? null : key;
+    setActiveCategory(next);
+    localStorage.setItem('sds_audit_category', next || '');
     setShowNoPlan(false);
-    setExpandedProcessCodes(new Set());
+    setExpandedProcessCodes(loadSavedExpandedPcs(next));
   };
 
   const filteredNoPlan = useMemo(() => {
     if (!activeCategory) return data.noProcessPlan;
-    const prefix = getCategoryPrefix(activeCategory);
-    return data.noProcessPlan.filter(r => r.sub_class?.startsWith(prefix));
-  }, [data.noProcessPlan, activeCategory, getCategoryPrefix]);
+    const prefixes = getCategoryPrefixes(activeCategory);
+    return data.noProcessPlan.filter(r => prefixes.some(p => r.sub_class?.startsWith(p)));
+  }, [data.noProcessPlan, activeCategory, getCategoryPrefixes]);
 
   const filteredMissingTooling = useMemo(() => {
     if (!activeCategory) return data.missingTooling;
-    const prefix = getCategoryPrefix(activeCategory);
-    return data.missingTooling.filter(r => r.sub_class?.startsWith(prefix));
-  }, [data.missingTooling, activeCategory, getCategoryPrefix]);
+    const prefixes = getCategoryPrefixes(activeCategory);
+    return data.missingTooling.filter(r => prefixes.some(p => r.sub_class?.startsWith(p)));
+  }, [data.missingTooling, activeCategory, getCategoryPrefixes]);
 
   // Group missingTooling by process_code for per-PC expandable sections
   const missingByProcessCode = useMemo(() => {
@@ -1745,6 +1908,9 @@ const AuditTab = ({ theme }) => {
       const next = new Set(prev);
       if (next.has(pc)) next.delete(pc);
       else next.add(pc);
+      if (activeCategory) {
+        localStorage.setItem(`sds_audit_pcs_${activeCategory}`, JSON.stringify([...next]));
+      }
       return next;
     });
   };
@@ -1761,154 +1927,254 @@ const AuditTab = ({ theme }) => {
 
   return (
     <div style={{ minHeight: 600 }}>
-      <Row gutter={24}>
-        <Col span={6}>
-          <Title level={5}><SearchOutlined /> Item Counts</Title>
-          <Card size="small" style={{ marginBottom: 16 }}>
-            <Text type="secondary">Grand Total (Enable)</Text>
-            <div style={{ fontSize: 32, fontWeight: 'bold', color: theme.colors.primary, lineHeight: 1.2, margin: '4px 0 8px' }}>
+      <Title level={5} style={{ marginBottom: 8 }}><SearchOutlined /> Item Counts</Title>
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Row gutter={16} align="middle">
+          <Col flex="none">
+            <Text type="secondary" style={{ fontSize: 12 }}>Grand Total (Enable)</Text>
+            <div style={{ fontSize: 28, fontWeight: 'bold', color: theme.colors.primary, lineHeight: 1.2 }}>
               {data.totals?.grandTotal?.toLocaleString() || 0}
             </div>
-            <Divider style={{ margin: '8px 0' }} />
+          </Col>
+          <Col flex="none"><Divider type="vertical" style={{ height: 48 }} /></Col>
+          <Col flex="auto">
             <Space wrap>
               <Button
                 size="small"
                 type={activeCategory === null ? 'primary' : 'default'}
-                onClick={() => { setActiveCategory(null); setShowNoPlan(false); setExpandedProcessCodes(new Set()); }}
+                onClick={() => {
+                  setActiveCategory(null);
+                  localStorage.setItem('sds_audit_category', '');
+                  setShowNoPlan(false);
+                  setExpandedProcessCodes(new Set());
+                }}
               >
                 All
               </Button>
               {categories.map(cat => (
                 <Button
                   key={cat.key}
-                  type={activeCategory === cat.key ? 'primary' : 'default'}
-                  onClick={() => handleCategoryClick(cat.key)}
                   size="small"
+                  type={activeCategory === cat.key ? 'primary' : 'default'}
+                  style={activeCategory === cat.key
+                    ? { background: cat.color, borderColor: cat.color }
+                    : { borderColor: cat.color, color: cat.color }}
+                  onClick={() => handleCategoryClick(cat.key)}
                 >
-                  {cat.label}
+                  {cat.label}{' '}
+                  <span style={{ fontSize: 11, opacity: 0.85 }}>({cat.total.toLocaleString()})</span>
                 </Button>
               ))}
             </Space>
-            {activeCat && (
-              <div style={{ marginTop: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 'bold', color: activeCat.color }}>
+          </Col>
+          {activeCat && (
+            <>
+              <Col flex="none"><Divider type="vertical" style={{ height: 48 }} /></Col>
+              <Col flex="none" style={{ textAlign: 'center', minWidth: 80 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>{activeCat.label} ({activeCat.prefixes.join('/')}x)</Text>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: activeCat.color, lineHeight: 1.2 }}>
                   {activeCat.total.toLocaleString()}
                 </div>
-                <Text type="secondary">{activeCat.label} ({activeCat.prefix}x)</Text>
-              </div>
-            )}
-          </Card>
+              </Col>
+            </>
+          )}
+        </Row>
+      </Card>
+
+      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        <Col><Title level={5}><ReloadOutlined /> Data Consistency Audit</Title></Col>
+        <Col>
+          <Space>
+            <Button icon={<SettingOutlined />} onClick={openConfig}>
+              Configure Settings
+              {auditConfig.process_codes?.length > 0 && (
+                <Tag style={{ marginLeft: 4 }}>{auditConfig.process_codes.length} PC</Tag>
+              )}
+              {visibleMachineNames && (
+                <Tag color="blue" style={{ marginLeft: 2 }}>{visibleMachineNames.size} visible</Tag>
+              )}
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>Refresh All</Button>
+          </Space>
         </Col>
+      </Row>
 
-        <Col span={18}>
-          <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-            <Col><Title level={5}><ReloadOutlined /> Data Consistency Audit</Title></Col>
-            <Col><Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>Refresh All</Button></Col>
-          </Row>
-
-          <Tabs
-            type="card"
-            size="small"
-            items={[
-              {
-                key: 'no-plan',
-                label: <Tag color="error">Critical: No Process Plan ({filteredNoPlan.length})</Tag>,
-                children: (
-                  <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      Incomplete Routing (Process Plan) from LPB — Can't generate SDS
-                    </Text>
+      <Tabs
+        type="card"
+        size="small"
+        items={[
+          {
+            key: 'no-plan',
+            label: <Tag color="error">Critical: No Process Plan ({filteredNoPlan.length})</Tag>,
+            children: (
+              <>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  Incomplete Routing (Process Plan) from LPB — Can't generate SDS
+                </Text>
+                <Button
+                  size="small"
+                  type={showNoPlan ? 'primary' : 'default'}
+                  onClick={() => setShowNoPlan(v => !v)}
+                  style={{ marginBottom: 12 }}
+                >
+                  {showNoPlan ? 'Hide List' : `Show List (${filteredNoPlan.length} CN)`}
+                </Button>
+                {showNoPlan && (
+                  <Table
+                    dataSource={filteredNoPlan}
+                    columns={noPlanCols}
+                    size="small"
+                    loading={loading}
+                    bordered
+                    rowKey="control_no"
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                  />
+                )}
+              </>
+            ),
+          },
+          {
+            key: 'missing-tool',
+            label: <Tag color="warning">Warning: Missing Tooling ({new Set(filteredMissingTooling.map(r => r.control_no)).size} CN)</Tag>,
+            children: (
+              <>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  Process Plan exists but missing Tooling — Click Process Code to see items
+                </Text>
+                <Space wrap style={{ marginBottom: 16 }}>
+                  {expandedProcessCodes.size > 0 && (
                     <Button
                       size="small"
-                      type={showNoPlan ? 'primary' : 'default'}
-                      onClick={() => setShowNoPlan(v => !v)}
-                      style={{ marginBottom: 12 }}
+                      danger
+                      onClick={() => {
+                        setExpandedProcessCodes(new Set());
+                        if (activeCategory) localStorage.setItem(`sds_audit_pcs_${activeCategory}`, '[]');
+                      }}
                     >
-                      {showNoPlan ? 'Hide List' : `Show List (${filteredNoPlan.length} CN)`}
+                      Collapse All
                     </Button>
-                    {showNoPlan && (
+                  )}
+                  {sortedProcessCodes.map(pc => {
+                    const isExpanded = expandedProcessCodes.has(pc);
+                    const cnCount = new Set(missingByProcessCode[pc].map(r => r.control_no)).size;
+                    return (
+                      <Button
+                        key={pc}
+                        size="small"
+                        type={isExpanded ? 'primary' : 'default'}
+                        onClick={() => toggleProcessCode(pc)}
+                      >
+                        {pc}
+                        <Tag
+                          color={isExpanded ? 'white' : 'default'}
+                          style={{ marginLeft: 4, color: isExpanded ? '#1677ff' : undefined }}
+                        >
+                          {cnCount}
+                        </Tag>
+                      </Button>
+                    );
+                  })}
+                </Space>
+                {sortedProcessCodes.filter(pc => expandedProcessCodes.has(pc)).map(pc => {
+                  const rows = missingByProcessCode[pc];
+                  const uniqCns = [...new Set(rows.map(r => r.control_no))].sort();
+                  return (
+                    <div key={pc} style={{ marginBottom: 16 }}>
+                      <Row align="middle" style={{ marginBottom: 6 }}>
+                        <Col>
+                          <Text strong>Process Code: </Text>
+                          <Tag color="blue">{pc}</Tag>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{uniqCns.length} CN</Text>
+                        </Col>
+                      </Row>
                       <Table
-                        dataSource={filteredNoPlan}
-                        columns={noPlanCols}
+                        dataSource={uniqCns.map(cn => ({ control_no: cn, key: cn }))}
+                        columns={missingCnCols}
                         size="small"
                         loading={loading}
                         bordered
-                        rowKey="control_no"
                         pagination={{ pageSize: 20, showSizeChanger: false }}
                       />
-                    )}
-                  </>
-                ),
-              },
-              {
-                key: 'missing-tool',
-                label: <Tag color="warning">Warning: Missing Tooling ({new Set(filteredMissingTooling.map(r => r.control_no)).size} CN)</Tag>,
-                children: (
-                  <>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      Process Plan exists but missing Tooling — Click Process Code to see items
-                    </Text>
-                    <Space wrap style={{ marginBottom: 16 }}>
-                      {expandedProcessCodes.size > 0 && (
-                        <Button
-                          size="small"
-                          danger
-                          onClick={() => setExpandedProcessCodes(new Set())}
-                        >
-                          Collapse All
-                        </Button>
-                      )}
-                      {sortedProcessCodes.map(pc => {
-                        const isExpanded = expandedProcessCodes.has(pc);
-                        const cnCount = new Set(missingByProcessCode[pc].map(r => r.control_no)).size;
-                        return (
-                          <Button
-                            key={pc}
-                            size="small"
-                            type={isExpanded ? 'primary' : 'default'}
-                            onClick={() => toggleProcessCode(pc)}
-                          >
-                            {pc}
-                            <Tag
-                              color={isExpanded ? 'white' : 'default'}
-                              style={{ marginLeft: 4, color: isExpanded ? '#1677ff' : undefined }}
-                            >
-                              {cnCount}
-                            </Tag>
-                          </Button>
-                        );
-                      })}
-                    </Space>
-                    {sortedProcessCodes.filter(pc => expandedProcessCodes.has(pc)).map(pc => {
-                      const rows = missingByProcessCode[pc];
-                      const uniqCns = [...new Set(rows.map(r => r.control_no))].sort();
-                      return (
-                        <div key={pc} style={{ marginBottom: 16 }}>
-                          <Row align="middle" style={{ marginBottom: 6 }}>
-                            <Col>
-                              <Text strong>Process Code: </Text>
-                              <Tag color="blue">{pc}</Tag>
-                              <Text type="secondary" style={{ fontSize: 12 }}>{uniqCns.length} CN</Text>
-                            </Col>
-                          </Row>
-                          <Table
-                            dataSource={uniqCns.map(cn => ({ control_no: cn, key: cn }))}
-                            columns={missingCnCols}
-                            size="small"
-                            loading={loading}
-                            bordered
-                            pagination={{ pageSize: 20, showSizeChanger: false }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </>
-                ),
-              },
-            ]}
-          />
-        </Col>
-      </Row>
+                    </div>
+                  );
+                })}
+              </>
+            ),
+          },
+        ]}
+      />
+
+      {/* ── Settings Config Modal ── */}
+      <Modal
+        title={<Space><SettingOutlined /> Configure Settings</Space>}
+        open={configOpen}
+        onCancel={() => setConfigOpen(false)}
+        onOk={saveConfig}
+        okText="Save"
+        confirmLoading={configSaving}
+        width={520}
+        destroyOnHidden
+      >
+        <Divider orientation="left" plain style={{ marginTop: 0 }}>Audit Process Codes</Divider>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+          Process codes checked for missing tooling in the audit.
+        </Text>
+        <Select
+          mode="multiple"
+          showSearch
+          allowClear
+          style={{ width: '100%', marginBottom: 4 }}
+          placeholder="Select process codes..."
+          value={configDraft}
+          onChange={vals => setConfigDraft([...vals].sort())}
+          options={processMasterOpts}
+          filterOption={(inp, opt) =>
+            opt.value.includes(inp) || (opt.label || '').toLowerCase().includes(inp.toLowerCase())
+          }
+          maxTagCount={6}
+          maxTagTextLength={12}
+          optionFilterProp="label"
+          listHeight={220}
+        />
+        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
+          {configDraft.length} code{configDraft.length !== 1 ? 's' : ''} selected
+        </Text>
+
+        <Divider orientation="left" plain>Visible Machines (Excel Config)</Divider>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+          Machines shown in Excel Config and Machine Tool Config tabs.
+        </Text>
+        <Space style={{ marginBottom: 8 }}>
+          <Button size="small" onClick={() => setVisibleTempChecked(allMachineTypes.map(m => m.machine_type_name))}>
+            Select All
+          </Button>
+          <Button size="small" onClick={() => setVisibleTempChecked([])}>
+            Deselect All
+          </Button>
+        </Space>
+        <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+          <Checkbox.Group
+            value={visibleTempChecked}
+            onChange={setVisibleTempChecked}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+          >
+            {allMachineTypes.map(m => (
+              <Checkbox key={m.id ?? m.machine_type_name} value={m.machine_type_name}>
+                <Text style={{ fontSize: 13 }}>
+                  <Text type="secondary">{m.machine_type_code}</Text>
+                  {' — '}
+                  {m.machine_group || m.machine_type_name}
+                </Text>
+              </Checkbox>
+            ))}
+          </Checkbox.Group>
+        </div>
+        <Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11 }}>
+          {visibleTempChecked.length === allMachineTypes.length
+            ? 'All machines visible'
+            : `${visibleTempChecked.length} of ${allMachineTypes.length} machines visible`}
+        </Text>
+      </Modal>
     </div>
   );
 };
@@ -1916,11 +2182,22 @@ const AuditTab = ({ theme }) => {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const SdsV2AdminPage = () => {
+  const navigate = useNavigate();
   const { theme } = useTheme();
+  const [visibleMachineNames, setVisibleMachineNames] = useState(null);
+
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES)
+      .then(r => {
+        const names = r.data.visible_machines;
+        setVisibleMachineNames(names ? new Set(names) : null);
+      })
+      .catch(() => {});
+  }, []);
 
   const tabItems = [
     { key: 'params', label: 'Per-record Params', children: <ParamsTab theme={theme} /> },
-    { key: 'machine-config', label: 'Machine Parameter Config', children: <MachineConfigTab theme={theme} /> },
+    { key: 'machine-config', label: 'Excel Config', children: <MachineConfigTab theme={theme} visibleMachineNames={visibleMachineNames} /> },
     {
       key: 'images',
       label: 'Images',
@@ -1934,7 +2211,7 @@ const SdsV2AdminPage = () => {
         />
       ),
     },
-    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
+    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
   ];
 
   return (
@@ -1942,9 +2219,14 @@ const SdsV2AdminPage = () => {
       <MenuTemplate type="MTC" />
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <Content className="kb-vscroll" style={{ padding: 24, overflowY: 'auto', height: 'calc(100vh - 64px)' }}>
-          <Title level={4} style={{ color: theme.colors.text, marginBottom: 16 }}>
-            Setup Data Sheet Management
-          </Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.SDS_V2)}>
+              Back to Search
+            </Button>
+            <Title level={4} style={{ color: theme.colors.text, margin: 0 }}>
+              Setup Data Sheet Management
+            </Title>
+          </div>
           <Card style={{ background: theme.colors.cardBackground }}>
             <Tabs items={tabItems} />
           </Card>

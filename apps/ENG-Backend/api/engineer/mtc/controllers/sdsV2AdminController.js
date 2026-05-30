@@ -412,95 +412,211 @@ router.delete('/machine-tools/combo', isAdmin, async (req, res) => {
   }
 });
 
+// ── Audit Config ─────────────────────────────────────────────────────────────
+
+const DEFAULT_AUDIT_PROCESS_CODES = ['1011','1012','1021','1022','1041','1042','1061','1062','1101','1102','1181','1182','1241'];
+const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%'];
+
+async function ensureAuditConfigTable() {
+  await engPool.query(`
+    CREATE TABLE IF NOT EXISTS sds_audit_config (
+      key         TEXT PRIMARY KEY,
+      value       JSONB NOT NULL,
+      updated_at  TIMESTAMP DEFAULT NOW()
+    )
+  `);
+}
+
+async function getAuditConfig() {
+  await ensureAuditConfigTable();
+  const res = await engPool.query(`SELECT key, value FROM sds_audit_config`);
+  const cfg = { process_codes: DEFAULT_AUDIT_PROCESS_CODES, sub_class_patterns: DEFAULT_AUDIT_SUB_CLASSES };
+  for (const row of res.rows) cfg[row.key] = row.value;
+  return cfg;
+}
+
+/** GET /api/sds/v2/admin/audit/process-master
+ *  Returns all process codes from rodpc master table for dropdown options.
+ */
+router.get('/audit/process-master', isAdmin, async (req, res) => {
+  try {
+    const result = await rodpcPool.query(
+      `SELECT process_code, process_eng FROM rodpc.kzwmaq_eng_process
+       WHERE process_code IS NOT NULL AND process_code <> ''
+       ORDER BY process_code`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[Audit Process Master]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/audit/config */
+router.get('/audit/config', isAdmin, async (req, res) => {
+  try {
+    const cfg = await getAuditConfig();
+    res.json({ success: true, data: cfg });
+  } catch (err) {
+    console.error('[Audit Config GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/audit/config */
+router.put('/audit/config', isAdmin, async (req, res) => {
+  try {
+    const { process_codes, sub_class_patterns } = req.body;
+    await ensureAuditConfigTable();
+    if (Array.isArray(process_codes)) {
+      const codes = [...new Set(process_codes.map(c => String(c).trim()).filter(Boolean))];
+      await engPool.query(
+        `INSERT INTO sds_audit_config (key, value, updated_at) VALUES ('process_codes', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(codes)]
+      );
+    }
+    if (Array.isArray(sub_class_patterns)) {
+      const patterns = [...new Set(sub_class_patterns.map(p => String(p).trim()).filter(Boolean))];
+      await engPool.query(
+        `INSERT INTO sds_audit_config (key, value, updated_at) VALUES ('sub_class_patterns', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(patterns)]
+      );
+    }
+    const cfg = await getAuditConfig();
+    res.json({ success: true, data: cfg });
+  } catch (err) {
+    console.error('[Audit Config PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Visible Machines Config ───────────────────────────────────────────────────
+
+/** GET /api/sds/v2/admin/visible-machines — load saved machine visibility list */
+router.get('/visible-machines', isAdmin, async (req, res) => {
+  try {
+    await ensureAuditConfigTable();
+    const r = await engPool.query(`SELECT value FROM sds_audit_config WHERE key='visible_machines'`);
+    res.json({ visible_machines: r.rows[0]?.value ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/visible-machines — save machine visibility list to DB
+ *  Body: { visible_machines: string[] } or { visible_machines: null } to show all
+ */
+router.put('/visible-machines', isAdmin, async (req, res) => {
+  try {
+    const { visible_machines } = req.body;
+    await ensureAuditConfigTable();
+    if (visible_machines === null || visible_machines === undefined) {
+      await engPool.query(`DELETE FROM sds_audit_config WHERE key='visible_machines'`);
+    } else {
+      const names = [...new Set(visible_machines.map(n => String(n).trim()).filter(Boolean))];
+      await engPool.query(
+        `INSERT INTO sds_audit_config (key, value, updated_at) VALUES ('visible_machines', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(names)]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Audit: Data Integrity ────────────────────────────────────────────────────
 
 /** GET /api/sds/v2/admin/audit/data-integrity */
 router.get('/audit/data-integrity', isAdmin, async (req, res) => {
   try {
-    // 1. Count C2x/C3x Enabled Items
-    const countsResult = await maqPool.query(`
-      SELECT sub_class, COUNT(*) 
-      FROM lpb.eng_item 
-      WHERE (sub_class LIKE 'C2%' OR sub_class LIKE 'C3%') AND condition = 'Enable'
-      GROUP BY sub_class ORDER BY sub_class
-    `);
+    const cfg = await getAuditConfig();
+    const targetProcessCodes  = cfg.process_codes;
+    const subClassPatterns     = cfg.sub_class_patterns;
+
+    if (!subClassPatterns.length) {
+      return res.json({ itemCounts: [], totals: { raceTotal: 0, ballTotal: 0, grandTotal: 0 }, noProcessPlan: [], missingTooling: [], config: cfg });
+    }
+
+    // Build safe WHERE fragments — values come from DB only, validated as text patterns
+    const buildWhere = (alias) => subClassPatterns
+      .map((_, idx) => `${alias ? alias + '.' : ''}sub_class LIKE $${idx + 1}`).join(' OR ');
+    const subClassWhere    = `(${buildWhere('i')})`;   // for queries with alias i
+    const subClassWhereRaw = `(${buildWhere('')})`;    // for simple single-table queries
+
+    // 1. Count Enabled Items by sub_class
+    const countsResult = await maqPool.query(
+      `SELECT sub_class, COUNT(*) FROM lpb.eng_item WHERE ${subClassWhereRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
+      subClassPatterns
+    );
 
     const itemCounts = countsResult.rows.map(r => ({ sub_class: r.sub_class, count: parseInt(r.count) }));
     const raceTotal = itemCounts.filter(r => r.sub_class.startsWith('C2')).reduce((sum, r) => sum + r.count, 0);
     const ballTotal = itemCounts.filter(r => r.sub_class.startsWith('C3')).reduce((sum, r) => sum + r.count, 0);
+    const grandTotal = itemCounts.reduce((sum, r) => sum + r.count, 0);
 
-    // 2. Critical: No Process Plan (Routing missing entirely)
-    // In LPB, process_plan_no is usually equal to control_no
-    const noProcessPlanResult = await maqPool.query(`
-      SELECT i.control_no, i.sub_class
-      FROM lpb.eng_item i
-      WHERE (i.sub_class LIKE 'C2%' OR i.sub_class LIKE 'C3%') 
-        AND i.condition = 'Enable'
-        AND NOT EXISTS (
-          SELECT 1 FROM lpb.eng_process_info pi 
-          WHERE pi.process_plan_no = i.control_no
-        )
-      ORDER BY i.control_no
-    `);
+    // 2. Critical: No Process Plan
+    const noProcessPlanResult = await maqPool.query(
+      `SELECT i.control_no, i.sub_class
+       FROM lpb.eng_item i
+       WHERE ${subClassWhere} AND i.condition = 'Enable'
+         AND NOT EXISTS (SELECT 1 FROM lpb.eng_process_info pi WHERE pi.process_plan_no = i.control_no)
+       ORDER BY i.control_no`,
+      subClassPatterns
+    );
 
-    // 3. Warning: Missing Tooling in specific Process Codes
-    const targetProcessCodes = ['1011', '1012', '1021', '1022', '1041', '1042', '1061', '1062', '1101', '1102', '1181', '1182', '1241'];
-    
-    const missingToolingResult = await maqPool.query(`
-      SELECT i.control_no, i.sub_class, pi.process_code, pi.wc
-      FROM lpb.eng_item i
-      JOIN lpb.eng_process_info pi ON pi.process_plan_no = i.control_no
-      LEFT JOIN lpb.eng_r_pi_tool rpt ON (rpt.process_plan_no = pi.process_plan_no AND rpt.process_code = pi.process_code)
-      WHERE (i.sub_class LIKE 'C2%' OR i.sub_class LIKE 'C3%') 
-        AND i.condition = 'Enable'
-        AND pi.process_code = ANY($1)
-        AND rpt.tool_dwg_no IS NULL
-      ORDER BY i.control_no, pi.seq_no
-    `, [targetProcessCodes]);
+    // 3. Warning: Missing Tooling in configured Process Codes
+    let missingRows = [];
+    if (targetProcessCodes.length > 0) {
+      const pcOffset = subClassPatterns.length + 1;
+      const missingToolingResult = await maqPool.query(
+        `SELECT i.control_no, i.sub_class, pi.process_code, pi.wc
+         FROM lpb.eng_item i
+         JOIN lpb.eng_process_info pi ON pi.process_plan_no = i.control_no
+         LEFT JOIN lpb.eng_r_pi_tool rpt ON (rpt.process_plan_no = pi.process_plan_no AND rpt.process_code = pi.process_code)
+         WHERE ${subClassWhere} AND i.condition = 'Enable'
+           AND pi.process_code = ANY($${pcOffset})
+           AND rpt.tool_dwg_no IS NULL
+         ORDER BY i.control_no, pi.seq_no`,
+        [...subClassPatterns, targetProcessCodes]
+      );
+      missingRows = missingToolingResult.rows;
+    }
 
-    const missingRows = missingToolingResult.rows;
-    
-    // Enrich both groups with Machine Model from rodpcPool
-    const { pool: rodpcPool } = require('../../../../instance/instance');
+    // Enrich with Machine Model
     const allCns = [...new Set([...noProcessPlanResult.rows.map(r => r.control_no), ...missingRows.map(r => r.control_no)])];
-    
-    let modelMap = {};
-    let mtcMap = {};
-
+    let modelMap = {}, mtcMap = {};
     if (allCns.length > 0) {
-      const prodRes = await rodpcPool.query(`
-        SELECT control_no, model FROM rodpc.kzwmaq_eng_production 
-        WHERE control_no = ANY($1)
-      `, [allCns]);
-      
-      modelMap = prodRes.rows.reduce((acc, row) => {
-        acc[row.control_no] = row.model;
-        return acc;
-      }, {});
-
+      const prodRes = await rodpcPool.query(
+        `SELECT control_no, model FROM rodpc.kzwmaq_eng_production WHERE control_no = ANY($1)`,
+        [allCns]
+      );
+      modelMap = prodRes.rows.reduce((acc, row) => { acc[row.control_no] = row.model; return acc; }, {});
       const models = [...new Set(prodRes.rows.map(r => r.model))];
-      const mtcRes = await engPool.query(`
-        SELECT machine_type_name, machine_type_code FROM sds_machine_type_code
-        WHERE machine_type_name = ANY($1)
-      `, [models]);
-
-      mtcMap = mtcRes.rows.reduce((acc, row) => {
-        acc[row.machine_type_name] = row.machine_type_code;
-        return acc;
-      }, {});
+      if (models.length > 0) {
+        const mtcRes = await engPool.query(
+          `SELECT machine_type_name, machine_type_code FROM sds_machine_type_code WHERE machine_type_name = ANY($1)`,
+          [models]
+        );
+        mtcMap = mtcRes.rows.reduce((acc, row) => { acc[row.machine_type_name] = row.machine_type_code; return acc; }, {});
+      }
     }
 
     const enrich = (row) => ({
       ...row,
       machine_name: modelMap[row.control_no] || null,
-      machine_type_code: mtcMap[modelMap[row.control_no]] || null
+      machine_type_code: mtcMap[modelMap[row.control_no]] || null,
     });
 
     res.json({
       itemCounts,
-      totals: { raceTotal, ballTotal, grandTotal: raceTotal + ballTotal },
+      totals: { raceTotal, ballTotal, grandTotal },
       noProcessPlan: noProcessPlanResult.rows.map(enrich),
       missingTooling: missingRows.map(enrich),
+      config: cfg,
     });
   } catch (err) {
     console.error('[Audit API Error]', err.message);
