@@ -262,12 +262,24 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
   }
 }
 
+// ── CN Normalization ─────────────────────────────────────────────────────────
+// tooling_spec_process stores CNs in 6-digit format (e.g. '250190').
+// Accept Cxx-0YYYY input and normalize so both formats find the spec.
+function normalizeSpecCn(cn) {
+  const s = String(cn).trim().toUpperCase();
+  if (/^\d{6}$/.test(s)) return s;
+  const m = s.match(/^[A-Z](\d{2})-0*(\d{4})$/);
+  if (m) return m[1] + m[2];
+  return s;
+}
+
 // ── Main Search ──────────────────────────────────────────────────────────────
 
 async function search(cn) {
+  const specCn = normalizeSpecCn(cn);
   const specRes = await engPool.query(
     `SELECT * FROM ${TSV2_TABLES.SPEC_PROCESS} WHERE cn = $1 LIMIT 1`,
-    [String(cn).trim()]
+    [specCn]
   );
   if (!specRes.rows.length) {
     return { success: false, error: 'Part spec not found', cn };

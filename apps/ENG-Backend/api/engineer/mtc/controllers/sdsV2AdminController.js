@@ -10,9 +10,11 @@ const router = express.Router();
 
 // ── Machine Type Codes ───────────────────────────────────────────────────────
 
-/** GET /api/sds/v2/admin/machine-types */
+/** GET /api/sds/v2/admin/machine-types
+ *  ?nodedupe=true  — skip group deduplication (SdsV2Page needs all codes for prefix lookup)
+ */
 router.get('/machine-types', async (req, res) => {
-  const { search } = req.query;
+  const { search, nodedupe } = req.query;
   try {
     let sql = `SELECT id, machine_type_code, machine_type_name, grinding_area_label, tool_code_filter, is_active, created_at, machine_group
                FROM ${TABLES.SDS_MACHINE_TYPE_CODE}`;
@@ -23,6 +25,10 @@ router.get('/machine-types', async (req, res) => {
     }
     sql += ' ORDER BY machine_type_code';
     const result = await engPool.query(sql, params);
+
+    if (nodedupe === 'true') {
+      return res.json(result.rows);
+    }
 
     // Deduplicate grouped machines: return one representative per machine_group.
     // Pick the row with the lowest id within each group (machine_type_code ORDER BY is string-based
