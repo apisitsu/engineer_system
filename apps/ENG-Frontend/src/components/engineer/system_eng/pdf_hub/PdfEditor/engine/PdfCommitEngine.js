@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
 /**
  * PdfCommitEngine — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -170,12 +170,37 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
     const scaleObjY = obj.scaleY || 1;
     const fabricType = (obj.type || '').toLowerCase();
 
+    // 1. Calculate unrotated bounding box edges
+    let leftEdge = obj.left || 0;
+    let topEdge = obj.top || 0;
+    const objW = (obj.width || 0) * scaleObjX;
+    const objH = (obj.height || 0) * scaleObjY;
+
+    if (obj.originX === 'center') leftEdge -= objW / 2;
+    else if (obj.originX === 'right') leftEdge -= objW;
+
+    if (obj.originY === 'center') topEdge -= objH / 2;
+    else if (obj.originY === 'bottom') topEdge -= objH;
+    
+    // Helper to rotate a point (px, py) around (obj.left, obj.top)
+    const rotatePoint = (px, py) => {
+        if (!obj.angle) return { x: px, y: py };
+        const rad = obj.angle * Math.PI / 180;
+        const dx = px - (obj.left || 0);
+        const dy = py - (obj.top || 0);
+        return {
+            x: (obj.left || 0) + dx * Math.cos(rad) - dy * Math.sin(rad),
+            y: (obj.top || 0) + dx * Math.sin(rad) + dy * Math.cos(rad),
+        };
+    };
+
     switch (fabricType) {
         case 'rect': {
-            const x = toPdf(obj.left, cW, pW);
-            const y = toPdfY(obj.top + obj.height * scaleObjY, cH, pH);
-            const w = toPdf(obj.width * scaleObjX, cW, pW);
-            const h = toPdf(obj.height * scaleObjY, cH, pH);
+            const bl = rotatePoint(leftEdge, topEdge + objH);
+            const x = toPdf(bl.x, cW, pW);
+            const y = toPdfY(bl.y, cH, pH);
+            const w = toPdf(objW, cW, pW);
+            const h = toPdf(objH, cH, pH);
 
             const fillColor = hexToRgb(obj.fill);
             const strokeColor = hexToRgb(obj.stroke);
@@ -187,37 +212,52 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                 borderColor: strokeColor || undefined,
                 borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth, cW, pW) : undefined,
                 borderOpacity: obj.opacity ?? 1,
+                rotate: obj.angle ? degrees(-obj.angle) : undefined,
             });
             break;
         }
 
+        case 'circle':
         case 'ellipse': {
-            const cx = toPdf(obj.left + obj.rx * scaleObjX, cW, pW);
-            const cy = toPdfY(obj.top + obj.ry * scaleObjY, cH, pH);
-            const rx = toPdf(obj.rx * scaleObjX, cW, pW);
-            const ry = toPdf(obj.ry * scaleObjY, cH, pH);
+            const radius = obj.radius || 0;
+            const rxRaw = obj.rx !== undefined ? obj.rx : radius;
+            const ryRaw = obj.ry !== undefined ? obj.ry : radius;
+            
+            const rx = toPdf(rxRaw * scaleObjX, cW, pW);
+            const ry = toPdf(ryRaw * scaleObjY, cH, pH);
+            
+            const cxUnrotated = leftEdge + rxRaw * scaleObjX;
+            const cyUnrotated = topEdge + ryRaw * scaleObjY;
+            const centerPoint = rotatePoint(cxUnrotated, cyUnrotated);
 
             page.drawEllipse({
-                x: cx, y: cy,
+                x: toPdf(centerPoint.x, cW, pW),
+                y: toPdfY(centerPoint.y, cH, pH),
                 xScale: rx, yScale: ry,
                 color: hexToRgb(obj.fill) || undefined,
                 borderColor: hexToRgb(obj.stroke) || undefined,
-                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth, cW, pW) : undefined,
+                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, pW) : undefined,
                 opacity: obj.opacity ?? 1,
             });
             break;
         }
 
         case 'line': {
-            const x1 = toPdf(obj.x1 + (obj.left || 0), cW, pW);
-            const y1 = toPdfY(obj.y1 + (obj.top || 0), cH, pH);
-            const x2 = toPdf(obj.x2 + (obj.left || 0), cW, pW);
-            const y2 = toPdfY(obj.y2 + (obj.top || 0), cH, pH);
+            const isReverseX = obj.x1 > obj.x2;
+            const isReverseY = obj.y1 > obj.y2;
+            
+            const startX = isReverseX ? leftEdge + objW : leftEdge;
+            const startY = isReverseY ? topEdge + objH : topEdge;
+            const endX = isReverseX ? leftEdge : leftEdge + objW;
+            const endY = isReverseY ? topEdge : topEdge + objH;
+
+            const p1 = rotatePoint(startX, startY);
+            const p2 = rotatePoint(endX, endY);
 
             page.drawLine({
-                start: { x: x1, y: y1 },
-                end: { x: x2, y: y2 },
-                thickness: toPdf((obj.strokeWidth * (obj.scaleY || 1)) || 2, cW, pW),
+                start: { x: toPdf(p1.x, cW, pW), y: toPdfY(p1.y, cH, pH) },
+                end: { x: toPdf(p2.x, cW, pW), y: toPdfY(p2.y, cH, pH) },
+                thickness: toPdf((obj.strokeWidth * scaleObjY) || 2, cW, pW),
                 color: hexToRgb(obj.stroke) || rgb(0, 0, 0),
                 opacity: obj.opacity ?? 1,
             });
@@ -229,42 +269,39 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         case 'text': {
             if (!obj.text) break;
             
-            // Draw background if present (e.g., for sticky notes)
             if (obj.backgroundColor) {
-                const bgX = toPdf(obj.left, cW, pW);
-                const bgY = toPdfY(obj.top + (obj.height * scaleObjY), cH, pH);
-                const bgW = toPdf(obj.width * scaleObjX, cW, pW);
-                const bgH = toPdf(obj.height * scaleObjY, cH, pH);
+                const bgBl = rotatePoint(leftEdge, topEdge + objH);
+                const bgX = toPdf(bgBl.x, cW, pW);
+                const bgY = toPdfY(bgBl.y, cH, pH);
+                const bgW = toPdf(objW, cW, pW);
+                const bgH = toPdf(objH, cH, pH);
                 const bgColor = hexToRgb(obj.backgroundColor);
                 if (bgColor) {
                     page.drawRectangle({
-                        x: bgX,
-                        y: bgY,
-                        width: bgW,
-                        height: bgH,
-                        color: bgColor,
-                        opacity: obj.opacity ?? 1,
+                        x: bgX, y: bgY, width: bgW, height: bgH,
+                        color: bgColor, opacity: obj.opacity ?? 1,
+                        rotate: obj.angle ? degrees(-obj.angle) : undefined,
                     });
                 }
             }
             
             const font = await getFont(doc, obj.fontFamily);
             const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
-            const x = toPdf(obj.left, cW, pW);
-            const y = toPdfY(obj.top + (obj.fontSize || 14) * scaleObjY, cH, pH);
-
-            // Handle multi-line text
             const lines = obj.text.split('\n');
             const lineHeight = size * 1.2;
 
             lines.forEach((line, i) => {
+                const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * 1.2));
+                const bl = rotatePoint(leftEdge, lineBaseY);
+                const x = toPdf(bl.x, cW, pW);
+                const y = toPdfY(bl.y, cH, pH);
+
                 page.drawText(line, {
-                    x,
-                    y: y - (i * lineHeight),
-                    size,
-                    font,
+                    x, y,
+                    size, font,
                     color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                     opacity: obj.opacity ?? 1,
+                    rotate: obj.angle ? degrees(-obj.angle) : undefined,
                 });
             });
             break;
@@ -273,12 +310,17 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         case 'image': {
             if (!obj.src) break;
             const img = await embedImage(doc, obj.src);
-            const x = toPdf(obj.left, cW, pW);
-            const y = toPdfY(obj.top + obj.height * scaleObjY, cH, pH);
-            const w = toPdf(obj.width * scaleObjX, cW, pW);
-            const h = toPdf(obj.height * scaleObjY, cH, pH);
+            const bl = rotatePoint(leftEdge, topEdge + objH);
+            const x = toPdf(bl.x, cW, pW);
+            const y = toPdfY(bl.y, cH, pH);
+            const w = toPdf(objW, cW, pW);
+            const h = toPdf(objH, cH, pH);
 
-            page.drawImage(img, { x, y, width: w, height: h, opacity: obj.opacity ?? 1 });
+            page.drawImage(img, { 
+                x, y, width: w, height: h, 
+                opacity: obj.opacity ?? 1,
+                rotate: obj.angle ? degrees(-obj.angle) : undefined,
+            });
             break;
         }
 
@@ -393,14 +435,34 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         }
 
         case 'group': {
-            // Recursively commit grouped objects (arrows, rulers, etc.)
             if (obj.objects) {
+                let cx = obj.left || 0;
+                let cy = obj.top || 0;
+                if (obj.originX === 'left') cx += objW / 2;
+                else if (obj.originX === 'right') cx -= objW / 2;
+                if (obj.originY === 'top') cy += objH / 2;
+                else if (obj.originY === 'bottom') cy -= objH / 2;
+
                 for (const child of obj.objects) {
-                    // Adjust child positions relative to group
+                    const childRelX = (child.left || 0) * scaleObjX;
+                    const childRelY = (child.top || 0) * scaleObjY;
+                    
+                    let finalChildX = cx + childRelX;
+                    let finalChildY = cy + childRelY;
+                    
+                    if (obj.angle) {
+                        const rad = obj.angle * Math.PI / 180;
+                        finalChildX = cx + childRelX * Math.cos(rad) - childRelY * Math.sin(rad);
+                        finalChildY = cy + childRelX * Math.sin(rad) + childRelY * Math.cos(rad);
+                    }
+
                     const adjustedChild = {
                         ...child,
-                        left: (child.left || 0) + (obj.left || 0) + (obj.width || 0) / 2,
-                        top: (child.top || 0) + (obj.top || 0) + (obj.height || 0) / 2,
+                        left: finalChildX,
+                        top: finalChildY,
+                        scaleX: (child.scaleX || 1) * scaleObjX,
+                        scaleY: (child.scaleY || 1) * scaleObjY,
+                        angle: (child.angle || 0) + (obj.angle || 0),
                     };
                     await commitObject(doc, page, adjustedChild, cW, cH, pW, pH);
                 }

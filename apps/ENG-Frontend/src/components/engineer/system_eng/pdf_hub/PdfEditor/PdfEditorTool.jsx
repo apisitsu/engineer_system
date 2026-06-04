@@ -611,7 +611,7 @@ const PdfEditorTool = () => {
 
                     {/* Zoom */}
                     <Tooltip title="Zoom out">
-                        <Button size="small" icon={<ZoomOutOutlined />} onClick={zoomOut}
+                        <Button size="small" icon={<ZoomOutOutlined />} onClick={() => { saveCurrentPageState(); zoomOut(); }}
                             style={{ borderRadius: 7 }} />
                     </Tooltip>
                     <Select
@@ -619,6 +619,7 @@ const PdfEditorTool = () => {
                         value={ZOOM_OPTIONS.some(o => o.value === zoom) ? zoom : undefined}
                         placeholder={`${Math.round(zoom * 100)}%`}
                         onChange={(val) => {
+                            saveCurrentPageState();
                             if (val === 'fit') {
                                 // Re-calculate fit-to-width
                                 if (canvasWrapperRef.current && pdfDoc) {
@@ -640,7 +641,7 @@ const PdfEditorTool = () => {
                         style={{ width: 90 }}
                     />
                     <Tooltip title="Zoom in">
-                        <Button size="small" icon={<ZoomInOutlined />} onClick={zoomIn}
+                        <Button size="small" icon={<ZoomInOutlined />} onClick={() => { saveCurrentPageState(); zoomIn(); }}
                             style={{ borderRadius: 7 }} />
                     </Tooltip>
 
@@ -753,6 +754,7 @@ const PdfEditorTool = () => {
                                                 fabricCanvasRefs={fabricCanvasRefs}
                                                 pushHistory={pushHistory}
                                                 overlayPdfDoc={overlayPdfDoc}
+                                                stampData={stampData}
                                             />
                                         </div>
                                     ))}
@@ -770,6 +772,7 @@ const PdfEditorTool = () => {
                                             fabricCanvasRefs={fabricCanvasRefs}
                                             pushHistory={pushHistory}
                                             overlayPdfDoc={overlayPdfDoc}
+                                            stampData={stampData}
                                         />
                                     </div>
                                 </div>

@@ -201,7 +201,10 @@ export default function usePdfEditor() {
     const pushHistory = useCallback((pageNum) => {
         const fc = fabricCanvasRefs?.current?.[pageNum];
         if (!fc) return;
-        const fabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const fabricSnapshot = JSON.stringify(json);
         // Snapshot highlights for this page too
         const highlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
@@ -230,7 +233,10 @@ export default function usePdfEditor() {
         }
 
         // Save current state to future (redo)
-        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const currentFabricSnapshot = JSON.stringify(json);
         const currentHighlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
         );
@@ -238,7 +244,21 @@ export default function usePdfEditor() {
 
         // Restore fabric
         const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        const scaleX = fc.width / (parsedSnapshot._canvasWidth || fc.width);
+        const scaleY = fc.height / (parsedSnapshot._canvasHeight || fc.height);
+
         fc.loadFromJSON(parsedSnapshot, () => {
+            if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * scaleX,
+                        top: obj.top * scaleY,
+                        scaleX: (obj.scaleX || 1) * scaleX,
+                        scaleY: (obj.scaleY || 1) * scaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
             fc.requestRenderAll();
         });
 
@@ -266,7 +286,10 @@ export default function usePdfEditor() {
         }
 
         // Save current state to past (undo)
-        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const currentFabricSnapshot = JSON.stringify(json);
         const currentHighlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
         );
@@ -274,7 +297,21 @@ export default function usePdfEditor() {
 
         // Restore fabric
         const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        const scaleX = fc.width / (parsedSnapshot._canvasWidth || fc.width);
+        const scaleY = fc.height / (parsedSnapshot._canvasHeight || fc.height);
+
         fc.loadFromJSON(parsedSnapshot, () => {
+            if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * scaleX,
+                        top: obj.top * scaleY,
+                        scaleX: (obj.scaleX || 1) * scaleX,
+                        scaleY: (obj.scaleY || 1) * scaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
             fc.requestRenderAll();
         });
 

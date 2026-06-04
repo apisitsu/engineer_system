@@ -35,6 +35,7 @@ const EditorCanvas = ({
     pushHistory,
     onPageRendered,
     overlayPdfDoc,
+    stampData,
 }) => {
     const { theme } = useTheme();
     const pdfCanvasRef = useRef(null);
@@ -43,6 +44,7 @@ const EditorCanvas = ({
     const textLayerRef = useRef(null);
     const fabricElRef = useRef(null);
     const containerRef = useRef(null);
+    const previewRef = useRef(null); // Ref for the floating preview
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
     // Hybrid drawing state (for freehand highlight fallback)
@@ -878,6 +880,36 @@ const EditorCanvas = ({
                     break;
                 }
 
+                case 'stamp':
+                case 'signature': {
+                    const isStamp = tool === 'stamp';
+                    const imgSrc = isStamp ? stampData?.stamp_image : stampData?.signature_image;
+                    if (!imgSrc) break;
+                    
+                    const imgEl = new Image();
+                    imgEl.src = `data:image/png;base64,${imgSrc}`;
+                    imgEl.onload = () => {
+                        const fImg = new fabric.FabricImage(imgEl, {
+                            left: pointer.x,
+                            top: pointer.y,
+                            scaleX: 0.5,
+                            scaleY: 0.5,
+                            opacity: 0.85,
+                            originX: 'center',
+                            originY: 'center',
+                            customData: {
+                                type: tool,
+                                widthMm: isStamp ? stampData?.stamp_width_mm : stampData?.sig_width_mm,
+                                heightMm: isStamp ? stampData?.stamp_height_mm : stampData?.sig_height_mm,
+                            },
+                        });
+                        fc.add(fImg);
+                        fc.setActiveObject(fImg);
+                        fc.renderAll();
+                    };
+                    break;
+                }
+
                 default:
                     break;
             }
@@ -1320,12 +1352,128 @@ const EditorCanvas = ({
     // Determine if a text-selection drag tool is active
     const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
 
+    // ── Mouse tracking for tool preview ──
+    const handleContainerMouseMove = useCallback((e) => {
+        if (!previewRef.current || !containerRef.current) return;
+        
+        const tool = store.activeTool;
+        const activeTools = ['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'];
+        
+        if (!activeTools.includes(tool)) {
+            previewRef.current.style.display = 'none';
+            return;
+        }
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        previewRef.current.style.display = 'block';
+        previewRef.current.style.left = `${x}px`;
+        previewRef.current.style.top = `${y}px`;
+    }, [store.activeTool]);
+
+    const handleContainerMouseLeave = useCallback(() => {
+        if (previewRef.current) {
+            previewRef.current.style.display = 'none';
+        }
+    }, []);
+
+    // ── Build preview content based on tool ──
+    const previewContent = React.useMemo(() => {
+        const tool = store.activeTool;
+        const activeTools = ['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'];
+        if (!activeTools.includes(tool)) return null;
+
+        const color = store.strokeColor || '#333';
+        const size = store.fontSize || 16;
+        let content = null;
+        let transform = 'translate(-50%, -50%)'; // default centered
+
+        switch (tool) {
+            case 'stampCheckmark':
+                content = <div style={{ color, fontSize: size * 2.5, fontWeight: 'bold' }}>✓</div>;
+                break;
+            case 'stampCross':
+                content = <div style={{ color, fontSize: size * 2.5, fontWeight: 'bold' }}>✕</div>;
+                break;
+            case 'stampCircle':
+                content = <div style={{ border: `${store.strokeWidth || 3}px solid ${color}`, borderRadius: '50%', width: size * 2, height: size * 2 }}></div>;
+                break;
+            case 'stampOk':
+                content = (
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: size * 2.4, height: size * 2.4 }}>
+                        <div style={{ position: 'absolute', border: `${store.strokeWidth || 3}px solid ${color}`, borderRadius: '50%', width: '100%', height: '100%' }}></div>
+                        <div style={{ color, fontSize: size * 1.1, fontWeight: 'bold' }}>OK</div>
+                    </div>
+                );
+                break;
+            case 'date':
+                transform = 'translate(0, 0)'; // Top-left alignment for date
+                content = <div style={{ color: '#333', fontSize: 14, fontFamily: 'Helvetica' }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>;
+                break;
+            case 'stampUserDate': {
+                const baseScale = (size / 16) * 0.75;
+                content = (
+                    <div style={{ 
+                        border: `3px solid ${color}`, borderRadius: '50%', 
+                        width: 96, height: 96, 
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        color, fontWeight: 'bold', fontFamily: 'Arial',
+                        transform: `scale(${baseScale})`,
+                        transformOrigin: 'center center'
+                    }}>
+                        <div style={{ borderBottom: `2px solid ${color}`, width: '100%', textAlign: 'center', fontSize: 12 }}>ROD ENG</div>
+                        <div style={{ borderBottom: `2px solid ${color}`, width: '100%', textAlign: 'center', fontSize: 10 }}>{userName?.split(' ')[0]?.toUpperCase() || 'USER'}</div>
+                        <div style={{ width: '100%', textAlign: 'center', fontSize: 11 }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                    </div>
+                );
+                break;
+            }
+            case 'stamp':
+                if (stampData?.stamp_image) {
+                    content = <img src={`data:image/png;base64,${stampData.stamp_image}`} alt="stamp" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
+                }
+                break;
+            case 'signature':
+                if (stampData?.signature_image) {
+                    content = <img src={`data:image/png;base64,${stampData.signature_image}`} alt="signature" style={{ transform: 'scale(0.5)', opacity: 0.8 }} />;
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (!content) return null;
+
+        return (
+            <div
+                ref={previewRef}
+                style={{
+                    position: 'absolute',
+                    display: 'none',
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                    opacity: 0.6,
+                    transform,
+                }}
+            >
+                {content}
+            </div>
+        );
+    }, [store.activeTool, store.strokeColor, store.fontSize, store.strokeWidth, stampData, userName]);
+
     return (
         <div
             ref={containerRef}
             className="pdf-ws-canvas-container"
+            style={{ position: 'relative', margin: '0 auto' }}
             onContextMenu={(e) => { if (isDragTool) e.preventDefault(); }}
+            onMouseMove={handleContainerMouseMove}
+            onMouseLeave={handleContainerMouseLeave}
         >
+            {previewContent}
+
             {/* Layer 1: PDF Rendering */}
             <canvas
                 ref={pdfCanvasRef}
