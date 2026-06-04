@@ -12,7 +12,6 @@ export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
-
 export const server = {
   API_URL: `${apiUrl}`,
 
@@ -93,6 +92,7 @@ export const server = {
 
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

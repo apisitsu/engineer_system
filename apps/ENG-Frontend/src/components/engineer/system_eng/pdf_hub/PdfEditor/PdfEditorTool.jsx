@@ -183,6 +183,29 @@ const PdfEditorTool = () => {
     };
 
     // ══════════════════════════════════════════════════════════════════
+    // Analytics / Usage Logging
+    // ══════════════════════════════════════════════════════════════════
+    const logPdfUsage = useCallback(async (actionType) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token || !empNo) return;
+            const filename = pdfFile?.name || 'document.pdf';
+            const payload = {
+                filename,
+                empno: empNo,
+                user_name: useAuthStore.getState().user?.name || '',
+                total_pages: totalPages || 1,
+                action_type: actionType
+            };
+            await axios.post(server.PDF_USAGE_LOG, payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (err) {
+            console.error('Failed to log PDF usage:', err);
+        }
+    }, [empNo, pdfFile, totalPages]);
+
+    // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)
     // ══════════════════════════════════════════════════════════════════
     const handleApplyAndDownload = useCallback(async () => {
@@ -214,12 +237,13 @@ const PdfEditorTool = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
+            logPdfUsage('export_pdf');
             message.success('PDF downloaded successfully!');
         } catch (err) {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
-    }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState]);
+    }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -235,6 +259,7 @@ const PdfEditorTool = () => {
             await loadPdfFromBytes(mergedBytes, `merged_${Date.now()}.pdf`);
             setMergeFiles([]);
             store.setActiveMode('view');
+            logPdfUsage('merge');
             message.success('PDFs merged! You can now annotate, sign, or export.');
         } catch (err) {
             console.error('Merge error:', err);
@@ -242,7 +267,7 @@ const PdfEditorTool = () => {
         } finally {
             setMergeLoading(false);
         }
-    }, [mergeFiles, loadPdfFromBytes, setMergeFiles, store]);
+    }, [mergeFiles, loadPdfFromBytes, setMergeFiles, store, logPdfUsage]);
 
     const handleMergeFilesAdd = useCallback((files) => {
         setMergeFiles(prev => {
@@ -299,6 +324,7 @@ const PdfEditorTool = () => {
                 document.body.removeChild(link);
             }
 
+            logPdfUsage('export_image');
             message.success(`Exported ${results.length} page(s) as ${format.toUpperCase()}`);
         } catch (err) {
             console.error('Export error:', err);
@@ -306,7 +332,7 @@ const PdfEditorTool = () => {
         } finally {
             setExportLoading(false);
         }
-    }, [pdfDoc, exportSelectedPages, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, setExportedImages]);
+    }, [pdfDoc, exportSelectedPages, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, setExportedImages, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
     // Batch ZIP Download

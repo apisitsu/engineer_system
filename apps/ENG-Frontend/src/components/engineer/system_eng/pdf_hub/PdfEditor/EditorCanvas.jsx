@@ -723,34 +723,42 @@ const EditorCanvas = ({
                 }
 
                 case 'stampCheckmark': {
-                    const checkText = new fabric.FabricText('✓', {
+                    const color = store.strokeColor || '#27ae60';
+                    const scale = store.fontSize / 16;
+                    const w = (store.strokeWidth || 3) / scale;
+                    const l1 = new fabric.Line([-10, 0, -3, 10], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
+                    const l2 = new fabric.Line([-3, 10, 15, -15], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
+                    const checkGroup = new fabric.Group([l1, l2], {
                         left: pointer.x,
                         top: pointer.y,
-                        fontSize: store.fontSize * 2.5,
-                        fill: store.strokeColor || '#27ae60',
-                        fontWeight: 'bold',
                         originX: 'center',
                         originY: 'center',
-                        customData: { type: 'stampCheckmark' },
+                        scaleX: scale,
+                        scaleY: scale,
+                        customData: { type: 'stampCheckmark' }
                     });
-                    fc.add(checkText);
-                    fc.setActiveObject(checkText);
+                    fc.add(checkGroup);
+                    fc.setActiveObject(checkGroup);
                     break;
                 }
 
                 case 'stampCross': {
-                    const crossText = new fabric.FabricText('✕', {
+                    const color = store.strokeColor || '#e74c3c';
+                    const scale = store.fontSize / 16;
+                    const w = (store.strokeWidth || 3) / scale;
+                    const l1 = new fabric.Line([-12, -12, 12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
+                    const l2 = new fabric.Line([12, -12, -12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
+                    const crossGroup = new fabric.Group([l1, l2], {
                         left: pointer.x,
                         top: pointer.y,
-                        fontSize: store.fontSize * 2.5,
-                        fill: store.strokeColor || '#e74c3c',
-                        fontWeight: 'bold',
                         originX: 'center',
                         originY: 'center',
-                        customData: { type: 'stampCross' },
+                        scaleX: scale,
+                        scaleY: scale,
+                        customData: { type: 'stampCross' }
                     });
-                    fc.add(crossText);
-                    fc.setActiveObject(crossText);
+                    fc.add(crossGroup);
+                    fc.setActiveObject(crossGroup);
                     break;
                 }
 
@@ -773,7 +781,7 @@ const EditorCanvas = ({
 
                 case 'stampOk': {
                     const okCircle = new fabric.Circle({
-                        radius: store.fontSize * 1.2,
+                        radius: store.fontSize,
                         fill: 'transparent',
                         stroke: store.strokeColor || '#3498db',
                         strokeWidth: store.strokeWidth || 3,
@@ -781,8 +789,9 @@ const EditorCanvas = ({
                         originY: 'center',
                     });
                     const okText = new fabric.FabricText('OK', {
-                        fontSize: store.fontSize * 1.1,
+                        fontSize: store.fontSize * 0.9,
                         fontWeight: 'bold',
+                        fontFamily: 'Arial',
                         fill: store.strokeColor || '#3498db',
                         originX: 'center',
                         originY: 'center',
@@ -820,29 +829,29 @@ const EditorCanvas = ({
                     const color = store.strokeColor || '#e74c3c';
 
                     const bgCircle = new fabric.Circle({
-                        radius: 48, fill: '#ffffff', stroke: color, strokeWidth: 3,
+                        radius: 48, fill: 'transparent', stroke: color, strokeWidth: 3,
                         originX: 'center', originY: 'center',
                         left: 0, top: 0, objectCaching: false
                     });
                     const line1 = new fabric.Line([-46, -14, 46, -14], { stroke: color, strokeWidth: 2, objectCaching: false });
                     const line2 = new fabric.Line([-46, 14, 46, 14], { stroke: color, strokeWidth: 2, objectCaching: false });
 
-                    // Use scaleX to create a condensed font look similar to the physical stamp
-                    const baseScale = (store.fontSize / 16) * 0.75;
+                    // Remove scaleX to avoid pdf-lib text overflow
+                    const baseScale = (store.fontSize / 16) * 0.85;
                     const fontProps = {
                         fontWeight: 'bold', fill: color, fontFamily: 'Arial',
                         originX: 'center', originY: 'center',
-                        scaleX: baseScale, objectCaching: false
+                        objectCaching: false
                     };
 
                     const deptText = new fabric.FabricText(dept, {
                         ...fontProps,
-                        fontSize: 16, top: -27, left: 0
+                        fontSize: 13, top: -27, left: 0
                     });
                     
                     const dateTextObj = new fabric.FabricText(dateVal, {
                         ...fontProps,
-                        fontSize: 16, top: 0, left: 0
+                        fontSize: 13, top: 0, left: 0
                     });
 
                     // Curved Name Text: Fixed max sweep angle to prevent overflowing
@@ -858,7 +867,7 @@ const EditorCanvas = ({
                         const rad = a * (Math.PI / 180);
                         return new fabric.FabricText(char, {
                             ...fontProps,
-                            fontSize: 14,
+                            fontSize: 11,
                             left: nameRadius * Math.cos(rad),
                             top: nameRadius * Math.sin(rad),
                             angle: a - 90

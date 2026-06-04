@@ -48,6 +48,10 @@ export const server = {
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
 
+  // PDF Hub (Sign & Stamp)
+  PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+
   // Tooling Select
   TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,

@@ -141,4 +141,28 @@ router.get('/stamps', async (req, res) => {
     }
 });
 
+// ============================================================================
+// POST /usage-log — Record PDF usage (for paper-saving cost calculation)
+// ============================================================================
+router.post('/usage-log', async (req, res) => {
+    try {
+        const { filename, empno, user_name, total_pages, action_type } = req.body;
+
+        if (!empno || !filename) {
+            return res.status(400).json({ result: 'false', message: 'empno and filename are required' });
+        }
+
+        await engPool.query(
+            `INSERT INTO tt_pdf_usage_logs (filename, empno, user_name, total_pages, action_type)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [filename, empno, user_name || '', total_pages || 1, action_type || 'unknown']
+        );
+
+        res.json({ result: 'true', message: 'Usage log recorded successfully' });
+    } catch (err) {
+        console.error('pdfHub logUsage error:', err.message);
+        res.status(500).json({ result: 'false', message: err.message });
+    }
+});
+
 module.exports = router;

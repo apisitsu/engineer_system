@@ -28,7 +28,7 @@ export const usePdfEditorStore = create((set, get) => ({
     strokeColor: '#e74c3c',
     fillColor: 'transparent',
     strokeWidth: 2,
-    fontSize: 16,
+    fontSize: 12,
     fontFamily: 'Helvetica',
     opacity: 1.0,
     highlightColor: '#ffeb3b',
