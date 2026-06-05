@@ -36,6 +36,7 @@ export const server = {
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/update`,
+  TOOLING_INSPECT_STATUS_PREVIEW: `${apiUrl}api/tooling_inspect/status_preview`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
   TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
@@ -83,9 +84,15 @@ export const server = {
   MTC_SDS_V2_ADMIN_AUDIT_CONFIG: `${apiUrl}api/sds/v2/admin/audit/config`,
   MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER: `${apiUrl}api/sds/v2/admin/audit/process-master`,
   MTC_SDS_V2_ADMIN_VISIBLE_MACHINES: `${apiUrl}api/sds/v2/admin/visible-machines`,
+  MTC_SDS_V2_ADMIN_MACHINE_CODES: `${apiUrl}api/sds/v2/admin/machine-codes`,
+  MTC_SDS_V2_ADMIN_CN_HISTORY: `${apiUrl}api/sds/v2/admin/cn-history`,
+  MTC_SDS_V2_PRODUCTION_SUMMARY: `${apiUrl}api/sds/v2/admin/production-summary`,
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
+  MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
+  MTC_SDS_V2_REPORT_ACCESS_LOG: `${apiUrl}api/sds/v2/report/access-log`,
+  MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
   // -------------------- ECNT --------------------
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
   ECR_REQUIRE_GETLIST: `${apiUrl}api/ecr/getlist`,

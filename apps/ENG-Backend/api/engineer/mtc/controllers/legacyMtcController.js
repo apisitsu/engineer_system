@@ -498,6 +498,21 @@ const ToolingInspectUpdate = async (req, res) => {
     }
 }
 
+// GET status preview — single source of truth for the Delay decision, used by
+// the update form to gate the reason prompt. Mirrors ToolingInspectUpdate's
+// calculation exactly (calculateDiffAndStatus: excludes Sundays + holidays,
+// Delay when diff > 3) so the prompt can never drift from the saved status.
+const ToolingStatusPreview = async (req, res) => {
+    const { receive_date, issue_date } = req.query;
+    try {
+        const { diff, status } = await calculateDiffAndStatus(receive_date, issue_date);
+        res.json({ result: "true", diff, status });
+    } catch (err) {
+        console.error("Status preview error:", err.message);
+        res.status(500).json({ result: "false", message: "Database error: " + err.message });
+    }
+};
+
 const ToolingSyncCSV = async (req, res) => {
     try {
         console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
@@ -585,7 +600,7 @@ const ToolingResultDashboard = async (req, res) => {
                               AND NULLIF(TRIM(issue_date::TEXT), '') IS NOT NULL`;
         const issueFilter = `issue_date  ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE  BETWEEN $1 AND $2`;
 
-        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes] = await Promise.all([
+        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes] = await Promise.all([
             engPool.query(`
                 SELECT
                     COUNT(*) as total_po,
@@ -642,6 +657,16 @@ const ToolingResultDashboard = async (req, res) => {
                 FROM ${TABLES.TI_LIST}
                 WHERE ${issueFilter}
                 GROUP BY day_num ORDER BY day_num
+            `, [periodStart, periodEnd]),
+
+            // Detail rows for bottom table
+            engPool.query(`
+                SELECT id, receive_date, po_no, item_name, dwg_no, qty,
+                       issue_date, diff, w_c, status, reason, measuring_tools, judgement
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}
+                ORDER BY receive_date DESC
+                LIMIT 500
             `, [periodStart, periodEnd])
         ]);
 
@@ -677,7 +702,8 @@ const ToolingResultDashboard = async (req, res) => {
                 pct:   totalItems > 0 ? parseFloat(((Number(r.cnt)/totalItems)*100).toFixed(1)) : 0
             })),
             wcBreakdown: wcRes.rows.map(r => ({ wc: r.w_c, count: Number(r.cnt) })),
-            dailyData:   dailyRes.rows.map(r => ({ day: Number(r.day_num), received: Number(r.received) }))
+            dailyData:   dailyRes.rows.map(r => ({ day: Number(r.day_num), received: Number(r.received) })),
+            detailRows:  detailRowsRes.rows
         });
     } catch (error) {
         console.error('ToolingResultDashboard Error:', error);
@@ -693,6 +719,7 @@ module.exports = {
     ToolingDashboadtGetlist,
     ToolingReturnAdd,
     ToolingInspectUpdate,
+    ToolingStatusPreview,
     ToolDWGRequestUpdate,
     ToolingSyncCSV,
     ToolingAvailableFYE,

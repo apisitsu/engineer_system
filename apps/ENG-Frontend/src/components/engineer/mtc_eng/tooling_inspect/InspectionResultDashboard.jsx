@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layout, Select, Spin, Typography, Row, Col, Tooltip } from 'antd';
+import { Layout, Select, Spin, Typography, Row, Col, Tooltip, Table, Tag } from 'antd';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import axios from 'axios';
@@ -399,7 +399,7 @@ export default function InspectionResultDashboard() {
 
                         {/* ── KPI Row ─────────────────────────────────────────── */}
                         <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
-                            <Col flex="1"><KpiCard label="Total PO Qty" value={kpi?.totalPO}  color={C.blue}   /></Col>
+                            <Col flex="1"><KpiCard label="Total PO" value={kpi?.totalPO}  color={C.blue}   /></Col>
                             <Col flex="1"><KpiCard label="Total Tooling Qty" value={kpi?.totalQty} color={C.cyan}   /></Col>
                             <Col flex="1"><KpiCard label="On Time" value={kpi?.onTime}  color={C.green}  /></Col>
                             <Col flex="1"><KpiCard label="Delay"   value={kpi?.delay}   color={C.red}    /></Col>
@@ -575,6 +575,52 @@ export default function InspectionResultDashboard() {
                         </Row>
 
 
+                        {/* ── Detail Table ─────────────────────────────────────── */}
+                        <div style={{ ...cardStyle, marginTop: 10 }}>
+                            {sectionTitle('Inspection Records')}
+                            <Table
+                                className="dark-inspect-table"
+                                dataSource={data?.detailRows || []}
+                                rowKey="id"
+                                size="small"
+                                scroll={{ x: 'max-content' }}
+                                pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20','50','100'], showTotal: (t) => `Total ${t} records` }}
+                                style={{ color: C.textPri }}
+                                columns={[
+                                    { title: 'Receive Date', dataIndex: 'receive_date', key: 'receive_date', width: 110,
+                                      render: (v) => v ? moment(v, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-',
+                                      sorter: (a, b) => (a.receive_date||'').localeCompare(b.receive_date||'') },
+                                    { title: 'PO No.', dataIndex: 'po_no', key: 'po_no', width: 120,
+                                      sorter: (a, b) => (a.po_no||'').localeCompare(b.po_no||'') },
+                                    { title: 'Item Name', dataIndex: 'item_name', key: 'item_name', width: 160,
+                                      sorter: (a, b) => (a.item_name||'').localeCompare(b.item_name||'') },
+                                    { title: 'DWG No.', dataIndex: 'dwg_no', key: 'dwg_no', width: 110,
+                                      sorter: (a, b) => (a.dwg_no||'').localeCompare(b.dwg_no||'') },
+                                    { title: 'Qty', dataIndex: 'qty', key: 'qty', width: 60, align: 'center',
+                                      sorter: (a, b) => (Number(a.qty)||0) - (Number(b.qty)||0) },
+                                    { title: 'Issue Date', dataIndex: 'issue_date', key: 'issue_date', width: 105,
+                                      render: (v) => v ? moment(v, 'YYYY-MM-DD').format('DD-MM-YYYY') : '-',
+                                      sorter: (a, b) => (a.issue_date||'').localeCompare(b.issue_date||'') },
+                                    { title: 'Diff', dataIndex: 'diff', key: 'diff', width: 60, align: 'center',
+                                      sorter: (a, b) => (Number(a.diff)||0) - (Number(b.diff)||0) },
+                                    { title: 'W/C', dataIndex: 'w_c', key: 'w_c', width: 80,
+                                      sorter: (a, b) => (a.w_c||'').localeCompare(b.w_c||'') },
+                                    { title: 'Status', dataIndex: 'status', key: 'status', width: 90, align: 'center',
+                                      sorter: (a, b) => (a.status||'').localeCompare(b.status||''),
+                                      render: (v) => v ? <Tag color={v === 'On time' ? 'success' : v === 'Delay' ? 'error' : 'warning'}>{v}</Tag> : '-' },
+                                    { title: 'Reason', dataIndex: 'reason', key: 'reason', width: 130,
+                                      sorter: (a, b) => (a.reason||'').localeCompare(b.reason||''),
+                                      render: (v) => v || '-' },
+                                    { title: 'Judgement', dataIndex: 'judgement', key: 'judgement', width: 100, align: 'center',
+                                      sorter: (a, b) => (a.judgement||'').localeCompare(b.judgement||''),
+                                      render: (v) => v ? <Tag color={v === 'Accept' ? 'success' : 'error'}>{v}</Tag> : '-' },
+                                    { title: 'Measuring Tools', dataIndex: 'measuring_tools', key: 'measuring_tools', width: 140,
+                                      sorter: (a, b) => (a.measuring_tools||'').localeCompare(b.measuring_tools||''),
+                                      render: (v) => v || '-' },
+                                ]}
+                            />
+                        </div>
+
                     </Spin>
                 </Content>
             </Layout>
@@ -583,6 +629,14 @@ export default function InspectionResultDashboard() {
                 .dark-select .ant-select-item { background: #0d1f35; color: #e8f4ff; }
                 .dark-select .ant-select-item-option-selected { background: #1890ff22; }
                 .dark-select .ant-select-item-option-active { background: #0e3a5c; }
+                .dark-inspect-table .ant-table { background: #072035; color: #e8f4ff; }
+                .dark-inspect-table .ant-table-thead > tr > th { background: #041c32; color: #6fa3c7; border-bottom: 1px solid #0e3a5c; font-size: 11px; }
+                .dark-inspect-table .ant-table-tbody > tr > td { background: #072035; color: #e8f4ff; border-bottom: 1px solid #0a2a42; font-size: 12px; }
+                .dark-inspect-table .ant-table-tbody > tr:hover > td { background: #0e3a5c !important; }
+                .dark-inspect-table .ant-pagination { color: #6fa3c7; }
+                .dark-inspect-table .ant-pagination-item a { color: #6fa3c7; }
+                .dark-inspect-table .ant-pagination-item-active a { color: #1890ff; }
+                .dark-inspect-table .ant-table-column-sorter { color: #6fa3c7; }
             `}</style>
         </Layout>
     );

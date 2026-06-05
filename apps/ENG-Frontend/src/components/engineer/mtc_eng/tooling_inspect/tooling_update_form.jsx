@@ -97,11 +97,25 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
       currentValues.issue_date = dayjs(currentValues.issue_date).format('YYYY-MM-DD');
     }
 
-    // Check for Delay: prompt reason only when status will be Delay
+    // Check for Delay: ask the backend (single source of truth — same calc that
+    // sets the saved status: excludes Sundays + holidays, Delay when diff > 3)
+    // so the reason prompt can never disagree with the stored status.
     let reason = null;
     if (currentValues.issue_date && initialData?.receive_date) {
-      const workingDays = calculateWorkingDays(initialData.receive_date, currentValues.issue_date);
-      if (workingDays > 3) {
+      let isDelay = false;
+      let workingDays = null;
+      try {
+        const { data } = await axios.get(server.TOOLING_INSPECT_STATUS_PREVIEW, {
+          params: { receive_date: initialData.receive_date, issue_date: currentValues.issue_date },
+        });
+        isDelay = data?.status === 'Delay';
+        workingDays = data?.diff;
+      } catch (err) {
+        // Fallback if preview endpoint is unreachable: local count (Sundays only)
+        workingDays = calculateWorkingDays(initialData.receive_date, currentValues.issue_date);
+        isDelay = workingDays > 3;
+      }
+      if (isDelay) {
         const inputOptions = REASON_OPTIONS.reduce((acc, o) => ({ ...acc, [o.value]: o.label }), {});
         const { value: selectedReason, isConfirmed } = await Swal.fire({
           icon: 'warning',

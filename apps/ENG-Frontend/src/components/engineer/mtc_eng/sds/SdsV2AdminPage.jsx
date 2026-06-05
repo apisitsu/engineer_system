@@ -15,6 +15,8 @@ import { server } from '../../../../constance/constance';
 import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import MachineCodes from './MachineCodes';
+import MachineTypes from './MachineTypes';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -24,6 +26,8 @@ const { Title, Text } = Typography;
 const PER_RECORD_KEYS = ['program_no', 'program_name', 'sds_rev', 'stamp_prepared', 'stamp_checked', 'stamp_approved'];
 const REV_ROWS = [1, 2, 3, 4, 5];
 
+// Kept (unused) — Per-record Params tab was removed for now; Program No/Name moved to Excel Config.
+// eslint-disable-next-line no-unused-vars
 const ParamsTab = ({ theme }) => {
   const { message } = App.useApp();
   const [allMachineTypes, setAllMachineTypes] = useState([]);
@@ -788,7 +792,7 @@ const ExcelMappingManager = ({ theme }) => {
                 label="Cell Address"
                 rules={[{ required: true, message: 'Required' }, {
                   pattern: /^[A-Za-z]{1,3}\d+$/,
-                  message: 'Format: B5, AB12 ฯลฯ',
+                  message: 'Format: B5, AB12, etc.',
                 }]}
               >
                 <Input
@@ -846,6 +850,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
   const [combos, setCombos] = useState([]);
   const [combosLoading, setCombosLoading] = useState(false);
   const [filterMachine, setFilterMachine] = useState('__all__');
+  const [showComboList, setShowComboList] = useState(false); // table starts hidden
 
   // Reset filter when selected machine is hidden by Configure Visible
   useEffect(() => {
@@ -901,6 +906,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 
   const selectCombo = (combo) => {
     setSelectedCombo(combo);
+    setShowComboList(false); // collapse list after picking a combo
     loadSlots(combo.machine_type, combo.process_code);
   };
 
@@ -1016,36 +1022,50 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
       {/* Left: Combo list */}
       <Col span={10}>
         <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
-          <Col flex="auto">
-            <Select
-              showSearch
-              value={filterMachine}
-              onChange={v => setFilterMachine(v)}
-              options={machineOptions}
-              style={{ width: '100%' }}
-              placeholder="Filter by Machine"
-              filterOption={(inp, opt) => opt.label.toLowerCase().includes(inp.toLowerCase())}
-            />
+          <Col>
+            <Button
+              icon={showComboList ? <UpOutlined /> : <DownOutlined />}
+              onClick={() => setShowComboList(s => !s)}
+            >
+              {showComboList ? 'Hide List' : 'Show List'}
+            </Button>
           </Col>
-          <Col><Button icon={<ReloadOutlined />} onClick={loadCombos} /></Col>
           <Col>
             <Button type="primary" icon={<PlusOutlined />} onClick={openNewCombo}>
               New
             </Button>
           </Col>
         </Row>
-        <Table
-          loading={combosLoading}
-          dataSource={combos.map((r, i) => ({ ...r, key: `${r.machine_type}_${r.process_code}_${i}` }))}
-          columns={comboColumns}
-          size="small"
-          bordered
-          pagination={{ pageSize: 15, showSizeChanger: false }}
-          rowClassName={row =>
-            selectedCombo?.machine_type === row.machine_type && selectedCombo?.process_code === row.process_code
-              ? 'ant-table-row-selected' : ''
-          }
-        />
+        {showComboList && (
+          <>
+            <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
+              <Col flex="auto">
+                <Select
+                  showSearch
+                  value={filterMachine}
+                  onChange={v => setFilterMachine(v)}
+                  options={machineOptions}
+                  style={{ width: '100%' }}
+                  placeholder="Filter by Machine"
+                  filterOption={(inp, opt) => opt.label.toLowerCase().includes(inp.toLowerCase())}
+                />
+              </Col>
+              <Col><Button icon={<ReloadOutlined />} onClick={loadCombos} /></Col>
+            </Row>
+            <Table
+              loading={combosLoading}
+              dataSource={combos.map((r, i) => ({ ...r, key: `${r.machine_type}_${r.process_code}_${i}` }))}
+              columns={comboColumns}
+              size="small"
+              bordered
+              pagination={{ pageSize: 15, showSizeChanger: false }}
+              rowClassName={row =>
+                selectedCombo?.machine_type === row.machine_type && selectedCombo?.process_code === row.process_code
+                  ? 'ant-table-row-selected' : ''
+              }
+            />
+          </>
+        )}
       </Col>
 
       {/* Right: Slot editor */}
@@ -1109,11 +1129,11 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 
       {/* New combo modal */}
       <Modal
-        title="เพิ่ม Combo ใหม่"
+        title="Add New Combo"
         open={newComboOpen}
         onOk={createNewCombo}
         onCancel={() => setNewComboOpen(false)}
-        okText="เริ่มแก้ไข"
+        okText="Start Editing"
         width={440}
         destroyOnHidden
       >
@@ -1130,7 +1150,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
             />
           </Form.Item>
           <Form.Item name="process_code" label="Process Code" rules={[{ required: true, message: 'Required' }]}>
-            {/* <Input placeholder="เช่น 1011, 1021, IDG001" /> */}
+            <Input placeholder="e.g. 1011, 1021, IDG001" />
           </Form.Item>
         </Form>
       </Modal>
@@ -1146,6 +1166,14 @@ const ROW_RANGE = Array.from({ length: 40 }, (_, i) => i + 16).filter(r => !EXCL
 
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
 const GW_ROW_RANGE = [50, 51, 52, 53, 54, 55];
+
+// Header single-cell fields (moved here from the former Per-record Params tab).
+// Stored as machine-level params (cn IS NULL) by default; CN-override aware.
+// Cell addresses come from sds_excel_mapping (program_no→Z4, program_name→Z5).
+const HEADER_CELL_FIELDS = [
+  { key: 'program_no',   label: 'Program No',   cell: 'Z4' },
+  { key: 'program_name', label: 'Program Name', cell: 'Z5' },
+];
 
 const MachineConfigTab = ({ theme, visibleMachineNames }) => {
   const { message } = App.useApp();
@@ -1171,6 +1199,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
   const [configLoading, setConfigLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [showMachineList, setShowMachineList] = useState(false); // table starts hidden
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -1191,6 +1220,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
 
   const loadConfig = useCallback(async (machineName) => {
     setSelectedMachine(machineName);
+    setShowMachineList(false); // collapse list after picking a machine
     // Reset CN override mode when switching machines
     setSelectedCn(null);
     setCnInput('');
@@ -1256,6 +1286,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
       res.data.forEach(r => {
         ids[r.param_key] = r.id;
         // Only load cell value keys — is_header and _type are machine-level (read-only per CN)
+        if (HEADER_CELL_FIELDS.some(f => f.key === r.param_key)) { overrides[r.param_key] = r.param_value || ''; return; }
         if (/^gw_row_\d+_[A-Z]{1,3}$/i.test(r.param_key)) { gwOverrides[r.param_key] = r.param_value || ''; return; }
         if (/^row_\d+_[A-I]$/i.test(r.param_key)) { overrides[r.param_key] = r.param_value || ''; }
       });
@@ -1321,6 +1352,13 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     markDirty();
   };
 
+  // Header single-cell fields (program_no/program_name) — machine default or CN override
+  const handleHeaderFieldChange = (key, val) => {
+    if (selectedCn) setCnOverrideData(prev => ({ ...prev, [key]: val }));
+    else setCellData(prev => ({ ...prev, [key]: val }));
+    markDirty();
+  };
+
   const saveConfig = async () => {
     setSaving(true);
     try {
@@ -1348,6 +1386,14 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
             } else if (cnRowIds[key]) {
               deleteIds.push(cnRowIds[key]);
             }
+          }
+        }
+        for (const f of HEADER_CELL_FIELDS) {
+          const val = (cnOverrideData[f.key] ?? '').toString();
+          if (val.trim()) {
+            upsertParams.push({ param_key: f.key, param_value: val.trim() });
+          } else if (cnRowIds[f.key]) {
+            deleteIds.push(cnRowIds[f.key]);
           }
         }
         if (upsertParams.length) {
@@ -1403,6 +1449,10 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           const hdrKey = `gw_row_${rowNum}_is_header`;
           const hdrVal = gwRowHeaders[rowNum] ? '1' : '';
           if (hdrVal || origKeys.has(hdrKey)) params.push({ param_key: hdrKey, param_value: hdrVal || null });
+        }
+        for (const f of HEADER_CELL_FIELDS) {
+          const val = cellData[f.key] || '';
+          if (val || origKeys.has(f.key)) params.push({ param_key: f.key, param_value: val || null });
         }
         await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
           cn: null, machine_type_name: selectedMachine, params,
@@ -1567,29 +1617,48 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
 
   const machineListBlock = (
     <>
-      <Row gutter={8} style={{ marginBottom: 12 }}>
+      <Row gutter={8} align="middle" style={{ marginBottom: showMachineList ? 12 : 16 }}>
         <Col>
-          <Input.Search
-            placeholder="Search code / name"
-            allowClear
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onSearch={loadList}
-            style={{ width: 280 }}
-            enterButton={<SearchOutlined />}
-          />
+          <Button
+            icon={showMachineList ? <UpOutlined /> : <DownOutlined />}
+            onClick={() => setShowMachineList(s => !s)}
+          >
+            {showMachineList ? 'Hide Machine List' : 'Show Machine List'}
+          </Button>
         </Col>
-        <Col><Button icon={<ReloadOutlined />} onClick={loadList}>Refresh</Button></Col>
+        {selectedMachine && (
+          <Col>
+            <Text type="secondary">Selected: <Text strong>{selectedMachine}</Text></Text>
+          </Col>
+        )}
       </Row>
-      <Table
-        loading={listLoading}
-        dataSource={displayedMachineTypes.map(r => ({ ...r, key: r.id }))}
-        columns={machineListCols}
-        size="small"
-        pagination={{ pageSize: 15, showSizeChanger: false }}
-        rowClassName={row => row.machine_type_name === selectedMachine ? 'ant-table-row-selected' : ''}
-        style={{ marginBottom: 24 }}
-      />
+      {showMachineList && (
+        <>
+          <Row gutter={8} style={{ marginBottom: 12 }}>
+            <Col>
+              <Input.Search
+                placeholder="Search code / name"
+                allowClear
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onSearch={loadList}
+                style={{ width: 280 }}
+                enterButton={<SearchOutlined />}
+              />
+            </Col>
+            <Col><Button icon={<ReloadOutlined />} onClick={loadList}>Refresh</Button></Col>
+          </Row>
+          <Table
+            loading={listLoading}
+            dataSource={displayedMachineTypes.map(r => ({ ...r, key: r.id }))}
+            columns={machineListCols}
+            size="small"
+            pagination={{ pageSize: 15, showSizeChanger: false }}
+            rowClassName={row => row.machine_type_name === selectedMachine ? 'ant-table-row-selected' : ''}
+            style={{ marginBottom: 24 }}
+          />
+        </>
+      )}
     </>
   );
 
@@ -1605,7 +1674,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           </Col>
           <Col>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              แก้ค่า cell ที่ต้องการ — cell สีน้ำเงิน = override, สีปกติ = ใช้ค่า machine default
+              Edit any cell — blue cell = override, normal = uses machine default
             </Text>
           </Col>
           <Col flex="auto" />
@@ -1620,7 +1689,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           <Col>
             <Space.Compact>
               <Input
-                placeholder="CN Override เช่น C25-0190"
+                placeholder="CN Override e.g. C25-0190"
                 value={cnInput}
                 onChange={e => setCnInput(e.target.value)}
                 onPressEnter={() => cnInput.trim() && loadCnConfig(cnInput)}
@@ -1637,7 +1706,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           </Col>
           <Col>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              ว่าง = แก้ค่า standard (ทุก CN)
+              Leave blank = edit machine default (all CNs)
             </Text>
           </Col>
         </>
@@ -1668,6 +1737,32 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
         <Spin spinning={configLoading}>
           {cnModeBar}
           {saveBar}
+          <Row gutter={16} style={{ marginBottom: 12 }}>
+            {HEADER_CELL_FIELDS.map(f => {
+              const hasOverride = !!selectedCn && cnOverrideData[f.key] !== undefined;
+              const displayValue = selectedCn
+                ? (cnOverrideData[f.key] ?? cellData[f.key] ?? '')
+                : (cellData[f.key] || '');
+              return (
+                <Col key={f.key} span={8}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {f.label} <Tag color="default" style={{ marginInlineStart: 4 }}>{f.cell}</Tag>
+                  </Text>
+                  <Input
+                    size="small"
+                    value={displayValue}
+                    placeholder={selectedCn ? 'CN override (blank = machine default)' : `${f.label} (machine default)`}
+                    onChange={e => handleHeaderFieldChange(f.key, e.target.value)}
+                    style={{
+                      marginTop: 2,
+                      backgroundColor: hasOverride ? '#e6f4ff' : undefined,
+                      borderColor: hasOverride ? '#1677ff' : undefined,
+                    }}
+                  />
+                </Col>
+              );
+            })}
+          </Row>
           <style>{`.sds-config-grid .sds-hdr-row td { background-color: #d9d9d9 !important; }`}</style>
           <Table
             className="sds-config-grid"
@@ -1755,46 +1850,20 @@ const loadSavedExpandedPcs = (catKey) => {
   } catch { return new Set(); }
 };
 
-const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
+const AuditTab = ({ theme }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
   const [activeCategory, setActiveCategory] = useState(() => localStorage.getItem('sds_audit_category') || null);
-  const [showNoPlan, setShowNoPlan] = useState(false);
   const [expandedProcessCodes, setExpandedProcessCodes] = useState(() =>
     loadSavedExpandedPcs(localStorage.getItem('sds_audit_category') || null)
   );
-
-  // ── Config (Process Codes + Visible Machines) ──
-  const [auditConfig, setAuditConfig] = useState({ process_codes: [], sub_class_patterns: [] });
-  const [configOpen, setConfigOpen] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configDraft, setConfigDraft] = useState([]);
-  const [processMasterOpts, setProcessMasterOpts] = useState([]);
-  const [allMachineTypes, setAllMachineTypes] = useState([]);
-  const [visibleTempChecked, setVisibleTempChecked] = useState([]);
-
-  useEffect(() => {
-    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
-      .then(r => {
-        const seen = new Set();
-        setAllMachineTypes(r.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
-      })
-      .catch(() => {});
-    axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER)
-      .then(r => setProcessMasterOpts(r.data.map(row => ({
-        value: row.process_code,
-        label: `${row.process_code} — ${row.process_eng || ''}`,
-      }))))
-      .catch(() => {});
-  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT);
       setData(res.data);
-      if (res.data.config) setAuditConfig(res.data.config);
     } catch (err) {
       message.error('Load audit data failed');
     } finally {
@@ -1803,43 +1872,6 @@ const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
   }, [message]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  const openConfig = () => {
-    setConfigDraft([...(auditConfig.process_codes || [])]);
-    setVisibleTempChecked(
-      visibleMachineNames
-        ? allMachineTypes.filter(m => visibleMachineNames.has(m.machine_type_name)).map(m => m.machine_type_name)
-        : allMachineTypes.map(m => m.machine_type_name)
-    );
-    setConfigOpen(true);
-  };
-
-  const saveConfig = async () => {
-    setConfigSaving(true);
-    try {
-      const [auditRes] = await Promise.all([
-        axios.put(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG, {
-          process_codes: configDraft,
-          sub_class_patterns: auditConfig.sub_class_patterns,
-        }),
-        (() => {
-          const allNames = allMachineTypes.map(m => m.machine_type_name);
-          const isAll = visibleTempChecked.length === allNames.length && allNames.every(n => visibleTempChecked.includes(n));
-          const next = isAll ? null : visibleTempChecked;
-          setVisibleMachineNames(next ? new Set(next) : null);
-          return axios.put(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES, { visible_machines: next });
-        })(),
-      ]);
-      setAuditConfig(auditRes.data.data);
-      setConfigOpen(false);
-      message.success('Settings saved');
-      loadData();
-    } catch (err) {
-      message.error(err.response?.data?.error || 'Save failed');
-    } finally {
-      setConfigSaving(false);
-    }
-  };
 
   // Static categories with counts derived from itemCounts
   const categories = useMemo(() => {
@@ -1871,15 +1903,8 @@ const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
     const next = activeCategory === key ? null : key;
     setActiveCategory(next);
     localStorage.setItem('sds_audit_category', next || '');
-    setShowNoPlan(false);
     setExpandedProcessCodes(loadSavedExpandedPcs(next));
   };
-
-  const filteredNoPlan = useMemo(() => {
-    if (!activeCategory) return data.noProcessPlan;
-    const prefixes = getCategoryPrefixes(activeCategory);
-    return data.noProcessPlan.filter(r => prefixes.some(p => r.sub_class?.startsWith(p)));
-  }, [data.noProcessPlan, activeCategory, getCategoryPrefixes]);
 
   const filteredMissingTooling = useMemo(() => {
     if (!activeCategory) return data.missingTooling;
@@ -1915,10 +1940,6 @@ const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
     });
   };
 
-  const noPlanCols = [
-    { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
-  ];
-
   const missingCnCols = [
     { title: 'CN', dataIndex: 'control_no', key: 'control_no', sorter: (a, b) => a.control_no?.localeCompare(b.control_no) },
   ];
@@ -1945,7 +1966,6 @@ const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
                 onClick={() => {
                   setActiveCategory(null);
                   localStorage.setItem('sds_audit_category', '');
-                  setShowNoPlan(false);
                   setExpandedProcessCodes(new Set());
                 }}
               >
@@ -1984,198 +2004,231 @@ const AuditTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col><Title level={5}><ReloadOutlined /> Data Consistency Audit</Title></Col>
         <Col>
-          <Space>
-            <Button icon={<SettingOutlined />} onClick={openConfig}>
-              Configure Settings
-              {auditConfig.process_codes?.length > 0 && (
-                <Tag style={{ marginLeft: 4 }}>{auditConfig.process_codes.length} PC</Tag>
-              )}
-              {visibleMachineNames && (
-                <Tag color="blue" style={{ marginLeft: 2 }}>{visibleMachineNames.size} visible</Tag>
-              )}
+          <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>Refresh All</Button>
+        </Col>
+      </Row>
+
+      <div style={{ marginBottom: 12 }}>
+        <Tag color="warning">Warning: Missing Tooling ({new Set(filteredMissingTooling.map(r => r.control_no)).size} CN)</Tag>
+      </div>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+        Process Plan exists but missing Tooling — Click Process Code to see items
+      </Text>
+      <Space wrap style={{ marginBottom: 16 }}>
+        {expandedProcessCodes.size > 0 && (
+          <Button
+            size="small"
+            danger
+            onClick={() => {
+              setExpandedProcessCodes(new Set());
+              if (activeCategory) localStorage.setItem(`sds_audit_pcs_${activeCategory}`, '[]');
+            }}
+          >
+            Collapse All
+          </Button>
+        )}
+        {sortedProcessCodes.map(pc => {
+          const isExpanded = expandedProcessCodes.has(pc);
+          const cnCount = new Set(missingByProcessCode[pc].map(r => r.control_no)).size;
+          return (
+            <Button
+              key={pc}
+              size="small"
+              type={isExpanded ? 'primary' : 'default'}
+              onClick={() => toggleProcessCode(pc)}
+            >
+              {pc}
+              <Tag
+                color={isExpanded ? 'white' : 'default'}
+                style={{ marginLeft: 4, color: isExpanded ? '#1677ff' : undefined }}
+              >
+                {cnCount}
+              </Tag>
             </Button>
-            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>Refresh All</Button>
+          );
+        })}
+      </Space>
+      {sortedProcessCodes.filter(pc => expandedProcessCodes.has(pc)).map(pc => {
+        const rows = missingByProcessCode[pc];
+        const uniqCns = [...new Set(rows.map(r => r.control_no))].sort();
+        return (
+          <div key={pc} style={{ marginBottom: 16 }}>
+            <Row align="middle" style={{ marginBottom: 6 }}>
+              <Col>
+                <Text strong>Process Code: </Text>
+                <Tag color="blue">{pc}</Tag>
+                <Text type="secondary" style={{ fontSize: 12 }}>{uniqCns.length} CN</Text>
+              </Col>
+            </Row>
+            <Table
+              dataSource={uniqCns.map(cn => ({ control_no: cn, key: cn }))}
+              columns={missingCnCols}
+              size="small"
+              loading={loading}
+              bordered
+              pagination={{ pageSize: 20, showSizeChanger: false }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ── Tab: Configure Settings (Audit Process Codes + Visible Machines) ──────────
+
+const ConfigureSettingsTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [processMasterOpts, setProcessMasterOpts] = useState([]);
+  const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [configDraft, setConfigDraft] = useState([]);
+  const [subClassPatterns, setSubClassPatterns] = useState([]);
+  const [visibleTempChecked, setVisibleTempChecked] = useState([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [mtRes, pmRes, cfgRes, vmRes] = await Promise.all([
+        axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES),
+        axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER),
+        axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG),
+        axios.get(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES),
+      ]);
+      const seen = new Set();
+      const mts = mtRes.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name));
+      setAllMachineTypes(mts);
+      setProcessMasterOpts(pmRes.data.map(row => ({
+        value: row.process_code,
+        label: `${row.process_code} — ${row.process_eng || ''}`,
+      })));
+      const cfg = cfgRes.data?.data || {};
+      setConfigDraft([...(cfg.process_codes || [])].sort());
+      setSubClassPatterns(cfg.sub_class_patterns || []);
+      const visNames = vmRes.data?.visible_machines; // null = all visible
+      setVisibleTempChecked(
+        visNames
+          ? mts.filter(m => visNames.includes(m.machine_type_name)).map(m => m.machine_type_name)
+          : mts.map(m => m.machine_type_name)
+      );
+    } catch (err) {
+      message.error('Load settings failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const allNames = allMachineTypes.map(m => m.machine_type_name);
+      const isAll = visibleTempChecked.length === allNames.length && allNames.every(n => visibleTempChecked.includes(n));
+      const next = isAll ? null : visibleTempChecked;
+      await Promise.all([
+        axios.put(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG, {
+          process_codes: configDraft,
+          sub_class_patterns: subClassPatterns,
+        }),
+        axios.put(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES, { visible_machines: next }),
+      ]);
+      setVisibleMachineNames(next ? new Set(next) : null);
+      message.success('Settings saved');
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Spin spinning={loading}>
+      <Row align="middle" style={{ marginBottom: 16 }}>
+        <Col flex="auto">
+          <Title level={5} style={{ margin: 0, color: theme.colors.text }}>
+            <SettingOutlined /> Configure Settings
+          </Title>
+        </Col>
+        <Col>
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={load}>Reload</Button>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>Save</Button>
           </Space>
         </Col>
       </Row>
 
-      <Tabs
-        type="card"
-        size="small"
-        items={[
-          {
-            key: 'no-plan',
-            label: <Tag color="error">Critical: No Process Plan ({filteredNoPlan.length})</Tag>,
-            children: (
-              <>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                  Incomplete Routing (Process Plan) from LPB — Can't generate SDS
-                </Text>
-                <Button
-                  size="small"
-                  type={showNoPlan ? 'primary' : 'default'}
-                  onClick={() => setShowNoPlan(v => !v)}
-                  style={{ marginBottom: 12 }}
-                >
-                  {showNoPlan ? 'Hide List' : `Show List (${filteredNoPlan.length} CN)`}
-                </Button>
-                {showNoPlan && (
-                  <Table
-                    dataSource={filteredNoPlan}
-                    columns={noPlanCols}
-                    size="small"
-                    loading={loading}
-                    bordered
-                    rowKey="control_no"
-                    pagination={{ pageSize: 20, showSizeChanger: false }}
-                  />
-                )}
-              </>
-            ),
-          },
-          {
-            key: 'missing-tool',
-            label: <Tag color="warning">Warning: Missing Tooling ({new Set(filteredMissingTooling.map(r => r.control_no)).size} CN)</Tag>,
-            children: (
-              <>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                  Process Plan exists but missing Tooling — Click Process Code to see items
-                </Text>
-                <Space wrap style={{ marginBottom: 16 }}>
-                  {expandedProcessCodes.size > 0 && (
-                    <Button
-                      size="small"
-                      danger
-                      onClick={() => {
-                        setExpandedProcessCodes(new Set());
-                        if (activeCategory) localStorage.setItem(`sds_audit_pcs_${activeCategory}`, '[]');
-                      }}
-                    >
-                      Collapse All
-                    </Button>
-                  )}
-                  {sortedProcessCodes.map(pc => {
-                    const isExpanded = expandedProcessCodes.has(pc);
-                    const cnCount = new Set(missingByProcessCode[pc].map(r => r.control_no)).size;
-                    return (
-                      <Button
-                        key={pc}
-                        size="small"
-                        type={isExpanded ? 'primary' : 'default'}
-                        onClick={() => toggleProcessCode(pc)}
-                      >
-                        {pc}
-                        <Tag
-                          color={isExpanded ? 'white' : 'default'}
-                          style={{ marginLeft: 4, color: isExpanded ? '#1677ff' : undefined }}
-                        >
-                          {cnCount}
-                        </Tag>
-                      </Button>
-                    );
-                  })}
-                </Space>
-                {sortedProcessCodes.filter(pc => expandedProcessCodes.has(pc)).map(pc => {
-                  const rows = missingByProcessCode[pc];
-                  const uniqCns = [...new Set(rows.map(r => r.control_no))].sort();
-                  return (
-                    <div key={pc} style={{ marginBottom: 16 }}>
-                      <Row align="middle" style={{ marginBottom: 6 }}>
-                        <Col>
-                          <Text strong>Process Code: </Text>
-                          <Tag color="blue">{pc}</Tag>
-                          <Text type="secondary" style={{ fontSize: 12 }}>{uniqCns.length} CN</Text>
-                        </Col>
-                      </Row>
-                      <Table
-                        dataSource={uniqCns.map(cn => ({ control_no: cn, key: cn }))}
-                        columns={missingCnCols}
-                        size="small"
-                        loading={loading}
-                        bordered
-                        pagination={{ pageSize: 20, showSizeChanger: false }}
-                      />
-                    </div>
-                  );
-                })}
-              </>
-            ),
-          },
-        ]}
-      />
+      <Row gutter={24}>
+        <Col xs={24} md={12}>
+          <Divider orientation="left" plain style={{ marginTop: 0 }}>Audit Process Codes</Divider>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+            Process codes checked for missing tooling in the audit.
+          </Text>
+          <Space style={{ marginBottom: 8 }}>
+            <Button size="small" onClick={() => setConfigDraft(processMasterOpts.map(o => o.value).sort())}>
+              Select All
+            </Button>
+            <Button size="small" onClick={() => setConfigDraft([])}>
+              Deselect All
+            </Button>
+          </Space>
+          <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+            <Checkbox.Group
+              value={configDraft}
+              onChange={vals => setConfigDraft([...vals].sort())}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              {processMasterOpts.map(o => (
+                <Checkbox key={o.value} value={o.value}>
+                  <Text style={{ fontSize: 13 }}>{o.label}</Text>
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+          <Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11 }}>
+            {configDraft.length} code{configDraft.length !== 1 ? 's' : ''} selected
+          </Text>
+        </Col>
 
-      {/* ── Settings Config Modal ── */}
-      <Modal
-        title={<Space><SettingOutlined /> Configure Settings</Space>}
-        open={configOpen}
-        onCancel={() => setConfigOpen(false)}
-        onOk={saveConfig}
-        okText="Save"
-        confirmLoading={configSaving}
-        width={520}
-        destroyOnHidden
-      >
-        <Divider orientation="left" plain style={{ marginTop: 0 }}>Audit Process Codes</Divider>
-        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-          Process codes checked for missing tooling in the audit.
-        </Text>
-        <Select
-          mode="multiple"
-          showSearch
-          allowClear
-          style={{ width: '100%', marginBottom: 4 }}
-          placeholder="Select process codes..."
-          value={configDraft}
-          onChange={vals => setConfigDraft([...vals].sort())}
-          options={processMasterOpts}
-          filterOption={(inp, opt) =>
-            opt.value.includes(inp) || (opt.label || '').toLowerCase().includes(inp.toLowerCase())
-          }
-          maxTagCount={6}
-          maxTagTextLength={12}
-          optionFilterProp="label"
-          listHeight={220}
-        />
-        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
-          {configDraft.length} code{configDraft.length !== 1 ? 's' : ''} selected
-        </Text>
-
-        <Divider orientation="left" plain>Visible Machines (Excel Config)</Divider>
-        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-          Machines shown in Excel Config and Machine Tool Config tabs.
-        </Text>
-        <Space style={{ marginBottom: 8 }}>
-          <Button size="small" onClick={() => setVisibleTempChecked(allMachineTypes.map(m => m.machine_type_name))}>
-            Select All
-          </Button>
-          <Button size="small" onClick={() => setVisibleTempChecked([])}>
-            Deselect All
-          </Button>
-        </Space>
-        <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
-          <Checkbox.Group
-            value={visibleTempChecked}
-            onChange={setVisibleTempChecked}
-            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-          >
-            {allMachineTypes.map(m => (
-              <Checkbox key={m.id ?? m.machine_type_name} value={m.machine_type_name}>
-                <Text style={{ fontSize: 13 }}>
-                  <Text type="secondary">{m.machine_type_code}</Text>
-                  {' — '}
-                  {m.machine_group || m.machine_type_name}
-                </Text>
-              </Checkbox>
-            ))}
-          </Checkbox.Group>
-        </div>
-        <Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11 }}>
-          {visibleTempChecked.length === allMachineTypes.length
-            ? 'All machines visible'
-            : `${visibleTempChecked.length} of ${allMachineTypes.length} machines visible`}
-        </Text>
-      </Modal>
-    </div>
+        <Col xs={24} md={12}>
+          <Divider orientation="left" plain style={{ marginTop: 0 }}>Visible Machines</Divider>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+            Machines shown in Excel Config and Machine Tool Config tabs.
+          </Text>
+          <Space style={{ marginBottom: 8 }}>
+            <Button size="small" onClick={() => setVisibleTempChecked(allMachineTypes.map(m => m.machine_type_name))}>
+              Select All
+            </Button>
+            <Button size="small" onClick={() => setVisibleTempChecked([])}>
+              Deselect All
+            </Button>
+          </Space>
+          <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+            <Checkbox.Group
+              value={visibleTempChecked}
+              onChange={setVisibleTempChecked}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              {allMachineTypes.map(m => (
+                <Checkbox key={m.id ?? m.machine_type_name} value={m.machine_type_name}>
+                  <Text style={{ fontSize: 13 }}>
+                    <Text type="secondary">{m.machine_type_code}</Text>
+                    {' — '}
+                    {m.machine_group || m.machine_type_name}
+                  </Text>
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+          <Text type="secondary" style={{ display: 'block', marginTop: 6, fontSize: 11 }}>
+            {visibleTempChecked.length === allMachineTypes.length
+              ? 'All machines visible'
+              : `${visibleTempChecked.length} of ${allMachineTypes.length} machines visible`}
+          </Text>
+        </Col>
+      </Row>
+    </Spin>
   );
 };
 
@@ -2196,7 +2249,7 @@ const SdsV2AdminPage = () => {
   }, []);
 
   const tabItems = [
-    { key: 'params', label: 'Per-record Params', children: <ParamsTab theme={theme} /> },
+    // Per-record Params tab removed — Program No (Z4) / Program Name (Z5) now live in Excel Config.
     { key: 'machine-config', label: 'Excel Config', children: <MachineConfigTab theme={theme} visibleMachineNames={visibleMachineNames} /> },
     {
       key: 'images',
@@ -2211,7 +2264,10 @@ const SdsV2AdminPage = () => {
         />
       ),
     },
-    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
+    { key: 'machine-codes', label: 'Machine Codes', children: <MachineCodes theme={theme} /> },
+    { key: 'machine-types', label: 'Machine Types', children: <MachineTypes theme={theme} /> },
+    { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
+    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
   ];
 
   return (

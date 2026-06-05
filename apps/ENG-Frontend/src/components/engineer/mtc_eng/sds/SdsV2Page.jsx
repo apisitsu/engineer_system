@@ -48,6 +48,7 @@ const SdsV2Page = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [tsData, setTsData] = useState(null);
+  const [cnHistory, setCnHistory] = useState(null);
 
   // PDF modal state
   const [pdfModal, setPdfModal] = useState(false);
@@ -64,17 +65,20 @@ const SdsV2Page = () => {
     setLoading(true);
     setData(null);
     setTsData(null);
+    setCnHistory(null);
     try {
-      const [searchRes, mtRes, tsRes, mtConfigRes] = await Promise.all([
+      const [searchRes, mtRes, tsRes, mtConfigRes, histRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
         allMachineTypes.length ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } }),
         axios.post(server.TSV2_SEARCH, { cn: cnVal }).catch(() => null),
         axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS).catch(() => null),
+        axios.get(server.MTC_SDS_V2_ADMIN_CN_HISTORY, { params: { cn: cnVal } }).catch(() => null),
       ]);
       setData(searchRes.data);
       if (mtRes) setAllMachineTypes(mtRes.data.filter(m => m.is_active && m.machine_type_name));
       if (tsRes?.data?.success) setTsData(tsRes.data);
       if (mtConfigRes?.data) setMachineToolsConfig(Array.isArray(mtConfigRes.data) ? mtConfigRes.data : []);
+      if (histRes?.data?.rows?.length) setCnHistory(histRes.data);
     } catch (err) {
       message.error(err.response?.data?.error || 'Can not find');
     } finally {
@@ -169,14 +173,51 @@ const SdsV2Page = () => {
     }, {});
   }, [data]);
 
+  // Map process_code → machines that historically ran this process (from Production History).
+  // pc_production.process shares the same numeric code space as process_info.process_code.
+  const machineHistoryByProcess = useMemo(() => {
+    const map = {};
+    if (!cnHistory?.rows) return map;
+    for (const r of cnHistory.rows) {
+      const pc = String(r.process || '').trim();
+      if (!pc) continue;
+      if (!map[pc]) map[pc] = [];
+      map[pc].push(r);
+    }
+    Object.values(map).forEach(arr => arr.sort((a, b) => b.production_count - a.production_count));
+    return map;
+  }, [cnHistory]);
+
   const processInfoCols = [
     { title: 'Seq', dataIndex: 'process_seqno', width: 60, align: 'center' },
     { title: 'Rev', dataIndex: 'rev', width: 60 },
     { title: 'Process Code', dataIndex: 'process_code', width: 120 },
     { title: 'Process', dataIndex: 'process_eng' },
     { title: 'WC', dataIndex: 'wc', width: 80 },
-    { title: 'CT', dataIndex: 'ct', width: 80 },
-    { title: 'ST', dataIndex: 'st', width: 80 },
+    {
+      title: 'Machine History',
+      key: 'machine_history',
+      width: 220,
+      render: (_, row) => {
+        const hist = machineHistoryByProcess[String(row.process_code || '').trim()] || [];
+        if (!hist.length) return <Text type="secondary">—</Text>;
+        return (
+          <Space size={[4, 4]} wrap>
+            {hist.map((h, i) => (
+              <Tag
+                key={i}
+                color={h.machine_type_code ? 'blue' : 'default'}
+                style={{ margin: 0 }}
+                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}
+              >
+                {h.machine_name || 'Unknown'}
+                <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
     {
       title: 'PDF',
       key: 'pdf',

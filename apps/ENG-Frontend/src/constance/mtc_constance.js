@@ -13,6 +13,7 @@ export const MTC_PATHS = {
   TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
+  SDS_COVERAGE_REPORT: '/eng/mtc_eng/sds-coverage-report',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
