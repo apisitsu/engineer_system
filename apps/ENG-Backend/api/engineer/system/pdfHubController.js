@@ -347,7 +347,7 @@ router.put('/watermarks/:id', async (req, res) => {
         const { name, text, color, opacity, font_size, angle } = req.body;
         const result = await engPool.query(
             `UPDATE tt_pdf_watermarks 
-             SET name = $1, text = $2, color = $3, opacity = $4, font_size = $5, angle = $6, updated_at = NOW()
+             SET name = $1, text = $2, color = $3, opacity = $4, font_size = $5, angle = $6
              WHERE id = $7
              RETURNING *`,
             [name, text, color, opacity, font_size, angle, id]

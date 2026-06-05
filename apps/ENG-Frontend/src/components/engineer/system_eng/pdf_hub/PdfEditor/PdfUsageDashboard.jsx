@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Row, Col, Card, Statistic, Table, DatePicker, message, Spin, Space, Tabs, Tag } from 'antd';
+import { Modal, Row, Col, Card, Statistic, Table, DatePicker, message, Spin, Space, Tabs, Tag, Progress, Empty } from 'antd';
 import { FilePdfOutlined, CheckCircleOutlined, InfoCircleOutlined, DollarOutlined, HistoryOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useTheme } from '../../../../../theme';
 import dayjs from 'dayjs';
 import { Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip as ChartTooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip as ChartTooltip, Legend, Filler } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler, ChartDataLabels);
 
 const PdfUsageDashboard = ({ open, onClose }) => {
     const { theme } = useTheme();
@@ -86,40 +87,85 @@ const PdfUsageDashboard = ({ open, onClose }) => {
         return `${yearStr}-${monthNum}`;
     });
 
+    const currentMonthStr = dayjs().format('YYYY-MM');
+    const currentMonthData = stats.chartData.find(d => d.month === currentMonthStr);
+    const currentMonthSavings = currentMonthData
+        ? (parseInt(currentMonthData.view_pages || 0) * 0.10) + (parseInt(currentMonthData.action_pages || 0) * 0.50)
+        : 0;
+
+    const savingsData = allMonths.map(monthLabel => {
+        const found = stats.chartData.find(d => d.month === monthLabel);
+        if (found) {
+            return (parseInt(found.view_pages || 0) * 0.10) + (parseInt(found.action_pages || 0) * 0.50);
+        }
+        return 0; // Show 0 for months without data
+    });
+
+    const targetDataset = {
+        label: 'Target',
+        data: allMonths.map(() => 8000),
+        borderColor: theme.colors.success,
+        borderWidth: 1.5,
+        borderDash: [5, 5],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        datalabels: {
+            display: (context) => context.dataIndex === context.dataset.data.length - 1,
+            formatter: () => 'Target',
+            align: 'top',
+            anchor: 'end',
+            color: theme.colors.success,
+            font: { size: 12 }
+        }
+    };
+
     const lineData = {
         labels: allMonths,
         datasets: [
             {
                 label: 'Cost Savings (THB)',
-                data: allMonths.map(monthLabel => {
-                    const found = stats.chartData.find(d => d.month === monthLabel);
-                    if (found) {
-                        return (parseInt(found.view_pages || 0) * 0.10) + (parseInt(found.action_pages || 0) * 0.50);
-                    }
-                    return 0; // Show 0 for months without data
-                }),
+                data: savingsData,
                 borderColor: theme.colors.success,
-                backgroundColor: 'rgba(82, 196, 26, 0.2)',
+                backgroundColor: 'rgba(82, 196, 26, 0.4)',
                 borderWidth: 2,
                 pointBackgroundColor: theme.colors.success,
-                tension: 0.3,
-                fill: true
-            }
+                tension: 0,
+                fill: true,
+                datalabels: {
+                    align: 'top',
+                    anchor: 'end',
+                    formatter: (value) => value > 0 ? value.toLocaleString() : '',
+                    font: { size: 11, weight: 'bold' }
+                }
+            },
+            targetDataset
         ]
     };
 
     const lineOptions = {
         responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+            padding: { top: 20 }
+        },
         plugins: {
             legend: { display: false },
             tooltip: {
                 callbacks: {
-                    label: (context) => `฿${context.raw.toFixed(2)}`
+                    label: (context) => {
+                        if (context.dataset.label === 'Target') return `Target: ฿8,000.00`;
+                        return `฿${context.raw.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                    }
                 }
             }
         },
         scales: {
-            y: { beginAtZero: true, title: { display: true, text: 'THB' } },
+            y: {
+                beginAtZero: true,
+                title: { display: true, text: 'THB' },
+                suggestedMax: Math.max(...savingsData, 8000) * 1.2
+            },
             x: { title: { display: true, text: 'Month' } }
         }
     };
@@ -130,13 +176,13 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             title: 'View Pages (0.10 THB)',
             dataIndex: 'view_pages',
             key: 'view_pages',
-            render: (val) => <span style={{ color: theme.colors.primary }}>{val || 0} Pages</span>
+            render: (val) => <span style={{ color: theme.colors.primary }}>{parseInt(val || 0).toLocaleString()} Pages</span>
         },
         {
             title: 'Action Pages (0.50 THB)',
             dataIndex: 'action_pages',
             key: 'action_pages',
-            render: (val) => <span style={{ color: theme.colors.success }}>{val || 0} Pages</span>
+            render: (val) => <span style={{ color: theme.colors.success }}>{parseInt(val || 0).toLocaleString()} Pages</span>
         },
         {
             title: 'Cost Saved (THB)',
@@ -145,7 +191,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                 const vPages = parseInt(record.view_pages) || 0;
                 const aPages = parseInt(record.action_pages) || 0;
                 const total = (vPages * 0.10) + (aPages * 0.50);
-                return <strong style={{ color: '#52c41a' }}>฿{total.toFixed(2)}</strong>;
+                return <strong style={{ color: '#52c41a' }}>฿{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>;
             }
         }
     ];
@@ -156,7 +202,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             dataIndex: 'created_at',
             key: 'created_at',
             render: (val) => dayjs(val).format('YYYY-MM-DD HH:mm:ss'),
-            width: 160
+            width: 200
         },
         {
             title: 'User',
@@ -221,87 +267,116 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                             label: <span><DollarOutlined /> KPI & Cost Reduction</span>,
                             children: (
                                 <>
-                                    <div style={{ padding: '16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <h3 style={{ margin: 0 }}>Yearly Report</h3>
-                                        <DatePicker
-                                            picker="year"
-                                            value={selectedYear}
-                                            onChange={(val) => setSelectedYear(val)}
-                                            allowClear={false}
-                                        />
-                                    </div>
-                                    <div style={{ background: theme.colors.background, padding: 24, borderRadius: 8 }}>
-                                        <Row gutter={[16, 16]}>
-                                            <Col span={8}>
-                                                <Card bordered={false} style={{ borderRadius: 12, borderLeft: `4px solid ${theme.colors.primary}` }}>
-                                                    <Statistic
-                                                        title="Total Documents"
-                                                        value={stats.totalDocs}
-                                                        prefix={<FilePdfOutlined />}
-                                                    />
-                                                </Card>
-                                            </Col>
-                                            <Col span={8}>
-                                                <Card bordered={false} style={{ borderRadius: 12, borderLeft: `4px solid ${theme.colors.info}` }}>
-                                                    <Statistic
-                                                        title="Total Pages Digitized"
-                                                        value={stats.totalPagesSaved}
-                                                        prefix={<CheckCircleOutlined />}
-                                                    />
-                                                </Card>
-                                            </Col>
-                                            <Col span={8}>
-                                                <Card bordered={false} style={{ borderRadius: 12, borderLeft: `4px solid ${theme.colors.success}` }}>
-                                                    <Statistic
-                                                        title="Total Cost Savings (THB)"
-                                                        value={stats.totalSavings}
-                                                        precision={2}
-                                                        prefix="฿"
-                                                        valueStyle={{ color: theme.colors.success, fontWeight: 'bold' }}
-                                                    />
-                                                </Card>
-                                            </Col>
-                                        </Row>
-                                    </div>
-                                    <div style={{ padding: '24px 0 0' }}>
-                                        <h4 style={{ marginBottom: 16 }}>Cost Savings Trend</h4>
-                                        <div style={{ position: 'relative', width: '100%', background: theme.colors.background, padding: 16, borderRadius: 8, marginBottom: 24, height: 300 }}>
-                                            <Line data={lineData} options={lineOptions} maintainAspectRatio={false} />
-                                        </div>
+                                    {/* Top Section */}
+                                    <Row gutter={24} style={{ marginBottom: 24, marginTop: 16 }}>
+                                        {/* Left Column */}
+                                        <Col span={8}>
+                                            <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: 16, color: theme.colors.textPrimary }}>Current Month Target: ฿8,000.00</div>
+                                            <div style={{ background: '#f5f5f5', padding: '16px', borderRadius: 8 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12, color: theme.colors.textSecondary }}>
+                                                    <span>Current Month Target</span>
+                                                    <strong style={{ color: theme.colors.textPrimary }}>฿8,000.00</strong>
+                                                </div>
+                                                <Progress percent={(currentMonthSavings / 8000) * 100} showInfo={false} strokeColor={theme.colors.success} strokeWidth={10} />
+                                                <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
+                                                    Progress Month: ฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </div>
+                                            </div>
+                                        </Col>
 
-                                        <h4 style={{ marginBottom: 16 }}>Details by Month</h4>
-                                        <Table
-                                            dataSource={stats.chartData}
-                                            columns={columns}
-                                            rowKey="month"
-                                            pagination={false}
-                                            size="middle"
-                                            summary={() => (
-                                                <Table.Summary fixed>
-                                                    <Table.Summary.Row style={{ background: theme.colors.background, fontWeight: 'bold' }}>
-                                                        <Table.Summary.Cell>Total (Selected Period)</Table.Summary.Cell>
-                                                        <Table.Summary.Cell>
-                                                            {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.view_pages) || 0), 0)} Pages
-                                                        </Table.Summary.Cell>
-                                                        <Table.Summary.Cell>
-                                                            {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.action_pages) || 0), 0)} Pages
-                                                        </Table.Summary.Cell>
-                                                        <Table.Summary.Cell>
-                                                            <span style={{ color: '#52c41a' }}>฿{stats.totalSavings.toFixed(2)}</span>
-                                                        </Table.Summary.Cell>
-                                                    </Table.Summary.Row>
-                                                </Table.Summary>
-                                            )}
-                                        />
+                                        {/* Right Column */}
+                                        <Col span={16}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                <div style={{ fontWeight: 'bold', fontSize: 16, color: theme.colors.textPrimary }}>Overall Performance</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <span>Year:</span>
+                                                    <DatePicker picker="year" value={selectedYear} onChange={(val) => setSelectedYear(val)} allowClear={false} size="small" />
+                                                </div>
+                                            </div>
+                                            <Row gutter={12}>
+                                                <Col span={6}>
+                                                    <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
+                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Digitized Documents</div>
+                                                        <div style={{ fontSize: 20 }}>{(stats.totalDocs || 0).toLocaleString()}</div>
+                                                    </Card>
+                                                </Col>
+                                                <Col span={6}>
+                                                    <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
+                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Pages Processed</div>
+                                                        <div style={{ fontSize: 20 }}>{(stats.totalPagesSaved || 0).toLocaleString()}</div>
+                                                    </Card>
+                                                </Col>
+                                                <Col span={6}>
+                                                    <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
+                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Current Month Savings</div>
+                                                        <div style={{ fontSize: 20, color: theme.colors.success }}>฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                                    </Card>
+                                                </Col>
+                                                <Col span={6}>
+                                                    <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
+                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Target Progress (Month)</div>
+                                                        <div style={{ fontSize: 20 }}>{((currentMonthSavings / 8000) * 100).toFixed(1)}%</div>
+                                                    </Card>
+                                                </Col>
+                                            </Row>
+                                        </Col>
+                                    </Row>
+
+                                    {/* Chart Section */}
+                                    <div style={{ padding: '0 0 24px 0' }}>
+                                        <h4 style={{ marginBottom: 16 }}>Cost Savings Trend</h4>
+                                        <div style={{ position: 'relative', width: '100%', background: theme.colors.background, padding: '16px 16px 16px 0', borderRadius: 8, height: 350 }}>
+                                            <Line data={lineData} options={lineOptions} />
+                                        </div>
                                     </div>
-                                    <div style={{ padding: '16px 0 0', textAlign: 'right', fontSize: 12, color: theme.colors.textSecondary }}>
-                                        <Space>
-                                            <InfoCircleOutlined />
-                                            <span>View Action: 0.10 THB / Page</span>
-                                            <span style={{ margin: '0 8px' }}>|</span>
-                                            <span>Export/Merge Actions: 0.50 THB / Page</span>
-                                        </Space>
-                                    </div>
+
+                                    {/* Bottom Section */}
+                                    <Row gutter={16}>
+                                        <Col span={18}>
+                                            <h4 style={{ marginBottom: 16 }}>Details by Month</h4>
+                                            <Table
+                                                dataSource={stats.chartData}
+                                                columns={columns}
+                                                rowKey="month"
+                                                pagination={false}
+                                                size="small"
+                                                summary={() => (
+                                                    <Table.Summary fixed>
+                                                        <Table.Summary.Row style={{ background: theme.colors.background, fontWeight: 'bold' }}>
+                                                            <Table.Summary.Cell index={0}>Total (Selected Period)</Table.Summary.Cell>
+                                                            <Table.Summary.Cell index={1}>
+                                                                {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.view_pages) || 0), 0).toLocaleString()} Pages
+                                                            </Table.Summary.Cell>
+                                                            <Table.Summary.Cell index={2}>
+                                                                {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.action_pages) || 0), 0).toLocaleString()} Pages
+                                                            </Table.Summary.Cell>
+                                                            <Table.Summary.Cell index={3}>
+                                                                <span style={{ color: '#52c41a' }}>฿{(stats.totalSavings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                            </Table.Summary.Cell>
+                                                        </Table.Summary.Row>
+                                                    </Table.Summary>
+                                                )}
+                                            />
+                                        </Col>
+                                        <Col span={6}>
+                                            <h4 style={{ marginBottom: 16 }}>Action Cost Info</h4>
+                                            <Card style={{ background: '#f8f9fa', borderRadius: 8, border: 'none' }} styles={{ body: { padding: 16 } }}>
+                                                <p style={{ margin: '0 0 16px 0', color: theme.colors.textSecondary, fontSize: 13 }}>
+                                                    Monitor and have info the action costs of action savings saved: <strong>฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.
+                                                </p>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: theme.colors.textSecondary }}>
+                                                    <div style={{ display: 'flex', gap: 8 }}>
+                                                        <InfoCircleOutlined style={{ color: theme.colors.primary, marginTop: 2 }} />
+                                                        <span>View Action: 0.10 THB / Page</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 8 }}>
+                                                        <InfoCircleOutlined style={{ color: theme.colors.success, marginTop: 2 }} />
+                                                        <span>Export/Merge Actions: 0.50 THB / Page</span>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        </Col>
+                                    </Row>
                                 </>
                             )
                         },
@@ -316,6 +391,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                         rowKey="id"
                                         size="small"
                                         pagination={{ pageSize: 10 }}
+                                        locale={{ emptyText: <Empty description="No Document History" /> }}
                                     />
                                 </div>
                             )
@@ -331,6 +407,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                         rowKey="id"
                                         size="small"
                                         pagination={{ pageSize: 10 }}
+                                        locale={{ emptyText: <Empty description="No Watermark Audit Data" /> }}
                                     />
                                 </div>
                             )
