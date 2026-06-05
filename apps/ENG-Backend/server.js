@@ -118,13 +118,9 @@ app.use('/api', (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
-//--------------------System Engineer (PDF Converter)---------------------//
-const pdfConverter = require('./api/engineer/system/pdfConverter');
-app.use('/api/engineer/system', pdfConverter);
-
-//--------------------PDF Hub (Sign & Stamp)---------------------//
-const pdfHubController = require('./api/engineer/system/pdfHubController');
-app.use('/api/engineer/pdf-hub', pdfHubController);
+//--------------------PDF Hub (Sign & Stamp, Converter, Tools)---------------------//
+const pdfHubRoutes = require('./api/engineer/pdf_hub/pdfHubRoutes');
+app.use('/api/engineer/pdf-hub', pdfHubRoutes);
 
 // Global File Upload Middleware (for routes not using multer)
 app.use(fileupload({ createParentPath: true, limits: { fileSize: 500 * 1024 * 1024 } }));

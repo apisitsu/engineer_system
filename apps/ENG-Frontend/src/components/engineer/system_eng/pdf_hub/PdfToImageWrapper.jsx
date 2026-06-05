@@ -44,7 +44,7 @@ const PdfToImageWrapper = () => {
         const token = localStorage.getItem("token");
 
         try {
-            const response = await axios.post(`${server.API_URL}api/engineer/system/pdf-to-image`, formData, {
+            const response = await axios.post(server.PDF_TO_IMAGE, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     'Authorization': `Bearer ${token}`,

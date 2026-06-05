@@ -3,8 +3,8 @@ import { Modal, Form, Input, Button, List, Spin, Space, Popconfirm, Select, Slid
 import { DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined, CopyOutlined, EditOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import * as fabric from 'fabric';
-import { server } from '../../../../../constance/constance';
-import { useAuthStore } from '../../../../../stores/authStore';
+import { server } from '../../../../../../constance/constance';
+import { useAuthStore } from '../../../../../../stores/authStore';
 
 const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pushHistory, pdfFile }) => {
     const empNo = useAuthStore(state => state.empNo);

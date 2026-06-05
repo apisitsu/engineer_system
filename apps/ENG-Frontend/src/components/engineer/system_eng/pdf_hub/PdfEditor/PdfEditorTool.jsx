@@ -6,11 +6,9 @@ import {
 import {
     EyeOutlined, HighlightOutlined, BorderOutlined,
     EditOutlined, FormOutlined, MergeCellsOutlined,
-    FileImageOutlined, FilePdfOutlined, InboxOutlined,
-    LeftOutlined, RightOutlined, ZoomInOutlined, ZoomOutOutlined,
+    FileImageOutlined, ZoomInOutlined, ZoomOutOutlined,
     UndoOutlined, RedoOutlined, DownloadOutlined, DeleteOutlined,
-    ToolOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-    AppstoreOutlined, InsertRowAboveOutlined, DashboardOutlined, BgColorsOutlined
+    AppstoreOutlined, DashboardOutlined, BgColorsOutlined, ToolOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -25,8 +23,15 @@ import PropertiesPanel from './panels/PropertiesPanel';
 import SignaturePad from './panels/SignaturePad';
 import ShortcutsHandler from './ShortcutsHandler';
 import MergePreview from './MergePreview';
-import PdfUsageDashboard from './PdfUsageDashboard.jsx';
-import WatermarkManagerModal from './WatermarkManagerModal.jsx';
+import PdfUsageDashboard from './wrappers/PdfUsageDashboard.jsx';
+import WatermarkManagerModal from './wrappers/WatermarkManagerModal.jsx';
+import { MODE_OPTIONS, ZOOM_OPTIONS } from './constants.jsx';
+
+// UI Extract Components
+import UploadLanding from './ui/UploadLanding';
+import StatusBar from './ui/StatusBar';
+import HeaderModeBar from './ui/HeaderModeBar';
+
 import { commitAllToPdf, exportPageToImage, mergePdfFiles } from './engine/PdfCommitEngine';
 import JSZip from 'jszip';
 import axios from 'axios';
@@ -35,26 +40,7 @@ import './PdfEditorTool.css';
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
 
-const ZOOM_OPTIONS = [
-    { value: 0.5, label: '50%' },
-    { value: 0.75, label: '75%' },
-    { value: 1.0, label: '100%' },
-    { value: 1.25, label: '125%' },
-    { value: 1.5, label: '150%' },
-    { value: 2.0, label: '200%' },
-    { value: 3.0, label: '300%' },
-];
 
-const MODE_OPTIONS = [
-    { value: 'view',     icon: <EyeOutlined />,         label: 'View' },
-    { value: 'annotate', icon: <HighlightOutlined />,   label: 'Annotate' },
-    { value: 'shapes',   icon: <BorderOutlined />,      label: 'Shapes' },
-    { value: 'edit',     icon: <EditOutlined />,        label: 'Edit' },
-    { value: 'sign',     icon: <FormOutlined />,        label: 'Fill & Sign' },
-    { value: 'watermark',icon: <BgColorsOutlined />,    label: 'Watermark' },
-    { value: 'merge',    icon: <MergeCellsOutlined />,  label: 'Merge' },
-    { value: 'export',   icon: <FileImageOutlined />,   label: 'Export' },
-];
 
 /**
  * PdfEditorTool — Main Workstation Orchestrator.
@@ -535,49 +521,15 @@ const PdfEditorTool = () => {
                     </Space>
                 </div>
 
-                <Spin spinning={pdfLoading} tip="Loading PDF..." size="large">
-                    <div className="pdf-ws-upload-landing" style={{ background: theme.colors.background }}>
-                        <div className="pdf-ws-upload-card">
-                            <div className="pdf-ws-upload-icon" style={{
-                                background: `linear-gradient(135deg, ${theme.colors.primary}22, ${theme.colors.primary}08)`,
-                                color: theme.colors.primary,
-                            }}>
-                                <FilePdfOutlined />
-                            </div>
-                            <Title level={3} style={{ margin: '0 0 8px', color: theme.colors.textPrimary }}>
-                                PDF Workstation
-                            </Title>
-                            <Text style={{ color: theme.colors.textSecondary, fontSize: 14, display: 'block', marginBottom: 32 }}>
-                                View, annotate, edit, sign, merge, and export — all in one place
-                            </Text>
-                            <Dragger
-                                accept=".pdf,application/pdf"
-                                showUploadList={false}
-                                beforeUpload={handleFileUpload}
-                                style={{
-                                    borderRadius: 16, padding: '40px 24px',
-                                    border: `2px dashed ${theme.colors.primary}55`,
-                                    background: `${theme.colors.primary}04`,
-                                }}
-                            >
-                                <p className="ant-upload-drag-icon">
-                                    <InboxOutlined style={{ color: theme.colors.primary, fontSize: 48 }} />
-                                </p>
-                                <p className="ant-upload-text" style={{ fontSize: 16, fontWeight: 600 }}>
-                                    Click or drag a PDF file here
-                                </p>
-                                <p className="ant-upload-hint" style={{ fontSize: 13 }}>
-                                    Open a document to start editing, annotating, or converting
-                                </p>
-                            </Dragger>
-                        </div>
-                    </div>
-                </Spin>
-
                 {/* ── Dashboard Modal ── */}
                 <PdfUsageDashboard 
                     open={dashboardOpen} 
                     onClose={() => setDashboardOpen(false)} 
+                />
+
+                <UploadLanding 
+                    pdfLoading={pdfLoading}
+                    onFileUpload={handleFileUpload}
                 />
             </div>
         );
@@ -611,186 +563,34 @@ const PdfEditorTool = () => {
             />
 
             {/* ── Mode Switcher Bar ── */}
-            <div className="pdf-ws-modebar" style={{
-                background: theme.colors.surface,
-                borderColor: theme.colors.border,
-            }}>
-                <div className="pdf-ws-modebar-logo">
-                    <div className="pdf-ws-modebar-logo-icon"
-                        style={{ background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primary}cc)` }}>
-                        <ToolOutlined />
-                    </div>
-                    <div>
-                        <div className="pdf-ws-modebar-title" style={{ color: theme.colors.textPrimary }}>
-                            PDF Workstation
-                        </div>
-                        <div className="pdf-ws-modebar-subtitle" style={{ color: theme.colors.textSecondary }}>
-                            Editor & Tools
-                        </div>
-                    </div>
-                </div>
-
-                <Segmented
-                    value={store.activeMode === 'watermark' ? 'view' : store.activeMode}
-                    onChange={(val) => {
-                        if (val === 'watermark') {
-                            usedToolsRef.current.add('watermark');
-                            setWatermarkOpen(true);
-                            return;
-                        }
-                        saveCurrentPageState();
-                        store.setActiveMode(val);
-                        store.setActiveTool('select');
-                    }}
-                    options={MODE_OPTIONS.map(m => ({
-                        value: m.value,
-                        label: (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                {m.icon} {m.label}
-                            </span>
-                        ),
-                    }))}
-                />
-
-                <div style={{ flex: 1 }} />
-
-                {/* ── Global actions ── */}
-                <Space size={4}>
-                    <Tooltip title="Usage Dashboard">
-                        <Button 
-                            type="text" 
-                            size="small" 
-                            icon={<DashboardOutlined style={{ color: theme.colors.primary }} />} 
-                            onClick={() => setDashboardOpen(true)}
-                        />
-                    </Tooltip>
-                    
-                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
-
-                    {/* View Toggle */}
-                    <Tooltip title={store.viewMode === 'continuous' ? "Switch to Single Page" : "Switch to Continuous"}>
-                        <Button size="small" 
-                            icon={store.viewMode === 'continuous' ? <AppstoreOutlined /> : <InsertRowAboveOutlined />}
-                            onClick={() => store.setViewMode(store.viewMode === 'continuous' ? 'single' : 'continuous')}
-                            style={{ borderRadius: 7 }} 
-                        />
-                    </Tooltip>
-
-                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
-
-                    {/* Page nav */}
-                    <Tooltip title="Previous page">
-                        <Button size="small" icon={<LeftOutlined />}
-                            disabled={currentPage <= 1} onClick={handlePrevPage}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-                    <span className="pdf-ws-page-pill" style={{
-                        background: `${theme.colors.primary}12`,
-                        color: theme.colors.primary,
-                    }}>
-                        {currentPage} / {totalPages}
-                    </span>
-                    <Tooltip title="Next page">
-                        <Button size="small" icon={<RightOutlined />}
-                            disabled={currentPage >= totalPages} onClick={handleNextPage}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-
-                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
-
-                    {/* Zoom */}
-                    <Tooltip title="Zoom out">
-                        <Button size="small" icon={<ZoomOutOutlined />} onClick={() => { saveCurrentPageState(); zoomOut(); }}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-                    <Select
-                        size="small"
-                        value={ZOOM_OPTIONS.some(o => o.value === zoom) ? zoom : undefined}
-                        placeholder={`${Math.round(zoom * 100)}%`}
-                        onChange={(val) => {
-                            saveCurrentPageState();
-                            if (val === 'fit') {
-                                // Re-calculate fit-to-width
-                                if (canvasWrapperRef.current && pdfDoc) {
-                                    pdfDoc.getPage(currentPage).then(page => {
-                                        const vp = page.getViewport({ scale: 1.0 });
-                                        const wrapperW = canvasWrapperRef.current.clientWidth - 60;
-                                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
-                                    });
-                                }
-                            } else {
-                                zoomTo(val);
-                            }
-                        }}
-                        options={[
-                            { value: 'fit', label: 'Fit Width' },
-                            ...ZOOM_OPTIONS,
-                        ]}
-                        style={{ width: 90 }}
-                    />
-                    <Tooltip title="Zoom in">
-                        <Button size="small" icon={<ZoomInOutlined />} onClick={() => { saveCurrentPageState(); zoomIn(); }}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-
-                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
-
-                    {/* Undo / Redo */}
-                    <Tooltip title="Undo (Ctrl+Z)">
-                        <Button size="small" icon={<UndoOutlined />}
-                            disabled={!canUndo} onClick={undo}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-                    <Tooltip title="Redo (Ctrl+Y)">
-                        <Button size="small" icon={<RedoOutlined />}
-                            disabled={!canRedo} onClick={redo}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-
-                    {/* Delete selected */}
-                    {store.selectedObjectId && (
-                        <Tooltip title="Delete selected (Del)">
-                            <Button size="small" danger icon={<DeleteOutlined />}
-                                onClick={handleDeleteSelected}
-                                style={{ borderRadius: 7 }} />
-                        </Tooltip>
-                    )}
-
-                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
-
-                    {/* Toggle panels */}
-                    <Tooltip title={leftCollapsed ? "Show pages" : "Hide pages"}>
-                        <Button size="small"
-                            icon={leftCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                            onClick={() => setLeftCollapsed(!leftCollapsed)}
-                            style={{ borderRadius: 7 }} />
-                    </Tooltip>
-
-                    {/* Save/Download */}
-                    <Tooltip title="Apply & Download PDF">
-                        <Button size="small" type="primary" icon={<DownloadOutlined />}
-                            onClick={handleApplyAndDownload}
-                            disabled={(totalAnnotations === 0 && !canUndo && Object.values(fabricCanvasRefs?.current || {}).every(fc => !fc || fc.getObjects().length === 0)) && store.activeMode !== 'merge'}
-                            style={{ borderRadius: 7, fontWeight: 600 }}>
-                            Save
-                        </Button>
-                    </Tooltip>
-
-                    {/* Change PDF */}
-                    <Upload
-                        accept=".pdf,application/pdf"
-                        showUploadList={false}
-                        beforeUpload={handleFileUpload}
-                    >
-                        <Tooltip title="Open another PDF">
-                            <Button size="small" style={{ borderRadius: 7 }}>
-                                <FilePdfOutlined />
-                            </Button>
-                        </Tooltip>
-                    </Upload>
-                </Space>
-            </div>
+            <HeaderModeBar
+                onOpenDashboard={() => setDashboardOpen(true)}
+                onOpenWatermark={() => setWatermarkOpen(true)}
+                onSavePageState={saveCurrentPageState}
+                onPrevPage={handlePrevPage}
+                onNextPage={handleNextPage}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                zoom={zoom}
+                setZoom={setZoom}
+                zoomIn={zoomIn}
+                zoomOut={zoomOut}
+                zoomTo={zoomTo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                undo={undo}
+                redo={redo}
+                onDeleteSelected={handleDeleteSelected}
+                leftCollapsed={leftCollapsed}
+                setLeftCollapsed={setLeftCollapsed}
+                onApplyAndDownload={handleApplyAndDownload}
+                totalAnnotations={totalAnnotations}
+                fabricCanvasRefs={fabricCanvasRefs}
+                onFileUpload={handleFileUpload}
+                usedToolsRef={usedToolsRef}
+                canvasWrapperRef={canvasWrapperRef}
+                pdfDoc={pdfDoc}
+            />
 
             {/* ── Mode-Specific Toolbar ── */}
             <ModeToolbar />
@@ -827,13 +627,13 @@ const PdfEditorTool = () => {
                             <MergePreview mergeFiles={mergeFiles} />
                         ) : pdfDoc ? (
                             store.viewMode === 'continuous' ? (
-                                <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', alignItems: 'center' }}>
+                                <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', minWidth: 'fit-content', margin: '0 auto' }}>
                                     {Array.from({ length: totalPages }).map((_, i) => (
                                         <div 
                                             key={i+1} 
                                             data-page={i+1} 
                                             ref={el => pageRefs.current[i+1] = el}
-                                            style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', margin: '0 auto', width: 'fit-content' }}
                                         >
                                             <EditorCanvas
                                                 pageNum={i+1}
@@ -851,8 +651,8 @@ const PdfEditorTool = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div style={{ padding: 24, display: 'flex', justifyContent: 'center' }}>
-                                    <div style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                <div style={{ padding: 24, display: 'flex', minWidth: 'fit-content', margin: '0 auto' }}>
+                                    <div style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', margin: '0 auto', width: 'fit-content' }}>
                                         <EditorCanvas
                                             pageNum={currentPage}
                                             pdfDoc={pdfDoc}
@@ -879,27 +679,13 @@ const PdfEditorTool = () => {
                     </div>
 
                     {/* Status Bar */}
-                    <div className="pdf-ws-statusbar" style={{
-                        background: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.textSecondary,
-                    }}>
-                        <span>
-                            {pdfFile && (
-                                <>
-                                    <Tag color="blue" style={{ borderRadius: 6, fontSize: 10 }}>
-                                        <FilePdfOutlined style={{ marginRight: 3 }} />
-                                        {pdfFile.name}
-                                    </Tag>
-                                    Page {currentPage}/{totalPages} • Zoom {Math.round(zoom * 100)}%
-                                </>
-                            )}
-                        </span>
-                        <span>
-                            {totalAnnotations > 0 && `${totalAnnotations} annotation(s)`}
-                            {store.activeTool !== 'select' && ` • Tool: ${store.activeTool}`}
-                        </span>
-                    </div>
+                    <StatusBar
+                        pdfFile={pdfFile}
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        zoom={zoom}
+                        totalAnnotations={totalAnnotations}
+                    />
                 </div>
 
                 {/* Right Panel */}

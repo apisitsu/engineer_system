@@ -53,6 +53,7 @@ export const server = {
   PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
   PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
   PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
+  PDF_TO_IMAGE: `${apiUrl}api/engineer/pdf-hub/pdf-to-image`,
 
   // Tooling Select
   TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
