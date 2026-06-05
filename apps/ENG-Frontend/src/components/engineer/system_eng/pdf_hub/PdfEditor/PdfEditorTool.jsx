@@ -10,7 +10,7 @@ import {
     LeftOutlined, RightOutlined, ZoomInOutlined, ZoomOutOutlined,
     UndoOutlined, RedoOutlined, DownloadOutlined, DeleteOutlined,
     ToolOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-    AppstoreOutlined, InsertRowAboveOutlined
+    AppstoreOutlined, InsertRowAboveOutlined, DashboardOutlined, BgColorsOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -25,6 +25,8 @@ import PropertiesPanel from './panels/PropertiesPanel';
 import SignaturePad from './panels/SignaturePad';
 import ShortcutsHandler from './ShortcutsHandler';
 import MergePreview from './MergePreview';
+import PdfUsageDashboard from './PdfUsageDashboard';
+import WatermarkManagerModal from './WatermarkManagerModal';
 import { commitAllToPdf, exportPageToImage, mergePdfFiles } from './engine/PdfCommitEngine';
 import JSZip from 'jszip';
 import axios from 'axios';
@@ -49,6 +51,7 @@ const MODE_OPTIONS = [
     { value: 'shapes',   icon: <BorderOutlined />,      label: 'Shapes' },
     { value: 'edit',     icon: <EditOutlined />,        label: 'Edit' },
     { value: 'sign',     icon: <FormOutlined />,        label: 'Fill & Sign' },
+    { value: 'watermark',icon: <BgColorsOutlined />,    label: 'Watermark' },
     { value: 'merge',    icon: <MergeCellsOutlined />,  label: 'Merge' },
     { value: 'export',   icon: <FileImageOutlined />,   label: 'Export' },
 ];
@@ -100,6 +103,13 @@ const PdfEditorTool = () => {
 
     // ── Signature Pad ──
     const [sigPadOpen, setSigPadOpen] = useState(false);
+
+    // ── Watermark Manager ──
+    const [watermarkOpen, setWatermarkOpen] = useState(false);
+
+    // ── Usage Dashboard ──
+    const [dashboardOpen, setDashboardOpen] = useState(false);
+    const usedToolsRef = useRef(new Set());
 
     // ── Overlay/Compare ──
     const [overlayPdfDoc, setOverlayPdfDoc] = useState(null);
@@ -170,6 +180,13 @@ const PdfEditorTool = () => {
         }
     }, [store.activeMode, empNo, stampData]);
 
+    // ── Track used tools ──
+    useEffect(() => {
+        if (store.activeMode && store.activeMode !== 'view' && store.activeMode !== 'export') {
+            usedToolsRef.current.add(store.activeMode);
+        }
+    }, [store.activeMode]);
+
     // ══════════════════════════════════════════════════════════════════
     // File Upload Handler
     // ══════════════════════════════════════════════════════════════════
@@ -193,10 +210,13 @@ const PdfEditorTool = () => {
             const payload = {
                 filename,
                 empno: empNo,
-                user_name: useAuthStore.getState().user?.name || '',
+                user_name: useAuthStore.getState().userName || '',
                 total_pages: totalPages || 1,
-                action_type: actionType
+                action_type: actionType,
             };
+            if (actionType !== 'view' && usedToolsRef.current.size > 0) {
+                payload.details = Array.from(usedToolsRef.current).join(', ');
+            }
             await axios.post(server.PDF_USAGE_LOG, payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -204,6 +224,14 @@ const PdfEditorTool = () => {
             console.error('Failed to log PDF usage:', err);
         }
     }, [empNo, pdfFile, totalPages]);
+
+    // Log 'view' when PDF successfully loads
+    useEffect(() => {
+        if (pdfDoc && pdfFile) {
+            usedToolsRef.current.clear();
+            logPdfUsage('view');
+        }
+    }, [pdfDoc, pdfFile, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)
@@ -492,6 +520,19 @@ const PdfEditorTool = () => {
                             ),
                         }))}
                     />
+                    
+                    <div style={{ flex: 1 }} />
+                    
+                    <Space size={4}>
+                        <Tooltip title="Usage Dashboard">
+                            <Button 
+                                type="text" 
+                                size="small" 
+                                icon={<DashboardOutlined style={{ color: theme.colors.primary }} />} 
+                                onClick={() => setDashboardOpen(true)}
+                            />
+                        </Tooltip>
+                    </Space>
                 </div>
 
                 <Spin spinning={pdfLoading} tip="Loading PDF..." size="large">
@@ -532,6 +573,12 @@ const PdfEditorTool = () => {
                         </div>
                     </div>
                 </Spin>
+
+                {/* ── Dashboard Modal ── */}
+                <PdfUsageDashboard 
+                    open={dashboardOpen} 
+                    onClose={() => setDashboardOpen(false)} 
+                />
             </div>
         );
     }
@@ -584,8 +631,13 @@ const PdfEditorTool = () => {
                 </div>
 
                 <Segmented
-                    value={store.activeMode}
+                    value={store.activeMode === 'watermark' ? 'view' : store.activeMode}
                     onChange={(val) => {
+                        if (val === 'watermark') {
+                            usedToolsRef.current.add('watermark');
+                            setWatermarkOpen(true);
+                            return;
+                        }
                         saveCurrentPageState();
                         store.setActiveMode(val);
                         store.setActiveTool('select');
@@ -604,6 +656,17 @@ const PdfEditorTool = () => {
 
                 {/* ── Global actions ── */}
                 <Space size={4}>
+                    <Tooltip title="Usage Dashboard">
+                        <Button 
+                            type="text" 
+                            size="small" 
+                            icon={<DashboardOutlined style={{ color: theme.colors.primary }} />} 
+                            onClick={() => setDashboardOpen(true)}
+                        />
+                    </Tooltip>
+                    
+                    <div style={{ width: 1, height: 20, background: theme.colors.border, margin: '0 4px' }} />
+
                     {/* View Toggle */}
                     <Tooltip title={store.viewMode === 'continuous' ? "Switch to Single Page" : "Switch to Continuous"}>
                         <Button size="small" 
@@ -760,7 +823,9 @@ const PdfEditorTool = () => {
                         data-tool={store.activeTool}
                         style={{ background: theme.colors.background }}
                     >
-                        {pdfDoc && store.activeMode !== 'merge' ? (
+                        {store.activeMode === 'merge' ? (
+                            <MergePreview mergeFiles={mergeFiles} />
+                        ) : pdfDoc ? (
                             store.viewMode === 'continuous' ? (
                                 <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', alignItems: 'center' }}>
                                     {Array.from({ length: totalPages }).map((_, i) => (
@@ -803,8 +868,13 @@ const PdfEditorTool = () => {
                                     </div>
                                 </div>
                             )
-                        ) : store.activeMode === 'merge' ? (
-                            <MergePreview mergeFiles={mergeFiles} />
+                        ) : pdfFile ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center', color: theme.colors.textPrimary }}>
+                                <div style={{ fontSize: 64, marginBottom: 24 }}>🔒</div>
+                                <h2>PDF is Protected (Blind Mode)</h2>
+                                <p style={{ fontSize: 16 }}>The viewer failed to load this PDF because it is password-protected or encrypted.</p>
+                                <p style={{ fontSize: 16 }}>However, you can still open the <b>Watermark</b> tool, use "Apply to All", and click <b>Save</b> to export a clean copy.</p>
+                            </div>
                         ) : null}
                     </div>
 
@@ -855,6 +925,23 @@ const PdfEditorTool = () => {
                     />
                 )}
             </div>
+            {/* ── Dashboard Modal ── */}
+            <PdfUsageDashboard 
+                open={dashboardOpen} 
+                onClose={() => setDashboardOpen(false)} 
+            />
+
+            {/* ── Watermark Modal ── */}
+            <WatermarkManagerModal
+                open={watermarkOpen}
+                onClose={() => setWatermarkOpen(false)}
+                pdfDoc={pdfDoc}
+                pdfFile={pdfFile}
+                totalPages={totalPages}
+                fabricCanvasRefs={fabricCanvasRefs}
+                pushHistory={pushHistory}
+                logPdfUsage={logPdfUsage}
+            />
         </div>
     );
 };

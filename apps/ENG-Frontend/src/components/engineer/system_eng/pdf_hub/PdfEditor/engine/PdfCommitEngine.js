@@ -70,7 +70,7 @@ async function embedImage(doc, base64Data) {
  * @returns {Promise<Uint8Array>} - Modified PDF bytes
  */
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
-    const doc = await PDFDocument.load(pdfBytes);
+    const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pages = doc.getPages();
 
     // ── Commit highlights per page (drawn first so text stays on top) ──
@@ -563,7 +563,7 @@ export async function mergePdfFiles(files) {
             throw new Error('Unsupported file type for merge');
         }
 
-        const pdf = await PDFDocument.load(arrayBuffer);
+        const pdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
         const pages = await mergedDoc.copyPages(pdf, pdf.getPageIndices());
         pages.forEach(page => mergedDoc.addPage(page));
     }

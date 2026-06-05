@@ -93,6 +93,12 @@ export const server = {
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
   PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+  PDF_USAGE_STATS: `${apiUrl}api/engineer/pdf-hub/usage-stats`,
+  PDF_USAGE_HISTORY: `${apiUrl}api/engineer/pdf-hub/usage-history`,
+  PDF_WATERMARKS: `${apiUrl}api/engineer/pdf-hub/watermarks`,
+  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
+  PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
