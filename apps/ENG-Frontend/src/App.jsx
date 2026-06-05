@@ -25,7 +25,7 @@ import HomeEng from './components/engineer/home_eng';
 
 import HomeSystemEng from './components/engineer/system_eng/home_system';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
-import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import HtmlToPdfDashboard from './components/engineer/newprod_eng/tool/html_to_pdf/HtmlToPdfDashboard';
 import PdfMergerTool from './components/engineer/newprod_eng/tool/PdfMergerTool';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
 import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
@@ -86,8 +86,8 @@ const ProtectedRoute = ({ allowedRoles }) => {
   const location = useLocation();
 
   if (!isAuthenticated) {
-    if (location.pathname === '/job_check_tracker') {
-      return <Navigate to="/job_check_tracker" replace />;
+    if (location.pathname === '/eng/html-to-pdf') {
+      return <Navigate to="/eng/html-to-pdf" replace />;
     } else {
       // Save the current location to redirect back after login
       return <Navigate to="/sign_in" state={{ from: location }} replace />;
@@ -161,7 +161,7 @@ const AppContent = () => {
     if (isAuthenticated) {
 
       const doCheckToken = async () => {
-        const publicPaths = ['/sign_in', '/job_check_tracker'];
+        const publicPaths = ['/sign_in'];
         const currentPath = window.location.pathname;
         console.log("Checking token for path:", currentPath)
         const isPublicPath = publicPaths.includes(currentPath);
@@ -277,7 +277,7 @@ const AppContent = () => {
       <AntdApp>
         <Router>
           <Routes>
-            <Route path="/job_check_tracker" element={<JobCheckTracker />} />
+
             <Route path="/sign_in" element={<AuthRedirectWrapper><SignIn /></AuthRedirectWrapper>} />
             <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
@@ -324,6 +324,7 @@ const AppContent = () => {
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
                   <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
+                  <Route path="/eng/html-to-pdf" element={<HtmlToPdfDashboard />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />

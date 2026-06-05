@@ -126,12 +126,12 @@ export default function useHighlightTools({
                 if (w < 2 || h < 2) continue;
 
                 if (activeTool === 'highlight') {
-                    // Shift Y up slightly (by 15% of height) to center visually over text body
+                    // Shift Y up slightly (by 40% of height) to center visually over text body
                     // and slightly adjust height to wrap nicely.
                     newHighlights.push({
                         id: `hl_${Date.now()}_${Math.random().toString(36).substr(2, 5)}_${i}`,
                         normX: x / cssW,
-                        normY: (y - (h * 0.2)) / cssH,
+                        normY: (y - (h * 0.35)) / cssH,
                         normW: w / cssW,
                         normH: (h * 1.05) / cssH,
                         color: store.highlightColor || '#ffeb3b',
@@ -140,8 +140,8 @@ export default function useHighlightTools({
                     if (fc) {
                         const dynamicThickness = Math.max(1.5, h * 0.08);
                         const lineY = activeTool === 'underline'
-                            ? y + h + (dynamicThickness / 2)
-                            : y + h / 2 + (dynamicThickness / 2);
+                            ? y + h - (h * 0.15) // Move underline up slightly too
+                            : y + h / 2 - (h * 0.1);
 
                         const line = new fabric.Line(
                             [x, lineY, x + w, lineY],
@@ -185,7 +185,7 @@ export default function useHighlightTools({
             const fc = fabricCanvasRefs.current[pageNum];
 
             const finalX = Math.min(startX, endX);
-            const finalY = startY - 10;
+            const finalY = startY - 18; // Moved up from -10 to align better with text
             const finalW = rawWidth;
             const finalH = 20;
 

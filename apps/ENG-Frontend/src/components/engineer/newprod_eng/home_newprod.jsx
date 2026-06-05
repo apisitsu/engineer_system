@@ -40,14 +40,14 @@ const HomeNewProd = () => {
       tags: ['Drawing', 'QA', 'Standards']
     },
     {
-      id: 'job-check',
-      title: 'Job Check Tracker',
-      description: 'Track and manage production job statuses and manufacturing progress in real-time.',
-      icon: <CheckCircleOutlined style={{ fontSize: '32px' }} />,
-      path: '/job_check_tracker',
-      category: 'Tracking',
+      id: 'html-to-pdf',
+      title: 'HTML to PDF Dashboard',
+      description: 'Upload HTML documents and convert them to high-quality PDF files asynchronously in the background.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/html-to-pdf',
+      category: 'Utilities',
       status: 'Active',
-      tags: ['Production', 'Status', 'Progress']
+      tags: ['PDF', 'HTML', 'Converter']
     },
     {
       id: 'bushing-configurator',

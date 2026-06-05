@@ -133,8 +133,13 @@ app.use('/api/engineer/eng-record', engRecordRoutes);
 
 //--------------------User----------------------//
 const newProducts = require('./api/engineer/new_prod/tool');
+const htmlToPdf = require('./api/engineer/new_prod/htmlToPdfController');
 
 app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
+app.post('/api/engineer/new_prod/html-to-pdf/upload', verifyToken, htmlToPdf.uploadJob);
+app.get('/api/engineer/new_prod/html-to-pdf/jobs', verifyToken, htmlToPdf.getJobs);
+app.get('/api/engineer/new_prod/html-to-pdf/download/:id', verifyToken, htmlToPdf.downloadPdf);
+app.get('/api/engineer/new_prod/html-to-pdf/download-html/:id', verifyToken, htmlToPdf.downloadHtml);
 
 //--------------------Template Tool (APQP Forms)---------------------//
 const templateTool = require('./api/engineer/new_prod/templateToolController');

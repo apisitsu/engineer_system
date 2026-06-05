@@ -48,10 +48,16 @@ export const server = {
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
 
-  // PDF Hub (Sign & Stamp)
-  PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
-  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
-  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  // Template Tool (APQP Forms)
+  TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
+  TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
+  TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
+
+  // HTML to PDF (New Prod)
+  HTML_TO_PDF_UPLOAD: `${apiUrl}api/engineer/new_prod/html-to-pdf/upload`,
+  HTML_TO_PDF_JOBS: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs`,
+  HTML_TO_PDF_DOWNLOAD_PDF: `${apiUrl}api/engineer/new_prod/html-to-pdf/download/`,
+  HTML_TO_PDF_DOWNLOAD_HTML: `${apiUrl}api/engineer/new_prod/html-to-pdf/download-html/`,
   PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
   PDF_TO_IMAGE: `${apiUrl}api/engineer/pdf-hub/pdf-to-image`,
 
