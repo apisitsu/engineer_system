@@ -239,3 +239,6 @@ docker-compose up -d --build
 - **การใช้ Python Command:** ถ้าในเครื่องใหม่ คำสั่ง Python ใช้ชื่อ `python3` แทนที่จะเป็น `python` อาจจะต้องเข้าไปแก้ในโค้ดฝั่ง Backend เล็กน้อย (เช่นในไฟล์ `pdfHubController.js` ที่เราเพิ่งแก้ไป ที่ใช้คำสั่ง `execFile('python', ...)` ครับ)
 
 เพียงทำตามขั้นตอนเหล่านี้ คุณก็จะสามารถนำระบบขึ้นรันบนเครื่องใหม่ได้สมบูรณ์ครับ!
+
+
+rundll32.exe sysdm.cpl,EditEnvironmentVariables
