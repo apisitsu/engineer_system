@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -53,19 +53,19 @@ export const server = {
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
 
   // Tooling Select
-  TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
+  TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
-  TSV2_INVENTORY:       `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
-  TSV2_COLUMNS:       `${apiUrl}api/tooling-select/columns`,
-  TSV2_LIMITS:        `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
-  TSV2_FORMULAS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
-  TSV2_TOOLINGS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/toolings
-  TSV2_FORMULA_ITEM:  `${apiUrl}api/tooling-select/formulas`,         // append /:id
-  TSV2_LIMIT_ITEM:    `${apiUrl}api/tooling-select/limits`,           // append /:id
-  TSV2_SEARCH_RULES:  `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
-  TSV2_RULE_ITEM:     `${apiUrl}api/tooling-select/search-rules`,     // append /:id
-  TSV2_FORMULA_TEST:  `${apiUrl}api/tooling-select/formula/test`,
-  TSV2_SEARCH:        `${apiUrl}api/tooling-select/search`,
+  TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
+  TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
+  TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
+  TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
+  TSV2_TOOLINGS: `${apiUrl}api/tooling-select/machines`,         // append /:id/toolings
+  TSV2_FORMULA_ITEM: `${apiUrl}api/tooling-select/formulas`,         // append /:id
+  TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
+  TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
+  TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
+  TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
+  TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,
   MTC_TOOLING_SPEC_FACTORY_PREVIEW: `${apiUrl}api/tooling-select/spec/factory-preview`,
@@ -96,6 +96,14 @@ export const server = {
 
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+  PDF_USAGE_STATS: `${apiUrl}api/engineer/pdf-hub/usage-stats`,
+  PDF_USAGE_HISTORY: `${apiUrl}api/engineer/pdf-hub/usage-history`,
+  PDF_WATERMARKS: `${apiUrl}api/engineer/pdf-hub/watermarks`,
+  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
+  PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
+  PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

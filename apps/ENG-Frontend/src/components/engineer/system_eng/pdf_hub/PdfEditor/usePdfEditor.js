@@ -3,6 +3,8 @@ import { message } from 'antd';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
+import axios from 'axios';
+import { server } from '../../../../../constance/constance';
 
 // ── PDF.js worker config (same CDN pattern as useSignStamp) ──
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -86,15 +88,74 @@ export default function usePdfEditor() {
             const bytes = new Uint8Array(arrayBuffer);
             setPdfBytes(bytes);
 
-            // pdfjs-dist for rendering
-            const doc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
-            setPdfDoc(doc);
-            setTotalPages(doc.numPages);
-            setCurrentPage(1);
+            let doc = null;
+            let libDoc = null;
+            let finalBytes = bytes;
 
-            // pdf-lib for manipulation
-            const libDoc = await PDFDocument.load(arrayBuffer.slice(0));
+            // ── Try to repair/rebuild the PDF through the backend first ──
+            // This flattens complex structures and removes problematic encodings that break pdf-lib.
+            try {
+                const formData = new FormData();
+                formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                
+                const token = localStorage.getItem('token');
+                const res = await axios.post(server.PDF_REPAIR, formData, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'arraybuffer'
+                });
+                
+                finalBytes = new Uint8Array(res.data);
+                console.log('PDF repaired and rebuilt via backend successfully!');
+            } catch (repairErr) {
+                console.warn('Backend repair failed or not available, falling back to original bytes:', repairErr);
+                finalBytes = bytes;
+            }
+
+            try {
+                libDoc = await PDFDocument.load(finalBytes.slice(0), { ignoreEncryption: true });
+            } catch (e) {
+                console.warn('pdf-lib failed to load doc during init:', e);
+            }
+
+            try {
+                // pdfjs-dist for rendering
+                doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
+            } catch (renderErr) {
+                console.warn('PDF.js rendering failed, attempting backend unlock...', renderErr);
+                try {
+                    const formData = new FormData();
+                    formData.append('pdf', new Blob([finalBytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                    
+                    const token = localStorage.getItem('token');
+                    const res = await axios.post(server.PDF_UNLOCK, formData, {
+                        headers: { Authorization: `Bearer ${token}` },
+                        responseType: 'arraybuffer'
+                    });
+                    
+                    finalBytes = new Uint8Array(res.data);
+                    
+                    // Retry with unlocked bytes
+                    doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
+                    libDoc = await PDFDocument.load(finalBytes); // Update libDoc to unlocked version
+                    message.success('PDF unlocked successfully via backend!');
+                } catch (unlockErr) {
+                    console.error('Failed to unlock PDF:', unlockErr);
+                }
+            }
+
+            setPdfBytes(finalBytes);
+            setPdfDoc(doc);
             setPdfLibDoc(libDoc);
+
+            if (doc) {
+                setTotalPages(doc.numPages);
+                setCurrentPage(1);
+            } else {
+                setPdfDoc(null);
+                setTotalPages(libDoc.getPageCount());
+                setCurrentPage(1);
+                message.warning('PDF is protected. Viewer disabled, but you can still apply watermarks and Save.', 5);
+            }
 
             setPdfFile(file);
             setPageAnnotations({});
@@ -102,21 +163,22 @@ export default function usePdfEditor() {
             setThumbnails({});
             historyRef.current = { past: [], future: [] };
 
-            // Read first page dimensions
-            const page = await doc.getPage(1);
-            const vp = page.getViewport({ scale: 1.0 });
-            setPageSize({ width: vp.width, height: vp.height });
+            if (doc) {
+                // Read first page dimensions
+                const page = await doc.getPage(1);
+                const vp = page.getViewport({ scale: 1.0 });
+                setPageSize({ width: vp.width, height: vp.height });
 
-            // Auto fit-to-width
-            requestAnimationFrame(() => {
-                if (canvasWrapperRef.current) {
-                    const wrapperW = canvasWrapperRef.current.clientWidth - 60; // padding
-                    const fitZoom = Math.min(wrapperW / vp.width, 1.5);
-                    setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
-                }
-            });
-
-            message.success(`Loaded: ${file.name} (${doc.numPages} pages)`);
+                // Auto fit-to-width
+                requestAnimationFrame(() => {
+                    if (canvasWrapperRef.current) {
+                        const wrapperW = canvasWrapperRef.current.clientWidth - 60; // padding
+                        const fitZoom = Math.min(wrapperW / vp.width, 1.5);
+                        setZoom(Math.max(0.25, +(fitZoom).toFixed(2)));
+                    }
+                });
+                message.success(`Loaded: ${file.name} (${doc.numPages} pages)`);
+            }
         } catch (err) {
             console.error('Failed to load PDF:', err);
             message.error('Failed to load PDF. File may be corrupted or password-protected.');
@@ -137,7 +199,7 @@ export default function usePdfEditor() {
             setTotalPages(doc.numPages);
             setCurrentPage(1);
 
-            const libDoc = await PDFDocument.load(uint8.slice(0));
+            const libDoc = await PDFDocument.load(uint8.slice(0), { ignoreEncryption: true });
             setPdfLibDoc(libDoc);
 
             setPdfFile({ name: filename, size: uint8.length });
@@ -201,7 +263,10 @@ export default function usePdfEditor() {
     const pushHistory = useCallback((pageNum) => {
         const fc = fabricCanvasRefs?.current?.[pageNum];
         if (!fc) return;
-        const fabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const fabricSnapshot = JSON.stringify(json);
         // Snapshot highlights for this page too
         const highlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
@@ -230,7 +295,10 @@ export default function usePdfEditor() {
         }
 
         // Save current state to future (redo)
-        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const currentFabricSnapshot = JSON.stringify(json);
         const currentHighlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
         );
@@ -238,7 +306,21 @@ export default function usePdfEditor() {
 
         // Restore fabric
         const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        const scaleX = fc.width / (parsedSnapshot._canvasWidth || fc.width);
+        const scaleY = fc.height / (parsedSnapshot._canvasHeight || fc.height);
+
         fc.loadFromJSON(parsedSnapshot, () => {
+            if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * scaleX,
+                        top: obj.top * scaleY,
+                        scaleX: (obj.scaleX || 1) * scaleX,
+                        scaleY: (obj.scaleY || 1) * scaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
             fc.requestRenderAll();
         });
 
@@ -266,7 +348,10 @@ export default function usePdfEditor() {
         }
 
         // Save current state to past (undo)
-        const currentFabricSnapshot = JSON.stringify(fc.toJSON(['customData']));
+        const json = fc.toJSON(['customData']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        const currentFabricSnapshot = JSON.stringify(json);
         const currentHighlightSnapshot = JSON.stringify(
             (typeof pageHighlights === 'object' ? pageHighlights : {})[pageNum] || []
         );
@@ -274,7 +359,21 @@ export default function usePdfEditor() {
 
         // Restore fabric
         const parsedSnapshot = typeof fabricSnapshot === 'string' ? JSON.parse(fabricSnapshot) : fabricSnapshot;
+        const scaleX = fc.width / (parsedSnapshot._canvasWidth || fc.width);
+        const scaleY = fc.height / (parsedSnapshot._canvasHeight || fc.height);
+
         fc.loadFromJSON(parsedSnapshot, () => {
+            if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * scaleX,
+                        top: obj.top * scaleY,
+                        scaleX: (obj.scaleX || 1) * scaleX,
+                        scaleY: (obj.scaleY || 1) * scaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
             fc.requestRenderAll();
         });
 
