@@ -83,6 +83,13 @@ export const mtc = createMenu([
     { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
     { label: "Setup Data Sheet", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
+    {
+        label: "Report", key: "report",
+        children: [
+            { label: "Inspection Dashboard", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
+            { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
+        ]
+    },
 ]);
 
 export const all = createMenu([

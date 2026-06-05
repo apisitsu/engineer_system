@@ -498,6 +498,21 @@ const ToolingInspectUpdate = async (req, res) => {
     }
 }
 
+// GET status preview — single source of truth for the Delay decision, used by
+// the update form to gate the reason prompt. Mirrors ToolingInspectUpdate's
+// calculation exactly (calculateDiffAndStatus: excludes Sundays + holidays,
+// Delay when diff > 3) so the prompt can never drift from the saved status.
+const ToolingStatusPreview = async (req, res) => {
+    const { receive_date, issue_date } = req.query;
+    try {
+        const { diff, status } = await calculateDiffAndStatus(receive_date, issue_date);
+        res.json({ result: "true", diff, status });
+    } catch (err) {
+        console.error("Status preview error:", err.message);
+        res.status(500).json({ result: "false", message: "Database error: " + err.message });
+    }
+};
+
 const ToolingSyncCSV = async (req, res) => {
     try {
         console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
@@ -529,6 +544,173 @@ const ToolingSyncCSV = async (req, res) => {
     }
 };
 
+// FYE helper: FYE = start_year - 1999 (e.g. FYE27 = Apr 2026–Mar 2027)
+const fyeToRange = (fye) => ({
+    start: `${fye + 1999}-04-01`,
+    end:   `${fye + 2000}-03-31`,
+});
+
+const currentFye = () => {
+    const m = moment().month() + 1; // 1-12
+    const y = moment().year();
+    return m >= 4 ? y - 1999 : y - 2000;
+};
+
+const ToolingAvailableFYE = async (req, res) => {
+    try {
+        const r = await engPool.query(`
+            SELECT DISTINCT
+                CASE
+                    WHEN EXTRACT(MONTH FROM issue_date::DATE) >= 4
+                    THEN EXTRACT(YEAR FROM issue_date::DATE)::int - 1999
+                    ELSE EXTRACT(YEAR FROM issue_date::DATE)::int - 2000
+                END AS fye
+            FROM ${TABLES.TI_LIST}
+            WHERE issue_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            ORDER BY fye DESC
+        `);
+        res.json(r.rows.map(row => Number(row.fye)));
+    } catch (error) {
+        console.error('ToolingAvailableFYE Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const ToolingResultDashboard = async (req, res) => {
+    try {
+        const fye   = parseInt(req.query.fye) || currentFye();
+        const month = req.query.month ? parseInt(req.query.month) : null; // 1-12 calendar
+
+        const { start: fyeStart, end: fyeEnd } = fyeToRange(fye);
+
+        // Period filter — full FYE or one specific calendar month within it
+        let periodStart, periodEnd;
+        if (month) {
+            const calYear = month >= 4 ? fye + 1999 : fye + 2000;
+            const ms = moment(`${calYear}-${String(month).padStart(2, '0')}-01`);
+            periodStart = ms.startOf('month').format('YYYY-MM-DD');
+            periodEnd   = ms.endOf('month').format('YYYY-MM-DD');
+        } else {
+            periodStart = fyeStart;
+            periodEnd   = fyeEnd;
+        }
+
+        // issued = received in period AND already has an issue_date (not pending)
+        const rcvFilter   = `receive_date ~ '^\\d{4}-\\d{2}-\\d{2}' AND receive_date::DATE BETWEEN $1 AND $2
+                              AND NULLIF(TRIM(issue_date::TEXT), '') IS NOT NULL`;
+        const issueFilter = `issue_date  ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE  BETWEEN $1 AND $2`;
+
+        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes] = await Promise.all([
+            engPool.query(`
+                SELECT
+                    COUNT(*) as total_po,
+                    COALESCE(SUM(qty), 0) as total_qty,
+                    SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
+                    SUM(CASE WHEN status = 'Delay'   THEN 1 ELSE 0 END) as delay,
+                    SUM(CASE WHEN judgement = 'Accept' THEN 1 ELSE 0 END) as accept,
+                    SUM(CASE WHEN judgement = 'Reject' THEN 1 ELSE 0 END) as reject,
+                    COUNT(*) as total_items
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}
+            `, [periodStart, periodEnd]),
+
+            engPool.query(`
+                SELECT reason, COUNT(*) as cnt
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter} AND status = 'Delay'
+                  AND reason IS NOT NULL AND TRIM(reason) != ''
+                GROUP BY reason ORDER BY cnt DESC
+            `, [periodStart, periodEnd]),
+
+            engPool.query(`
+                SELECT measuring_tools, COUNT(*) as cnt
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}
+                  AND measuring_tools IS NOT NULL AND TRIM(measuring_tools) != ''
+                GROUP BY measuring_tools ORDER BY cnt DESC
+            `, [periodStart, periodEnd]),
+
+            engPool.query(`
+                SELECT w_c, COUNT(*) as cnt
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}
+                  AND w_c IS NOT NULL AND TRIM(w_c) != ''
+                GROUP BY w_c ORDER BY cnt DESC LIMIT 15
+            `, [periodStart, periodEnd]),
+
+            // Monthly trend — issue_date, always full FYE
+            engPool.query(`
+                SELECT
+                    TO_CHAR(issue_date::DATE, 'YYYY-MM') as month_key,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
+                    SUM(CASE WHEN status = 'Delay'   THEN 1 ELSE 0 END) as delay
+                FROM ${TABLES.TI_LIST}
+                WHERE ${issueFilter}
+                GROUP BY month_key ORDER BY month_key
+            `, [fyeStart, fyeEnd]),
+
+            // Daily — group by day-of-month (1–31), sum across all months in period
+            engPool.query(`
+                SELECT EXTRACT(DAY FROM issue_date::DATE)::int as day_num,
+                       COALESCE(SUM(qty), 0) as received
+                FROM ${TABLES.TI_LIST}
+                WHERE ${issueFilter}
+                GROUP BY day_num ORDER BY day_num
+            `, [periodStart, periodEnd]),
+
+            // Detail rows for bottom table
+            engPool.query(`
+                SELECT id, receive_date, po_no, item_name, dwg_no, qty,
+                       issue_date, diff, w_c, status, reason, measuring_tools, judgement
+                FROM ${TABLES.TI_LIST}
+                WHERE ${rcvFilter}
+                ORDER BY receive_date DESC
+                LIMIT 500
+            `, [periodStart, periodEnd])
+        ]);
+
+        const kpi = kpiRes.rows[0];
+        const totalItems = Number(kpi.total_items) || 0;
+        const totalQty   = Number(kpi.total_qty)   || 0;
+        const onTime     = Number(kpi.on_time)      || 0;
+        const onTimePct  = totalItems > 0
+            ? parseFloat(((onTime / totalItems) * 100).toFixed(1)) : 0;
+
+        res.json({
+            kpi: { totalPO: Number(kpi.total_po)||0, totalQty, onTime,
+                   delay: Number(kpi.delay)||0, accept: Number(kpi.accept)||0,
+                   reject: Number(kpi.reject)||0, totalItems, onTimePct },
+            judgementRatio: [
+                { name: 'Accept', value: Number(kpi.accept)||0 },
+                { name: 'Reject', value: Number(kpi.reject)||0 }
+            ],
+            statusRatio: [
+                { name: 'On time', value: onTime },
+                { name: 'Delay',   value: Number(kpi.delay)||0 }
+            ],
+            monthlyTrend: monthlyRes.rows.map(r => ({
+                month:  r.month_key,
+                total:  Number(r.total),
+                onTime: Number(r.on_time),
+                delay:  Number(r.delay)
+            })),
+            delayCauses:   delayCausesRes.rows.map(r => ({ reason: r.reason, count: Number(r.cnt) })),
+            measuringTools: measuringToolsRes.rows.map(r => ({
+                tool:  r.measuring_tools,
+                count: Number(r.cnt),
+                pct:   totalItems > 0 ? parseFloat(((Number(r.cnt)/totalItems)*100).toFixed(1)) : 0
+            })),
+            wcBreakdown: wcRes.rows.map(r => ({ wc: r.w_c, count: Number(r.cnt) })),
+            dailyData:   dailyRes.rows.map(r => ({ day: Number(r.day_num), received: Number(r.received) })),
+            detailRows:  detailRowsRes.rows
+        });
+    } catch (error) {
+        console.error('ToolingResultDashboard Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 module.exports = {
     ToolingInspectGetlist,
     ToolDWGRequestGetList,
@@ -537,7 +719,10 @@ module.exports = {
     ToolingDashboadtGetlist,
     ToolingReturnAdd,
     ToolingInspectUpdate,
+    ToolingStatusPreview,
     ToolDWGRequestUpdate,
-    ToolingSyncCSV
+    ToolingSyncCSV,
+    ToolingAvailableFYE,
+    ToolingResultDashboard
 };
 

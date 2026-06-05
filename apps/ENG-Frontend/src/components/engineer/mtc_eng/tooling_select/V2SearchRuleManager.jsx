@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Select,
-  Space, Popconfirm, message, Typography, Tag, Tooltip
+  Space, Popconfirm, message, Typography, Tag, Tooltip, Switch
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -21,8 +21,8 @@ export default function V2SearchRuleManager({ machine, token }) {
   const [toolingFilter, setToolingFilter] = useState('');
   const [form] = Form.useForm();
 
-  const headers = { Authorization: `Bearer ${token}` };
-  const baseUrl = `${server.TSV2_SEARCH_RULES}/${machine.id}/search-rules`;
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  const baseUrl = useMemo(() => `${server.TSV2_SEARCH_RULES}/${machine.id}/search-rules`, [machine.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,7 +40,7 @@ export default function V2SearchRuleManager({ machine, token }) {
     } finally {
       setLoading(false);
     }
-  }, [machine.id, token]);
+  }, [baseUrl, headers, machine.id]);
 
   // Load columns when inventory_table is known
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function V2SearchRuleManager({ machine, token }) {
     axios.get(`${server.TSV2_COLUMNS}/${machine.inventory_table}`, { headers })
       .then(r => setColumns(r.data.columns || []))
       .catch(() => {});
-  }, [machine.inventory_table, token]);
+  }, [machine.inventory_table, headers]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -56,7 +56,7 @@ export default function V2SearchRuleManager({ machine, token }) {
 
   const openCreate = () => {
     form.resetFields();
-    form.setFieldsValue({ sort_priority: 0 });
+    form.setFieldsValue({ sort_priority: 0, is_match_dim: true });
     setModal({ open: true, record: null });
   };
 
@@ -67,6 +67,7 @@ export default function V2SearchRuleManager({ machine, token }) {
       tol_minus: record.tol_minus !== null ? record.tol_minus : undefined,
       inventory_tooling_filter:  record.inventory_tooling_filter  || undefined,
       inventory_table_override:  record.inventory_table_override  || undefined,
+      is_match_dim: record.is_match_dim !== false,
     });
     setModal({ open: true, record });
   };
@@ -121,6 +122,10 @@ export default function V2SearchRuleManager({ machine, token }) {
     { title: 'Table Override', dataIndex: 'inventory_table_override', key: 'inventory_table_override', width: 160,
       render: v => v ? <Tag color="volcano">{v}</Tag> : <span style={{ color: '#bbb' }}>—</span> },
     { title: 'Tolerance / Strategy', key: 'tol', width: 160, render: (_, r) => tolLabel(r) },
+    { title: 'Ranking', dataIndex: 'is_match_dim', key: 'is_match_dim', width: 110,
+      render: v => v === false
+        ? <Tag color="default">Excluded</Tag>
+        : <Tag color="blue">Match dim</Tag> },
     { title: 'Priority', dataIndex: 'sort_priority', key: 'sort_priority', width: 70 },
     { title: 'Label', dataIndex: 'label', key: 'label' },
     {
@@ -224,6 +229,15 @@ export default function V2SearchRuleManager({ machine, token }) {
               <Input />
             </Form.Item>
           </div>
+          <Form.Item
+            name="is_match_dim"
+            label="Use in closest-match ranking"
+            valuePropName="checked"
+            initialValue={true}
+            extra="ON = this dim counts toward picking the closest tool. Turn OFF for constant / SD-lookup dims so the match is ranked by OD/ID/W part-fit dims only. Tolerance filter still applies either way."
+          >
+            <Switch checkedChildren="Match dim" unCheckedChildren="Excluded" />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
