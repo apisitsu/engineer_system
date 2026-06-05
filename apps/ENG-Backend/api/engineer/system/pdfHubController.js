@@ -438,4 +438,44 @@ router.get('/test-unlock', (req, res) => {
     });
 });
 
+// ============================================================================
+// POST /repair — Rebuild and clean a PDF using Python PyMuPDF
+// ============================================================================
+router.post('/repair', upload.single('pdf'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ result: 'false', message: 'No PDF file uploaded' });
+    }
+
+    const inputPath = req.file.path;
+    const outputPath = path.join(os.tmpdir(), `repaired_${req.file.filename}.pdf`);
+    
+    // Path to the python script
+    const scriptPath = path.join(__dirname, 'pdf_rebuilder.py');
+
+    execFile('python', [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
+        if (error) {
+            console.error('PDF Repair Error:', stderr || error.message);
+            // Cleanup input
+            fs.unlink(inputPath, () => {});
+            return res.status(500).json({ result: 'false', message: 'Failed to repair PDF' });
+        }
+
+        // Read the repaired PDF
+        fs.readFile(outputPath, (err, data) => {
+            // Cleanup both temp files
+            fs.unlink(inputPath, () => {});
+            fs.unlink(outputPath, () => {});
+
+            if (err) {
+                console.error('PDF Repair Read Error:', err.message);
+                return res.status(500).json({ result: 'false', message: 'Failed to read repaired PDF' });
+            }
+
+            // Send back the raw PDF bytes
+            res.setHeader('Content-Type', 'application/pdf');
+            res.send(data);
+        });
+    });
+});
+
 module.exports = router;

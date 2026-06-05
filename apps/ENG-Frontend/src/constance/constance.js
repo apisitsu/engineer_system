@@ -97,6 +97,7 @@ export const server = {
   PDF_USAGE_HISTORY: `${apiUrl}api/engineer/pdf-hub/usage-history`,
   PDF_WATERMARKS: `${apiUrl}api/engineer/pdf-hub/watermarks`,
   PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
   PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
   PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
 

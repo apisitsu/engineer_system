@@ -89,17 +89,42 @@ export default function usePdfEditor() {
             setPdfBytes(bytes);
 
             let doc = null;
-            let libDoc = await PDFDocument.load(arrayBuffer.slice(0), { ignoreEncryption: true });
+            let libDoc = null;
             let finalBytes = bytes;
+
+            // ── Try to repair/rebuild the PDF through the backend first ──
+            // This flattens complex structures and removes problematic encodings that break pdf-lib.
+            try {
+                const formData = new FormData();
+                formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                
+                const token = localStorage.getItem('token');
+                const res = await axios.post(server.PDF_REPAIR, formData, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    responseType: 'arraybuffer'
+                });
+                
+                finalBytes = new Uint8Array(res.data);
+                console.log('PDF repaired and rebuilt via backend successfully!');
+            } catch (repairErr) {
+                console.warn('Backend repair failed or not available, falling back to original bytes:', repairErr);
+                finalBytes = bytes;
+            }
+
+            try {
+                libDoc = await PDFDocument.load(finalBytes.slice(0), { ignoreEncryption: true });
+            } catch (e) {
+                console.warn('pdf-lib failed to load doc during init:', e);
+            }
 
             try {
                 // pdfjs-dist for rendering
-                doc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
+                doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
             } catch (renderErr) {
                 console.warn('PDF.js rendering failed, attempting backend unlock...', renderErr);
                 try {
                     const formData = new FormData();
-                    formData.append('pdf', new Blob([bytes], { type: 'application/pdf' }), file.name || 'document.pdf');
+                    formData.append('pdf', new Blob([finalBytes], { type: 'application/pdf' }), file.name || 'document.pdf');
                     
                     const token = localStorage.getItem('token');
                     const res = await axios.post(server.PDF_UNLOCK, formData, {

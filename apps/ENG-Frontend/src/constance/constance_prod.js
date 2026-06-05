@@ -51,6 +51,8 @@ export const server = {
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
   PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
 
   // Tooling Select
   TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
