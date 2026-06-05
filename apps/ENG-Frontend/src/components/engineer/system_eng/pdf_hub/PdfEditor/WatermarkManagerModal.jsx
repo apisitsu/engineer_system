@@ -175,58 +175,62 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
             width={600}
         >
             <Spin spinning={loading}>
-                {!isCreate ? (
-                    <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                            <span>Select a watermark to apply, or create a new one.</span>
-                            <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsCreate(true)}>
-                                Create New
-                            </Button>
-                        </div>
-                        <List
-                            bordered
-                            dataSource={watermarks}
-                            renderItem={(wm) => (
-                                <List.Item
-                                    actions={[
-                                        wm.owner_empno === empNo && (
-                                            <Tooltip title="Edit">
-                                                <Button type="text" icon={<EditOutlined />} onClick={() => {
-                                                    setEditingId(wm.id);
-                                                    setIsCreate(true);
-                                                    form.setFieldsValue({ ...wm });
-                                                }} />
-                                            </Tooltip>
-                                        ),
-                                        wm.owner_empno === empNo && (
-                                            <Tooltip title="Share">
-                                                <Button type="text" icon={<ShareAltOutlined />} onClick={() => {
-                                                    setShareWmId(wm.id);
-                                                    setShareOpen(true);
-                                                }} />
-                                            </Tooltip>
-                                        ),
-                                        wm.owner_empno === empNo && (
-                                            <Popconfirm title="Delete watermark?" onConfirm={() => handleDelete(wm.id)}>
-                                                <Button type="text" danger icon={<DeleteOutlined />} />
-                                            </Popconfirm>
-                                        )
-                                    ].filter(Boolean)}
-                                >
-                                    <div style={{ flex: 1 }}>
-                                        <strong>{wm.name}</strong>
-                                        {wm.owner_empno !== empNo && <Badge count="Shared" style={{ backgroundColor: '#52c41a', marginLeft: 8 }} />}
-                                        <div style={{ color: '#888', fontSize: 12 }}>Text: "{wm.text}"</div>
-                                        <Space style={{ marginTop: 8 }}>
-                                            <Button size="small" onClick={() => applyWatermark(wm, 'stamp')}>Place as Stamp</Button>
-                                            <Button size="small" type="primary" ghost onClick={() => applyWatermark(wm, 'all')}>Apply to All Pages</Button>
-                                        </Space>
-                                    </div>
-                                </List.Item>
-                            )}
-                        />
+                <div style={{ display: !isCreate ? 'block' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+                        <span>Select a watermark to apply, or create a new one.</span>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+                            setIsCreate(true);
+                            setEditingId(null);
+                            form.resetFields();
+                        }}>
+                            Create New
+                        </Button>
                     </div>
-                ) : (
+                    <List
+                        bordered
+                        dataSource={watermarks}
+                        renderItem={(wm) => (
+                            <List.Item
+                                actions={[
+                                    wm.owner_empno === empNo && (
+                                        <Tooltip title="Edit" key="edit">
+                                            <Button type="text" icon={<EditOutlined />} onClick={() => {
+                                                setEditingId(wm.id);
+                                                setIsCreate(true);
+                                                form.setFieldsValue({ ...wm });
+                                            }} />
+                                        </Tooltip>
+                                    ),
+                                    wm.owner_empno === empNo && (
+                                        <Tooltip title="Share" key="share">
+                                            <Button type="text" icon={<ShareAltOutlined />} onClick={() => {
+                                                setShareWmId(wm.id);
+                                                setShareOpen(true);
+                                            }} />
+                                        </Tooltip>
+                                    ),
+                                    wm.owner_empno === empNo && (
+                                        <Popconfirm title="Delete watermark?" onConfirm={() => handleDelete(wm.id)} key="delete">
+                                            <Button type="text" danger icon={<DeleteOutlined />} />
+                                        </Popconfirm>
+                                    )
+                                ].filter(Boolean)}
+                            >
+                                <div style={{ flex: 1 }}>
+                                    <strong>{wm.name}</strong>
+                                    {wm.owner_empno !== empNo && <Badge count="Shared" style={{ backgroundColor: '#52c41a', marginLeft: 8 }} />}
+                                    <div style={{ color: '#888', fontSize: 12 }}>Text: "{wm.text}"</div>
+                                    <Space style={{ marginTop: 8 }}>
+                                        <Button size="small" onClick={() => applyWatermark(wm, 'stamp')}>Place as Stamp</Button>
+                                        <Button size="small" type="primary" ghost onClick={() => applyWatermark(wm, 'all')}>Apply to All Pages</Button>
+                                    </Space>
+                                </div>
+                            </List.Item>
+                        )}
+                    />
+                </div>
+                
+                <div style={{ display: isCreate ? 'block' : 'none' }}>
                     <Form form={form} layout="vertical" onFinish={handleCreate} initialValues={{ opacity: 0.3, font_size: 48, angle: 45, color: '#000000' }}>
                         <Form.Item name="name" label="Template Name" rules={[{ required: true }]}>
                             <Input placeholder="e.g. Confidential" />
@@ -271,7 +275,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                             </Button>
                         </div>
                     </Form>
-                )}
+                </div>
 
                 <Modal
                     title="Share Watermark"

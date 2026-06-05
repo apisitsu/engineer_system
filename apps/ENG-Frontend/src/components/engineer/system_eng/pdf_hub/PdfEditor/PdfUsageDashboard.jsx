@@ -208,7 +208,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             onCancel={onClose}
             footer={null}
             width={1200}
-            bodyStyle={{ padding: '24px 0' }}
+            styles={{ body: { padding: '24px 0' } }}
         >
             <Spin spinning={loading}>
                 <Tabs

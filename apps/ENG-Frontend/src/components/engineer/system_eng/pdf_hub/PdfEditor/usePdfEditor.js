@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { message } from 'antd';
+import { App } from 'antd';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -38,6 +38,8 @@ export function screenToPdfCoords(sx, sy, canvasW, canvasH, pageW, pageH) {
 // usePdfEditor — Master Hook
 // ============================================================================
 export default function usePdfEditor() {
+    const { message } = App.useApp();
+
     // ── PDF Document State ──
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfDoc, setPdfDoc] = useState(null);         // pdfjs-dist (rendering)

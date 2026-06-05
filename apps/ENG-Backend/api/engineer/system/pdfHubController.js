@@ -14,6 +14,13 @@ const { execFile } = require('child_process');
 const router = express.Router();
 const upload = multer({ dest: os.tmpdir() });
 
+// Detect Python executable: Windows uses 'py' launcher, others use 'python3' or 'python'
+function getPythonCmd() {
+    if (process.platform === 'win32') return 'py';
+    // Try python3 first on Unix, fallback to python
+    return 'python3';
+}
+
 // ============================================================================
 // GET /stamps/:em_id — Fetch a user's stamp & signature with dimensions
 // ============================================================================
@@ -395,21 +402,17 @@ router.post('/unlock', upload.single('pdf'), (req, res) => {
 
     const inputPath = req.file.path;
     const outputPath = path.join(os.tmpdir(), `unlocked_${req.file.filename}.pdf`);
-    
-    // Path to the python script
     const scriptPath = path.join(__dirname, 'pdf_unlocker.py');
+    const pythonCmd = getPythonCmd();
 
-    execFile('python', [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
+    execFile(pythonCmd, [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
         if (error) {
             console.error('PDF Unlock Error:', stderr || error.message);
-            // Cleanup input
             fs.unlink(inputPath, () => {});
             return res.status(500).json({ result: 'false', message: 'Failed to unlock PDF' });
         }
 
-        // Read the unlocked PDF
         fs.readFile(outputPath, (err, data) => {
-            // Cleanup both temp files
             fs.unlink(inputPath, () => {});
             fs.unlink(outputPath, () => {});
 
@@ -418,7 +421,6 @@ router.post('/unlock', upload.single('pdf'), (req, res) => {
                 return res.status(500).json({ result: 'false', message: 'Failed to read unlocked PDF' });
             }
 
-            // Send back the raw PDF bytes
             res.setHeader('Content-Type', 'application/pdf');
             res.send(data);
         });
@@ -429,8 +431,9 @@ router.get('/test-unlock', (req, res) => {
     const inputPath = path.join(__dirname, '..', '..', '..', '..', 'ENG-Frontend', 'src', 'components', 'engineer', 'system_eng', 'pdf_hub', 'AS81935-8.pdf');
     const outputPath = path.join(os.tmpdir(), `test_unlock.pdf`);
     const scriptPath = path.join(__dirname, 'pdf_unlocker.py');
+    const pythonCmd = getPythonCmd();
 
-    execFile('python', [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
+    execFile(pythonCmd, [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
         if (error) {
             return res.status(500).json({ result: 'false', error: error.message, stderr });
         }
@@ -448,21 +451,17 @@ router.post('/repair', upload.single('pdf'), (req, res) => {
 
     const inputPath = req.file.path;
     const outputPath = path.join(os.tmpdir(), `repaired_${req.file.filename}.pdf`);
-    
-    // Path to the python script
     const scriptPath = path.join(__dirname, 'pdf_rebuilder.py');
+    const pythonCmd = getPythonCmd();
 
-    execFile('python', [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
+    execFile(pythonCmd, [scriptPath, inputPath, outputPath], (error, stdout, stderr) => {
         if (error) {
             console.error('PDF Repair Error:', stderr || error.message);
-            // Cleanup input
             fs.unlink(inputPath, () => {});
             return res.status(500).json({ result: 'false', message: 'Failed to repair PDF' });
         }
 
-        // Read the repaired PDF
         fs.readFile(outputPath, (err, data) => {
-            // Cleanup both temp files
             fs.unlink(inputPath, () => {});
             fs.unlink(outputPath, () => {});
 
@@ -471,7 +470,6 @@ router.post('/repair', upload.single('pdf'), (req, res) => {
                 return res.status(500).json({ result: 'false', message: 'Failed to read repaired PDF' });
             }
 
-            // Send back the raw PDF bytes
             res.setHeader('Content-Type', 'application/pdf');
             res.send(data);
         });

@@ -180,7 +180,7 @@ const SignaturePad = ({ open, onClose, onComplete }) => {
             footer={null}
             width={560}
             centered
-            destroyOnClose
+            destroyOnHidden
             styles={{
                 body: { padding: 0 },
                 mask: { backdropFilter: 'blur(4px)' },
