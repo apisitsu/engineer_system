@@ -167,7 +167,7 @@ const HomeNewProd = () => {
           transition: `all ${theme.transitions.normal}`,
           background: theme.colors.surface
         }}
-        bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' }}
+        styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' } }}
         onClick={() => {
           if (tool.path.startsWith('http')) {
             window.open(tool.path, '_blank');

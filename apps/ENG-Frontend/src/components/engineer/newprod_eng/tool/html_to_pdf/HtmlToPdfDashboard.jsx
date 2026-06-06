@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Tag, Upload, message, Tooltip, Spin, Typography, Layout } from 'antd';
+import { Table, Button, Tag, Upload, Tooltip, Spin, Typography, Layout, App } from 'antd';
 import { ReloadOutlined, UploadOutlined, DownloadOutlined, UserOutlined, FilePdfOutlined, Html5Outlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -16,6 +16,7 @@ const { Content } = Layout;
 const HtmlToPdfDashboard = () => {
     const { empNo } = useAuthStore();
     const { theme } = useTheme();
+    const { message } = App.useApp();
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(false);
     const [myJobOnly, setMyJobOnly] = useState(false);
