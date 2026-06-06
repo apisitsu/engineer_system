@@ -4,6 +4,7 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
+const cnFormat = require('../utils/cnFormat');
 
 const router = express.Router();
 
@@ -16,12 +17,10 @@ const COVERAGE_TTL_MS = 15 * 60 * 1000;
 
 // Convert pc_production.control_no (item number format) to standard CN format
 // e.g. "350528" → "C35-00528", "350528-C" → "C35-00528", "C35-00528" → "C35-00528"
+// Delegates to cnFormat (SSOT); falls back to the cleaned raw string when the
+// shape is unrecognized so unmapped values still flow through the report.
 function normalizeCn(raw) {
-  const cleaned = String(raw || '').trim().toUpperCase().replace(/-[A-Z]$/, '');
-  if (/^\d{6}$/.test(cleaned)) {
-    return `C${cleaned.slice(0, 2)}-${cleaned.slice(2).padStart(5, '0')}`;
-  }
-  return cleaned;
+  return cnFormat.toControlNo(raw) || String(raw || '').trim().toUpperCase().replace(/-[A-Z]$/, '');
 }
 
 // Derive part_type string from CN prefix
@@ -380,10 +379,7 @@ async function buildCoverage() {
     // have a spec row are searchable; results are cached per CN (TTL) so each CN is
     // searched once even though it appears in several machine/process rows.
     const specCnSet = new Set(specCnsRes.rows.map(r => String(r.cn).trim()));
-    const toSpecCn = (c) => {
-      const m = String(c).toUpperCase().match(/^[A-Z](\d{2})-0*(\d{4})$/);
-      return m ? m[1] + m[2] : null;
-    };
+    const toSpecCn = cnFormat.toSpecCn; // SSOT: control-no / item-no → 6-digit spec CN
     // Unique CNs (report format → spec CN) that need a lookup
     const needTs = new Map();
     for (const r of evaluated) {
@@ -412,7 +408,9 @@ async function buildCoverage() {
       if (!tsResult) continue;
       const acceptable = new Set([r.machine_type_name]);
       if (nameToGroup[r.machine_type_name]) acceptable.add(nameToGroup[r.machine_type_name]);
-      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable).length > 0) {
+      // Gate by grinding direction: a T-Select tooling set computed for the part's
+      // direction must not satisfy an opposite-direction process_code row.
+      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code }).length > 0) {
         r.has_tooling_match = true;
         r.tooling_source = 'tselect';
       }

@@ -1,4 +1,5 @@
 const { TABLES } = require('../mtcConstants');
+const cnFormat = require('../utils/cnFormat');
 
 const PART_TYPE_MAP = {
   C31: { type: 'BALL',      table: TABLES.LPB_ENG_BALL },
@@ -49,13 +50,8 @@ const PART_TYPE_MAP = {
   A49: { type: 'SPHERICAL', table: TABLES.LPB_ENG_SPH },
 };
 
-function itemNoToCN(itemNo) {
-  if (!/^\d{6}$/.test(itemNo)) return null;
-  const classNum = itemNo.slice(0, 2);
-  const seq = itemNo.slice(2);
-  const prefix = classNum >= '41' && classNum <= '49' ? 'A' : 'C';
-  return `${prefix}${classNum}-0${seq}`;
-}
+// Re-exported from cnFormat (SSOT) for backward compatibility.
+const itemNoToCN = cnFormat.itemNoToControlNo;
 
 function sortBySeq(a, b) {
   const s1 = (parseInt(a.seq_no) || 0) - (parseInt(b.seq_no) || 0);
@@ -72,21 +68,16 @@ function sortBySeq(a, b) {
 async function searchByCn(cn, maqPool, rodpcPool) {
   let cnUpper = cn.trim().toUpperCase();
 
+  // Normalize to canonical Cxx-0YYYY (factory DB stores the 5-digit-suffix form).
+  // Accepts 6-digit item numbers and 4-/5-digit-suffix control numbers alike.
+  // cnFormat returns null for unrecognized shapes — keep the raw value so the
+  // downstream "Unknown CN prefix" error still fires for genuinely bad input.
   if (/^\d{6}$/.test(cnUpper)) {
-    // 6-digit numeric "250235" → "C25-00235"
-    const converted = itemNoToCN(cnUpper);
+    const converted = cnFormat.toControlNo(cnUpper);
     if (!converted) throw new Error(`Cannot convert item_no: ${cnUpper}`);
     cnUpper = converted;
   } else {
-    // "Cxx-0235" or "Cxx-00235" → normalize to canonical "Cxx-00235" via 6-digit intermediate
-    // Factory DB stores format Cxx-0YYYY (5-digit suffix) but users often type Cxx-YYYY (4-digit)
-    const m = cnUpper.match(/^([A-Z])(\d{2})-0*(\d{4})$/);
-    if (m) {
-      const numeric = m[2] + m[3]; // e.g. "25" + "0235" = "250235"
-      const converted = itemNoToCN(numeric);
-      if (!converted) throw new Error(`Cannot convert: ${cnUpper}`);
-      cnUpper = converted;
-    }
+    cnUpper = cnFormat.toControlNo(cnUpper) || cnUpper;
   }
 
   const prefix = cnUpper.slice(0, 3);

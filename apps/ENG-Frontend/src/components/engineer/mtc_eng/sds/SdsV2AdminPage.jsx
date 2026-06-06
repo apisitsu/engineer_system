@@ -850,7 +850,6 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
   const [combos, setCombos] = useState([]);
   const [combosLoading, setCombosLoading] = useState(false);
   const [filterMachine, setFilterMachine] = useState('__all__');
-  const [showComboList, setShowComboList] = useState(false); // table starts hidden
 
   // Reset filter when selected machine is hidden by Configure Visible
   useEffect(() => {
@@ -906,7 +905,6 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 
   const selectCombo = (combo) => {
     setSelectedCombo(combo);
-    setShowComboList(false); // collapse list after picking a combo
     loadSlots(combo.machine_type, combo.process_code);
   };
 
@@ -1023,21 +1021,12 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
       <Col span={10}>
         <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
           <Col>
-            <Button
-              icon={showComboList ? <UpOutlined /> : <DownOutlined />}
-              onClick={() => setShowComboList(s => !s)}
-            >
-              {showComboList ? 'Hide List' : 'Show List'}
-            </Button>
-          </Col>
-          <Col>
             <Button type="primary" icon={<PlusOutlined />} onClick={openNewCombo}>
               New
             </Button>
           </Col>
         </Row>
-        {showComboList && (
-          <>
+        <>
             <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
               <Col flex="auto">
                 <Select
@@ -1064,8 +1053,7 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
                   ? 'ant-table-row-selected' : ''
               }
             />
-          </>
-        )}
+        </>
       </Col>
 
       {/* Right: Slot editor */}
@@ -1839,7 +1827,7 @@ const AUDIT_STATIC_PART_TYPES = [
   { key: 'race',      label: 'Race',      prefixes: ['C2'],       color: '#52c41a' },
   { key: 'body',      label: 'Body',      prefixes: ['C1', 'C5'], color: '#fa8c16' },
   { key: 'sleeve',    label: 'Sleeve',    prefixes: ['C6'],       color: '#722ed1' },
-  { key: 'spherical', label: 'Spherical', prefixes: ['A4'],       color: '#f5222d' },
+  { key: 'mecha',     label: 'Mecha',     prefixes: ['C9'],       color: '#f5222d' },
 ];
 
 const loadSavedExpandedPcs = (catKey) => {

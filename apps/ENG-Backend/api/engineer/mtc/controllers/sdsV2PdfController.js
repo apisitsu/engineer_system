@@ -170,7 +170,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     const existingPrefixes = new Set(
       slotData.filter(Boolean).map(s => dwgPrefix(s.tool_dwg_no)).filter(Boolean)
     );
-    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable)) {
+    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code })) {
       const pfx = dwgPrefix(tt.tooling_no);
       if (pfx && existingPrefixes.has(pfx)) continue;   // already covered by a saved tool
       const idx = slotData.findIndex(s => s === null);
