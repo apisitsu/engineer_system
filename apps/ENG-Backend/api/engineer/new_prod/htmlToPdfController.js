@@ -265,17 +265,14 @@ const deleteJob = async (req, res) => {
 
 const deleteAllJobs = async (req, res) => {
     try {
-        const result = await engPool.query(`SELECT input_file_path, output_pdf_path FROM newprod_html_to_pdf_jobs`);
-        result.rows.forEach(row => {
-            if (row.input_file_path && fs.existsSync(row.input_file_path)) {
-                try { fs.unlinkSync(row.input_file_path); } catch (e) { }
+        if (fs.existsSync(UPLOAD_DIR)) {
+            const files = fs.readdirSync(UPLOAD_DIR);
+            for (const file of files) {
+                try { fs.unlinkSync(path.join(UPLOAD_DIR, file)); } catch (e) { }
             }
-            if (row.output_pdf_path && fs.existsSync(row.output_pdf_path)) {
-                try { fs.unlinkSync(row.output_pdf_path); } catch (e) { }
-            }
-        });
+        }
         await engPool.query(`TRUNCATE TABLE newprod_html_to_pdf_jobs`);
-        res.json({ success: true, message: 'All jobs deleted' });
+        res.json({ success: true, message: 'All jobs and files deleted' });
     } catch (err) {
         console.error('Error deleting all jobs:', err);
         res.status(500).json({ error: 'Server error' });
