@@ -8,9 +8,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -108,7 +108,9 @@ export const server = {
   HTML_TO_PDF_JOBS: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs`,
   HTML_TO_PDF_DOWNLOAD_PDF: `${apiUrl}api/engineer/new_prod/html-to-pdf/download/`,
   HTML_TO_PDF_DOWNLOAD_HTML: `${apiUrl}api/engineer/new_prod/html-to-pdf/download-html/`,
-
+  HTML_TO_PDF_DELETE_JOB: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
+  HTML_TO_PDF_DELETE_ALL: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/all`,
+  HTML_TO_PDF_REWORK: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
   // PDF Hub (Sign & Stamp)
   PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
   PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,

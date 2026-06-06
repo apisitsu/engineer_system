@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Tag, Upload, Tooltip, Spin, Typography, Layout, App } from 'antd';
-import { ReloadOutlined, UploadOutlined, DownloadOutlined, UserOutlined, FilePdfOutlined, Html5Outlined } from '@ant-design/icons';
+import { Table, Button, Tag, Upload, Tooltip, Spin, Typography, Layout, App, Popconfirm } from 'antd';
+import { ReloadOutlined, UploadOutlined, DownloadOutlined, UserOutlined, FilePdfOutlined, Html5Outlined, DeleteOutlined, RetweetOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
 import { server } from '../../../../../constance/constance';
@@ -14,7 +14,7 @@ const { Title, Text } = Typography;
 const { Content } = Layout;
 
 const HtmlToPdfDashboard = () => {
-    const { empNo } = useAuthStore();
+    const { empNo, userDepartment } = useAuthStore();
     const { theme } = useTheme();
     const { message } = App.useApp();
     const [jobs, setJobs] = useState([]);
@@ -42,6 +42,48 @@ const HtmlToPdfDashboard = () => {
             message.error('Failed to fetch jobs.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${server.HTML_TO_PDF_DELETE_JOB}${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            message.success('Job deleted successfully');
+            fetchJobs();
+        } catch (error) {
+            console.error('Error deleting job:', error);
+            message.error('Failed to delete job');
+        }
+    };
+
+    const handleDeleteAll = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(server.HTML_TO_PDF_DELETE_ALL, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            message.success('All jobs deleted successfully');
+            fetchJobs();
+        } catch (error) {
+            console.error('Error deleting all jobs:', error);
+            message.error('Failed to delete all jobs');
+        }
+    };
+
+    const handleRework = async (id) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${server.HTML_TO_PDF_REWORK}${id}/rework`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            message.success('Job rework started');
+            fetchJobs();
+        } catch (error) {
+            console.error('Error starting rework:', error);
+            message.error('Failed to start rework');
         }
     };
 
@@ -117,22 +159,10 @@ const HtmlToPdfDashboard = () => {
             case 'Running SmartExchange': return <Text>Running SmartExchange</Text>;
             case 'Fetching SQL Data': return <Text>Fetching SQL Data</Text>;
             case 'Exporting PDF': return <Text>Exporting PDF</Text>;
-            case 'Failed': return <Text type="danger">Failed</Text>;
+            case 'Error':
+            case 'Failed': return <Text type="danger">ERROR</Text>;
             default: return <Text>{status}</Text>;
         }
-    };
-
-    const getConditionTag = (condition) => {
-        if (condition === 'Revised') {
-            return <Tag color="success" style={{ borderRadius: '12px', padding: '0 10px' }}>Revised</Tag>;
-        }
-        if (condition === 'Failed') {
-            return <Tag color="error" style={{ borderRadius: '12px', padding: '0 10px' }}>Failed</Tag>;
-        }
-        if (condition === 'Expired') {
-            return <Tag color="warning" style={{ borderRadius: '12px', padding: '0 10px' }}>Expired</Tag>;
-        }
-        return <Tag color="default" style={{ borderRadius: '12px', padding: '0 10px', backgroundColor: '#e6f7ff', borderColor: '#e6f7ff', color: '#1890ff' }}>—</Tag>;
     };
 
     const columns = [
@@ -170,13 +200,6 @@ const HtmlToPdfDashboard = () => {
             key: 'status',
             align: 'center',
             render: text => getStatusTag(text)
-        },
-        {
-            title: 'CONDITION',
-            dataIndex: 'condition',
-            key: 'condition',
-            align: 'center',
-            render: text => getConditionTag(text)
         }
     ];
 
@@ -190,9 +213,7 @@ const HtmlToPdfDashboard = () => {
                     return <Text type="secondary" italic>File Expired</Text>;
                 }
 
-                const displayName = record.rev && record.rev !== '---' && record.rev !== '-'
-                    ? `${record.cn}_${record.rev}.pdf`
-                    : `${record.cn}_DRS01_---.pdf`;
+                const displayName = `${record.cn}_${record.rev}.pdf`;
 
                 return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
@@ -227,6 +248,34 @@ const HtmlToPdfDashboard = () => {
         key: 'error',
         align: 'center',
         render: text => text ? <Text type="danger">⚠ {text}</Text> : <Text type="secondary">—</Text>
+    });
+
+    columns.push({
+        title: 'ACTION',
+        key: 'action',
+        align: 'center',
+        render: (text, record) => (
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                {(record.status === 'Failed' || record.status === 'Error') && (
+                    <Tooltip title="Rework Job">
+                        <Button size="small" type="primary" icon={<RetweetOutlined />} onClick={() => handleRework(record.id)}>Rework</Button>
+                    </Tooltip>
+                )}
+                {userDepartment === 'AD' && (
+                    <Popconfirm
+                        title="Delete Job"
+                        description="Are you sure to delete this job?"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="Yes"
+                        cancelText="No"
+                    >
+                        <Tooltip title="Delete Job">
+                            <Button size="small" danger icon={<DeleteOutlined />} />
+                        </Tooltip>
+                    </Popconfirm>
+                )}
+            </div>
+        )
     });
 
     return (
@@ -268,6 +317,24 @@ const HtmlToPdfDashboard = () => {
                                     MyJob
                                 </Button>
                                 <div className="refresh-status">
+                                    {userDepartment === 'AD' && (
+                                        <Popconfirm
+                                            title="Delete All Jobs"
+                                            description="Are you sure you want to delete ALL jobs and files? This cannot be undone."
+                                            onConfirm={handleDeleteAll}
+                                            okText="Yes"
+                                            cancelText="No"
+                                            okButtonProps={{ danger: true }}
+                                        >
+                                            <Button
+                                                danger
+                                                icon={<DeleteOutlined />}
+                                                style={{ marginRight: '12px' }}
+                                            >
+                                                Clear All Data
+                                            </Button>
+                                        </Popconfirm>
+                                    )}
                                     <Button
                                         type="default"
                                         icon={<ReloadOutlined />}

@@ -139,7 +139,7 @@ const runHtmlToPdfBackground = (jobId, inputFilePath, originalName) => {
     const expectedOutputPdf = path.join(parsedPath.dir, `${parsedPath.name}_output.pdf`);
 
     // run python
-    const pyProcess = spawn('py', [pythonScriptPath, '-i', inputFilePath]);
+    const pyProcess = spawn('python', [pythonScriptPath, '-i', inputFilePath]);
 
     let outputLog = '';
 
@@ -152,6 +152,18 @@ const runHtmlToPdfBackground = (jobId, inputFilePath, originalName) => {
     pyProcess.stderr.on('data', (data) => {
         outputLog += data.toString();
         console.error(`[Python Job ${jobId} ERROR]: ${data.toString().trim()}`);
+    });
+
+    pyProcess.on('error', async (err) => {
+        console.error(`[Python Job ${jobId} ERROR EVENT]:`, err);
+        try {
+            await engPool.query(
+                `UPDATE newprod_html_to_pdf_jobs SET status = 'Error', error = $1, condition = 'Failed', updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+                [`Process error: ${err.message}`, jobId]
+            );
+        } catch (dbErr) {
+            console.error('Error updating job status on process error:', dbErr);
+        }
     });
 
     pyProcess.on('close', async (code) => {
@@ -206,7 +218,7 @@ const downloadPdf = async (req, res) => {
             return res.status(404).json({ error: 'PDF file not found or not ready yet' });
         }
 
-        const downloadFileName = rev && rev !== '---' && rev !== '-' ? `${cn}_${rev}.pdf` : `${cn}_DRS01_---.pdf`;
+        const downloadFileName = `${cn}_${rev}.pdf`;
         res.download(output_pdf_path, downloadFileName);
     } catch (err) {
         console.error('Error downloading PDF:', err);
@@ -234,9 +246,72 @@ const downloadHtml = async (req, res) => {
     }
 };
 
+const deleteJob = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await engPool.query(`SELECT input_file_path, output_pdf_path FROM newprod_html_to_pdf_jobs WHERE id = $1`, [id]);
+        if (result.rows.length > 0) {
+            const row = result.rows[0];
+            if (row.input_file_path && fs.existsSync(row.input_file_path)) fs.unlinkSync(row.input_file_path);
+            if (row.output_pdf_path && fs.existsSync(row.output_pdf_path)) fs.unlinkSync(row.output_pdf_path);
+        }
+        await engPool.query(`DELETE FROM newprod_html_to_pdf_jobs WHERE id = $1`, [id]);
+        res.json({ success: true, message: 'Job deleted' });
+    } catch (err) {
+        console.error('Error deleting job:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+const deleteAllJobs = async (req, res) => {
+    try {
+        const result = await engPool.query(`SELECT input_file_path, output_pdf_path FROM newprod_html_to_pdf_jobs`);
+        result.rows.forEach(row => {
+            if (row.input_file_path && fs.existsSync(row.input_file_path)) {
+                try { fs.unlinkSync(row.input_file_path); } catch (e) { }
+            }
+            if (row.output_pdf_path && fs.existsSync(row.output_pdf_path)) {
+                try { fs.unlinkSync(row.output_pdf_path); } catch (e) { }
+            }
+        });
+        await engPool.query(`TRUNCATE TABLE newprod_html_to_pdf_jobs`);
+        res.json({ success: true, message: 'All jobs deleted' });
+    } catch (err) {
+        console.error('Error deleting all jobs:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+const reworkJob = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await engPool.query(`SELECT input_file_path, cn FROM newprod_html_to_pdf_jobs WHERE id = $1`, [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Job not found' });
+
+        const { input_file_path, cn } = result.rows[0];
+        if (!input_file_path || !fs.existsSync(input_file_path)) {
+            return res.status(404).json({ error: 'Source HTML file missing, cannot rework' });
+        }
+
+        await engPool.query(
+            `UPDATE newprod_html_to_pdf_jobs SET status = 'Running SmartExchange', error = NULL, condition = '-', output_pdf_path = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [id]
+        );
+
+        runHtmlToPdfBackground(id, input_file_path, cn);
+        res.json({ success: true, message: 'Job restarted' });
+    } catch (err) {
+        console.error('Error reworking job:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
 module.exports = {
     uploadJob,
     getJobs,
     downloadPdf,
-    downloadHtml
+    downloadHtml,
+    deleteJob,
+    deleteAllJobs,
+    reworkJob
 };

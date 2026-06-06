@@ -140,7 +140,9 @@ app.post('/api/engineer/new_prod/html-to-pdf/upload', verifyToken, htmlToPdf.upl
 app.get('/api/engineer/new_prod/html-to-pdf/jobs', verifyToken, htmlToPdf.getJobs);
 app.get('/api/engineer/new_prod/html-to-pdf/download/:id', verifyToken, htmlToPdf.downloadPdf);
 app.get('/api/engineer/new_prod/html-to-pdf/download-html/:id', verifyToken, htmlToPdf.downloadHtml);
-
+app.delete('/api/engineer/new_prod/html-to-pdf/jobs/all', verifyToken, htmlToPdf.deleteAllJobs);
+app.delete('/api/engineer/new_prod/html-to-pdf/jobs/:id', verifyToken, htmlToPdf.deleteJob);
+app.post('/api/engineer/new_prod/html-to-pdf/jobs/:id/rework', verifyToken, htmlToPdf.reworkJob);
 //--------------------Template Tool (APQP Forms)---------------------//
 const templateTool = require('./api/engineer/new_prod/templateToolController');
 
