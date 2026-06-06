@@ -8,6 +8,39 @@ const cache = require('../services/agents/CacheAgent');
 
 const router = express.Router();
 
+/**
+ * Resolve floor machine_code → { machine_name, machine_type_code } from a single
+ * source of truth chain (no reliance on redundant sds_machine_code rows):
+ *   machine_name      = rodpc.m_machine.TRIM(m_model) [base], overridden by sds_machine_code [exceptions only]
+ *   machine_type_code = sds_machine_code override if set, else derived from the
+ *                       sds_machine_type_code dictionary by resolved name (active rows only)
+ * Keeps admin grids correct even after sds_machine_code is trimmed to override rows.
+ */
+async function buildMachineResolver() {
+  const [rodpc, sds, dict] = await Promise.all([
+    rodpcPool.query(`SELECT machine_code, TRIM(m_model) AS m_model FROM m_machine WHERE m_model IS NOT NULL`).catch(() => ({ rows: [] })),
+    engPool.query(`SELECT machine_code, machine_name, machine_type_code FROM ${TABLES.SDS_MACHINE_CODE}`),
+    engPool.query(`SELECT machine_type_name, machine_type_code FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE is_active AND machine_type_name IS NOT NULL`),
+  ]);
+  const baseName = new Map();
+  for (const r of rodpc.rows) if (r.m_model) baseName.set(r.machine_code, r.m_model);
+  const overrideName = new Map(), overrideType = new Map();
+  for (const r of sds.rows) {
+    if (r.machine_name) overrideName.set(r.machine_code, r.machine_name);
+    if (r.machine_type_code) overrideType.set(r.machine_code, r.machine_type_code);
+  }
+  const codeByName = new Map(); // name → single active code (lowest wins if a dup slips through)
+  for (const r of dict.rows) {
+    const code = String(r.machine_type_code);
+    const cur = codeByName.get(r.machine_type_name);
+    if (cur == null || code < cur) codeByName.set(r.machine_type_name, code);
+  }
+  const nameOf = (code) => overrideName.get(code) || baseName.get(code) || code;
+  const typeCodeOf = (code) =>
+    overrideType.has(code) ? overrideType.get(code) : (codeByName.get(nameOf(code)) || null);
+  return { nameOf, typeCodeOf };
+}
+
 // ── Machine Type Codes ───────────────────────────────────────────────────────
 
 /** GET /api/sds/v2/admin/machine-types
@@ -62,11 +95,13 @@ router.get('/machine-types', async (req, res) => {
  *  flushes the SDS search cache so stale results are not served.
  */
 router.put('/machine-types/:id', isAdmin, async (req, res) => {
-  const { machine_type_name, grinding_area_label, tool_code_filter, is_active } = req.body;
+  const { machine_type_code, machine_type_name, machine_group, grinding_area_label, tool_code_filter, is_active } = req.body;
   try {
     const sets = [];
     const vals = [];
+    if (machine_type_code !== undefined) { vals.push(String(machine_type_code).trim()); sets.push(`machine_type_code=$${vals.length}`); }
     if (machine_type_name !== undefined) { vals.push(machine_type_name); sets.push(`machine_type_name=$${vals.length}`); }
+    if (machine_group !== undefined) { vals.push(machine_group?.trim() || null); sets.push(`machine_group=$${vals.length}`); }
     if (grinding_area_label !== undefined) { vals.push(grinding_area_label); sets.push(`grinding_area_label=$${vals.length}`); }
     if (tool_code_filter !== undefined) { vals.push(tool_code_filter || null); sets.push(`tool_code_filter=$${vals.length}`); }
     if (is_active !== undefined) { vals.push(is_active); sets.push(`is_active=$${vals.length}`); }
@@ -109,6 +144,69 @@ router.put('/machine-types/:id', isAdmin, async (req, res) => {
     } finally {
       client.release();
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/sds/v2/admin/machine-types — create a new machine type code */
+router.post('/machine-types', isAdmin, async (req, res) => {
+  const { machine_type_code, machine_type_name, machine_group, grinding_area_label, tool_code_filter, is_active } = req.body;
+  if (!machine_type_code?.toString().trim() || !machine_type_name?.toString().trim()) {
+    return res.status(400).json({ error: 'machine_type_code and machine_type_name are required' });
+  }
+  try {
+    const result = await engPool.query(
+      `INSERT INTO ${TABLES.SDS_MACHINE_TYPE_CODE}
+         (machine_type_code, machine_type_name, machine_group, grinding_area_label, tool_code_filter, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        String(machine_type_code).trim(),
+        String(machine_type_name).trim(),
+        machine_group?.trim() || null,
+        grinding_area_label?.trim() || null,
+        tool_code_filter?.trim() || null,
+        is_active !== false,
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/sds/v2/admin/machine-types/:id
+ *  Blocks deletion when the machine_type_name is still referenced by SDS config
+ *  (sds_parameter / sds_machine_tool / sds_excel_mapping) unless ?force=true.
+ */
+router.delete('/machine-types/:id', isAdmin, async (req, res) => {
+  try {
+    const cur = await engPool.query(
+      `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!cur.rows[0]) return res.status(404).json({ error: 'Machine type not found' });
+    const name = cur.rows[0].machine_type_name;
+
+    if (req.query.force !== 'true') {
+      const [p, t, m] = await Promise.all([
+        engPool.query(`SELECT COUNT(*)::int AS c FROM ${TABLES.SDS_PARAMETER}      WHERE machine_type_name=$1`, [name]),
+        engPool.query(`SELECT COUNT(*)::int AS c FROM ${TABLES.SDS_V2_MACHINE_TOOL} WHERE machine_type=$1`,       [name]),
+        engPool.query(`SELECT COUNT(*)::int AS c FROM ${TABLES.SDS_EXCEL_MAPPING}  WHERE machine_type_name=$1`, [name]),
+      ]);
+      const refs = { sds_parameter: p.rows[0].c, sds_machine_tool: t.rows[0].c, sds_excel_mapping: m.rows[0].c };
+      const totalRefs = refs.sds_parameter + refs.sds_machine_tool + refs.sds_excel_mapping;
+      if (totalRefs > 0) {
+        return res.status(409).json({
+          error: `"${name}" is still referenced by SDS config (${totalRefs} rows). Reassign/remove them first, or delete with force.`,
+          references: refs,
+        });
+      }
+    }
+
+    await engPool.query(`DELETE FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE id=$1`, [req.params.id]);
+    cache.invalidatePrefix('sds:');
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -412,6 +510,188 @@ router.delete('/machine-tools/combo', isAdmin, async (req, res) => {
   }
 });
 
+// ── Machine Code Mapping (sds_machine_code) ──────────────────────────────────
+
+/** GET /api/sds/v2/admin/machine-codes */
+router.get('/machine-codes', async (req, res) => {
+  try {
+    const result = await engPool.query(
+      `SELECT id, machine_code, machine_name, machine_type_code, remark, updated_at
+       FROM ${TABLES.SDS_MACHINE_CODE} ORDER BY machine_code`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/sds/v2/admin/machine-codes */
+router.post('/machine-codes', isAdmin, async (req, res) => {
+  const { machine_code, machine_name, machine_type_code, remark } = req.body;
+  if (!machine_code?.trim()) return res.status(400).json({ error: 'machine_code is required' });
+  try {
+    const result = await engPool.query(
+      `INSERT INTO ${TABLES.SDS_MACHINE_CODE} (machine_code, machine_name, machine_type_code, remark)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [machine_code.trim().toUpperCase(), machine_name?.trim() || null, machine_type_code?.trim() || null, remark?.trim() || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'machine_code already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/machine-codes/:id */
+router.put('/machine-codes/:id', isAdmin, async (req, res) => {
+  const { machine_code, machine_name, machine_type_code, remark } = req.body;
+  try {
+    const result = await engPool.query(
+      `UPDATE ${TABLES.SDS_MACHINE_CODE}
+       SET machine_code=$1, machine_name=$2, machine_type_code=$3, remark=$4, updated_at=NOW()
+       WHERE id=$5 RETURNING *`,
+      [machine_code?.trim().toUpperCase(), machine_name?.trim() || null, machine_type_code?.trim() || null, remark?.trim() || null, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'machine_code already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/sds/v2/admin/machine-codes/:id */
+router.delete('/machine-codes/:id', isAdmin, async (req, res) => {
+  try {
+    const result = await engPool.query(
+      `DELETE FROM ${TABLES.SDS_MACHINE_CODE} WHERE id=$1 RETURNING id`, [req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CN Production History ─────────────────────────────────────────────────────
+
+function normalizeToPcCn(raw) {
+  const s = raw.trim().toUpperCase().replace(/\s/g, '');
+  const variants = new Set();
+  // Already 6-digit numeric
+  if (/^\d{6}(-C)?$/.test(s)) {
+    const base = s.replace(/-C$/, '');
+    variants.add(base);
+    variants.add(base + '-C');
+    return [...variants];
+  }
+  // Cxx-xxxxx format (with optional -C suffix)
+  const m = s.match(/^[A-Z](\d{2})-0*(\d+)(-C)?$/);
+  if (m) {
+    const itemRaw = m[2].replace(/^0+/, '') || '0';
+    const item4 = itemRaw.padStart(4, '0').slice(-4);
+    const base = m[1] + item4;
+    variants.add(base);
+    variants.add(base + '-C');
+  }
+  // Fallback: include raw
+  if (!variants.size) variants.add(s);
+  return [...variants];
+}
+
+/** GET /api/sds/v2/admin/production-summary
+ *  Returns aggregated production counts for ALL CNs, grouped by (machine, process, part_type).
+ *  part_type is derived from control_no prefix:
+ *    3x = ball, 2x = race, 1x|5x = body, 6x = sleeve, 4x = spherical
+ */
+router.get('/production-summary', async (req, res) => {
+  const PART_TYPE_CASE = `CASE
+    WHEN control_no::text ~ '^3' THEN 'ball'
+    WHEN control_no::text ~ '^2' THEN 'race'
+    WHEN control_no::text ~ '^[15]' THEN 'body'
+    WHEN control_no::text ~ '^6' THEN 'sleeve'
+    WHEN control_no::text ~ '^4' THEN 'spherical'
+    WHEN control_no::text ~ '^9' THEN 'mecha'
+    ELSE 'other'
+  END`;
+  try {
+    const [prodResult, resolver] = await Promise.all([
+      maqPool.query(
+        `SELECT machine, wc, process, proc_name,
+                ${PART_TYPE_CASE} AS part_type,
+                COUNT(*)::int AS production_count,
+                COUNT(DISTINCT control_no)::int AS cn_count,
+                MAX(comp_date) AS last_date
+         FROM ${TABLES.LPB_PC_PRODUCTION}
+         GROUP BY machine, wc, process, proc_name, part_type
+         ORDER BY machine, wc, process`
+      ),
+      buildMachineResolver(),
+    ]);
+
+    const rows = prodResult.rows.map(r => {
+      return {
+        machine_name: resolver.nameOf(r.machine),
+        machine_type_code: resolver.typeCodeOf(r.machine),
+        wc: r.wc || null,
+        process: r.process,
+        proc_name: r.proc_name,
+        part_type: r.part_type,
+        production_count: r.production_count,
+        cn_count: r.cn_count,
+        last_date: r.last_date,
+      };
+    }).sort((a, b) =>
+      (a.machine_name || '').localeCompare(b.machine_name || '') || (a.wc || '').localeCompare(b.wc || '') || (a.process || '').localeCompare(b.process || '')
+    );
+
+    res.json({ rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/cn-history?cn= */
+router.get('/cn-history', async (req, res) => {
+  const { cn } = req.query;
+  if (!cn?.trim()) return res.status(400).json({ error: 'cn is required' });
+  const variants = normalizeToPcCn(cn);
+  try {
+    const [prodResult, resolver] = await Promise.all([
+      maqPool.query(
+        `SELECT machine, process, proc_name,
+                COUNT(*)::int AS production_count,
+                MAX(comp_date) AS last_date
+         FROM ${TABLES.LPB_PC_PRODUCTION}
+         WHERE control_no = ANY($1)
+         GROUP BY machine, process, proc_name
+         ORDER BY process, machine`,
+        [variants]
+      ),
+      buildMachineResolver(),
+    ]);
+
+    // Aggregate by (machine_name, machine_type_code, process, proc_name)
+    const agg = {};
+    for (const r of prodResult.rows) {
+      const name = resolver.nameOf(r.machine);
+      const typeCode = resolver.typeCodeOf(r.machine);
+      const key = `${name}||${typeCode}||${r.process}`;
+      if (!agg[key]) {
+        agg[key] = { machine_name: name, machine_type_code: typeCode, process: r.process, proc_name: r.proc_name, production_count: 0, last_date: null };
+      }
+      agg[key].production_count += r.production_count;
+      if (!agg[key].last_date || r.last_date > agg[key].last_date) agg[key].last_date = r.last_date;
+    }
+    const rows = Object.values(agg).sort((a, b) =>
+      (a.machine_name || '').localeCompare(b.machine_name || '') || (a.process || '').localeCompare(b.process || '')
+    );
+    res.json({ rows, searched_variants: variants });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Audit Config ─────────────────────────────────────────────────────────────
 
 const DEFAULT_AUDIT_PROCESS_CODES = ['1011','1012','1021','1022','1041','1042','1061','1062','1101','1102','1181','1182','1241'];
@@ -620,6 +900,105 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[Audit API Error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/sds/v2/admin/audit/machine-identity
+ * Cross-checks the machine identity chain (machine_code → name → type_code → type_name)
+ * against the single sources of truth: rodpc.m_machine (name) + sds_machine_type_code
+ * (type_code). Surfaces drift so SDS + Tooling Select stay aligned. Read-only.
+ */
+router.get('/audit/machine-identity', isAdmin, async (req, res) => {
+  // Grinding WCs that require an SDS setup sheet (exclude 05 turning, 32 surface grind).
+  const SCOPE_WC = ['09', '29', '30', '37'];
+  try {
+    const [rodpcRes, sdsRes, dictRes, prodRes] = await Promise.all([
+      rodpcPool.query(`SELECT machine_code, TRIM(m_model) AS m_model FROM m_machine`).catch(() => ({ rows: [] })),
+      engPool.query(`SELECT machine_code, machine_name, machine_type_code FROM ${TABLES.SDS_MACHINE_CODE}`),
+      engPool.query(`SELECT machine_type_name, machine_type_code, is_active FROM ${TABLES.SDS_MACHINE_TYPE_CODE}`),
+      maqPool.query(
+        `SELECT DISTINCT machine, wc FROM ${TABLES.LPB_PC_PRODUCTION}
+         WHERE machine IS NOT NULL AND machine <> '' AND wc = ANY($1) AND comp_date >= '2023-01-01'`,
+        [SCOPE_WC]
+      ).catch(() => ({ rows: [] })),
+    ]);
+
+    const rodpcCodes = new Set(rodpcRes.rows.map(r => r.machine_code));
+    const baseName = new Map();
+    for (const r of rodpcRes.rows) if (r.m_model) baseName.set(r.machine_code, r.m_model);
+
+    // dict: name → active codes; code → name (active rows)
+    const activeCodesByName = new Map();
+    const nameByCode = new Map();
+    for (const r of dictRes.rows) {
+      const code = String(r.machine_type_code);
+      nameByCode.set(code, r.machine_type_name);
+      if (r.is_active && r.machine_type_name) {
+        if (!activeCodesByName.has(r.machine_type_name)) activeCodesByName.set(r.machine_type_name, []);
+        activeCodesByName.get(r.machine_type_name).push(code);
+      }
+    }
+    const codeByName = (name) => {
+      const codes = activeCodesByName.get(name);
+      return codes && codes.length ? codes.slice().sort()[0] : null;
+    };
+
+    const overrideName = new Map(), overrideType = new Map();
+    for (const r of sdsRes.rows) {
+      if (r.machine_name) overrideName.set(r.machine_code, r.machine_name);
+      if (r.machine_type_code) overrideType.set(r.machine_code, r.machine_type_code);
+    }
+    const nameOf = (code) => overrideName.get(code) || baseName.get(code) || code;
+
+    // CHECK 1 — bridge code not in rodpc master (cannot be sourced)
+    const bridgeNotInRodpc = sdsRes.rows
+      .filter(r => !rodpcCodes.has(r.machine_code))
+      .map(r => ({ machine_code: r.machine_code, machine_name: r.machine_name }));
+
+    // CHECK 2 — override type_code that doesn't resolve in the dictionary
+    const typeCodeUnresolved = sdsRes.rows
+      .filter(r => r.machine_type_code && !nameByCode.has(String(r.machine_type_code)))
+      .map(r => ({ machine_code: r.machine_code, machine_type_code: r.machine_type_code }));
+
+    // CHECK 3 — dictionary names with >1 active code (name→code non-deterministic)
+    const dictDuplicateActiveNames = [...activeCodesByName.entries()]
+      .filter(([name, codes]) => codes.length > 1 && name !== 'no data')
+      .map(([name, codes]) => ({ machine_type_name: name, active_codes: codes.sort() }));
+
+    // CHECK 4 — in-scope production machines whose resolved name has no type_code
+    //           (needs a dictionary entry or an override) — actionable SDS gaps
+    const productionUnresolved = [];
+    const seen = new Set();
+    for (const r of prodRes.rows) {
+      if (seen.has(r.machine)) continue;
+      seen.add(r.machine);
+      const resolvedName = nameOf(r.machine);
+      const typeCode = overrideType.has(r.machine) ? overrideType.get(r.machine) : codeByName(resolvedName);
+      if (!typeCode) {
+        productionUnresolved.push({ machine_code: r.machine, wc: r.wc, resolved_name: resolvedName });
+      }
+    }
+    productionUnresolved.sort((a, b) => a.machine_code.localeCompare(b.machine_code));
+
+    const checks = { bridgeNotInRodpc, typeCodeUnresolved, dictDuplicateActiveNames, productionUnresolved };
+    const issueCount = Object.values(checks).reduce((n, arr) => n + arr.length, 0);
+
+    res.json({
+      ok: issueCount === 0,
+      summary: {
+        bridgeRows: sdsRes.rows.length,
+        rodpcMachines: rodpcCodes.size,
+        dictActiveTypes: activeCodesByName.size,
+        scopeWc: SCOPE_WC,
+        issueCount,
+        counts: Object.fromEntries(Object.entries(checks).map(([k, v]) => [k, v.length])),
+      },
+      checks,
+    });
+  } catch (err) {
+    console.error('[Audit machine-identity]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

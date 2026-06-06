@@ -76,8 +76,12 @@ function NewDesignCard({ tooling, computed }) {
   );
 }
 
-function ToolingMatchCard({ tooling, matches, computed, columnMap, primaryColor }) {
+function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, primaryColor }) {
   if (!matches?.length) return <NewDesignCard tooling={tooling} computed={computed} />;
+
+  // Inventory columns that feed the closest-match ranking (is_match_dim) —
+  // their result headers get highlighted so users see what drove the match.
+  const matchDimSet = new Set(matchDimCols || []);
 
   const allKeys = new Set();
   matches.forEach(m => Object.keys(m).forEach(k => allKeys.add(k)));
@@ -113,18 +117,30 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, primaryColor 
     ...ordered.map(k => {
       const computedKey = resolveComputedKey(k);
       const computedVal = computedKey != null ? computed?.[computedKey] : undefined;
+      const isMatchDim = matchDimSet.has(k);
       return {
         key: k,
         dataIndex: k,
         width: 130,
+        onHeaderCell: () => (isMatchDim
+          ? { style: { backgroundColor: '#fffbe6', borderTop: '2px solid #faad14' } }
+          : {}),
         title: (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>{formatColName(k)}</div>
+            <div style={{
+              fontSize: 12, fontWeight: isMatchDim ? 700 : 600,
+              color: isMatchDim ? '#d48806' : undefined,
+            }}>
+              {isMatchDim && <span title="Match dim — used for ranking" style={{ marginRight: 3 }}>★</span>}
+              {formatColName(k)}
+            </div>
             {computedVal != null && (
               <div style={{
                 fontSize: 10, marginTop: 4, padding: '2px 4px',
-                backgroundColor: '#e6f7ff', color: '#1890ff',
-                borderRadius: 4, border: '1px solid #91d5ff',
+                backgroundColor: isMatchDim ? '#fff1b8' : '#e6f7ff',
+                color: isMatchDim ? '#ad6800' : '#1890ff',
+                borderRadius: 4,
+                border: `1px solid ${isMatchDim ? '#ffe58f' : '#91d5ff'}`,
               }}>
                 Req: {Number(computedVal).toFixed(3)}
               </div>
@@ -291,6 +307,7 @@ export default function ToolingSelectV2Page() {
               matches={t.matches}
               computed={t.computed}
               columnMap={t.columnMap}
+              matchDimCols={t.matchDimCols}
               primaryColor={primaryColor}
             />
           ))}

@@ -21,7 +21,9 @@ axios.interceptors.request.use(async (config) => {
 
   // console.log(config);
 
-  config.timeout = config.timeout || 10000; // 10 Second default (allow per-request override)
+  // Default 10s, but respect a longer per-request timeout when explicitly set
+  // (e.g. heavy reports like SDS coverage that can take >10s on a cold build).
+  if (config.timeout == null || config.timeout === 0) config.timeout = 10000;
   return config;
 });
 

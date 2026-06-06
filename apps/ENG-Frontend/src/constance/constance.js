@@ -8,9 +8,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -35,6 +35,7 @@ export const server = {
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
   TOOLING_INSPECT_API: `${apiUrl}api/engineer/mtc/tooling-inspect`,
   TOOLING_INSPECT_UPDATE: `${apiUrl}api/tooling_inspect/inspect_update`,
+  TOOLING_INSPECT_STATUS_PREVIEW: `${apiUrl}api/tooling_inspect/status_preview`,
   TOOLING_RETURN_ADD: `${apiUrl}api/tooling_inspect/return_add`,
   TOOLING_SYNC_CSV: `${apiUrl}api/tooling_inspect/sync_csv`,
 
@@ -51,6 +52,8 @@ export const server = {
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
+  TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
+  TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
 
   // Tooling Select
   TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
@@ -85,9 +88,15 @@ export const server = {
   MTC_SDS_V2_ADMIN_AUDIT_CONFIG: `${apiUrl}api/sds/v2/admin/audit/config`,
   MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER: `${apiUrl}api/sds/v2/admin/audit/process-master`,
   MTC_SDS_V2_ADMIN_VISIBLE_MACHINES: `${apiUrl}api/sds/v2/admin/visible-machines`,
+  MTC_SDS_V2_ADMIN_MACHINE_CODES: `${apiUrl}api/sds/v2/admin/machine-codes`,
+  MTC_SDS_V2_ADMIN_CN_HISTORY: `${apiUrl}api/sds/v2/admin/cn-history`,
+  MTC_SDS_V2_PRODUCTION_SUMMARY: `${apiUrl}api/sds/v2/admin/production-summary`,
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
+  MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
+  MTC_SDS_V2_REPORT_ACCESS_LOG: `${apiUrl}api/sds/v2/report/access-log`,
+  MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
 
   // Template Tool (APQP Forms)
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,

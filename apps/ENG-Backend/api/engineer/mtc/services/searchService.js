@@ -194,13 +194,30 @@ async function searchInventory(machine, rules, computedDims) {
       params.push(lo);
     }
 
-    distanceRules.push({ col: rule.inventory_column, computed, priority: rule.sort_priority ?? 0 });
+    // is_match_dim=false → keep the tolerance WHERE filter above, but exclude
+    // this dim from the closest-match ranking (lets admins rank by OD/ID/W
+    // part-fit dims only, ignoring constant / SD-lookup dims).
+    if (rule.is_match_dim !== false) {
+      distanceRules.push({ col: rule.inventory_column, computed, priority: rule.sort_priority ?? 0 });
+    }
   }
 
   for (const rule of withoutTol) {
     const computed = computedDims[rule.output_key];
     if (computed === undefined || !validCols.has(rule.inventory_column)) continue;
-    distanceRules.push({ col: rule.inventory_column, computed, priority: rule.sort_priority ?? 0 });
+    if (rule.is_match_dim !== false) {
+      distanceRules.push({ col: rule.inventory_column, computed, priority: rule.sort_priority ?? 0 });
+    }
+  }
+
+  // Fallback: if every dim was excluded from ranking (all is_match_dim=false),
+  // rank by all mapped dims so we still return a deterministic closest match.
+  if (distanceRules.length === 0) {
+    for (const rule of rules) {
+      const computed = computedDims[rule.output_key];
+      if (computed === undefined || !validCols.has(rule.inventory_column)) continue;
+      distanceRules.push({ col: rule.inventory_column, computed, priority: rule.sort_priority ?? 0 });
+    }
   }
 
   // Sort by priority so ORDER BY terms are hierarchical (primary first)
@@ -340,12 +357,19 @@ async function search(cn) {
           const columnMap = {};
           for (const r of rulesRes.rows) columnMap[r.output_key] = r.inventory_column;
 
+          // Inventory columns whose rule feeds the closest-match ranking
+          // (is_match_dim) — used by the UI to highlight those result headers.
+          const matchDimCols = rulesRes.rows
+            .filter(r => r.is_match_dim !== false)
+            .map(r => r.inventory_column);
+
           results.push({
             machine:      displayName,
             machineLabel: machine._displayName ? null : machine.label,
             tooling:      tooling_name,
             computed:     computedDims,
             columnMap,
+            matchDimCols,
             matches,
           });
         } catch (err) {

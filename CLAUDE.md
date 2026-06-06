@@ -112,8 +112,8 @@ Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.
 
 Machine names **must use hyphens** consistently. `FormulaService` uses exact-match SQL — a missing hyphen silently returns `0` for every parameter.
 
-Canonical names: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B2`, `KS-400B5`, `KS-400B6`, `KS-400B7`, `KS-500RD`, `TSG-300`, `5b`
-Exceptions (no hyphen): `KS400B` (retired — formula still computed but legacy SQL skipped via `use_dynamic_rules=true`); `5b` (Machine Type Code 564, active — replaces TSG-300W).
+Canonical names: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B2`, `KS-400B5`, `KS-400B6`, `KS-400B7`, `KS-500RD`, `TSG-300`, `HAMAI 5B`
+Exceptions (no hyphen): `KS400B` (retired — formula still computed but legacy SQL skipped via `use_dynamic_rules=true`); `HAMAI 5B` (Machine Type Code 564, active — Hamai-brand 5B grinder, replaces TSG-300W; floor code VSG-02. Renamed from `5B` 2026-06-05).
 
 When renaming a machine, always pair with a DB migration:
 ```sql

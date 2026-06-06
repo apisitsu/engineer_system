@@ -276,10 +276,15 @@ app.use('/api/sds/v2/admin', sdsV2AdminController);
 const sdsV2PdfController = require('./api/engineer/mtc/controllers/sdsV2PdfController');
 app.use('/api/sds/v2', sdsV2PdfController);
 
+const sdsV2ReportController = require('./api/engineer/mtc/controllers/sdsV2ReportController');
+app.use('/api/sds/v2/report', sdsV2ReportController);
+
 // Backward Compatibility for Tooling Inspect
 const legacyMtcController = require('./api/engineer/mtc/controllers/legacyMtcController');
 app.route('/api/tooling_inspect/getlist').get(verifyToken, legacyMtcController.ToolingInspectGetlist);
 app.route('/api/tooling_inspect/dashboard_stats').get(verifyToken, legacyMtcController.ToolingDashboadtGetlist);
+app.route('/api/tooling_inspect/result_dashboard').get(verifyToken, legacyMtcController.ToolingResultDashboard);
+app.route('/api/tooling_inspect/available_fye').get(verifyToken, legacyMtcController.ToolingAvailableFYE);
 app.route('/api/tooling_inspect/dwg_require_getlist').get(verifyToken, legacyMtcController.ToolDWGRequestGetList);
 
 // Protected Modification endpoints
@@ -287,6 +292,7 @@ app.route('/api/tooling_inspect/dwg_require_add').post(verifyToken, legacyMtcCon
 app.route('/api/tooling_inspect/dwg_require_update').put(verifyToken, legacyMtcController.ToolDWGRequestUpdate);
 app.route('/api/tooling_inspect/return_add').post(verifyToken, legacyMtcController.ToolingReturnAdd);
 app.route('/api/tooling_inspect/inspect_update').post(verifyToken, legacyMtcController.ToolingInspectUpdate);
+app.route('/api/tooling_inspect/status_preview').get(verifyToken, legacyMtcController.ToolingStatusPreview);
 app.route('/api/tooling_inspect/sync_csv').post(verifyToken, legacyMtcController.ToolingSyncCSV);
 app.route('/api/master/wc').get(verifyToken, legacyMtcController.GetWCCodes);
 

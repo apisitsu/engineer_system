@@ -44,6 +44,9 @@ const TABLES = {
   SDS_V2_TOOLING_IMAGE:   'sds_tooling_image',   // tooling images by tool_dwg_no
   SDS_V2_GRINDING_IMAGE:  'sds_grinding_image',  // grinding diagrams by cn_prefix
   SDS_V2_MACHINE_TOOL:    'sds_machine_tool',    // tool ordering per (machine_type, process_code)
+  SDS_MACHINE_CODE:       'sds_machine_code',    // factory floor code → machine type mapping
+  SDS_ACCESS_LOG:         'sds_access_log',      // VIEW/PDF/ADMIN access tracking
+  LPB_PC_PRODUCTION:      'lpb.pc_production',   // factory production records
 
   // Tooling Selection & Rules
   MTC_SELECTION_RULES: 'tooling_selection_rules',

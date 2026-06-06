@@ -7,6 +7,7 @@ const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { searchByCn } = require('../services/sdsV2SearchService');
+const tselectFallback = require('../services/tselectFallback');
 const { TABLES, PATHS } = require('../mtcConstants');
 const { colLetterToIndex, cellAddressToRC, cellAddressTo0Based } = require('../utils/excelHelpers');
 
@@ -69,9 +70,12 @@ const PART_CATEGORY = {
 async function buildValueMap(searchData, machine_type_name, process_code, engPool) {
   const map = {};
 
-  // Resolve machine_type_code for tool filtering (use tool_code_filter when available)
+  // Resolve machine_type_code for tool filtering (use tool_code_filter when available).
+  // Filter is_active + deterministic ORDER BY so a duplicate machine_type_name never
+  // resolves to an arbitrary (possibly stale) code — see dedupe migration 20260605.
   const mtcRow2 = await engPool.query(
-    `SELECT machine_type_code, tool_code_filter, machine_group FROM ${TABLES.SDS_MACHINE_TYPE_CODE} WHERE machine_type_name = $1 LIMIT 1`,
+    `SELECT machine_type_code, tool_code_filter, machine_group FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+     WHERE machine_type_name = $1 AND is_active ORDER BY machine_type_code LIMIT 1`,
     [machine_type_name]
   );
   const mtcRow2Data = mtcRow2.rows[0];
@@ -146,11 +150,41 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
   }
 
+  // Build T01–T20 slot assignment from the saved process-plan tools first.
+  const slotData = [];
+  for (let i = 0; i < 20; i++) {
+    const t = tools[i];
+    slotData.push(t ? { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false } : null);
+  }
+
+  // T-Select fallback: when the saved process plan / whitelist leaves slots empty,
+  // fill them with the tool computed by Tooling Select. Such numbers are NOT saved
+  // values, so they are marked with a trailing ' *' (see PDF footnote convention).
+  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
+  const tsResult = slotData.some(s => s === null)
+    ? await tselectFallback.safeSearch(searchData.cn)
+    : null;
+  if (tsResult) {
+    const acceptable = new Set([machine_type_name]);
+    if (machineDisplayName) acceptable.add(machineDisplayName);
+    const existingPrefixes = new Set(
+      slotData.filter(Boolean).map(s => dwgPrefix(s.tool_dwg_no)).filter(Boolean)
+    );
+    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable)) {
+      const pfx = dwgPrefix(tt.tooling_no);
+      if (pfx && existingPrefixes.has(pfx)) continue;   // already covered by a saved tool
+      const idx = slotData.findIndex(s => s === null);
+      if (idx === -1) break;                            // no free slot
+      slotData[idx] = { tool_name: tt.tooling_name || '', tool_dwg_no: tt.tooling_no, fromTs: true };
+      if (pfx) existingPrefixes.add(pfx);
+    }
+  }
+
   for (let i = 0; i < 20; i++) {
     const slot = `T${String(i + 1).padStart(2, '0')}`;
-    const t = tools[i];
-    map[`tool_name_${slot}`]   = t?.tool_name   || '';
-    map[`tool_dwg_no_${slot}`] = t?.tool_dwg_no || '';
+    const s = slotData[i];
+    map[`tool_name_${slot}`]   = s ? s.tool_name : '';
+    map[`tool_dwg_no_${slot}`] = s ? (s.fromTs ? `${s.tool_dwg_no} *` : s.tool_dwg_no) : '';
   }
 
   // 2. sds_parameter — machine-config (cn IS NULL) as defaults, cn-specific overwrites
@@ -178,8 +212,8 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     map['grinding_area_label'] = mtcRow.rows[0]?.grinding_area_label || 'GRINDING AREA';
   }
 
-  // 4. Tooling images (Buffer) — uses already-filtered tools list
-  const dwgNos = tools.slice(0, 20).map(t => t?.tool_dwg_no).filter(Boolean);
+  // 4. Tooling images (Buffer) — uses the final slot assignment (clean DWG, no ' *' marker)
+  const dwgNos = slotData.slice(0, 20).map(s => s?.tool_dwg_no).filter(Boolean);
   if (dwgNos.length) {
     // Stored keys may be partial (e.g. '4866-14') while process_plan has full form ('4866-14-0001')
     const allImgRows = await engPool.query(
@@ -187,15 +221,15 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     );
     const imgMap = {};
     for (const img of allImgRows.rows) {
-      const match = dwgNos.find(d => 
-        d === img.tool_dwg_no || 
+      const match = dwgNos.find(d =>
+        d === img.tool_dwg_no ||
         d.startsWith(img.tool_dwg_no + '-')
       );
       if (match && !imgMap[match]) imgMap[match] = img;
     }
     for (let i = 0; i < 20; i++) {
       const slot = `T${String(i + 1).padStart(2, '0')}`;
-      const dwgNo = tools[i]?.tool_dwg_no;
+      const dwgNo = slotData[i]?.tool_dwg_no;
       if (dwgNo && imgMap[dwgNo]) {
         map[`tool_image_${slot}`] = { data: imgMap[dwgNo].image_data, mime: imgMap[dwgNo].mime_type };
       }
@@ -574,6 +608,12 @@ router.get('/pdf', async (req, res) => {
       }
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="SDS_${safe(cn)}.pdf"`);
+      // Log PDF access (fire-and-forget)
+      const accessed_by = req.user?.empno || req.user?.name || null;
+      engPool.query(
+        `INSERT INTO sds_access_log (cn, machine_type_name, access_type, accessed_by) VALUES ($1,$2,'PDF',$3)`,
+        [cn.trim().toUpperCase(), machine_type_name.trim(), accessed_by]
+      ).catch(() => {});
       res.sendFile(path.resolve(generatedPath), () => safeUnlink(generatedPath));
     });
   } catch (err) {
