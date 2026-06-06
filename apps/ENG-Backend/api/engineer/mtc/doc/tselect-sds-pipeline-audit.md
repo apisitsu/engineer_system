@@ -93,10 +93,16 @@ fallback bounded concurrency 6 · information_schema cache.
   - dedupe `HI-GRIND-1-D` เหลือ active 1 (code 507; ปิด 519/520/521) — เคย 4 active + ถูกอ้าง = blocker หลัก
   - retire junk 128 แถว (NULL/"no data", ไม่ถูกอ้าง) → `is_active=false`
   - **ผล: FK ambiguity gate = clear** (ไม่มี referenced name ที่ตรง >1 active master)
-- **เหลือ block เดียว:** orphan `GS-64PF` (ids 70-73) **ไม่มี master row** — เจ้าของต้องเพิ่ม row พร้อม
-  `machine_type_code` จริง (ถ้ารัน FK ตอนนี้ rows นี้จะได้ `machine_type_id=NULL`)
+- **GS-64PF แก้แล้ว (2026-06-06):** code 762 = id 298 มีอยู่แล้วแต่ `machine_type_name=NULL` (เลยโดน
+  retire junk ไปด้วย) → owner ยืนยัน 762=GS-64PF → UPDATE ใส่ชื่อ + `is_active=true`
+  (`20260606_name_gs64pf_master.sql` + rollback)
+- **🎯 prerequisite FK ครบแล้ว:** remaining orphans = [] · FK ambiguity gate = [] → ทุก satellite name
+  resolve ไป active master เพียง 1 แถว
 - **เตรียมไว้ (ยังไม่รัน):** surrogate-id FK migration + rollback ใน `db_migrations/20260606_machine_identity_fk_PREPARED.sql`
-  → รันได้หลังเพิ่ม master `GS-64PF` แล้วตามด้วย code follow-up (dual-read by id ใน PDF/report/admin)
+  → รันได้แล้ว แต่ต้องทำพร้อม code follow-up (dual-read by id ใน PDF/report/admin) ใน change เดียว
+- **⚠️ หมายเหตุ data-quality:** การ retire junk (D) ปิด 128 แถวที่ชื่อ NULL/"no data" — id 298 (GS-64PF)
+  พิสูจน์ว่าบางแถว "ไม่มีชื่อ" จริง ๆ เป็นเครื่องจริงที่ชื่อหาย อีก 127 แถวควรให้ owner สุ่มตรวจว่ามี
+  เครื่องจริงที่ชื่อหายอีกไหม
 - **เหตุผลที่ FK ยังไม่รัน:** ตัว FK ต้องมาคู่กับการแก้ code ให้ join ด้วย `machine_type_id` ถ้ารันแต่ DB
   เปล่า ๆ จะได้คอลัมน์ที่ไม่มีใครใช้ (งานครึ่ง ๆ) — ต้องทำพร้อมกันใน change เดียว
 
@@ -105,6 +111,7 @@ fallback bounded concurrency 6 · information_schema cache.
 |---|---|
 | `20260606_fix_sds_machine_tool_orphans.sql` (+_rollback) | ✅ รันแล้ว |
 | `20260606_dedupe_machine_types_for_fk.sql` (+_rollback) | ✅ รันแล้ว (A+D: dedupe HI-GRIND-1-D + retire junk 128) |
+| `20260606_name_gs64pf_master.sql` (+_rollback) | ✅ รันแล้ว (id 298 code 762 → ชื่อ GS-64PF + active) |
 | `20260606_machine_identity_cleanup_prereq.sql` | 📋 diagnostics ให้เจ้าของรัน |
 | `20260606_machine_identity_fk_PREPARED.sql` (+_rollback) | ⏸ เตรียมไว้ รอ cleanup |
 | `20260606_add_tselect_sds_indexes.sql` | 📋 idempotent รอรัน |
