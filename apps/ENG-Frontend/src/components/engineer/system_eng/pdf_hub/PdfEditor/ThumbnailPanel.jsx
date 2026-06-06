@@ -376,7 +376,8 @@ const ThumbnailPanel = ({
             </div>
             <div className="pdf-ws-thumbnails kb-vscroll">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => {
-                    const annotCount = getAnnotationCount(pageNum);
+                    const realtimeCount = store.canvasObjectCounts[pageNum];
+                    const annotCount = getAnnotationCount(pageNum, realtimeCount);
                     const isActive = pageNum === currentPage;
 
                     return (

@@ -41,6 +41,9 @@ export const usePdfEditorStore = create((set, get) => ({
     rulerScale: 1.0,       // px per mm (calibratable)
     rulerUnit: 'mm',       // mm | cm | in
 
+    // ── Real-time Object Counts ──
+    canvasObjectCounts: {},
+
     // ── Overlay Compare (View mode) ──
     overlayEnabled: false,
     overlayOpacity: 0.5,   // 0..1
@@ -68,6 +71,13 @@ export const usePdfEditorStore = create((set, get) => ({
         selectedObjectId: null,
         selectedObjectProps: null,
     }),
+
+    setCanvasObjectCount: (pageNum, count) => set(state => ({
+        canvasObjectCounts: {
+            ...state.canvasObjectCounts,
+            [pageNum]: count
+        }
+    })),
 
     // Drawing property setters
     setStrokeColor: (c) => set({ strokeColor: c }),

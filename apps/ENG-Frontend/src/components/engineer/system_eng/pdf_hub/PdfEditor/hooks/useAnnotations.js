@@ -10,10 +10,12 @@ export default function useAnnotations() {
     // ── Per-page highlight data (plain objects, rendered on blend canvas) ──
     const [pageHighlights, setPageHighlights] = useState({});
 
-    const getAnnotationCount = useCallback((pageNum) => {
-        const annots = pageAnnotations[pageNum]?.objects || [];
+    const getAnnotationCount = useCallback((pageNum, realtimeFabricCount) => {
+        const fabricCount = realtimeFabricCount !== undefined 
+            ? realtimeFabricCount 
+            : (pageAnnotations[pageNum]?.objects || []).length;
         const hls = pageHighlights[pageNum] || [];
-        return annots.length + hls.length;
+        return fabricCount + hls.length;
     }, [pageAnnotations, pageHighlights]);
 
     const totalAnnotations = Object.keys(pageAnnotations).reduce((sum, pageNum) => sum + getAnnotationCount(pageNum), 0) +

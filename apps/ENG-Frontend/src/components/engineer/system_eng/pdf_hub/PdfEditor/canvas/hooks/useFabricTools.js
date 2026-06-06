@@ -143,7 +143,7 @@ export default function useFabricTools({
                     const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
                     const dateVal = `${d.getDate().toString().padStart(2, '0')} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
 
-                    const color = store.strokeColor || '#e74c3c';
+                    const color = '#e74c3c'; // Force red color as requested
 
                     const bgCircle = new fabric.Circle({
                         radius: 48, fill: 'transparent', stroke: color, strokeWidth: 3,
@@ -153,7 +153,7 @@ export default function useFabricTools({
                     const line1 = new fabric.Line([-46, -14, 46, -14], { stroke: color, strokeWidth: 2, objectCaching: false });
                     const line2 = new fabric.Line([-46, 14, 46, 14], { stroke: color, strokeWidth: 2, objectCaching: false });
 
-                    const baseScale = (store.fontSize / 16) * 0.85;
+                    const baseScale = store.fontSize / 16;
                     const fontProps = {
                         fontWeight: 'bold', fill: color, fontFamily: 'Arial',
                         originX: 'center', originY: 'center',
@@ -162,27 +162,27 @@ export default function useFabricTools({
 
                     const deptText = new fabric.FabricText(dept, {
                         ...fontProps,
-                        fontSize: 13, top: -27, left: 0
+                        fontSize: 16, top: -24, left: 0
                     });
-                    
+
                     const dateTextObj = new fabric.FabricText(dateVal, {
                         ...fontProps,
-                        fontSize: 13, top: 0, left: 0
+                        fontSize: 14, top: 5, left: 0
                     });
 
                     const nameChars = formattedName.split('');
-                    const maxSweep = 110; 
+                    const maxSweep = 110;
                     const charAngle = Math.min(13, maxSweep / (nameChars.length - 1 || 1));
                     const actualSweep = charAngle * (nameChars.length - 1);
-                    const startA = 90 + (actualSweep / 2); 
-                    const nameRadius = 38; 
-                    
+                    const startA = 90 + (actualSweep / 2);
+                    const nameRadius = 38;
+
                     const nameObjects = nameChars.map((char, i) => {
                         const a = startA - (i * charAngle);
                         const rad = a * (Math.PI / 180);
                         return new fabric.FabricText(char, {
                             ...fontProps,
-                            fontSize: 11,
+                            fontSize: 12,
                             left: nameRadius * Math.cos(rad),
                             top: nameRadius * Math.sin(rad),
                             angle: a - 90
@@ -209,7 +209,7 @@ export default function useFabricTools({
                     const isStamp = tool === 'stamp';
                     const imgSrc = isStamp ? stampData?.stamp_image : stampData?.signature_image;
                     if (!imgSrc) break;
-                    
+
                     const imgEl = new Image();
                     imgEl.src = `data:image/png;base64,${imgSrc}`;
                     imgEl.onload = () => {
@@ -242,7 +242,7 @@ export default function useFabricTools({
                 originX: 'left',
                 originY: 'top',
                 strokeUniform: true,
-                objectCaching: false, 
+                objectCaching: false,
                 customData: { type: tool, createdAt: Date.now() },
             };
 
@@ -261,31 +261,40 @@ export default function useFabricTools({
                         ry: 2,
                     });
                     break;
-                    
-                case 'addText':
-                    tempObj = new fabric.Rect({
-                        ...commonProps,
-                        width: 0,
-                        height: 0,
-                        fill: 'transparent',
-                        stroke: '#999999',
-                        strokeDashArray: [5, 5],
-                        strokeWidth: 1,
-                        opacity: store.opacity,
+
+                case 'addText': {
+                    const itext = new fabric.Textbox('Type here', {
+                        left: startX,
+                        top: startY,
+                        width: 150,
+                        fontSize: store.fontSize || 16,
+                        fontFamily: store.fontFamily || 'Helvetica',
+                        fill: store.strokeColor || '#000000',
+                        customData: { type: 'text', createdAt: Date.now() },
                     });
-                    break;
-                    
-                case 'sticky':
-                    tempObj = new fabric.Rect({
-                        ...commonProps,
-                        width: 0,
-                        height: 0,
-                        fill: '#fff3cd',
-                        stroke: '#ffc107',
-                        strokeWidth: 1,
-                        opacity: 0.8,
+                    fc.add(itext);
+                    fc.setActiveObject(itext);
+                    store.setActiveTool('select');
+                    // We don't want to enter dragging mode for text, so just return!
+                    return;
+                }
+
+                case 'sticky': {
+                    const stickyTxt = new fabric.Textbox('Sticky Note', {
+                        left: startX,
+                        top: startY,
+                        width: 150,
+                        fontSize: 14,
+                        fill: '#856404',
+                        backgroundColor: '#fff3cd',
+                        padding: 10,
+                        customData: { type: 'sticky', createdAt: Date.now() },
                     });
-                    break;
+                    fc.add(stickyTxt);
+                    fc.setActiveObject(stickyTxt);
+                    store.setActiveTool('select');
+                    return;
+                }
 
                 case 'circle':
                     tempObj = new fabric.Ellipse({
@@ -326,6 +335,21 @@ export default function useFabricTools({
             if (!tool || tool === 'select' || tool === 'pan' || tool === 'freehand') return;
             if (['highlight', 'underline', 'strikethrough'].includes(tool)) return;
 
+            if (tool === 'eraser') {
+                if (opt.target) {
+                    pushHistory(pageNum);
+                    fc.remove(opt.target);
+                    fc.discardActiveObject();
+                    fc.renderAll();
+                }
+                return;
+            }
+
+            // If user clicked on a text object while in text-adding mode, let them select/edit it!
+            if (opt.target && (opt.target.type === 'textbox' || opt.target.type === 'i-text' || opt.target.type === 'FabricText') && (tool === 'addText' || tool === 'sticky')) {
+                return;
+            }
+
             if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
                 handleOneClickTool(opt.pointer, tool);
                 return;
@@ -343,9 +367,7 @@ export default function useFabricTools({
 
             switch (tool) {
                 case 'rect':
-                case 'maskReplace':
-                case 'addText':
-                case 'sticky': {
+                case 'maskReplace': {
                     const w = Math.abs(pointer.x - startX);
                     const h = Math.abs(pointer.y - startY);
                     tempObj.set({
@@ -453,69 +475,6 @@ export default function useFabricTools({
                 fc.remove(label);
                 fc.add(group);
                 tempObj = null;
-            }
-
-            if (tool === 'addText' && tempObj) {
-                const finalX = tempObj.left;
-                const finalY = tempObj.top;
-                const finalW = Math.max(100, tempObj.width);
-                fc.remove(tempObj);
-
-                const itext = new fabric.Textbox('Type here', {
-                    left: finalX,
-                    top: finalY,
-                    width: finalW,
-                    fontSize: store.fontSize,
-                    fontFamily: store.fontFamily || 'Helvetica',
-                    fill: store.strokeColor || '#000',
-                    customData: { type: 'text' },
-                });
-                fc.add(itext);
-                fc.setActiveObject(itext);
-                itext.enterEditing();
-                itext.selectAll();
-            }
-
-            if (tool === 'sticky' && tempObj) {
-                const finalX = tempObj.left;
-                const finalY = tempObj.top;
-                fc.remove(tempObj);
-
-                const bg = new fabric.Rect({
-                    width: 200, height: 150,
-                    fill: '#fff3cd', stroke: '#ffc107', strokeWidth: 1,
-                    rx: 4, ry: 4,
-                    originX: 'center', originY: 'center'
-                });
-                const txt = new fabric.Textbox('Double click to edit note', {
-                    width: 180, fontSize: 14, fill: '#856404',
-                    originX: 'center', originY: 'center',
-                    textAlign: 'left'
-                });
-                const group = new fabric.Group([bg, txt], {
-                    left: finalX, top: finalY,
-                    customData: { type: 'sticky' }
-                });
-
-                group.on('mousedblclick', () => {
-                    group.remove(txt);
-                    fc.add(txt);
-                    txt.set({
-                        left: group.left, top: group.top,
-                        originX: 'center', originY: 'center'
-                    });
-                    txt.enterEditing();
-                    txt.selectAll();
-
-                    txt.on('editing:exited', () => {
-                        fc.remove(txt);
-                        group.add(txt);
-                        fc.renderAll();
-                    });
-                });
-
-                fc.add(group);
-                fc.setActiveObject(group);
             }
 
             if (tempObj && tool === 'maskReplace') {

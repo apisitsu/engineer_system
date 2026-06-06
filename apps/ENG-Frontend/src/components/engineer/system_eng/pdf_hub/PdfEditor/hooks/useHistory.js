@@ -46,6 +46,7 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
         setPageAnnotations(previous.annotations || {});
         setPageHighlights(previous.highlights || {});
         setHistoryVersion(v => v + 1);
+        return previous;
     }, [setPageAnnotations, setPageHighlights]);
 
     const redo = useCallback((currentAnnotations, currentHighlights) => {
@@ -60,6 +61,7 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
         setPageAnnotations(next.annotations || {});
         setPageHighlights(next.highlights || {});
         setHistoryVersion(v => v + 1);
+        return next;
     }, [setPageAnnotations, setPageHighlights]);
 
     const clearHistory = useCallback(() => {

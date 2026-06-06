@@ -122,6 +122,12 @@ const EditorCanvas = ({
             if (pushHistory) pushHistory(pageNum);
         });
 
+        const updateObjectCount = () => {
+            store.setCanvasObjectCount(pageNum, canvas.getObjects().length);
+        };
+        canvas.on('object:added', updateObjectCount);
+        canvas.on('object:removed', updateObjectCount);
+
         return () => {
             canvas.dispose();
             delete fabricCanvasRefs.current[pageNum];
@@ -341,6 +347,7 @@ const EditorCanvas = ({
             case 'highlight':
             case 'underline':
             case 'strikethrough':
+            case 'eraser':
             case 'rect':
             case 'circle':
             case 'arrow':
@@ -549,7 +556,7 @@ const EditorCanvas = ({
     });
 
     // Determine if a text-selection drag tool is active
-    const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
+    const isDragTool = ['highlight', 'underline', 'strikethrough', 'eraser'].includes(store.activeTool);
 
     // ── Mouse tracking for tool preview ──
     const handleContainerMouseMove = useCallback((e) => {

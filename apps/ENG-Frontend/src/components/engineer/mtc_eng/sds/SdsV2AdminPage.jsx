@@ -15,8 +15,8 @@ import { server } from '../../../../constance/constance';
 import { MTC_PATHS } from '../../../../constance/mtc_constance';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
-import MachineCodes from './MachineCodes';
-import MachineTypes from './MachineTypes';
+import MachineCodes from './MachineCodes.jsx';
+import MachineTypes from './MachineTypes.jsx';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;

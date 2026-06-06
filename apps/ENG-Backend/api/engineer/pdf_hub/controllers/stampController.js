@@ -14,7 +14,7 @@ async function getStamp(req, res) {
         const stamp = await stampService.getStampByEmId(em_id);
 
         if (!stamp) {
-            return res.status(404).json({ result: 'false', message: 'No stamp found for this user' });
+            return res.json({ result: 'true', data: null });
         }
 
         res.json({ result: 'true', data: stamp });

@@ -25,7 +25,27 @@ const ShortcutsHandler = ({
         const tag = e.target.tagName.toLowerCase();
         if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
 
-        // Also ignore when Fabric.js IText is being edited
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+        const code = e.code?.toLowerCase();
+        const key = e.key?.toLowerCase();
+
+        // ── Escape — deselect or switch to select tool ──
+        if (key === 'escape') {
+            e.preventDefault();
+            if (fabricCanvasRefs?.current) {
+                Object.values(fabricCanvasRefs.current).forEach(fc => {
+                    if (fc) {
+                        fc.discardActiveObject();
+                        fc.renderAll();
+                    }
+                });
+            }
+            store.setActiveTool('select');
+            return;
+        }
+
+        // Also ignore when Fabric.js IText is being edited for other shortcuts
         let isEditingText = false;
         if (fabricCanvasRefs?.current) {
             Object.values(fabricCanvasRefs.current).forEach(fc => {
@@ -36,11 +56,6 @@ const ShortcutsHandler = ({
             });
         }
         if (isEditingText) return;
-
-        const ctrl = e.ctrlKey || e.metaKey;
-        const shift = e.shiftKey;
-        const code = e.code?.toLowerCase();
-        const key = e.key?.toLowerCase();
 
         // ── Undo / Redo ──
         if (ctrl && !shift && (code === 'keyz' || key === 'z')) {
@@ -92,21 +107,7 @@ const ShortcutsHandler = ({
             return;
         }
 
-        // ── Escape — deselect or switch to select tool ──
-        if (key === 'escape') {
-            e.preventDefault();
-            if (fabricCanvasRefs?.current) {
-                Object.values(fabricCanvasRefs.current).forEach(fc => {
-                    if (fc) {
-                        fc.discardActiveObject();
-                        fc.renderAll();
-                    }
-                });
-            }
-            store.setActiveTool('select');
-            return;
-        }
-
+        // (Escape logic moved up)
         // ── Tool shortcuts (single keys) ──
         if (!ctrl && !shift && !e.altKey) {
             switch (key) {

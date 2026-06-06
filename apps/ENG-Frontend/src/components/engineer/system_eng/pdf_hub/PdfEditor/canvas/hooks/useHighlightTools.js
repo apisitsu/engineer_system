@@ -17,7 +17,7 @@ export default function useHighlightTools({
     hlDrawRef,
 }) {
     const handleHybridMouseDown = useCallback((e) => {
-        const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
+        const isDragTool = ['highlight', 'underline', 'strikethrough', 'eraser'].includes(store.activeTool);
         if (!isDragTool) return;
 
         const rect = textLayerRef.current?.getBoundingClientRect();
@@ -30,8 +30,33 @@ export default function useHighlightTools({
         // Note: right click is handled by handleHighlightCanvasContextMenu on the highlight layer
         if (e.button === 2) return;
 
+        if (store.activeTool === 'eraser') {
+            const cssW = canvasSize.width;
+            const cssH = canvasSize.height;
+            if (cssW === 0 || cssH === 0) return;
+
+            const highlights = (pageHighlights || {})[pageNum] || [];
+            const hitIdx = highlights.findIndex(hl => {
+                const hx = hl.normX * cssW;
+                const hy = hl.normY * cssH;
+                const hw = hl.normW * cssW;
+                const hh = hl.normH * cssH;
+                return x >= hx && x <= hx + hw && y >= hy && y <= hy + hh;
+            });
+
+            if (hitIdx !== -1) {
+                pushHistory(pageNum);
+                setPageHighlights(prev => {
+                    const updated = [...(prev[pageNum] || [])];
+                    updated.splice(hitIdx, 1);
+                    return { ...prev, [pageNum]: updated };
+                });
+            }
+            return; // Don't start drawing box
+        }
+
         hlDrawRef.current = { isDrawing: true, startX: x, startY: y };
-    }, [store.activeTool, textLayerRef, hlDrawRef]);
+    }, [store.activeTool, textLayerRef, hlDrawRef, canvasSize, pageHighlights, pageNum, pushHistory, setPageHighlights]);
 
     const handleHybridMouseMove = useCallback((e) => {
         if (!hlDrawRef.current.isDrawing) return;
@@ -47,6 +72,7 @@ export default function useHighlightTools({
         const ctx = hlCanvas.getContext('2d');
 
         const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
         const { startX, startY } = hlDrawRef.current;
 
         const cssW = canvasSize.width;
@@ -70,24 +96,35 @@ export default function useHighlightTools({
 
         // Draw live preview for freehand drag
         if (store.activeTool === 'highlight') {
-            const previewX = Math.min(startX, currentX);
-            const previewW = Math.abs(currentX - startX);
-            const previewY = startY - 10;
-            const previewH = 20;
+            const isVertical = e.ctrlKey;
+            const previewX = isVertical ? startX - 10 : Math.min(startX, currentX);
+            const previewW = isVertical ? 20 : Math.abs(currentX - startX);
+            const previewY = isVertical ? Math.min(startY, currentY) : startY - 10;
+            const previewH = isVertical ? Math.abs(currentY - startY) : 20;
             ctx.fillStyle = store.highlightColor || '#ffeb3b';
             ctx.globalAlpha = 0.6;
             ctx.fillRect(previewX, previewY, previewW, previewH);
             ctx.globalAlpha = 1.0;
         } else {
             // Underline/Strikethrough preview line
-            const previewX = Math.min(startX, currentX);
-            const previewW = Math.abs(currentX - startX);
-            const previewY = store.activeTool === 'underline' ? startY + 5 : startY;
+            const isVertical = e.ctrlKey;
             ctx.strokeStyle = store.strokeColor || '#000000';
             ctx.lineWidth = store.strokeWidth || 2;
             ctx.beginPath();
-            ctx.moveTo(previewX, previewY);
-            ctx.lineTo(previewX + previewW, previewY);
+            
+            if (isVertical) {
+                const previewY = Math.min(startY, currentY);
+                const previewH = Math.abs(currentY - startY);
+                const previewX = store.activeTool === 'underline' ? startX - 5 : startX;
+                ctx.moveTo(previewX, previewY);
+                ctx.lineTo(previewX, previewY + previewH);
+            } else {
+                const previewX = Math.min(startX, currentX);
+                const previewW = Math.abs(currentX - startX);
+                const previewY = store.activeTool === 'underline' ? startY + 5 : startY;
+                ctx.moveTo(previewX, previewY);
+                ctx.lineTo(previewX + previewW, previewY);
+            }
             ctx.stroke();
         }
     }, [pageHighlights, pageNum, store.highlightColor, store.activeTool, store.strokeColor, store.strokeWidth, canvasSize, hlDrawRef, highlightCanvasRef]);
@@ -176,18 +213,23 @@ export default function useHighlightTools({
         // ── CONDITION B: Freehand Fallback (No Text Selected) ──
         if (isDrawing) {
             const endX = e.clientX - containerRect.left;
+            const endY = e.clientY - containerRect.top;
             const { startX, startY } = hlDrawRef.current;
             const rawWidth = Math.abs(endX - startX);
+            const rawHeight = Math.abs(endY - startY);
 
-            if (rawWidth < 3) return; // Too small, just a click
+            const isVertical = e.ctrlKey;
+
+            if (!isVertical && rawWidth < 3) return; // Too small, just a click
+            if (isVertical && rawHeight < 3) return; // Too small, just a click
 
             pushHistory(pageNum);
             const fc = fabricCanvasRefs.current[pageNum];
 
-            const finalX = Math.min(startX, endX);
-            const finalY = startY - 18; // Moved up from -10 to align better with text
-            const finalW = rawWidth;
-            const finalH = 20;
+            const finalX = isVertical ? startX - 10 : Math.min(startX, endX);
+            const finalY = isVertical ? Math.min(startY, endY) : startY - 10;
+            const finalW = isVertical ? 20 : rawWidth;
+            const finalH = isVertical ? rawHeight : 20;
 
             if (activeTool === 'highlight') {
                 const newHL = {
@@ -204,9 +246,16 @@ export default function useHighlightTools({
                 }));
             } else if (activeTool === 'underline' || activeTool === 'strikethrough') {
                 if (fc) {
-                    const lineY = activeTool === 'underline' ? startY + 5 : startY;
+                    let coords;
+                    if (isVertical) {
+                        const lineX = activeTool === 'underline' ? startX - 5 : startX;
+                        coords = [lineX, finalY, lineX, finalY + finalH];
+                    } else {
+                        const lineY = activeTool === 'underline' ? startY + 5 : startY;
+                        coords = [finalX, lineY, finalX + finalW, lineY];
+                    }
                     const line = new fabric.Line(
-                        [finalX, lineY, finalX + finalW, lineY],
+                        coords,
                         {
                             stroke: store.strokeColor || '#000000',
                             strokeWidth: store.strokeWidth || 2, // Fixed thickness for freehand

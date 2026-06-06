@@ -31,20 +31,24 @@ const ToolPreview = forwardRef(({ tool, color, size, strokeWidth, stampData }, r
                 content = <div style={{ color: '#333', fontSize: 14, fontFamily: 'Helvetica' }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>;
                 break;
             case 'stampUserDate': {
-                const baseScale = (size / 16) * 0.75;
+                const stampColor = '#e74c3c';
+                const d = new Date();
+                const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+                const dateVal = `${d.getDate().toString().padStart(2, '0')} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+                const nameStr = `K. ${userName?.split(' ')[0]?.toUpperCase() || 'USER'}`;
+
                 content = (
-                    <div style={{ 
-                        border: `3px solid ${color}`, borderRadius: '50%', 
-                        width: 96, height: 96, 
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        color, fontWeight: 'bold', fontFamily: 'Arial',
-                        transform: `scale(${baseScale})`,
-                        transformOrigin: 'center center'
-                    }}>
-                        <div style={{ borderBottom: `2px solid ${color}`, width: '100%', textAlign: 'center', fontSize: 12 }}>ROD ENG</div>
-                        <div style={{ borderBottom: `2px solid ${color}`, width: '100%', textAlign: 'center', fontSize: 10 }}>{userName?.split(' ')[0]?.toUpperCase() || 'USER'}</div>
-                        <div style={{ width: '100%', textAlign: 'center', fontSize: 11 }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-                    </div>
+                    <svg width="96" height="96" viewBox="-48 -48 96 96" xmlns="http://www.w3.org/2000/svg" style={{ transform: `scale(${size / 16})` }}>
+                        <circle cx="0" cy="0" r="46.5" fill="none" stroke={stampColor} strokeWidth="3" />
+                        <line x1="-46" y1="-14" x2="46" y2="-14" stroke={stampColor} strokeWidth="2" />
+                        <line x1="-46" y1="14" x2="46" y2="14" stroke={stampColor} strokeWidth="2" />
+                        <text x="0" y="-24" fill={stampColor} fontSize="16" fontWeight="bold" fontFamily="Arial" textAnchor="middle">ROD ENG</text>
+                        <text x="0" y="5" fill={stampColor} fontSize="14" fontWeight="bold" fontFamily="Arial" textAnchor="middle">{dateVal}</text>
+                        <path id="nameCurve" d="M -34,0 A 34,34 0 0,0 34,0" fill="none" stroke="none" />
+                        <text fill={stampColor} fontSize="12" fontWeight="bold" fontFamily="Arial">
+                            <textPath href="#nameCurve" startOffset="50%" textAnchor="middle">{nameStr}</textPath>
+                        </text>
+                    </svg>
                 );
                 break;
             }

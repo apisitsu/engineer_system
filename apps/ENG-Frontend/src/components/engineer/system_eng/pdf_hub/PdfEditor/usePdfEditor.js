@@ -19,7 +19,7 @@ export default function usePdfEditor() {
     // ── 1. Document State ──
     const { 
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage
+        loadPdf: _loadPdf, loadPdfFromBytes: _loadPdfFromBytes, goToPage, nextPage, prevPage
     } = usePdfDocument(canvasWrapperRef, setZoom);
 
     // ── 2. Annotation State ──
@@ -31,8 +31,66 @@ export default function usePdfEditor() {
 
     // ── 3. History State ──
     const { 
-        pushHistory, saveCurrentPageState, undo, redo, clearHistory, canUndo, canRedo, historyVersion 
+        pushHistory: _pushHistory, saveCurrentPageState, undo: _undo, redo: _redo, clearHistory, canUndo, canRedo, historyVersion 
     } = useHistory(setPageAnnotations, setPageHighlights);
+
+    // Wrapper for pushHistory to capture current state
+    const pushHistory = () => {
+        const currentAnnotations = { ...pageAnnotations };
+        Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
+            if (fc) {
+                const json = fc.toJSON(['customData']);
+                json._canvasWidth = fc.width;
+                json._canvasHeight = fc.height;
+                currentAnnotations[pNum] = json;
+            }
+        });
+        _pushHistory({
+            annotations: currentAnnotations,
+            highlights: { ...pageHighlights }
+        });
+    };
+
+    const _applyStateToCanvases = (restoredState) => {
+        if (!restoredState) return;
+        Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
+            if (fc && restoredState.annotations[pNum]) {
+                fc.loadFromJSON(restoredState.annotations[pNum]).then(() => {
+                    fc.renderAll();
+                }).catch(err => console.error("loadFromJSON error:", err));
+            } else if (fc) {
+                fc.clear();
+            }
+        });
+    };
+
+    const undo = () => {
+        const currentAnnotations = { ...pageAnnotations };
+        Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
+            if (fc) {
+                const json = fc.toJSON(['customData']);
+                json._canvasWidth = fc.width;
+                json._canvasHeight = fc.height;
+                currentAnnotations[pNum] = json;
+            }
+        });
+        const restoredState = _undo(currentAnnotations, { ...pageHighlights });
+        _applyStateToCanvases(restoredState);
+    };
+
+    const redo = () => {
+        const currentAnnotations = { ...pageAnnotations };
+        Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
+            if (fc) {
+                const json = fc.toJSON(['customData']);
+                json._canvasWidth = fc.width;
+                json._canvasHeight = fc.height;
+                currentAnnotations[pNum] = json;
+            }
+        });
+        const restoredState = _redo(currentAnnotations, { ...pageHighlights });
+        _applyStateToCanvases(restoredState);
+    };
 
     // ── 4. Merge State ──
     const { mergeFiles, setMergeFiles } = useMerge();
@@ -44,6 +102,20 @@ export default function usePdfEditor() {
     const zoomIn = () => setZoom(z => Math.min(z + 0.25, 3.0));
     const zoomOut = () => setZoom(z => Math.max(z - 0.25, 0.25));
     const zoomTo = (val) => setZoom(val);
+
+    const loadPdf = async (file, callbacks) => {
+        await _loadPdf(file, callbacks);
+        setThumbnails({});
+        clearAllAnnotations();
+        clearHistory();
+    };
+
+    const loadPdfFromBytes = async (bytes, filename, callbacks) => {
+        await _loadPdfFromBytes(bytes, filename, callbacks);
+        setThumbnails({});
+        clearAllAnnotations();
+        clearHistory();
+    };
 
     return {
         // Document

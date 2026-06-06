@@ -25,7 +25,7 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
     if (pageHighlights) {
         for (const [pageNumStr, highlights] of Object.entries(pageHighlights)) {
             const pageIdx = parseInt(pageNumStr) - 1;
-            if (pageIdx < 0 || pageIdx >= pages.length || !highlights?.length) continue;
+            if (isNaN(pageIdx) || pageIdx < 0 || pageIdx >= pages.length || !highlights?.length) continue;
 
             const page = pages[pageIdx];
             const { width: pW, height: pH } = page.getSize();
@@ -65,7 +65,7 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
     // ── Commit Fabric.js annotations per page ──
     for (const [pageNumStr, fabricData] of Object.entries(pageAnnotations)) {
         const pageIdx = parseInt(pageNumStr) - 1;
-        if (pageIdx < 0 || pageIdx >= pages.length) continue;
+        if (isNaN(pageIdx) || pageIdx < 0 || pageIdx >= pages.length) continue;
 
         const page = pages[pageIdx];
         const { width: pW, height: pH } = page.getSize();
