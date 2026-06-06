@@ -28,7 +28,6 @@ apps/ENG-Backend/tools/
 
 # Database
 db_eng/
->>>>>>> old-work-backup
 
 # Attachment files
 apps/ENG-Backend/files/tool_requests/
