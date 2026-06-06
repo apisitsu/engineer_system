@@ -3,3 +3,5 @@ api/system/config.js
 *.db
 apps/ENG-Backend/instance/*.db
 .env
+
+apps/uploads/html_to_pdf

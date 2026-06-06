@@ -37,6 +37,7 @@
 2. ใช้คำสั่ง `cd` เข้าไปยังโฟลเดอร์โปรเจกต์ `EngineerSystem` (โฟลเดอร์ที่มีไฟล์ `docker-compose.yml` อยู่)
 3. รันคำสั่งนี้เพื่อสร้างระบบทั้งหมด:
    ```bash
+      set DOCKER_BUILDKIT=0
    docker-compose up -d --build
    ```
 4. **กระบวนการที่ Docker จะทำให้คุณอัตโนมัติ:**
