@@ -667,4 +667,114 @@ router.post('/sync-new', isAdmin, async (req, res) => {
   res.json(result);
 });
 
+// ── Drift Audit (#5) ──────────────────────────────────────────────────────────
+// tooling_spec_process (engPool, manual copy via /sync) can silently diverge from
+// the live factory dims in lpb.* (maqPool). This bulk-diffs every spec row against
+// the current factory value and reports the ones that drifted, so they can be
+// re-synced. Read-only. Cross-pool, so it cannot be a single SQL — it bulk-fetches
+// each side and diffs in JS (reuses mapFactoryDimToSpec + the sync-new fetch shape).
+
+// We diff only the after-grind nominal dims OD/ID/W — these are what the formula
+// engine consumes (buildSpecContext: OD=od_aft, ID=id_aft, W=w_aft).
+const DRIFT_FIELDS = ['od_aft', 'id_aft', 'w_aft'];
+let _driftCache = null;               // { at, tol, data }
+const DRIFT_TTL_MS = 15 * 60 * 1000;  // 15 min, matches the coverage report cache
+
+// Factory dim tables use different column names per part type (verified live):
+//   race   (C21-29): od / id / width
+//   ball   (C31-39): ball_dia / in_dia / width
+//   sleeve (C61-69): od / id / (no reliable width column → not diffed)
+//   body / other   : no clean OD/ID/W after-table → not diffed
+// (mapFactoryDimToSpec only reads d.od/d.id/d.w so it silently misses ball &
+//  width — hence this dedicated extractor for the audit.)
+function factoryAfterDims(prefixKey, row) {
+  const cls = parseInt(String(prefixKey).slice(1), 10);
+  const num = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  if (cls >= 31 && cls <= 39) return { od_aft: num(row.ball_dia), id_aft: num(row.in_dia), w_aft: num(row.width) };
+  if (cls >= 21 && cls <= 29) return { od_aft: num(row.od),       id_aft: num(row.id),     w_aft: num(row.width) };
+  if (cls >= 61 && cls <= 69) return { od_aft: num(row.od),       id_aft: num(row.id),     w_aft: null };
+  return { od_aft: null, id_aft: null, w_aft: null };
+}
+
+async function buildDriftAudit(tol) {
+  // 1. All specs (only dims we diff, keeps payload small)
+  const specRes = await engPool.query(
+    `SELECT cn, ${DRIFT_FIELDS.join(', ')} FROM ${TABLES.SPEC_PROCESS}`
+  );
+  const specs = specRes.rows
+    .map(r => ({ ...r, cn: normalizeCn(r.cn) }))
+    .filter(r => /^\d{6}$/.test(r.cn) && PREFIX_TABLE_MAP[cnToPrefix(r.cn)]);
+
+  // 2. Bulk-fetch factory dims per part table (both 6-digit and Cxx storage forms)
+  const byTable = {};
+  for (const r of specs) {
+    const tbl = PREFIX_TABLE_MAP[cnToPrefix(r.cn)];
+    (byTable[tbl] = byTable[tbl] || []).push(r.cn);
+  }
+  const dimRowsMap = {};
+  await Promise.all(Object.entries(byTable).map(async ([tbl, cns]) => {
+    const cxxForms = cns.map(cn => {
+      const cls = cn.slice(0, 2);
+      const pfx = parseInt(cls, 10) >= 41 && parseInt(cls, 10) <= 49 ? 'A' : 'C';
+      return `${pfx}${cls}-0${cn.slice(2)}`;
+    });
+    try {
+      const r = await maqPool.query(
+        `SELECT * FROM ${tbl} WHERE control_no = ANY($1)`,
+        [[...new Set([...cns, ...cxxForms])]]
+      );
+      for (const row of r.rows) {
+        const key = normalizeCn(row.control_no);
+        if (key) dimRowsMap[key] = row;
+      }
+    } catch (e) {
+      console.error(`[drift-audit] dim fetch failed for ${tbl}:`, e.message);
+    }
+  }));
+
+  // 3. Diff
+  let drifted = 0, noFactory = 0, compared = 0;
+  const rows = [];
+  for (const spec of specs) {
+    const factoryRow = dimRowsMap[spec.cn];
+    if (!factoryRow) { noFactory++; continue; }
+    compared++;
+    const factory = factoryAfterDims(cnToPrefix(spec.cn), factoryRow);
+    const diffs = [];
+    for (const f of DRIFT_FIELDS) {
+      const fv = factory[f];
+      if (fv === null || fv === undefined) continue;   // factory has no value → cannot compare
+      const sv = Number(spec[f] ?? 0);
+      const delta = Math.abs(sv - fv);
+      if (delta > tol) diffs.push({ field: f, spec_val: sv, factory_val: fv, delta: parseFloat(delta.toFixed(4)) });
+    }
+    if (diffs.length) { drifted++; rows.push({ cn: spec.cn, diffs }); }
+  }
+  rows.sort((a, b) => b.diffs.length - a.diffs.length || a.cn.localeCompare(b.cn));
+
+  return {
+    success: true,
+    tol,
+    summary: { total_specs: specs.length, compared, drifted, no_factory_row: noFactory },
+    rows,
+  };
+}
+
+router.get('/drift-audit', isAdmin, async (req, res) => {
+  const tol = Math.max(0, parseFloat(req.query.tol) || 0.005);
+  try {
+    const fresh = _driftCache && _driftCache.tol === tol &&
+                  Date.now() - _driftCache.at < DRIFT_TTL_MS;
+    if (!req.query.refresh && fresh) {
+      return res.json({ ..._driftCache.data, cached: true, cachedAt: new Date(_driftCache.at).toISOString() });
+    }
+    const data = await buildDriftAudit(tol);
+    _driftCache = { at: Date.now(), tol, data };
+    res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[drift-audit] error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = { router, syncNewCns };
