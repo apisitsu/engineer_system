@@ -128,6 +128,9 @@ const HtmlToPdfDashboard = () => {
         if (condition === 'Failed') {
             return <Tag color="error" style={{ borderRadius: '12px', padding: '0 10px' }}>Failed</Tag>;
         }
+        if (condition === 'Expired') {
+            return <Tag color="warning" style={{ borderRadius: '12px', padding: '0 10px' }}>Expired</Tag>;
+        }
         return <Tag color="default" style={{ borderRadius: '12px', padding: '0 10px', backgroundColor: '#e6f7ff', borderColor: '#e6f7ff', color: '#1890ff' }}>—</Tag>;
     };
 
@@ -182,6 +185,10 @@ const HtmlToPdfDashboard = () => {
             key: 'download',
             align: 'center',
             render: (text, record) => {
+                if (record.condition === 'Expired') {
+                    return <Text type="secondary" italic>File Expired</Text>;
+                }
+
                 const displayName = record.rev && record.rev !== '---' && record.rev !== '-'
                     ? `${record.cn}_${record.rev}.pdf`
                     : `${record.cn}_DRS01_---.pdf`;

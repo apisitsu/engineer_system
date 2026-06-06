@@ -11,22 +11,21 @@ if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-const pythonScriptPath = path.resolve(__dirname, '../../../../../html_to_pdf.py');
+const pythonScriptPath = path.join(__dirname, 'html_to_pdf.py');
 
-// Function to cleanup old jobs if user exceeds 30
+// Function to cleanup old jobs if user exceeds 20 files
 const cleanupOldJobs = async (user_id) => {
     try {
         const res = await engPool.query(`
             SELECT id, input_file_path, output_pdf_path 
             FROM newprod_html_to_pdf_jobs 
-            WHERE user_id = $1 
+            WHERE user_id = $1 AND (input_file_path IS NOT NULL OR output_pdf_path IS NOT NULL)
             ORDER BY created_at DESC 
-            OFFSET 30
+            OFFSET 20
         `, [user_id]);
 
         if (res.rows.length > 0) {
-            const idsToDelete = res.rows.map(row => row.id);
-            await engPool.query(`DELETE FROM newprod_html_to_pdf_jobs WHERE id = ANY($1::int[])`, [idsToDelete]);
+            const idsToUpdate = res.rows.map(row => row.id);
 
             // Delete physical files
             res.rows.forEach(row => {
@@ -37,7 +36,18 @@ const cleanupOldJobs = async (user_id) => {
                     try { fs.unlinkSync(row.output_pdf_path); } catch (e) { console.error(e); }
                 }
             });
-            console.log(`Cleaned up ${idsToDelete.length} old jobs for user ${user_id}`);
+
+            // Update DB to mark files as deleted
+            await engPool.query(`
+                UPDATE newprod_html_to_pdf_jobs 
+                SET input_file_path = NULL, 
+                    output_pdf_path = NULL, 
+                    condition = 'Expired',
+                    updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ANY($1::int[])
+            `, [idsToUpdate]);
+
+            console.log(`Cleaned up physical files for ${idsToUpdate.length} old jobs for user ${user_id}`);
         }
     } catch (err) {
         console.error('Error in cleanupOldJobs:', err);
