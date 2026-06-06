@@ -87,7 +87,21 @@ fallback bounded concurrency 6 · information_schema cache.
 - audit: ทุกตาราง `tooling_*` ใช้ `tooling_no` หมด ไม่มี `No`/`no`/`part_no` → ไม่ต้อง migrate
 - `matchNo()` ตัด fallback dead-code เหลือ `tooling_no` · diagnostics section E ดักตารางใหม่ที่ผิด convention
 
-### ⚠️ #4 Machine identity SSOT — **Phase 0 เสร็จ, FK รอ GS-64PF + code follow-up**
+### ✅ #4 Machine identity SSOT — **FK เสร็จแล้ว (DB-level, รันจริง 2026-06-06)**
+- **รัน `20260606_machine_identity_fk.sql` แล้ว** (+_rollback): เพิ่ม `machine_type_id` FK →
+  `sds_machine_type_code.id` บน sds_machine_tool / sds_parameter / sds_excel_mapping
+  - backfill: machine_tool 81/81, parameter 1362/1362, excel_mapping 0/121 (NULL name = shared layout)
+  - `ON DELETE RESTRICT` (ลบ master ที่ถูกอ้างไม่ได้) + index บน FK
+  - **trigger `sds_set_machine_type_id`** auto-เซ็ต id จาก name ทุก INSERT/UPDATE → column ดูแลตัวเอง
+    โดย**ไม่ต้องแก้โค้ด app เลย** (zero code risk)
+  - verify: trigger ทำงาน (insert GS-64PF → id 298), RESTRICT บล็อกลบ master, report 2 ตัวยัง 200 (ไม่ regression)
+- **ผลลัพธ์:** ได้ referential integrity + กันdata-loss แบบ 1299-row disaster (ลบ master ไม่ได้ถ้าถูกอ้าง;
+  rename ไม่ลบ row) + id self-maintained
+- **เหลือ optional (ไม่บังคับ):** rewrite read ให้ join ด้วย `machine_type_id` แทน name ใน PDF/report/admin
+  → เพิ่ม raw-rename read-safety แต่เสี่ยงแตะโค้ด SDS ที่ user ใช้งานอยู่ + ได้ marginal น้อย (cascade-rename
+  API + FK + trigger ครอบคลุม catastrophic case แล้ว) — ทำเพิ่มภายหลังได้แบบ incremental
+
+<details><summary>เดิม: Phase 0 (เก็บไว้อ้างอิง)</summary>
 - **ทำแล้ว (รัน DB):**
   - แก้ orphan `HIGRIND-1-D → HI-GRIND-1-D` (2 rows) — rows เดิม dead
   - dedupe `HI-GRIND-1-D` เหลือ active 1 (code 507; ปิด 519/520/521) — เคย 4 active + ถูกอ้าง = blocker หลัก
@@ -105,6 +119,9 @@ fallback bounded concurrency 6 · information_schema cache.
   เครื่องจริงที่ชื่อหายอีกไหม
 - **เหตุผลที่ FK ยังไม่รัน:** ตัว FK ต้องมาคู่กับการแก้ code ให้ join ด้วย `machine_type_id` ถ้ารันแต่ DB
   เปล่า ๆ จะได้คอลัมน์ที่ไม่มีใครใช้ (งานครึ่ง ๆ) — ต้องทำพร้อมกันใน change เดียว
+  > อัปเดต: แก้ด้วย trigger self-maintain แทน → FK ใช้งานได้โดยไม่ต้องแก้ read code (ดูด้านบน)
+
+</details>
 
 ### ไฟล์ migration ที่เพิ่ม
 | ไฟล์ | สถานะ |
@@ -112,6 +129,7 @@ fallback bounded concurrency 6 · information_schema cache.
 | `20260606_fix_sds_machine_tool_orphans.sql` (+_rollback) | ✅ รันแล้ว |
 | `20260606_dedupe_machine_types_for_fk.sql` (+_rollback) | ✅ รันแล้ว (A+D: dedupe HI-GRIND-1-D + retire junk 128) |
 | `20260606_name_gs64pf_master.sql` (+_rollback) | ✅ รันแล้ว (id 298 code 762 → ชื่อ GS-64PF + active) |
+| `20260606_machine_identity_fk.sql` (+_rollback) | ✅ รันแล้ว (FK + backfill + trigger self-maintain) |
 | `20260606_machine_identity_cleanup_prereq.sql` | 📋 diagnostics ให้เจ้าของรัน |
 | `20260606_machine_identity_fk_PREPARED.sql` (+_rollback) | ⏸ เตรียมไว้ รอ cleanup |
 | `20260606_add_tselect_sds_indexes.sql` | 📋 idempotent รอรัน |
