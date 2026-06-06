@@ -87,17 +87,24 @@ fallback bounded concurrency 6 · information_schema cache.
 - audit: ทุกตาราง `tooling_*` ใช้ `tooling_no` หมด ไม่มี `No`/`no`/`part_no` → ไม่ต้อง migrate
 - `matchNo()` ตัด fallback dead-code เหลือ `tooling_no` · diagnostics section E ดักตารางใหม่ที่ผิด convention
 
-### ⚠️ #4 Machine identity SSOT — **บางส่วน (ถูก block ด้วยสภาพข้อมูล)**
-- **ทำแล้ว:** แก้ orphan `HIGRIND-1-D → HI-GRIND-1-D` (2 rows, transactional, มี rollback) — rows เดิม dead
-- **Block:** FK-on-name **เป็นไปไม่ได้** — `machine_type_name` ไม่ unique (ซ้ำ 16 กลุ่ม: null×87, "no data"×41,
-  KS-03A×2, HI-GRIND-1-D×4…) เพราะ identity จริงคือ `machine_type_code`; และ orphan `GS-64PF` ไม่มี master row
-- **เตรียมไว้ (ไม่รัน):** surrogate-id FK migration + rollback + cleanup-prereq ใน `db_migrations/20260606_*`
-  → ต้อง dedup ชื่อ + retire junk + เพิ่ม master `GS-64PF` (เจ้าของตัดสิน) ก่อน
+### ⚠️ #4 Machine identity SSOT — **Phase 0 เสร็จ, FK รอ GS-64PF + code follow-up**
+- **ทำแล้ว (รัน DB):**
+  - แก้ orphan `HIGRIND-1-D → HI-GRIND-1-D` (2 rows) — rows เดิม dead
+  - dedupe `HI-GRIND-1-D` เหลือ active 1 (code 507; ปิด 519/520/521) — เคย 4 active + ถูกอ้าง = blocker หลัก
+  - retire junk 128 แถว (NULL/"no data", ไม่ถูกอ้าง) → `is_active=false`
+  - **ผล: FK ambiguity gate = clear** (ไม่มี referenced name ที่ตรง >1 active master)
+- **เหลือ block เดียว:** orphan `GS-64PF` (ids 70-73) **ไม่มี master row** — เจ้าของต้องเพิ่ม row พร้อม
+  `machine_type_code` จริง (ถ้ารัน FK ตอนนี้ rows นี้จะได้ `machine_type_id=NULL`)
+- **เตรียมไว้ (ยังไม่รัน):** surrogate-id FK migration + rollback ใน `db_migrations/20260606_machine_identity_fk_PREPARED.sql`
+  → รันได้หลังเพิ่ม master `GS-64PF` แล้วตามด้วย code follow-up (dual-read by id ใน PDF/report/admin)
+- **เหตุผลที่ FK ยังไม่รัน:** ตัว FK ต้องมาคู่กับการแก้ code ให้ join ด้วย `machine_type_id` ถ้ารันแต่ DB
+  เปล่า ๆ จะได้คอลัมน์ที่ไม่มีใครใช้ (งานครึ่ง ๆ) — ต้องทำพร้อมกันใน change เดียว
 
 ### ไฟล์ migration ที่เพิ่ม
 | ไฟล์ | สถานะ |
 |---|---|
 | `20260606_fix_sds_machine_tool_orphans.sql` (+_rollback) | ✅ รันแล้ว |
+| `20260606_dedupe_machine_types_for_fk.sql` (+_rollback) | ✅ รันแล้ว (A+D: dedupe HI-GRIND-1-D + retire junk 128) |
 | `20260606_machine_identity_cleanup_prereq.sql` | 📋 diagnostics ให้เจ้าของรัน |
 | `20260606_machine_identity_fk_PREPARED.sql` (+_rollback) | ⏸ เตรียมไว้ รอ cleanup |
 | `20260606_add_tselect_sds_indexes.sql` | 📋 idempotent รอรัน |
