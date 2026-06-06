@@ -46,14 +46,14 @@ import HomeMaterialsEng from './components/engineer/material_eng/home_materials'
 
 import HomeMTCEng from './components/engineer/mtc_eng/home_mtc';
 import ToolingInspect from './components/engineer/mtc_eng/tooling_inspect/tooling_inspect';
-import InspectionResultDashboard from './components/engineer/mtc_eng/tooling_inspect/InspectionResultDashboard.jsx';
+import InspectionResultDashboard from './components/engineer/mtc_eng/tooling_inspect/InspectionResultDashboard';
 import ToolRequest from './components/engineer/mtc_eng/general_dwg_req/ToolRequest';
 import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/EmailConfigManager';
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
-import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage.jsx';
-import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageDashboard.jsx';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page.jsx';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage.jsx';
+import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
+import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageDashboard';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
