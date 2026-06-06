@@ -13,7 +13,7 @@ import Swal from 'sweetalert2';
 import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
 import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
-import { uploadFileToDrive } from '../../../../utils/uploadFileToDrive';
+import { uploadFileToDrive, deleteFileFromDrive } from '../../../../utils/uploadFileToDrive';
 
 export const createCardSlice = (set, get) => ({
     // --- Card Data State ---
@@ -181,7 +181,7 @@ export const createCardSlice = (set, get) => ({
             const loc = get()._findCardList(cardId);
             const card = loc ? get().cards[loc.listId][loc.idx] : get().activeCardDetail;
             if (card && card.attachments) {
-                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                // deleteFileFromDrive is imported statically at the top
                 for (const att of card.attachments) {
                     if (att.drive_file_id) {
                         try {
@@ -662,7 +662,7 @@ export const createCardSlice = (set, get) => ({
 
             // 1. Delete from Google Drive if it's a Drive file
             if (driveFileId) {
-                const { deleteFileFromDrive } = require('../../../../utils/uploadFileToDrive');
+                // deleteFileFromDrive is imported statically at the top
                 await deleteFileFromDrive(driveFileId);
             }
 

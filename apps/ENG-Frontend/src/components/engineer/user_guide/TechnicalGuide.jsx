@@ -26,7 +26,8 @@ import {
 } from 'react-icons/io5';
 import { MdOutlineSecurity, MdOutlineAnalytics, MdDns } from 'react-icons/md';
 import { BiNetworkChart, BiCodeBlock } from 'react-icons/bi';
-import { SiPostgresql, SiRedis, SiAmazonwebservices, SiNodedotjs, SiReact, SiSocketdotio } from 'react-icons/si';
+import { SiPostgresql, SiRedis, SiNodedotjs, SiReact, SiSocketdotio } from 'react-icons/si';
+import { FaAws } from 'react-icons/fa';
 
 const { Title, Text, Paragraph } = Typography;
 const { Panel } = Collapse;
@@ -80,7 +81,7 @@ const TechnicalGuide = ({ theme }) => {
                             The system is designed for 99.99% uptime with automated failover and horizontal scaling.
                         </Paragraph>
                         <div style={{ padding: '24px', background: theme.colors.surface, borderRadius: '24px', border: `1px solid ${theme.colors.border}` }}>
-                            <Title level={5}><SiAmazonwebservices /> AWS Service Stack:</Title>
+                            <Title level={5}><FaAws /> AWS Service Stack:</Title>
                             <List size="small" dataSource={[
                                 { icon: <SiNodedotjs color="#339933" />, title: 'ECS (Fargate)', desc: 'Serverless container orchestration for API nodes.' },
                                 { icon: <SiPostgresql color="#336791" />, title: 'RDS (PostgreSQL)', desc: 'Managed relational database with Multi-AZ replicas.' },

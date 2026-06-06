@@ -2,7 +2,7 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
-const formulaService = require('../services/formulaService');
+const formulaService = require('../services/FormulaService');
 
 // GET /api/tooling-select-v2/machines/:machineId/formulas?tooling_name=
 const list = async (req, res) => {

@@ -3,6 +3,9 @@ services:
     build:
       context: ./apps/ENG-Backend
       dockerfile: Dockerfile
+      args:
+        - HTTP_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+        - HTTPS_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
     container_name: eng_backend
     restart: unless-stopped
     ports:
@@ -18,10 +21,13 @@ services:
     build:
       context: .
       dockerfile: apps/ENG-Frontend/Dockerfile
+      args:
+        - HTTP_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+        - HTTPS_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
     container_name: eng_frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "3000:80"
     depends_on:
       - backend
 
