@@ -1,162 +1,29 @@
-D:\00_system\EngineerSystem>set DOCKER_BUILDKIT=0
-
-D:\00_system\EngineerSystem>docker-compose up -d --build
-Sending build context to Docker daemon  18.39MB
-Step 1/12 : FROM node:18-alpine
-18-alpine: Pulling from library/node
-25ff2da83641: Pull complete
-1e5a4c89cee5: Pull complete
-dd71dde834b5: Pull complete
-27e1cfd0b5f2: Download complete
-0758d11b0bb7: Download complete
-Digest: sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
-Status: Downloaded newer image for node:18-alpine
- ---> 8d6421d663b4
-Step 2/12 : ARG HTTP_PROXY
- ---> Running in 73c0c8924ff7
- ---> Removed intermediate container 73c0c8924ff7
- ---> bfae7a4c8366
-Step 3/12 : ARG HTTPS_PROXY
- ---> Running in ef3621dc09be
- ---> Removed intermediate container ef3621dc09be
- ---> 224e01e84918
-Step 4/12 : RUN npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTPS_PROXY && npm config set strict-ssl false
- ---> Running in b3eb988e88b8
- ---> Removed intermediate container b3eb988e88b8
- ---> 1b76c58c2c02
-Step 5/12 : WORKDIR /app
- ---> Running in 1dbc4521ad8e
- ---> Removed intermediate container 1dbc4521ad8e
- ---> f3205f56c2af
-Step 6/12 : RUN apk add --no-cache python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev
- ---> Running in b3a261fdc419
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/main: DNS lookup error
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/community: DNS lookup error
-ERROR: unable to select packages:
-  cairo-dev (no such package):
-    required by: world[cairo-dev]
-  g++ (no such package):
-    required by: world[g++]
-  giflib-dev (no such package):
-    required by: world[giflib-dev]
-  jpeg-dev (no such package):
-    required by: world[jpeg-dev]
-  make (no such package):
-    required by: world[make]
-  pango-dev (no such package):
-    required by: world[pango-dev]
-  py3-setuptools (no such package):
-    required by: world[py3-setuptools]
-  python3 (no such package):
-    required by: world[python3]
-[+] up 0/1
- - Image engineersystem-backend Building                                                                           61.6s
-The command '/bin/sh -c apk add --no-cache python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev' returned a non-zero code: 8
-
-D:\00_system\EngineerSystem>docker-compose build --no-cache
-Sending build context to Docker daemon  18.39MB
-Step 1/14 : FROM node:18-alpine
- ---> 8d6421d663b4
-Step 2/14 : ARG HTTP_PROXY
- ---> Running in 1e274ffdf894
- ---> Removed intermediate container 1e274ffdf894
- ---> 2a4597b31c09
-Step 3/14 : ARG HTTPS_PROXY
- ---> Running in b6e606e1aab3
- ---> Removed intermediate container b6e606e1aab3
- ---> 7bcf1abf4a44
-Step 4/14 : ENV http_proxy=$HTTP_PROXY
- ---> Running in 157467a7ff8f
- ---> Removed intermediate container 157467a7ff8f
- ---> 491a09243ded
-Step 5/14 : ENV https_proxy=$HTTPS_PROXY
- ---> Running in e1c4b850d364
- ---> Removed intermediate container e1c4b850d364
- ---> 4b0fb57e9c10
-Step 6/14 : RUN npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTPS_PROXY && npm config set strict-ssl false
- ---> Running in 1e05daab2771
- ---> Removed intermediate container 1e05daab2771
- ---> e5ab57b79abc
-Step 7/14 : WORKDIR /app
- ---> Running in 5e94a6cbb42c
- ---> Removed intermediate container 5e94a6cbb42c
- ---> ffb9d1a7ddc1
-Step 8/14 : RUN apk add --no-cache     --repository https://dl-cdn.alpinelinux.org/alpine/v3.21/main     python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev
- ---> Running in c564ac3039bc
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/main: DNS lookup error
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/community: DNS lookup error
-ERROR: unable to select packages:
-  cairo-dev (no such package):
-    required by: world[cairo-dev]
-  g++ (no such package):
-    required by: world[g++]
-  giflib-dev (no such package):
-    required by: world[giflib-dev]
-  jpeg-dev (no such package):
-    required by: world[jpeg-dev]
-  make (no such package):
-    required by: world[make]
-  pango-dev (no such package):
-    required by: world[pango-dev]
-  py3-setuptools (no such package):
-    required by: world[py3-setuptools]
-  python3 (no such package):
-    required by: world[python3]
-[+] build 0/1
- - Image engineersystem-backend Building                                                                            6.9s
-The command '/bin/sh -c apk add --no-cache     --repository https://dl-cdn.alpinelinux.org/alpine/v3.21/main     python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev' returned a non-zero code: 8
-
-D:\00_system\EngineerSystem>docker-compose up -d
-Sending build context to Docker daemon  18.39MB
-Step 1/14 : FROM node:18-alpine
- ---> 8d6421d663b4
-Step 2/14 : ARG HTTP_PROXY
- ---> Using cache
- ---> 2a4597b31c09
-Step 3/14 : ARG HTTPS_PROXY
- ---> Using cache
- ---> 7bcf1abf4a44
-Step 4/14 : ENV http_proxy=$HTTP_PROXY
- ---> Using cache
- ---> 491a09243ded
-Step 5/14 : ENV https_proxy=$HTTPS_PROXY
- ---> Using cache
- ---> 4b0fb57e9c10
-Step 6/14 : RUN npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTPS_PROXY && npm config set strict-ssl false
- ---> Using cache
- ---> e5ab57b79abc
-Step 7/14 : WORKDIR /app
- ---> Using cache
- ---> ffb9d1a7ddc1
-Step 8/14 : RUN apk add --no-cache     --repository https://dl-cdn.alpinelinux.org/alpine/v3.21/main     python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev
- ---> Running in 6ff970a4f4bb
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/main: DNS lookup error
-fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
-WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.21/community: DNS lookup error
-ERROR: unable to select packages:
-  cairo-dev (no such package):
-    required by: world[cairo-dev]
-  g++ (no such package):
-    required by: world[g++]
-  giflib-dev (no such package):
-    required by: world[giflib-dev]
-  jpeg-dev (no such package):
-    required by: world[jpeg-dev]
-  make (no such package):
-    required by: world[make]
-  pango-dev (no such package):
-    required by: world[pango-dev]
-  py3-setuptools (no such package):
-    required by: world[py3-setuptools]
-  python3 (no such package):
-    required by: world[python3]
-[+] up 0/1
- - Image engineersystem-backend Building                                                                            3.4s
-The command '/bin/sh -c apk add --no-cache     --repository https://dl-cdn.alpinelinux.org/alpine/v3.21/main     python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev' returned a non-zero code: 8
-
-D:\00_system\EngineerSystem>
+[0] Saving file file-1780734279095-327573763.HTML to D:\00_system\EngineerSystem\apps\uploads\html_to_pdf\file-1780734774074-61753306.HTML
+[0] Extracted metadata -> DWGNO: file-1780734279095-327573763, REV: ---
+[0] Job created in DB with ID: 10
+[0] Starting background Python process for Job ID 10
+[0] node:events:497
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: spawn py ENOENT
+[0]     at ChildProcess._handle.onexit (node:internal/child_process:285:19)
+[0]     at onErrorNT (node:internal/child_process:483:16)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+[0] Emitted 'error' event on ChildProcess instance at:
+[0]     at ChildProcess._handle.onexit (node:internal/child_process:291:12)
+[0]     at onErrorNT (node:internal/child_process:483:16)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   errno: -4058,
+[0]   code: 'ENOENT',
+[0]   syscall: 'spawn py',
+[0]   path: 'py',
+[0]   spawnargs: [
+[0]     'D:\\00_system\\EngineerSystem\\apps\\ENG-Backend\\api\\engineer\\new_prod\\html_to_pdf.py',
+[0]     '-i',
+[0]     'D:\\00_system\\EngineerSystem\\apps\\uploads\\html_to_pdf\\file-1780734774074-61753306.HTML'
+[0]   ]
+[0] }
+[0]
+[0] Node.js v22.22.2
+[0] 💥 [Nodemon] App crashed! รอ 30 วินาทีก่อนทำการรีสตาร์ทอัตโนมัติ...
