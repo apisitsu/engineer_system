@@ -74,7 +74,7 @@ const uploadJob = async (req, res) => {
         const uploadedFile = req.files.file;
         const user_id = req.user?.empno || req.body.empno || 'Unknown';
         const originalName = uploadedFile.name.replace('.html', '').replace('.HTML', '');
-        
+
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const newFilename = 'file-' + uniqueSuffix + path.extname(uploadedFile.name);
         const inputFilePath = path.join(UPLOAD_DIR, newFilename);
@@ -104,7 +104,7 @@ const uploadJob = async (req, res) => {
              VALUES ($1, $2, $3, 'MANUAL', 'Running SmartExchange', '-', $4) RETURNING id`,
             [user_id, dwgNo, dwgRev, inputFilePath]
         );
-        
+
         const jobId = insertResult.rows[0].id;
         console.log(`Job created in DB with ID: ${jobId}`);
 
@@ -129,7 +129,7 @@ const runHtmlToPdfBackground = (jobId, inputFilePath, originalName) => {
     const expectedOutputPdf = path.join(parsedPath.dir, `${parsedPath.name}_output.pdf`);
 
     // run python
-    const pyProcess = spawn('python', [pythonScriptPath, '-i', inputFilePath]);
+    const pyProcess = spawn('py', [pythonScriptPath, '-i', inputFilePath]);
 
     let outputLog = '';
 
