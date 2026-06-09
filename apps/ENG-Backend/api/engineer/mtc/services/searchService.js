@@ -26,7 +26,7 @@ function buildSpecContext(spec) {
   const od = num(spec.od_aft);
   const id = num(spec.id_aft);
   const w = num(spec.w_aft);
-  const sd = num(spec.sd ?? 0);
+  // const sd = num(spec.sd ?? 0);
   const odBf = num(spec.od_bf);
   const idBf = num(spec.id_bf);
   const wBf = num(spec.w_bf);
