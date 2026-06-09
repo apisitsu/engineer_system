@@ -149,6 +149,57 @@ describe('mixed withTol + withoutTol rules', () => {
   });
 });
 
+// ── buildSpecContext: SD (肩径) derivation ────────────────────────────────────
+
+describe('buildSpecContext SD', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  it('keeps the stored sd when present (manual Y-ball / ABR value wins)', () => {
+    // 3ABR3-02-T: W(12.7) > OD(11.4) → geometry invalid; stored 7.70 must survive
+    const c = ctx({ od_aft: 11.4, w_aft: 12.7, sd: 7.70 });
+    expect(c.SD).toBeCloseTo(7.70, 5);
+  });
+
+  it('falls back to sqrt(OD² − W²) when sd is missing (Normal part)', () => {
+    // 3ABK3DON-T: OD=10.319 W=7.14 → Excel SD = 7.4499…
+    const c = ctx({ od_aft: 10.319, w_aft: 7.14, sd: null });
+    expect(c.SD).toBeCloseTo(7.449977, 5);
+    expect(c.sdCalc).toBeCloseTo(7.449977, 5);
+  });
+
+  it('treats sd = 0 the same as missing and uses the geometric fallback', () => {
+    const c = ctx({ od_aft: 10.319, w_aft: 7.14, sd: 0 });
+    expect(c.SD).toBeCloseTo(7.449977, 5);
+  });
+
+  it('yields SD = 0 when geometry is invalid (W ≥ OD) and no stored sd', () => {
+    const c = ctx({ od_aft: 11.4, w_aft: 12.7, sd: 0 });
+    expect(c.SD).toBe(0);
+    expect(c.sdCalc).toBe(0);
+  });
+});
+
+describe('buildSpecContext groove Y + isABR (CPX SHOE V)', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  it('exposes groove_y as Y and ABR sets isABR (V = ceil05(Y+1))', () => {
+    const c = ctx({ od_aft: 12, w_aft: 14, type: 'ABR', groove_y: 6.3 });
+    expect(c.Y).toBeCloseTo(6.3, 5);
+    expect(c.isABR).toBe(1);
+  });
+
+  it('Y defaults to 0 when groove_y is null/absent', () => {
+    expect(ctx({ od_aft: 12, w_aft: 14, type: 'ABR' }).Y).toBe(0);
+    expect(ctx({ od_aft: 12, w_aft: 14, type: 'ABR', groove_y: null }).Y).toBe(0);
+  });
+
+  it('Y-ball part is NOT isABR (no longer forced through the ABR V branch)', () => {
+    const c = ctx({ od_aft: 12, w_aft: 14, type: null, yball: 'Y' });
+    expect(c.isABR).toBe(0);
+    expect(c.isBallInner).toBe(1);
+  });
+});
+
 // ── Edge cases ────────────────────────────────────────────────────────────────
 
 describe('edge cases', () => {

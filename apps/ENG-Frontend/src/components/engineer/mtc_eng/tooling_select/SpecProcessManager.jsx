@@ -223,6 +223,14 @@ export const SpecProcessManager = ({ embedded = false }) => {
       sorter: (a, b) => (a.type || '').localeCompare(b.type || ''),
     },
     {
+      title: 'Groove Y',
+      dataIndex: 'groove_y',
+      key: 'groove_y',
+      width: 80,
+      render: (v, r) => (r.type === 'ABR' && (v == null || v === '')) ? <Text type="warning">—</Text> : (v ?? ''),
+      sorter: (a, b) => (a.groove_y || 0) - (b.groove_y || 0),
+    },
+    {
       title: 'Process',
       dataIndex: 'process',
       key: 'process',
@@ -512,6 +520,11 @@ export const SpecProcessManager = ({ embedded = false }) => {
                     </Col>
                     <Col span={6}>
                       <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={6}>
+                      <Form.Item name="groove_y" label="Groove Y (ABR)" tooltip="Ball-insert groove width. Used by CPX SHOE V for ABR parts only.">
                         <InputNumber style={{ width: '100%' }} precision={4} />
                       </Form.Item>
                     </Col>

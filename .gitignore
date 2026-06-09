@@ -30,6 +30,7 @@ apps/ENG-Backend/files/output/pdf-cache/
 # --- Application Specific (ENG-Backend) ---
 apps/ENG-Backend/files/template/
 apps/ENG-Backend/api/engineer/mtc/images/
+apps/ENG-Backend/api/engineer/mtc/templates/Select_tool_backup/
 apps/run.ps1
 
 # --- AI & Tool Configurations ---

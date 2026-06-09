@@ -8,6 +8,16 @@ const cache = require('../services/agents/CacheAgent');
 
 const router = express.Router();
 
+// Flush the SDS search/PDF cache (sds:* keys, 10-min TTL) after a successful
+// config mutation, so edits to parameters / tool lists / cell mappings are
+// reflected on the very next search & PDF. Without this, template-setup edits
+// appear to "not take" until the TTL expires. (machine-types routes already
+// invalidate inline.)
+const flushSds = (req, res, next) => {
+  res.on('finish', () => { if (res.statusCode < 400) cache.invalidatePrefix('sds:'); });
+  next();
+};
+
 /**
  * Resolve floor machine_code → { machine_name, machine_type_code } from a single
  * source of truth chain (no reliance on redundant sds_machine_code rows):
@@ -237,7 +247,7 @@ router.get('/mappings', async (req, res) => {
 });
 
 /** POST /api/sds/v2/admin/mappings */
-router.post('/mappings', isAdmin, async (req, res) => {
+router.post('/mappings', isAdmin, flushSds, async (req, res) => {
   const { machine_type_name, cell_address, param_key, description, sort_order } = req.body;
   if (!cell_address?.trim() || !param_key?.trim()) {
     return res.status(400).json({ error: 'cell_address and param_key are required' });
@@ -256,7 +266,7 @@ router.post('/mappings', isAdmin, async (req, res) => {
 });
 
 /** PUT /api/sds/v2/admin/mappings/:id */
-router.put('/mappings/:id', isAdmin, async (req, res) => {
+router.put('/mappings/:id', isAdmin, flushSds, async (req, res) => {
   const { machine_type_name, cell_address, param_key, description, sort_order, is_active } = req.body;
   try {
     const result = await engPool.query(
@@ -274,7 +284,7 @@ router.put('/mappings/:id', isAdmin, async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/admin/mappings/:id */
-router.delete('/mappings/:id', isAdmin, async (req, res) => {
+router.delete('/mappings/:id', isAdmin, flushSds, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_EXCEL_MAPPING} WHERE id=$1 RETURNING id`, [req.params.id]
@@ -327,7 +337,7 @@ router.get('/parameters', async (req, res) => {
  * Body: { cn, machine_type_name, param_key, param_value }
  * cn null/omitted → machine config row
  */
-router.put('/parameters', isAdmin, async (req, res) => {
+router.put('/parameters', isAdmin, flushSds, async (req, res) => {
   const { cn, machine_type_name, param_key, param_value } = req.body;
   if (!machine_type_name?.trim() || !param_key?.trim()) {
     return res.status(400).json({ error: 'machine_type_name and param_key are required' });
@@ -354,7 +364,7 @@ router.put('/parameters', isAdmin, async (req, res) => {
  * PUT /api/sds/v2/admin/parameters/bulk — upsert multiple parameters at once
  * Body: { cn, machine_type_name, params: [{ param_key, param_value }, ...] }
  */
-router.put('/parameters/bulk', isAdmin, async (req, res) => {
+router.put('/parameters/bulk', isAdmin, flushSds, async (req, res) => {
   const { cn, machine_type_name, params } = req.body;
   if (!machine_type_name?.trim()) return res.status(400).json({ error: 'machine_type_name is required' });
   if (!Array.isArray(params) || !params.length) return res.status(400).json({ error: 'params array is required' });
@@ -391,7 +401,7 @@ router.put('/parameters/bulk', isAdmin, async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/admin/parameters/:id */
-router.delete('/parameters/:id', isAdmin, async (req, res) => {
+router.delete('/parameters/:id', isAdmin, flushSds, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_PARAMETER} WHERE id=$1 RETURNING id`, [req.params.id]
@@ -455,7 +465,7 @@ router.get('/machine-tools', async (req, res) => {
  * Body: { machine_type, process_code, rows: [{ tool_number, tool_drawing_no }] }
  * Rows with empty tool_drawing_no are skipped (treated as clearing the slot).
  */
-router.put('/machine-tools/bulk', isAdmin, async (req, res) => {
+router.put('/machine-tools/bulk', isAdmin, flushSds, async (req, res) => {
   const { machine_type, process_code, rows } = req.body;
   if (!machine_type?.trim() || !process_code?.trim()) {
     return res.status(400).json({ error: 'machine_type and process_code are required' });
@@ -493,7 +503,7 @@ router.put('/machine-tools/bulk', isAdmin, async (req, res) => {
  * DELETE /api/sds/v2/admin/machine-tools/combo?machine_type=&process_code=
  * Delete all rows for a specific (machine_type, process_code) combo.
  */
-router.delete('/machine-tools/combo', isAdmin, async (req, res) => {
+router.delete('/machine-tools/combo', isAdmin, flushSds, async (req, res) => {
   const { machine_type, process_code } = req.query;
   if (!machine_type?.trim() || !process_code?.trim()) {
     return res.status(400).json({ error: 'machine_type and process_code are required' });
@@ -695,7 +705,13 @@ router.get('/cn-history', async (req, res) => {
 // ── Audit Config ─────────────────────────────────────────────────────────────
 
 const DEFAULT_AUDIT_PROCESS_CODES = ['1011','1012','1021','1022','1041','1042','1061','1062','1101','1102','1181','1182','1241'];
-const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%'];
+// Mecha = C95 (Mechanical Parts) + C99 (Others) — the two C9x classes that have
+// real grinding production (process 1101/1102 on SGM machines, verified 2026-06-09).
+// Other C9x are excluded by design: C90 forging blank, C91 ball retainer (NO
+// production at all), C96 tooling/fixtures, C97 fastener blank, C98 others — none
+// have ground production. Broaden via the audit config UI if needed. The frontend
+// Mecha card (prefix 'C9') picks up both C95 and C99 rows.
+const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%','C95%','C99%'];
 
 async function ensureAuditConfigTable() {
   await engPool.query(`
@@ -827,9 +843,10 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     const subClassWhere    = `(${buildWhere('i')})`;   // for queries with alias i
     const subClassWhereRaw = `(${buildWhere('')})`;    // for simple single-table queries
 
-    // 1. Count Enabled Items by sub_class
+    // 1. Count Enabled Items by sub_class — COUNT(DISTINCT control_no) so the
+    //    figure is genuinely "unique CNs" (one part counted once) rather than rows.
     const countsResult = await maqPool.query(
-      `SELECT sub_class, COUNT(*) FROM lpb.eng_item WHERE ${subClassWhereRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
+      `SELECT sub_class, COUNT(DISTINCT control_no) AS count FROM lpb.eng_item WHERE ${subClassWhereRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
       subClassPatterns
     );
 

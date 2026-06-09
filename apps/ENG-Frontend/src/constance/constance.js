@@ -95,6 +95,8 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
   MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
+  MTC_SDS_V2_REPORT_CONFIG: `${apiUrl}api/sds/v2/report/config`,
+  MTC_SDS_V2_REPORT_WC_OPTIONS: `${apiUrl}api/sds/v2/report/wc-options`,
   MTC_SDS_V2_REPORT_ACCESS_LOG: `${apiUrl}api/sds/v2/report/access-log`,
   MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
 

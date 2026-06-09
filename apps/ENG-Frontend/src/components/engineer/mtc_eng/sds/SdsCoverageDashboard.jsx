@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
-import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
+import ReportScopeModal from './ReportScopeModal';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, BarElement, LineElement, PointElement,
@@ -85,13 +86,21 @@ const PartTypeCard = ({ pt }) => {
   const pct = pt.complete_pct || 0;
   return (
     <div style={{ ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
         <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>
           {pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)}
         </Text>
-        <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>
-          {pt.total.toLocaleString()}
-        </Text>
+        <Tooltip title="SDS requirements = CN × machine × process (one CN may need several setup sheets)">
+          <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
+            {(pt.total ?? 0).toLocaleString()}
+          </Text>
+        </Tooltip>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <Text style={{ color: C.textSec, fontSize: 10 }}>SDS reqs</Text>
+        <Tooltip title="Unique CNs (deduplicated across machine × process)">
+          <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(pt.cn_count ?? 0).toLocaleString()} Unique CNs</Text>
+        </Tooltip>
       </div>
       <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
       <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px' }}>
@@ -148,9 +157,11 @@ const PartTypeDetailRow = ({ pt }) => {
               )
             ))}
           </div>
-          <Text style={{ color: C.textSec, fontSize: 10, whiteSpace: 'nowrap' }}>
-            {pt.total.toLocaleString()} CNs
-          </Text>
+          <Tooltip title="Unique CNs · SDS requirements (CN × machine × process)">
+            <Text style={{ color: C.textSec, fontSize: 10, whiteSpace: 'nowrap', cursor: 'help' }}>
+              {(pt.cn_count ?? 0).toLocaleString()} CNs · {pt.total.toLocaleString()} reqs
+            </Text>
+          </Tooltip>
         </div>
       </div>
     </div>
@@ -165,6 +176,7 @@ export default function SdsCoverageDashboard() {
   const [building, setBuilding] = useState(false);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
+  const [scopeOpen, setScopeOpen] = useState(false);
   const pollRef = useRef(null);
 
   const stopPolling = useCallback(() => {
@@ -450,7 +462,11 @@ export default function SdsCoverageDashboard() {
     },
   ];
 
-  const totalCns = (data?.kpi?.complete ?? 0) + (data?.needsAttention?.length ?? 0) + (data?.kpi?.missing ?? 0);
+  // Total SDS requirements = evaluated.length (authoritative). Use kpi.total so the
+  // headline/summary match the per-part-type cards (Σ pt.total) and the "no tool/excel"
+  // tags (which also divide by kpi.total) — the old complete+pending+missing recompute
+  // could diverge when pending was deduped.
+  const totalCns = data?.kpi?.total ?? 0;
 
   return (
     <Layout style={{ height: '100%', background: C.bg }}>
@@ -467,14 +483,26 @@ export default function SdsCoverageDashboard() {
                 </div>
                 {totalCns > 0 && (
                   <div style={{ color: C.textSec, fontSize: 12, marginTop: 2 }}>
-                    <span style={{ color: C.textPri, fontWeight: 700 }}>{totalCns.toLocaleString()} CNs</span>
+                    <span style={{ color: C.textPri, fontWeight: 700 }}>{(data?.kpi?.uniqueCnCount ?? 0).toLocaleString()} unique CNs</span>
+                    <span style={{ color: C.textSec }}> · {totalCns.toLocaleString()} SDS reqs</span>
                   </div>
                 )}
               </div>
-              <Button icon={<ReloadOutlined />} onClick={() => fetchData({ refresh: true })} loading={loading} size="small"
-                title="Rebuild report (recomputes Tooling Select — may take a few minutes)"
-                style={{ background: C.card, borderColor: C.border, color: C.textPri }} />
+              <Space>
+                <Button icon={<SettingOutlined />} onClick={() => setScopeOpen(true)} size="small"
+                  title="Edit report scope (part types, process codes, work centers) — admin"
+                  style={{ background: C.card, borderColor: C.border, color: C.textPri }}>Scope</Button>
+                <Button icon={<ReloadOutlined />} onClick={() => fetchData({ refresh: true })} loading={loading} size="small"
+                  title="Rebuild report (recomputes Tooling Select — may take a few minutes)"
+                  style={{ background: C.card, borderColor: C.border, color: C.textPri }} />
+              </Space>
             </div>
+
+            <ReportScopeModal
+              open={scopeOpen}
+              onClose={() => setScopeOpen(false)}
+              onSaved={() => fetchData({ refresh: true })}
+            />
 
             {/* ── Coverage Legend ─────────────────────────────────────────────── */}
             <div style={{ ...cardStyle, padding: '8px 16px', marginBottom: 12 }}>
@@ -497,13 +525,20 @@ export default function SdsCoverageDashboard() {
                 {/* Total CNs summary card */}
                 <div style={{ flex: 1 }}>
                   <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
                       <Text style={{ color: C.cyan, fontSize: 13, fontWeight: 800 }}>TOTAL</Text>
-                      <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1 }}>
-                        {totalCns.toLocaleString()}
-                      </Text>
+                      <Tooltip title="Total SDS requirements = CN × machine × process">
+                        <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
+                          {totalCns.toLocaleString()}
+                        </Text>
+                      </Tooltip>
                     </div>
-                    <Text style={{ color: C.textSec, fontSize: 10 }}>Total SDS requirements</Text>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                      <Text style={{ color: C.textSec, fontSize: 10 }}>SDS reqs</Text>
+                      <Tooltip title="Unique CNs across the selected part types (deduplicated across machine × process)">
+                        <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(data?.kpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
+                      </Tooltip>
+                    </div>
                     <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px' }}>
                       <div style={{
                         width: `${Math.min(data?.kpi?.completePct ?? 0, 100)}%`, height: '100%',
@@ -583,10 +618,11 @@ export default function SdsCoverageDashboard() {
                 <Space>
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}
                     options={[
-                      { value: '',      label: 'All Part Types' },
-                      { value: 'ball',  label: 'Ball'           },
-                      { value: 'race',  label: 'Race'           },
-                      { value: 'mecha', label: 'Mecha'          },
+                      { value: '', label: 'All Part Types' },
+                      ...byPartType.map(pt => ({
+                        value: pt.part_type,
+                        label: pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1),
+                      })),
                     ]} popupMatchSelectWidth={false} />
                   <Select size="small" value={filterMc} onChange={setFilterMc} style={{ width: 160 }}
                     options={machineOptions} popupMatchSelectWidth={false} showSearch
