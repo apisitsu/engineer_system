@@ -19,33 +19,33 @@ const { Content } = Layout;
 const { Text } = Typography;
 
 const C = {
-  bg:       '#041320',
-  card:     '#072035',
-  border:   '#0e3a5c',
-  blue:     '#1890ff',
-  cyan:     '#00d4ff',
-  green:    '#52c41a',
-  red:      '#ff4d4f',
-  yellow:   '#ffc53d',
-  orange:   '#fa8c16',
-  purple:   '#722ed1',
-  textPri:  '#e8f4ff',
-  textSec:  '#6fa3c7',
+  bg: '#041320',
+  card: '#072035',
+  border: '#0e3a5c',
+  blue: '#1890ff',
+  cyan: '#00d4ff',
+  green: '#52c41a',
+  red: '#ff4d4f',
+  yellow: '#ffc53d',
+  orange: '#fa8c16',
+  purple: '#722ed1',
+  textPri: '#e8f4ff',
+  textSec: '#6fa3c7',
   gridLine: 'rgba(14,58,92,0.8)',
 };
 
 const PART_TYPE_COLOR = {
-  ball:      '#1890ff',
-  race:      '#52c41a',
-  body:      '#fa8c16',
-  sleeve:    '#722ed1',
+  ball: '#1890ff',
+  race: '#52c41a',
+  body: '#fa8c16',
+  sleeve: '#722ed1',
   spherical: '#ff4d4f',
-  mecha:     '#eb2f96',
-  other:     '#6fa3c7',
+  mecha: '#eb2f96',
+  other: '#6fa3c7',
 };
 
 const LEVEL_CFG = {
-  COMPLETE:     { color: C.green,  label: 'Complete',     icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
+  COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
 };
 
@@ -133,7 +133,7 @@ const PartTypeDetailRow = ({ pt }) => {
   const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
   const total = pt.total || 1;
   const segments = [
-    { key: 'complete',     count: pt.complete,     color: C.green,  label: 'Complete'     },
+    { key: 'complete', count: pt.complete, color: C.green, label: 'Complete' },
     { key: 'pending', count: pt.pending, color: C.yellow, label: 'Pending' },
   ];
   return (
@@ -171,8 +171,8 @@ const PartTypeDetailRow = ({ pt }) => {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
   const { message } = App.useApp();
-  const [data, setData]         = useState(null);
-  const [loading, setLoading]   = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
@@ -228,7 +228,7 @@ export default function SdsCoverageDashboard() {
   const ptBarData = {
     labels: byPartType.map(pt => pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)),
     datasets: [
-      { label: 'Complete',     data: byPartType.map(pt => pt.complete),     backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
+      { label: 'Complete', data: byPartType.map(pt => pt.complete), backgroundColor: 'rgba(82,196,26,0.80)', borderColor: C.green, borderWidth: 1, stack: 'pt' },
       { label: 'Pending', data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
     ],
   };
@@ -268,8 +268,8 @@ export default function SdsCoverageDashboard() {
   const newPartsChartData = {
     labels: monthlyNewParts.map(r => fmtMonth(r.month)),
     datasets: [
-      { label: 'Ball',  data: monthlyNewParts.map(r => r.ball  || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball,  borderWidth: 1, stack: 'np' },
-      { label: 'Race',  data: monthlyNewParts.map(r => r.race  || 0), backgroundColor: 'rgba(82,196,26,0.75)',  borderColor: PART_TYPE_COLOR.race,  borderWidth: 1, stack: 'np' },
+      { label: 'Ball', data: monthlyNewParts.map(r => r.ball || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball, borderWidth: 1, stack: 'np' },
+      { label: 'Race', data: monthlyNewParts.map(r => r.race || 0), backgroundColor: 'rgba(82,196,26,0.75)', borderColor: PART_TYPE_COLOR.race, borderWidth: 1, stack: 'np' },
       { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: 'rgba(235,47,150,0.65)', borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
     ],
   };
