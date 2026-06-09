@@ -3,6 +3,7 @@
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
 const formulaService = require('./formulaService');
+const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
 
 // ── Spec ────────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ function buildSpecContext(spec) {
   const od = num(spec.od_aft);
   const id = num(spec.id_aft);
   const w = num(spec.w_aft);
-  const sd = num(spec.sd ?? 0);
+  // const sd = num(spec.sd ?? 0);
   const odBf = num(spec.od_bf);
   const idBf = num(spec.id_bf);
   const wBf = num(spec.w_bf);
@@ -34,9 +35,20 @@ function buildSpecContext(spec) {
   const yball = str(spec.yball);
   const process = str(spec.process ?? '');
 
+  // SD (肩径 / shoulder dia). The legacy Excel TOOLING LISTs compute it geometrically
+  // for Normal parts — SD = sqrt(OD² − W²) — and take a manually-entered value for
+  // Y-ball / ABR parts (where W > OD makes the geometry invalid → sqrt of a negative).
+  // V2 stores `sd`, but ~62% of rows have sd = 0/NULL, which silently zeroes every
+  // SD-dependent formula (KS-03A / KS-B22RD FRONT PLATE, KS-400B1 PLUG A/B & WORK DRIVER).
+  // Stored value wins (preserves the manual Y-ball/ABR numbers); fall back to the
+  // geometric value only when sd is missing AND the geometry is valid (OD > W).
+  const sdStored = num(spec.sd ?? 0);
+  const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
+  const sd = sdStored > 0 ? sdStored : sdCalc;
+
   return {
     // ── After (nominal) ───────────────────────────────────────────────────────
-    OD: od, ID: id, W: w, SD: sd,
+    OD: od, ID: id, W: w, SD: sd, sdCalc,
     odAft: od, idAft: id, wAft: w,
 
     // After max / min — DB stores tolerance DELTA; nominal + delta = absolute bound
@@ -50,6 +62,9 @@ function buildSpecContext(spec) {
     odBf_max: odBf + num(spec.od_bf_max), odBf_min: odBf + num(spec.od_bf_min),
     idBf_max: idBf + num(spec.id_bf_max), idBf_min: idBf + num(spec.id_bf_min),
     wBf_max: wBf + num(spec.w_bf_max), wBf_min: wBf + num(spec.w_bf_min),
+
+    // Ball-insert groove protrusion width (Excel "Y"; manual). Used by CPX SHOE V.
+    Y: num(spec.groove_y),
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
@@ -65,12 +80,7 @@ function buildSpecContext(spec) {
 // ── Machine Limit Check ──────────────────────────────────────────────────────
 
 async function checkMachineLimits(machineId, ctx) {
-  const { rows } = await engPool.query(
-    `SELECT * FROM ${TSV2_TABLES.LIMIT}
-      WHERE machine_id = $1
-      ORDER BY sort_order ASC, id ASC`,
-    [machineId]
-  );
+  const rows = await configCache.getLimits(machineId);
 
   for (const limit of rows) {
     const key = limit.input_var;
@@ -303,14 +313,12 @@ async function search(cn) {
   const spec = specRes.rows[0];
   const specCtx = buildSpecContext(spec);
 
-  const machinesRes = await engPool.query(
-    `SELECT * FROM ${TSV2_TABLES.MACHINE} WHERE enabled = true ORDER BY machine_name ASC`
-  );
+  const machines = await configCache.getMachines();
 
   // Deduplicate grouped machines: for machines sharing the same machine_group,
   // run search once using the first representative and label results with the group name.
   const seenGroups = new Set();
-  const searchMachines = machinesRes.rows.reduce((acc, m) => {
+  const searchMachines = machines.reduce((acc, m) => {
     if (!m.machine_group) { acc.push(m); return acc; }
     if (!seenGroups.has(m.machine_group)) {
       seenGroups.add(m.machine_group);
@@ -331,34 +339,33 @@ async function search(cn) {
         return;
       }
 
-      const toolingsRes = await engPool.query(
-        `SELECT DISTINCT tooling_name FROM ${TSV2_TABLES.FORMULA}
-          WHERE machine_id = $1
-          ORDER BY tooling_name ASC`,
-        [machine.id]
-      );
+      const toolingNames = await configCache.getToolingNames(machine.id);
 
-      await Promise.all(toolingsRes.rows.map(async ({ tooling_name }) => {
+      await Promise.all(toolingNames.map(async (tooling_name) => {
         try {
-          const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx);
+          const formulaRows = await configCache.getFormulas(machine.id, tooling_name);
+          const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows });
 
-          const rulesRes = await engPool.query(
-            `SELECT * FROM ${TSV2_TABLES.SEARCH_RULE}
-              WHERE machine_id = $1 AND tooling_name = $2
-              ORDER BY sort_priority ASC, id ASC`,
-            [machine.id, tooling_name]
-          );
-          if (!rulesRes.rows.length) return;
+          // Surface formula evaluation failures (previously swallowed silently) so
+          // a broken/inapplicable formula is visible instead of just a missing tool.
+          if (computedDims._warnings?.length) {
+            for (const w of computedDims._warnings) {
+              warnings.push({ machine: displayName, tooling: tooling_name, reason: `formula ${w.output_key} (${w.phase}) failed: ${w.error}` });
+            }
+          }
 
-          const matches = await searchInventory(machine, rulesRes.rows, computedDims);
+          const rules = await configCache.getSearchRules(machine.id, tooling_name);
+          if (!rules.length) return;
+
+          const matches = await searchInventory(machine, rules, computedDims);
 
           // Map computed key → inventory column (e.g. A → dim_a) for frontend display
           const columnMap = {};
-          for (const r of rulesRes.rows) columnMap[r.output_key] = r.inventory_column;
+          for (const r of rules) columnMap[r.output_key] = r.inventory_column;
 
           // Inventory columns whose rule feeds the closest-match ranking
           // (is_match_dim) — used by the UI to highlight those result headers.
-          const matchDimCols = rulesRes.rows
+          const matchDimCols = rules
             .filter(r => r.is_match_dim !== false)
             .map(r => r.inventory_column);
 
@@ -397,6 +404,7 @@ async function search(cn) {
 function _clearCaches() {
   _validatedTables.clear();
   _columnCache.clear();
+  configCache.flush();
 }
 
-module.exports = { search, _searchInventory: searchInventory, _clearCaches };
+module.exports = { search, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };

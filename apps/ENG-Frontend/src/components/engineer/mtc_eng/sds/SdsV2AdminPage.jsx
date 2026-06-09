@@ -2064,6 +2064,7 @@ const AuditTab = ({ theme }) => {
 };
 
 // ── Tab: Configure Settings (Audit Process Codes + Visible Machines) ──────────
+// (Report Scope config moved to a button on the SDS Coverage report page.)
 
 const ConfigureSettingsTab = ({ theme, visibleMachineNames, setVisibleMachineNames }) => {
   const { message } = App.useApp();
