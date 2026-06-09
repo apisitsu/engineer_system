@@ -43,8 +43,8 @@ function buildSpecContext(spec) {
   // Stored value wins (preserves the manual Y-ball/ABR numbers); fall back to the
   // geometric value only when sd is missing AND the geometry is valid (OD > W).
   const sdStored = num(spec.sd ?? 0);
-  const sdCalc   = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
-  const sd       = sdStored > 0 ? sdStored : sdCalc;
+  const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
+  const sd = sdStored > 0 ? sdStored : sdCalc;
 
   return {
     // ── After (nominal) ───────────────────────────────────────────────────────
@@ -62,12 +62,9 @@ function buildSpecContext(spec) {
     odBf_max: odBf + num(spec.od_bf_max), odBf_min: odBf + num(spec.od_bf_min),
     idBf_max: idBf + num(spec.id_bf_max), idBf_min: idBf + num(spec.id_bf_min),
     wBf_max: wBf + num(spec.w_bf_max), wBf_min: wBf + num(spec.w_bf_min),
-<<<<<<< HEAD
-=======
 
     // Ball-insert groove protrusion width (Excel "Y"; manual). Used by CPX SHOE V.
     Y: num(spec.groove_y),
->>>>>>> 55eb45ac4d8398d075ad3d3ec54cbeab493da6df
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
@@ -346,7 +343,7 @@ async function search(cn) {
 
       await Promise.all(toolingNames.map(async (tooling_name) => {
         try {
-          const formulaRows  = await configCache.getFormulas(machine.id, tooling_name);
+          const formulaRows = await configCache.getFormulas(machine.id, tooling_name);
           const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows });
 
           // Surface formula evaluation failures (previously swallowed silently) so
