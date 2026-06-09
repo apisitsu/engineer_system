@@ -2,12 +2,8 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
-<<<<<<< HEAD
-const formulaService = require('./FormulaService');
-=======
 const formulaService = require('./formulaService');
 const cnFormat = require('../utils/cnFormat');
->>>>>>> 0c59445df1c79a2cbf7f6cee641b04c4c5a9dd95
 
 // ── Spec ────────────────────────────────────────────────────────────────────
 
@@ -22,20 +18,20 @@ const cnFormat = require('../utils/cnFormat');
  * so the context already converts them to absolute values (nominal + delta).
  */
 function buildSpecContext(spec) {
-  const num  = (v) => (v !== null && v !== undefined && v !== '') ? Number(v) : 0;
-  const str  = (v) => (v ?? '').toString().toUpperCase().trim();
+  const num = (v) => (v !== null && v !== undefined && v !== '') ? Number(v) : 0;
+  const str = (v) => (v ?? '').toString().toUpperCase().trim();
   const flag = (v) => v ? 1 : 0;
 
-  const od   = num(spec.od_aft);
-  const id   = num(spec.id_aft);
-  const w    = num(spec.w_aft);
-  const sd   = num(spec.sd ?? 0);
+  const od = num(spec.od_aft);
+  const id = num(spec.id_aft);
+  const w = num(spec.w_aft);
+  const sd = num(spec.sd ?? 0);
   const odBf = num(spec.od_bf);
   const idBf = num(spec.id_bf);
-  const wBf  = num(spec.w_bf);
+  const wBf = num(spec.w_bf);
 
-  const type    = str(spec.type);
-  const yball   = str(spec.yball);
+  const type = str(spec.type);
+  const yball = str(spec.yball);
   const process = str(spec.process ?? '');
 
   return {
@@ -47,19 +43,19 @@ function buildSpecContext(spec) {
     // e.g. od_aft=22.555, od_aft_max=0, od_aft_min=-0.01 → upper=22.555, lower=22.545
     odAft_max: od + num(spec.od_aft_max), odAft_min: od + num(spec.od_aft_min),
     idAft_max: id + num(spec.id_aft_max), idAft_min: id + num(spec.id_aft_min),
-    wAft_max:  w  + num(spec.w_aft_max),  wAft_min:  w  + num(spec.w_aft_min),
+    wAft_max: w + num(spec.w_aft_max), wAft_min: w + num(spec.w_aft_min),
 
     // ── Before (nominal + max / min) ──────────────────────────────────────────
     odBf, idBf, wBf,
     odBf_max: odBf + num(spec.od_bf_max), odBf_min: odBf + num(spec.od_bf_min),
     idBf_max: idBf + num(spec.id_bf_max), idBf_min: idBf + num(spec.id_bf_min),
-    wBf_max:  wBf  + num(spec.w_bf_max),  wBf_min:  wBf  + num(spec.w_bf_min),
+    wBf_max: wBf + num(spec.w_bf_max), wBf_min: wBf + num(spec.w_bf_min),
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
-    isABR:       flag(type.includes('ABR')),
-    isIDtoOD:    flag(process === 'ID->OD'),
-    isODtoID:    flag(process === 'OD->ID'),
+    isABR: flag(type.includes('ABR')),
+    isIDtoOD: flag(process === 'ID->OD'),
+    isODtoID: flag(process === 'OD->ID'),
 
     // ── Raw strings ───────────────────────────────────────────────────────────
     Type: type, YBall: yball, Process: process,
@@ -146,9 +142,9 @@ async function searchInventory(machine, rules, computedDims) {
   await assertTableExists(table);
   const validCols = await getTableColumns(table);
 
-  const conditions   = [];
-  const params       = [];
-  let   pi           = 1;
+  const conditions = [];
+  const params = [];
+  let pi = 1;
 
   // Optional machine column filter
   if (machineFilter && validCols.has('Machine')) {
@@ -164,7 +160,7 @@ async function searchInventory(machine, rules, computedDims) {
     params.push(inventoryToolingFilter);
   }
 
-  const withTol    = rules.filter(r => r.tol_plus !== null || r.tol_minus !== null);
+  const withTol = rules.filter(r => r.tol_plus !== null || r.tol_minus !== null);
   const withoutTol = rules.filter(r => r.tol_plus === null && r.tol_minus === null);
 
   // distanceRules: rules that contribute to ORDER BY, each carrying its sort_priority
@@ -176,7 +172,7 @@ async function searchInventory(machine, rules, computedDims) {
     const computed = computedDims[rule.output_key];
     if (computed === undefined || !validCols.has(rule.inventory_column)) continue;
 
-    const hasTolPlus  = rule.tol_plus  !== null;
+    const hasTolPlus = rule.tol_plus !== null;
     const hasTolMinus = rule.tol_minus !== null;
     const col = `"${rule.inventory_column}"::numeric`;
 
@@ -304,7 +300,7 @@ async function search(cn) {
   if (!specRes.rows.length) {
     return { success: false, error: 'Part spec not found', cn };
   }
-  const spec    = specRes.rows[0];
+  const spec = specRes.rows[0];
   const specCtx = buildSpecContext(spec);
 
   const machinesRes = await engPool.query(
@@ -367,10 +363,10 @@ async function search(cn) {
             .map(r => r.inventory_column);
 
           results.push({
-            machine:      displayName,
+            machine: displayName,
             machineLabel: machine._displayName ? null : machine.label,
-            tooling:      tooling_name,
-            computed:     computedDims,
+            tooling: tooling_name,
+            computed: computedDims,
             columnMap,
             matchDimCols,
             matches,
