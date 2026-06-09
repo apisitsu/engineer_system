@@ -11,15 +11,15 @@ import { create } from 'zustand';
  */
 export const usePdfEditorStore = create((set, get) => ({
     // ── Operating Mode ──
-    // view | annotate | shapes | edit | sign | merge | export
+    // view | annotate | shapes | sign | dwgCheck | merge | export
     activeMode: 'view',
 
     // ── Active Tool within current mode ──
     // View:     select, pan
-    // Annotate: highlight, underline, strikethrough, sticky
+    // Annotate: highlight, underline, strikethrough, sticky, addText, maskReplace
     // Shapes:   rect, circle, arrow, line, freehand, ruler
-    // Edit:     addText, maskReplace
     // Sign:     formFill, signature, stamp, date
+    // dwgCheck: rect, circle, arrow, addText, stampCheckmark, stampCross, stampCircle, stampOk, stampUserDate
     // Merge:    (no sub-tools)
     // Export:   (no sub-tools)
     activeTool: 'select',
@@ -36,6 +36,9 @@ export const usePdfEditorStore = create((set, get) => ({
     // ── Selected Object ──
     selectedObjectId: null,
     selectedObjectProps: null, // { type, fill, stroke, ... } for PropertiesPanel
+
+    // ── Clipboard (for Copy/Paste) ──
+    clipboard: null,
 
     // ── Ruler / Measurement ──
     rulerScale: 1.0,       // px per mm (calibratable)
@@ -71,6 +74,8 @@ export const usePdfEditorStore = create((set, get) => ({
         selectedObjectId: null,
         selectedObjectProps: null,
     }),
+    
+    setClipboard: (obj) => set({ clipboard: obj }),
 
     setCanvasObjectCount: (pageNum, count) => set(state => ({
         canvasObjectCounts: {

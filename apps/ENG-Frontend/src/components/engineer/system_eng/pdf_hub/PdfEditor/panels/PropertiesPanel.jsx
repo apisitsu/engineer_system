@@ -5,7 +5,6 @@ import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
 import ViewPanel from './properties/ViewPanel';
 import AnnotatePanel from './properties/AnnotatePanel';
 import ShapesPanel from './properties/ShapesPanel';
-import EditPanel from './properties/EditPanel';
 import SignPanel from './properties/SignPanel';
 import MergePanel from './properties/MergePanel';
 import ExportPanel from './properties/ExportPanel';
@@ -59,12 +58,8 @@ const PropertiesPanel = ({
         return <AnnotatePanel />;
     }
 
-    if (store.activeMode === 'shapes') {
+    if (store.activeMode === 'shapes' || store.activeMode === 'dwgCheck') {
         return <ShapesPanel />;
-    }
-
-    if (store.activeMode === 'edit') {
-        return <EditPanel />;
     }
 
     if (store.activeMode === 'sign') {

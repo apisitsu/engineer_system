@@ -89,6 +89,9 @@ const ModeToolbar = () => {
                         <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
                         <ToolBtn tool="sticky" icon={<MessageOutlined />} label="Sticky Note" />
                         <ToolDivider />
+                        <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
+                        <ToolBtn tool="maskReplace" icon={<BlockOutlined />} label="Mask & Replace Text" />
+                        <ToolDivider />
                         <ToolBtn tool="eraser" icon={<ClearOutlined />} label="Eraser (Delete)" danger={true} />
                     </div>
                 </div>
@@ -129,7 +132,7 @@ const ModeToolbar = () => {
                 </div>
             );
 
-        case 'edit':
+        case 'dwgCheck':
             return (
                 <div className="pdf-ws-toolbar" style={{
                     background: theme.colors.surface,
@@ -138,9 +141,32 @@ const ModeToolbar = () => {
                     <SelectionTools />
                     <ToolDivider />
                     <div className="pdf-ws-toolbar-group">
+                        <ToolBtn tool="rect" icon={<BorderOutlined />} label="Rectangle Shape" />
+                        <ToolBtn tool="circle" icon={<RadiusSettingOutlined />} label="Ellipse Shape" />
                         <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
-                        <ToolBtn tool="maskReplace" icon={<BlockOutlined />} label="Mask & Replace Text" />
+                        <ToolBtn tool="arrow" icon={<ArrowRightOutlined />} label="Draw Arrow" />
                     </div>
+                    <ToolDivider />
+                    <div className="pdf-ws-toolbar-group">
+                        <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
+                        <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
+                        <ToolBtn tool="stampCircle" icon={
+                            <span style={{
+                                display: 'inline-flex', width: 14, height: 14,
+                                borderRadius: '50%', border: '2px solid currentColor',
+                                boxSizing: 'border-box',
+                            }} />
+                        } label="Circle (○)" />
+                        <ToolBtn tool="stampOk" icon={<CheckCircleOutlined />} label="OK Symbol" />
+                    </div>
+                    {isAdOrEng && (
+                        <>
+                            <ToolDivider />
+                            <div className="pdf-ws-toolbar-group">
+                                <ToolBtn tool="stampUserDate" icon={<IdcardOutlined />} label="User & Date Stamp" />
+                            </div>
+                        </>
+                    )}
                 </div>
             );
 

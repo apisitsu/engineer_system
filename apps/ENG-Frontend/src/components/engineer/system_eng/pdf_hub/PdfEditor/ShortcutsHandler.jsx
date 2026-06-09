@@ -7,7 +7,7 @@ import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
  * Captures key events for tool switching, navigation, and actions.
  * Does NOT render any UI elements.
  */
-const ShortcutsHandler = ({
+export default function ShortcutsHandler({
     onUndo,
     onRedo,
     onPrevPage,
@@ -17,13 +17,26 @@ const ShortcutsHandler = ({
     onDelete,
     onSave,
     fabricCanvasRefs,
-}) => {
+    currentPage
+}) {
     const store = usePdfEditorStore();
 
     const handleKeyDown = useCallback((e) => {
-        // Ignore when typing in inputs/textareas
-        const tag = e.target.tagName.toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+        const activeElement = document.activeElement;
+        const isInput = activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable;
+
+        // Allow copy/paste in text inputs
+        if (isInput && (e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v')) {
+            return;
+        }
+
+        if (isInput) {
+            if (e.key === 'Escape') {
+                activeElement.blur();
+                store.setActiveTool('select');
+            }
+            return;
+        }
 
         const ctrl = e.ctrlKey || e.metaKey;
         const shift = e.shiftKey;
@@ -33,6 +46,7 @@ const ShortcutsHandler = ({
         // ── Escape — deselect or switch to select tool ──
         if (key === 'escape') {
             e.preventDefault();
+            store.setActiveTool('select');
             if (fabricCanvasRefs?.current) {
                 Object.values(fabricCanvasRefs.current).forEach(fc => {
                     if (fc) {
@@ -41,7 +55,6 @@ const ShortcutsHandler = ({
                     }
                 });
             }
-            store.setActiveTool('select');
             return;
         }
 
@@ -66,6 +79,56 @@ const ShortcutsHandler = ({
         if (ctrl && (code === 'keyy' || key === 'y' || (shift && (code === 'keyz' || key === 'z')))) {
             e.preventDefault();
             onRedo?.();
+            return;
+        }
+
+        // ── Copy / Paste ──
+        if (ctrl && (code === 'keyc' || key === 'c')) {
+            if (fabricCanvasRefs?.current) {
+                Object.values(fabricCanvasRefs.current).forEach(fc => {
+                    if (fc) {
+                        const active = fc.getActiveObject();
+                        if (active) {
+                            e.preventDefault();
+                            active.clone().then(cloned => {
+                                store.setClipboard(cloned);
+                            });
+                        }
+                    }
+                });
+            }
+            return;
+        }
+
+        if (ctrl && (code === 'keyv' || key === 'v')) {
+            const clipboard = store.clipboard;
+            if (clipboard && fabricCanvasRefs?.current && currentPage) {
+                const fc = fabricCanvasRefs.current[currentPage];
+                if (fc) {
+                    e.preventDefault();
+                    clipboard.clone().then(clonedObj => {
+                        fc.discardActiveObject();
+                        clonedObj.set({
+                            left: clonedObj.left + 20,
+                            top: clonedObj.top + 20,
+                            evented: true,
+                        });
+                        if (clonedObj.type === 'activeSelection') {
+                            clonedObj.canvas = fc;
+                            clonedObj.forEachObject(obj => fc.add(obj));
+                            clonedObj.setCoords();
+                        } else {
+                            fc.add(clonedObj);
+                        }
+                        if (clonedObj.customData) {
+                            clonedObj.set('customData', { ...clonedObj.customData, createdAt: Date.now() });
+                        }
+                        fc.setActiveObject(clonedObj);
+                        store.setClipboard(clonedObj); // Update clipboard to the new slightly offset object
+                        fc.renderAll();
+                    });
+                }
+            }
             return;
         }
 
@@ -150,6 +213,4 @@ const ShortcutsHandler = ({
     }, [handleKeyDown]);
 
     return null; // No UI
-};
-
-export default ShortcutsHandler;
+}

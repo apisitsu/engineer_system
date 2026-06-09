@@ -19,6 +19,7 @@ export default function useFabricTools({
         let isDrawing = false;
         let startX = 0;
         let startY = 0;
+        let maxDist = 0;
         let tempObj = null;
 
         const handleOneClickTool = (pointer, tool) => {
@@ -235,6 +236,7 @@ export default function useFabricTools({
             const tool = store.activeTool;
             startX = pointer.x;
             startY = pointer.y;
+            maxDist = 0;
 
             const commonProps = {
                 left: startX,
@@ -251,8 +253,8 @@ export default function useFabricTools({
                 case 'maskReplace':
                     tempObj = new fabric.Rect({
                         ...commonProps,
-                        width: 0,
-                        height: 0,
+                        width: 4,
+                        height: 4,
                         fill: tool === 'maskReplace' ? '#ffffff' : store.fillColor,
                         stroke: tool === 'maskReplace' ? '#cccccc' : store.strokeColor,
                         strokeWidth: tool === 'maskReplace' ? 1 : store.strokeWidth,
@@ -275,7 +277,6 @@ export default function useFabricTools({
                     fc.add(itext);
                     fc.setActiveObject(itext);
                     store.setActiveTool('select');
-                    // We don't want to enter dragging mode for text, so just return!
                     return;
                 }
 
@@ -299,8 +300,8 @@ export default function useFabricTools({
                 case 'circle':
                     tempObj = new fabric.Ellipse({
                         ...commonProps,
-                        rx: 0,
-                        ry: 0,
+                        rx: 2,
+                        ry: 2,
                         fill: store.fillColor,
                         stroke: store.strokeColor,
                         strokeWidth: store.strokeWidth,
@@ -311,7 +312,7 @@ export default function useFabricTools({
                 case 'line':
                 case 'arrow':
                 case 'ruler':
-                    tempObj = new fabric.Line([startX, startY, startX, startY], {
+                    tempObj = new fabric.Line([startX, startY, startX + 4, startY + 4], {
                         stroke: tool === 'ruler' ? '#2196f3' : store.strokeColor,
                         strokeWidth: tool === 'ruler' ? 2 : store.strokeWidth,
                         opacity: store.opacity,
@@ -345,44 +346,50 @@ export default function useFabricTools({
                 return;
             }
 
-            // If user clicked on a text object while in text-adding mode, let them select/edit it!
             if (opt.target && (opt.target.type === 'textbox' || opt.target.type === 'i-text' || opt.target.type === 'FabricText') && (tool === 'addText' || tool === 'sticky')) {
                 return;
             }
 
             if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
-                handleOneClickTool(opt.pointer, tool);
+                const pointer = opt.scenePoint || opt.pointer;
+                if (pointer) handleOneClickTool(pointer, tool);
                 return;
             }
 
             isDrawing = true;
+            maxDist = 0;
             pushHistory(pageNum);
-            createObject(opt.pointer);
+            const pointer = opt.scenePoint || opt.pointer;
+            if (pointer) createObject(pointer);
         };
 
         const onMouseMove = (opt) => {
             if (!isDrawing || !tempObj) return;
-            const pointer = opt.pointer;
+            const pointer = opt.scenePoint || opt.pointer;
+            if (!pointer) return;
+
             const tool = store.activeTool;
+
+            const dx = Math.abs(pointer.x - startX);
+            const dy = Math.abs(pointer.y - startY);
+            if (dx > maxDist) maxDist = dx;
+            if (dy > maxDist) maxDist = dy;
 
             switch (tool) {
                 case 'rect':
                 case 'maskReplace': {
-                    const w = Math.abs(pointer.x - startX);
-                    const h = Math.abs(pointer.y - startY);
                     tempObj.set({
-                        width: w,
-                        height: h,
+                        width: Math.max(dx, 4),
+                        height: Math.max(dy, 4),
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
                     break;
                 }
                 case 'circle':
-                    const rx = Math.abs(pointer.x - startX) / 2;
-                    const ry = Math.abs(pointer.y - startY) / 2;
                     tempObj.set({
-                        rx, ry,
+                        rx: Math.max(dx / 2, 2),
+                        ry: Math.max(dy / 2, 2),
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
@@ -400,6 +407,8 @@ export default function useFabricTools({
                     break;
             }
 
+            tempObj.setCoords();
+            tempObj.dirty = true;
             fc.renderAll();
         };
 
@@ -408,6 +417,30 @@ export default function useFabricTools({
             isDrawing = false;
 
             const tool = store.activeTool;
+
+            if (tempObj) {
+                let sizeChanged = false;
+                const isClickOnly = maxDist <= 5;
+
+                if (isClickOnly) {
+                    if (tool === 'rect' || tool === 'maskReplace') {
+                        tempObj.set({ width: 100, height: 50 });
+                        sizeChanged = true;
+                    } else if (tool === 'circle') {
+                        tempObj.set({ rx: 30, ry: 30 });
+                        sizeChanged = true;
+                    } else if (tool === 'line' || tool === 'arrow' || tool === 'ruler') {
+                        tempObj.set({ x2: startX + 100, y2: startY + 100 });
+                        sizeChanged = true;
+                    }
+                }
+
+                if (sizeChanged) {
+                    tempObj.setCoords();
+                    tempObj.dirty = true;
+                    fc.renderAll();
+                }
+            }
 
             if (tool === 'arrow' && tempObj) {
                 const x1 = tempObj.x1, y1 = tempObj.y1;

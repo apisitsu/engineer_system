@@ -93,6 +93,17 @@ const EditorCanvas = ({
                     text: obj.text,
                     customData: obj.customData,
                 });
+                
+                // Sync back to global store to update PropertiesPanel
+                if (obj.stroke) store.setStrokeColor(obj.stroke);
+                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                    // Stamps often have transparent fill
+                    store.setFillColor(obj.fill);
+                }
+                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
+                if (obj.fontSize) store.setFontSize(obj.fontSize);
+                if (obj.opacity) store.setOpacity(obj.opacity);
+                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
             }
         });
 
@@ -110,6 +121,16 @@ const EditorCanvas = ({
                     text: obj.text,
                     customData: obj.customData,
                 });
+
+                // Sync back to global store to update PropertiesPanel
+                if (obj.stroke) store.setStrokeColor(obj.stroke);
+                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                    store.setFillColor(obj.fill);
+                }
+                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
+                if (obj.fontSize) store.setFontSize(obj.fontSize);
+                if (obj.opacity) store.setOpacity(obj.opacity);
+                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
             }
         });
 

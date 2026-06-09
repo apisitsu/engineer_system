@@ -542,7 +542,6 @@ const PdfEditorTool = () => {
         <div className="pdf-ws" style={cssVars}>
             <ScrollbarStyle primary={theme.colors.primary} />
 
-            {/* ── Keyboard Shortcuts ── */}
             <ShortcutsHandler
                 onUndo={undo}
                 onRedo={redo}
@@ -553,6 +552,7 @@ const PdfEditorTool = () => {
                 onDelete={handleDeleteSelected}
                 onSave={handleApplyAndDownload}
                 fabricCanvasRefs={fabricCanvasRefs}
+                currentPage={currentPage}
             />
 
             {/* ── Signature Pad Modal ── */}
