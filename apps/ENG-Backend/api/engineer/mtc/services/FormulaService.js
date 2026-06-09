@@ -66,12 +66,19 @@ class FormulaServiceV2 {
       .replace(/\bfloor\s*\(/g, 'floorN(');
   }
 
-  // Safely evaluate an expression; returns null on error
-  _eval(expr, context) {
+  // Evaluate an expression, distinguishing a real failure (a thrown error, or a
+  // non-finite NaN/Infinity result from e.g. 0/0, sqrt(-1)) from a valid value.
+  // Returns { value, error } — error is non-null only on failure. This replaces
+  // the old silent `return null on error` so callers can log/surface what broke.
+  _evalChecked(expr, context) {
     try {
-      return this.parser.evaluate(this._preprocess(expr), context);
-    } catch {
-      return null;
+      const value = this.parser.evaluate(this._preprocess(expr), context);
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return { value: null, error: `non-finite result (${value})` };
+      }
+      return { value, error: null };
+    } catch (e) {
+      return { value: null, error: e.message };
     }
   }
 
@@ -92,41 +99,59 @@ class FormulaServiceV2 {
    *   → When isBallInner=1: row 0 matches, row 10 is skipped.
    *   → When isBallInner=0: row 0 fails condition, row 10 applies.
    */
-  async computeDimensions(machineId, toolingName, inputContext) {
-    const { rows } = await engPool.query(
+  async computeDimensions(machineId, toolingName, inputContext, meta = {}) {
+    // Caller may pass pre-loaded formula rows (from tsv2ConfigCache) to avoid a
+    // per-tooling DB round-trip; fall back to a direct query when absent.
+    const rows = meta.formulaRows ?? (await engPool.query(
       `SELECT output_key, formula_expr, condition_expr
          FROM ${TSV2_TABLES.FORMULA}
         WHERE machine_id = $1 AND tooling_name = $2
         ORDER BY sort_order ASC, id ASC`,
       [machineId, toolingName]
-    );
+    )).rows;
 
     // Seed context: A–Z = 0 + all spec inputs
     const context = {};
     for (const ch of ALPHA) context[ch] = 0;
     Object.assign(context, inputContext);
 
-    const defined = new Set(); // tracks which output_keys are already resolved
+    const defined  = new Set(); // tracks which output_keys are already resolved
+    const warnings = [];        // formula/condition evaluation failures (was silent)
+
+    // Audit a failed evaluation: keep a structured record AND log a greppable line
+    // so "why wasn't this tool selected?" is traceable instead of a silent null.
+    const note = (phase, key, expr, error) => {
+      warnings.push({ machine_id: machineId, tooling_name: toolingName, output_key: key, phase, expr, error, cn: meta.cn ?? null });
+      console.warn(
+        `[formula] FAILED cn=${meta.cn ?? '?'} machine=${machineId} tooling=${JSON.stringify(toolingName)} ` +
+        `key=${key} ${phase} expr=${JSON.stringify(expr)} → ${error}`
+      );
+    };
 
     for (const row of rows) {
       // Skip if another row already resolved this key
       if (defined.has(row.output_key)) continue;
 
-      // Evaluate condition if present — skip row when condition fails
+      // Evaluate condition if present — skip row when condition is falsy, but
+      // distinguish a real evaluation error (logged) from a legitimate false.
       if (row.condition_expr?.trim()) {
-        const condResult = this._eval(row.condition_expr, context);
-        if (!condResult) continue;
+        const cond = this._evalChecked(row.condition_expr, context);
+        if (cond.error) { note('condition', row.output_key, row.condition_expr, cond.error); continue; }
+        if (!cond.value) continue;
       }
 
-      const val = this._eval(row.formula_expr, context);
-      if (val !== null) {
-        context[row.output_key] = val;
-        defined.add(row.output_key);
-      }
+      const out = this._evalChecked(row.formula_expr, context);
+      if (out.error) { note('formula', row.output_key, row.formula_expr, out.error); continue; }
+      context[row.output_key] = out.value;
+      defined.add(row.output_key);
     }
 
     const result = {};
     for (const key of defined) result[key] = context[key];
+    // Attach failures non-enumerably (only when present) so callers/tests that
+    // iterate or compare the A–Z dims map are unaffected, while searchService can
+    // surface them in the /search response.
+    if (warnings.length) Object.defineProperty(result, '_warnings', { value: warnings, enumerable: false });
     return result;
   }
 

@@ -5,6 +5,7 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
 const cnFormat = require('../utils/cnFormat');
+const { isAdmin } = require('../../../../middleware/mtcAuth');
 
 const router = express.Router();
 
@@ -14,6 +15,50 @@ const router = express.Router();
 let _coverageCache = null;     // { at, data }
 let _coverageBuilding = null;  // Promise<payload> while a build is in flight
 const COVERAGE_TTL_MS = 15 * 60 * 1000;
+
+// ── Report scope config (admin-editable) ─────────────────────────────────────
+// The operational "dials" of the coverage scope, externalized from hardcode so
+// admins can change them without a deploy. Defaults == the original hardcoded
+// values, so behaviour is identical until edited. SEPARATE from sds_audit_config
+// (Data Integrity) by design — that audits master eng_item, this scopes the
+// production-based coverage report (different population). The part-type taxonomy
+// (ball/race/mecha = C95+C99) stays in code (cnPartType) — see the config UI note.
+const DEFAULT_REPORT_SCOPE = {
+  part_types:    ['ball', 'race', 'mecha'],   // future: add 'sleeve', 'body'
+  process_codes: ['1011','1012','1021','1022','1031','1041','1042','1061','1062','1101','1102','1161','1162','1241','1321'],
+  work_centers:  ['05', '09', '29', '30', '31', '32', '37'],
+  excluded_cns:  ['C39-00209', 'C29-04044', 'C29-04045'],
+  since_date:    '2023-01-01',
+};
+
+// part_type → pc_production item-number leading-digit prefix. Taxonomy stays in code
+// (cnPartType does the precise C-prefix classification); part_types config only
+// selects WHICH types are included in the report. Used to build query 11's prefix gate.
+const PART_TYPE_ITEM_PREFIX = { ball: '3', race: '2', body: '[15]', sleeve: '6', mecha: '9', spherical: '4' };
+
+async function ensureReportConfigTable() {
+  await engPool.query(`
+    CREATE TABLE IF NOT EXISTS sds_report_config (
+      key        TEXT PRIMARY KEY,
+      value      JSONB NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+}
+
+// Resolve the effective scope: defaults overlaid with any rows in sds_report_config.
+async function getReportScope() {
+  const scope = { ...DEFAULT_REPORT_SCOPE };
+  try {
+    await ensureReportConfigTable();
+    const r = await engPool.query(`SELECT key, value FROM sds_report_config`);
+    for (const row of r.rows) if (row.key in scope) scope[row.key] = row.value;
+  } catch (e) { console.error('[report-scope] falling back to defaults:', e.message); }
+  if (Array.isArray(scope.since_date)) scope.since_date = scope.since_date[0]; // stored as JSON scalar
+  return scope;
+}
+
+// Force the next /coverage request to rebuild (called when scope config changes).
+function invalidateCoverageCache() { _coverageCache = null; _coverageBuilding = null; }
 
 // Convert pc_production.control_no (item number format) to standard CN format
 // e.g. "350528" → "C35-00528", "350528-C" → "C35-00528", "C35-00528" → "C35-00528"
@@ -37,14 +82,17 @@ function cnPartType(cn) {
     if ((n >= 61 && n <= 64) || n === 69) return 'sleeve';
   }
   if (letter === 'A' && n >= 41 && n <= 49) return 'spherical';
-  if (letter === 'C' && n >= 91 && n <= 99) return 'mecha';
+  // Mecha = C95 (Mechanical Parts) + C99 (Others) only — the two C9x classes with
+  // real grinding production. Keep in sync with DEFAULT_AUDIT_SUB_CLASSES (admin).
+  if (letter === 'C' && (n === 95 || n === 99)) return 'mecha';
   return 'other';
 }
 
 /**
  * GET /api/sds/v2/report/coverage
  *
- * Coverage is measured in 3 levels against CNs active in production (last 2 years):
+ * Coverage is measured in 3 levels against CNs active in production (since 2023-01-01,
+ * a fixed cutoff — not a rolling window):
  *   Level 1 — AUTO     : CN has dimension data + process info + tooling in factory DB (no manual work needed)
  *   Level 2 — CONFIGURED: CN also has sds_parameter rows (manual program no, stamps, revision)
  *   Level 3 — COMPLETE : Also has tool images + grinding images uploaded
@@ -56,11 +104,21 @@ function cnPartType(cn) {
 // interactive request should block, so the route triggers this and polls the
 // cache instead of awaiting it inline.
 async function buildCoverage() {
+    // Effective scope (admin config overlaid on defaults). Parameterized into the
+    // production queries below so the scope is data-driven, not hardcoded.
+    const scope       = await getReportScope();
+    const since       = scope.since_date;
+    const wcArr       = scope.work_centers;
+    const partTypes   = scope.part_types;
+    const procCodes   = scope.process_codes;
+    const exclItemNos = scope.excluded_cns.map(c => cnFormat.toItemNo(c)).filter(Boolean); // raw item-no form for pc_production
+    // Combined item-number prefix for the selected part types (e.g. ball+race+mecha → ^(3|2|9))
+    const prefixRegex = `^(${partTypes.map(pt => PART_TYPE_ITEM_PREFIX[pt]).filter(Boolean).join('|')})`;
+
     // ── Query all sources in parallel ───────────────────────────────────────
     const [
       prodCnsRes,          // CNs active in production
       cnWithProcessRes,    // CNs that have a process plan (eng_process_info)
-      mechaGrindRes,       // C9x CNs that have at least one grinding process
       cnRpiToolRes,        // (control_no, tool_dwg_no) from process plan tooling
       machineToolsRes,     // tool_drawing_no whitelist from sds_machine_tool config
       sdsParamsRes,        // per-CN sds_parameter (cn IS NOT NULL)
@@ -73,7 +131,7 @@ async function buildCoverage() {
       rodpcMachineRes,   // machine_code → m_model from rodpc.m_machine (full master)
     ] = await Promise.all([
 
-      // 1. Production CNs — last 2 years (maqPool)
+      // 1. Production CNs — since the configured cutoff (maqPool)
       maqPool.query(`
         SELECT DISTINCT control_no,
                MAX(comp_date) AS last_prod_date,
@@ -82,9 +140,9 @@ async function buildCoverage() {
         FROM ${TABLES.LPB_PC_PRODUCTION}
         WHERE control_no IS NOT NULL
           AND control_no NOT LIKE 'PM%'
-          AND comp_date >= '2023-01-01'
+          AND comp_date >= $1
         GROUP BY control_no
-      `).catch(() => ({ rows: [] })),
+      `, [since]).catch(() => ({ rows: [] })),
 
       // 2. CNs with process plan — eng_process_info.process_plan_no = CN
       maqPool.query(`
@@ -92,17 +150,6 @@ async function buildCoverage() {
         FROM ${TABLES.LPB_ENG_PROCESS_INFO}
         WHERE process_plan_no IS NOT NULL
           AND process_plan_no ~ '^[A-Z][0-9]{2}-'
-      `).catch(() => ({ rows: [] })),
-
-      // 3. Mecha CNs (C9x) that have a grinding production record (process 1041/1042/1061/1062)
-      //    Uses pc_production so CN format matches prodCnMap after normalizeCn()
-      maqPool.query(`
-        SELECT DISTINCT control_no
-        FROM ${TABLES.LPB_PC_PRODUCTION}
-        WHERE control_no ~ '^9'
-          AND control_no NOT LIKE 'PM%'
-          AND process IN ('1101','1102')
-          AND comp_date >= '2023-01-01'
       `).catch(() => ({ rows: [] })),
 
       // 4. Tooling items in process plan per CN (include process_code for directional check)
@@ -161,37 +208,32 @@ async function buildCoverage() {
         LIMIT 24
       `),
 
-      // 11. CN × machine × process triples — first time each combo appeared in production
-      //     WC filter: 05=BFD, 09=VSG, 29=SPG, 30=IDG, 31=SPF, 32=SGM, 37=CGM
-      //     ball/race process codes incl. super-finish (1241/1321); mecha: 1101/1102 only
-      //     1181/1182 (NC GRIND) excluded — 0 records in ball/race since 2023
+      // 11. CN × machine × process triples — first time each combo appeared in production.
+      //     Fully config-driven (sds_report_config): part_types → prefix gate ($5),
+      //     a single unified process_codes set ($4), work_centers ($3), excluded CNs ($1),
+      //     since-date ($2). cnPartType still does the precise C-prefix classification below.
       maqPool.query(`
         SELECT control_no, machine, process, MIN(comp_date) AS first_seen
         FROM ${TABLES.LPB_PC_PRODUCTION}
         WHERE control_no IS NOT NULL
           AND control_no NOT LIKE 'PM%'
-          AND control_no NOT IN ('390209','294044','294045')
-          AND comp_date >= '2023-01-01'
+          AND control_no <> ALL($1)
+          AND comp_date >= $2
           AND machine IS NOT NULL
-          AND wc IN ('05','09','29','30','31','32','37')
-          AND (
-            ( control_no ~ '^[23]'
-              AND process IN ('1011','1012','1021','1022','1031','1041','1042','1061','1062','1101','1102','1161','1162','1241','1321') )
-            OR
-            ( control_no ~ '^9'
-              AND process IN ('1101','1102') )
-          )
+          AND wc = ANY($3)
+          AND process = ANY($4)
+          AND control_no ~ $5
         GROUP BY control_no, machine, process
-      `).catch(() => ({ rows: [] })),
+      `, [exclItemNos, since, wcArr, procCodes, prefixRegex]).catch(() => ({ rows: [] })),
 
       // 12. Machine master from rodpc — machine_code → m_model (machine type name)
       //     Used as base; sds_machine_code (query 9) overrides for SDS-curated names
       rodpcPool.query(`
         SELECT machine_code, TRIM(m_model) AS m_model
         FROM m_machine
-        WHERE wc IN ('05','09','29','30','31','32','37')
+        WHERE wc = ANY($1)
           AND m_model IS NOT NULL AND TRIM(m_model) != ''
-      `).catch(() => ({ rows: [] })),
+      `, [wcArr]).catch(() => ({ rows: [] })),
     ]);
 
     // ── Extra refs for Tooling Select fallback ───────────────────────────────
@@ -253,7 +295,6 @@ async function buildCoverage() {
     };
 
     const hasProcess    = new Set(cnWithProcessRes.rows.map(r => r.control_no));
-    const mechaGrinding = new Set(mechaGrindRes.rows.map(r => normalizeCn(r.control_no)));
 
     // machine_code → machine_type_name
     // Base: rodpc.m_machine (m_model) — covers all floor machines
@@ -317,18 +358,20 @@ async function buildCoverage() {
     const repOf        = (name) => (name && nameToGroup[name]) ? (groupRepName[nameToGroup[name]] || name) : name;
     const displayGroup = (name) => (name && nameToGroup[name]) ? nameToGroup[name] : name;
 
-    // CNs excluded from coverage scope (normalized form)
-    const EXCLUDED_CNS = new Set(['C39-00209', 'C29-04044', 'C29-04045']);
+    // CNs excluded from coverage scope (normalized form) — from report config
+    const EXCLUDED_CNS = new Set(scope.excluded_cns.map(normalizeCn));
 
     // Dedup by (control_no, machine_type_name, process):
     // multiple machine codes sharing the same type (e.g. IDG-03..07 → KS-03A)
     // represent ONE SDS requirement — keep row with earliest first_seen
     // Resolve to the group representative so B1/B2/B7 production of the same CN+process
     // collapses into ONE SDS requirement (config lives under the representative).
+    // Key on the NORMALIZED CN (not raw control_no) so a part's dual production
+    // forms — "310016" and "310016-C" — collapse to ONE requirement instead of two.
     const _deduped = new Map();
     for (const row of cnMachinePairs) {
       const mTypeName = repOf(machineCodeMap[row.machine] || row.machine);
-      const key = `${row.control_no}||${mTypeName}||${row.process}`;
+      const key = `${normalizeCn(row.control_no)}||${mTypeName}||${row.process}`;
       const existing = _deduped.get(key);
       if (!existing || row.first_seen < existing.first_seen) _deduped.set(key, row);
     }
@@ -345,8 +388,7 @@ async function buildCoverage() {
       if (EXCLUDED_CNS.has(cn)) continue;
       const pt = cnPartType(cn);
 
-      if (pt !== 'ball' && pt !== 'race' && pt !== 'mecha') continue;
-      if (pt === 'mecha' && !mechaGrinding.has(cn)) continue;
+      if (!partTypes.includes(pt)) continue;
 
       const prodRow             = prodCnMap.get(cn) || {};
       const machineTypeName     = repOf(machineCodeMap[row.machine] || null);
@@ -464,9 +506,8 @@ async function buildCoverage() {
     const completePct    = total > 0 ? parseFloat(((complete / total) * 100).toFixed(1)) : 0;
     const pendingPct = total > 0 ? parseFloat(((pending / total) * 100).toFixed(1)) : 0;
 
-    // ── By part type ─────────────────────────────────────────────────────────
-    const PART_TYPES = ['ball', 'race', 'mecha'];
-    const byPartType = PART_TYPES.map(pt => {
+    // ── By part type (the configured set) ────────────────────────────────────
+    const byPartType = partTypes.map(pt => {
       const rows = evaluated.filter(r => r.part_type === pt);
       if (!rows.length) return null;
       const ptComplete = rows.filter(r => r.coverage_level === 'COMPLETE').length;
@@ -474,6 +515,7 @@ async function buildCoverage() {
       return {
         part_type:    pt,
         total:        rows.length,
+        cn_count:     new Set(rows.map(r => r.cn)).size, // distinct CN (dedup across machine×process)
         complete:     ptComplete,
         pending:      ptPending,
         tool_match:   rows.filter(r => r.has_tooling_match).length,
@@ -488,15 +530,16 @@ async function buildCoverage() {
 
     // ── Monthly new parts — count unique (CN × machine) pairs by first appearance ──
     // e.g. CN C31-00165 first seen on KS-03A in Mar 2026 AND KS-B22RD in Apr 2026 → counts 2
-    const monthlyMap = new Map(); // 'YYYY-MM' → { ball:0, race:0, mecha:0 }
+    const monthlyMap = new Map(); // 'YYYY-MM' → { <part_type>: count }
+    const zeroMonth = () => Object.fromEntries(partTypes.map(t => [t, 0]));
     for (const row of cnMachinePairsDeduped) {
       const cn = normalizeCn(row.control_no);
       const pt = cnPartType(cn);
-      if (pt !== 'ball' && pt !== 'race' && pt !== 'mecha') continue;
-      if (pt === 'mecha' && !mechaGrinding.has(cn)) continue;
+      if (!partTypes.includes(pt)) continue;
+      if (EXCLUDED_CNS.has(cn)) continue;
       if (!row.first_seen) continue;
       const month = new Date(row.first_seen).toISOString().slice(0, 7);
-      if (!monthlyMap.has(month)) monthlyMap.set(month, { ball: 0, race: 0, mecha: 0 });
+      if (!monthlyMap.has(month)) monthlyMap.set(month, zeroMonth());
       monthlyMap.get(month)[pt] += 1;
     }
     const monthlyNewParts = [...monthlyMap.entries()]
@@ -699,6 +742,58 @@ router.post('/parameters/bulk-import', async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// ── Report scope config (admin) ──────────────────────────────────────────────
+// Separate from sds_audit_config (Data Integrity) by design. The report page is
+// unchanged; this is edited from the SDS Admin → Configure Settings tab.
+
+/** GET /api/sds/v2/report/config — effective scope (defaults overlaid with overrides) */
+router.get('/config', async (req, res) => {
+  try {
+    res.json({ success: true, data: await getReportScope(), defaults: DEFAULT_REPORT_SCOPE });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/report/wc-options — work centers from rodpc.m_workcenter (code + name) */
+router.get('/wc-options', async (req, res) => {
+  try {
+    const r = await rodpcPool.query(`SELECT wc_code, name FROM rodpc.m_workcenter WHERE status = '1' ORDER BY wc_code`);
+    res.json(r.rows.map(x => ({ value: String(x.wc_code), label: `${x.wc_code} — ${x.name || ''}`.trim() })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/report/config — upsert scope keys; flushes the coverage cache so the next build uses the new scope */
+router.put('/config', isAdmin, async (req, res) => {
+  const ARRAY_KEYS = ['part_types', 'process_codes', 'work_centers', 'excluded_cns'];
+  try {
+    await ensureReportConfigTable();
+    const entries = Object.entries(req.body || {}).filter(([k]) => k in DEFAULT_REPORT_SCOPE);
+    for (const [key, raw] of entries) {
+      let value = raw;
+      if (ARRAY_KEYS.includes(key)) {
+        if (!Array.isArray(value)) return res.status(400).json({ error: `${key} must be an array` });
+        value = [...new Set(value.map(v => String(v).trim()).filter(Boolean))];
+      } else if (key === 'since_date') {
+        value = String(value).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return res.status(400).json({ error: 'since_date must be YYYY-MM-DD' });
+      }
+      await engPool.query(
+        `INSERT INTO sds_report_config (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [key, JSON.stringify(value)]
+      );
+    }
+    invalidateCoverageCache();
+    res.json({ success: true, data: await getReportScope() });
+  } catch (err) {
+    console.error('[report-config PUT]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

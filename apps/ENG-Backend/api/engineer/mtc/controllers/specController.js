@@ -235,9 +235,10 @@ router.post('/', isAdmin, async (req, res) => {
   const {
     cn, od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
     od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
-    type, yball, process, sd,
+    type, yball, process, sd, groove_y,
   } = req.body;
   if (!cn) return res.status(400).json({ success: false, error: 'CN Number is required' });
+  const gy = (groove_y === '' || groove_y == null) ? null : groove_y;  // numeric: keep NULL meaningful
   const bf = extractBodyFields(req.body);
   try {
     const r = await engPool.query(
@@ -247,9 +248,9 @@ router.post('/', isAdmin, async (req, res) => {
         type, yball, process, sd,
         final_id,head_width,thread_length,shape_code,nipple,key_groove,
         blank_head,blank_f_dim,blank_r2,blank_r3,female_shankdia,female_shank,female_id_dim,
-        thread_name,thread_max_od,thread_min_od,pre_thread,female_flange_d,female_flange_h)
+        thread_name,thread_max_od,thread_min_od,pre_thread,female_flange_d,female_flange_h, groove_y)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-               $24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42)
+               $24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42, $43)
        RETURNING *`,
       [cn, od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
        w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
@@ -258,7 +259,7 @@ router.post('/', isAdmin, async (req, res) => {
        bf.final_id,bf.head_width,bf.thread_length,bf.shape_code,bf.nipple,bf.key_groove,
        bf.blank_head,bf.blank_f_dim,bf.blank_r2,bf.blank_r3,bf.female_shankdia,bf.female_shank,
        bf.female_id_dim,bf.thread_name,bf.thread_max_od,bf.thread_min_od,bf.pre_thread,
-       bf.female_flange_d,bf.female_flange_h]
+       bf.female_flange_d,bf.female_flange_h, gy]
     );
     res.json({ success: true, data: r.rows[0] });
   } catch (err) {
@@ -272,8 +273,9 @@ router.put('/:cn', isAdmin, async (req, res) => {
   const {
     od_bf, od_bf_max, od_bf_min, id_bf, id_bf_max, id_bf_min, w_bf, w_bf_max, w_bf_min,
     od_aft, od_aft_max, od_aft_min, id_aft, id_aft_max, id_aft_min, w_aft, w_aft_max, w_aft_min,
-    type, yball, process, sd,
+    type, yball, process, sd, groove_y,
   } = req.body;
+  const gy = (groove_y === '' || groove_y == null) ? null : groove_y;  // numeric: keep NULL meaningful
   const bf = extractBodyFields(req.body);
   try {
     const r = await engPool.query(
@@ -285,7 +287,7 @@ router.put('/:cn', isAdmin, async (req, res) => {
        final_id=$24,head_width=$25,thread_length=$26,shape_code=$27,nipple=$28,key_groove=$29,
        blank_head=$30,blank_f_dim=$31,blank_r2=$32,blank_r3=$33,female_shankdia=$34,
        female_shank=$35,female_id_dim=$36,thread_name=$37,thread_max_od=$38,thread_min_od=$39,
-       pre_thread=$40,female_flange_d=$41,female_flange_h=$42
+       pre_thread=$40,female_flange_d=$41,female_flange_h=$42, groove_y=$43
        WHERE cn=$23 RETURNING *`,
       [od_bf||0,od_bf_max||0,od_bf_min||0, id_bf||0,id_bf_max||0,id_bf_min||0,
        w_bf||0,w_bf_max||0,w_bf_min||0, od_aft||0,od_aft_max||0,od_aft_min||0,
@@ -294,7 +296,7 @@ router.put('/:cn', isAdmin, async (req, res) => {
        bf.final_id,bf.head_width,bf.thread_length,bf.shape_code,bf.nipple,bf.key_groove,
        bf.blank_head,bf.blank_f_dim,bf.blank_r2,bf.blank_r3,bf.female_shankdia,bf.female_shank,
        bf.female_id_dim,bf.thread_name,bf.thread_max_od,bf.thread_min_od,bf.pre_thread,
-       bf.female_flange_d,bf.female_flange_h]
+       bf.female_flange_d,bf.female_flange_h, gy]
     );
     if (!r.rows.length) return res.status(404).json({ success: false, error: 'Spec not found' });
     invalidateCache(cn);
