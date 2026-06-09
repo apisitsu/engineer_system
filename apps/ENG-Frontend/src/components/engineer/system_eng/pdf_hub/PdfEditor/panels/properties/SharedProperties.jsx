@@ -5,9 +5,10 @@ export const COLOR_PRESETS = [
     {
         label: 'Recommended',
         colors: [
-            '#000000', '#F5222D', '#FA8C16', '#FADB14', 
-            '#8CE600', '#52C41A', '#13A8A8', '#1677FF', 
-            '#2F54EB', '#722ED1', '#EB2F96', '#FFFFFF'
+            '#000000', '#595959', '#BFBFBF', '#FFFFFF', 
+            '#F5222D', '#FA541C', '#FA8C16', '#FAAD14', 
+            '#FADB14', '#A0D911', '#52C41A', '#13A8A8', 
+            '#1677FF', '#2F54EB', '#722ED1', '#EB2F96'
         ],
     }
 ];

@@ -93,6 +93,17 @@ const EditorCanvas = ({
                     text: obj.text,
                     customData: obj.customData,
                 });
+                
+                // Sync back to global store to update PropertiesPanel
+                if (obj.stroke) store.setStrokeColor(obj.stroke);
+                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                    // Stamps often have transparent fill
+                    store.setFillColor(obj.fill);
+                }
+                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
+                if (obj.fontSize) store.setFontSize(obj.fontSize);
+                if (obj.opacity) store.setOpacity(obj.opacity);
+                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
             }
         });
 
@@ -110,6 +121,16 @@ const EditorCanvas = ({
                     text: obj.text,
                     customData: obj.customData,
                 });
+
+                // Sync back to global store to update PropertiesPanel
+                if (obj.stroke) store.setStrokeColor(obj.stroke);
+                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                    store.setFillColor(obj.fill);
+                }
+                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
+                if (obj.fontSize) store.setFontSize(obj.fontSize);
+                if (obj.opacity) store.setOpacity(obj.opacity);
+                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
             }
         });
 
@@ -414,13 +435,24 @@ const EditorCanvas = ({
                     }
                 } else if (!isStamp) {
                     // Regular shapes
-                    if (activeObj.stroke !== undefined && activeObj.stroke !== store.strokeColor) {
-                        activeObj.set('stroke', store.strokeColor);
+                    if (activeObj.type === 'group') {
+                        activeObj.getObjects().forEach(child => {
+                            if (child.stroke) child.set('stroke', store.strokeColor);
+                            if (child.type === 'triangle' && child.fill) child.set('fill', store.strokeColor);
+                            if (child.type === 'text' || child.type === 'i-text') {
+                                child.set('fill', store.strokeColor);
+                            }
+                        });
                         changed = true;
-                    }
-                    if (activeObj.fill !== undefined && activeObj.fill !== store.fillColor) {
-                        activeObj.set('fill', store.fillColor);
-                        changed = true;
+                    } else {
+                        if (activeObj.stroke !== undefined && activeObj.stroke !== store.strokeColor) {
+                            activeObj.set('stroke', store.strokeColor);
+                            changed = true;
+                        }
+                        if (activeObj.fill !== undefined && activeObj.fill !== store.fillColor) {
+                            activeObj.set('fill', store.fillColor);
+                            changed = true;
+                        }
                     }
                 } else {
                     // Stamps: change all child objects if it's a group, or just the object
@@ -445,7 +477,23 @@ const EditorCanvas = ({
             }
 
             // --- Stroke Width ---
-            if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== store.strokeWidth) {
+            if (activeObj.type === 'group' && !isStamp) {
+                activeObj.getObjects().forEach(child => {
+                    if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) {
+                        if (child.strokeWidth !== store.strokeWidth) {
+                            child.set('strokeWidth', store.strokeWidth);
+                            changed = true;
+                        }
+                    }
+                    if (child.type === 'triangle') {
+                        if (child.width !== store.fontSize || child.height !== store.fontSize) {
+                            child.set({ width: store.fontSize, height: store.fontSize });
+                            changed = true;
+                        }
+                    }
+                });
+                if (changed) activeObj.addWithUpdate();
+            } else if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== store.strokeWidth) {
                 if (!isText && !isSticky) {
                     activeObj.set('strokeWidth', store.strokeWidth);
                     changed = true;
@@ -466,6 +514,20 @@ const EditorCanvas = ({
                 }
                 if (activeObj.fontFamily !== store.fontFamily) {
                     activeObj.set('fontFamily', store.fontFamily);
+                    changed = true;
+                }
+            } else if (activeObj.type === 'group' && !isStamp) {
+                let textChanged = false;
+                activeObj.getObjects().forEach(child => {
+                    if (child.type === 'i-text' || child.type === 'text') {
+                        if (child.fontSize !== store.fontSize) {
+                            child.set('fontSize', store.fontSize);
+                            textChanged = true;
+                        }
+                    }
+                });
+                if (textChanged) {
+                    activeObj.addWithUpdate();
                     changed = true;
                 }
             } else if (isStamp) {

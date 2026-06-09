@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import usePdfDocument from './hooks/usePdfDocument';
 import useAnnotations from './hooks/useAnnotations';
 import useHistory from './hooks/useHistory';
@@ -35,7 +35,8 @@ export default function usePdfEditor() {
     } = useHistory(setPageAnnotations, setPageHighlights);
 
     // Wrapper for pushHistory to capture current state
-    const pushHistory = () => {
+    const pushHistoryRef = useRef();
+    pushHistoryRef.current = () => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             if (fc) {
@@ -50,6 +51,10 @@ export default function usePdfEditor() {
             highlights: { ...pageHighlights }
         });
     };
+
+    const pushHistory = useCallback(() => {
+        if (pushHistoryRef.current) pushHistoryRef.current();
+    }, []);
 
     const _applyStateToCanvases = (restoredState) => {
         if (!restoredState) return;
@@ -107,6 +112,9 @@ export default function usePdfEditor() {
         await _loadPdf(file, callbacks);
         setThumbnails({});
         clearAllAnnotations();
+        Object.values(fabricCanvasRefs.current || {}).forEach(fc => {
+            if (fc) fc.clear();
+        });
         clearHistory();
     };
 

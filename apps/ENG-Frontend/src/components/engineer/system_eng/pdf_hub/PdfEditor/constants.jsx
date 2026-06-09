@@ -19,7 +19,7 @@ export const MODE_OPTIONS = [
     { value: 'view',     icon: <EyeOutlined />,         label: 'View' },
     { value: 'annotate', icon: <HighlightOutlined />,   label: 'Annotate' },
     { value: 'shapes',   icon: <BorderOutlined />,      label: 'Shapes' },
-    { value: 'edit',     icon: <EditOutlined />,        label: 'Edit' },
+    { value: 'dwgCheck', icon: <FormOutlined />,        label: 'DWG Check' },
     { value: 'sign',     icon: <FormOutlined />,        label: 'Fill & Sign' },
     { value: 'watermark',icon: <BgColorsOutlined />,    label: 'Watermark' },
     { value: 'merge',    icon: <MergeCellsOutlined />,  label: 'Merge' },

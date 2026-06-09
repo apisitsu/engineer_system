@@ -19,6 +19,7 @@ export default function useFabricTools({
         let isDrawing = false;
         let startX = 0;
         let startY = 0;
+        let maxDist = 0;
         let tempObj = null;
 
         const handleOneClickTool = (pointer, tool) => {
@@ -235,6 +236,7 @@ export default function useFabricTools({
             const tool = store.activeTool;
             startX = pointer.x;
             startY = pointer.y;
+            maxDist = 0;
 
             const commonProps = {
                 left: startX,
@@ -243,6 +245,8 @@ export default function useFabricTools({
                 originY: 'top',
                 strokeUniform: true,
                 objectCaching: false,
+                evented: false,
+                selectable: false,
                 customData: { type: tool, createdAt: Date.now() },
             };
 
@@ -275,7 +279,6 @@ export default function useFabricTools({
                     fc.add(itext);
                     fc.setActiveObject(itext);
                     store.setActiveTool('select');
-                    // We don't want to enter dragging mode for text, so just return!
                     return;
                 }
 
@@ -315,7 +318,8 @@ export default function useFabricTools({
                         stroke: tool === 'ruler' ? '#2196f3' : store.strokeColor,
                         strokeWidth: tool === 'ruler' ? 2 : store.strokeWidth,
                         opacity: store.opacity,
-                        selectable: true,
+                        evented: false,
+                        selectable: false,
                         customData: { type: tool },
                     });
                     break;
@@ -345,44 +349,50 @@ export default function useFabricTools({
                 return;
             }
 
-            // If user clicked on a text object while in text-adding mode, let them select/edit it!
             if (opt.target && (opt.target.type === 'textbox' || opt.target.type === 'i-text' || opt.target.type === 'FabricText') && (tool === 'addText' || tool === 'sticky')) {
                 return;
             }
 
             if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
-                handleOneClickTool(opt.pointer, tool);
+                const pointer = opt.scenePoint || opt.pointer;
+                if (pointer) handleOneClickTool(pointer, tool);
                 return;
             }
 
             isDrawing = true;
+            maxDist = 0;
             pushHistory(pageNum);
-            createObject(opt.pointer);
+            const pointer = opt.scenePoint || opt.pointer;
+            if (pointer) createObject(pointer);
         };
 
         const onMouseMove = (opt) => {
             if (!isDrawing || !tempObj) return;
-            const pointer = opt.pointer;
+            const pointer = opt.scenePoint || opt.pointer;
+            if (!pointer) return;
+
             const tool = store.activeTool;
+
+            const dx = Math.abs(pointer.x - startX);
+            const dy = Math.abs(pointer.y - startY);
+            if (dx > maxDist) maxDist = dx;
+            if (dy > maxDist) maxDist = dy;
 
             switch (tool) {
                 case 'rect':
                 case 'maskReplace': {
-                    const w = Math.abs(pointer.x - startX);
-                    const h = Math.abs(pointer.y - startY);
                     tempObj.set({
-                        width: w,
-                        height: h,
+                        width: dx,
+                        height: dy,
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
                     break;
                 }
                 case 'circle':
-                    const rx = Math.abs(pointer.x - startX) / 2;
-                    const ry = Math.abs(pointer.y - startY) / 2;
                     tempObj.set({
-                        rx, ry,
+                        rx: dx / 2,
+                        ry: dy / 2,
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
@@ -393,13 +403,15 @@ export default function useFabricTools({
                 case 'line':
                 case 'arrow':
                 case 'ruler':
-                    tempObj.set({ x2: pointer.x, y2: pointer.y });
+                    tempObj.set({ x1: startX, y1: startY, x2: pointer.x, y2: pointer.y });
                     break;
 
                 default:
                     break;
             }
 
+            tempObj.setCoords();
+            tempObj.dirty = true;
             fc.renderAll();
         };
 
@@ -409,11 +421,41 @@ export default function useFabricTools({
 
             const tool = store.activeTool;
 
+            if (tempObj) {
+                let sizeChanged = false;
+                const isClickOnly = maxDist <= 5;
+
+                if (isClickOnly) {
+                    if (tool === 'rect' || tool === 'maskReplace') {
+                        tempObj.set({ width: 100, height: 50 });
+                        sizeChanged = true;
+                    } else if (tool === 'circle') {
+                        tempObj.set({ rx: 30, ry: 30 });
+                        sizeChanged = true;
+                    } else if (tool === 'line' || tool === 'arrow' || tool === 'ruler') {
+                        tempObj.set({ x1: startX, y1: startY, x2: startX + 100, y2: startY + 100 });
+                        sizeChanged = true;
+                    }
+                }
+
+                tempObj.set({
+                    selectable: true,
+                    evented: true,
+                });
+
+                if (sizeChanged) {
+                    tempObj.setCoords();
+                    tempObj.dirty = true;
+                }
+            }
+
+            let finalObj = tempObj;
+
             if (tool === 'arrow' && tempObj) {
                 const x1 = tempObj.x1, y1 = tempObj.y1;
                 const x2 = tempObj.x2, y2 = tempObj.y2;
                 const angle = Math.atan2(y2 - y1, x2 - x1);
-                const headLen = 12;
+                const headLen = store.fontSize || 16;
 
                 const arrowHead = new fabric.Triangle({
                     left: x2,
@@ -429,15 +471,14 @@ export default function useFabricTools({
                     customData: { type: 'arrowhead' },
                 });
 
-                fc.add(arrowHead);
-
                 const group = new fabric.Group([tempObj, arrowHead], {
                     customData: { type: 'arrow' },
+                    selectable: true,
+                    evented: true,
                 });
                 fc.remove(tempObj);
-                fc.remove(arrowHead);
                 fc.add(group);
-                tempObj = null;
+                finalObj = group;
             }
 
             if (tool === 'ruler' && tempObj) {
@@ -467,26 +508,26 @@ export default function useFabricTools({
                     customData: { type: 'rulerLabel' },
                 });
 
-                fc.add(label);
                 const group = new fabric.Group([tempObj, label], {
                     customData: { type: 'ruler' },
+                    selectable: true,
+                    evented: true,
                 });
                 fc.remove(tempObj);
-                fc.remove(label);
                 fc.add(group);
-                tempObj = null;
+                finalObj = group;
             }
 
-            if (tempObj && tool === 'maskReplace') {
-                tempObj.set({
+            if (finalObj && tool === 'maskReplace' && finalObj === tempObj) {
+                finalObj.set({
                     stroke: store.strokeColor,
                     strokeWidth: store.strokeWidth,
                     fill: '#ffffff',
                 });
             }
 
-            if (tempObj && tool !== 'ruler' && tool !== 'arrow') {
-                fc.setActiveObject(tempObj);
+            if (finalObj && tool !== 'select' && tool !== 'pan') {
+                fc.setActiveObject(finalObj);
             }
 
             tempObj = null;

@@ -4,7 +4,7 @@ import {
     ToolOutlined, DashboardOutlined, AppstoreOutlined, InsertRowAboveOutlined,
     LeftOutlined, RightOutlined, ZoomOutOutlined, ZoomInOutlined,
     UndoOutlined, RedoOutlined, DeleteOutlined, MenuUnfoldOutlined, MenuFoldOutlined,
-    DownloadOutlined, FilePdfOutlined
+    DownloadOutlined, FilePdfOutlined, ClearOutlined, SaveOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
@@ -31,6 +31,8 @@ export default function HeaderModeBar({
     leftCollapsed,
     setLeftCollapsed,
     onApplyAndDownload,
+    onSaveEditable,
+    onClearPage,
     totalAnnotations,
     fabricCanvasRefs,
     onFileUpload,
@@ -177,6 +179,11 @@ export default function HeaderModeBar({
                         disabled={!canRedo} onClick={redo}
                         style={{ borderRadius: 7 }} />
                 </Tooltip>
+                <Tooltip title="Clear Page">
+                    <Button size="small" icon={<ClearOutlined />}
+                        onClick={onClearPage}
+                        style={{ borderRadius: 7 }} />
+                </Tooltip>
 
                 {/* Delete selected */}
                 {store.selectedObjectId && (
@@ -198,6 +205,11 @@ export default function HeaderModeBar({
                 </Tooltip>
 
                 {/* Save/Download */}
+                <Tooltip title="Save Editable PDF">
+                    <Button size="small" icon={<SaveOutlined />}
+                        onClick={onSaveEditable}
+                        style={{ borderRadius: 7 }} />
+                </Tooltip>
                 <Tooltip title="Apply & Download PDF">
                     <Button size="small" type="primary" icon={<DownloadOutlined />}
                         onClick={onApplyAndDownload}
