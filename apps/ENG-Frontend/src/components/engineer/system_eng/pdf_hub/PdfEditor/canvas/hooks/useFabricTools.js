@@ -245,6 +245,8 @@ export default function useFabricTools({
                 originY: 'top',
                 strokeUniform: true,
                 objectCaching: false,
+                evented: false,
+                selectable: false,
                 customData: { type: tool, createdAt: Date.now() },
             };
 
@@ -253,8 +255,8 @@ export default function useFabricTools({
                 case 'maskReplace':
                     tempObj = new fabric.Rect({
                         ...commonProps,
-                        width: 4,
-                        height: 4,
+                        width: 0,
+                        height: 0,
                         fill: tool === 'maskReplace' ? '#ffffff' : store.fillColor,
                         stroke: tool === 'maskReplace' ? '#cccccc' : store.strokeColor,
                         strokeWidth: tool === 'maskReplace' ? 1 : store.strokeWidth,
@@ -300,8 +302,8 @@ export default function useFabricTools({
                 case 'circle':
                     tempObj = new fabric.Ellipse({
                         ...commonProps,
-                        rx: 2,
-                        ry: 2,
+                        rx: 0,
+                        ry: 0,
                         fill: store.fillColor,
                         stroke: store.strokeColor,
                         strokeWidth: store.strokeWidth,
@@ -312,11 +314,12 @@ export default function useFabricTools({
                 case 'line':
                 case 'arrow':
                 case 'ruler':
-                    tempObj = new fabric.Line([startX, startY, startX + 4, startY + 4], {
+                    tempObj = new fabric.Line([startX, startY, startX, startY], {
                         stroke: tool === 'ruler' ? '#2196f3' : store.strokeColor,
                         strokeWidth: tool === 'ruler' ? 2 : store.strokeWidth,
                         opacity: store.opacity,
-                        selectable: true,
+                        evented: false,
+                        selectable: false,
                         customData: { type: tool },
                     });
                     break;
@@ -379,8 +382,8 @@ export default function useFabricTools({
                 case 'rect':
                 case 'maskReplace': {
                     tempObj.set({
-                        width: Math.max(dx, 4),
-                        height: Math.max(dy, 4),
+                        width: dx,
+                        height: dy,
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
@@ -388,8 +391,8 @@ export default function useFabricTools({
                 }
                 case 'circle':
                     tempObj.set({
-                        rx: Math.max(dx / 2, 2),
-                        ry: Math.max(dy / 2, 2),
+                        rx: dx / 2,
+                        ry: dy / 2,
                         left: Math.min(startX, pointer.x),
                         top: Math.min(startY, pointer.y),
                     });
@@ -400,7 +403,7 @@ export default function useFabricTools({
                 case 'line':
                 case 'arrow':
                 case 'ruler':
-                    tempObj.set({ x2: pointer.x, y2: pointer.y });
+                    tempObj.set({ x1: startX, y1: startY, x2: pointer.x, y2: pointer.y });
                     break;
 
                 default:
@@ -430,17 +433,23 @@ export default function useFabricTools({
                         tempObj.set({ rx: 30, ry: 30 });
                         sizeChanged = true;
                     } else if (tool === 'line' || tool === 'arrow' || tool === 'ruler') {
-                        tempObj.set({ x2: startX + 100, y2: startY + 100 });
+                        tempObj.set({ x1: startX, y1: startY, x2: startX + 100, y2: startY + 100 });
                         sizeChanged = true;
                     }
                 }
 
+                tempObj.set({
+                    selectable: true,
+                    evented: true,
+                });
+
                 if (sizeChanged) {
                     tempObj.setCoords();
                     tempObj.dirty = true;
-                    fc.renderAll();
                 }
             }
+
+            let finalObj = tempObj;
 
             if (tool === 'arrow' && tempObj) {
                 const x1 = tempObj.x1, y1 = tempObj.y1;
@@ -462,15 +471,14 @@ export default function useFabricTools({
                     customData: { type: 'arrowhead' },
                 });
 
-                fc.add(arrowHead);
-
                 const group = new fabric.Group([tempObj, arrowHead], {
                     customData: { type: 'arrow' },
+                    selectable: true,
+                    evented: true,
                 });
                 fc.remove(tempObj);
-                fc.remove(arrowHead);
                 fc.add(group);
-                tempObj = null;
+                finalObj = group;
             }
 
             if (tool === 'ruler' && tempObj) {
@@ -500,26 +508,26 @@ export default function useFabricTools({
                     customData: { type: 'rulerLabel' },
                 });
 
-                fc.add(label);
                 const group = new fabric.Group([tempObj, label], {
                     customData: { type: 'ruler' },
+                    selectable: true,
+                    evented: true,
                 });
                 fc.remove(tempObj);
-                fc.remove(label);
                 fc.add(group);
-                tempObj = null;
+                finalObj = group;
             }
 
-            if (tempObj && tool === 'maskReplace') {
-                tempObj.set({
+            if (finalObj && tool === 'maskReplace' && finalObj === tempObj) {
+                finalObj.set({
                     stroke: store.strokeColor,
                     strokeWidth: store.strokeWidth,
                     fill: '#ffffff',
                 });
             }
 
-            if (tempObj && tool !== 'ruler' && tool !== 'arrow') {
-                fc.setActiveObject(tempObj);
+            if (finalObj && tool !== 'select' && tool !== 'pan') {
+                fc.setActiveObject(finalObj);
             }
 
             tempObj = null;
