@@ -2,7 +2,12 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
+<<<<<<< HEAD
 const formulaService = require('./FormulaService');
+=======
+const formulaService = require('./formulaService');
+const cnFormat = require('../utils/cnFormat');
+>>>>>>> 0c59445df1c79a2cbf7f6cee641b04c4c5a9dd95
 
 // ── Spec ────────────────────────────────────────────────────────────────────
 
@@ -282,12 +287,10 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
 // ── CN Normalization ─────────────────────────────────────────────────────────
 // tooling_spec_process stores CNs in 6-digit format (e.g. '250190').
 // Accept Cxx-0YYYY input and normalize so both formats find the spec.
+// Delegates to cnFormat (SSOT); falls back to the raw upper string when the
+// input is an unrecognized shape so the "spec not found" path is preserved.
 function normalizeSpecCn(cn) {
-  const s = String(cn).trim().toUpperCase();
-  if (/^\d{6}$/.test(s)) return s;
-  const m = s.match(/^[A-Z](\d{2})-0*(\d{4})$/);
-  if (m) return m[1] + m[2];
-  return s;
+  return cnFormat.toSpecCn(cn) || String(cn).trim().toUpperCase();
 }
 
 // ── Main Search ──────────────────────────────────────────────────────────────

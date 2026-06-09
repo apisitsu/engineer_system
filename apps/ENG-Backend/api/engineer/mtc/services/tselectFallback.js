@@ -13,10 +13,39 @@ const searchService = require('./searchService');
 const _cache = new Map();            // specCn → { at, result }
 const TTL_MS = 10 * 60 * 1000;       // 10 minutes — matches SDS search cache TTL
 
+// Periodic sweep so expired entries are evicted even when never read again.
+// Without this the Map only checks TTL on read → stale entries accumulate in RAM
+// during a long-running process (the coverage build touches hundreds of CNs).
+// Timer is unref'd so it never keeps the process alive on its own.
+const _sweepTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, v] of _cache) {
+    if (now - v.at >= TTL_MS) _cache.delete(key);
+  }
+}, TTL_MS);
+if (typeof _sweepTimer.unref === 'function') _sweepTimer.unref();
+
+// Factory grinding process_code → grinding direction (mirrors specController's
+// ID_GRIND_PROCESS_CODES / OD_GRIND_PROCESS_CODES). Tooling Select itself has no
+// concept of process_code — it stores direction on the spec — so this lets the
+// SDS side gate a per-process tool match by the part's actual grinding direction.
+const PROCESS_CODE_DIRECTION = {
+  '1041': 'OD->ID', '1042': 'OD->ID',
+  '1061': 'ID->OD', '1062': 'ID->OD',
+};
+function directionForProcessCode(code) {
+  return PROCESS_CODE_DIRECTION[String(code ?? '').trim()] || null;
+}
+
 // inventory match row → tool number (mirrors frontend getMatchNo in SdsV2Page.jsx)
+// All inventory tables use the canonical `tooling_no` column — audited 2026-06-06:
+// every tooling_* table has tooling_no; none use No/no/part_no. The old
+// `?? No ?? no ?? part_no` fallback read columns that exist in no current table,
+// so it was removed. If a non-canonical inventory table is ever added, the
+// diagnostics SQL (20260606_tselect_sds_diagnostics.sql, section E) flags it.
 function matchNo(m) {
   if (!m) return null;
-  const raw = m.tooling_no ?? m.No ?? m.no ?? m.part_no ?? null;
+  const raw = m.tooling_no ?? null;
   return raw != null ? String(raw).trim() : null;
 }
 
@@ -43,10 +72,23 @@ async function safeSearch(cn) {
  * @param acceptableNames Set of names that identify this machine inside the
  *                        result (the machine_type_name and its machine_group —
  *                        T-Select labels grouped machines by machine_group).
+ * @param opts.processCode (optional) factory grinding process_code. When given
+ *                        AND it maps to a grinding direction AND the part's spec
+ *                        has a (different) direction, the match is rejected — the
+ *                        T-Select tooling set is for the part's actual grinding
+ *                        direction, so it must not satisfy an opposite-direction
+ *                        process row. Missing/unknown direction → not gated
+ *                        (additive: only removes provable false positives).
  * @returns [{ tooling_name, tooling_no }] — first (closest) match per tooling
  */
-function tselectToolsForMachine(tsResult, acceptableNames) {
+function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   if (!tsResult || !tsResult.success || !Array.isArray(tsResult.results)) return [];
+
+  // Direction gate — only rejects on a proven conflict, never on missing data.
+  const expectedDir = directionForProcessCode(opts.processCode);
+  const specDir = String(tsResult.spec?.process ?? '').toUpperCase().trim();
+  if (expectedDir && specDir && specDir !== expectedDir) return [];
+
   const out = [];
   const seen = new Set();
   for (const r of tsResult.results) {
@@ -61,4 +103,4 @@ function tselectToolsForMachine(tsResult, acceptableNames) {
   return out;
 }
 
-module.exports = { safeSearch, tselectToolsForMachine, matchNo };
+module.exports = { safeSearch, tselectToolsForMachine, matchNo, directionForProcessCode };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Switch, Popconfirm,
-  Space, Tag, App, Input as AntInput, Alert,
+  Space, Tag, App, Input as AntInput,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
@@ -172,12 +172,6 @@ const MachineTypes = ({ theme }) => {
 
   return (
     <div>
-      <Alert
-        type="info"
-        showIcon
-        message="Machines that share one SDS config (e.g. KS-400B1/B2/B7, TSG-300W/TSG-300ZNC) must use the same Group value. The report resolves all members to the configured representative via this Group field."
-        style={{ marginBottom: 12 }}
-      />
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add</Button>
         <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
