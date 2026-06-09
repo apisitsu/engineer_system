@@ -492,7 +492,10 @@ const EditorCanvas = ({
                         }
                     }
                 });
-                if (changed) activeObj.addWithUpdate();
+                if (changed) {
+                    activeObj.set({ dirty: true });
+                    activeObj.setCoords();
+                }
             } else if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== store.strokeWidth) {
                 if (!isText && !isSticky) {
                     activeObj.set('strokeWidth', store.strokeWidth);
@@ -527,7 +530,8 @@ const EditorCanvas = ({
                     }
                 });
                 if (textChanged) {
-                    activeObj.addWithUpdate();
+                    activeObj.set({ dirty: true });
+                    activeObj.setCoords();
                     changed = true;
                 }
             } else if (isStamp) {
@@ -541,7 +545,8 @@ const EditorCanvas = ({
                 } else if (activeObj.customData.type === 'stampOk') {
                     activeObj.getObjects()[0].set('radius', store.fontSize * 1.2);
                     activeObj.getObjects()[1].set('fontSize', store.fontSize * 1.1);
-                    activeObj.addWithUpdate(); // Recalculate group bounds
+                    activeObj.set({ dirty: true });
+                    activeObj.setCoords(); // Recalculate group bounds
                     changed = true;
                 } else if (activeObj.customData.type === 'stampUserDate') {
                     const scale = (store.fontSize / 16) * 0.75;
