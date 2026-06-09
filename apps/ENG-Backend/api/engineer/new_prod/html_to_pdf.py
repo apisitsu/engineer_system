@@ -37,6 +37,27 @@ class HTMLToPDFConverter:
 
             modified_html_content = self._remove_watermark(html_content)
 
+            # --- Inject Custom Font CSS (For Japanese/CAD English + Thai Angsana) ---
+            font_injection = """
+            <style>
+                body, .text-content, span, div, p, td, th {
+                    font-family: 'MS Mincho', 'SimSun', 'Browallia New', 'Angsana New', 'TH Sarabun PSK', serif !important;
+                    font-weight: normal !important;
+                    -webkit-text-stroke: 0.05px currentColor !important; /* Very thin stroke for English */
+                }
+                .thai-balanced {
+                    -webkit-text-stroke: 0px !important; /* Keep Thai normal */
+                    opacity: 0.75; /* Visually thin out Thai further to match thin English */
+                }
+            </style>
+            """
+            if "</head>" in modified_html_content.lower():
+                import re
+                modified_html_content = re.sub(r'(?i)</head>', f'{font_injection}</head>', modified_html_content)
+            else:
+                modified_html_content = font_injection + modified_html_content
+            # ------------------------------------------------------------------------
+
             with open(temp_html_path, 'w', encoding='utf-8') as f:
                 f.write(modified_html_content)
 
@@ -86,6 +107,31 @@ class HTMLToPDFConverter:
                                 logger.warning(f"Failed to click thumbnail {j+1}: {e}")
 
                         temp_img = f"{output_pdf_path}_temp_page_{i}_{j}.png"
+                        
+                        # Execute font balancing script right before screenshot to ensure it applies to all pages and dynamic content
+                        page.evaluate("""
+                            () => {
+                                function balanceFonts(node) {
+                                    if (node.nodeType === 3) { // Text node
+                                        let text = node.nodeValue;
+                                        if (/[\\u0E00-\\u0E7F]/.test(text)) {
+                                            let span = document.createElement("span");
+                                            span.innerHTML = text.replace(/([\\u0E00-\\u0E7F]+)/g, '<span class="thai-balanced">$1</span>');
+                                            node.parentNode.replaceChild(span, node);
+                                        }
+                                    } else if (node.nodeType === 1 && node.tagName !== "SCRIPT" && node.tagName !== "STYLE") {
+                                        if (!node.classList.contains("thai-balanced")) {
+                                            let children = Array.from(node.childNodes);
+                                            for (let child of children) {
+                                                balanceFonts(child);
+                                            }
+                                        }
+                                    }
+                                }
+                                balanceFonts(document.body);
+                            }
+                        """)
+                        
                         page.screenshot(path=temp_img, full_page=True)
                         image_files.append(temp_img)
 
