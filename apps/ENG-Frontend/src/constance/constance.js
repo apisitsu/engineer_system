@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -56,19 +56,19 @@ export const server = {
   TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
 
   // Tooling Select
-  TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
+  TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
-  TSV2_INVENTORY:       `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
-  TSV2_COLUMNS:       `${apiUrl}api/tooling-select/columns`,
-  TSV2_LIMITS:        `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
-  TSV2_FORMULAS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
-  TSV2_TOOLINGS:      `${apiUrl}api/tooling-select/machines`,         // append /:id/toolings
-  TSV2_FORMULA_ITEM:  `${apiUrl}api/tooling-select/formulas`,         // append /:id
-  TSV2_LIMIT_ITEM:    `${apiUrl}api/tooling-select/limits`,           // append /:id
-  TSV2_SEARCH_RULES:  `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
-  TSV2_RULE_ITEM:     `${apiUrl}api/tooling-select/search-rules`,     // append /:id
-  TSV2_FORMULA_TEST:  `${apiUrl}api/tooling-select/formula/test`,
-  TSV2_SEARCH:        `${apiUrl}api/tooling-select/search`,
+  TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
+  TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
+  TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
+  TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
+  TSV2_TOOLINGS: `${apiUrl}api/tooling-select/machines`,         // append /:id/toolings
+  TSV2_FORMULA_ITEM: `${apiUrl}api/tooling-select/formulas`,         // append /:id
+  TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
+  TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
+  TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
+  TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
+  TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,
   MTC_TOOLING_SPEC_FACTORY_PREVIEW: `${apiUrl}api/tooling-select/spec/factory-preview`,
@@ -104,6 +104,26 @@ export const server = {
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
   TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
   TT_CALC_LOG: `${apiUrl}api/engineer/new_prod/calc/log`,
+
+  // HTML to PDF (New Prod)
+  HTML_TO_PDF_UPLOAD: `${apiUrl}api/engineer/new_prod/html-to-pdf/upload`,
+  HTML_TO_PDF_JOBS: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs`,
+  HTML_TO_PDF_DOWNLOAD_PDF: `${apiUrl}api/engineer/new_prod/html-to-pdf/download/`,
+  HTML_TO_PDF_DOWNLOAD_HTML: `${apiUrl}api/engineer/new_prod/html-to-pdf/download-html/`,
+  HTML_TO_PDF_DELETE_JOB: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
+  HTML_TO_PDF_DELETE_ALL: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/all`,
+  HTML_TO_PDF_REWORK: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
+  // PDF Hub (Sign & Stamp)
+  PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+  PDF_USAGE_STATS: `${apiUrl}api/engineer/pdf-hub/usage-stats`,
+  PDF_USAGE_HISTORY: `${apiUrl}api/engineer/pdf-hub/usage-history`,
+  PDF_WATERMARKS: `${apiUrl}api/engineer/pdf-hub/watermarks`,
+  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
+  PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
+  PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
+  PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
+  PDF_TO_IMAGE: `${apiUrl}api/engineer/pdf-hub/pdf-to-image`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,
@@ -201,7 +221,7 @@ export const mm_safety = {
 }
 
 // Google Apps Script Web App URL (doGet endpoint for hidden iframe email notifications)
-export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwUQrPmEcyc3olb4TTBW3XxQ9D-iykOy-Hjx63I145jcqJ6TDAp7B-qg8MRY_u48Fv_nw/exec';
+export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
 
 // Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
 // ⚠️ Paste your deployed GAS URL here after deploying Code.gs

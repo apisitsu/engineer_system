@@ -1,0 +1,37 @@
+{
+  "catia_version": "V5-6R2023",
+  "catia_timeout": 60,
+  "catia_visible": false,
+  "close_catia_after_job": false,
+
+  "export": {
+    "format": "both",
+    "step_with_pmi": true,
+    "viewport_capture": true,
+    "viewport_width": 1920,
+    "viewport_height": 1080
+  },
+
+  "camera": {
+    "default_view": "isometric",
+    "zoom_margin": 1.15
+  },
+
+  "paths": {
+    "python_executable": "python",
+    "output_dir": "./output/cad_results",
+    "temp_dir": "./output/cad_temp",
+    "catia_templates_dir": ""
+  },
+
+  "worker": {
+    "job_timeout_ms": 900000,
+    "max_concurrent_jobs": 1,
+    "retry_attempts": 2
+  },
+
+  "drawing": {
+    "size": "A4",
+    "orientation": "landscape"
+  }
+}

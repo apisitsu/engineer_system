@@ -156,3 +156,110 @@ sudo systemctl restart nginx
 2. เมื่อ React ยิง API ไปที่ `/api/login` -> Nginx จะส่งต่อให้ Backend ที่ Port 2005 ทำงานเบื้องหลัง
 
 วิธีนี้เป็นวิธีมาตรฐาน (Production Grade) ที่ปลอดภัย เร็ว และจัดการง่ายที่สุดครับ!
+
+
+Viewed package.json:1-33
+Viewed docker-compose.yml:1-30
+
+ถ้าต้องการนำโปรเจกต์ `EngineerSystem` นี้ไปรันบนเครื่องใหม่ที่ยังไม่มีอะไรเลย (From Scratch) จะต้องเตรียมตัวและทำตามขั้นตอนดังนี้ครับ:
+
+### 1. ติดตั้งโปรแกรมพื้นฐาน (Prerequisites)
+เครื่องใหม่จะต้องมี Software เหล่านี้ติดตั้งอยู่:
+- **Node.js** (แนะนำเวอร์ชัน 18 หรือ 20 LTS)
+- **Python** (แนะนำเวอร์ชัน 3.10 ขึ้นไป) เพื่อใช้รันเซอร์วิสเกี่ยวกับ PDF
+- **PostgreSQL** (หรือใช้ผ่าน Docker ก็ได้)
+- **Git** สำหรับดึง Source code
+- **Docker & Docker Compose** (ทางเลือก หากต้องการรันแบบ Container)
+
+### 2. ดึง Source Code และติดตั้ง Dependencies
+เนื่องจากโปรเจกต์นี้เป็นโครงสร้างแบบ **NPM Workspace (Monorepo)** การติดตั้งจะทำที่โฟลเดอร์นอกสุด (Root):
+```bash
+# 1. Clone repository
+git clone <url-ของ-repo-นี้>
+cd EngineerSystem
+
+# 2. ติดตั้ง Node Modules สำหรับทั้ง Backend และ Frontend ในคำสั่งเดียว
+npm install
+```
+
+### 3. ติดตั้ง Python Library สำหรับระบบ PDF
+ระบบจัดการ PDF (Unlock และ Repair) บน Backend เรียกใช้ Python Script ดังนั้นต้องลงไลบรารีเหล่านี้:
+```bash
+cd apps/ENG-Backend
+pip install pypdf PyMuPDF
+```
+
+### 4. การตั้งค่า Environment Variables (.env)
+คุณต้องสร้างไฟล์ `.env` ที่โฟลเดอร์ `apps/ENG-Backend/.env` โดยใส่ค่าที่จำเป็นหลักๆ ดังนี้:
+```env
+# ตั้งค่า Database สำหรับ eng_db (ระบบหลัก) และ factory databases (rodpc, maqdb)
+DB_HOST=localhost
+DB_PORT=6543
+DB_USER=your_user
+DB_PASS=your_password
+DB_NAME=eng_system
+
+# JWT Secret สำหรับระบบ Auth
+JWT_SECRET=your_secret_key_here
+
+# Gmail OAuth (จำเป็นสำหรับระบบส่งอีเมล ECR/MTC)
+GMAIL_CLIENT_ID="your_client_id"
+GMAIL_CLIENT_SECRET="your_client_secret"
+GMAIL_REFRESH_TOKEN="your_refresh_token"
+```
+*(ถ้ามีไฟล์ `.env.example` อยู่แล้ว ให้ก๊อปปี้แล้วแก้ชื่อเป็น `.env` ได้เลยครับ)*
+
+### 5. การตั้งค่าฝั่ง Frontend (API URL)
+ไปที่ไฟล์ `apps/ENG-Frontend/src/constance/constance_prod.js` (และ `constance.js`)
+ให้เช็คบรรทัดที่เป็น:
+```javascript
+export const apiUrl = "http://localhost:2005/";
+```
+ปรับให้ตรงกับ IP หรือ Localhost ของเครื่องที่รัน Backend
+
+### 6. รันเซิร์ฟเวอร์
+**วิธีที่ 1: รันแบบ Development (รันตรงบนเครื่อง)**
+เปิด Terminal ที่โฟลเดอร์ Root (`EngineerSystem`) แล้วรัน:
+```bash
+npm run dev
+```
+*(คำสั่งนี้จะใช้ `concurrently` เพื่อรันทั้ง Backend พอร์ต 2005 และ Frontend พอร์ต 3000 พร้อมกัน)*
+
+**วิธีที่ 2: รันผ่าน Docker (สำหรับ Production / จำลองเซิร์ฟเวอร์จริง)**
+โปรเจกต์นี้มี `docker-compose.yml` เตรียมไว้ให้แล้ว รันคำสั่งนี้ที่โฟลเดอร์ Root:
+```bash
+docker-compose up -d --build
+```
+ระบบจะเปิดพอร์ตดังนี้:
+- Backend ทำงานผ่าน: `http://localhost:2005`
+- Frontend ทำงานผ่าน Nginx: `http://localhost:80`
+
+### 7. ข้อควรระวังเพิ่มเติม
+- **ฐานข้อมูล:** อย่าลืม Import Schema/Tables พื้นฐานของระบบลงใน PostgreSQL ก่อนรัน (โดยปกติน่าจะมีไฟล์ SQL อยู่ในโฟลเดอร์ `db_migrations/`)
+- **การใช้ Python Command:** ถ้าในเครื่องใหม่ คำสั่ง Python ใช้ชื่อ `python3` แทนที่จะเป็น `python` อาจจะต้องเข้าไปแก้ในโค้ดฝั่ง Backend เล็กน้อย (เช่นในไฟล์ `pdfHubController.js` ที่เราเพิ่งแก้ไป ที่ใช้คำสั่ง `execFile('python', ...)` ครับ)
+
+เพียงทำตามขั้นตอนเหล่านี้ คุณก็จะสามารถนำระบบขึ้นรันบนเครื่องใหม่ได้สมบูรณ์ครับ!
+
+
+rundll32.exe sysdm.cpl,EditEnvironmentVariables
+
+set HTTP_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+set HTTPS_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+
+
+
+C:\Users\lble131\AppData\Local\Programs\Python\Python314\Scripts\;C:\Users\lble131\AppData\Local\Programs\Python\Python314\;%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;;C:\Users\lble131\AppData\Local\Programs\Ollama;C:\Users\lble131\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\lble131\AppData\Roaming\npm;C:\Users\lble131\AppData\Local\Programs\Antigravity IDE\bin
+C:\Users\lble131\AppData\Local\Programs\Python\Python314\Scripts\
+C:\Users\lble131\AppData\Local\Programs\Python\Python314\
+%USERPROFILE%\AppData\Local\Microsoft\WindowsApps
+C:\Users\lble131\AppData\Local\Programs\Microsoft VS Code\bin
+C:\Users\lble131\AppData\Roaming\npm
+C:\Users\lble131\AppData\Local\Programs\Antigravity IDE\bin
+
+HTTP_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+HTTPS_PROXY=http://lble131:Eng1123456789@proxyth.bp.minebea.local:8080
+
+TEMP
+%USERPROFILE%\AppData\Local\Temp
+TMP
+%USERPROFILE%\AppData\Local\Temp

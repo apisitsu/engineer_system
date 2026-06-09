@@ -136,7 +136,7 @@ const HeaderBar = () => {
         <Header style={headerStyle.header} >
             {/* จัดกลุ่มทางซ้าย: Menu และ Tag ให้อยู่ติดกันพอดี */}
             <div style={headerStyle.leftSection}>
-                <Menu theme="dark" mode="horizontal" items={master} style={headerStyle.menuList} />
+                <Menu theme="dark" mode="horizontal" items={master} style={headerStyle.menuList} disabledOverflow={true} />
                 {isTestVersion && (
                     <Tag color="error" style={{ fontSize: '14px', padding: '4px 12px', fontWeight: 'bold', margin: 0 }}>
                         TEST VERSION

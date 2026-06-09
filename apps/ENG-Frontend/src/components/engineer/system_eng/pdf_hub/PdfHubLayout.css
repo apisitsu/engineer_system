@@ -1,0 +1,167 @@
+/* ============================================================================
+   PDF Hub Layout — Premium Sidebar Styling
+   ============================================================================ */
+
+.pdf-hub-layout {
+  min-height: 100vh;
+  display: flex;
+}
+
+/* ── Sidebar ── */
+.pdf-hub-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-hub-sider-header {
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.pdf-hub-sider-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.pdf-hub-sider-title {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pdf-hub-sider-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+.pdf-hub-sider-title span {
+  font-size: 11px;
+  opacity: 0.6;
+  display: block;
+  margin-top: 2px;
+}
+
+/* ── Menu Items ── */
+.pdf-hub-menu {
+  flex: 1;
+  padding: 12px 8px !important;
+  border-inline-end: none !important;
+}
+
+.pdf-hub-menu .ant-menu-item {
+  height: 48px !important;
+  line-height: 48px !important;
+  border-radius: 12px !important;
+  margin-bottom: 4px !important;
+  padding: 0 16px !important;
+  font-weight: 500;
+  font-size: 13.5px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.pdf-hub-menu .ant-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 24px;
+  border-radius: 0 4px 4px 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pdf-hub-menu .ant-menu-item-selected::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
+.pdf-hub-menu .ant-menu-item:not(.ant-menu-item-selected):hover {
+  transform: translateX(2px);
+}
+
+.pdf-hub-menu .ant-menu-item .anticon {
+  font-size: 17px !important;
+}
+
+/* ── Badge pill in menu items ── */
+.pdf-hub-menu-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 6px;
+  margin-left: 8px;
+  opacity: 0.8;
+}
+
+/* ── Content Area ── */
+.pdf-hub-content {
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 24px;
+  position: relative;
+}
+
+/* ── Collapsed State ── */
+.pdf-hub-sider.ant-layout-sider-collapsed .pdf-hub-sider-title {
+  display: none;
+}
+
+.pdf-hub-sider.ant-layout-sider-collapsed .pdf-hub-sider-header {
+  justify-content: center;
+  padding: 20px 8px 16px;
+}
+
+.pdf-hub-sider.ant-layout-sider-collapsed .pdf-hub-menu-badge {
+  display: none;
+}
+
+/* ── Footer ── */
+.pdf-hub-sider-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.pdf-hub-sider-footer span {
+  font-size: 10px;
+  opacity: 0.4;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ── Animations ── */
+@keyframes pdfHubFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pdf-hub-content > * {
+  animation: pdfHubFadeIn 0.35s ease-out;
+}

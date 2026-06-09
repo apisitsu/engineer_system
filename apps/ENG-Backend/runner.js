@@ -4,6 +4,7 @@ const nodemon = require('nodemon');
 nodemon({
     script: 'server.js', // เช็คให้แน่ใจว่าไฟล์รันเซิร์ฟเวอร์ของคุณชื่อนี้
     ext: 'js json',
+    ignore: ['output/*', 'files/*'],
 });
 
 nodemon.on('crash', () => {

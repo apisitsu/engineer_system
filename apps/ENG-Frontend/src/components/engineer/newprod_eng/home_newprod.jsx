@@ -40,14 +40,14 @@ const HomeNewProd = () => {
       tags: ['Drawing', 'QA', 'Standards']
     },
     {
-      id: 'job-check',
-      title: 'Job Check Tracker',
-      description: 'Track and manage production job statuses and manufacturing progress in real-time.',
-      icon: <CheckCircleOutlined style={{ fontSize: '32px' }} />,
-      path: '/job_check_tracker',
-      category: 'Tracking',
+      id: 'html-to-pdf',
+      title: 'HTML to PDF Dashboard',
+      description: 'Upload HTML documents and convert them to high-quality PDF files asynchronously in the background.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/html-to-pdf',
+      category: 'Utilities',
       status: 'Active',
-      tags: ['Production', 'Status', 'Progress']
+      tags: ['PDF', 'HTML', 'Converter']
     },
     {
       id: 'bushing-configurator',
@@ -71,6 +71,16 @@ const HomeNewProd = () => {
       restricted: true
     },
     {
+      id: '3d-cad-pdf',
+      title: '3D CAD PDF Generator',
+      description: 'Automate CATIA V5 3D model updates, generate interactive 3D previews with PMI annotations, and export engineering PDF drawings.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/3d_pdf',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['CATIA', '3D', 'PDF', 'CAD', 'PMI']
+    },
+    {
       id: 'pdf-merger',
       title: 'PDF Merger Tool',
       description: 'Easily merge multiple PDF files into a single document with drag-and-drop support.',
@@ -81,6 +91,16 @@ const HomeNewProd = () => {
       tags: ['PDF', 'Merge', 'Document']
     },
     {
+      id: 'pdf-hub',
+      title: 'PDF Management Hub',
+      description: 'All-in-one PDF toolkit — Sign & Stamp, Merge, Convert to Image, and Drawing Check in one place.',
+      icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/pdf-hub',
+      category: 'Utilities',
+      status: 'Active',
+      tags: ['PDF', 'Sign', 'Stamp', 'Merge', 'Convert']
+    },
+    {
       id: 'template-tool',
       title: 'Template Tool',
       description: 'Create and manage APQP documents — PID, PDR, PFD, PFMEA, Control Plans. With auto-save and approval workflows.',
@@ -89,6 +109,36 @@ const HomeNewProd = () => {
       category: 'Engineering',
       status: 'Active',
       tags: ['APQP', 'Forms', 'Templates']
+    },
+    {
+      id: 'calc-area-volume',
+      title: 'Area & Volume',
+      description: 'Calculate Area and Volume using exact math integration methods.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/area',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['Math', 'Calculators', 'Area', 'Volume']
+    },
+    {
+      id: 'calc-rpn',
+      title: 'RPN Action Priority',
+      description: 'FMEA Action Priority (AP) Generator. Lookup severity, occurrence, and detection ratings.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/rpn',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['FMEA', 'Calculators', 'RPN', 'APQP']
+    },
+    {
+      id: 'calc-geometric',
+      title: 'Geometric Radius',
+      description: 'Calculate target radius from complex geometric dimensions.',
+      icon: <CalculatorOutlined style={{ fontSize: '32px' }} />,
+      path: '/eng/calculators/geometric',
+      category: 'Calculators',
+      status: 'Active',
+      tags: ['Math', 'Calculators', 'Radius', 'Geometry']
     }
   ];
 
@@ -117,7 +167,7 @@ const HomeNewProd = () => {
           transition: `all ${theme.transitions.normal}`,
           background: theme.colors.surface
         }}
-        bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' }}
+        styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' } }}
         onClick={() => {
           if (tool.path.startsWith('http')) {
             window.open(tool.path, '_blank');

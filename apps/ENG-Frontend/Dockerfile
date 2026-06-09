@@ -1,7 +1,15 @@
 # Stage 1: Build React App
 FROM node:18-alpine AS builder
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
+RUN npm config set proxy $HTTP_PROXY && npm config set https-proxy $HTTPS_PROXY && npm config set strict-ssl false
+
 WORKDIR /app
+
+# Install native dependencies for node-gyp and canvas
+RUN apk add --no-cache python3 py3-setuptools make g++ cairo-dev pango-dev jpeg-dev giflib-dev
 
 # Install dependencies first (better layer caching)
 COPY apps/ENG-Frontend/package*.json ./

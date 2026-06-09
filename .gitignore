@@ -1,10 +1,3 @@
-
-apps/ENG-Frontend/node_modules
-node_modules
-dist
-.env
-.DS_Store
-
 # Dependency directories
 node_modules/
 **/node_modules/
@@ -28,7 +21,6 @@ apps/ENG-Backend/tools/
 
 # Database
 db_eng/
->>>>>>> old-work-backup
 
 # Attachment files
 apps/ENG-Backend/files/tool_requests/
@@ -53,3 +45,5 @@ tmp/
 
 CLAUDE.md
 GEMINI.md
+
+./apps/uploads

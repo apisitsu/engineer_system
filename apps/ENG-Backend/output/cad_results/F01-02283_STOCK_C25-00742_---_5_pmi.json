@@ -1,0 +1,1594 @@
+[
+  {
+    "id": "param_1",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN1 = ミネベアミツミ株式会社の専有情報及び機密情報が含まれます。弊社に断りなく利用、公開、再配布することは禁止いたします。",
+    "value": "ミネベアミツミ株式会社の専有情報及び機密情報が含まれます。弊社に断りなく利用、公開、再配布することは禁止いたします。",
+    "visible": false
+  },
+  {
+    "id": "param_2",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN2 = 本3次元データセットはJIS B 0060シリーズおよびRE21700に従い構成及び定義され、幾何形状、表示要求事項，非表示要求事項、管理情報、部品特性が含まれています。",
+    "value": "本3次元データセットはJIS B 0060シリーズおよびRE21700に従い構成及び定義され、幾何形状、表示要求事項，非表示要求事項、管理情報、部品特性が含まれています。",
+    "visible": false
+  },
+  {
+    "id": "param_3",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN3",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN3 = 本3次元データセットと非表示要求事項の内容(注記、普通幾何公差、工程情報等)はISO 32000に従った3D PDFにて結合されて技術データパッケージとして指示されます。",
+    "value": "本3次元データセットと非表示要求事項の内容(注記、普通幾何公差、工程情報等)はISO 32000に従った3D PDFにて結合されて技術データパッケージとして指示されます。",
+    "visible": false
+  },
+  {
+    "id": "param_4",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN4 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_5",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN5",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN5 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_6",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN6",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN6 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_7",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN7",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN7 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_8",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN8",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\JPN\\GN8 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_9",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN1 = MinebeaMitsumi Inc. CONFIDENTIAL AND PROPRIETARY. UNAUTHORIZED USE, DISCLOSURE, OR REPRODUCTION PROHIBITED.",
+    "value": "MinebeaMitsumi Inc. CONFIDENTIAL AND PROPRIETARY. UNAUTHORIZED USE, DISCLOSURE, OR REPRODUCTION PROHIBITED.",
+    "visible": false
+  },
+  {
+    "id": "param_10",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN2 = THIS 3D DATA SET IS COMPOSED AND DEFINED, GEOMETRY, ANNOTATION, ATTRIBUTE, MANAGEMENT INFORMATION, AND PART PROPERTIES IN ACCORDANCE WITH JIS B 0060 SERIES AND RE21700.",
+    "value": "THIS 3D DATA SET IS COMPOSED AND DEFINED, GEOMETRY, ANNOTATION, ATTRIBUTE, MANAGEMENT INFORMATION, AND PART PROPERTIES IN ACCORDANCE WITH JIS B 0060 SERIES AND RE21700.",
+    "visible": false
+  },
+  {
+    "id": "param_11",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN3",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN3 = THIS 3D DATA SET AND THE CONTENTS OF ATTRIBUTE (NOTE, GENERAL GEOMETRICAL TOLERANCE, PROCESS INFORMATION etc...) ARE COMBINED AND SHOWN IN 3D PDF IN ACCORDANCE WITH ISO 32000 AS TECHNICAL DATA PACKAGE.",
+    "value": "THIS 3D DATA SET AND THE CONTENTS OF ATTRIBUTE (NOTE, GENERAL GEOMETRICAL TOLERANCE, PROCESS INFORMATION etc...) ARE COMBINED AND SHOWN IN 3D PDF IN ACCORDANCE WITH ISO 32000 AS TECHNICAL DATA PACKAGE.",
+    "visible": false
+  },
+  {
+    "id": "param_12",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN4 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_13",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN5",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN5 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_14",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN6",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN6 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_15",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN7",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN7 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_16",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN8",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\GENERAL NOTICE\\ENG\\EGN8 = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_17",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING NUMBER",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING NUMBER = F01-02283_STOCK_C25-00742",
+    "value": "F01-02283_STOCK_C25-00742",
+    "visible": false
+  },
+  {
+    "id": "param_18",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\REVISION",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\REVISION = ---",
+    "value": "---",
+    "visible": false
+  },
+  {
+    "id": "param_19",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING TYPE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING TYPE = PROCESS DRAWING",
+    "value": "PROCESS DRAWING",
+    "visible": false
+  },
+  {
+    "id": "param_20",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING NAME",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWING NAME = GEOMETRICAL DEFINITION",
+    "value": "GEOMETRICAL DEFINITION",
+    "visible": false
+  },
+  {
+    "id": "param_21",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DCN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DCN = ",
+    "value": "",
+    "visible": false
+  },
+  {
+    "id": "param_22",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\TEMPLATE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\TEMPLATE = ",
+    "value": "",
+    "visible": false
+  },
+  {
+    "id": "param_23",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\STATE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\STATE = #FFFFFF",
+    "value": "#FFFFFF",
+    "visible": false
+  },
+  {
+    "id": "param_24",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWER",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWER = kzle0129",
+    "value": "kzle0129",
+    "visible": false
+  },
+  {
+    "id": "param_25",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWN DATE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\DRAWN DATE = 2026-04-21T15:00:35",
+    "value": "2026-04-21T15:00:35",
+    "visible": false
+  },
+  {
+    "id": "param_26",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\CHECKER",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\CHECKER = kz117751",
+    "value": "kz117751",
+    "visible": false
+  },
+  {
+    "id": "param_27",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\CHECKED DATE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\CHECKED DATE = 2026-04-21T15:00:35",
+    "value": "2026-04-21T15:00:35",
+    "visible": false
+  },
+  {
+    "id": "param_28",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\APPROVER",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\APPROVER = kz10360",
+    "value": "kz10360",
+    "visible": false
+  },
+  {
+    "id": "param_29",
+    "name": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\APPROVED DATE",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PART PROPERTY\\MANAGEMENT DATA\\APPROVED DATE = 2026-04-21T15:00:35",
+    "value": "2026-04-21T15:00:35",
+    "visible": false
+  },
+  {
+    "id": "param_30",
+    "name": "F01-02283_STOCK_C25-00742\\PartBody\\Material",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PartBody\\Material = MATERIAL",
+    "value": "MATERIAL",
+    "visible": false
+  },
+  {
+    "id": "param_31",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\X",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\X = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_32",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\Y",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\Y = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_33",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\Z",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Origin\\Z = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_34",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\X",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\X = 1.0",
+    "value": 1.0,
+    "visible": false
+  },
+  {
+    "id": "param_35",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\Y",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\Y = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_36",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\Z",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\XAxis\\Z = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_37",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\X",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\X = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_38",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\Y",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\Y = 1.0",
+    "value": 1.0,
+    "visible": false
+  },
+  {
+    "id": "param_39",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\Z",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\YAxis\\Z = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_40",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\X",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\X = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_41",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\Y",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\Y = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_42",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\Z",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\ZAxis\\Z = 1.0",
+    "value": 1.0,
+    "visible": false
+  },
+  {
+    "id": "param_43",
+    "name": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Absolute Axis System\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_44",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.10\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.10\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_45",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.11\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.11\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_46",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.12\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.12\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_47",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.13\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.13\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_48",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.14\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.14\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_49",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.15\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.15\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_50",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.16\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.16\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_51",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.17\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.17\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_52",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.18\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.18\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_53",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.19\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.19\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_54",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.20\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.20\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_55",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.21\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.21\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_56",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.22\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.22\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_57",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.23\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.23\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_58",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.24\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.24\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_59",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.25\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.25\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_60",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.26\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.26\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_61",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.27\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.27\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_62",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.28\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.28\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_63",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.29\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.29\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_64",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.30\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.30\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_65",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.31\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.31\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_66",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.32\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.32\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_67",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.33\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.33\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_68",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.34\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.34\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_69",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.35\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.35\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_70",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.36\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.36\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_71",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.37\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.37\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_72",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\式.38\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\式.38\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_73",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.312\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.312\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_74",
+    "name": "削除された_DENSITY_11",
+    "type": "parameter",
+    "text": "削除された_DENSITY_11 = 7849.999999999999",
+    "value": 7849.999999999999,
+    "visible": false
+  },
+  {
+    "id": "param_75",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.313\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.313\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_76",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.314\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.314\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_77",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.315\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.315\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_78",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\DESIGN_TABLE\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\DESIGN_TABLE\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_79",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\DESIGN_TABLE\\Configuration",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\DESIGN_TABLE\\Configuration = 1",
+    "value": 1,
+    "visible": false
+  },
+  {
+    "id": "param_80",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.524\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.524\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_81",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.525\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.525\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_82",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.526\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.526\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_83",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.527\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.527\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_84",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.528\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.528\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_85",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.529\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.529\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_86",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.531\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.531\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_87",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.532\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.532\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_88",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.533\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.533\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_89",
+    "name": "F01-02283_STOCK_C25-00742\\Relations\\Formula.534\\Activity",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\Relations\\Formula.534\\Activity = True",
+    "value": true,
+    "visible": false
+  },
+  {
+    "id": "param_90",
+    "name": "AREA",
+    "type": "parameter",
+    "text": "AREA = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_91",
+    "name": "VOLUME",
+    "type": "parameter",
+    "text": "VOLUME = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_92",
+    "name": "MASS",
+    "type": "parameter",
+    "text": "MASS = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_93",
+    "name": "F01-02283_STOCK_C25-00742\\CN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\CN = C25-00742",
+    "value": "C25-00742",
+    "visible": false
+  },
+  {
+    "id": "param_94",
+    "name": "F01-02283_STOCK_C25-00742\\PN_C",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PN_C = 0",
+    "value": 0,
+    "visible": false
+  },
+  {
+    "id": "param_95",
+    "name": "F01-02283_STOCK_C25-00742\\SUFIX_CN_C",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\SUFIX_CN_C = A41-04308",
+    "value": "A41-04308",
+    "visible": false
+  },
+  {
+    "id": "param_96",
+    "name": "F01-02283_STOCK_C25-00742\\mD_f_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\mD_f_1 = 36.51",
+    "value": 36.51,
+    "visible": false
+  },
+  {
+    "id": "param_97",
+    "name": "F01-02283_STOCK_C25-00742\\DENSITY_L1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\DENSITY_L1 = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_98",
+    "name": "F01-02283_STOCK_C25-00742\\W_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_f_4 = 15.06",
+    "value": 15.06,
+    "visible": false
+  },
+  {
+    "id": "param_99",
+    "name": "F01-02283_STOCK_C25-00742\\W_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_f_4_MAX = 0.12",
+    "value": 0.12,
+    "visible": false
+  },
+  {
+    "id": "param_100",
+    "name": "F01-02283_STOCK_C25-00742\\W_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_f_4_MIN = -0.12",
+    "value": -0.12,
+    "visible": false
+  },
+  {
+    "id": "param_101",
+    "name": "F01-02283_STOCK_C25-00742\\W_f_4_GT1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_f_4_GT1 = 0.25",
+    "value": 0.25,
+    "visible": false
+  },
+  {
+    "id": "param_102",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_1 = 15.035",
+    "value": 15.035,
+    "visible": false
+  },
+  {
+    "id": "param_103",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_1_max = 0.025",
+    "value": 0.025,
+    "visible": false
+  },
+  {
+    "id": "param_104",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_1_min = -0.025",
+    "value": -0.025,
+    "visible": false
+  },
+  {
+    "id": "param_105",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_1_gt1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_1_gt1 = 0.2",
+    "value": 0.2,
+    "visible": false
+  },
+  {
+    "id": "param_106",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_2 = 15.06",
+    "value": 15.06,
+    "visible": false
+  },
+  {
+    "id": "param_107",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_2_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_2_max = 0.09",
+    "value": 0.09,
+    "visible": false
+  },
+  {
+    "id": "param_108",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_2_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_2_min = -0.09",
+    "value": -0.09,
+    "visible": false
+  },
+  {
+    "id": "param_109",
+    "name": "F01-02283_STOCK_C25-00742\\OD_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_f_4 = 36.512",
+    "value": 36.512,
+    "visible": false
+  },
+  {
+    "id": "param_110",
+    "name": "F01-02283_STOCK_C25-00742\\OD_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_f_4_MAX = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_111",
+    "name": "F01-02283_STOCK_C25-00742\\OD_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_f_4_MIN = -0.012",
+    "value": -0.012,
+    "visible": false
+  },
+  {
+    "id": "param_112",
+    "name": "F01-02283_STOCK_C25-00742\\OD_f_4_GT1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_f_4_GT1 = 0.127",
+    "value": 0.127,
+    "visible": false
+  },
+  {
+    "id": "param_113",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_1 = 36.613",
+    "value": 36.613,
+    "visible": false
+  },
+  {
+    "id": "param_114",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_1_max = 0.025",
+    "value": 0.025,
+    "visible": false
+  },
+  {
+    "id": "param_115",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_1_min = -0.025",
+    "value": -0.025,
+    "visible": false
+  },
+  {
+    "id": "param_116",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_1_gt1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_1_gt1 = 0.1",
+    "value": 0.1,
+    "visible": false
+  },
+  {
+    "id": "param_117",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_2 = 36.486",
+    "value": 36.486,
+    "visible": false
+  },
+  {
+    "id": "param_118",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_2_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_2_max = 0.002",
+    "value": 0.002,
+    "visible": false
+  },
+  {
+    "id": "param_119",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_2_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_2_min = -0.002",
+    "value": -0.002,
+    "visible": false
+  },
+  {
+    "id": "param_120",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_3",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_3 = 36.506",
+    "value": 36.506,
+    "visible": false
+  },
+  {
+    "id": "param_121",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_3_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_3_max = 0.006",
+    "value": 0.006,
+    "visible": false
+  },
+  {
+    "id": "param_122",
+    "name": "F01-02283_STOCK_C25-00742\\oD_f_4_3_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_f_4_3_min = -0.006",
+    "value": -0.006,
+    "visible": false
+  },
+  {
+    "id": "param_123",
+    "name": "F01-02283_STOCK_C25-00742\\OC_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OC_f_4 = 0.06",
+    "value": 0.06,
+    "visible": false
+  },
+  {
+    "id": "param_124",
+    "name": "F01-02283_STOCK_C25-00742\\OC_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OC_f_4_MAX = 0.12",
+    "value": 0.12,
+    "visible": false
+  },
+  {
+    "id": "param_125",
+    "name": "F01-02283_STOCK_C25-00742\\OC_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OC_f_4_MIN = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_126",
+    "name": "F01-02283_STOCK_C25-00742\\OC_f_4_GT1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OC_f_4_GT1 = 0.06",
+    "value": 0.06,
+    "visible": false
+  },
+  {
+    "id": "param_127",
+    "name": "F01-02283_STOCK_C25-00742\\OC_f_4_GT2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OC_f_4_GT2 = -0.06",
+    "value": -0.06,
+    "visible": false
+  },
+  {
+    "id": "param_128",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_1 = 0.12",
+    "value": 0.12,
+    "visible": false
+  },
+  {
+    "id": "param_129",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_1_max = 0.04",
+    "value": 0.04,
+    "visible": false
+  },
+  {
+    "id": "param_130",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_1_min = -0.04",
+    "value": -0.04,
+    "visible": false
+  },
+  {
+    "id": "param_131",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_2 = 0.06",
+    "value": 0.06,
+    "visible": false
+  },
+  {
+    "id": "param_132",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_2_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_2_max = 0.06",
+    "value": 0.06,
+    "visible": false
+  },
+  {
+    "id": "param_133",
+    "name": "F01-02283_STOCK_C25-00742\\oC_f_4_2_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oC_f_4_2_min = -0.06",
+    "value": -0.06,
+    "visible": false
+  },
+  {
+    "id": "param_134",
+    "name": "F01-02283_STOCK_C25-00742\\OCA_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OCA_f_4 = 45.0",
+    "value": 45.0,
+    "visible": false
+  },
+  {
+    "id": "param_135",
+    "name": "F01-02283_STOCK_C25-00742\\OCA_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OCA_f_4_MAX = 2.0",
+    "value": 2.0,
+    "visible": false
+  },
+  {
+    "id": "param_136",
+    "name": "F01-02283_STOCK_C25-00742\\OCA_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OCA_f_4_MIN = -2.0",
+    "value": -2.0,
+    "visible": false
+  },
+  {
+    "id": "param_137",
+    "name": "F01-02283_STOCK_C25-00742\\oCA_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oCA_f_4_1 = 45.0",
+    "value": 45.0,
+    "visible": false
+  },
+  {
+    "id": "param_138",
+    "name": "F01-02283_STOCK_C25-00742\\oCA_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oCA_f_4_1_max = 0.5",
+    "value": 0.5,
+    "visible": false
+  },
+  {
+    "id": "param_139",
+    "name": "F01-02283_STOCK_C25-00742\\oCA_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oCA_f_4_1_min = -0.5",
+    "value": -0.5,
+    "visible": false
+  },
+  {
+    "id": "param_140",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrD_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrD_f_4 = 1.397",
+    "value": 1.397,
+    "visible": false
+  },
+  {
+    "id": "param_141",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrD_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrD_f_4_MAX = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_142",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrD_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrD_f_4_MIN = -0.254",
+    "value": -0.254,
+    "visible": false
+  },
+  {
+    "id": "param_143",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1 = 1.28",
+    "value": 1.28,
+    "visible": false
+  },
+  {
+    "id": "param_144",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1_max = 0.09",
+    "value": 0.09,
+    "visible": false
+  },
+  {
+    "id": "param_145",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrD_f_4_1_min = -0.09",
+    "value": -0.09,
+    "visible": false
+  },
+  {
+    "id": "param_146",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrR_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrR_f_4 = 0.43",
+    "value": 0.43,
+    "visible": false
+  },
+  {
+    "id": "param_147",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrR_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrR_f_4_MAX = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_148",
+    "name": "F01-02283_STOCK_C25-00742\\PcGrR_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcGrR_f_4_MIN = -0.17",
+    "value": -0.17,
+    "visible": false
+  },
+  {
+    "id": "param_149",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1 = 0.35",
+    "value": 0.35,
+    "visible": false
+  },
+  {
+    "id": "param_150",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1_max = 0.05",
+    "value": 0.05,
+    "visible": false
+  },
+  {
+    "id": "param_151",
+    "name": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcGrR_f_4_1_min = -0.05",
+    "value": -0.05,
+    "visible": false
+  },
+  {
+    "id": "param_152",
+    "name": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4 = 30.0",
+    "value": 30.0,
+    "visible": false
+  },
+  {
+    "id": "param_153",
+    "name": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4_MAX = 0.5",
+    "value": 0.5,
+    "visible": false
+  },
+  {
+    "id": "param_154",
+    "name": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\IpcGrA_f_4_MIN = -0.5",
+    "value": -0.5,
+    "visible": false
+  },
+  {
+    "id": "param_155",
+    "name": "F01-02283_STOCK_C25-00742\\PcD_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcD_f_4 = 33.35",
+    "value": 33.35,
+    "visible": false
+  },
+  {
+    "id": "param_156",
+    "name": "F01-02283_STOCK_C25-00742\\PcD_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcD_f_4_MAX = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_157",
+    "name": "F01-02283_STOCK_C25-00742\\PcD_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcD_f_4_MIN = -0.2",
+    "value": -0.2,
+    "visible": false
+  },
+  {
+    "id": "param_158",
+    "name": "F01-02283_STOCK_C25-00742\\PcD_f_4_GT1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\PcD_f_4_GT1 = 0.127",
+    "value": 0.127,
+    "visible": false
+  },
+  {
+    "id": "param_159",
+    "name": "F01-02283_STOCK_C25-00742\\pcD_f_4_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcD_f_4_1 = 33.25",
+    "value": 33.25,
+    "visible": false
+  },
+  {
+    "id": "param_160",
+    "name": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_max = 0.07",
+    "value": 0.07,
+    "visible": false
+  },
+  {
+    "id": "param_161",
+    "name": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_min = -0.07",
+    "value": -0.07,
+    "visible": false
+  },
+  {
+    "id": "param_162",
+    "name": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_gt1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\pcD_f_4_1_gt1 = 0.1",
+    "value": 0.1,
+    "visible": false
+  },
+  {
+    "id": "param_163",
+    "name": "F01-02283_STOCK_C25-00742\\SbL_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\SbL_f_4 = 1.143",
+    "value": 1.143,
+    "visible": false
+  },
+  {
+    "id": "param_164",
+    "name": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4 = 30.0",
+    "value": 30.0,
+    "visible": false
+  },
+  {
+    "id": "param_165",
+    "name": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4_MAX = 0.5",
+    "value": 0.5,
+    "visible": false
+  },
+  {
+    "id": "param_166",
+    "name": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OpcGrA_f_4_MIN = -0.5",
+    "value": -0.5,
+    "visible": false
+  },
+  {
+    "id": "param_167",
+    "name": "F01-02283_STOCK_C25-00742\\TiD_2_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\TiD_2_2 = 0.381",
+    "value": 0.381,
+    "visible": false
+  },
+  {
+    "id": "param_168",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_3",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_3 = 15.06",
+    "value": 15.06,
+    "visible": false
+  },
+  {
+    "id": "param_169",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_3_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_3_max = 0.12",
+    "value": 0.12,
+    "visible": false
+  },
+  {
+    "id": "param_170",
+    "name": "F01-02283_STOCK_C25-00742\\w_f_4_3_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_f_4_3_min = -0.12",
+    "value": -0.12,
+    "visible": false
+  },
+  {
+    "id": "param_171",
+    "name": "F01-02283_STOCK_C25-00742\\W_2_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_2_2 = 15.062",
+    "value": 15.062,
+    "visible": false
+  },
+  {
+    "id": "param_172",
+    "name": "F01-02283_STOCK_C25-00742\\W_2_2_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_2_2_MAX = 0.127",
+    "value": 0.127,
+    "visible": false
+  },
+  {
+    "id": "param_173",
+    "name": "F01-02283_STOCK_C25-00742\\W_2_2_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_2_2_MIN = -0.126",
+    "value": -0.126,
+    "visible": false
+  },
+  {
+    "id": "param_174",
+    "name": "F01-02283_STOCK_C25-00742\\W_2_2_GT1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\W_2_2_GT1 = 0.25",
+    "value": 0.25,
+    "visible": false
+  },
+  {
+    "id": "param_175",
+    "name": "F01-02283_STOCK_C25-00742\\w_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_2_2_1 = 17.115",
+    "value": 17.115,
+    "visible": false
+  },
+  {
+    "id": "param_176",
+    "name": "F01-02283_STOCK_C25-00742\\w_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_2_2_1_max = 0.025",
+    "value": 0.025,
+    "visible": false
+  },
+  {
+    "id": "param_177",
+    "name": "F01-02283_STOCK_C25-00742\\w_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\w_2_2_1_min = -0.025",
+    "value": -0.025,
+    "visible": false
+  },
+  {
+    "id": "param_178",
+    "name": "F01-02283_STOCK_C25-00742\\OD_2_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_2_2 = 36.512",
+    "value": 36.512,
+    "visible": false
+  },
+  {
+    "id": "param_179",
+    "name": "F01-02283_STOCK_C25-00742\\OD_2_2_MAX",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_2_2_MAX = 0.0",
+    "value": 0.0,
+    "visible": false
+  },
+  {
+    "id": "param_180",
+    "name": "F01-02283_STOCK_C25-00742\\OD_2_2_MIN",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\OD_2_2_MIN = -0.012",
+    "value": -0.012,
+    "visible": false
+  },
+  {
+    "id": "param_181",
+    "name": "F01-02283_STOCK_C25-00742\\oD_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_2_2_1 = 39.905",
+    "value": 39.905,
+    "visible": false
+  },
+  {
+    "id": "param_182",
+    "name": "F01-02283_STOCK_C25-00742\\oD_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_2_2_1_max = 0.025",
+    "value": 0.025,
+    "visible": false
+  },
+  {
+    "id": "param_183",
+    "name": "F01-02283_STOCK_C25-00742\\oD_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\oD_2_2_1_min = -0.025",
+    "value": -0.025,
+    "visible": false
+  },
+  {
+    "id": "param_184",
+    "name": "F01-02283_STOCK_C25-00742\\ciD_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\ciD_2_2_1 = 34.4",
+    "value": 34.4,
+    "visible": false
+  },
+  {
+    "id": "param_185",
+    "name": "F01-02283_STOCK_C25-00742\\ciD_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\ciD_2_2_1_max = 0.1",
+    "value": 0.1,
+    "visible": false
+  },
+  {
+    "id": "param_186",
+    "name": "F01-02283_STOCK_C25-00742\\ciD_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\ciD_2_2_1_min = -0.1",
+    "value": -0.1,
+    "visible": false
+  },
+  {
+    "id": "param_187",
+    "name": "F01-02283_STOCK_C25-00742\\iD_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\iD_2_2_1 = 32.55",
+    "value": 32.55,
+    "visible": false
+  },
+  {
+    "id": "param_188",
+    "name": "F01-02283_STOCK_C25-00742\\iD_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\iD_2_2_1_max = 0.02",
+    "value": 0.02,
+    "visible": false
+  },
+  {
+    "id": "param_189",
+    "name": "F01-02283_STOCK_C25-00742\\iD_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\iD_2_2_1_min = -0.02",
+    "value": -0.02,
+    "visible": false
+  },
+  {
+    "id": "param_190",
+    "name": "F01-02283_STOCK_C25-00742\\iD_2_2_1_gt1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\iD_2_2_1_gt1 = 0.05",
+    "value": 0.05,
+    "visible": false
+  },
+  {
+    "id": "param_191",
+    "name": "F01-02283_STOCK_C25-00742\\iD_2_2_2",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\iD_2_2_2 = 19.05",
+    "value": 19.05,
+    "visible": false
+  },
+  {
+    "id": "param_192",
+    "name": "F01-02283_STOCK_C25-00742\\coD1_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD1_2_2_1 = 0.3",
+    "value": 0.3,
+    "visible": false
+  },
+  {
+    "id": "param_193",
+    "name": "F01-02283_STOCK_C25-00742\\coD1_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD1_2_2_1_max = 0.1",
+    "value": 0.1,
+    "visible": false
+  },
+  {
+    "id": "param_194",
+    "name": "F01-02283_STOCK_C25-00742\\coD1_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD1_2_2_1_min = -0.1",
+    "value": -0.1,
+    "visible": false
+  },
+  {
+    "id": "param_195",
+    "name": "F01-02283_STOCK_C25-00742\\coD2_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD2_2_2_1 = 0.5",
+    "value": 0.5,
+    "visible": false
+  },
+  {
+    "id": "param_196",
+    "name": "F01-02283_STOCK_C25-00742\\coD2_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD2_2_2_1_max = 0.1",
+    "value": 0.1,
+    "visible": false
+  },
+  {
+    "id": "param_197",
+    "name": "F01-02283_STOCK_C25-00742\\coD2_2_2_1_min",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\coD2_2_2_1_min = -0.1",
+    "value": -0.1,
+    "visible": false
+  },
+  {
+    "id": "param_198",
+    "name": "F01-02283_STOCK_C25-00742\\roD_2_2_1",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\roD_2_2_1 = 1.0",
+    "value": 1.0,
+    "visible": false
+  },
+  {
+    "id": "param_199",
+    "name": "F01-02283_STOCK_C25-00742\\roD_2_2_1_max",
+    "type": "parameter",
+    "text": "F01-02283_STOCK_C25-00742\\roD_2_2_1_max = 0.1",
+    "value": 0.1,
+    "visible": false
+  }
+]

@@ -504,6 +504,16 @@ const UpdateCard = async (req, res) => {
             await logAction(client, id, uCode, 'card_moved', {
                 from_list_id: card.list_id, to_list_id: newListId
             });
+            
+            // Feature: Auto-update board status from "Waiting Pool" to "Active Operations"
+            const { rows: [destList] } = await client.query('SELECT name FROM kb_list WHERE id=$1', [newListId]);
+            const destName = destList?.name?.toLowerCase() || '';
+            if (!destName.includes('to do') && !destName.includes('backlog')) {
+                const { rows: [boardRec] } = await client.query("SELECT status FROM kb_board WHERE id=$1", [card.board_id]);
+                if (boardRec && boardRec.status === 'pool') {
+                    await client.query("UPDATE kb_board SET status='active' WHERE id=$1", [card.board_id]);
+                }
+            }
         }
         if (due_date !== undefined && due_date !== card.due_date) {
             await logAction(client, id, uCode, 'due_date_changed', { new_date: due_date });
@@ -1444,33 +1454,46 @@ const SetCoverImage = async (req, res) => {
 // GET /api/kanban/notifications
 const GetNotifications = async (req, res) => {
     const uCode = getAuthUser(req, res); if (!uCode) return;
-    const { rows } = await engPool.query(`
-        SELECT n.*, ka.action_type, ka.action_data
-        FROM kb_notification n
-        LEFT JOIN kb_action ka ON ka.id=n.action_id
-        WHERE n.recipient_u_code=$1
-        ORDER BY n.created_at DESC LIMIT 50
-    `, [uCode]);
-    res.json({ data: rows });
+    try {
+        const { rows } = await engPool.query(`
+            SELECT n.*, ka.action_type, ka.action_data
+            FROM kb_notification n
+            LEFT JOIN kb_action ka ON ka.id=n.action_id
+            WHERE n.recipient_u_code=$1
+            ORDER BY n.created_at DESC LIMIT 50
+        `, [uCode]);
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('GetNotifications error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
 };
 
 // PATCH /api/kanban/notifications/read-all
 const MarkAllRead = async (req, res) => {
     const uCode = getAuthUser(req, res); if (!uCode) return;
-    await engPool.query('UPDATE kb_notification SET is_read=TRUE WHERE recipient_u_code=$1', [uCode]);
-    res.json({ message: 'All notifications marked as read' });
+    try {
+        await engPool.query('UPDATE kb_notification SET is_read=TRUE WHERE recipient_u_code=$1', [uCode]);
+        res.json({ message: 'All notifications marked as read' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 // PATCH /api/kanban/notifications/:id/read
 const MarkRead = async (req, res) => {
     const { id } = req.params;
     const uCode = getAuthUser(req, res); if (!uCode) return;
-    const { rows } = await engPool.query(
-        'UPDATE kb_notification SET is_read=TRUE WHERE id=$1 AND recipient_u_code=$2 RETURNING *',
-        [id, uCode]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Notification not found or unauthorized' });
-    res.json({ data: rows[0] });
+    try {
+        const { rows } = await engPool.query(
+            'UPDATE kb_notification SET is_read=TRUE WHERE id=$1 AND recipient_u_code=$2 RETURNING *',
+            [id, uCode]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'Notification not found or unauthorized' });
+        res.json({ data: rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 // ─── CARD REORDER (Drag & Drop) ───────────────────────────────────

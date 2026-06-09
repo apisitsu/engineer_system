@@ -25,7 +25,7 @@ import HomeEng from './components/engineer/home_eng';
 
 import HomeSystemEng from './components/engineer/system_eng/home_system';
 import UserManagement from './components/engineer/system_eng/user_management/UserManagement';
-import JobCheckTracker from './components/engineer/newprod_eng/tool/JobCheckTracker';
+import HtmlToPdfDashboard from './components/engineer/newprod_eng/tool/html_to_pdf/HtmlToPdfDashboard';
 import PdfMergerTool from './components/engineer/newprod_eng/tool/PdfMergerTool';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
 import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
@@ -52,18 +52,35 @@ import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/Em
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageDashboard';
-import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page.jsx';
-import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage.jsx';
+import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page';
+import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
+import TemplateFormEditor from './components/engineer/newprod_eng/TemplateTool/TemplateFormEditor';
+import AreaVolumeCalc from './components/engineer/newprod_eng/calculators/AreaVolumeCalc';
+import RPNLookupCalc from './components/engineer/newprod_eng/calculators/RPNLookupCalc';
+import GeometricRadiusCalc from './components/engineer/newprod_eng/calculators/GeometricRadiusCalc';
 import BushingConfigurator from './components/engineer/newprod_eng/calculator/BushingConfigurator';
 import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaSimulation';
+import CadJobDashboard from './components/engineer/newprod_eng/3d_pdf/CadJobDashboard';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
+
+// Engineer Record
+import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
+import EngRecordViewerLayout from './components/engineer/overall_eng/eng_record/EngRecordViewerLayout';
+
+// PDF Hub
+import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
+import SignStampTool from './components/engineer/system_eng/pdf_hub/SignStamp/SignStampTool';
+import PdfMergerWrapper from './components/engineer/system_eng/pdf_hub/PdfMergerWrapper';
+import PdfToImageWrapper from './components/engineer/system_eng/pdf_hub/PdfToImageWrapper';
+import DwgCheckWrapper from './components/engineer/system_eng/pdf_hub/DwgCheckWrapper';
+import PdfEditorTool from './components/engineer/system_eng/pdf_hub/PdfEditor/PdfEditorTool';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -71,8 +88,8 @@ const ProtectedRoute = ({ allowedRoles }) => {
   const location = useLocation();
 
   if (!isAuthenticated) {
-    if (location.pathname === '/job_check_tracker') {
-      return <Navigate to="/job_check_tracker" replace />;
+    if (location.pathname === '/eng/html-to-pdf') {
+      return <Navigate to="/eng/html-to-pdf" replace />;
     } else {
       // Save the current location to redirect back after login
       return <Navigate to="/sign_in" state={{ from: location }} replace />;
@@ -146,7 +163,7 @@ const AppContent = () => {
     if (isAuthenticated) {
 
       const doCheckToken = async () => {
-        const publicPaths = ['/sign_in', '/job_check_tracker'];
+        const publicPaths = ['/sign_in'];
         const currentPath = window.location.pathname;
         console.log("Checking token for path:", currentPath)
         const isPublicPath = publicPaths.includes(currentPath);
@@ -262,11 +279,12 @@ const AppContent = () => {
       <AntdApp>
         <Router>
           <Routes>
-            <Route path="/job_check_tracker" element={<JobCheckTracker />} />
+
             <Route path="/sign_in" element={<AuthRedirectWrapper><SignIn /></AuthRedirectWrapper>} />
             <Route path="/" element={<AuthRedirectWrapper><Navigate replace to="/sign_in" /></AuthRedirectWrapper>} />
 
             <Route element={<ProtectedRoute />}>
+              <Route path="/eng/viewer/eng-record" element={<EngRecordViewerLayout />} />
 
               <Route element={<MainLayout />}>
                 <Route path="/home" element={<Home />} />
@@ -310,14 +328,17 @@ const AppContent = () => {
                   {/* ------ New Product Engineer ------ */}
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
                   <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
+                  <Route path="/eng/html-to-pdf" element={<HtmlToPdfDashboard />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+                  <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
                   <Route path="/eng/kanban/guide" element={<UserGuideFullPage />} />
                   <Route path="/eng/kanban/:projectId" element={<KanbanMain />} />
+                  <Route path="/eng/kanban/:projectId/:boardId" element={<KanbanMain />} />
 
                   {/* ------ User Guide ------ */}
                   <Route path="/eng/user-guide" element={<UserGuidePage />} />
@@ -327,10 +348,34 @@ const AppContent = () => {
 
               {/* ------ (Standalone - Full Viewport) ------ */}
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG']} />}>
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/template_tool" element={<TemplateTool />} />
+                  <Route path="/eng/calculators/area" element={<AreaVolumeCalc />} />
+                  <Route path="/eng/calculators/rpn" element={<RPNLookupCalc />} />
+                  <Route path="/eng/calculators/geometric" element={<GeometricRadiusCalc />} />
+                </Route>
                 <Route path="/eng/bushing_configurator" element={<BushingConfigurator />} />
                 <Route path="/eng/dwg_check" element={<DwgCheckApp />} />
                 <Route path="/eng/fea_simulation" element={<FeaSimulation />} />
-                <Route path="/eng/template_tool" element={<TemplateTool />} />
+                <Route path="/eng/3d_pdf" element={<CadJobDashboard />} />
+                <Route path="/drawing/:jobId" element={<CadJobDashboard />} />
+                <Route path="/eng/template_tool/:formType/:formId" element={<TemplateFormEditor />} />
+
+                {/* ------ PDF Management Hub ------ */}
+                {/* Workstation: fullscreen, no sidebar */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub" element={<PdfEditorTool />} />
+                </Route>
+                {/* Legacy tools (backward compat, uses sidebar layout) */}
+                <Route element={<MainLayout />}>
+                  <Route path="/eng/pdf-hub/tools" element={<PdfHubLayout />}>
+                    <Route index element={<Navigate to="sign-stamp" replace />} />
+                    <Route path="sign-stamp" element={<SignStampTool />} />
+                    <Route path="merge" element={<PdfMergerWrapper />} />
+                    <Route path="to-image" element={<PdfToImageWrapper />} />
+                    <Route path="dwg-check" element={<DwgCheckWrapper />} />
+                  </Route>
+                </Route>
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
@@ -340,7 +385,6 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
-
 
                   {/* ------ For Test Only ------ */}
 
@@ -384,15 +428,15 @@ const NotFound = () => {
 // Outer App component with ThemeProvider
 export default function App() {
   return (
-    <CacheBuster
-      currentVersion={packageInfo.version}
-      isEnabled={true}
-      isVerboseMode={false}
-      metaFileDirectory={"."}
-    >
-      <ThemeProvider>  {/* Wrap entire app with theme provider */}
+    <ThemeProvider>  {/* Wrap entire app with theme provider */}
+      <CacheBuster
+        currentVersion={packageInfo.version}
+        isEnabled={true}
+        isVerboseMode={false}
+        metaFileDirectory={"."}
+      >
         <AppContent />
-      </ThemeProvider>
-    </CacheBuster>
+      </CacheBuster>
+    </ThemeProvider>
   );
 }

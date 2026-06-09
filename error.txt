@@ -1,0 +1,29 @@
+[0] Saving file file-1780734279095-327573763.HTML to D:\00_system\EngineerSystem\apps\uploads\html_to_pdf\file-1780734774074-61753306.HTML
+[0] Extracted metadata -> DWGNO: file-1780734279095-327573763, REV: ---
+[0] Job created in DB with ID: 10
+[0] Starting background Python process for Job ID 10
+[0] node:events:497
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: spawn py ENOENT
+[0]     at ChildProcess._handle.onexit (node:internal/child_process:285:19)
+[0]     at onErrorNT (node:internal/child_process:483:16)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+[0] Emitted 'error' event on ChildProcess instance at:
+[0]     at ChildProcess._handle.onexit (node:internal/child_process:291:12)
+[0]     at onErrorNT (node:internal/child_process:483:16)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   errno: -4058,
+[0]   code: 'ENOENT',
+[0]   syscall: 'spawn py',
+[0]   path: 'py',
+[0]   spawnargs: [
+[0]     'D:\\00_system\\EngineerSystem\\apps\\ENG-Backend\\api\\engineer\\new_prod\\html_to_pdf.py',
+[0]     '-i',
+[0]     'D:\\00_system\\EngineerSystem\\apps\\uploads\\html_to_pdf\\file-1780734774074-61753306.HTML'
+[0]   ]
+[0] }
+[0]
+[0] Node.js v22.22.2
+[0] 💥 [Nodemon] App crashed! รอ 30 วินาทีก่อนทำการรีสตาร์ทอัตโนมัติ...

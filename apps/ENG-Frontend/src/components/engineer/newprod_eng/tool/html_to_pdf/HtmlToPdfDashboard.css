@@ -1,0 +1,35 @@
+.html-to-pdf-dashboard {
+    padding: 24px;
+    background: #fff;
+    min-height: calc(100vh - 64px);
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+}
+
+.refresh-status {
+    display: flex;
+    align-items: center;
+}
+
+.jobs-table .ant-table-thead > tr > th {
+    background: #fafafa;
+    color: #595959;
+    font-weight: 600;
+}
+
+.dashboard-footer {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+}

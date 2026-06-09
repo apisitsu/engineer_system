@@ -118,20 +118,31 @@ app.use('/api', (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
-//--------------------System Engineer (PDF Converter)---------------------//
-const pdfConverter = require('./api/engineer/system/pdfConverter');
-app.use('/api/engineer/system', pdfConverter);
+//--------------------PDF Hub (Sign & Stamp, Converter, Tools)---------------------//
+const pdfHubRoutes = require('./api/engineer/pdf_hub/pdfHubRoutes');
+app.use('/api/engineer/pdf-hub', pdfHubRoutes);
 
 // Global File Upload Middleware (for routes not using multer)
-app.use(fileupload({ createParentPath: true, limits: { fileSize: 50 * 1024 * 1024 } }));
+app.use(fileupload({ createParentPath: true, limits: { fileSize: 500 * 1024 * 1024 } }));
 
+//--------------------Engineer Record (Rod End Request)---------------------//
+// Must be AFTER fileupload middleware so req.files is available for sync uploads
+const engRecordRoutes = require('./api/engineer/eng_record/engRecordRoutes');
+app.use('/api/engineer/eng-record', engRecordRoutes);
 
 
 //--------------------User----------------------//
 const newProducts = require('./api/engineer/new_prod/tool');
+const htmlToPdf = require('./api/engineer/new_prod/htmlToPdfController');
 
 app.route('/api/proxy/job_check').get(newProducts.getJobCheck);
-
+app.post('/api/engineer/new_prod/html-to-pdf/upload', verifyToken, htmlToPdf.uploadJob);
+app.get('/api/engineer/new_prod/html-to-pdf/jobs', verifyToken, htmlToPdf.getJobs);
+app.get('/api/engineer/new_prod/html-to-pdf/download/:id', verifyToken, htmlToPdf.downloadPdf);
+app.get('/api/engineer/new_prod/html-to-pdf/download-html/:id', verifyToken, htmlToPdf.downloadHtml);
+app.delete('/api/engineer/new_prod/html-to-pdf/jobs/all', verifyToken, htmlToPdf.deleteAllJobs);
+app.delete('/api/engineer/new_prod/html-to-pdf/jobs/:id', verifyToken, htmlToPdf.deleteJob);
+app.post('/api/engineer/new_prod/html-to-pdf/jobs/:id/rework', verifyToken, htmlToPdf.reworkJob);
 //--------------------Template Tool (APQP Forms)---------------------//
 const templateTool = require('./api/engineer/new_prod/templateToolController');
 
@@ -363,6 +374,16 @@ require('./api/fea/fea_worker');
 app.use('/api/fea', feaSimulation);
 // Expose the output directory so the frontend can fetch the generated JSON files
 app.use('/output', express.static(path.join(__dirname, 'output')));
+
+//--------------------CAD Generation Module---------------------//
+const cadRouter = require('./api/cad/cad_router');
+// Initialize CAD worker so it starts listening for jobs
+require('./api/cad/cad_worker');
+app.use('/api/cad', cadRouter);
+// Serve exported CAD files (STEP, 3DXML, glTF, viewport images)
+app.use('/cad-output', express.static(path.join(__dirname, 'output', 'cad_results')));
+// Serve generated PDFs
+app.use('/cad-pdfs', express.static(path.join(__dirname, 'output', 'cad_pdfs')));
 
 // const { HttpsProxyAgent } = require('https-proxy-agent');
 // const proxyUrl = 'http://lble131:Eng1234567889@proxyth.bp.minebea.local:8080';

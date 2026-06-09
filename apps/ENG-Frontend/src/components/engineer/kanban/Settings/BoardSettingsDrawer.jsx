@@ -15,6 +15,7 @@ import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import TemplateBuilderDrawer from './TemplateBuilderDrawer';
+import LoadBoardTemplateModal from './LoadBoardTemplateModal';
 import {
     DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors
 } from '@dnd-kit/core';
@@ -153,6 +154,7 @@ const BoardSettingsDrawer = () => {
     const [previewTemplateLabels, setPreviewTemplateLabels] = useState(null);
     const [selectedLabelTemplateId, setSelectedLabelTemplateId] = useState(null);
     const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
+    const [showLoadTemplateModal, setShowLoadTemplateModal] = useState(false);
 
     useEffect(() => {
         if (isBoardSettingsOpen && activeTab === 'labels') {
@@ -428,8 +430,11 @@ const BoardSettingsDrawer = () => {
             {canManageTemplates && (
                 <>
                     <Divider style={{ margin: '16px 0' }} />
-                    <Button block icon={<IoSaveOutline />} onClick={handleSaveBoardAsBlueprint} style={{ color: theme.colors.primary, borderColor: theme.colors.primary }}>
+                    <Button block icon={<IoSaveOutline />} onClick={handleSaveBoardAsBlueprint} style={{ color: theme.colors.primary, borderColor: theme.colors.primary, marginBottom: 8 }}>
                         Save Board as Blueprint
+                    </Button>
+                    <Button block icon={<AiOutlineApi />} onClick={() => setShowLoadTemplateModal(true)} style={{ color: theme.colors.info, borderColor: theme.colors.info }}>
+                        Load Data from Template
                     </Button>
                 </>
             )}
@@ -967,6 +972,15 @@ const BoardSettingsDrawer = () => {
                     onClose={() => setShowTemplateBuilder(false)}
                     masterProject={activeProject}
                     targetBoardId={activeBoard?.id}
+                />
+            )}
+
+            {showLoadTemplateModal && activeBoard && (
+                <LoadBoardTemplateModal
+                    open={showLoadTemplateModal}
+                    onClose={() => setShowLoadTemplateModal(false)}
+                    boardId={activeBoard.id}
+                    theme={theme}
                 />
             )}
         </Drawer>
