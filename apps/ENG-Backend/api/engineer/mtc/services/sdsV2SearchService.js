@@ -48,6 +48,21 @@ const PART_TYPE_MAP = {
   A44: { type: 'SPHERICAL', table: TABLES.LPB_ENG_SPH },
   A48: { type: 'SPHERICAL', table: TABLES.LPB_ENG_SPH },
   A49: { type: 'SPHERICAL', table: TABLES.LPB_ENG_SPH },
+  // Mecha / mechanical parts (C90–C99). No dedicated dimension table exists in
+  // lpb (unlike ball/race/body/sleeve/sph) — C95 "MECHA" is surface-ground but
+  // carries no standard OD/ID/W record. table: null → skip the dimension query
+  // and return dimension: null while still resolving process plan, tooling and
+  // production. Prevents the "Unknown CN prefix: C9x" hard failure on search.
+  C90: { type: 'MECHA', table: null },
+  C91: { type: 'MECHA', table: null },
+  C92: { type: 'MECHA', table: null },
+  C93: { type: 'MECHA', table: null },
+  C94: { type: 'MECHA', table: null },
+  C95: { type: 'MECHA', table: null },
+  C96: { type: 'MECHA', table: null },
+  C97: { type: 'MECHA', table: null },
+  C98: { type: 'MECHA', table: null },
+  C99: { type: 'MECHA', table: null },
 };
 
 // Re-exported from cnFormat (SSOT) for backward compatibility.
@@ -86,7 +101,10 @@ async function searchByCn(cn, maqPool, rodpcPool) {
 
   const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult] = await Promise.all([
     maqPool.query(`SELECT class1, class1_name, sub_class, sub_class_name, t_parts_name AS part_type FROM ${TABLES.LPB_ENG_TEMP_PARTS} WHERE class1 = $1 LIMIT 1`, [prefix]),
-    maqPool.query(`SELECT * FROM ${partInfo.table} WHERE control_no = $1`, [cnUpper]),
+    // Mecha (C9x) has no dimension table → skip the query, dimension stays null.
+    partInfo.table
+      ? maqPool.query(`SELECT * FROM ${partInfo.table} WHERE control_no = $1`, [cnUpper])
+      : Promise.resolve({ rows: [] }),
     maqPool.query(`
       SELECT t.process_plan_no, t.seq_no, t.rev, t.process_code, t.tool_dwg_no, t.update_date AS tool_update_date, tl.tool_name, t.process_seqno
       FROM ${TABLES.LPB_ENG_R_PI_TOOL} t
