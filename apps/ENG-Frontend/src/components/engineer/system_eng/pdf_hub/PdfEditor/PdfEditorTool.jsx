@@ -176,11 +176,52 @@ const PdfEditorTool = () => {
     // ══════════════════════════════════════════════════════════════════
     // File Upload Handler
     // ══════════════════════════════════════════════════════════════════
-    const handleFileUpload = (file) => {
+    const handleFileUpload = async (file) => {
         if (file.type !== 'application/pdf') {
             message.error('Please upload a PDF file.');
             return Upload.LIST_IGNORE;
         }
+
+        try {
+            const buffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            
+            const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
+            let sigIndex = -1;
+            for (let i = bytes.length - signature.length; i >= 0; i--) {
+                let match = true;
+                for (let j = 0; j < signature.length; j++) {
+                    if (bytes[i + j] !== signature[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    sigIndex = i;
+                    break;
+                }
+            }
+
+            if (sigIndex !== -1) {
+                const jsonBytes = bytes.slice(sigIndex + signature.length);
+                const jsonStr = new TextDecoder().decode(jsonBytes);
+                const projectData = JSON.parse(jsonStr);
+                
+                const originalPdfBytes = bytes.slice(0, sigIndex);
+                await loadPdfFromBytes(originalPdfBytes, file.name);
+                
+                setTimeout(() => {
+                    if (projectData.annotations) setPageAnnotations(projectData.annotations);
+                    if (projectData.highlights) setPageHighlights(projectData.highlights);
+                    message.success('Editable project loaded successfully!');
+                }, 300);
+                
+                return false;
+            }
+        } catch (e) {
+            console.error('Failed to parse editable project:', e);
+        }
+
         loadPdf(file);
         return false;
     };
@@ -222,6 +263,56 @@ const PdfEditorTool = () => {
     // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)
     // ══════════════════════════════════════════════════════════════════
+    const handleClearPage = useCallback(() => {
+        const fc = fabricCanvasRefs?.current?.[currentPage];
+        if (fc) {
+            pushHistory(currentPage);
+            fc.clear();
+            fc.backgroundColor = 'transparent';
+            fc.renderAll();
+        }
+    }, [fabricCanvasRefs, currentPage, pushHistory]);
+
+    const handleSaveEditable = useCallback(async () => {
+        if (!pdfBytes) return;
+        saveCurrentPageState();
+
+        const finalAnnotations = { ...pageAnnotations };
+        Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
+            if (fc) {
+                const json = fc.toJSON(['customData']);
+                json._canvasWidth = fc.width;
+                json._canvasHeight = fc.height;
+                finalAnnotations[pageNumStr] = json;
+            }
+        });
+
+        const projectData = {
+            annotations: finalAnnotations,
+            highlights: pageHighlights,
+        };
+        const jsonStr = JSON.stringify(projectData);
+        const jsonBytes = new TextEncoder().encode('\nENG_PROJECT_DATA:' + jsonStr);
+        
+        const finalBytes = new Uint8Array(pdfBytes.length + jsonBytes.length);
+        finalBytes.set(pdfBytes);
+        finalBytes.set(jsonBytes, pdfBytes.length);
+
+        const blob = new Blob([finalBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `editable_${pdfFile?.name || 'document.pdf'}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        logPdfUsage('export_editable_pdf');
+        message.success('Editable PDF saved! You can load it back to edit annotations.');
+    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
+
+
     const handleApplyAndDownload = useCallback(async () => {
         if (!pdfBytes) return;
 
@@ -584,6 +675,8 @@ const PdfEditorTool = () => {
                 leftCollapsed={leftCollapsed}
                 setLeftCollapsed={setLeftCollapsed}
                 onApplyAndDownload={handleApplyAndDownload}
+                onSaveEditable={handleSaveEditable}
+                onClearPage={handleClearPage}
                 totalAnnotations={totalAnnotations}
                 fabricCanvasRefs={fabricCanvasRefs}
                 onFileUpload={handleFileUpload}

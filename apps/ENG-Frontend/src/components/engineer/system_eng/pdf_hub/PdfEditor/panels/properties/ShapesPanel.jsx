@@ -63,9 +63,10 @@ export default function ShapesPanel() {
                     <SectionTitle>Stroke</SectionTitle>
                     <PropRow label="Color">
                         <ColorPicker
-                            value={store.strokeColor}
-                            onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
+                            value={store.strokeColor === 'transparent' ? null : store.strokeColor}
+                            onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
                             size="small"
+                            allowClear
                             presets={COLOR_PRESETS}
                         />
                     </PropRow>
@@ -89,8 +90,8 @@ export default function ShapesPanel() {
                     <SectionTitle>Fill</SectionTitle>
                     <PropRow label="Color">
                         <ColorPicker
-                            value={store.fillColor === 'transparent' ? '#ffffff00' : store.fillColor}
-                            onChangeComplete={(color) => store.setFillColor(color.toHexString())}
+                            value={store.fillColor === 'transparent' ? null : store.fillColor}
+                            onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
                             size="small"
                             allowClear
                             presets={COLOR_PRESETS}
@@ -116,7 +117,7 @@ export default function ShapesPanel() {
                             min={0.1} max={100} step={0.1}
                             value={store.rulerScale}
                             onChange={store.setRulerScale}
-                            size="small" style={{ width: 70 }}
+                            size="small" style={{ width: 110 }}
                             addonAfter="px/mm"
                         />
                     </PropRow>

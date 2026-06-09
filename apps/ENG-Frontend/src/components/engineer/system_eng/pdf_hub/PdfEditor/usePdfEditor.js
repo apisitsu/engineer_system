@@ -112,6 +112,9 @@ export default function usePdfEditor() {
         await _loadPdf(file, callbacks);
         setThumbnails({});
         clearAllAnnotations();
+        Object.values(fabricCanvasRefs.current || {}).forEach(fc => {
+            if (fc) fc.clear();
+        });
         clearHistory();
     };
 

@@ -455,7 +455,7 @@ export default function useFabricTools({
                 const x1 = tempObj.x1, y1 = tempObj.y1;
                 const x2 = tempObj.x2, y2 = tempObj.y2;
                 const angle = Math.atan2(y2 - y1, x2 - x1);
-                const headLen = 12;
+                const headLen = store.fontSize || 16;
 
                 const arrowHead = new fabric.Triangle({
                     left: x2,
