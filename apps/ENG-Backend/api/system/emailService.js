@@ -10,7 +10,7 @@ const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const GMAIL_REDIRECT_URI = process.env.GMAIL_REDIRECT_URI || 'http://localhost:2005/auth/google/callback';
 
 // --- GAS URL from environment ---
-const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwK3lA8rAOZvlGuvBRkIfNj7zrqBriIiREnhKnWaHyLXFV8lrfZwPNA_aaMP2hF_qZdBA/exec';
+const GAS_EMAIL_URL = process.env.GAS_EMAIL_URL || 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
 
 // --- Corporate proxy agent (for HTTPS tunneling through McAfee Web Gateway) ---
 function getProxyAgent() {
@@ -37,9 +37,9 @@ const sendEmailViaAS = async (to, subject, htmlContent) => {
         // const agent = getProxyAgent();
 
         const response = await axios.post(GAS_EMAIL_URL, {
-            to,
-            subject,
-            htmlContent
+            user_to: to,
+            subject: subject,
+            body: htmlContent
         }, {
             // httpAgent: agent,
             // httpsAgent: agent,
