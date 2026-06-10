@@ -1810,11 +1810,6 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           label: 'Excel Column Mapping',
           children: <ExcelMappingManager theme={theme} />,
         },
-        {
-          key: 'machine-tool',
-          label: 'Machine Tool Config',
-          children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} />,
-        },
       ]}
     />
   );
@@ -2256,6 +2251,7 @@ const SdsV2AdminPage = () => {
     { key: 'machine-codes', label: 'Machine Codes', children: <MachineCodes theme={theme} /> },
     { key: 'machine-types', label: 'Machine Types', children: <MachineTypes theme={theme} /> },
     { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
+    { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
     { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
   ];
 
