@@ -48,8 +48,20 @@ const FORMULAS = {
   'WORK GUIDE': [{ key: 'A', expr: 'round(W)' }],
   'WORK PUSHER': [{ key: 'A', expr: 'odBf * 0.55' }],
   'WORK DRIVER': [{ key: 'A', expr: '(if(idBf > 0, idBf, idAft)) - 0.4' }],
-  'FRONT SHOE': [{ key: 'A', expr: 'odBf * 0.32' }],   // low confidence
-  'REAR SHOE': [{ key: 'B', expr: 'odBf - 0.5' }],     // low confidence
+  // FRONT SHOE 4931-11 / REAR SHOE 4931-12 — AUTHORITATIVE DWG (SME 2026-06-11).
+  // Two categories:
+  //   Cat.1 Inner Ring w/ Balls Included (ボール入りインナー) = isBallInner (yball=Y / ABR):
+  //         FRONT A = V (端面からの距離);  REAR A = X−1, B = Y_dwg+1  — V/X/Y are per-part
+  //         END-FACE DISTANCES, NOT in spec & NOT derivable from OD/ID/W → keep odBf proxy.
+  //         (`Y` context var is groove_y, a DIFFERENT quantity — must NOT be reused here.)
+  //   Cat.2 Standard Ball (通常ボール) = isBallInner=0 (WHT etc): computable —
+  //         FRONT A = W/2+2;  REAR A = W/2−2, B = W/2+2.
+  // Other DWG dims (display; inventory already stores real values): FRONT B=if(OD<10,8,9),
+  //   C=0.15, D=round(31−(10−A−1)); REAR C=if(OD<10,4,5), D=angle(180°/None). OD=odBf_max.
+  // Validated vs MASTER (26 rows): FRONT 23%→46%, REAR 58%→81%. The residual misses are all
+  // Cat.1 (ABR) parts whose V/X/Y aren't in spec — see DEBUG_FORMULA_PENDING for the manual path.
+  'FRONT SHOE': [{ key: 'A', expr: 'if(isBallInner, odBf * 0.32, W / 2 + 2)' }],
+  'REAR SHOE':  [{ key: 'B', expr: 'if(isBallInner, odBf - 0.5, W / 2 + 2)' }],
 };
 
 const RULES = {

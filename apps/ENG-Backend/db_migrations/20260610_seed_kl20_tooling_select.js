@@ -31,9 +31,18 @@ const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, 'kl20_data.json'), 
 // NOT a condition_expr: a skipped row leaves A undefined, which makes searchInventory
 // drop the tolerance filter and return arbitrary rows. -999 keeps the BETWEEN filter
 // active so the wrong-flange tooling correctly returns nothing.
+// Grip mode resolution (2026-06-11): the explicit `type` ('N'/'F') wins WHEN SET, but
+// `type` is a shared column that a factory sync / Part-Management save can clobber to NULL.
+// So when type is blank, fall back to a DETERMINISTIC rule on the CN class prefix (proven
+// from the DIMENSION sheet, 98.7% of 624 parts): OD-chuck classes 23/25/26/41/42/61/63 →
+// 4030-01; ID-chuck classes 62/64/69 → 4030-02. This makes selection survive clobbering
+// with no per-part manual setting. The 8 prefix exceptions still need an explicit `type`.
+const PFX_N = '(cnPrefix==23 or cnPrefix==25 or cnPrefix==26 or cnPrefix==41 or cnPrefix==42 or cnPrefix==61 or cnPrefix==63)';
+const PFX_F = '(cnPrefix==62 or cnPrefix==64 or cnPrefix==69)';
+const blank = '(Type != "N" and Type != "F")'; // type cleared/unset → use prefix rule
 const FORMULAS = {
-  '4030-01_COLLET': [{ key: 'A', expr: 'if(Type == "N", odBf, -999)' }],        // OD chuck (race), trim OD
-  '4030-02_COLLET': [{ key: 'A', expr: 'if(Type == "F", idBf + 0.15, -999)' }], // ID chuck (sleeve), trim ID
+  '4030-01_COLLET': [{ key: 'A', expr: `if(Type == "N" or (${blank} and ${PFX_N}), odBf, -999)` }],        // OD chuck, trim OD
+  '4030-02_COLLET': [{ key: 'A', expr: `if(Type == "F" or (${blank} and ${PFX_F}), idBf + 0.15, -999)` }], // ID chuck, trim ID
 };
 const RULES = {
   '4030-01_COLLET': [['A', 'dim_a', 0.5, 0.5, true, 'Grip OD']],
