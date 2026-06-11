@@ -40,10 +40,19 @@ const LIMITS = [
   { input_var: 'W',  min_value: 6.0,  max_value: 29,   min_inclusive: true,  max_inclusive: true },
 ];
 
-// CARRIER 4036-01 formulas (evaluated sequentially; A computed first, then B uses A, etc.)
-// OD = if(odBf_max>0, odBf_max, odAft_max)  [turned OD upper bound]
-// W  = if(wBf_max>0, wBf_max, wAft_max)     [turned width upper bound]
-// Note: round(A-5,1) → preprocessed to roundN(A-5,1) by _preprocess().
+// CARRIER 4036-01 — AUTHORITATIVE DWG FORMULA (SME-confirmed 2026-06-11):
+//   OD = Workpiece Outer Diameter MAX (ワーク外径MAX) = if(odBf_max>0, odBf_max, odAft_max)
+//   W  = Workpiece Width MAX (ワーク巾MAX)            = if(wBf_max>0, wBf_max, wAft_max)
+//   A  = ceil05(OD+0.4) [OD<=30] / ceil05(OD+1) [OD>30]   ← pocket bore, selection dim
+//   B  = 281 - A
+//   (C)= A - 5
+//   D  = ceil05(W*0.8)                                     ← pocket width, selection dim
+//   E  = 現合 (match-machining), basically a multiple of 4 → NOT computed
+//   F  = 360 / E                                           → NOT computed (E is 現合)
+//   (G)= 現合, basically 0.3*A <= G                        → NOT computed (acceptance check only)
+//   H  = R0.5 [A<=40] / R1.0 [A>40]   (corner R, text)
+//   J  = 別表参照 (separate material table → encoded as the IF on D below)
+// A computed first, then B/(C)/H reference it.
 const FORMULAS = {
   'CARRIER': [
     {
@@ -51,10 +60,10 @@ const FORMULAS = {
       expr: 'if(if(odBf_max>0,odBf_max,odAft_max)<=30, ceil05(if(odBf_max>0,odBf_max,odAft_max)+0.4), ceil05(if(odBf_max>0,odBf_max,odAft_max)+1))',
     }, // pocket bore dia (NEW std 2025/12/05)
     { key: 'B', expr: '281 - A' },              // reference dim
-    { key: 'C', expr: 'round(A-5, 1)' },        // reference dim (→ roundN by preprocess)
+    { key: 'C', expr: 'A - 5' },                // reference dim (A is 0.5-step → no rounding needed, per DWG)
     { key: 'D', expr: 'ceil05(if(wBf_max>0,wBf_max,wAft_max)*0.8)' }, // pocket width
     { key: 'H', expr: 'if(A<=40,"R0.5","R1")' }, // corner R (text)
-    { key: 'J', expr: 'if(D<=2.5,"S45C-S55C",if(D<=12,"SS400","S45C-S55C"))' }, // material (text)
+    { key: 'J', expr: 'if(D<=2.5,"S45C-S55C",if(D<=12,"SS400","S45C-S55C"))' }, // material (別表参照, text)
   ],
 };
 

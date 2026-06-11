@@ -8,10 +8,20 @@
  * engine). Two tooling types are dimension-driven:
  *
  *   RACE PUSHER (4560-18): pushes the work through the grinding gap.
- *     DIM A (col E) = pusher OD. Rule: pusher OD must be < work OD
- *     (design A = OD − 0.5). Formula: A = OD (od_aft, finished work OD).
- *     Search: dim_a BETWEEN (OD−1.0) AND (OD+0), closest match.
+ *     DWG dims: A(col E)=pusher OD, B(F)=ID, C(G)=c'bore depth, D(H)=notch depth,
+ *     E(I)=inner chamfer, F(J)=note, G(K)=notch width, H(L)=notch pos.
+ *     AUTHORITATIVE DWG FORMULA (confirmed by SME 2026-06-11):
+ *       A = largest 0.5-step value ≤ OD−1  →  floor05(OD − 1)
+ *       B = integer ≤ A−3                   →  floor(A − 3)
+ *       C = (BW−SW)/2 + 0.5  (TYPE.1 bar only; pipe/Race/Sleeve = None)  ← design-time
+ *       D = round(A×0.3) for 12≤A<40 (THAI/BOTH); 12 for A≥40; None for MTD & A<12  ← needs destination
+ *       E = 0.5 (basic);  F = note text;  G = 12 if D else None;  H = 25 if D else None
+ *     OD = od_aft (finished — pusher must clear the wheel at the smallest part dia).
+ *     Only A drives selection (B follows from A; C/D/F depend on BW/SW/TYPE/destination
+ *     which are NOT workpiece-spec vars → design-time, not auto-computed).
  *     77 rows imported (OD 5–78.5); deprecated row 4560-18-1011 excluded.
+ *     (Was wrongly A = OD with asymmetric tol — that selected a pusher ≈ work OD instead
+ *      of ≤ OD−1; e.g. CN 614033 OD=14.32 gave 4560-18-1010 (14) vs correct 4560-18-1009 (13).)
  *
  *   SET PIN (4560-21): centerless SETTING GAUGE pin — its diameter equals the
  *     work OUTER diameter (used to set the regulating-wheel gap), NOT the bore.
@@ -46,19 +56,21 @@ const LIMITS = [
 ];
 
 const FORMULAS = {
-  'RACE PUSHER': [{ key: 'A', expr: 'OD' }],                      // OD = od_aft (finished work OD)
+  'RACE PUSHER': [
+    { key: 'A', expr: 'floor05(OD - 1)' },  // pusher OD: largest 0.5-step ≤ OD−1 (DWG)
+    { key: 'B', expr: 'floor(A - 3)' },     // pusher ID: integer ≤ A−3 (display; follows A)
+  ],
   'SET PIN':     [{ key: 'A', expr: 'if(odBf > 0, odBf, OD)' }],  // setting-gauge pin dia = work OD (before grind, od_aft fallback)
 };
 
 // [output_key, inventory_col, tol_plus, tol_minus, is_match_dim, label]
 const RULES = {
-  // Asymmetric: pusher OD must be ≤ work OD (design rule A = OD − 0.5).
-  // tol_plus=0 prevents returning a pusher larger than the work; tol_minus=1.0 allows
-  // up to 1.0mm smaller. WHERE dim_a BETWEEN (OD−1.0) AND OD.
-  // Extra inventory cols (dim_b/c/d/e/f) are returned via SELECT * and need no rule entry —
-  // adding them with the same output_key='A' violates the UNIQUE(machine_id,tooling_name,output_key) constraint.
+  // A = floor05(OD−1) is already the exact target pusher OD; match dim_a closest
+  // (symmetric tol bridges gaps when a 0.5-step size is missing from inventory).
+  // B follows from A → display only (is_match_dim=false), so match by A alone.
   'RACE PUSHER': [
-    ['A', 'dim_a', 0, 1.0, true, 'Pusher OD (A)'],
+    ['A', 'dim_a', 1.0, 1.0, true,  'Pusher OD (A)'],
+    ['B', 'dim_b', null, null, false, 'Pusher ID (B)'],
   ],
   // SET PIN: tight symmetric tolerance around bore ID.
   'SET PIN': [
