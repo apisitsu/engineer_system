@@ -93,26 +93,23 @@ export const SpecProcessManager = ({ embedded = false }) => {
   useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
   useEffect(() => {
-    if (selectedPartType !== null) {
-      fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
-    }
-  }, [fetchSpecs, selectedPartType, pagination, searchText]);
+    fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
+  }, [fetchSpecs, selectedPartType, pagination.current, pagination.pageSize]);
 
   const handleTableChange = (pag) => {
     setPagination(pag);
   };
 
-  const handleSearch = () => {
-    if (selectedPartType === null) return;
+  const handleSearch = (value) => {
+    const q = typeof value === 'string' ? value : searchText;
     setPagination({ ...pagination, current: 1 });
-    fetchSpecs(1, pagination.pageSize, searchText, selectedPartType);
+    fetchSpecs(1, pagination.pageSize, q, selectedPartType);
   };
 
   const handlePartTypeSelect = (pt) => {
     if (selectedPartType === pt) {
       setSelectedPartType(null);
-      setData([]);
-      setTotal(0);
+      setPagination({ ...pagination, current: 1 });
     } else {
       setSelectedPartType(pt);
       setPagination({ current: 1, pageSize: 20 });
@@ -320,18 +317,16 @@ export const SpecProcessManager = ({ embedded = false }) => {
           </Space>
         )}
         <Space>
-          <Input
+          <Input.Search
             placeholder="Search CN, Type, Process..."
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            onPressEnter={handleSearch}
-            prefix={<SearchOutlined />}
+            onSearch={handleSearch}
+            enterButton
             style={{ width: 300 }}
             allowClear
           />
-          {selectedPartType !== null && (
-            <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
-          )}
+          <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
           <Popconfirm
             title="Sync New CNs จาก Factory"
             description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
@@ -392,29 +387,23 @@ export const SpecProcessManager = ({ embedded = false }) => {
           )}
         </Row>
       </Card>
-      {selectedPartType !== null ? (
-        <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
-          <Table
-            dataSource={data.map(r => ({ ...r, key: r.cn }))}
-            columns={columns}
-            loading={loading}
-            size="small"
-            bordered
-            scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
-            pagination={{
-              ...pagination,
-              total,
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} items`
-            }}
-            onChange={handleTableChange}
-          />
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#bfbfbf' }}>
-          Select a Part Type to view specs
-        </div>
-      )}
+      <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
+        <Table
+          dataSource={data.map(r => ({ ...r, key: r.cn }))}
+          columns={columns}
+          loading={loading}
+          size="small"
+          bordered
+          scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
+          pagination={{
+            ...pagination,
+            total,
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total} items`
+          }}
+          onChange={handleTableChange}
+        />
+      </Card>
 
           {/* ── Sync New CNs — Result Modal ──────────────────────────────── */}
           <Modal

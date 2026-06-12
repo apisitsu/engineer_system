@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { pathToFileURL } = require('url');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
@@ -15,10 +16,28 @@ const router = express.Router();
 
 const TEMPLATE_PATH = path.join(__dirname, '../templates/sds_template.xlsx');
 const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
-const SOFFICE       = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+// Windows dev ships a portable LibreOffice; Linux/Docker resolves `soffice` from
+// PATH. Always overridable via SOFFICE_PATH (required on Linux if not on PATH).
+const SOFFICE       = process.env.SOFFICE_PATH || (process.platform === 'win32'
+  ? path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe')
+  : 'soffice');
+
+// One-time startup sanity check: if an explicit path is configured but the binary
+// is missing, warn loudly now so a deploy misconfig is caught before the first PDF
+// request fails. (A bare `soffice` resolved from PATH can't be stat-checked here.)
+if ((SOFFICE.includes('/') || SOFFICE.includes('\\')) && !fs.existsSync(SOFFICE)) {
+  console.warn(`[SDS PDF] ⚠ LibreOffice not found at "${SOFFICE}". ` +
+    `Set SOFFICE_PATH to a valid soffice binary or SDS PDF generation will fail.`);
+}
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
+function safeRmDir(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (_) {} }
+
+// Cap a single LibreOffice conversion. Headless soffice can hang indefinitely (e.g.
+// profile-lock contention, a corrupt input) — without a timeout the HTTP request
+// never responds and a zombie soffice process is left behind.
+const SOFFICE_TIMEOUT_MS = parseInt(process.env.SOFFICE_TIMEOUT_MS, 10) || 90000;
 
 // ── Image extent map: param_key → { tl_cell, br_cell } ─────────────────────
 // These define where each image is anchored in the template.
@@ -582,11 +601,6 @@ router.get('/pdf', async (req, res) => {
 
     await fillTemplate(workbook, mappings, valueMap);
     await fillMachineConfigSection(workbook.worksheets[0], machine_type_name.trim(), searchData.cn, engPool);
-    console.log(`[PDF] Fill done: cn=${searchData.cn}, machine=${machine_type_name.trim()}`);
-    // Verify row 24/29 fill after apply
-    const _ws = workbook.worksheets[0];
-    console.log('[PDF] A24 fill after:', JSON.stringify(_ws.getCell('A24').fill));
-    console.log('[PDF] A29 fill after:', JSON.stringify(_ws.getCell('A29').fill));
 
     // Direct writes — fields that may not yet be in sds_excel_mapping
     const ws0 = workbook.worksheets[0];
@@ -595,12 +609,24 @@ router.get('/pdf', async (req, res) => {
 
     await workbook.xlsx.writeFile(tempXlsPath);
 
-    // 5. Convert to PDF via LibreOffice
-    execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempXlsPath, '--outdir', OUTPUT_DIR], (err) => {
+    // 5. Convert to PDF via LibreOffice.
+    // Per-invocation UserInstallation profile: concurrent `soffice --headless`
+    // calls otherwise contend on the single default profile lock (the 2nd call
+    // blocks or fails). A unique profile dir per call makes conversions safe to
+    // run in parallel. Bounded by SOFFICE_TIMEOUT_MS so a hang can't wedge the req.
+    const profileDir  = path.join(OUTPUT_DIR, `.lo_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    const userInstall = `-env:UserInstallation=${pathToFileURL(profileDir).href}`;
+    execFile(
+      SOFFICE,
+      [userInstall, '--headless', '--convert-to', 'pdf', tempXlsPath, '--outdir', OUTPUT_DIR],
+      { timeout: SOFFICE_TIMEOUT_MS, killSignal: 'SIGKILL' },
+      (err) => {
       safeUnlink(tempXlsPath);
+      safeRmDir(profileDir);
       if (err) {
-        console.error('[SDS PDF] LibreOffice error:', err.message);
-        return res.status(500).json({ error: 'PDF conversion failed', detail: err.message });
+        const reason = err.killed ? `timed out after ${SOFFICE_TIMEOUT_MS}ms` : err.message;
+        console.error('[SDS PDF] LibreOffice error:', reason);
+        return res.status(500).json({ error: 'PDF conversion failed', detail: reason });
       }
       const generatedPath = path.join(OUTPUT_DIR, path.basename(tempXlsPath).replace(/\.xlsx$/, '.pdf'));
       if (!fs.existsSync(generatedPath)) {

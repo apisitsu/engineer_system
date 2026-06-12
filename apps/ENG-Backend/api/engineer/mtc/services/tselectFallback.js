@@ -59,10 +59,18 @@ async function safeSearch(cn) {
   if (!key) return null;
   const hit = _cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.result;
-  let result = null;
-  try { result = await searchService.search(key); } catch (_) { result = null; }
-  _cache.set(key, { at: Date.now(), result });
-  return result;
+  try {
+    // A success OR a legitimate "spec not found" ({success:false}) is cacheable —
+    // both are stable answers for this CN.
+    const result = await searchService.search(key);
+    _cache.set(key, { at: Date.now(), result });
+    return result;
+  } catch (_) {
+    // Transient failure (e.g. a DB blip) — do NOT cache. Caching null here would
+    // serve an empty result for the whole TTL (10 min) and silently drop the CN
+    // from the coverage report / PDF tool list. Return null so the next call retries.
+    return null;
+  }
 }
 
 /**

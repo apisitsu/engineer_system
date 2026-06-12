@@ -2,7 +2,7 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
-const formulaService = require('./formulaService');
+const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
 
@@ -26,7 +26,6 @@ function buildSpecContext(spec) {
   const od = num(spec.od_aft);
   const id = num(spec.id_aft);
   const w = num(spec.w_aft);
-  // const sd = num(spec.sd ?? 0);
   const odBf = num(spec.od_bf);
   const idBf = num(spec.id_bf);
   const wBf = num(spec.w_bf);
@@ -74,6 +73,12 @@ function buildSpecContext(spec) {
 
     // ── Raw strings ───────────────────────────────────────────────────────────
     Type: type, YBall: yball, Process: process,
+
+    // CN class prefix = first 2 digits of the CN (e.g. '614033' → 61). Deterministic,
+    // never clobbered by a factory sync / Part-Management save. KL-20 derives its
+    // grip mode from this (N-chuck classes 23/25/26/41/42/61/63 → 4030-01; ID-chuck
+    // classes 62/64/69 → 4030-02) instead of the manually-set `type` column.
+    cnPrefix: parseInt(String(spec.cn ?? '').slice(0, 2), 10) || 0,
   };
 }
 
