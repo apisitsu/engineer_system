@@ -25,6 +25,7 @@ const C = {
   blue:     '#1890ff',
   cyan:     '#00d4ff',
   green:    '#52c41a',
+  greenSoft:'#95de64',   // THAI Complete (T-Select #1 boost) — softer than the KZW green
   red:      '#ff4d4f',
   yellow:   '#ffc53d',
   orange:   '#fa8c16',
@@ -105,26 +106,26 @@ const PartTypeCard = ({ pt }) => {
         </Tooltip>
       </div>
       <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
-      {/* Two-tone bar: solid = saved baseline, cyan = extra unlocked by T-Select #1 ( * ) */}
-      <Tooltip title={`Saved ${pctSaved}% + T-Select #1 ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
+      {/* Two-tone bar: solid = KZW baseline, soft green = THAI Complete (T-Select #1 boost, * ) */}
+      <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
         <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
-          <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: pctSaved >= 90 ? C.green : pctSaved >= 60 ? C.yellow : C.red, transition: 'width 0.8s ease' }} />
-          <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.cyan, opacity: 0.85, transition: 'width 0.8s ease' }} />
+          <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
+          <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
         </div>
       </Tooltip>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-        <Text style={{ color: pctSaved >= 90 ? C.green : pctSaved >= 60 ? C.yellow : C.red, fontSize: 11, fontWeight: 700 }}>
+        <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>
           {pctSaved}%
         </Text>
         {boost > 0 && (
-          <Text style={{ color: C.cyan, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.cyan, fontSize: 9 }}>(+T-Select *)</Text></Text>
+          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>
         )}
       </div>
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-        <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} complete</Tag>
+        <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
         {boost > 0 && (
-          <Tooltip title="Extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-            <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>+{boost.toLocaleString()} via T-Select *</Tag>
+          <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
           </Tooltip>
         )}
         <Tooltip title={gapTooltip(pt.gaps?.noToolMatch, 'Config tooling here → +complete')}>
@@ -145,8 +146,8 @@ const PartTypeDetailRow = ({ pt }) => {
   const completeSaved = pt.complete_saved ?? pt.complete;
   const boost = Math.max(0, (pt.complete || 0) - completeSaved);
   const segments = [
-    { key: 'complete_saved', count: completeSaved, color: C.green,  label: 'Complete (saved)' },
-    { key: 'complete_ts',    count: boost,         color: C.cyan,   label: 'Complete via T-Select #1 *' },
+    { key: 'complete_saved', count: completeSaved, color: C.green,     label: 'KZW Complete' },
+    { key: 'complete_ts',    count: boost,         color: C.greenSoft, label: 'THAI Complete *' },
     { key: 'pending',        count: pt.pending,    color: C.yellow, label: 'Pending' },
   ];
   return (
@@ -241,8 +242,9 @@ export default function SdsCoverageDashboard() {
   const ptBarData = useMemo(() => ({
     labels: byPartType.map(pt => pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)),
     datasets: [
-      { label: 'Complete',     data: byPartType.map(pt => pt.complete),     backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
-      { label: 'Pending', data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
+      { label: 'KZW Complete',   data: byPartType.map(pt => pt.complete_saved ?? pt.complete), backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
+      { label: 'THAI Complete *', data: byPartType.map(pt => Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0))), backgroundColor: 'rgba(149,222,100,0.75)', borderColor: C.greenSoft, borderWidth: 1, stack: 'pt' },
+      { label: 'Pending',                     data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
     ],
   }), [byPartType]);
   const ptBarOpts = {
@@ -322,7 +324,7 @@ export default function SdsCoverageDashboard() {
     datasets: [
       {
         type: 'bar',
-        label: 'Complete (saved)',
+        label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
         backgroundColor: 'rgba(82,196,26,0.75)',
         borderColor: C.green,
@@ -332,10 +334,10 @@ export default function SdsCoverageDashboard() {
       },
       {
         type: 'bar',
-        label: 'Complete via T-Select #1 *',
+        label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: 'rgba(0,212,255,0.65)',
-        borderColor: C.cyan,
+        backgroundColor: 'rgba(149,222,100,0.70)',
+        borderColor: C.greenSoft,
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -352,7 +354,7 @@ export default function SdsCoverageDashboard() {
       },
       {
         type: 'line',
-        label: 'Complete % (with T-Select)',
+        label: 'Complete % (KZW+THAI)',
         data: monthlyStatus.map(r => r.complete_pct),
         borderColor: C.cyan,
         backgroundColor: 'rgba(0,212,255,0.15)',
@@ -364,7 +366,7 @@ export default function SdsCoverageDashboard() {
       },
       {
         type: 'line',
-        label: 'Complete % (saved)',
+        label: 'KZW Complete %',
         data: monthlyStatus.map(r => r.complete_saved_pct ?? r.complete_pct),
         borderColor: C.green,
         borderWidth: 1.5,
@@ -588,23 +590,23 @@ export default function SdsCoverageDashboard() {
                       const pctSaved = data?.kpi?.completeSavedPct ?? pct;
                       const boost = Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0));
                       return (<>
-                        <Tooltip title={`Saved ${pctSaved}% + T-Select #1 ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
+                        <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
                           <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
-                            <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: pctSaved >= 90 ? C.green : pctSaved >= 60 ? C.yellow : C.red, transition: 'width 0.8s ease' }} />
-                            <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.cyan, opacity: 0.85, transition: 'width 0.8s ease' }} />
+                            <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
+                            <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
                           </div>
                         </Tooltip>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                          <Text style={{ color: pctSaved >= 90 ? C.green : pctSaved >= 60 ? C.yellow : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}%</Text>
-                          {boost > 0 && <Text style={{ color: C.cyan, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.cyan, fontSize: 9 }}>(+T-Select *)</Text></Text>}
+                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}%</Text>
+                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>}
                         </div>
                       </>);
                     })()}
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} complete</Tag>
+                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
                       {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
-                        <Tooltip title="Extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                          <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} via T-Select *</Tag>
+                        <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
                       <Tooltip title={gapTooltip(data?.kpi?.gaps?.noToolMatch, 'Config tooling here → +complete')}>
@@ -646,11 +648,11 @@ export default function SdsCoverageDashboard() {
                   <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
                     <Space size={4}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: C.green }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>Complete (saved)</Text>
+                      <Text style={{ color: C.textSec, fontSize: 10 }}>KZW Complete</Text>
                     </Space>
                     <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.cyan }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>via T-Select #1 *</Text>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.greenSoft }} />
+                      <Text style={{ color: C.textSec, fontSize: 10 }}>THAI Complete *</Text>
                     </Space>
                     <Space size={4}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: C.yellow }} />
