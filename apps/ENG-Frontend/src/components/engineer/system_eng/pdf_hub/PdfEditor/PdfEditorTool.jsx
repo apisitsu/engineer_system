@@ -418,6 +418,10 @@ const PdfEditorTool = () => {
                 results.push({ url, filename, pageNum });
             }
 
+            // Revoke previous export URLs
+            if (exportedImages?.length > 0) {
+                exportedImages.forEach(img => URL.revokeObjectURL(img.url));
+            }
             setExportedImages(results);
 
             // Auto-download if single page
@@ -820,6 +824,7 @@ const PdfEditorTool = () => {
                 pdfDoc={pdfDoc}
                 pdfFile={pdfFile}
                 totalPages={totalPages}
+                currentPage={currentPage}
                 fabricCanvasRefs={fabricCanvasRefs}
                 pushHistory={pushHistory}
                 logPdfUsage={logPdfUsage}
