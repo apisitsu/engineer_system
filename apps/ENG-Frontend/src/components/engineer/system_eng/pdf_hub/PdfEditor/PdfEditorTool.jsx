@@ -23,6 +23,7 @@ import PropertiesPanel from './panels/PropertiesPanel';
 import SignaturePad from './panels/SignaturePad';
 import ShortcutsHandler from './ShortcutsHandler';
 import MergePreview from './MergePreview';
+import PhysicalRuler from './canvas/PhysicalRuler';
 import PdfUsageDashboard from './wrappers/PdfUsageDashboard.jsx';
 import WatermarkManagerModal from './wrappers/WatermarkManagerModal.jsx';
 import { MODE_OPTIONS, ZOOM_OPTIONS } from './constants.jsx';
@@ -769,6 +770,8 @@ const PdfEditorTool = () => {
                                 <p style={{ fontSize: 16 }}>However, you can still open the <b>Watermark</b> tool, use "Apply to All", and click <b>Save</b> to export a clean copy.</p>
                             </div>
                         ) : null}
+
+                        <PhysicalRuler pdfDoc={pdfDoc} zoom={zoom} />
                     </div>
 
                     {/* Status Bar */}

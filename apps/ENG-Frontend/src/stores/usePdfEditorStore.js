@@ -24,14 +24,26 @@ export const usePdfEditorStore = create((set, get) => ({
     // Export:   (no sub-tools)
     activeTool: 'select',
 
-    // ── Drawing / Styling Properties ──
-    strokeColor: '#e74c3c',
-    fillColor: 'transparent',
-    strokeWidth: 2,
-    fontSize: 12,
-    fontFamily: 'Helvetica',
-    opacity: 1.0,
-    highlightColor: '#ffeb3b',
+    // ── Tool-Specific Properties ──
+    toolSettings: {
+        rect: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
+        circle: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
+        arrow: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
+        line: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
+        freehand: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
+        highlight: { highlightColor: '#ffeb3b', opacity: 0.5 },
+        underline: { strokeColor: '#e74c3c', strokeWidth: 2 },
+        strikethrough: { strokeColor: '#e74c3c', strokeWidth: 2 },
+        addText: { strokeColor: '#000000', fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0 },
+        maskReplace: { strokeColor: '#cccccc', fillColor: '#ffffff', strokeWidth: 1, opacity: 1.0 },
+        stampCheckmark: { strokeColor: '#27ae60', strokeWidth: 3, fontSize: 16 },
+        stampCross: { strokeColor: '#e74c3c', strokeWidth: 3, fontSize: 16 },
+        stampCircle: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 16 },
+        stampOk: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 16 },
+        stampUserDate: { strokeColor: '#e74c3c', fontSize: 16 },
+        // Fallback for missing tools
+        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 12, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
+    },
 
     // ── Selected Object ──
     selectedObjectId: null,
@@ -43,6 +55,10 @@ export const usePdfEditorStore = create((set, get) => ({
     // ── Ruler / Measurement ──
     rulerScale: 1.0,       // px per mm (calibratable)
     rulerUnit: 'mm',       // mm | cm | in
+    paperSize: 'A4',       // Physical paper size for calibration
+    physicalRulerVisible: false,
+    physicalRulerPosition: { x: 100, y: 100 },
+    physicalRulerAngle: 0,
 
     // ── Real-time Object Counts ──
     canvasObjectCounts: {},
@@ -84,16 +100,33 @@ export const usePdfEditorStore = create((set, get) => ({
         }
     })),
 
-    // Drawing property setters
-    setStrokeColor: (c) => set({ strokeColor: c }),
-    setFillColor: (c) => set({ fillColor: c }),
-    setStrokeWidth: (w) => set({ strokeWidth: w }),
-    setFontSize: (s) => set({ fontSize: s }),
-    setFontFamily: (f) => set({ fontFamily: f }),
-    setOpacity: (o) => set({ opacity: o }),
-    setHighlightColor: (c) => set({ highlightColor: c }),
+    // Tool property setter
+    setToolSetting: (tool, key, value) => set(state => {
+        const settings = state.toolSettings[tool] || state.toolSettings.default;
+        return {
+            toolSettings: {
+                ...state.toolSettings,
+                [tool]: { ...settings, [key]: value }
+            }
+        };
+    }),
+
+    // Drawing property setters (Backward compatible for selected objects)
+    setStrokeColor: (c) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), strokeColor: c } } })),
+    setFillColor: (c) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fillColor: c } } })),
+    setStrokeWidth: (w) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), strokeWidth: w } } })),
+    setFontSize: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontSize: s } } })),
+    setFontFamily: (f) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontFamily: f } } })),
+    setOpacity: (o) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), opacity: o } } })),
+    setHighlightColor: (c) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), highlightColor: c } } })),
+    
+    // Ruler setters
     setRulerScale: (s) => set({ rulerScale: s }),
     setRulerUnit: (u) => set({ rulerUnit: u }),
+    setPaperSize: (size) => set({ paperSize: size }),
+    setPhysicalRulerVisible: (v) => set({ physicalRulerVisible: v }),
+    setPhysicalRulerPosition: (pos) => set({ physicalRulerPosition: pos }),
+    setPhysicalRulerAngle: (angle) => set({ physicalRulerAngle: angle }),
 
     // Overlay setters
     setOverlayEnabled: (v) => set({ overlayEnabled: v }),

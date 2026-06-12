@@ -70,6 +70,7 @@ const EditorCanvas = ({
 
         const canvas = new fabric.Canvas(fabricElRef.current, {
             selection: true,
+            selectionKey: ['shiftKey', 'ctrlKey'],
             preserveObjectStacking: true,
             enableRetinaScaling: true, // DPR-aware: crisp annotations on Retina displays
             stopContextMenu: true,
@@ -415,153 +416,161 @@ const EditorCanvas = ({
     useEffect(() => {
         const fc = fabricCanvasRefs.current[pageNum];
         if (!fc) return;
-        const activeObj = fc.getActiveObject();
-        if (!activeObj) return;
+        const activeSelection = fc.getActiveObject();
+        if (!activeSelection) return;
 
         let changed = false;
+        const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
 
-        // Skip highlights as they are not standard Fabric objects
-        if (activeObj.customData?.type !== 'highlight') {
-            const isText = activeObj.type === 'i-text' || activeObj.type === 'textbox' || activeObj.type === 'text';
-            const isSticky = activeObj.customData?.type === 'sticky';
-            const isStamp = activeObj.customData?.type && activeObj.customData.type.startsWith('stamp');
+        const processObject = (activeObj) => {
+            // Skip highlights as they are not standard Fabric objects
+            if (activeObj.customData?.type !== 'highlight') {
+                const isText = activeObj.type === 'i-text' || activeObj.type === 'textbox' || activeObj.type === 'text';
+                const isSticky = activeObj.customData?.type === 'sticky';
+                const isStamp = activeObj.customData?.type && activeObj.customData.type.startsWith('stamp');
 
-            // --- Color Update ---
-            if (!isSticky) {
-                if (isText) {
-                    if (activeObj.fill !== store.strokeColor) {
-                        activeObj.set('fill', store.strokeColor);
-                        changed = true;
-                    }
-                } else if (!isStamp) {
-                    // Regular shapes
-                    if (activeObj.type === 'group') {
-                        activeObj.getObjects().forEach(child => {
-                            if (child.stroke) child.set('stroke', store.strokeColor);
-                            if (child.type === 'triangle' && child.fill) child.set('fill', store.strokeColor);
-                            if (child.type === 'text' || child.type === 'i-text') {
-                                child.set('fill', store.strokeColor);
+                // --- Color Update ---
+                if (!isSticky) {
+                    if (isText) {
+                        if (activeObj.fill !== currentSettings.strokeColor) {
+                            activeObj.set('fill', currentSettings.strokeColor);
+                            changed = true;
+                        }
+                    } else if (!isStamp) {
+                        // Regular shapes
+                        if (activeObj.type === 'group') {
+                            activeObj.getObjects().forEach(child => {
+                                if (child.stroke) child.set('stroke', currentSettings.strokeColor);
+                                if (child.type === 'triangle' && child.fill) child.set('fill', currentSettings.strokeColor);
+                                if (child.type === 'text' || child.type === 'i-text') {
+                                    child.set('fill', currentSettings.strokeColor);
+                                }
+                            });
+                            changed = true;
+                        } else {
+                            if (activeObj.stroke !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
+                                activeObj.set('stroke', currentSettings.strokeColor);
+                                changed = true;
                             }
-                        });
-                        changed = true;
-                    } else {
-                        if (activeObj.stroke !== undefined && activeObj.stroke !== store.strokeColor) {
-                            activeObj.set('stroke', store.strokeColor);
-                            changed = true;
-                        }
-                        if (activeObj.fill !== undefined && activeObj.fill !== store.fillColor) {
-                            activeObj.set('fill', store.fillColor);
-                            changed = true;
-                        }
-                    }
-                } else {
-                    // Stamps: change all child objects if it's a group, or just the object
-                    if (activeObj.type === 'group') {
-                        activeObj.getObjects().forEach(child => {
-                            if (child.stroke) child.set('stroke', store.strokeColor);
-                            if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') {
-                                child.set('fill', store.strokeColor);
+                            if (activeObj.fill !== undefined && activeObj.fill !== currentSettings.fillColor) {
+                                activeObj.set('fill', currentSettings.fillColor);
+                                changed = true;
                             }
-                        });
-                        changed = true;
+                        }
                     } else {
-                        if (activeObj.fill && activeObj.fill !== 'transparent') {
-                            activeObj.set('fill', store.strokeColor);
+                        // Stamps
+                        if (activeObj.type === 'group') {
+                            activeObj.getObjects().forEach(child => {
+                                if (child.stroke) child.set('stroke', currentSettings.strokeColor);
+                                if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') {
+                                    child.set('fill', currentSettings.strokeColor);
+                                }
+                            });
+                            changed = true;
+                        } else {
+                            if (activeObj.fill && activeObj.fill !== 'transparent') {
+                                activeObj.set('fill', currentSettings.strokeColor);
+                            }
+                            if (activeObj.stroke) {
+                                activeObj.set('stroke', currentSettings.strokeColor);
+                            }
+                            changed = true;
                         }
-                        if (activeObj.stroke) {
-                            activeObj.set('stroke', store.strokeColor);
+                    }
+                }
+
+                // --- Stroke Width ---
+                if (activeObj.type === 'group' && !isStamp) {
+                    activeObj.getObjects().forEach(child => {
+                        if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) {
+                            if (child.strokeWidth !== currentSettings.strokeWidth) {
+                                child.set('strokeWidth', currentSettings.strokeWidth);
+                                changed = true;
+                            }
                         }
+                        if (child.type === 'triangle') {
+                            if (child.width !== currentSettings.fontSize || child.height !== currentSettings.fontSize) {
+                                child.set({ width: currentSettings.fontSize, height: currentSettings.fontSize });
+                                changed = true;
+                            }
+                        }
+                    });
+                    if (changed) {
+                        activeObj.set({ dirty: true });
+                        activeObj.setCoords();
+                    }
+                } else if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== currentSettings.strokeWidth) {
+                    if (!isText && !isSticky) {
+                        activeObj.set('strokeWidth', currentSettings.strokeWidth);
+                        changed = true;
+                    }
+                }
+
+                // --- Opacity ---
+                if (activeObj.opacity !== undefined && activeObj.opacity !== currentSettings.opacity) {
+                    activeObj.set('opacity', currentSettings.opacity);
+                    changed = true;
+                }
+
+                // --- Font Size (and Stamp Size) ---
+                if (isText || isSticky) {
+                    if (activeObj.fontSize !== currentSettings.fontSize) {
+                        activeObj.set('fontSize', currentSettings.fontSize);
+                        changed = true;
+                    }
+                    if (activeObj.fontFamily !== currentSettings.fontFamily) {
+                        activeObj.set('fontFamily', currentSettings.fontFamily);
+                        changed = true;
+                    }
+                } else if (activeObj.type === 'group' && !isStamp) {
+                    let textChanged = false;
+                    activeObj.getObjects().forEach(child => {
+                        if (child.type === 'i-text' || child.type === 'text') {
+                            if (child.fontSize !== currentSettings.fontSize) {
+                                child.set('fontSize', currentSettings.fontSize);
+                                textChanged = true;
+                            }
+                        }
+                    });
+                    if (textChanged) {
+                        activeObj.set({ dirty: true });
+                        activeObj.setCoords();
+                        changed = true;
+                    }
+                } else if (isStamp) {
+                    // Resize stamps dynamically
+                    if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
+                        activeObj.set('fontSize', currentSettings.fontSize * 2.5);
+                        changed = true;
+                    } else if (activeObj.customData.type === 'stampCircle') {
+                        activeObj.set('radius', currentSettings.fontSize);
+                        changed = true;
+                    } else if (activeObj.customData.type === 'stampOk') {
+                        activeObj.getObjects()[0].set('radius', currentSettings.fontSize * 1.2);
+                        activeObj.getObjects()[1].set('fontSize', currentSettings.fontSize * 1.1);
+                        activeObj.set({ dirty: true });
+                        activeObj.setCoords();
+                        changed = true;
+                    } else if (activeObj.customData.type === 'stampUserDate') {
+                        const scale = (currentSettings.fontSize / 16) * 0.75;
+                        activeObj.set({ scaleX: scale, scaleY: scale });
                         changed = true;
                     }
                 }
             }
+        };
 
-            // --- Stroke Width ---
-            if (activeObj.type === 'group' && !isStamp) {
-                activeObj.getObjects().forEach(child => {
-                    if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) {
-                        if (child.strokeWidth !== store.strokeWidth) {
-                            child.set('strokeWidth', store.strokeWidth);
-                            changed = true;
-                        }
-                    }
-                    if (child.type === 'triangle') {
-                        if (child.width !== store.fontSize || child.height !== store.fontSize) {
-                            child.set({ width: store.fontSize, height: store.fontSize });
-                            changed = true;
-                        }
-                    }
-                });
-                if (changed) {
-                    activeObj.set({ dirty: true });
-                    activeObj.setCoords();
-                }
-            } else if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== store.strokeWidth) {
-                if (!isText && !isSticky) {
-                    activeObj.set('strokeWidth', store.strokeWidth);
-                    changed = true;
-                }
-            }
-
-            // --- Opacity ---
-            if (activeObj.opacity !== undefined && activeObj.opacity !== store.opacity) {
-                activeObj.set('opacity', store.opacity);
-                changed = true;
-            }
-
-            // --- Font Size (and Stamp Size) ---
-            if (isText || isSticky) {
-                if (activeObj.fontSize !== store.fontSize) {
-                    activeObj.set('fontSize', store.fontSize);
-                    changed = true;
-                }
-                if (activeObj.fontFamily !== store.fontFamily) {
-                    activeObj.set('fontFamily', store.fontFamily);
-                    changed = true;
-                }
-            } else if (activeObj.type === 'group' && !isStamp) {
-                let textChanged = false;
-                activeObj.getObjects().forEach(child => {
-                    if (child.type === 'i-text' || child.type === 'text') {
-                        if (child.fontSize !== store.fontSize) {
-                            child.set('fontSize', store.fontSize);
-                            textChanged = true;
-                        }
-                    }
-                });
-                if (textChanged) {
-                    activeObj.set({ dirty: true });
-                    activeObj.setCoords();
-                    changed = true;
-                }
-            } else if (isStamp) {
-                // Resize stamps dynamically
-                if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
-                    activeObj.set('fontSize', store.fontSize * 2.5);
-                    changed = true;
-                } else if (activeObj.customData.type === 'stampCircle') {
-                    activeObj.set('radius', store.fontSize);
-                    changed = true;
-                } else if (activeObj.customData.type === 'stampOk') {
-                    activeObj.getObjects()[0].set('radius', store.fontSize * 1.2);
-                    activeObj.getObjects()[1].set('fontSize', store.fontSize * 1.1);
-                    activeObj.set({ dirty: true });
-                    activeObj.setCoords(); // Recalculate group bounds
-                    changed = true;
-                } else if (activeObj.customData.type === 'stampUserDate') {
-                    const scale = (store.fontSize / 16) * 0.75;
-                    activeObj.set({ scaleX: scale, scaleY: scale });
-                    changed = true;
-                }
-            }
+        if (activeSelection.type === 'activeSelection') {
+            activeSelection.getObjects().forEach(obj => processObject(obj));
+        } else {
+            processObject(activeSelection);
         }
 
         if (changed) {
             fc.renderAll();
         }
     }, [
-        store.strokeColor, store.fillColor, store.strokeWidth, 
-        store.opacity, store.fontSize, store.fontFamily, pageNum
+        store.toolSettings, store.activeTool, pageNum
     ]);
 
     // ══════════════════════════════════════════════════════════════════
@@ -665,9 +674,9 @@ const EditorCanvas = ({
             <ToolPreview
                 ref={previewRef}
                 tool={store.activeTool}
-                color={store.strokeColor || '#333'}
-                size={store.fontSize || 16}
-                strokeWidth={store.strokeWidth}
+                color={store.toolSettings?.[store.activeTool]?.strokeColor || '#333'}
+                size={store.toolSettings?.[store.activeTool]?.fontSize || 16}
+                strokeWidth={store.toolSettings?.[store.activeTool]?.strokeWidth}
                 stampData={stampData}
             />
 

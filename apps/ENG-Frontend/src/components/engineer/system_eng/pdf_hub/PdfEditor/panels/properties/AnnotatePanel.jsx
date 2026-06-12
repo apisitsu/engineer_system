@@ -7,6 +7,7 @@ import { SectionTitle, COLOR_PRESETS } from './SharedProperties';
 export default function AnnotatePanel() {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
+    const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
 
     return (
         <div className="pdf-ws-right-panel" style={{
@@ -25,12 +26,12 @@ export default function AnnotatePanel() {
                                 key={c}
                                 onClick={() => store.setHighlightColor(c)}
                                 style={{
-                                    width: 28, height: 28, borderRadius: 8,
-                                    background: c, cursor: 'pointer',
-                                    border: store.highlightColor === c
-                                        ? `3px solid ${theme.colors.primary}`
-                                        : '2px solid #e0e0e0',
-                                    transition: 'all 0.15s',
+                                    width: 24, height: 24, borderRadius: '50%', cursor: 'pointer',
+                                    background: c,
+                                    border: currentSettings.highlightColor === c
+                                        ? `2px solid ${theme.colors.textPrimary}`
+                                        : '2px solid transparent',
+                                    boxShadow: currentSettings.highlightColor === c ? '0 0 0 2px #fff inset' : 'none'
                                 }}
                             />
                         ))}
@@ -40,7 +41,7 @@ export default function AnnotatePanel() {
                 <div className="pdf-ws-prop-section">
                     <SectionTitle>Stroke Color</SectionTitle>
                     <ColorPicker
-                        value={store.strokeColor}
+                        value={currentSettings.strokeColor}
                         onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
                         size="small"
                         presets={COLOR_PRESETS}
@@ -51,7 +52,7 @@ export default function AnnotatePanel() {
                     <SectionTitle>Opacity</SectionTitle>
                     <Slider
                         min={0.1} max={1} step={0.05}
-                        value={store.opacity}
+                        value={currentSettings.opacity}
                         onChange={store.setOpacity}
                     />
                 </div>
