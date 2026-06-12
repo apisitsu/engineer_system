@@ -22,6 +22,8 @@ export default function useFabricTools({
         let maxDist = 0;
         let tempObj = null;
 
+        const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
+
         const handleOneClickTool = (pointer, tool) => {
             pushHistory(pageNum);
             switch (tool) {
@@ -43,9 +45,9 @@ export default function useFabricTools({
                 }
 
                 case 'stampCheckmark': {
-                    const color = store.strokeColor || '#27ae60';
-                    const scale = store.fontSize / 16;
-                    const w = (store.strokeWidth || 3) / scale;
+                    const color = currentSettings.strokeColor || '#27ae60';
+                    const scale = (currentSettings.fontSize || 16) / 16;
+                    const w = (currentSettings.strokeWidth || 3) / scale;
                     const l1 = new fabric.Line([-10, 0, -3, 10], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const l2 = new fabric.Line([-3, 10, 15, -15], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const checkGroup = new fabric.Group([l1, l2], {
@@ -63,9 +65,9 @@ export default function useFabricTools({
                 }
 
                 case 'stampCross': {
-                    const color = store.strokeColor || '#e74c3c';
-                    const scale = store.fontSize / 16;
-                    const w = (store.strokeWidth || 3) / scale;
+                    const color = currentSettings.strokeColor || '#e74c3c';
+                    const scale = (currentSettings.fontSize || 16) / 16;
+                    const w = (currentSettings.strokeWidth || 3) / scale;
                     const l1 = new fabric.Line([-12, -12, 12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const l2 = new fabric.Line([12, -12, -12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const crossGroup = new fabric.Group([l1, l2], {
@@ -86,10 +88,10 @@ export default function useFabricTools({
                     const circleShape = new fabric.Circle({
                         left: pointer.x,
                         top: pointer.y,
-                        radius: store.fontSize,
+                        radius: currentSettings.fontSize || 16,
                         fill: 'transparent',
-                        stroke: store.strokeColor || '#3498db',
-                        strokeWidth: store.strokeWidth || 3,
+                        stroke: currentSettings.strokeColor || '#3498db',
+                        strokeWidth: currentSettings.strokeWidth || 3,
                         originX: 'center',
                         originY: 'center',
                         customData: { type: 'stampCircle' },
@@ -101,18 +103,18 @@ export default function useFabricTools({
 
                 case 'stampOk': {
                     const okCircle = new fabric.Circle({
-                        radius: store.fontSize,
+                        radius: currentSettings.fontSize || 16,
                         fill: 'transparent',
-                        stroke: store.strokeColor || '#3498db',
-                        strokeWidth: store.strokeWidth || 3,
+                        stroke: currentSettings.strokeColor || '#3498db',
+                        strokeWidth: currentSettings.strokeWidth || 3,
                         originX: 'center',
                         originY: 'center',
                     });
                     const okText = new fabric.FabricText('OK', {
-                        fontSize: store.fontSize * 0.9,
+                        fontSize: (currentSettings.fontSize || 16) * 0.9,
                         fontWeight: 'bold',
                         fontFamily: 'Arial',
-                        fill: store.strokeColor || '#3498db',
+                        fill: currentSettings.strokeColor || '#3498db',
                         originX: 'center',
                         originY: 'center',
                     });
@@ -154,7 +156,7 @@ export default function useFabricTools({
                     const line1 = new fabric.Line([-46, -14, 46, -14], { stroke: color, strokeWidth: 2, objectCaching: false });
                     const line2 = new fabric.Line([-46, 14, 46, 14], { stroke: color, strokeWidth: 2, objectCaching: false });
 
-                    const baseScale = store.fontSize / 16;
+                    const baseScale = (currentSettings.fontSize || 16) / 16;
                     const fontProps = {
                         fontWeight: 'bold', fill: color, fontFamily: 'Arial',
                         originX: 'center', originY: 'center',
@@ -257,10 +259,10 @@ export default function useFabricTools({
                         ...commonProps,
                         width: 0,
                         height: 0,
-                        fill: tool === 'maskReplace' ? '#ffffff' : store.fillColor,
-                        stroke: tool === 'maskReplace' ? '#cccccc' : store.strokeColor,
-                        strokeWidth: tool === 'maskReplace' ? 1 : store.strokeWidth,
-                        opacity: store.opacity,
+                        fill: tool === 'maskReplace' ? '#ffffff' : currentSettings.fillColor,
+                        stroke: tool === 'maskReplace' ? '#cccccc' : currentSettings.strokeColor,
+                        strokeWidth: tool === 'maskReplace' ? 1 : currentSettings.strokeWidth,
+                        opacity: currentSettings.opacity,
                         rx: 2,
                         ry: 2,
                     });
@@ -271,9 +273,9 @@ export default function useFabricTools({
                         left: startX,
                         top: startY,
                         width: 150,
-                        fontSize: store.fontSize || 16,
-                        fontFamily: store.fontFamily || 'Helvetica',
-                        fill: store.strokeColor || '#000000',
+                        fontSize: currentSettings.fontSize || 16,
+                        fontFamily: currentSettings.fontFamily || 'Helvetica',
+                        fill: currentSettings.strokeColor || '#000000',
                         customData: { type: 'text', createdAt: Date.now() },
                     });
                     fc.add(itext);
@@ -304,10 +306,10 @@ export default function useFabricTools({
                         ...commonProps,
                         rx: 0,
                         ry: 0,
-                        fill: store.fillColor,
-                        stroke: store.strokeColor,
-                        strokeWidth: store.strokeWidth,
-                        opacity: store.opacity,
+                        fill: currentSettings.fillColor,
+                        stroke: currentSettings.strokeColor,
+                        strokeWidth: currentSettings.strokeWidth,
+                        opacity: currentSettings.opacity,
                     });
                     break;
 
@@ -315,9 +317,9 @@ export default function useFabricTools({
                 case 'arrow':
                 case 'ruler':
                     tempObj = new fabric.Line([startX, startY, startX, startY], {
-                        stroke: tool === 'ruler' ? '#2196f3' : store.strokeColor,
-                        strokeWidth: tool === 'ruler' ? 2 : store.strokeWidth,
-                        opacity: store.opacity,
+                        stroke: tool === 'ruler' ? '#2196f3' : currentSettings.strokeColor,
+                        strokeWidth: tool === 'ruler' ? 2 : currentSettings.strokeWidth,
+                        opacity: currentSettings.opacity,
                         evented: false,
                         selectable: false,
                         customData: { type: tool },
@@ -455,7 +457,7 @@ export default function useFabricTools({
                 const x1 = tempObj.x1, y1 = tempObj.y1;
                 const x2 = tempObj.x2, y2 = tempObj.y2;
                 const angle = Math.atan2(y2 - y1, x2 - x1);
-                const headLen = store.fontSize || 16;
+                const headLen = currentSettings.fontSize || 16;
 
                 const arrowHead = new fabric.Triangle({
                     left: x2,
@@ -465,7 +467,7 @@ export default function useFabricTools({
                     width: headLen,
                     height: headLen,
                     angle: (angle * 180 / Math.PI) + 90,
-                    fill: store.strokeColor,
+                    fill: currentSettings.strokeColor,
                     selectable: false,
                     evented: false,
                     customData: { type: 'arrowhead' },
@@ -520,8 +522,8 @@ export default function useFabricTools({
 
             if (finalObj && tool === 'maskReplace' && finalObj === tempObj) {
                 finalObj.set({
-                    stroke: store.strokeColor,
-                    strokeWidth: store.strokeWidth,
+                    stroke: currentSettings.strokeColor,
+                    strokeWidth: currentSettings.strokeWidth,
                     fill: '#ffffff',
                 });
             }
@@ -552,5 +554,5 @@ export default function useFabricTools({
             fc.off('mouse:up', onMouseUp);
             fc.off('path:created', onPathCreated);
         };
-    }, [store.activeTool, store.strokeColor, store.fillColor, store.strokeWidth, store.fontSize, store.opacity, pageNum, store.rulerScale, store.rulerUnit, store.fontFamily, pushHistory, stampData, userName, fabricCanvasRefs]);
+    }, [store.activeTool, store.toolSettings, pageNum, store.rulerScale, store.rulerUnit, pushHistory, stampData, userName, fabricCanvasRefs]);
 }

@@ -7,6 +7,7 @@ import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
 export default function EditPanel() {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
+    const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
 
     return (
         <div className="pdf-ws-right-panel" style={{
@@ -35,14 +36,14 @@ export default function EditPanel() {
                     </PropRow>
                     <PropRow label="Size">
                         <InputNumber
-                            min={6} max={72} value={store.fontSize}
+                            min={6} max={72} value={currentSettings.fontSize}
                             onChange={store.setFontSize}
                             size="small" style={{ width: 60 }}
                         />
                     </PropRow>
                     <PropRow label="Color">
                         <ColorPicker
-                            value={store.strokeColor}
+                            value={currentSettings.strokeColor}
                             onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
                             size="small"
                             presets={COLOR_PRESETS}

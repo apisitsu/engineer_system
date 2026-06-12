@@ -167,10 +167,10 @@ const PdfToImageWrapper = () => {
                                                         <Col key={index} xs={12} sm={8}>
                                                             <Card hoverable
                                                                 cover={<Image alt={`Page ${index + 1}`} src={imageUrl} style={{ height: 160, objectFit: 'contain', padding: 12, background: 'white' }} />}
-                                                                bodyStyle={{ padding: 8 }} style={{ borderRadius: 12, overflow: 'hidden' }}
+                                                                styles={{ body: { padding: 8 } }} style={{ borderRadius: 12, overflow: 'hidden' }}
                                                                 actions={[
                                                                     <Button type="link" icon={<DownloadOutlined />}
-                                                                        onClick={() => handleDownload(imageUrl, `page_${index + 1}.jpg`)} style={{ padding: 0 }}>
+                                                                        onClick={() => handleDownload(imageUrl, `page_${index + 1}.${form.getFieldValue('format') || 'jpg'}`)} style={{ padding: 0 }}>
                                                                         Download
                                                                     </Button>
                                                                 ]}

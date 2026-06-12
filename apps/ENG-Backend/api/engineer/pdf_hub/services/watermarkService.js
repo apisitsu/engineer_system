@@ -24,12 +24,12 @@ async function getWatermarks(empno) {
 /**
  * Create a new watermark template.
  */
-async function createWatermark({ name, text, color, opacity, font_size, angle, owner_empno }) {
+async function createWatermark({ name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style }) {
     const result = await engPool.query(
-        `INSERT INTO tt_pdf_watermarks (name, text, color, opacity, font_size, angle, owner_empno)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO tt_pdf_watermarks (name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
-        [name, text, color, opacity, font_size, angle, owner_empno]
+        [name, text, color, opacity, font_size, angle, owner_empno, repeat_mode || false, repeat_gap || 100, font_family || 'Helvetica', font_weight || 'normal', font_style || 'normal', position_preset || 'center', repeat_style || 'full']
     );
     return result.rows[0];
 }
@@ -37,22 +37,28 @@ async function createWatermark({ name, text, color, opacity, font_size, angle, o
 /**
  * Update an existing watermark template.
  */
-async function updateWatermark(id, { name, text, color, opacity, font_size, angle }) {
+async function updateWatermark(id, { name, text, color, opacity, font_size, angle, owner_empno, repeat_mode, repeat_gap, font_family, font_weight, font_style, position_preset, repeat_style }) {
     const result = await engPool.query(
         `UPDATE tt_pdf_watermarks 
-         SET name = $1, text = $2, color = $3, opacity = $4, font_size = $5, angle = $6
-         WHERE id = $7
+         SET name = $1, text = $2, color = $3, opacity = $4, font_size = $5, angle = $6,
+             repeat_mode = $7, repeat_gap = $8, font_family = $9, font_weight = $10, font_style = $11, position_preset = $12, repeat_style = $13
+         WHERE id = $14 AND owner_empno = $15
          RETURNING *`,
-        [name, text, color, opacity, font_size, angle, id]
+        [name, text, color, opacity, font_size, angle, repeat_mode || false, repeat_gap || 100, font_family || 'Helvetica', font_weight || 'normal', font_style || 'normal', position_preset || 'center', repeat_style || 'full', id, owner_empno]
     );
+    if (result.rowCount === 0) throw new Error('Watermark not found or not owned by user');
     return result.rows[0];
 }
 
 /**
  * Delete a watermark template by ID.
  */
-async function deleteWatermark(id) {
-    await engPool.query(`DELETE FROM tt_pdf_watermarks WHERE id = $1`, [id]);
+async function deleteWatermark(id, empno) {
+    const result = await engPool.query(
+        `DELETE FROM tt_pdf_watermarks WHERE id = $1 AND owner_empno = $2`, 
+        [id, empno]
+    );
+    if (result.rowCount === 0) throw new Error('Watermark not found or not owned by user');
 }
 
 /**

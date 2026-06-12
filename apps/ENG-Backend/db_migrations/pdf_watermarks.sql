@@ -25,3 +25,12 @@ CREATE TABLE IF NOT EXISTS tt_pdf_watermark_shares (
 
 -- Index for fetching watermarks shared with a user
 CREATE INDEX IF NOT EXISTS idx_pdf_watermark_shares_empno ON tt_pdf_watermark_shares(shared_with_empno);
+
+-- 3. Migration V2 — Additional watermark template settings
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS repeat_mode BOOLEAN DEFAULT false;
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS repeat_gap INTEGER DEFAULT 100;
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS font_family VARCHAR(50) DEFAULT 'Helvetica';
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS font_weight VARCHAR(20) DEFAULT 'normal';
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS font_style VARCHAR(20) DEFAULT 'normal';
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS position_preset VARCHAR(20) DEFAULT 'center';
+ALTER TABLE tt_pdf_watermarks ADD COLUMN IF NOT EXISTS repeat_style VARCHAR(20) DEFAULT 'full';

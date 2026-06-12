@@ -92,7 +92,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                 setCurrentPage(1);
             } else {
                 setPdfDoc(null);
-                setTotalPages(libDoc.getPageCount());
+                setTotalPages(libDoc ? libDoc.getPageCount() : 0);
                 setCurrentPage(1);
                 message.warning('PDF is protected. Viewer disabled, but you can still apply watermarks and Save.', 5);
             }

@@ -46,7 +46,15 @@ async function createWatermark(req, res) {
 async function updateWatermark(req, res) {
     try {
         const { id } = req.params;
-        const data = await watermarkService.updateWatermark(id, req.body);
+        const token = req.headers.authorization?.split(' ')[1];
+        let empno = null;
+        if (token) {
+            const decoded = jwt.decode(token);
+            empno = decoded?.empno;
+        }
+        if (!empno) return res.status(400).json({ result: 'false', message: 'Missing empno' });
+        
+        const data = await watermarkService.updateWatermark(id, { ...req.body, owner_empno: empno });
         res.json({ result: 'true', data });
     } catch (err) {
         console.error('pdfHub updateWatermark error:', err.message);
@@ -60,7 +68,9 @@ async function updateWatermark(req, res) {
 async function deleteWatermark(req, res) {
     try {
         const { id } = req.params;
-        await watermarkService.deleteWatermark(id);
+        const empno = req.query.empno;
+        if (!empno) return res.status(400).json({ result: 'false', message: 'Missing empno' });
+        await watermarkService.deleteWatermark(id, empno);
         res.json({ result: 'true', message: 'Deleted' });
     } catch (err) {
         console.error('pdfHub deleteWatermark error:', err.message);
