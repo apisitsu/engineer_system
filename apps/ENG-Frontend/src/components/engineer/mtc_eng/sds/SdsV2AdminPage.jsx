@@ -1823,6 +1823,7 @@ const AUDIT_STATIC_PART_TYPES = [
   { key: 'body',      label: 'Body',      prefixes: ['C1', 'C5'], color: '#fa8c16' },
   { key: 'sleeve',    label: 'Sleeve',    prefixes: ['C6'],       color: '#722ed1' },
   { key: 'mecha',     label: 'Mecha',     prefixes: ['C9'],       color: '#f5222d' },
+  { key: 'spherical', label: 'Spherical', prefixes: ['A4'],       color: '#eb2f96' },
 ];
 
 const loadSavedExpandedPcs = (catKey) => {
@@ -2264,9 +2265,12 @@ const SdsV2AdminPage = () => {
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.SDS_V2)}>
               Back to Search
             </Button>
-            <Title level={4} style={{ color: theme.colors.text, margin: 0 }}>
+            <Title level={4} style={{ color: theme.colors.text, margin: 0, flex: 1 }}>
               Setup Data Sheet Management
             </Title>
+            <Button icon={<SettingOutlined />} onClick={() => navigate(MTC_PATHS.SDS_TEMPLATE_CONFIG)}>
+              Template Config
+            </Button>
           </div>
           <Card style={{ background: theme.colors.cardBackground }}>
             <Tabs items={tabItems} />

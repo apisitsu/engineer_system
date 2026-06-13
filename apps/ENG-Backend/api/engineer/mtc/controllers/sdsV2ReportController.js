@@ -472,6 +472,14 @@ async function buildCoverage() {
         r.tooling_source === 'saved' && r.has_machine_template ? 'COMPLETE' :
         r.has_process                                          ? 'PENDING'  :
                                                                  'MISSING';
+      // WHY the row is pending — so the dashboard can separate "tool already
+      // solved (saved or T-Select #1), only Excel config missing" from "no tool".
+      // A tselect/saved-tool row without the machine Excel template stays PENDING
+      // (COMPLETE means PDF-ready), but it must not read as "tool missing".
+      r.pending_reason = r.coverage_level !== 'PENDING' ? null :
+        !r.has_tooling_match && !r.has_machine_template ? 'NO_TOOL_NO_EXCEL' :
+        !r.has_tooling_match                            ? 'NO_TOOL'          :
+                                                          'NO_EXCEL';
     }
 
     const total         = evaluated.length;
@@ -514,6 +522,16 @@ async function buildCoverage() {
       .sort((a, b) => a.cn.localeCompare(b.cn));
 
     const pending    = needsAttention.length; // derived from table so both always match
+    // Pending split by missing piece. toolReady* = rows whose tooling is already
+    // solved (the only gap is the machine Excel Parameter Config) — configuring
+    // that machine's template converts them straight to COMPLETE.
+    const pendingByReason = {
+      noExcel:          needsAttention.filter(r => r.pending_reason === 'NO_EXCEL').length,
+      noTool:           needsAttention.filter(r => r.pending_reason === 'NO_TOOL').length,
+      noToolNoExcel:    needsAttention.filter(r => r.pending_reason === 'NO_TOOL_NO_EXCEL').length,
+      toolReadySaved:   needsAttention.filter(r => r.pending_reason === 'NO_EXCEL' && r.tooling_source === 'saved').length,
+      toolReadyTselect: needsAttention.filter(r => r.pending_reason === 'NO_EXCEL' && r.tooling_source === 'tselect').length,
+    };
     const completePct    = total > 0 ? parseFloat(((complete / total) * 100).toFixed(1)) : 0;
     const completeSavedPct = total > 0 ? parseFloat(((completeSaved / total) * 100).toFixed(1)) : 0;
     const pendingPct = total > 0 ? parseFloat(((pending / total) * 100).toFixed(1)) : 0;
@@ -605,6 +623,7 @@ async function buildCoverage() {
         completeSavedPct,
         pending,
         pendingPct,
+        pendingByReason,
         missing,
         toolMatch,
         excelConfig,
@@ -820,3 +839,4 @@ router.put('/config', isAdmin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.invalidateCoverageCache = invalidateCoverageCache;

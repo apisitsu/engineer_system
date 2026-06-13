@@ -306,7 +306,7 @@ function normalizeSpecCn(cn) {
 
 // ── Main Search ──────────────────────────────────────────────────────────────
 
-async function search(cn) {
+async function search(cn, opts = {}) {
   const specCn = normalizeSpecCn(cn);
   const specRes = await engPool.query(
     `SELECT * FROM ${TSV2_TABLES.SPEC_PROCESS} WHERE cn = $1 LIMIT 1`,
@@ -349,7 +349,7 @@ async function search(cn) {
       await Promise.all(toolingNames.map(async (tooling_name) => {
         try {
           const formulaRows  = await configCache.getFormulas(machine.id, tooling_name);
-          const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows });
+          const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows, user_empno: opts.user_empno ?? null });
 
           // Surface formula evaluation failures (previously swallowed silently) so
           // a broken/inapplicable formula is visible instead of just a missing tool.

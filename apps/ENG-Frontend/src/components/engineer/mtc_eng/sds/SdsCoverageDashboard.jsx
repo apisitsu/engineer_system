@@ -87,11 +87,18 @@ const PartTypeCard = ({ pt }) => {
   const pct = pt.complete_pct || 0;                       // with T-Select #1
   const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
   const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
+  
+  // Custom label mapping: 'body' or 'mecha' -> 'Mecha'
+  const typeKey = pt.part_type.toLowerCase();
+  const displayLabel = (typeKey === 'body' || typeKey === 'mecha') 
+    ? 'Mecha' 
+    : (pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1));
+
   return (
     <div style={{ ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
         <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>
-          {pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)}
+          {displayLabel}
         </Text>
         <Tooltip title="SDS requirements = CN × machine × process (one CN may need several setup sheets)">
           <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
@@ -139,49 +146,6 @@ const PartTypeCard = ({ pt }) => {
   );
 };
 
-// ── Part Type Detail Row (horizontal coverage bars) ───────────────────────────
-const PartTypeDetailRow = ({ pt }) => {
-  const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
-  const total = pt.total || 1;
-  const completeSaved = pt.complete_saved ?? pt.complete;
-  const boost = Math.max(0, (pt.complete || 0) - completeSaved);
-  const segments = [
-    { key: 'complete_saved', count: completeSaved, color: C.green,     label: 'KZW Complete' },
-    { key: 'complete_ts',    count: boost,         color: C.greenSoft, label: 'THAI Complete *' },
-    { key: 'pending',        count: pt.pending,    color: C.yellow, label: 'Pending' },
-  ];
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <Text style={{ color, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', width: 80 }}>
-          {pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)}
-        </Text>
-        <div style={{ display: 'flex', gap: 8, flex: 1, alignItems: 'center' }}>
-          {/* Segmented bar */}
-          <div style={{ flex: 1, height: 14, display: 'flex', borderRadius: 4, overflow: 'hidden', background: C.border }}>
-            {segments.map(seg => (
-              seg.count > 0 && (
-                <Tooltip key={seg.key} title={`${seg.label}: ${seg.count.toLocaleString()} (${((seg.count / total) * 100).toFixed(0)}%)`}>
-                  <div style={{
-                    width: `${(seg.count / total) * 100}%`,
-                    background: seg.color,
-                    transition: 'width 0.8s ease',
-                  }} />
-                </Tooltip>
-              )
-            ))}
-          </div>
-          <Tooltip title="Unique CNs · SDS requirements (CN × machine × process)">
-            <Text style={{ color: C.textSec, fontSize: 10, whiteSpace: 'nowrap', cursor: 'help' }}>
-              {(pt.cn_count ?? 0).toLocaleString()} CNs · {pt.total.toLocaleString()} reqs
-            </Text>
-          </Tooltip>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
   const { message } = App.useApp();
@@ -190,6 +154,7 @@ export default function SdsCoverageDashboard() {
   const [building, setBuilding] = useState(false);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
+  const [filterReason, setFilterReason] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
   const pollRef = useRef(null);
 
@@ -236,7 +201,15 @@ export default function SdsCoverageDashboard() {
     return stopPolling; // clear the poll timer on unmount
   }, [fetchData, stopPolling]);
 
-  const byPartType = data?.byPartType || [];
+  const byPartType = useMemo(() => {
+    const raw = data?.byPartType || [];
+    const order = ['ball', 'race', 'mecha', 'body', 'sleeve', 'spherical'];
+    return [...raw].sort((a, b) => {
+      const ia = order.indexOf(a.part_type.toLowerCase());
+      const ib = order.indexOf(b.part_type.toLowerCase());
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }, [data]);
 
   // ── Coverage by Part Type stacked bar ────────────────────────────────────────
   const ptBarData = useMemo(() => ({
@@ -437,9 +410,10 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
+      if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
-  }, [data, filterPt, filterMc]);
+  }, [data, filterPt, filterMc, filterReason]);
 
   // Keyed dataSource — memoized so the (potentially large) array isn't rebuilt with a
   // spread on every render (poll tick / chart hover). Only changes when the filter does.
@@ -567,9 +541,9 @@ export default function SdsCoverageDashboard() {
 
             {/* ── Part Type Cards ─────────────────────────────────────────────── */}
             {byPartType.length > 0 && (
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'stretch' }}>
+              <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
                 {/* Total CNs summary card */}
-                <div style={{ flex: 1 }}>
+                <Col span={4}>
                   <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
                       <Text style={{ color: C.cyan, fontSize: 13, fontWeight: 800 }}>TOTAL</Text>
@@ -617,18 +591,18 @@ export default function SdsCoverageDashboard() {
                       </Tooltip>
                     </div>
                   </div>
-                </div>
+                </Col>
                 {byPartType.map(pt => (
-                  <div key={pt.part_type} style={{ flex: 1 }}>
+                  <Col key={pt.part_type} span={4}>
                     <PartTypeCard pt={pt} />
-                  </div>
+                  </Col>
                 ))}
-              </div>
+              </Row>
             )}
 
-            {/* ── New Parts per Month + Breakdown (same row) ─────────────────── */}
+            {/* ── Charts Row (New Parts + Cumulative Status) ─────────────────── */}
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
-              <Col span={14}>
+              <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
                   {sectionTitle('New Parts per Month')}
                   <div style={{ height: 240 }}>
@@ -639,37 +613,15 @@ export default function SdsCoverageDashboard() {
                   </div>
                 </div>
               </Col>
-              <Col span={10}>
+              <Col span={16}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('Coverage Breakdown by Part Type')}
-                  {byPartType.map(pt => (
-                    <PartTypeDetailRow key={pt.part_type} pt={pt} />
-                  ))}
-                  <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                    <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.green }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>KZW Complete</Text>
-                    </Space>
-                    <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.greenSoft }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>THAI Complete *</Text>
-                    </Space>
-                    <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.yellow }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>Pending</Text>
-                    </Space>
+                  {sectionTitle('Cumulative Coverage Status')}
+                  <div style={{ height: 240 }}>
+                    <Bar data={statusChartData} options={statusChartOpts} />
                   </div>
                 </div>
               </Col>
             </Row>
-
-            {/* ── Monthly Coverage Status (bar + line) ───────────────────────── */}
-            <div style={{ ...cardStyle, marginBottom: 14 }}>
-              {sectionTitle('Cumulative Coverage Status')}
-              <div style={{ height: 240 }}>
-                <Bar data={statusChartData} options={statusChartOpts} />
-              </div>
-            </div>
 
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
             <div style={cardStyle}>
@@ -687,6 +639,13 @@ export default function SdsCoverageDashboard() {
                   <Select size="small" value={filterMc} onChange={setFilterMc} style={{ width: 160 }}
                     options={machineOptions} popupMatchSelectWidth={false} showSearch
                     filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())} />
+                  <Select size="small" value={filterReason} onChange={setFilterReason} style={{ width: 190 }}
+                    options={[
+                      { value: '', label: 'All Reasons' },
+                      { value: 'NO_EXCEL', label: 'Tool ✓ — needs Excel config' },
+                      { value: 'NO_TOOL', label: 'No tool match' },
+                      { value: 'NO_TOOL_NO_EXCEL', label: 'No tool + no Excel config' },
+                    ]} popupMatchSelectWidth={false} />
                   <Text style={{ color: C.textSec, fontSize: 11 }}>{filteredAttention.length} CNs</Text>
                 </Space>
               </div>

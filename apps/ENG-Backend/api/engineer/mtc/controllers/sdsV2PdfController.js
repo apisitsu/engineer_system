@@ -120,6 +120,20 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['ct']               = firstProcessInfo?.ct != null ? String(firstProcessInfo.ct) : '';
   map['machine_type_name'] = machineDisplayName || '';
 
+  // 1.5 Dimensions (with SD fallback)
+  if (searchData.dimension) {
+    const dim = searchData.dimension;
+    Object.keys(dim).forEach(k => { map[`dimension.${k}`] = dim[k] !== null ? String(dim[k]) : ''; });
+    
+    // SD fallback logic: geometric SD = sqrt(OD² - W²)
+    const od = Number(dim.od_aft || 0);
+    const w = Number(dim.w_aft || 0);
+    const sdStored = Number(dim.sd || 0);
+    const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
+    const sd = sdStored > 0 ? sdStored : sdCalc;
+    if (sd > 0) map['dimension.sd'] = sd.toFixed(3);
+  }
+
   // Production fields
   if (searchData.production) {
     map['model']        = searchData.production.model || '';
@@ -330,6 +344,30 @@ function getCellRangePixels(ws, tlAddr, brAddr) {
   return { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) };
 }
 
+// Convert a pixel offset from the range's top-left into a NATIVE ExcelJS anchor
+// (nativeCol + nativeColOff in EMU). Lets an image that's narrower/shorter than its
+// cell range be CENTERED instead of pinned to the top-left. We compute EMU offsets
+// ourselves (px×9525) from the real column widths rather than relying on ExcelJS's
+// approximate fractional-col→EMU conversion. Column px = width×7, row px = height×4/3
+// (matches getCellRangePixels above). EMU_PER_PX = 9525.
+const EMU_PER_PX = 9525;
+function offsetToNativeCol(ws, startCol0, offsetPx) {
+  let col = startCol0, remain = Math.max(0, offsetPx);
+  for (;;) {
+    const wpx = (ws.getColumn(col + 1).width || 8.43) * 7;
+    if (wpx <= 0 || remain < wpx) return { nativeCol: col, nativeColOff: Math.round(remain * EMU_PER_PX) };
+    remain -= wpx; col++;
+  }
+}
+function offsetToNativeRow(ws, startRow0, offsetPx) {
+  let row = startRow0, remain = Math.max(0, offsetPx);
+  for (;;) {
+    const hpx = (ws.getRow(row + 1).height || 15) * (4 / 3);
+    if (hpx <= 0 || remain < hpx) return { nativeRow: row, nativeRowOff: Math.round(remain * EMU_PER_PX) };
+    remain -= hpx; row++;
+  }
+}
+
 // ── Fill ExcelJS worksheet ────────────────────────────────────────────────────
 
 async function fillTemplate(workbook, mappings, valueMap) {
@@ -355,9 +393,18 @@ async function fillTemplate(workbook, mappings, valueMap) {
         const dim = getImageDimensions(Buffer.isBuffer(val.data) ? val.data : Buffer.from(val.data));
         if (cellPx && dim && dim.width > 0 && dim.height > 0) {
           const scale = Math.min(cellPx.width / dim.width, cellPx.height / dim.height);
+          const scaledW = Math.round(dim.width * scale);
+          const scaledH = Math.round(dim.height * scale);
+          // Center within the cell range: offset the top-left anchor by half the
+          // leftover space on each axis (fractional col/row).
+          const offsetX = (cellPx.width  - scaledW) / 2;
+          const offsetY = (cellPx.height - scaledH) / 2;
+          const aCol = offsetToNativeCol(ws, tl.col, offsetX);
+          const aRow = offsetToNativeRow(ws, tl.row, offsetY);
           ws.addImage(imgId, {
-            tl: { col: tl.col, row: tl.row },
-            ext: { width: Math.round(dim.width * scale), height: Math.round(dim.height * scale) },
+            tl: { nativeCol: aCol.nativeCol, nativeColOff: aCol.nativeColOff,
+                  nativeRow: aRow.nativeRow, nativeRowOff: aRow.nativeRowOff },
+            ext: { width: scaledW, height: scaledH },
             editAs: 'oneCell',
           });
         } else {

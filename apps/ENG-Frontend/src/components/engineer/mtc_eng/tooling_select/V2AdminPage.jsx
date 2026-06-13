@@ -14,6 +14,7 @@ import V2FormulaManager from './V2FormulaManager';
 import V2SearchRuleManager from './V2SearchRuleManager';
 import V2InventoryManager from './V2InventoryManager';
 import SpecProcessManager from './SpecProcessManager';
+import V2FormulaErrorLog from './V2FormulaErrorLog';
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -89,6 +90,11 @@ export default function V2AdminPage() {
             key: 'spec',
             label: 'Part Management',
             children: <SpecProcessManager embedded />,
+          },
+          {
+            key: 'errors',
+            label: 'Formula Errors',
+            children: <V2FormulaErrorLog />,
           },
         ]}
       />
