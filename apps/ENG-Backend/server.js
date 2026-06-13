@@ -278,6 +278,9 @@ app.use('/api/sds/v2/admin', sdsV2AdminController);
 const sdsV2PdfController = require('./api/engineer/mtc/controllers/sdsV2PdfController');
 app.use('/api/sds/v2', sdsV2PdfController);
 
+const sdsV2HeadlessController = require('./api/engineer/mtc/controllers/sdsV2HeadlessController');
+app.use('/api/sds/v2-headless', sdsV2HeadlessController);
+
 const sdsV2ReportController = require('./api/engineer/mtc/controllers/sdsV2ReportController');
 app.use('/api/sds/v2/report', sdsV2ReportController);
 

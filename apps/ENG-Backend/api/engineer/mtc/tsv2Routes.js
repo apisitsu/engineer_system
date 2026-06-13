@@ -23,6 +23,8 @@ router.post('/search', searchCtrl.search);
 
 // ── Formula test (no machine context needed) ────────────────────────────────
 router.post('/formula/test', formulaCtrl.test);
+router.get('/formula/errors', isAdmin, formulaCtrl.getErrorLogs);
+router.delete('/formula/errors', isAdmin, formulaCtrl.clearErrorLogs);
 
 // ── Machines ────────────────────────────────────────────────────────────────
 router.get('/machines',                       machineCtrl.list);

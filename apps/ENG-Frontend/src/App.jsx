@@ -52,6 +52,7 @@ import EmailConfigManager from './components/engineer/mtc_eng/general_dwg_req/Em
 import SdsV2Page from './components/engineer/mtc_eng/sds/SdsV2Page';
 import SdsV2AdminPage from './components/engineer/mtc_eng/sds/SdsV2AdminPage';
 import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageDashboard';
+import SdsTemplateConfigPage from './components/engineer/mtc_eng/sds/SdsTemplateConfigPage';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page';
 import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
@@ -322,6 +323,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
+                  <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />
                   <Route path={MTC_PATHS.SDS_COVERAGE_REPORT} element={<SdsCoverageDashboard />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
 

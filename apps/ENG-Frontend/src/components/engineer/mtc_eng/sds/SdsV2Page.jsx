@@ -124,7 +124,7 @@ const SdsV2Page = () => {
     setPdfModal(true);
   };
 
-  const handleGeneratePdf = async () => {
+  const handleGeneratePdf = async (mode = 'legacy') => {
     if (!selectedMachine) { message.warning('Please select machine type'); return; }
     setPdfLoading(true);
     try {
@@ -136,7 +136,12 @@ const SdsV2Page = () => {
         token: localStorage.getItem('token') || '',
       };
       const queryParams = new URLSearchParams(params).toString();
-      const fullUrl = `${server.MTC_SDS_V2_PDF}?${queryParams}`;
+      
+      let baseUrl = server.MTC_SDS_V2_PDF;
+      if (mode === 'gotenberg') baseUrl = `${server.API_URL}api/sds/v2-gotenberg/pdf-gotenberg`;
+      if (mode === 'chrome') baseUrl = `${server.API_URL}api/sds/v2-headless/pdf-chrome`;
+      
+      const fullUrl = `${baseUrl}?${queryParams}`;
       const a = document.createElement('a');
       a.href = fullUrl;
       a.target = '_blank';
@@ -233,6 +238,31 @@ const SdsV2Page = () => {
       ),
     },
   ];
+
+  // A process row is expandable (shows the leading "+" ) when it has factory tooling
+  // OR when Tooling Select has a relevant computed tool for it — so a process with NO
+  // factory tooling but a T-Select #1/#2 result still gets the "+" and can be opened.
+  const processHasExpandableContent = (processRow) => {
+    const code = String(processRow.process_code || '').trim();
+    if ((toolingByCode[processRow.process_code] || []).length > 0) return true;
+    // Production history with a resolved grinding machine (machine_type_code) — the
+    // machines that actually ran this process. Lets a face/grind row with no factory
+    // tooling still expand to show those machines.
+    if ((machineHistoryByProcess[code] || []).some(h => h.machine_type_code)) return true;
+    if (!tsData?.results?.length) return false;
+    // No factory tooling → the machine↔process link comes from sds_machine_tool config.
+    const configMachineNames = new Set(
+      machineToolsConfig
+        .filter(c => String(c.process_code) === code)
+        .map(c => c.machine_type?.trim())
+        .filter(Boolean)
+    );
+    if (!configMachineNames.size) return false;
+    const groupToRep = {};
+    for (const m of allMachineTypes) if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
+    const resolveMachine = (name) => groupToRep[name] || name;
+    return tsData.results.some(r => r.matches?.length && configMachineNames.has(resolveMachine(r.machine)));
+  };
 
   const buildExpandedContent = (processRow) => {
     const processTools = toolingByCode[processRow.process_code] || [];
@@ -391,11 +421,14 @@ const SdsV2Page = () => {
     ]);
 
     allRelevantMachines.forEach(machineName => {
-      const isEligible = !eligibleMachines || eligibleMachines.has(machineName);
       const toolsInThisGroup = groupedData[machineName] || [];
       const hasTools = toolsInThisGroup.length > 0;
 
-      if (isEligible || hasTools) {
+      // Show a machine ONLY when it actually has tools for THIS process — a factory
+      // tool OR a T-Select #1/#2 result (extra row). A machine that is merely
+      // "eligible" in T-Select globally but has nothing computed/configured for this
+      // process is hidden (was previously shown as an empty "0 / N" group).
+      if (hasTools) {
         // Count only tools that were actually assigned to THIS machine group
         // To find "Total", we check how many tools are CONFIGURED for this machine
         const configuredForThisMachine = configForProcess.filter(c => c.machine_type === machineName);
@@ -452,8 +485,28 @@ const SdsV2Page = () => {
       ] : []),
     ];
 
+    // Production-history machines that ran this process (resolved grinding machines).
+    // Surfaced so a row with no factory tooling / T-Select still shows the real
+    // machines when expanded.
+    const historyMachines = (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
+      .filter(h => h.machine_type_code);
+
     return (
       <div style={{ padding: '8px', background: '#f9f9f9', borderRadius: '4px' }}>
+        {historyMachines.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ fontSize: 12, marginRight: 8 }}>Production History:</Text>
+            <Space size={[4, 4]} wrap>
+              {historyMachines.map((h, i) => (
+                <Tag key={i} color="purple" style={{ margin: 0 }}
+                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}>
+                  {h.machine_name}
+                  <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
+                </Tag>
+              ))}
+            </Space>
+          </div>
+        )}
         {Object.keys(machineStatus).length > 0 && (
           <div style={{ marginBottom: 12 }}>
             {Object.entries(machineStatus).map(([machine, stat]) => (
@@ -620,7 +673,7 @@ const SdsV2Page = () => {
                       size="small"
                       scroll={{ x: 'max-content' }}
                       expandable={{
-                        rowExpandable: (row) => (toolingByCode[row.process_code]?.length > 0),
+                        rowExpandable: processHasExpandableContent,
                         expandedRowRender: buildExpandedContent,
                       }}
                     />
@@ -641,9 +694,27 @@ const SdsV2Page = () => {
         }
         open={pdfModal}
         onCancel={() => setPdfModal(false)}
-        onOk={handleGeneratePdf}
-        okText="Generate PDF"
-        okButtonProps={{ loading: pdfLoading, icon: <FilePdfOutlined /> }}
+        footer={[
+          <Button key="cancel" onClick={() => setPdfModal(false)}>Cancel</Button>,
+          <Button 
+            key="headless" 
+            icon={<FilePdfOutlined />} 
+            onClick={() => handleGeneratePdf('chrome')}
+            loading={pdfLoading}
+            style={{ backgroundColor: '#faad14', color: 'white' }}
+          >
+            Test Chrome
+          </Button>,
+          <Button 
+            key="generate" 
+            type="primary" 
+            icon={<FilePdfOutlined />} 
+            onClick={() => handleGeneratePdf('legacy')}
+            loading={pdfLoading}
+          >
+            Generate PDF
+          </Button>
+        ]}
         destroyOnHidden
       >
         <Select

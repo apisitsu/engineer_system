@@ -46,6 +46,7 @@ const TABLES = {
   SDS_V2_MACHINE_TOOL:    'sds_machine_tool',    // tool ordering per (machine_type, process_code)
   SDS_MACHINE_CODE:       'sds_machine_code',    // factory floor code → machine type mapping
   SDS_ACCESS_LOG:         'sds_access_log',      // VIEW/PDF/ADMIN access tracking
+  SDS_TEMPLATE_CSS_CONFIG: 'sds_template_css_config', // CSS variable overrides for Chrome PDF template
   LPB_PC_PRODUCTION:      'lpb.pc_production',   // factory production records
 
   // Tooling Selection & Rules

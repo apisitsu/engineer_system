@@ -156,7 +156,9 @@ const PREFIX_TABLE_MAP = {
   C57: TABLES.LPB_ENG_BODY,  C58: TABLES.LPB_ENG_BODY,  C59: TABLES.LPB_ENG_BODY,
   C61: TABLES.LPB_ENG_SLEEVE, C62: TABLES.LPB_ENG_SLEEVE, C63: TABLES.LPB_ENG_SLEEVE,
   C64: TABLES.LPB_ENG_SLEEVE, C69: TABLES.LPB_ENG_SLEEVE,
-  // A41–A49 (Spherical) excluded — no tooling formulas configured; omitted to prevent sync-new from re-inserting
+  A41: TABLES.LPB_ENG_SPH, A42: TABLES.LPB_ENG_SPH, A43: TABLES.LPB_ENG_SPH,
+  A44: TABLES.LPB_ENG_SPH, A45: TABLES.LPB_ENG_SPH, A46: TABLES.LPB_ENG_SPH,
+  A47: TABLES.LPB_ENG_SPH, A48: TABLES.LPB_ENG_SPH, A49: TABLES.LPB_ENG_SPH,
 };
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ const PART_TYPE_SQL = {
   BODY:      `(SUBSTRING(cn FROM 1 FOR 2) BETWEEN '11' AND '19' OR SUBSTRING(cn FROM 1 FOR 2) BETWEEN '51' AND '59')`,
   SPHERICAL: `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '41' AND '49'`,
   SLEEVE:    `SUBSTRING(cn FROM 1 FOR 2) BETWEEN '61' AND '69'`,
+  MECHA:     `SUBSTRING(cn FROM 1 FOR 2) IN ('95','99')`,
 };
 
 router.get('/counts', async (req, res) => {
@@ -179,6 +182,7 @@ router.get('/counts', async (req, res) => {
                                OR SUBSTRING(cn FROM 1 FOR 2) BETWEEN '51' AND '59')) AS body,
         COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '41' AND '49') AS spherical,
         COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) BETWEEN '61' AND '69') AS sleeve,
+        COUNT(*) FILTER (WHERE SUBSTRING(cn FROM 1 FOR 2) IN ('95','99')) AS mecha,
         COUNT(*) AS total
       FROM ${TABLES.SPEC_PROCESS}
     `);
@@ -191,6 +195,7 @@ router.get('/counts', async (req, res) => {
         BODY:      parseInt(row.body),
         SLEEVE:    parseInt(row.sleeve),
         SPHERICAL: parseInt(row.spherical),
+        MECHA:     parseInt(row.mecha),
       },
     });
   } catch (err) {
@@ -507,6 +512,27 @@ async function syncNewCns() {
       })
     );
 
+    // Spherical dim override: lpb.eng_sph has no dim columns; join eng_sph_design for od/id/w
+    const sphNewCns = newCns.filter(cn => { const c = parseInt(cn.slice(0,2),10); return c >= 41 && c <= 49; });
+    if (sphNewCns.length > 0) {
+      try {
+        const sphCxxForms = sphNewCns.map(cn => `A${cn.slice(0,2)}-0${cn.slice(2)}`);
+        const sphRes = await maqPool.query(
+          `SELECT s.control_no, d.sph_od AS od, d.dall_id AS id, d.sph_width AS w
+           FROM lpb.eng_sph s
+           JOIN lpb.eng_sph_design d ON d.sph_design_cn = s.sph_design_no
+           WHERE s.control_no = ANY($1)`,
+          [[...new Set([...sphNewCns, ...sphCxxForms])]]
+        );
+        for (const row of sphRes.rows) {
+          const key = normalizeCn(row.control_no);
+          if (key) dimRowsMap[key] = row;
+        }
+      } catch (e) {
+        console.error('[sync-new] spherical dim fetch failed:', e.message);
+      }
+    }
+
     // Bulk-fetch process codes
     const cnToPlanNos = {};
     try {
@@ -694,6 +720,7 @@ function factoryAfterDims(prefixKey, row) {
   const num = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
   if (cls >= 31 && cls <= 39) return { od_aft: num(row.ball_dia), id_aft: num(row.in_dia), w_aft: num(row.width) };
   if (cls >= 21 && cls <= 29) return { od_aft: num(row.od),       id_aft: num(row.id),     w_aft: num(row.width) };
+  if (cls >= 41 && cls <= 49) return { od_aft: num(row.od),       id_aft: num(row.id),     w_aft: num(row.w) };
   if (cls >= 61 && cls <= 69) return { od_aft: num(row.od),       id_aft: num(row.id),     w_aft: null };
   return { od_aft: null, id_aft: null, w_aft: null };
 }
@@ -733,6 +760,27 @@ async function buildDriftAudit(tol) {
       console.error(`[drift-audit] dim fetch failed for ${tbl}:`, e.message);
     }
   }));
+
+  // Spherical dim override for drift audit (same join as sync-new)
+  const sphSpecCns = specs.filter(r => { const c = parseInt(r.cn.slice(0,2),10); return c >= 41 && c <= 49; }).map(r => r.cn);
+  if (sphSpecCns.length > 0) {
+    try {
+      const sphCxxForms = sphSpecCns.map(cn => `A${cn.slice(0,2)}-0${cn.slice(2)}`);
+      const sphRes = await maqPool.query(
+        `SELECT s.control_no, d.sph_od AS od, d.dall_id AS id, d.sph_width AS w
+         FROM lpb.eng_sph s
+         JOIN lpb.eng_sph_design d ON d.sph_design_cn = s.sph_design_no
+         WHERE s.control_no = ANY($1)`,
+        [[...new Set([...sphSpecCns, ...sphCxxForms])]]
+      );
+      for (const row of sphRes.rows) {
+        const key = normalizeCn(row.control_no);
+        if (key) dimRowsMap[key] = row;
+      }
+    } catch (e) {
+      console.error('[drift-audit] spherical dim fetch failed:', e.message);
+    }
+  }
 
   // 3. Diff
   let drifted = 0, noFactory = 0, compared = 0;

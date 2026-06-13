@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SDS - C29-04137</title>
+    <style>
+        /* A4 landscape, margins matching Excel page setup (0.1" = 2.54mm) */
+        @page { size: A4 landscape; margin: 2.54mm; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 6.5pt;
+            line-height: 1.1;
+            color: #000;
+            background: #fff;
+            /* Content = A4 landscape − 2×2.54mm margins = 291.92mm */
+            width: 291.92mm;
+        }
+        .page { border: 1.5pt solid #000; width: 100%; overflow: hidden; }
+
+        /* ══ TITLE BAR (Excel row 1, 21pt × 53% = 3.93mm) ════════════════════ */
+        .title-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 3.93mm;
+            padding: 0 2mm;
+            border-bottom: 0.5pt solid #ccc;
+        }
+        .title-bar-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 7pt;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        .title-bar-right { font-size: 6pt; font-weight: bold; }
+
+        /* ══ HEADER INFO PANELS (Excel rows 3-6, 30pt each × 53% = 5.61mm) ══ */
+        .hdr-panels {
+            display: flex;
+            border-bottom: 1pt solid #000;
+        }
+        .hdr-left {
+            width: 26.13%;
+            flex: none;
+            border-right: 1pt solid #000;
+        }
+        .hdr-mid {
+            flex: 1;
+            border-right: 1pt solid #000;
+            display: flex;
+            flex-direction: column;
+        }
+        .hdr-right {
+            width: 19.27%;
+            flex: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Each info row = 30pt × 0.353mm/pt × 0.53 = 5.61mm */
+        .hdr-info-row {
+            display: flex;
+            align-items: center;
+            height: 5.61mm;
+            padding: 0 1.2mm;
+            border-bottom: 0.5pt solid #ccc;
+            overflow: hidden;
+        }
+        .hdr-info-row:last-child { border-bottom: none; }
+        .hdr-lbl { font-size: 5.5pt; font-weight: bold; white-space: nowrap; margin-right: 1mm; color: #222; }
+        .hdr-val { font-size: 6pt; font-weight: bold; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+        .hdr-mid-row {
+            display: flex;
+            align-items: stretch;
+            height: 5.61mm;
+            border-bottom: 0.5pt solid #ccc;
+            overflow: hidden;
+        }
+        .hdr-mid-row:last-child { border-bottom: none; }
+        .hdr-mid-cell {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            padding: 0 1.2mm;
+            border-right: 0.5pt solid #ccc;
+            overflow: hidden;
+        }
+        .hdr-mid-cell:last-child { border-right: none; }
+
+        /* SDS REV row */
+        .sds-rev-row {
+            display: flex;
+            align-items: stretch;
+            height: 5.61mm;
+            border-bottom: 0.5pt solid #000;
+        }
+        .sds-rev-lbl {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5pt;
+            font-weight: bold;
+            text-align: center;
+            background: #d9d9d9;
+            border-right: 0.5pt solid #000;
+            padding: 0 0.5mm;
+        }
+        .sds-rev-val {
+            width: 38%;
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7pt;
+            font-weight: bold;
+            color: #cc0000;
+        }
+        /* Stamps area = remaining 3 rows */
+        .stamps-area {
+            flex: 1;
+            display: flex;
+        }
+        .stamp-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 0.5pt solid #000;
+        }
+        .stamp-col:last-child { border-right: none; }
+        .stamp-lbl {
+            font-size: 5pt;
+            font-weight: bold;
+            text-align: center;
+            background: #d9d9d9;
+            padding: 0.3mm 0;
+            border-bottom: 0.3pt solid #ccc;
+        }
+        .stamp-val {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5pt;
+            padding: 0.3mm;
+            text-align: center;
+        }
+
+        /* ══ ECN REVISION TABLE (Excel rows 8-13, 15pt each × 53% = 2.81mm) ══ */
+        .ecn-wrap { border-bottom: 1pt solid #000; }
+        .ecn-table { width: 100%; border-collapse: collapse; font-size: 5.5pt; }
+        .ecn-table th {
+            background: #d9d9d9;
+            border: 0.5pt solid #000;
+            padding: 0.2mm 1mm;
+            font-weight: bold;
+            text-align: center;
+            height: 2.81mm;
+        }
+        .ecn-table td {
+            border: 0.5pt solid #000;
+            padding: 0.2mm 1mm;
+            height: 2.81mm;
+            overflow: hidden;
+        }
+        /* ECN columns match Excel: A=REV, B-F=ECN NO, G-I=DATE, J-AG=DESC, AH-AM=REMARK */
+        /* Proportions: REV=3%, ECN=7%, DATE=6%, DESC=69%, REMARK=15% */
+        .ecn-c-rev  { width: 3%; }
+        .ecn-c-ecn  { width: 7%; }
+        .ecn-c-date { width: 6%; }
+        .ecn-c-desc { width: 69%; }
+        .ecn-c-rmk  { width: 15%; }
+
+        /* ══ TOOLING & GRINDING CONDITION (Excel rows 14-15, merged) ══════════ */
+        .section-title-area {
+            display: flex;
+            border-bottom: 1pt solid #000;
+            align-items: stretch;
+        }
+        .section-title-main {
+            flex: 1;
+            background: #d9d9d9;
+            font-size: 7.5pt;
+            font-weight: bold;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1mm;
+            border-right: 1pt solid #000;
+            /* 2 rows × 19.5pt × 53% = 7.3mm */
+            min-height: 7.3mm;
+        }
+        .section-title-grinding {
+            width: 19.27%;
+            flex: none;
+            font-size: 6pt;
+            font-weight: bold;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5mm;
+            background: #eee;
+        }
+
+        /* ══ MAIN BODY ════════════════════════════════════════════════════════ */
+        .main-body { display: flex; }
+        .params-panel  { width: 26.13%; flex: none; border-right: 1pt solid #000; overflow: hidden; }
+        .tooling-panel { width: 54.60%; flex: none; border-right: 1pt solid #000; }
+        .grinding-panel { width: 19.27%; flex: none; display: flex; flex-direction: column; }
+
+        /* ── PARAM TABLE (cols A-I, rows 16-55) ─────────────────────────────── */
+        .param-table { width: 100%; border-collapse: collapse; font-size: 5.5pt; }
+        .param-table td {
+            border: 0.3pt solid #d0d0d0;
+            padding: 0 0.5mm;
+            height: 3.65mm;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .param-table .sep-row td {
+            height: 0.84mm !important;
+            border-top: none;
+            border-bottom: none;
+            background: #f5f5f5;
+            padding: 0;
+        }
+        .param-table .hdr-row td {
+            background: #d9d9d9 !important;
+            font-weight: bold;
+            text-align: center;
+            border-color: #999;
+            color: #000;
+            height: 3.65mm;
+        }
+        .param-table .val-red { color: #dd0000; font-weight: bold; }
+        /* Column widths: A=11/69.6=15.8%, B=8/69.6=11.5%, C-H=7.1/69.6=10.2%, I=8/69.6=11.5% */
+        .pc-a { width: 15.8%; } .pc-b { width: 11.5%; }
+        .pc-c { width: 10.2%; } .pc-d { width: 10.2%; }
+        .pc-e { width: 10.2%; } .pc-f { width: 10.2%; }
+        .pc-g { width: 10.2%; } .pc-h { width: 10.2%; }
+        .pc-i { width: 11.5%; }
+
+        /* ── TOOLING GRID (4 groups × 5 slots) ──────────────────────────────── */
+        .tooling-group { border-bottom: 0.5pt solid #000; }
+        .tooling-group:last-child { border-bottom: none; }
+
+        /* Slot widths (% of tooling panel, matching Excel units) */
+        .tool-slot       { width: 19.39%; flex: none; border-right: 0.5pt solid #aaa; }
+        .tool-slot-wide  { width: 22.46%; }
+        .tool-slot:last-child, .tool-slot-wide:last-child { border-right: none; }
+
+        /* Label row (T01 label + tool name) = 19.5pt × 53% = 3.65mm */
+        .tool-label-row {
+            display: flex;
+            height: 3.65mm;
+            border-bottom: 0.3pt solid #ccc;
+        }
+        .tool-label-inner {
+            display: flex;
+            align-items: center;
+            height: 100%;
+            width: 100%;
+            padding: 0 0.8mm;
+            gap: 0.8mm;
+            overflow: hidden;
+        }
+        .tool-id {
+            background: #1a3a8c;
+            color: #fff;
+            font-size: 4.5pt;
+            font-weight: bold;
+            padding: 0 0.8mm;
+            border-radius: 1pt;
+            white-space: nowrap;
+            flex: none;
+        }
+        .tool-name-val {
+            font-size: 4.5pt;
+            flex: 1;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        /* Separator row (4.5pt × 53% = 0.84mm) */
+        .tool-sep-row {
+            height: 0.84mm;
+            background: #f0f0f0;
+            border-bottom: 0.3pt solid #ddd;
+        }
+
+        /* Image row (6 × 19.5pt × 53% = 21.9mm total) */
+        .tool-img-row {
+            display: flex;
+            height: 21.9mm;
+            border-bottom: 0.3pt solid #ccc;
+        }
+        .tool-img-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            padding: 0.5mm;
+            overflow: hidden;
+        }
+        .tool-img-cell img { max-width: 100%; max-height: 20mm; object-fit: contain; }
+
+        /* Tooling No row (19.5pt × 53% = 3.65mm) */
+        .tool-dwg-row {
+            display: flex;
+            height: 3.65mm;
+            border-bottom: 0.3pt solid #ccc;
+        }
+        .tool-dwg-cell {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            padding: 0 0.8mm;
+            overflow: hidden;
+        }
+        .tool-dwg-no {
+            color: #cc0000;
+            font-size: 4.5pt;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Maker row (19.5pt × 53% = 3.65mm) */
+        .tool-maker-row {
+            display: flex;
+            height: 3.65mm;
+        }
+        .tool-maker-cell {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            padding: 0 0.8mm;
+            font-size: 4pt;
+            color: #555;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        /* ── GRINDING PANEL ──────────────────────────────────────────────────── */
+        .grinding-img-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1mm;
+            border-bottom: 0.5pt solid #ccc;
+            min-height: 25mm;
+        }
+        .grinding-img-wrap img { max-width: 100%; max-height: 55mm; object-fit: contain; }
+        .grinding-no-img { color: #bbb; font-size: 5pt; font-style: italic; text-align: center; }
+        .gw-panel { padding: 0.3mm 0.5mm; }
+        .gw-label {
+            font-size: 5pt; font-weight: bold; text-align: center;
+            padding: 0.3mm; background: #d9d9d9;
+            border-bottom: 0.3pt solid #999; margin-bottom: 0.3mm;
+        }
+        .gw-table { width: 100%; border-collapse: collapse; font-size: 4.5pt; }
+        .gw-table td { border: 0.3pt solid #d0d0d0; padding: 0 0.5mm; height: 2.81mm; overflow: hidden; white-space: nowrap; }
+        .gw-table .hdr-row td { background: #d9d9d9; text-align: center; border-color: #999; font-weight: bold; }
+        .gw-table .val-red { color: #dd0000; font-weight: bold; }
+
+        /* ══ FOOTER (Excel row 56) ════════════════════════════════════════════ */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            border-top: 1pt solid #000;
+            padding: 0.2mm 2mm;
+            font-size: 4.5pt;
+            color: #555;
+            height: 2.69mm;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- ══ TITLE BAR (Excel row 1) ══════════════════════════════════════════ -->
+    <div class="title-bar" style="position: relative;">
+        <div></div>
+        <div class="title-bar-center">SETUP DATA SHEET</div>
+        <div class="title-bar-right">Rod End Bearing</div>
+    </div>
+
+    <!-- ══ HEADER INFO PANELS (Excel rows 3-6) ══════════════════════════════ -->
+    <div class="hdr-panels">
+
+        <!-- LEFT: Machine info = params-panel width (26.13%) -->
+        <div class="hdr-left">
+            <div class="hdr-info-row">
+                <span class="hdr-lbl">MACHINE :</span>
+                <span class="hdr-val">KS-B22RD</span>
+            </div>
+            <div class="hdr-info-row">
+                <span class="hdr-lbl">CYCLE TIME :</span>
+                <span class="hdr-val">&nbsp;sec</span>
+            </div>
+            <div class="hdr-info-row">
+                <span class="hdr-lbl">CATEGORY :</span>
+                <span class="hdr-val">Race Parts</span>
+            </div>
+            <div class="hdr-info-row" style="border-bottom:none;">
+                <span class="hdr-lbl">NOTE :</span>
+            </div>
+        </div>
+
+        <!-- MIDDLE: Part / Process info -->
+        <div class="hdr-mid">
+            <div class="hdr-mid-row">
+                <div class="hdr-mid-cell" style="flex:1.6;">
+                    <span class="hdr-lbl">PART NO :</span>
+                    <span class="hdr-val"></span>
+                </div>
+                <div class="hdr-mid-cell" style="flex:0.7;">
+                    <span class="hdr-lbl">REV :</span>
+                    <span class="hdr-val">NC</span>
+                </div>
+                <div class="hdr-mid-cell" style="flex:2.4;">
+                    <span class="hdr-lbl">PROCESS :</span>
+                    <span class="hdr-val">&nbsp;</span>
+                </div>
+            </div>
+            <div class="hdr-mid-row">
+                <div class="hdr-mid-cell" style="flex:1.6;">
+                    <span class="hdr-lbl">C/N :</span>
+                    <span class="hdr-val" style="color:#0033cc;">C29-04137</span>
+                </div>
+                <div class="hdr-mid-cell" style="flex:3.1;">
+                    <span class="hdr-lbl">PROGRAM NO :</span>
+                    <span class="hdr-val"></span>
+                </div>
+            </div>
+            <div class="hdr-mid-row">
+                <div class="hdr-mid-cell" style="flex:1.6;">
+                    <span class="hdr-lbl">MAT'L TYPE :</span>
+                    <span class="hdr-val"></span>
+                </div>
+                <div class="hdr-mid-cell" style="flex:3.1;">
+                    <span class="hdr-lbl">PROGRAM NAME :</span>
+                    <span class="hdr-val"></span>
+                </div>
+            </div>
+            <!-- Row 6 placeholder -->
+            <div class="hdr-mid-row" style="border-bottom:none;"></div>
+        </div>
+
+        <!-- RIGHT: SDS REV + stamps = grinding-panel width (19.27%) -->
+        <div class="hdr-right">
+            <div class="sds-rev-row">
+                <div class="sds-rev-lbl">SETUP DATA SHEET REV.</div>
+                <div class="sds-rev-val">NC</div>
+            </div>
+            <div class="stamps-area">
+                <div class="stamp-col">
+                    <div class="stamp-lbl">PREPARED</div>
+                    <div class="stamp-val"></div>
+                </div>
+                <div class="stamp-col">
+                    <div class="stamp-lbl">CHECKED</div>
+                    <div class="stamp-val"></div>
+                </div>
+                <div class="stamp-col">
+                    <div class="stamp-lbl">APPROVED</div>
+                    <div class="stamp-val"></div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /hdr-panels -->
+
+    <!-- ══ ECN REVISION HISTORY (Excel rows 8-13) ═══════════════════════════ -->
+    <div class="ecn-wrap">
+        <table class="ecn-table">
+            <thead>
+                <tr>
+                    <th class="ecn-c-rev">REV.</th>
+                    <th class="ecn-c-ecn">ECN NO.</th>
+                    <th class="ecn-c-date">DATE</th>
+                    <th class="ecn-c-desc">DESCRIPTION</th>
+                    <th class="ecn-c-rmk">REMARK</th>
+                </tr>
+            </thead>
+            <tbody><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+        </table>
+    </div>
+
+    <!-- ══ TOOLING & GRINDING CONDITION (Excel rows 14-15) ══════════════════ -->
+    <div class="section-title-area">
+        <div class="section-title-main">TOOLING &amp; GRINDING CONDITION</div>
+        <div class="section-title-grinding">OD GRINDING AREA</div>
+    </div>
+
+    <!-- ══ MAIN BODY (Excel rows 16-55) ════════════════════════════════════ -->
+    <div class="main-body">
+
+        <!-- LEFT: PARAM TABLE (cols A-I) -->
+        <div class="params-panel">
+            <table class="param-table">
+                <colgroup>
+                    <col class="pc-a"><col class="pc-b"><col class="pc-c">
+                    <col class="pc-d"><col class="pc-e"><col class="pc-f">
+                    <col class="pc-g"><col class="pc-h"><col class="pc-i">
+                </colgroup>
+                <tbody><tr class="hdr-row"><td colspan="9">GRIND CONDITION</td></tr><tr class="sep-row"><td colspan="9"></td></tr><tr><td class="">#01 JUMP FEED</td><td class=""></td><td class="val-red">0.05</td><td class="">mm</td><td class="">#12</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm/s</td></tr><tr><td class="">#02 FEED 1</td><td class=""></td><td class="val-red">0.035</td><td class="">mm</td><td class="">#13</td><td class=""></td><td class=""></td><td class="val-red">0.25</td><td class="">mm/s</td></tr><tr><td class="">#03 FEED2</td><td class=""></td><td class="val-red">0.025</td><td class="">mm</td><td class="">#14</td><td class=""></td><td class=""></td><td class="val-red">0.03</td><td class="">mm/s</td></tr><tr><td class="">#04 FEED 3</td><td class=""></td><td class="val-red">0.01</td><td class="">mm</td><td class="">#17</td><td class=""></td><td class=""></td><td class="val-red">0.003</td><td class="">mm/s</td></tr><tr><td class="">#05 FEED 3</td><td class=""></td><td class="val-red">0.005</td><td class="">mm</td><td class="">#20</td><td class=""></td><td class=""></td><td class="val-red">0.001</td><td class="">mm/s</td></tr><tr><td class="">#07 FEED 4</td><td class=""></td><td class="val-red">0.005</td><td class="">mm</td><td class="">#21 WORK SIZE</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm</td></tr><tr><td class="">#08 FEED 4 RET</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#22 DISK ROLLER SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">min-1</td></tr><tr><td class="">#09 SPARK OUT</td><td class=""></td><td class="val-red">2</td><td class="">sec</td><td class="">#23 CYCLE TIME OVER</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">sec</td></tr><tr><td class="">#10 OVER FEED</td><td class=""></td><td class="val-red">0.003</td><td class="">mm</td><td class="">#24 WORK OFFSET</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm</td></tr><tr class="sep-row"><td colspan="9"></td></tr><tr><td class="">#11</td><td class=""></td><td class="val-red">-</td><td class="">mm/s</td><td class="">#25 G.WHEEL SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">min-1</td></tr><tr class="hdr-row"><td colspan="9">DRESS CONDITION</td></tr><tr><td class="">#31 COMPENSATION</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#36 DRESS CYCLE</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">times</td></tr><tr><td class="">#32 N.W.D. COMPEN</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#37 NOCUT DRESS CYCLE</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">times</td></tr><tr><td class="">#33 AUTO DRESS INT.</td><td class=""></td><td class="val-red">-</td><td class="">pcs</td><td class="">#38 ROTARY DRESSER SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">min-1</td></tr><tr><td class="">#34 MAN DRESS CYC.</td><td class=""></td><td class="val-red">-</td><td class="">cycle</td><td class="">#39 G.WHEEL SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">min-1</td></tr><tr><td class="">#35 AUTO DRESS CYC.</td><td class=""></td><td class="val-red">-</td><td class="">cycle</td><td class=""></td><td class=""></td><td class=""></td><td class="val-red">-</td><td class=""></td></tr><tr class="hdr-row"><td colspan="9">WHEEL CONDITION</td></tr><tr><td class="">#41 NEW WHEEL SIZE</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#43 WORN WHEEL SIZE</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm</td></tr><tr class="sep-row"><td colspan="9"></td></tr><tr><td class="">#42 WHEEL SIZE</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#44 PRESENT WHEEL SIZE</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm</td></tr><tr class="hdr-row"><td colspan="9">SPINDLE</td></tr><tr><td class="">#52 DRESS R. POSITION</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#56 OSC. AMOUNT</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm</td></tr><tr><td class="">#53 DRESS F. POSITION</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#57 OSC SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">cpm</td></tr><tr><td class="">#54 RETRACT POSITION</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#58 DRESS SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm/s</td></tr><tr><td class="">#55 GRINDING POSITION</td><td class=""></td><td class="val-red">-</td><td class="">mm</td><td class="">#59 N.W.DRESS SPEED</td><td class=""></td><td class=""></td><td class="val-red">-</td><td class="">mm/s</td></tr><tr class="sep-row"><td colspan="9"></td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- MIDDLE: TOOLING GRID (4 groups × 5 slots) -->
+        <div class="tooling-panel">
+            <div class="tooling-group"><div class="tool-label-row"><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T01</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T02</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T03</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T04</span><span class="tool-name-val"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-label-inner"><span class="tool-id">T05</span><span class="tool-name-val"></span></div></div></div><div class="tool-sep-row"></div><div class="tool-img-row"><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-img-cell"></div></div></div><div class="tool-dwg-row"><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div></div><div class="tool-maker-row"><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-maker-cell"></div></div></div></div><div class="tooling-group"><div class="tool-label-row"><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T06</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T07</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T08</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T09</span><span class="tool-name-val"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-label-inner"><span class="tool-id">T10</span><span class="tool-name-val"></span></div></div></div><div class="tool-sep-row"></div><div class="tool-img-row"><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-img-cell"></div></div></div><div class="tool-dwg-row"><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div></div><div class="tool-maker-row"><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-maker-cell"></div></div></div></div><div class="tooling-group"><div class="tool-label-row"><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T11</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T12</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T13</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T14</span><span class="tool-name-val"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-label-inner"><span class="tool-id">T15</span><span class="tool-name-val"></span></div></div></div><div class="tool-sep-row"></div><div class="tool-img-row"><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-img-cell"></div></div></div><div class="tool-dwg-row"><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div></div><div class="tool-maker-row"><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-maker-cell"></div></div></div></div><div class="tooling-group"><div class="tool-label-row"><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T16</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T17</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T18</span><span class="tool-name-val"></span></div></div><div class="tool-slot"><div class="tool-label-inner"><span class="tool-id">T19</span><span class="tool-name-val"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-label-inner"><span class="tool-id">T20</span><span class="tool-name-val"></span></div></div></div><div class="tool-sep-row"></div><div class="tool-img-row"><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot"><div class="tool-img-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-img-cell"></div></div></div><div class="tool-dwg-row"><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div><div class="tool-slot tool-slot-wide"><div class="tool-dwg-cell"><span class="tool-dwg-no"></span></div></div></div><div class="tool-maker-row"><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot"><div class="tool-maker-cell"></div></div><div class="tool-slot tool-slot-wide"><div class="tool-maker-cell"></div></div></div></div>
+        </div>
+
+        <!-- RIGHT: GRINDING IMAGE + GW PARAMS -->
+        <div class="grinding-panel">
+            <div class="grinding-img-wrap">
+                <div class="grinding-no-img">No Layout Image</div>
+            </div>
+            <div class="gw-panel">
+                
+            </div>
+        </div>
+
+    </div><!-- /main-body -->
+
+    <!-- ══ FOOTER (Excel row 56) ════════════════════════════════════════════ -->
+    <div class="footer">
+        <span>NMB Minebea Thai Ltd.</span>
+        <span>* = T-Select computed (not confirmed in process plan)</span>
+        <span>Page 1 of 1</span>
+    </div>
+
+</div><!-- /page -->
+</body>
+</html>

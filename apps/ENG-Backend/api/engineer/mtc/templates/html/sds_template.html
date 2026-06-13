@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SDS - {{cn}}</title>
+    <style>
+        /* CSS variable overrides injected at render time (from sds_template_css_config) */
+        {{css_vars_block}}
+
+        @page { size: A4 landscape; margin: 2.54mm; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: var(--font-size-base, 5.3pt);
+            line-height: 1.15; color: #000; background: #fff;
+            width: 291.92mm;
+        }
+        .page { border: 1.5pt solid var(--color-border-outer, #000); width: 100%; overflow: hidden; }
+
+        /* ── ROW 1: TITLE (3.93mm) ─────────────────────────────────────────── */
+        .title-bar {
+            display: flex; align-items: center; height: 3.93mm;
+            padding: 0 2mm; border-bottom: 0.5pt solid #ccc;
+            position: relative; overflow: hidden;
+        }
+        .title-center {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            font-size: var(--font-size-title, 7pt); font-weight: bold;
+            letter-spacing: 0.5px; white-space: nowrap;
+        }
+        .title-right { margin-left: auto; font-size: var(--font-size-base, 5.3pt); font-weight: bold; }
+
+        /* ── ROW 2 SPACER (1.40mm) ─────────────────────────────────────────── */
+        .row2-spacer { height: 1.40mm; border-bottom: 1pt solid var(--color-border-outer, #000); }
+
+        /* ── ROWS 3-6: HEADER PANELS ────────────────────────────────────────── */
+        .hdr-panels { display: flex; border-bottom: 1pt solid var(--color-border-outer, #000); overflow: hidden; }
+
+        .hdr-left {
+            width: var(--width-params-panel, 26.13%); flex: none;
+            border-right: 1pt solid var(--color-border-outer, #000);
+            display: flex; flex-direction: column;
+        }
+        .hdr-mid {
+            flex: 1; border-right: 1pt solid var(--color-border-outer, #000);
+            display: flex; flex-direction: row; overflow: hidden;
+        }
+        .hdr-part-info { flex: 1; display: flex; flex-direction: column; }
+
+        /* SDS REV sub-column: AH-AM = 19.4% of tooling panel */
+        .hdr-sds-rev {
+            width: 19.4%; flex: none;
+            border-left: 1pt solid var(--color-border-outer, #000);
+            display: flex; flex-direction: column;
+        }
+        .sds-rev-lbl-cell {
+            height: 5.61mm; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 4.5pt; font-weight: bold; text-align: center;
+            border-bottom: 0.5pt solid var(--color-border-inner, #aaa);
+            padding: 0 0.5mm; line-height: 1.2;
+        }
+        .sds-rev-val-cell {
+            height: 5.61mm; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 7pt; font-weight: bold;
+            color: var(--color-value-red, #cc0000);
+            border-bottom: 0.5pt solid var(--color-border-inner, #aaa);
+        }
+
+        /* RIGHT panel: stamps */
+        .hdr-right {
+            width: var(--width-grinding-panel, 19.27%); flex: none;
+            display: flex; flex-direction: row; overflow: hidden;
+        }
+        .stamp-col {
+            flex: 1; display: flex; flex-direction: column;
+            border-right: 0.5pt solid var(--color-border-outer, #000);
+        }
+        .stamp-col:last-child { border-right: none; }
+        .stamp-lbl {
+            height: 5.61mm; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 5pt; font-weight: bold; text-align: center;
+            border-bottom: 0.5pt solid var(--color-border-inner, #aaa); padding: 0 0.5mm;
+        }
+        .stamp-val {
+            flex: 1; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 5pt; padding: 0.5mm; text-align: center;
+        }
+
+        /* Header info rows: rows 3-5 = 5.61mm, row 6 = 2.81mm */
+        .hdr-row {
+            display: flex; align-items: center; height: 5.61mm;
+            border-bottom: 0.5pt solid var(--color-border-inner, #aaa);
+            padding: 0 1.2mm; overflow: hidden;
+        }
+        .hdr-row.row6 { height: 2.81mm; border-bottom: none; }
+        .hdr-mid-row {
+            display: flex; align-items: center; height: 5.61mm;
+            border-bottom: 0.5pt solid var(--color-border-inner, #aaa);
+            overflow: hidden;
+        }
+        .hdr-mid-row.row6 { height: 2.81mm; border-bottom: none; }
+        .mid-cell {
+            display: flex; align-items: center; height: 100%;
+            padding: 0 1.2mm;
+            border-right: 0.5pt solid var(--color-border-inner, #aaa);
+            overflow: hidden;
+        }
+        .mid-cell:last-child { border-right: none; }
+        .lbl { font-size: var(--font-size-base, 5.3pt); font-weight: bold; white-space: nowrap; flex: none; margin-right: 0.8mm; }
+        .val { font-size: var(--font-size-base, 5.3pt); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+        /* ── ROW 7 SPACER (2.81mm) ─────────────────────────────────────────── */
+        .row7-spacer { height: 2.81mm; border-bottom: 1pt solid var(--color-border-outer, #000); }
+
+        /* ── ROWS 8-13: ECN ─────────────────────────────────────────────────── */
+        .ecn-section { display: flex; border-bottom: 1pt solid var(--color-border-outer, #000); overflow: hidden; }
+        .ecn-table-wrap { flex: 1; border-right: 1pt solid var(--color-border-outer, #000); }
+        .ecn-grinding-col { width: var(--width-grinding-panel, 19.27%); flex: none; }
+        .ecn-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-base, 5.3pt); }
+        .ecn-table th {
+            border: 0.5pt solid var(--color-border-outer, #000);
+            padding: 0.2mm 1mm; font-weight: bold; text-align: center;
+            height: 2.81mm;
+        }
+        .ecn-table td {
+            border: 0.5pt solid var(--color-border-outer, #000);
+            padding: 0.2mm 1mm; height: 2.81mm; overflow: hidden;
+        }
+        /* Column proportions: REV=5.1%, ECN NO=17.0%, DATE=10.3%, DESC=54.1%, REMARK=13.5% */
+        .ecn-c-rev  { width:  5.1%; } .ecn-c-ecn  { width: 17.0%; }
+        .ecn-c-date { width: 10.3%; } .ecn-c-desc { width: 54.1%; }
+        .ecn-c-rmk  { width: 13.5%; }
+        .ecn-sample-hdr {
+            height: 2.81mm; display: flex; align-items: center;
+            padding: 0 1mm; font-size: var(--font-size-base, 5.3pt); font-weight: bold;
+            border-bottom: 0.3pt solid var(--color-border-inner, #aaa);
+        }
+        .ecn-sample-row { height: 2.81mm; border-bottom: 0.3pt solid #eee; }
+
+        /* ── ROWS 14-15: SECTION TITLE (5.62mm = 2×2.81mm) ─────────────────── */
+        .section-title-area {
+            display: flex; border-bottom: 1pt solid var(--color-border-outer, #000);
+            height: 5.62mm; overflow: hidden;
+        }
+        .section-title-main {
+            flex: 1; font-size: var(--font-size-section, 9pt); font-weight: bold;
+            text-align: center; display: flex; align-items: center; justify-content: center;
+            border-right: 1pt solid var(--color-border-outer, #000);
+        }
+        .section-title-grinding {
+            width: var(--width-grinding-panel, 19.27%); flex: none;
+            font-size: 5.5pt; font-weight: bold; text-align: center;
+            display: flex; align-items: center; justify-content: center; padding: 0.5mm;
+        }
+
+        /* ── ROWS 16-55: MAIN BODY ──────────────────────────────────────────── */
+        .main-body { display: flex; }
+        .params-panel  { width: var(--width-params-panel, 26.13%); flex: none; border-right: 1pt solid var(--color-border-outer, #000); overflow: hidden; }
+        .tooling-panel { width: var(--width-tooling-panel, 54.60%); flex: none; border-right: 1pt solid var(--color-border-outer, #000); }
+        .grinding-panel { width: var(--width-grinding-panel, 19.27%); flex: none; display: flex; flex-direction: column; }
+
+        /* Param table */
+        .param-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-base, 5.3pt); }
+        .param-table td {
+            border: 0.3pt solid #d0d0d0; padding: 0 0.5mm;
+            height: var(--height-row-normal, 3.65mm);
+            overflow: hidden; white-space: nowrap;
+        }
+        .param-table .sep-row td {
+            height: var(--height-row-sep, 0.84mm) !important;
+            border: none; background: var(--color-sep-bg, #f0f0f0); padding: 0;
+        }
+        .param-table .hdr-row td {
+            background: var(--color-header-bg, #e0e0e0); font-weight: bold;
+            text-align: center; border-color: #888;
+            height: var(--height-row-normal, 3.65mm);
+        }
+        .param-table .val-red { color: var(--color-value-red, #cc0000); font-weight: bold; }
+        .pc-a{width:15.8%} .pc-b{width:11.5%} .pc-c{width:10.2%} .pc-d{width:10.2%}
+        .pc-e{width:10.2%} .pc-f{width:10.2%} .pc-g{width:10.2%} .pc-h{width:10.2%} .pc-i{width:11.5%}
+
+        /* Tooling grid */
+        .tooling-group { border-bottom: 0.5pt solid var(--color-border-outer, #000); }
+        .tooling-group:last-child { border-bottom: none; }
+        .tool-slot      { width: 19.39%; flex: none; border-right: 0.5pt solid var(--color-border-inner, #aaa); }
+        .tool-slot-wide { width: 22.46%; }
+        .tool-slot:last-child, .tool-slot-wide:last-child { border-right: none; }
+
+        .tool-label-row { display: flex; height: var(--height-row-normal, 3.65mm); border-bottom: 0.3pt solid #ccc; }
+        .tool-label-inner {
+            display: flex; align-items: center; height: 100%;
+            width: 100%; padding: 0 0.8mm; gap: 0.8mm; overflow: hidden;
+        }
+        .tool-id {
+            background: var(--color-badge-bg, #1a3a8c); color: #fff;
+            font-size: var(--font-size-badge, 4.5pt); font-weight: bold;
+            padding: 0 0.8mm; border-radius: 1pt; white-space: nowrap; flex: none;
+        }
+        .tool-name-val { font-size: var(--font-size-badge, 4.5pt); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+        .tool-sep-row { height: var(--height-row-sep, 0.84mm); background: var(--color-sep-bg, #f0f0f0); }
+
+        .tool-img-row { display: flex; height: var(--height-row-img, 21.9mm); border-bottom: 0.3pt solid #ccc; }
+        .tool-img-cell {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; width: 100%; padding: 0.5mm; overflow: hidden;
+        }
+        .tool-img-cell img { max-width: 100%; max-height: 20mm; object-fit: contain; }
+
+        .tool-dwg-row { display: flex; height: var(--height-row-normal, 3.65mm); border-bottom: 0.3pt solid #ccc; }
+        .tool-dwg-cell { display: flex; align-items: center; width: 100%; height: 100%; padding: 0 0.8mm; overflow: hidden; }
+        .tool-dwg-no {
+            color: var(--color-value-red, #cc0000); font-size: var(--font-size-badge, 4.5pt);
+            font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .tool-maker-row { display: flex; height: var(--height-row-normal, 3.65mm); }
+        .tool-maker-cell {
+            display: flex; align-items: center; width: 100%; height: 100%;
+            padding: 0 0.8mm; font-size: 4pt; color: #555; overflow: hidden; white-space: nowrap;
+        }
+
+        /* Grinding panel */
+        .grinding-img-wrap {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 1mm; border-bottom: 0.5pt solid #ccc; min-height: 20mm;
+        }
+        .grinding-img-wrap img { max-width: 100%; max-height: 55mm; object-fit: contain; }
+        .grinding-no-img { color: #bbb; font-size: 5pt; font-style: italic; text-align: center; }
+        .gw-panel { padding: 0.3mm 0.5mm; }
+        .gw-label {
+            font-size: 5pt; font-weight: bold; text-align: center; padding: 0.3mm;
+            background: var(--color-header-bg, #e0e0e0);
+            border-bottom: 0.3pt solid #999; margin-bottom: 0.3mm;
+        }
+        .gw-table { width: 100%; border-collapse: collapse; font-size: 4.5pt; }
+        .gw-table td { border: 0.3pt solid #d0d0d0; padding: 0 0.5mm; height: 2.81mm; overflow: hidden; white-space: nowrap; }
+        .gw-table .hdr-row td { background: var(--color-header-bg, #e0e0e0); text-align: center; border-color: #999; font-weight: bold; }
+        .gw-table .val-red { color: var(--color-value-red, #cc0000); font-weight: bold; }
+
+        /* ── ROW 56: FOOTER (2.69mm) ────────────────────────────────────────── */
+        .footer {
+            display: flex; justify-content: space-between; align-items: center;
+            border-top: 1pt solid var(--color-border-outer, #000);
+            padding: 0.2mm 2mm; font-size: 4.5pt; color: #555; height: 2.69mm;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- ROW 1: Title (3.93mm) -->
+    <div class="title-bar">
+        <div></div>
+        <div class="title-center">SETUP DATA SHEET</div>
+        <div class="title-right">Rod End Bearing</div>
+    </div>
+
+    <!-- ROW 2: Spacer (1.40mm) -->
+    <div class="row2-spacer"></div>
+
+    <!-- ROWS 3-6: Header info (3 panels) -->
+    <div class="hdr-panels">
+
+        <!-- LEFT: Machine/CT/Category/Note -->
+        <div class="hdr-left">
+            <div class="hdr-row"><span class="lbl">MACHINE :</span><span class="val">{{machine_type_name}}</span></div>
+            <div class="hdr-row"><span class="lbl">CYCLE TIME :</span><span class="val">{{ct}}&nbsp;sec</span></div>
+            <div class="hdr-row"><span class="lbl">CATEGORY :</span><span class="val">{{category}}</span></div>
+            <div class="hdr-row row6"><span class="lbl">NOTE</span></div>
+        </div>
+
+        <!-- MIDDLE: Part info + SDS REV sub-column -->
+        <div class="hdr-mid">
+            <div class="hdr-part-info">
+                <!-- Row 3 -->
+                <div class="hdr-mid-row">
+                    <div class="mid-cell" style="flex:2.2;"><span class="lbl">PART NO :</span><span class="val">{{parts_no}}</span></div>
+                    <div class="mid-cell" style="flex:0.8;"><span class="lbl">REV :</span><span class="val">{{dwg_rev}}</span></div>
+                    <div class="mid-cell" style="flex:3;"><span class="lbl">PROCESS :</span><span class="val">{{process_code}}&nbsp;{{process_name}}</span></div>
+                </div>
+                <!-- Row 4 -->
+                <div class="hdr-mid-row">
+                    <div class="mid-cell" style="flex:3;"><span class="lbl">C/N :</span><span class="val" style="color:#0033cc;font-weight:bold;">{{cn}}</span></div>
+                    <div class="mid-cell" style="flex:3;"><span class="lbl">PROGRAM NO :</span><span class="val">{{program_no}}</span></div>
+                </div>
+                <!-- Row 5 -->
+                <div class="hdr-mid-row">
+                    <div class="mid-cell" style="flex:3;"><span class="lbl">MAT'L TYPE :</span><span class="val">{{material}}</span></div>
+                    <div class="mid-cell" style="flex:3;"><span class="lbl">PROGRAM NAME :</span><span class="val">{{program_name}}</span></div>
+                </div>
+                <!-- Row 6 (2.81mm) -->
+                <div class="hdr-mid-row row6"><div class="mid-cell" style="flex:1;border-right:none;"></div></div>
+            </div>
+            <!-- SDS REV sub-column (rows 3-6) -->
+            <div class="hdr-sds-rev">
+                <div class="sds-rev-lbl-cell">SETUP DATA SHEET REV.</div>
+                <div class="sds-rev-val-cell">{{sds_rev}}</div>
+                <div style="flex:1;"></div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Stamps -->
+        <div class="hdr-right">
+            <div class="stamp-col"><div class="stamp-lbl">PREPARED</div><div class="stamp-val">{{stamp_prepared}}</div></div>
+            <div class="stamp-col"><div class="stamp-lbl">CHECKED</div><div class="stamp-val">{{stamp_checked}}</div></div>
+            <div class="stamp-col"><div class="stamp-lbl">APPROVED</div><div class="stamp-val">{{stamp_approved}}</div></div>
+        </div>
+
+    </div>
+
+    <!-- ROW 7: Spacer (2.81mm) -->
+    <div class="row7-spacer"></div>
+
+    <!-- ROWS 8-13: ECN -->
+    <div class="ecn-section">
+        <div class="ecn-table-wrap">
+            <table class="ecn-table">
+                <thead><tr>
+                    <th class="ecn-c-rev">REV.</th>
+                    <th class="ecn-c-ecn">ECN NO.</th>
+                    <th class="ecn-c-date">DATE</th>
+                    <th class="ecn-c-desc">DESCRIPTION</th>
+                    <th class="ecn-c-rmk">REMARK</th>
+                </tr></thead>
+                <tbody>{{ecn_html}}</tbody>
+            </table>
+        </div>
+        <div class="ecn-grinding-col">
+            <div class="ecn-sample-hdr">SAMPLE NO :</div>
+            <div class="ecn-sample-row"></div><div class="ecn-sample-row"></div>
+            <div class="ecn-sample-row"></div><div class="ecn-sample-row"></div>
+            <div class="ecn-sample-row"></div>
+        </div>
+    </div>
+
+    <!-- ROWS 14-15: Section title (5.62mm) -->
+    <div class="section-title-area">
+        <div class="section-title-main">TOOLING &amp; GRINDING CONDITION</div>
+        <div class="section-title-grinding">{{grinding_area_label}}</div>
+    </div>
+
+    <!-- ROWS 16-55: Main body -->
+    <div class="main-body">
+        <div class="params-panel">
+            <table class="param-table">
+                <colgroup>
+                    <col class="pc-a"><col class="pc-b"><col class="pc-c">
+                    <col class="pc-d"><col class="pc-e"><col class="pc-f">
+                    <col class="pc-g"><col class="pc-h"><col class="pc-i">
+                </colgroup>
+                <tbody>{{params_html}}</tbody>
+            </table>
+        </div>
+        <div class="tooling-panel">{{tooling_html}}</div>
+        <div class="grinding-panel">
+            <div class="grinding-img-wrap">{{grinding_layout_html}}</div>
+            <div class="gw-panel">{{gw_params_html}}</div>
+        </div>
+    </div>
+
+    <!-- ROW 56: Footer (2.69mm) -->
+    <div class="footer">
+        <span>NMB Minebea Thai Ltd.</span>
+        <span>* = T-Select computed (not confirmed in process plan)</span>
+        <span>Page 1 of 1</span>
+    </div>
+
+</div>
+</body>
+</html>
