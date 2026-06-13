@@ -25,6 +25,7 @@ const C = {
   blue:     '#1890ff',
   cyan:     '#00d4ff',
   green:    '#52c41a',
+  greenSoft:'#95de64',   // THAI Complete (T-Select #1 boost) — softer than the KZW green
   red:      '#ff4d4f',
   yellow:   '#ffc53d',
   orange:   '#fa8c16',
@@ -83,12 +84,21 @@ const sectionTitle = (label) => (
 // ── Part Type Card ─────────────────────────────────────────────────────────────
 const PartTypeCard = ({ pt }) => {
   const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
-  const pct = pt.complete_pct || 0;
+  const pct = pt.complete_pct || 0;                       // with T-Select #1
+  const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
+  const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
+  
+  // Custom label mapping: 'body' or 'mecha' -> 'Mecha'
+  const typeKey = pt.part_type.toLowerCase();
+  const displayLabel = (typeKey === 'body' || typeKey === 'mecha') 
+    ? 'Mecha' 
+    : (pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1));
+
   return (
     <div style={{ ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
         <Text style={{ color, fontSize: 13, fontWeight: 800, textTransform: 'uppercase' }}>
-          {pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)}
+          {displayLabel}
         </Text>
         <Tooltip title="SDS requirements = CN × machine × process (one CN may need several setup sheets)">
           <Text style={{ color: C.textPri, fontSize: 22, fontWeight: 800, lineHeight: 1, cursor: 'help' }}>
@@ -103,66 +113,34 @@ const PartTypeCard = ({ pt }) => {
         </Tooltip>
       </div>
       <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
-      <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px' }}>
-        <div style={{
-          width: `${Math.min(pct, 100)}%`, height: '100%',
-          background: pct >= 90 ? C.green : pct >= 60 ? C.yellow : C.red,
-          transition: 'width 0.8s ease',
-        }} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-        <Text style={{ color: pct >= 90 ? C.green : pct >= 60 ? C.yellow : C.red, fontSize: 11, fontWeight: 700 }}>
-          {pct}%
+      {/* Two-tone bar: solid = KZW baseline, soft green = THAI Complete (T-Select #1 boost, * ) */}
+      <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
+        <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
+          <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
+          <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
+        </div>
+      </Tooltip>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>
+          {pctSaved}%
         </Text>
+        {boost > 0 && (
+          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-        <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{pt.complete.toLocaleString()} complete</Tag>
+        <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
+        {boost > 0 && (
+          <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
+          </Tooltip>
+        )}
         <Tooltip title={gapTooltip(pt.gaps?.noToolMatch, 'Config tooling here → +complete')}>
           <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.tool_match ?? 0)).toLocaleString()} no tool match</Tag>
         </Tooltip>
         <Tooltip title={gapTooltip(pt.gaps?.noExcelConfig, 'Add Excel config here → +complete')}>
           <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.excel_config ?? 0)).toLocaleString()} no excel config</Tag>
         </Tooltip>
-      </div>
-    </div>
-  );
-};
-
-// ── Part Type Detail Row (horizontal coverage bars) ───────────────────────────
-const PartTypeDetailRow = ({ pt }) => {
-  const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
-  const total = pt.total || 1;
-  const segments = [
-    { key: 'complete',     count: pt.complete,     color: C.green,  label: 'Complete'     },
-    { key: 'pending', count: pt.pending, color: C.yellow, label: 'Pending' },
-  ];
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <Text style={{ color, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', width: 80 }}>
-          {pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)}
-        </Text>
-        <div style={{ display: 'flex', gap: 8, flex: 1, alignItems: 'center' }}>
-          {/* Segmented bar */}
-          <div style={{ flex: 1, height: 14, display: 'flex', borderRadius: 4, overflow: 'hidden', background: C.border }}>
-            {segments.map(seg => (
-              seg.count > 0 && (
-                <Tooltip key={seg.key} title={`${seg.label}: ${seg.count.toLocaleString()} (${((seg.count / total) * 100).toFixed(0)}%)`}>
-                  <div style={{
-                    width: `${(seg.count / total) * 100}%`,
-                    background: seg.color,
-                    transition: 'width 0.8s ease',
-                  }} />
-                </Tooltip>
-              )
-            ))}
-          </div>
-          <Tooltip title="Unique CNs · SDS requirements (CN × machine × process)">
-            <Text style={{ color: C.textSec, fontSize: 10, whiteSpace: 'nowrap', cursor: 'help' }}>
-              {(pt.cn_count ?? 0).toLocaleString()} CNs · {pt.total.toLocaleString()} reqs
-            </Text>
-          </Tooltip>
-        </div>
       </div>
     </div>
   );
@@ -176,6 +154,7 @@ export default function SdsCoverageDashboard() {
   const [building, setBuilding] = useState(false);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
+  const [filterReason, setFilterReason] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
   const pollRef = useRef(null);
 
@@ -222,21 +201,31 @@ export default function SdsCoverageDashboard() {
     return stopPolling; // clear the poll timer on unmount
   }, [fetchData, stopPolling]);
 
-  const byPartType = data?.byPartType || [];
+  const byPartType = useMemo(() => {
+    const raw = data?.byPartType || [];
+    const order = ['ball', 'race', 'mecha', 'body', 'sleeve', 'spherical'];
+    return [...raw].sort((a, b) => {
+      const ia = order.indexOf(a.part_type.toLowerCase());
+      const ib = order.indexOf(b.part_type.toLowerCase());
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }, [data]);
 
   // ── Coverage by Part Type stacked bar ────────────────────────────────────────
-  const ptBarData = {
+  const ptBarData = useMemo(() => ({
     labels: byPartType.map(pt => pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)),
     datasets: [
-      { label: 'Complete',     data: byPartType.map(pt => pt.complete),     backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
-      { label: 'Pending', data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
+      { label: 'KZW Complete',   data: byPartType.map(pt => pt.complete_saved ?? pt.complete), backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
+      { label: 'THAI Complete *', data: byPartType.map(pt => Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0))), backgroundColor: 'rgba(149,222,100,0.75)', borderColor: C.greenSoft, borderWidth: 1, stack: 'pt' },
+      { label: 'Pending',                     data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
     ],
-  };
+  }), [byPartType]);
   const ptBarOpts = {
-    responsive: true, maintainAspectRatio: false,
+    responsive: true, maintainAspectRatio: false, animation: false,
     plugins: {
       legend: { labels: { color: C.textSec, font: { size: 11 } } },
       tooltip: { mode: 'index', intersect: false },
+      datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
     },
     scales: {
       x: { stacked: true, ticks: { color: C.textSec, font: { size: 12 } }, grid: { color: C.gridLine } },
@@ -265,19 +254,20 @@ export default function SdsCoverageDashboard() {
     }
     return months;
   }, [data]);
-  const newPartsChartData = {
+  const newPartsChartData = useMemo(() => ({
     labels: monthlyNewParts.map(r => fmtMonth(r.month)),
     datasets: [
       { label: 'Ball',  data: monthlyNewParts.map(r => r.ball  || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball,  borderWidth: 1, stack: 'np' },
       { label: 'Race',  data: monthlyNewParts.map(r => r.race  || 0), backgroundColor: 'rgba(82,196,26,0.75)',  borderColor: PART_TYPE_COLOR.race,  borderWidth: 1, stack: 'np' },
       { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: 'rgba(235,47,150,0.65)', borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
     ],
-  };
+  }), [monthlyNewParts]);
   const newPartsChartOpts = {
-    responsive: true, maintainAspectRatio: false,
+    responsive: true, maintainAspectRatio: false, animation: false,
     plugins: {
       legend: { labels: { color: C.textSec, font: { size: 11 } } },
       tooltip: { mode: 'index', intersect: false },
+      datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
     },
     scales: {
       x: { stacked: true, ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
@@ -302,15 +292,25 @@ export default function SdsCoverageDashboard() {
     return months;
   }, [data]);
 
-  const statusChartData = {
+  const statusChartData = useMemo(() => ({
     labels: monthlyStatus.map(r => fmtMonth(r.month)),
     datasets: [
       {
         type: 'bar',
-        label: 'Complete',
-        data: monthlyStatus.map(r => r.complete),
+        label: 'KZW Complete',
+        data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
         backgroundColor: 'rgba(82,196,26,0.75)',
         borderColor: C.green,
+        borderWidth: 1,
+        stack: 'status',
+        yAxisID: 'y',
+      },
+      {
+        type: 'bar',
+        label: 'THAI Complete *',
+        data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
+        backgroundColor: 'rgba(149,222,100,0.70)',
+        borderColor: C.greenSoft,
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -327,13 +327,24 @@ export default function SdsCoverageDashboard() {
       },
       {
         type: 'line',
-        label: 'Complete %',
+        label: 'Complete % (KZW+THAI)',
         data: monthlyStatus.map(r => r.complete_pct),
         borderColor: C.cyan,
         backgroundColor: 'rgba(0,212,255,0.15)',
         borderWidth: 2,
         pointRadius: 3,
         pointBackgroundColor: C.cyan,
+        tension: 0.3,
+        yAxisID: 'y1',
+      },
+      {
+        type: 'line',
+        label: 'KZW Complete %',
+        data: monthlyStatus.map(r => r.complete_saved_pct ?? r.complete_pct),
+        borderColor: C.green,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        pointRadius: 0,
         tension: 0.3,
         yAxisID: 'y1',
       },
@@ -349,19 +360,20 @@ export default function SdsCoverageDashboard() {
         yAxisID: 'y1',
       },
     ],
-  };
+  }), [monthlyStatus]);
 
   const statusChartOpts = {
-    responsive: true,
+    responsive: true, animation: false,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { labels: { color: C.textSec, font: { size: 11 } } },
+      datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
       tooltip: {
         callbacks: {
           label: ctx => {
-            if (ctx.dataset.label === 'Complete %') return `Complete %: ${ctx.parsed.y}%`;
             if (ctx.dataset.label === 'Target 90%') return null;
+            if (ctx.dataset.label.includes('%')) return `${ctx.dataset.label}: ${ctx.parsed.y}%`;
             return `${ctx.dataset.label}: ${ctx.parsed.y}`;
           },
         },
@@ -398,9 +410,17 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
+      if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
-  }, [data, filterPt, filterMc]);
+  }, [data, filterPt, filterMc, filterReason]);
+
+  // Keyed dataSource — memoized so the (potentially large) array isn't rebuilt with a
+  // spread on every render (poll tick / chart hover). Only changes when the filter does.
+  const attentionRows = useMemo(
+    () => filteredAttention.map((r, i) => ({ ...r, key: i })),
+    [filteredAttention]
+  );
 
   const attentionColumns = [
     {
@@ -521,9 +541,9 @@ export default function SdsCoverageDashboard() {
 
             {/* ── Part Type Cards ─────────────────────────────────────────────── */}
             {byPartType.length > 0 && (
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'stretch' }}>
+              <Row gutter={[10, 10]} style={{ marginBottom: 14 }}>
                 {/* Total CNs summary card */}
-                <div style={{ flex: 1 }}>
+                <Col span={4}>
                   <div style={{ ...cardStyle, borderTop: `3px solid ${C.cyan}`, height: '100%', boxSizing: 'border-box' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
                       <Text style={{ color: C.cyan, fontSize: 13, fontWeight: 800 }}>TOTAL</Text>
@@ -539,20 +559,30 @@ export default function SdsCoverageDashboard() {
                         <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(data?.kpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
                       </Tooltip>
                     </div>
-                    <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px' }}>
-                      <div style={{
-                        width: `${Math.min(data?.kpi?.completePct ?? 0, 100)}%`, height: '100%',
-                        background: (data?.kpi?.completePct ?? 0) >= 90 ? C.green : (data?.kpi?.completePct ?? 0) >= 60 ? C.yellow : C.red,
-                        transition: 'width 0.8s ease',
-                      }} />
-                    </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <Text style={{ color: (data?.kpi?.completePct ?? 0) >= 90 ? C.green : (data?.kpi?.completePct ?? 0) >= 60 ? C.yellow : C.red, fontSize: 11, fontWeight: 700 }}>
-                        {data?.kpi?.completePct ?? 0}%
-                      </Text>
-                    </div>
+                    {(() => {
+                      const pct = data?.kpi?.completePct ?? 0;
+                      const pctSaved = data?.kpi?.completeSavedPct ?? pct;
+                      const boost = Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0));
+                      return (<>
+                        <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
+                          <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
+                            <div style={{ width: `${Math.min(pctSaved, 100)}%`, height: '100%', background: C.green, transition: 'width 0.8s ease' }} />
+                            <div style={{ width: `${Math.min(Math.max(pct - pctSaved, 0), 100)}%`, height: '100%', background: C.greenSoft, opacity: 0.85, transition: 'width 0.8s ease' }} />
+                          </div>
+                        </Tooltip>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}%</Text>
+                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>}
+                        </div>
+                      </>);
+                    })()}
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.complete ?? 0).toLocaleString()} complete</Tag>
+                      <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
+                      {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
+                        <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
+                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
+                        </Tooltip>
+                      )}
                       <Tooltip title={gapTooltip(data?.kpi?.gaps?.noToolMatch, 'Config tooling here → +complete')}>
                         <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.toolMatch ?? 0)).toLocaleString()} no tool match</Tag>
                       </Tooltip>
@@ -561,18 +591,18 @@ export default function SdsCoverageDashboard() {
                       </Tooltip>
                     </div>
                   </div>
-                </div>
+                </Col>
                 {byPartType.map(pt => (
-                  <div key={pt.part_type} style={{ flex: 1 }}>
+                  <Col key={pt.part_type} span={4}>
                     <PartTypeCard pt={pt} />
-                  </div>
+                  </Col>
                 ))}
-              </div>
+              </Row>
             )}
 
-            {/* ── New Parts per Month + Breakdown (same row) ─────────────────── */}
+            {/* ── Charts Row (New Parts + Cumulative Status) ─────────────────── */}
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
-              <Col span={14}>
+              <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
                   {sectionTitle('New Parts per Month')}
                   <div style={{ height: 240 }}>
@@ -583,33 +613,15 @@ export default function SdsCoverageDashboard() {
                   </div>
                 </div>
               </Col>
-              <Col span={10}>
+              <Col span={16}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('Coverage Breakdown by Part Type')}
-                  {byPartType.map(pt => (
-                    <PartTypeDetailRow key={pt.part_type} pt={pt} />
-                  ))}
-                  <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                    <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.green }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>Complete</Text>
-                    </Space>
-                    <Space size={4}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: C.yellow }} />
-                      <Text style={{ color: C.textSec, fontSize: 10 }}>Pending</Text>
-                    </Space>
+                  {sectionTitle('Cumulative Coverage Status')}
+                  <div style={{ height: 240 }}>
+                    <Bar data={statusChartData} options={statusChartOpts} />
                   </div>
                 </div>
               </Col>
             </Row>
-
-            {/* ── Monthly Coverage Status (bar + line) ───────────────────────── */}
-            <div style={{ ...cardStyle, marginBottom: 14 }}>
-              {sectionTitle('Cumulative Coverage Status')}
-              <div style={{ height: 240 }}>
-                <Bar data={statusChartData} options={statusChartOpts} />
-              </div>
-            </div>
 
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
             <div style={cardStyle}>
@@ -627,11 +639,18 @@ export default function SdsCoverageDashboard() {
                   <Select size="small" value={filterMc} onChange={setFilterMc} style={{ width: 160 }}
                     options={machineOptions} popupMatchSelectWidth={false} showSearch
                     filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())} />
+                  <Select size="small" value={filterReason} onChange={setFilterReason} style={{ width: 190 }}
+                    options={[
+                      { value: '', label: 'All Reasons' },
+                      { value: 'NO_EXCEL', label: 'Tool ✓ — needs Excel config' },
+                      { value: 'NO_TOOL', label: 'No tool match' },
+                      { value: 'NO_TOOL_NO_EXCEL', label: 'No tool + no Excel config' },
+                    ]} popupMatchSelectWidth={false} />
                   <Text style={{ color: C.textSec, fontSize: 11 }}>{filteredAttention.length} CNs</Text>
                 </Space>
               </div>
               <Table
-                dataSource={filteredAttention.map((r, i) => ({ ...r, key: i }))}
+                dataSource={attentionRows}
                 columns={attentionColumns}
                 size="small"
                 pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}

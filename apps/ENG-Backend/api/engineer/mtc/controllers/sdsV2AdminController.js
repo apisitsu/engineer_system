@@ -5,16 +5,25 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const { isAdmin } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
+const { invalidateCoverageCache } = require('./sdsV2ReportController');
 
 const router = express.Router();
+const headlessController = require('./sdsV2HeadlessController');
 
 // Flush the SDS search/PDF cache (sds:* keys, 10-min TTL) after a successful
 // config mutation, so edits to parameters / tool lists / cell mappings are
 // reflected on the very next search & PDF. Without this, template-setup edits
 // appear to "not take" until the TTL expires. (machine-types routes already
 // invalidate inline.)
+// Also flushes the coverage cache so the report picks up new machine templates
+// and tool configs immediately without waiting for the 15-min TTL.
 const flushSds = (req, res, next) => {
-  res.on('finish', () => { if (res.statusCode < 400) cache.invalidatePrefix('sds:'); });
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      cache.invalidatePrefix('sds:');
+      invalidateCoverageCache();
+    }
+  });
   next();
 };
 
@@ -711,7 +720,11 @@ const DEFAULT_AUDIT_PROCESS_CODES = ['1011','1012','1021','1022','1041','1042','
 // production at all), C96 tooling/fixtures, C97 fastener blank, C98 others — none
 // have ground production. Broaden via the audit config UI if needed. The frontend
 // Mecha card (prefix 'C9') picks up both C95 and C99 rows.
-const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%','C95%','C99%'];
+// A4% = Spherical (A41–A49) — added 2026-06-13 when spherical entered the SDS
+// coverage scope (OD GRIND 1011 on OC machines); frontend Spherical card = prefix 'A4'.
+// NOTE: the DB row sds_audit_config.sub_class_patterns OVERRIDES this list — when
+// adding a class here, UPDATE the DB row too or the change is invisible.
+const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%','C95%','C99%','A4%'];
 
 async function ensureAuditConfigTable() {
   await engPool.query(`
@@ -1016,6 +1029,151 @@ router.get('/audit/machine-identity', isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[Audit machine-identity]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Template CSS Config ───────────────────────────────────────────────────────
+
+const DEFAULT_CSS_CONFIG = {
+  'font-size-base':       '5.3pt',
+  'font-size-title':      '7pt',
+  'font-size-section':    '9pt',
+  'font-size-badge':      '4.5pt',
+  'height-row-normal':    '3.65mm',
+  'height-row-sep':       '0.84mm',
+  'height-row-img':       '21.9mm',
+  'width-params-panel':   '26.13%',
+  'width-tooling-panel':  '54.60%',
+  'width-grinding-panel': '19.27%',
+  'color-border-outer':   '#000000',
+  'color-border-inner':   '#aaaaaa',
+  'color-badge-bg':       '#1a3a8c',
+  'color-value-red':      '#cc0000',
+  'color-header-bg':      '#e0e0e0',
+  'color-sep-bg':         '#f0f0f0',
+};
+
+async function ensureTemplateCssTable() {
+  await engPool.query(`
+    CREATE TABLE IF NOT EXISTS ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (
+      id          SERIAL PRIMARY KEY,
+      config_key  TEXT NOT NULL UNIQUE,
+      config_value TEXT NOT NULL,
+      description TEXT,
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+/** GET /api/sds/v2/admin/template-config
+ *  Returns all CSS config rows merged with defaults, plus machine-type list.
+ */
+router.get('/template-config', isAdmin, async (req, res) => {
+  try {
+    await ensureTemplateCssTable();
+    const r = await engPool.query(
+      `SELECT config_key, config_value, description, updated_at FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG} ORDER BY config_key`
+    );
+    const stored = Object.fromEntries(r.rows.map(row => [row.config_key, row]));
+    const configs = Object.entries(DEFAULT_CSS_CONFIG).map(([key, defaultVal]) => ({
+      config_key:   key,
+      config_value: stored[key]?.config_value ?? defaultVal,
+      default_value: defaultVal,
+      description:  stored[key]?.description ?? null,
+      updated_at:   stored[key]?.updated_at ?? null,
+      is_modified:  !!stored[key] && stored[key].config_value !== defaultVal,
+    }));
+    res.json({ configs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-config
+ *  Body: { configs: [{ config_key, config_value }] }
+ *  Upserts rows; flushes SDS cache AND headless CSS cache so PDFs pick up changes immediately.
+ */
+router.put('/template-config', isAdmin, flushSds, async (req, res) => {
+  const { configs } = req.body;
+  if (!Array.isArray(configs) || !configs.length) {
+    return res.status(400).json({ error: 'configs array required' });
+  }
+  try {
+    await ensureTemplateCssTable();
+    const client = await engPool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const { config_key, config_value } of configs) {
+        if (!config_key || config_value === undefined) continue;
+        // Reset to default: delete the override row
+        if (config_value === null) {
+          await client.query(
+            `DELETE FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG} WHERE config_key = $1`, [config_key]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (config_key, config_value, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()`,
+            [config_key, String(config_value).trim()]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+    // Flush the headless controller's CSS cache so the next PDF uses new values
+    if (typeof headlessController.flushCssCache === 'function') headlessController.flushCssCache();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-config/common-params
+ *  Returns sds_parameter rows where cn IS NULL (machine-level config), optionally
+ *  filtered by machine_type_name. Also returns sds_excel_mapping rows.
+ */
+router.get('/template-config/common-params', isAdmin, async (req, res) => {
+  const { machine_type_name } = req.query;
+  try {
+    const paramQ = machine_type_name
+      ? await engPool.query(
+          `SELECT machine_type_name, param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+           WHERE cn IS NULL AND machine_type_name = $1 ORDER BY param_key`,
+          [machine_type_name]
+        )
+      : await engPool.query(
+          `SELECT machine_type_name, param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+           WHERE cn IS NULL ORDER BY machine_type_name, param_key`
+        );
+
+    const mappingQ = machine_type_name
+      ? await engPool.query(
+          `SELECT id, cell_address, param_key, machine_type_name FROM ${TABLES.SDS_EXCEL_MAPPING}
+           WHERE machine_type_name = $1 OR machine_type_name IS NULL ORDER BY cell_address`,
+          [machine_type_name]
+        )
+      : await engPool.query(
+          `SELECT id, cell_address, param_key, machine_type_name FROM ${TABLES.SDS_EXCEL_MAPPING}
+           ORDER BY machine_type_name NULLS FIRST, cell_address`
+        );
+
+    // Split params into regular (row_*) and GW (gw_row_*)
+    const params    = paramQ.rows.filter(r => !r.param_key.startsWith('gw_'));
+    const gwParams  = paramQ.rows.filter(r => r.param_key.startsWith('gw_'));
+
+    res.json({
+      params,
+      gw_params: gwParams,
+      mappings:  mappingQ.rows,
+    });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

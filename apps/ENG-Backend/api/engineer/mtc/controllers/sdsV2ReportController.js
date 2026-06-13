@@ -458,17 +458,36 @@ async function buildCoverage() {
       }
     }
 
-    // Finalize coverage level (after T-Select augmentation)
+    // Finalize coverage level (after T-Select augmentation).
+    //   coverage_level       = WITH the T-Select #1 fallback counted (current behaviour)
+    //   coverage_level_saved = BASELINE — only a saved factory-plan tool counts as a match
+    //                          (i.e. what the report would show WITHOUT T-Select #1)
+    // The delta between them = the extra completes that T-Select #1 ( * ) unlocks.
     for (const r of evaluated) {
       r.coverage_level =
         r.has_tooling_match && r.has_machine_template ? 'COMPLETE' :
         r.has_process                                 ? 'PENDING'  :
                                                         'MISSING';
+      r.coverage_level_saved =
+        r.tooling_source === 'saved' && r.has_machine_template ? 'COMPLETE' :
+        r.has_process                                          ? 'PENDING'  :
+                                                                 'MISSING';
+      // WHY the row is pending — so the dashboard can separate "tool already
+      // solved (saved or T-Select #1), only Excel config missing" from "no tool".
+      // A tselect/saved-tool row without the machine Excel template stays PENDING
+      // (COMPLETE means PDF-ready), but it must not read as "tool missing".
+      r.pending_reason = r.coverage_level !== 'PENDING' ? null :
+        !r.has_tooling_match && !r.has_machine_template ? 'NO_TOOL_NO_EXCEL' :
+        !r.has_tooling_match                            ? 'NO_TOOL'          :
+                                                          'NO_EXCEL';
     }
 
     const total         = evaluated.length;
     const uniqueCnCount = new Set(evaluated.map(r => r.cn)).size;
     const complete      = evaluated.filter(r => r.coverage_level === 'COMPLETE').length;
+    // Baseline complete (saved tools only, no T-Select #1). complete - completeSaved
+    // = the completes unlocked by the T-Select #1 ( * ) fallback.
+    const completeSaved = evaluated.filter(r => r.coverage_level_saved === 'COMPLETE').length;
     const missing       = evaluated.filter(r => r.coverage_level === 'MISSING').length;
     const toolMatch     = evaluated.filter(r => r.has_tooling_match).length;
     const excelConfig   = evaluated.filter(r => r.has_machine_template).length;
@@ -503,7 +522,18 @@ async function buildCoverage() {
       .sort((a, b) => a.cn.localeCompare(b.cn));
 
     const pending    = needsAttention.length; // derived from table so both always match
+    // Pending split by missing piece. toolReady* = rows whose tooling is already
+    // solved (the only gap is the machine Excel Parameter Config) — configuring
+    // that machine's template converts them straight to COMPLETE.
+    const pendingByReason = {
+      noExcel:          needsAttention.filter(r => r.pending_reason === 'NO_EXCEL').length,
+      noTool:           needsAttention.filter(r => r.pending_reason === 'NO_TOOL').length,
+      noToolNoExcel:    needsAttention.filter(r => r.pending_reason === 'NO_TOOL_NO_EXCEL').length,
+      toolReadySaved:   needsAttention.filter(r => r.pending_reason === 'NO_EXCEL' && r.tooling_source === 'saved').length,
+      toolReadyTselect: needsAttention.filter(r => r.pending_reason === 'NO_EXCEL' && r.tooling_source === 'tselect').length,
+    };
     const completePct    = total > 0 ? parseFloat(((complete / total) * 100).toFixed(1)) : 0;
+    const completeSavedPct = total > 0 ? parseFloat(((completeSaved / total) * 100).toFixed(1)) : 0;
     const pendingPct = total > 0 ? parseFloat(((pending / total) * 100).toFixed(1)) : 0;
 
     // ── By part type (the configured set) ────────────────────────────────────
@@ -511,16 +541,19 @@ async function buildCoverage() {
       const rows = evaluated.filter(r => r.part_type === pt);
       if (!rows.length) return null;
       const ptComplete = rows.filter(r => r.coverage_level === 'COMPLETE').length;
+      const ptCompleteSaved = rows.filter(r => r.coverage_level_saved === 'COMPLETE').length;
       const ptPending  = needsAttention.filter(r => r.part_type === pt).length;
       return {
         part_type:    pt,
         total:        rows.length,
         cn_count:     new Set(rows.map(r => r.cn)).size, // distinct CN (dedup across machine×process)
         complete:     ptComplete,
+        complete_saved: ptCompleteSaved,  // baseline (saved only); complete - complete_saved = T-Select #1 boost
         pending:      ptPending,
         tool_match:   rows.filter(r => r.has_tooling_match).length,
         excel_config: rows.filter(r => r.has_machine_template).length,
         complete_pct: parseFloat(((ptComplete / rows.length) * 100).toFixed(1)),
+        complete_saved_pct: parseFloat(((ptCompleteSaved / rows.length) * 100).toFixed(1)),
         gaps: {
           noToolMatch:   topGaps(rows, noToolMatchPred),
           noExcelConfig: topGaps(rows, noExcelConfigPred),
@@ -554,24 +587,29 @@ async function buildCoverage() {
     for (const r of evaluated) {
       if (!r.first_prod_date) continue;
       const month = new Date(r.first_prod_date).toISOString().slice(0, 7);
-      if (!monthlyStatusMap.has(month)) monthlyStatusMap.set(month, { complete: 0, pending: 0 });
+      if (!monthlyStatusMap.has(month)) monthlyStatusMap.set(month, { complete: 0, completeSaved: 0, pending: 0 });
       const entry = monthlyStatusMap.get(month);
       if (r.coverage_level === 'COMPLETE') entry.complete += 1;
       else if (r.coverage_level === 'PENDING') entry.pending += 1;
+      if (r.coverage_level_saved === 'COMPLETE') entry.completeSaved += 1;
     }
     let cumComplete = 0;
+    let cumCompleteSaved = 0;
     let cumAutoPending = 0;
     const monthlyStatus = [...monthlyStatusMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, c]) => {
-        cumComplete    += c.complete;
-        cumAutoPending += c.pending;
+        cumComplete      += c.complete;
+        cumCompleteSaved += c.completeSaved;
+        cumAutoPending   += c.pending;
         const total = cumComplete + cumAutoPending;
         return {
           month,
-          complete:     cumComplete,
+          complete:       cumComplete,         // with T-Select #1
+          complete_saved: cumCompleteSaved,    // baseline (saved only)
           pending: cumAutoPending,
           complete_pct: total > 0 ? parseFloat(((cumComplete / total) * 100).toFixed(1)) : 0,
+          complete_saved_pct: total > 0 ? parseFloat(((cumCompleteSaved / total) * 100).toFixed(1)) : 0,
         };
       });
 
@@ -581,8 +619,11 @@ async function buildCoverage() {
         uniqueCnCount,
         complete,
         completePct,
+        completeSaved,        // baseline: complete with saved tools only (no T-Select #1)
+        completeSavedPct,
         pending,
         pendingPct,
+        pendingByReason,
         missing,
         toolMatch,
         excelConfig,
@@ -798,3 +839,4 @@ router.put('/config', isAdmin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.invalidateCoverageCache = invalidateCoverageCache;

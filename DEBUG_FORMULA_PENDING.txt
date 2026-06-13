@@ -1,0 +1,194 @@
+================================================================================
+ DEBUG FORMULA — รายการที่ยังไม่เคลีย / รอยืนยัน (Tooling Select V2)
+ สร้าง: 2026-06-11
+ ขอบเขต: tooling_formula ทุกเครื่อง — เฉพาะรายการที่ยัง "รอยืนยัน" (ไม่รวมที่ปิดแล้ว)
+ แหล่งอ้างอิง: .claude/rules/formula-reference.md + memory/project_*.md
+--------------------------------------------------------------------------------
+ LEGEND สถานะ:
+   [SME]   = ต้องให้ผู้เชี่ยวชาญ/DWG ยืนยัน (มีผลต่อความถูกต้อง)
+   [RE]    = reverse-engineered (ต้นฉบับไม่มีสูตร — เดาจาก inventory/MASTER)
+   [WIP]   = ต้นฉบับ Excel ยังเป็นฉบับร่าง (製作中)
+   [LOWVAL]= validation ยังไม่หนักแน่น (self-match / reconstruction / ไม่มี answer key)
+   [LOW]   = ผลต่างเล็ก (<0.01–0.05mm) ความเสี่ยงต่ำ แต่ยังไม่ตรง Excel
+   [現合]  = ค่า hand-fit ที่หน้างาน (ไม่ได้คำนวณในเอนจิน)
+================================================================================
+
+
+########################  เครื่องใหม่ 2026-06-11  ############################
+
+== OC-16A (machine id=31, centerless lookup) ==================================
+[1] SET PIN 4560-21  — A
+    สูตรปัจจุบัน: A = if(odBf>0, odBf, OD)
+    สถานะ: ✅ แก้แล้ว 2026-06-11 (เดิม A=ID ผิด → setting-gauge pin ใช้ "OD ก่อนเจียร")
+            ยืนยันด้วย CN 614033 → 4560-21-0044 (dim_a=14.42) ผ่าน search() จริง
+    คงเหลือ: [LOWVAL] ยังมี answer key จุดเดียว (614033) — ควร validate หลาย CN เพิ่ม
+
+[2] RACE PUSHER 4560-18 — A, B
+    สูตรปัจจุบัน: A = floor05(OD - 1), B = floor(A - 3)
+    สถานะ: ✅ ยืนยันด้วย DWG (SME 2026-06-11) — เดิม A=OD ผิด (เลือกพุชเชอร์ ≈ OD งาน
+            แทนที่จะ ≤ OD−1). CN 614033 OD=14.32 → 4560-18-1009 (A=13,B=10) ผ่าน search() จริง
+    OD = od_aft (finished) — ✅ ยืนยันโดย SME 2026-06-11
+    C/D/F/G/H (design-time) — VERDICT 2026-06-11: ❌ ไม่ต้อง seed (ไม่จำเป็นต่อ tooling-select)
+      เหตุผล: A แยกพุชเชอร์ได้ 70/77 (82%); ซ้ำแค่ 7 ค่า OD ซึ่งตัวแยกคือ "วัสดุ bar/pipe"
+              (6/7 เคส) ไม่ใช่ C/D/G/H (notchD เท่ากันในคู่ที่ซ้ำ). ยิ่งกว่านั้น dim_c/d/e/f
+              เก็บค่าจริงในแถว inventory อยู่แล้ว → search คืนผ่าน SELECT * (คำนวณซ้ำไร้ประโยชน์).
+              สูตร C/D/F/G/H จำเป็นเฉพาะตอน "ออกแบบพุชเชอร์ตัวใหม่" = งาน design-time จาก DWG.
+      ทางเลือก (priority ต่ำ): ถ้าอยากเป๊ะ 7 เคสซ้ำ → เพิ่ม tiebreaker วัสดุ bar/pipe
+              (ผูก part-class: ball→bar, race/sleeve→pipe) — ทำต่อเมื่อมี answer key ชี้ว่าเลือกผิดจริง
+      อ้างอิงสูตร design-time (เก็บไว้ใน formula-reference.md):
+      - C = (BW−SW)/2+0.5 [TYPE.1 bar เท่านั้น]
+      - D = round(A×0.3) [12≤A<40] / 12 [A≥40] / None (ขึ้นกับ destination MTD/THAI/BOTH)
+      - F = note text ตาม material TYPE; G=12, H=25 (gated by D)
+
+[3] OC-16A validation โดยรวม
+    สถานะ: [LOWVAL] "295/295 100%" ใน seed = hollow self-match
+            (ป้อน dim_a กลับเข้าไปหา row เดิม) — จับ bug ตัวแปร input ผิดไม่ได้
+            ต้องใช้ answer key CN→tool จริงเท่านั้นจึงพิสูจน์ความถูกต้องได้
+
+[4] COLLAR / PIN / ARBOR (4560-10/11, 04, 4880-01)
+    สถานะ: ยังไม่ seed (categorical/SDS-only) — ไม่มี dimension driver ชัด รอตัดสินใจ
+
+
+== KVD-300CRII (machine id=29, face/巾 grind CARRIER) =========================
+*** ✅ CARRIER 4036-01 สูตรครบ DWG-confirmed โดย SME 2026-06-11 ***
+    A=ceil05(OD+0.4)[OD≤30]/ceil05(OD+1)[OD>30], B=281−A, (C)=A−5, D=ceil05(W×0.8),
+    H=R0.5[A≤40]/R1.0[A>40], J=別表(material). OD/W = Workpiece MAX (ยืนยัน).
+    (แก้ (C) จาก round(A-5,1) → A-5 ให้ตรง DWG — ผลเท่าเดิม; re-validate 14/14 100%)
+
+[5] CARRIER — E (จำนวน pocket) และ (G) (ความลึก pocket)
+    สถานะ: ✅ [現合] ยืนยันโดย SME ว่าเป็น match-machining — E=ทวีคูณของ 4, (G)=0.3×A≤G,
+            F=360/E (ขึ้นกับ E) → ถูกต้องที่ไม่คำนวณในเอนจิน (ไม่ใช่ gap)
+
+[6] CARRIER — ตัวแปร OD / W
+    สถานะ: ✅ ยืนยัน OD/W = Workpiece MAX (odBf_max/wBf_max, fallback od/w_aft_max)
+            face grind ไม่แตะ OD → fallback ปลอดภัย
+
+[7] KVD-300CRII validation โดยรวม
+    สถานะ: [LOWVAL→ต่ำมาก] 14/14 reconstruction; สูตร DWG-confirmed แล้วจึงมั่นใจสูง
+            (ยังไม่มี answer key CN→tool จาก factory แต่ formula ยืนยันจาก DWG โดยตรง)
+
+
+== Mecha part 4577-22 (สลีブ挿入ピン / sleeve-insertion pin) ===================
+[8] ทั้งกลุ่ม 4577-22
+    สถานะ: ยังไม่ seed เข้า T-Select (เป็น assembly jig ไม่ใช่เครื่องเจียร)
+            สูตรเดียวที่ได้ = F = D − E
+            [SME] ถ้าจะทำ T-Select เชิงมิติ ต้องยืนยันว่า spec เก็บ sleeve bore/flange dia หรือไม่
+            รอตัดสินใจว่าจะทำเป็น SDS/categorical ต่อไป หรือเพิ่มเป็น lookup
+
+
+########################  เครื่องที่ seed ก่อนหน้า (ยังค้าง)  #################
+
+== KS-400B6 (machine id=15) — [RE] ต้นฉบับมี ZERO สูตร (「計算式追加予定」) ======
+[9]  FRONT SHOE 4931-11 — A = if(isBallInner, odBf*0.32, W/2+2)
+     สถานะ: ✅ ได้สูตร DWG แล้ว (SME 2026-06-11) — แยก 2 category ตาม isBallInner
+       - Cat.2 standard ball (WHT, yball=N): A=W/2+2 → คำนวณได้เป๊ะ ✅
+       - Cat.1 inner+ball (ABR, yball=Y): A=V (ระยะจากหน้า) — ❌ V ไม่มีใน spec → คง proxy
+     validate vs MASTER: 23%→46% (ที่พลาดคือ Cat.1 ABR ทั้งหมด)
+     คงเหลือ [SME/manual]: เพิ่มคอลัมน์ V (manual) + backfill ~14-21 ABR parts จึงจะเป๊ะ Cat.1
+
+[10] REAR SHOE 4931-12 — B = if(isBallInner, odBf-0.5, W/2+2)
+     สถานะ: ✅ ได้สูตร DWG แล้ว — Cat.2: A=W/2−2, B=W/2+2 (เป๊ะ); Cat.1: A=X−1, B=Y+1
+       ❌ X,Y (ระยะจากหน้า) ไม่มีใน spec → คง proxy odBf-0.5
+       ⚠ DWG Y ≠ spec Y (groove_y) — คนละค่า ห้ามใช้ซ้ำ
+     validate vs MASTER: 58%→81% (ที่พลาดคือ Cat.1 ABR)
+     คงเหลือ [SME/manual]: เพิ่มคอลัมน์ X,Y (manual) + backfill ABR parts จึงจะเป๊ะ Cat.1
+
+[11] PILOT PIN 4931-03 (ใช้สูตรร่วม B1)
+     สถานะ: [RE] ที่ยังพลาดคือกลุ่มนอก inventory (4664-/4034- pin ข้ามเครื่อง) + ชิ้นใหญ่ outlier
+
+[12] ทุกสูตรของ B6
+     สถานะ: [RE] เป็น approximation ทั้งหมด — ต้องยืนยันกับ DWG ก่อนใช้งานจริง
+             (= 計算式 ที่คุณ Yamamoto ตั้งใจจะเพิ่มทีหลัง)
+
+
+== KS-500RD (machine id=14) — [WIP] Excel 製作中 ===============================
+[13] FRONT SHOE 4033-03 — A (6-band step ตาม OD)
+     สถานะ: [SME] ตัวแปรเลือกถูก "สมมติ" ว่าเป็น after-grind OD
+             (ต้นฉบับไม่มี sheet สูตร FRONT SHOE มีแค่ตาราง 6 band)
+
+[14] WORK DRIVER 4033-01 — A = SD - 0.2 (ใช้ stored SD)
+     สถานะ: [SME] WIP Excel ใช้ geometric SD (sqrt(OD²−W²)) ซึ่ง stale/พังกับ Y-ball
+             stored SD reconstruct ดีกว่า แต่ต้องยืนยันกับ DWG ปัจจุบัน
+
+[15] KS-500RD validation โดยรวม
+     สถานะ: [LOWVAL] ไม่มี answer key ต่อ CN (TOOLING LIST_旧 เป็นชีต KS-400B หลงเหลือ)
+             validate ด้วย reconstruction เท่านั้น (residual dim_a ~0.00–0.14)
+
+
+== KS-400B5 (machine id=10) — [RE] ===========================================
+[16] WORK CHUTE GUIDE 4906-09 — (เลือกโดยจับคู่กับ WORK CHUTE ที่ match ไม่ใช่มิติ)
+     สถานะ: [SME] น่าจะถูกเลิกใช้ราว ~2016; inventory ปน 4906-09 กับ 4906-15
+             validation ต่ำ (~17%)
+
+[17] WORK LOADER specials 0019–0033 ("Normal BALL")
+     สถานะ: [SME] ไม่มีมิติคำนวณ — เลือกด้วย ball P/N ตรงตัว
+             dimensional search เลือกไม่ได้ (ต้องใช้กลไกอื่น)
+
+[18] WORK CLAMP 4906-01 / SHAFT 4906-02 — tip dia A
+     สถานะ: [現合][SME] A เป็น "ช่วง" [ID+0.3 .. SD] แต่ encode เป็นจุดเดียว (SD / SD−0.5)
+             + asymmetric tol; ต้นฉบับมีหมายเหตุ 現合 (ฟิตหน้างาน) → ไม่ deterministic เต็มที่
+
+
+== KS-400B1 (id=7) / KS-03A (m4) / KS-B22RD (m5) — audit "STILL OPEN" =========
+[19] KS-400B1 PILOT PIN 4931-03 — D = W [if idBf_min < 31]
+     สถานะ: [SME] ref TYPE3 (10≤ID<31) บอก None; KS400B Excel ไม่มี sheet PILOT PIN
+             (อยู่ใน B6 MASTER) → ยังพิสูจน์ไม่ได้
+
+[20] PLUG GAUGE B,C (m4/m5)
+     สถานะ: [LOW] DB ใช้ tolerance-centre/tol− เฉยๆ; Excel E19/F19 บวก GO/NOGO offset
+             (+0.005/+0.003 ถ้า T≤0.012, ไม่งั้น Tc−0.001/−0.003) — ต่ำกว่า 0.01mm
+
+[21] ROLLER SHOE (m4/m5)
+     สถานะ: [LOW] TYPE threshold DB=12.3 vs Excel=12.5; DB มี dim J/K/L/M เพิ่ม (DWG ใหม่กว่า)
+             search key A,B ตรง Excel แล้ว
+
+[22] SETTING GAUGE B (m4/m5) — TYPE3 (F"A" ≥ 19)
+     สถานะ: [LOW] DB ให้ W+67; Excel บอก None — พบไม่บ่อย
+
+[23] PRESSURE ROTOR A (m4/m5)
+     สถานะ: [LOW] DB/ref = idAft_min + 0.20; Excel = idAft(nominal) + 0.2
+             กำกวม nominal-vs-min (~0.05mm)
+
+
+== HAMAI 5B (machine id=6) ====================================================
+[24] CARRIER B (จำนวนรู) = 2*floor(PI*88/(2*(A+4)))
+     สถานะ: ✅ FIXED 2026-06-11 (DWG ยืนยันโดย SME)
+             บั๊กเดิมใช้ PI*(88−A) (สับสน 88−A=C กับวงเจาะรู) → ได้ 14
+             holes อยู่บน pitch circle Ø88 คงที่, pitch=A+4 → B=16 (A=12) → D=360/16=22.5
+             A/C/D/E ตรง DWG อยู่แล้ว; migration: 20260611_fix_hamai5b_carrier_hole_count.js
+             validate ตัวอย่าง DWG: OD=11.245,W=5.95 → A=12,B=16,C=76,D=22.5,E=5 ✓
+
+
+########################  งาน follow-up ที่เกี่ยวกับ formula  #################
+
+[25] groove_y backfill (ABR parts) — manual
+     CPX SHOE V = if(Y>0, ceil05(Y+1), 0) [if isABR] ทำงานแล้ว แต่ค่า Y ต้องกรอกมือ
+     (~14–16 ABR parts) — ยังไม่ backfill ครบ
+
+[26] Race C2x process = NULL (803 ชิ้น) / Ball type = NULL
+     ไม่มี factory source — กระทบ flag isABR/isInner/process ในสูตร — รอประเมินมือ
+
+
+================================================================================
+ สรุปจำนวน: 26 รายการ
+   - ✅ ยืนยัน/เคลียแล้ว 2026-06-11 (จาก DWG/SME):
+       OC-16A: #1 SET PIN (CN 614033), #2 RACE PUSHER A,B (DWG) — เหลือ C/D/F/G/H design-time
+       KVD-300CRII: #5 E/(G)/F 現合 ยืนยัน, #6 OD/W=MAX ยืนยัน, #7 สูตร DWG ครบ (validation มั่นใจสูง)
+       KS-400B6: #9 FRONT SHOE, #10 REAR SHOE — ได้ DWG, Cat.2 standard-ball เป๊ะ;
+                 Cat.1 ABR เหลือต้องเพิ่ม V/X/Y manual (FRONT 23→46%, REAR 58→81%)
+       HAMAI 5B: #24 CARRIER B hole-count — FIXED (DWG: holes บน Ø88 pitch circle → B=16)
+   - [SME]/[RE] กระทบความถูกต้อง: #8,12,13,14,16,17,18,19
+   - [SME/manual] ต้องเพิ่ม column manual (V/X/Y) แล้ว backfill: #9,#10 (Cat.1 ABR)
+   - [LOW]/[LOWVAL] ความเสี่ยงต่ำ/รอ validate: #3,11,15,20,21,22,23
+   - [現合] hand-fit by design: #18
+   - follow-up data: #25,26
+
+   *** เครื่องใหม่ 2026-06-11 (OC-16A, KVD-300CRII) = สูตรยืนยันครบจาก DWG/SME แล้ว ***
+   *** ที่เหลือเป็นเครื่องเดิม [RE]/[WIP] (B5/B6/500RD) + audit เก่า (B1/03A) + HAMAI ***
+
+ หมายเหตุสำคัญ:
+   * เครื่องที่ "ผ่าน 100%" จาก seed script หลายตัวเป็น hollow self-match —
+     ตัวเลขนี้ไม่ยืนยันความถูกต้องของสูตร ต้องใช้ answer key CN→tool จาก factory
+   * เครื่อง [RE]/[WIP] (B5/B6/500RD) ทั้งหมดเป็น approximation — อย่าใช้ผลิตจริง
+     จนกว่าจะเทียบ DWG
+================================================================================

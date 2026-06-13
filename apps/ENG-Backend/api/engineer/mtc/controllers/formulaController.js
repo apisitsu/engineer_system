@@ -121,4 +121,49 @@ const test = async (req, res) => {
   }
 };
 
-module.exports = { list, listToolings, create, update, remove, test };
+// GET /api/tooling-select-v2/formula/errors
+const getErrorLogs = async (req, res) => {
+  const { cn, machineId, limit = 100 } = req.query;
+  try {
+    let sql = `
+      SELECT e.*, m.machine_name 
+      FROM ${TSV2_TABLES.FORMULA_ERROR_LOG} e
+      LEFT JOIN ${TSV2_TABLES.MACHINE} m ON e.machine_id = m.id
+    `;
+    const conditions = [];
+    const params = [];
+    let pi = 1;
+
+    if (cn?.trim()) {
+      conditions.push(`e.cn ILIKE $${pi++}`);
+      params.push(`%${cn.trim()}%`);
+    }
+    if (machineId) {
+      conditions.push(`e.machine_id = $${pi++}`);
+      params.push(Number(machineId));
+    }
+
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ` ORDER BY e.created_at DESC LIMIT $${pi}`;
+    params.push(Number(limit));
+
+    const { rows } = await engPool.query(sql, params);
+    res.json({ success: true, logs: rows });
+  } catch (err) {
+    console.error('tsv2 formula getErrorLogs error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
+// DELETE /api/tooling-select-v2/formula/errors
+const clearErrorLogs = async (req, res) => {
+  try {
+    await engPool.query(`DELETE FROM ${TSV2_TABLES.FORMULA_ERROR_LOG}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('tsv2 formula clearErrorLogs error:', err.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
+module.exports = { list, listToolings, create, update, remove, test, getErrorLogs, clearErrorLogs };

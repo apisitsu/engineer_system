@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { pathToFileURL } = require('url');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
@@ -15,10 +16,28 @@ const router = express.Router();
 
 const TEMPLATE_PATH = path.join(__dirname, '../templates/sds_template.xlsx');
 const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
-const SOFFICE       = process.env.SOFFICE_PATH || path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe');
+// Windows dev ships a portable LibreOffice; Linux/Docker resolves `soffice` from
+// PATH. Always overridable via SOFFICE_PATH (required on Linux if not on PATH).
+const SOFFICE       = process.env.SOFFICE_PATH || (process.platform === 'win32'
+  ? path.resolve('./tools/LibreOfficePortable/App/libreoffice/program/soffice.exe')
+  : 'soffice');
+
+// One-time startup sanity check: if an explicit path is configured but the binary
+// is missing, warn loudly now so a deploy misconfig is caught before the first PDF
+// request fails. (A bare `soffice` resolved from PATH can't be stat-checked here.)
+if ((SOFFICE.includes('/') || SOFFICE.includes('\\')) && !fs.existsSync(SOFFICE)) {
+  console.warn(`[SDS PDF] ⚠ LibreOffice not found at "${SOFFICE}". ` +
+    `Set SOFFICE_PATH to a valid soffice binary or SDS PDF generation will fail.`);
+}
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
+function safeRmDir(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (_) {} }
+
+// Cap a single LibreOffice conversion. Headless soffice can hang indefinitely (e.g.
+// profile-lock contention, a corrupt input) — without a timeout the HTTP request
+// never responds and a zombie soffice process is left behind.
+const SOFFICE_TIMEOUT_MS = parseInt(process.env.SOFFICE_TIMEOUT_MS, 10) || 90000;
 
 // ── Image extent map: param_key → { tl_cell, br_cell } ─────────────────────
 // These define where each image is anchored in the template.
@@ -100,6 +119,20 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['process_eng']      = firstProcessInfo?.process_eng  || '';
   map['ct']               = firstProcessInfo?.ct != null ? String(firstProcessInfo.ct) : '';
   map['machine_type_name'] = machineDisplayName || '';
+
+  // 1.5 Dimensions (with SD fallback)
+  if (searchData.dimension) {
+    const dim = searchData.dimension;
+    Object.keys(dim).forEach(k => { map[`dimension.${k}`] = dim[k] !== null ? String(dim[k]) : ''; });
+    
+    // SD fallback logic: geometric SD = sqrt(OD² - W²)
+    const od = Number(dim.od_aft || 0);
+    const w = Number(dim.w_aft || 0);
+    const sdStored = Number(dim.sd || 0);
+    const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
+    const sd = sdStored > 0 ? sdStored : sdCalc;
+    if (sd > 0) map['dimension.sd'] = sd.toFixed(3);
+  }
 
   // Production fields
   if (searchData.production) {
@@ -311,6 +344,30 @@ function getCellRangePixels(ws, tlAddr, brAddr) {
   return { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) };
 }
 
+// Convert a pixel offset from the range's top-left into a NATIVE ExcelJS anchor
+// (nativeCol + nativeColOff in EMU). Lets an image that's narrower/shorter than its
+// cell range be CENTERED instead of pinned to the top-left. We compute EMU offsets
+// ourselves (px×9525) from the real column widths rather than relying on ExcelJS's
+// approximate fractional-col→EMU conversion. Column px = width×7, row px = height×4/3
+// (matches getCellRangePixels above). EMU_PER_PX = 9525.
+const EMU_PER_PX = 9525;
+function offsetToNativeCol(ws, startCol0, offsetPx) {
+  let col = startCol0, remain = Math.max(0, offsetPx);
+  for (;;) {
+    const wpx = (ws.getColumn(col + 1).width || 8.43) * 7;
+    if (wpx <= 0 || remain < wpx) return { nativeCol: col, nativeColOff: Math.round(remain * EMU_PER_PX) };
+    remain -= wpx; col++;
+  }
+}
+function offsetToNativeRow(ws, startRow0, offsetPx) {
+  let row = startRow0, remain = Math.max(0, offsetPx);
+  for (;;) {
+    const hpx = (ws.getRow(row + 1).height || 15) * (4 / 3);
+    if (hpx <= 0 || remain < hpx) return { nativeRow: row, nativeRowOff: Math.round(remain * EMU_PER_PX) };
+    remain -= hpx; row++;
+  }
+}
+
 // ── Fill ExcelJS worksheet ────────────────────────────────────────────────────
 
 async function fillTemplate(workbook, mappings, valueMap) {
@@ -336,9 +393,18 @@ async function fillTemplate(workbook, mappings, valueMap) {
         const dim = getImageDimensions(Buffer.isBuffer(val.data) ? val.data : Buffer.from(val.data));
         if (cellPx && dim && dim.width > 0 && dim.height > 0) {
           const scale = Math.min(cellPx.width / dim.width, cellPx.height / dim.height);
+          const scaledW = Math.round(dim.width * scale);
+          const scaledH = Math.round(dim.height * scale);
+          // Center within the cell range: offset the top-left anchor by half the
+          // leftover space on each axis (fractional col/row).
+          const offsetX = (cellPx.width  - scaledW) / 2;
+          const offsetY = (cellPx.height - scaledH) / 2;
+          const aCol = offsetToNativeCol(ws, tl.col, offsetX);
+          const aRow = offsetToNativeRow(ws, tl.row, offsetY);
           ws.addImage(imgId, {
-            tl: { col: tl.col, row: tl.row },
-            ext: { width: Math.round(dim.width * scale), height: Math.round(dim.height * scale) },
+            tl: { nativeCol: aCol.nativeCol, nativeColOff: aCol.nativeColOff,
+                  nativeRow: aRow.nativeRow, nativeRowOff: aRow.nativeRowOff },
+            ext: { width: scaledW, height: scaledH },
             editAs: 'oneCell',
           });
         } else {
@@ -582,11 +648,6 @@ router.get('/pdf', async (req, res) => {
 
     await fillTemplate(workbook, mappings, valueMap);
     await fillMachineConfigSection(workbook.worksheets[0], machine_type_name.trim(), searchData.cn, engPool);
-    console.log(`[PDF] Fill done: cn=${searchData.cn}, machine=${machine_type_name.trim()}`);
-    // Verify row 24/29 fill after apply
-    const _ws = workbook.worksheets[0];
-    console.log('[PDF] A24 fill after:', JSON.stringify(_ws.getCell('A24').fill));
-    console.log('[PDF] A29 fill after:', JSON.stringify(_ws.getCell('A29').fill));
 
     // Direct writes — fields that may not yet be in sds_excel_mapping
     const ws0 = workbook.worksheets[0];
@@ -595,12 +656,24 @@ router.get('/pdf', async (req, res) => {
 
     await workbook.xlsx.writeFile(tempXlsPath);
 
-    // 5. Convert to PDF via LibreOffice
-    execFile(SOFFICE, ['--headless', '--convert-to', 'pdf', tempXlsPath, '--outdir', OUTPUT_DIR], (err) => {
+    // 5. Convert to PDF via LibreOffice.
+    // Per-invocation UserInstallation profile: concurrent `soffice --headless`
+    // calls otherwise contend on the single default profile lock (the 2nd call
+    // blocks or fails). A unique profile dir per call makes conversions safe to
+    // run in parallel. Bounded by SOFFICE_TIMEOUT_MS so a hang can't wedge the req.
+    const profileDir  = path.join(OUTPUT_DIR, `.lo_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    const userInstall = `-env:UserInstallation=${pathToFileURL(profileDir).href}`;
+    execFile(
+      SOFFICE,
+      [userInstall, '--headless', '--convert-to', 'pdf', tempXlsPath, '--outdir', OUTPUT_DIR],
+      { timeout: SOFFICE_TIMEOUT_MS, killSignal: 'SIGKILL' },
+      (err) => {
       safeUnlink(tempXlsPath);
+      safeRmDir(profileDir);
       if (err) {
-        console.error('[SDS PDF] LibreOffice error:', err.message);
-        return res.status(500).json({ error: 'PDF conversion failed', detail: err.message });
+        const reason = err.killed ? `timed out after ${SOFFICE_TIMEOUT_MS}ms` : err.message;
+        console.error('[SDS PDF] LibreOffice error:', reason);
+        return res.status(500).json({ error: 'PDF conversion failed', detail: reason });
       }
       const generatedPath = path.join(OUTPUT_DIR, path.basename(tempXlsPath).replace(/\.xlsx$/, '.pdf'));
       if (!fs.existsSync(generatedPath)) {

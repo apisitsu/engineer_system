@@ -4,6 +4,7 @@
 jest.mock('../../api/engineer/mtc/services/searchService', () => ({ search: jest.fn() }));
 
 const fallback = require('../../api/engineer/mtc/services/tselectFallback');
+const searchService = require('../../api/engineer/mtc/services/searchService');
 
 const RESULT = {
   success: true,
@@ -61,5 +62,39 @@ describe('tselectToolsForMachine', () => {
   it('returns [] for an unsuccessful / empty result', () => {
     expect(fallback.tselectToolsForMachine(null, new Set(['X']))).toEqual([]);
     expect(fallback.tselectToolsForMachine({ success: false }, new Set(['X']))).toEqual([]);
+  });
+});
+
+describe('safeSearch caching', () => {
+  beforeEach(() => searchService.search.mockReset());
+
+  it('does NOT cache a thrown (transient) error — the next call retries', async () => {
+    searchService.search
+      .mockRejectedValueOnce(new Error('db blip'))
+      .mockResolvedValueOnce({ success: true, results: [] });
+
+    const first = await fallback.safeSearch('ERRCN-001');
+    expect(first).toBeNull();                                  // error → null
+    const second = await fallback.safeSearch('ERRCN-001');     // same CN, retried
+    expect(second).toEqual({ success: true, results: [] });
+    expect(searchService.search).toHaveBeenCalledTimes(2);     // not served from cache
+  });
+
+  it('caches a successful result — the second call is served from cache', async () => {
+    searchService.search.mockResolvedValueOnce({ success: true, results: ['x'] });
+
+    const first  = await fallback.safeSearch('OKCN-001');
+    const second = await fallback.safeSearch('OKCN-001');
+    expect(second).toBe(first);                                // same object reference
+    expect(searchService.search).toHaveBeenCalledTimes(1);     // 2nd hit cache
+  });
+
+  it('caches a legitimate "spec not found" answer too', async () => {
+    searchService.search.mockResolvedValueOnce({ success: false, error: 'Part spec not found' });
+
+    await fallback.safeSearch('NOSPEC-001');
+    const second = await fallback.safeSearch('NOSPEC-001');
+    expect(second).toEqual({ success: false, error: 'Part spec not found' });
+    expect(searchService.search).toHaveBeenCalledTimes(1);     // stable answer, cached
   });
 });
