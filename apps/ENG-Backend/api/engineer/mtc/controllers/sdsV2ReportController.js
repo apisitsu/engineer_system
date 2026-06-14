@@ -16,6 +16,42 @@ let _coverageCache = null;     // { at, data }
 let _coverageBuilding = null;  // Promise<payload> while a build is in flight
 const COVERAGE_TTL_MS = 15 * 60 * 1000;
 
+// Persist the last successful build to a DB row so it survives a process
+// restart. A fresh process then serves the previous result instantly (stale) and
+// rebuilds in the background, instead of forcing the first user to wait for a
+// cold ~minutes-long build. (The in-memory cache stays the fast path.)
+let _coverageTableReady = null;
+function ensureCoverageTable() {
+  if (!_coverageTableReady) {
+    _coverageTableReady = engPool.query(`
+      CREATE TABLE IF NOT EXISTS sds_coverage_cache (
+        id       TEXT PRIMARY KEY,
+        data     JSONB NOT NULL,
+        built_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => { _coverageTableReady = null; throw e; });
+  }
+  return _coverageTableReady;
+}
+async function persistCoverage(payload, at) {
+  try {
+    await ensureCoverageTable();
+    await engPool.query(
+      `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('coverage', $1, $2)
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = EXCLUDED.built_at`,
+      [payload, new Date(at)]
+    );
+  } catch (e) { console.error('[SDS Report] persist coverage failed:', e.message); }
+}
+async function loadPersistedCoverage() {
+  try {
+    await ensureCoverageTable();
+    const r = await engPool.query(`SELECT data, built_at FROM sds_coverage_cache WHERE id = 'coverage' LIMIT 1`);
+    if (r.rows[0]) return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+  } catch (e) { console.error('[SDS Report] load persisted coverage failed:', e.message); }
+  return null;
+}
+
 // ── Report scope config (admin-editable) ─────────────────────────────────────
 // The operational "dials" of the coverage scope, externalized from hardcode so
 // admins can change them without a deploy. Defaults == the original hardcoded
@@ -436,6 +472,10 @@ async function buildCoverage() {
     // timeouts at concurrency 8; 6 is the safe default.
     const tsByCn = new Map();
     const tsEntries = [...needTs.entries()];
+    // Warm the in-memory cache from the persisted per-CN T-Select results in ONE
+    // bulk query, so most safeSearch() calls below hit memory and skip the
+    // expensive full search (rebuilds become near-instant for unchanged CNs).
+    await tselectFallback.preloadPersisted(tsEntries.map(([, sc]) => sc));
     const TS_CONCURRENCY = 6;
     for (let i = 0; i < tsEntries.length; i += TS_CONCURRENCY) {
       const batch = tsEntries.slice(i, i + TS_CONCURRENCY);
@@ -654,7 +694,9 @@ async function buildCoverage() {
 function kickCoverageBuild() {
   if (_coverageBuilding) return _coverageBuilding;
   const p = buildCoverage().then(payload => {
-    _coverageCache = { at: Date.now(), data: payload };
+    const at = Date.now();
+    _coverageCache = { at, data: payload };
+    persistCoverage(payload, at); // fire-and-forget → survives restarts
     return payload;
   });
   _coverageBuilding = p;
@@ -665,6 +707,13 @@ function kickCoverageBuild() {
 
 router.get('/coverage', async (req, res) => {
   try {
+    // Fresh process with no in-memory cache → hydrate from the persisted copy so
+    // we serve the previous result instantly instead of a cold 202/build.
+    if (!_coverageCache && !req.query.refresh) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+
     const fresh = _coverageCache && Date.now() - _coverageCache.at < COVERAGE_TTL_MS;
 
     // Fresh cache → serve immediately
@@ -837,6 +886,20 @@ router.put('/config', isAdmin, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Warm the cache shortly after process start so users almost never hit a cold
+// build: hydrate the in-memory cache from the persisted copy, and only kick a
+// (background) rebuild when there's nothing persisted or it's already stale.
+// Small delay so this never competes with server startup / first requests.
+setTimeout(() => {
+  loadPersistedCoverage()
+    .then((persisted) => {
+      if (persisted) _coverageCache = persisted;
+      const stale = !persisted || Date.now() - persisted.at >= COVERAGE_TTL_MS;
+      if (stale) kickCoverageBuild();
+    })
+    .catch(() => {});
+}, 8000);
 
 module.exports = router;
 module.exports.invalidateCoverageCache = invalidateCoverageCache;
