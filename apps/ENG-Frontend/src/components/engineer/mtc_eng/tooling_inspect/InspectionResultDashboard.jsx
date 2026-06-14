@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Layout, Select, Spin, Typography, Row, Col, Tooltip, Table, Tag } from 'antd';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import axios from 'axios';
 import moment from 'moment';
@@ -377,6 +378,7 @@ export default function InspectionResultDashboard() {
                                 <div style={{ color: C.cyan, fontWeight: 800, fontSize: 16,
                                               letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                                     Tooling Inspection Result Dashboard
+                                    <SystemVersionBadge system="tooling-result-dashboard" dark />
                                 </div>
                                 <div style={{ color: C.textSec, fontSize: 11 }}>{periodLabel}</div>
                             </div>

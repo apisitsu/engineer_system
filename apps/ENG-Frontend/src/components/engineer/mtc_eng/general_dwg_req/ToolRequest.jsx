@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
 } from 'antd';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
     PlusOutlined, SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CheckCircleOutlined,
@@ -366,6 +367,7 @@ const ToolRequestContent = () => {
                                     <div style={{ padding: '16px 16px' }}>
                                         <Title level={2} style={{ marginBottom: 0 }}>
                                             General DWG Request
+                                            <SystemVersionBadge system="tool-request" />
                                         </Title>
                                         <Text type="secondary">Manage and track tool & drawing requests</Text>
                                     </div>
