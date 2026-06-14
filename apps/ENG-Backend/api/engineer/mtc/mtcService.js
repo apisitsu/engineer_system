@@ -1,8 +1,5 @@
 const moment = require('moment');
 const mtcModel = require('./mtcModel');
-const ExcelJS = require('exceljs');
-const fs = require('fs');
-const path = require('path');
 
 const getToolingInspectListService = async (query) => {
     const pageNum = Math.max(1, parseInt(query.page) || 1);
@@ -63,32 +60,8 @@ const getToolDWGRequestService = async () => {
     };
 };
 
-const processSdsExcel = async (setupId, templatePath) => {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(templatePath);
-
-    const mappingResult = await mtcModel.getTemplateMapping(setupId);
-    
-    mappingResult.rows.forEach(row => {
-        const ws = row.sheet_name ? workbook.getWorksheet(row.sheet_name) : workbook.worksheets[0];
-        if (ws && row.cell_address && row.param_key) {
-            const cell = ws.getCell(row.cell_address);
-            const current = cell.value;
-            const placeholder = `{{${row.param_key}}}`;
-            if (typeof current === 'string' && current.includes(placeholder)) {
-                cell.value = current.replace(placeholder, row.param_value);
-            } else {
-                cell.value = row.param_value;
-            }
-        }
-    });
-
-    return workbook;
-};
-
 module.exports = {
     getToolingInspectListService,
     getToolDWGRequestService,
-    processSdsExcel
 };
 

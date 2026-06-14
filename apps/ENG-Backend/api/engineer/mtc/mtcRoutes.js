@@ -5,7 +5,7 @@ const mtcController = require('./mtcController');
 // Define routes for MTC
 router.get('/tooling-inspect', mtcController.getToolingInspectList);
 router.get('/tool-dwg-request', mtcController.getToolDWGRequest);
-router.get('/generate-sds-pdf', mtcController.generateSdsPdf);
+// /generate-sds-pdf (LibreOffice) retired — use the Chrome grid renderer
 
 module.exports = router;
 

@@ -9,6 +9,86 @@ const { invalidateCoverageCache } = require('./sdsV2ReportController');
 
 const router = express.Router();
 const headlessController = require('./sdsV2HeadlessController');
+const ExcelJS = require('exceljs');
+const path = require('path');
+
+const SDS_XLSX_TEMPLATE = path.join(__dirname, '../templates/sds_template.xlsx');
+
+// Excel border style → editor edge { w(px), s(css style) }
+const XLSX_BORDER_STYLE = {
+  hair: { w: 0.5, s: 'solid' }, thin: { w: 1, s: 'solid' }, medium: { w: 1.5, s: 'solid' }, thick: { w: 2.5, s: 'solid' },
+  dotted: { w: 1, s: 'dotted' }, dashed: { w: 1, s: 'dashed' }, dashDot: { w: 1, s: 'dashed' }, dashDotDot: { w: 1, s: 'dashed' },
+  mediumDashed: { w: 1.5, s: 'dashed' }, double: { w: 2.5, s: 'double' }, slantDashDot: { w: 1, s: 'dashed' },
+};
+const argbToHex = (argb) => {
+  if (!argb) return null;
+  const s = String(argb);
+  return '#' + (s.length === 8 ? s.slice(2) : s).toLowerCase();
+};
+const xlsxEdge = (side) => {
+  if (!side || !side.style) return null;
+  const m = XLSX_BORDER_STYLE[side.style] || { w: 1, s: 'solid' };
+  return { w: m.w, s: m.s, c: argbToHex(side.color && side.color.argb) || '#000000' };
+};
+
+/** Parse sds_template.xlsx into the editor's grid model (A1:AV56). */
+async function parseSdsXlsxGrid() {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(SDS_XLSX_TEMPLATE);
+  const ws = wb.worksheets[0];
+  const rows = 56, cols = 48;
+  const colW = [], rowH = [], borders = {}, fills = {}, cells = {};
+  for (let c = 1; c <= cols; c++) {
+    const w = ws.getColumn(c).width;            // Excel char units
+    colW.push(Math.max(8, Math.round((Number(w) || 8.43) * 7 + 5)));
+  }
+  for (let r = 1; r <= rows; r++) {
+    const h = ws.getRow(r).height;              // points
+    rowH.push(Math.max(8, Math.round((Number(h) || 15) * 96 / 72)));
+  }
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = ws.getCell(r, c);
+      const bd = cell.border || {};
+      const e = {};
+      const t = xlsxEdge(bd.top), rr = xlsxEdge(bd.right), bb = xlsxEdge(bd.bottom), ll = xlsxEdge(bd.left);
+      if (t) e.t = t; if (rr) e.r = rr; if (bb) e.b = bb; if (ll) e.l = ll;
+      if (Object.keys(e).length) borders[`${r - 1},${c - 1}`] = e;
+      const f = cell.fill;
+      if (f && f.type === 'pattern' && f.pattern === 'solid' && f.fgColor) {
+        const hex = argbToHex(f.fgColor.argb);
+        if (hex && hex !== '#ffffff') fills[`${r - 1},${c - 1}`] = hex;
+      }
+      // Text + font + alignment (master cell only — reading .text on a covered
+      // merge cell whose master is empty throws inside exceljs, so skip those).
+      const isCovered = cell.isMerged && cell.master && cell.master.address !== cell.address;
+      if (!isCovered) {
+        let txt = '';
+        try { txt = cell.text; } catch (_) { txt = ''; }
+        const hasText = txt != null && String(txt).trim() !== '';
+        const fnt = cell.font || {}, al = cell.alignment || {};
+        const fontColor = argbToHex(fnt.color && fnt.color.argb);
+        // Capture cells with text OR a meaningful font, so EMPTY dynamic-value
+        // placeholders keep their designed colour (e.g. the red header value cells).
+        if (hasText || (fontColor && fontColor !== '#000000') || fnt.bold || fnt.italic) {
+          const cell0 = {
+            f: { name: fnt.name || null, size: fnt.size || null, bold: !!fnt.bold, italic: !!fnt.italic, color: fontColor || null },
+            a: { h: al.horizontal || null, v: al.vertical || null, wrap: !!al.wrapText },
+          };
+          if (hasText) cell0.v = String(txt);
+          cells[`${r - 1},${c - 1}`] = cell0;
+        }
+      }
+    }
+  }
+  const merges = (ws.model.merges || []).map((rng) => {
+    const m = String(rng).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (!m) return null;
+    const col = (s) => { let n = 0; for (const ch of s) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+    return { r1: +m[2] - 1, c1: col(m[1]), r2: +m[4] - 1, c2: col(m[3]) };
+  }).filter(Boolean);
+  return { rows, cols, colW, rowH, borders, fills, cells, merges };
+}
 
 // Flush the SDS search/PDF cache (sds:* keys, 10-min TTL) after a successful
 // config mutation, so edits to parameters / tool lists / cell mappings are
@@ -1173,6 +1253,65 @@ router.get('/template-config/common-params', isAdmin, async (req, res) => {
       gw_params: gwParams,
       mappings:  mappingQ.rows,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grid
+ *  Returns the Excel-like blank-template grid layout (cells, borders, fills)
+ *  stored as a single JSON blob under config_key 'grid-layout'. null if never saved.
+ */
+router.get('/template-grid', isAdmin, async (req, res) => {
+  try {
+    await ensureTemplateCssTable();
+    const r = await engPool.query(
+      `SELECT config_value, updated_at FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG}
+       WHERE config_key = 'grid-layout' LIMIT 1`
+    );
+    let grid = null;
+    if (r.rows[0]?.config_value) {
+      try { grid = JSON.parse(r.rows[0].config_value); } catch (_) { grid = null; }
+    }
+    res.json({ grid, updated_at: r.rows[0]?.updated_at ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grid/from-xlsx
+ *  Parses sds_template.xlsx into the editor grid model (A1:AV56) so the editor
+ *  exactly mirrors the real Excel template — column widths, row heights, borders,
+ *  fills (and merge ranges). Used by the "Import xlsx" action / first-load default.
+ */
+router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
+  try {
+    const grid = await parseSdsXlsxGrid();
+    res.json({ grid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-grid
+ *  Body: { grid: { rows, cols, borders, fills, ... } }
+ *  Upserts the grid layout JSON. Stored in sds_template_css_config.
+ */
+router.put('/template-grid', isAdmin, async (req, res) => {
+  const { grid } = req.body;
+  if (!grid || typeof grid !== 'object' || Array.isArray(grid)) {
+    return res.status(400).json({ error: 'grid object required' });
+  }
+  try {
+    await ensureTemplateCssTable();
+    const json = JSON.stringify(grid);
+    await engPool.query(
+      `INSERT INTO ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (config_key, config_value, description, updated_at)
+       VALUES ('grid-layout', $1, 'Excel-like blank template grid (borders/fills)', NOW())
+       ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()`,
+      [json]
+    );
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

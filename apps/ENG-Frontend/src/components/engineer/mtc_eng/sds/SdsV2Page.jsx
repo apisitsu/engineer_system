@@ -124,7 +124,7 @@ const SdsV2Page = () => {
     setPdfModal(true);
   };
 
-  const handleGeneratePdf = async (mode = 'legacy') => {
+  const handleGeneratePdf = async () => {
     if (!selectedMachine) { message.warning('Please select machine type'); return; }
     setPdfLoading(true);
     try {
@@ -137,9 +137,8 @@ const SdsV2Page = () => {
       };
       const queryParams = new URLSearchParams(params).toString();
       
-      let baseUrl = server.MTC_SDS_V2_PDF;
-      if (mode === 'gotenberg') baseUrl = `${server.API_URL}api/sds/v2-gotenberg/pdf-gotenberg`;
-      if (mode === 'chrome') baseUrl = `${server.API_URL}api/sds/v2-headless/pdf-chrome`;
+      // Grid renderer (Chrome) is the production SDS PDF.
+      const baseUrl = `${server.API_URL}api/sds/v2-headless/pdf-chrome/grid`;
       
       const fullUrl = `${baseUrl}?${queryParams}`;
       const a = document.createElement('a');
@@ -696,20 +695,11 @@ const SdsV2Page = () => {
         onCancel={() => setPdfModal(false)}
         footer={[
           <Button key="cancel" onClick={() => setPdfModal(false)}>Cancel</Button>,
-          <Button 
-            key="headless" 
-            icon={<FilePdfOutlined />} 
-            onClick={() => handleGeneratePdf('chrome')}
-            loading={pdfLoading}
-            style={{ backgroundColor: '#faad14', color: 'white' }}
-          >
-            Test Chrome
-          </Button>,
-          <Button 
-            key="generate" 
-            type="primary" 
-            icon={<FilePdfOutlined />} 
-            onClick={() => handleGeneratePdf('legacy')}
+          <Button
+            key="generate"
+            type="primary"
+            icon={<FilePdfOutlined />}
+            onClick={() => handleGeneratePdf()}
             loading={pdfLoading}
           >
             Generate PDF
