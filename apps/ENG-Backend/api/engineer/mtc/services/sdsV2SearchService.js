@@ -99,7 +99,7 @@ async function searchByCn(cn, maqPool, rodpcPool) {
   const partInfo = PART_TYPE_MAP[prefix];
   if (!partInfo) throw new Error(`Unknown CN prefix: ${prefix}`);
 
-  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult] = await Promise.all([
+  const [partTypeResult, dimensionResult, toolingResult, itemResult, cadRevResult, processInfoLpbResult, bomResult] = await Promise.all([
     maqPool.query(`SELECT class1, class1_name, sub_class, sub_class_name, t_parts_name AS part_type FROM ${TABLES.LPB_ENG_TEMP_PARTS} WHERE class1 = $1 LIMIT 1`, [prefix]),
     // Mecha (C9x) has no dimension table → skip the query, dimension stays null.
     partInfo.table
@@ -118,14 +118,11 @@ async function searchByCn(cn, maqPool, rodpcPool) {
       FROM ${TABLES.LPB_ENG_PROCESS_INFO}
       WHERE process_plan_no = $1 OR process_plan_no IN (SELECT process_plan_no FROM ${TABLES.LPB_ENG_R_PI_ITEM} WHERE control_no = $1)
     `, [cnUpper]),
+    // BOM depends only on cnUpper → fetch in the same batch (saves a round-trip).
+    maqPool.query(`SELECT child_cn, child_pn FROM ${TABLES.LPB_ENG_BOM} WHERE parent_cn = $1 LIMIT 1`, [cnUpper]),
   ]);
 
   const itemData = itemResult.rows[0];
-
-  const bomResult = await maqPool.query(
-    `SELECT child_cn, child_pn FROM ${TABLES.LPB_ENG_BOM} WHERE parent_cn = $1 LIMIT 1`,
-    [cnUpper]
-  );
   const bomRow = bomResult.rows[0];
 
   let rawMaterial = null;

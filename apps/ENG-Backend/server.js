@@ -8,7 +8,7 @@ const cors = require("cors");
 const fileupload = require("express-fileupload");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // runs first — must match the 50mb limit below or it 413s large bodies (e.g. grid layout)
 var jsonParser = bodyParser.json();
 var urlencodedParser = bodyParser.urlencoded({ extended: false });
 
@@ -275,11 +275,16 @@ app.use('/api/sds/v2/images', sdsV2ImageController);
 const sdsV2AdminController = require('./api/engineer/mtc/controllers/sdsV2AdminController');
 app.use('/api/sds/v2/admin', sdsV2AdminController);
 
-const sdsV2PdfController = require('./api/engineer/mtc/controllers/sdsV2PdfController');
-app.use('/api/sds/v2', sdsV2PdfController);
-
 const sdsV2HeadlessController = require('./api/engineer/mtc/controllers/sdsV2HeadlessController');
 app.use('/api/sds/v2-headless', sdsV2HeadlessController);
+
+// LibreOffice (soffice) SDS PDF generation has been retired — the Chrome grid
+// renderer (Approach B) fully replaces it. Keep the old path working by
+// redirecting to the grid renderer so existing links/clients don't break.
+app.get('/api/sds/v2/pdf', (req, res) => {
+  const qs = new URLSearchParams(req.query).toString();
+  res.redirect(307, `/api/sds/v2-headless/pdf-chrome/grid${qs ? `?${qs}` : ''}`);
+});
 
 const sdsV2ReportController = require('./api/engineer/mtc/controllers/sdsV2ReportController');
 app.use('/api/sds/v2/report', sdsV2ReportController);

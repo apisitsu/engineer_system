@@ -6,8 +6,8 @@ const moment = require('moment');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
-const { searchByCn } = require('../services/sdsV2SearchService');
 const tselectFallback = require('../services/tselectFallback');
+const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 
 const router = express.Router();
@@ -17,6 +17,24 @@ const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
+
+// Cache the HTML template in memory — it never changes at runtime, so reading it
+// from disk on every render was pure per-request I/O.
+let _templateHtml = null;
+function getTemplateHtml() {
+  if (_templateHtml == null) _templateHtml = fs.readFileSync(TEMPLATE_PATH, 'utf8');
+  return _templateHtml;
+}
+
+// Fetch CN search data through the cached orchestrator (sds:{CN}, 10-min TTL)
+// instead of a fresh factory-DB round-trip on every PDF render.
+async function getSearchData(cn) {
+  const data = await SdsOrchestrator.search(cn, maqPool, rodpcPool);
+  if (!data || data.error || data.success === false) {
+    throw new Error(data?.error || 'CN search failed');
+  }
+  return data;
+}
 
 // ── CSS Config Cache (5-min TTL) ────────────────────────────────────────────
 
@@ -193,10 +211,21 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const grindMatch = (map['process_name'] || '').match(/^(.*?)\s*grind/i);
   map['grinding_area_label'] = grindMatch ? `${grindMatch[1].trim().toUpperCase()} GRINDING AREA` : 'GRINDING AREA';
 
-  // Images
+  // Images — only fetch the rows we might match (stored tool_dwg_no can be a
+  // prefix of the full dwg, so include every cumulative prefix as a candidate)
+  // instead of loading the entire image-BLOB table on every render.
   const dwgNos = slotData.slice(0, 20).map(s => s?.tool_dwg_no).filter(Boolean);
   if (dwgNos.length) {
-    const allImgRows = await engPool.query(`SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE}`);
+    const dwgCandidates = new Set();
+    for (const d of dwgNos) {
+      dwgCandidates.add(d);
+      const parts = String(d).split('-');
+      for (let i = 1; i < parts.length; i++) dwgCandidates.add(parts.slice(0, i).join('-'));
+    }
+    const allImgRows = await engPool.query(
+      `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
+      [[...dwgCandidates]]
+    );
     for (const tool of map.tooling) {
         if (!tool.cleanDwg) continue;
         const img = allImgRows.rows.find(i => tool.cleanDwg === i.tool_dwg_no || tool.cleanDwg.startsWith(i.tool_dwg_no + '-'));
@@ -232,6 +261,51 @@ function getBrowserPath() {
     if (fs.existsSync(p)) return p;
   }
   return null;
+}
+
+// ── Warm browser singleton ──────────────────────────────────────────────────
+// Launch Chrome once and reuse it across requests (a page is opened/closed per
+// render). Avoids the ~0.5–1s per-request launch cost; auto-relaunches if it dies.
+
+let _browser = null;
+let _browserLaunching = null;
+
+async function getBrowser() {
+  if (_browser && _browser.isConnected()) return _browser;
+  if (_browserLaunching) return _browserLaunching;
+  const executablePath = getBrowserPath();
+  const launchOptions = {
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+  };
+  if (executablePath) launchOptions.executablePath = executablePath;
+  _browserLaunching = puppeteer.launch(launchOptions).then((b) => {
+    _browser = b;
+    _browserLaunching = null;
+    b.on('disconnected', () => { _browser = null; });
+    return b;
+  }).catch((e) => { _browserLaunching = null; throw e; });
+  return _browserLaunching;
+}
+
+// Render an HTML string to a PDF Buffer on a fresh page of the warm browser.
+async function renderPdf(html, pdfOpts = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setCacheEnabled(false);
+    // 'load' fires once inline/data-URI images decode; the template has no
+    // external network resources, so 'networkidle2' just added a ~500ms wait.
+    await page.setContent(html, { waitUntil: 'load' });
+    const raw = await page.pdf({
+      format: 'A4', landscape: true, printBackground: true,
+      margin: { top: '2.54mm', bottom: '2.54mm', left: '2.54mm', right: '2.54mm' },
+      ...pdfOpts,
+    });
+    return Buffer.from(raw);
+  } finally {
+    await page.close().catch(() => {});
+  }
 }
 
 // ── Blank Template Preview ──────────────────────────────────────────────────
@@ -286,7 +360,7 @@ router.get('/pdf-chrome/blank', async (req, res) => {
     if (cssOverrides) { try { parsedCssOverrides = JSON.parse(cssOverrides); } catch (_) {} }
     const cssConfig = await loadCssConfig(parsedCssOverrides);
 
-    let html = fs.readFileSync(TEMPLATE_PATH, 'utf8');
+    let html = getTemplateHtml();
 
     // 1. Inject CSS variables
     html = html.replace('{{css_vars_block}}', buildCssVarsBlock(cssConfig));
@@ -310,6 +384,269 @@ router.get('/pdf-chrome/blank', async (req, res) => {
   }
 });
 
+// ── Grid Template → PDF ─────────────────────────────────────────────────────
+// Renders the Excel-like blank-template grid (cells + borders + fills designed
+// in the Template Config "Grid Editor") to a printable PDF. Mirrors the grid
+// the user draws in SdsBlankTemplateGrid.jsx.
+
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildGridPdfHtml(grid) {
+  const rows = Math.max(1, parseInt(grid.rows, 10) || 56);
+  const cols = Math.max(1, parseInt(grid.cols, 10) || 48);
+  const borders = grid.borders || {};
+  const fills   = grid.fills   || {};
+  const cells   = grid.cells   || {};
+  const merges  = Array.isArray(grid.merges) ? grid.merges : [];
+
+  // Per-column widths / per-row heights (px in the editor) → scaled to the page.
+  const fit = (arr, n, d) => Array.from({ length: n }, (_, i) => (Array.isArray(arr) && Number(arr[i]) > 0 ? Number(arr[i]) : d));
+  const colW = fit(grid.colW, cols, 30);
+  const rowH = fit(grid.rowH, rows, 22);
+  const sumW = colW.reduce((a, b) => a + b, 0) || 1;
+  const PAGE_W_MM = 287;            // A4 landscape printable width (297 − 2×5mm margin)
+  const scale = PAGE_W_MM / sumW;   // mm per editor-px (preserves aspect for rows + fonts)
+
+  // Merge lookup: covered cells are skipped; base cell gets row/col span.
+  const covered = new Set();
+  const spanAt = {};
+  for (const m of merges) {
+    const r1 = +m.r1, c1 = +m.c1, r2 = +m.r2, c2 = +m.c2;
+    if ([r1, c1, r2, c2].some(n => Number.isNaN(n))) continue;
+    spanAt[`${r1},${c1}`] = { rs: r2 - r1 + 1, cs: c2 - c1 + 1, r2, c2 };
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { if (r === r1 && c === c1) continue; covered.add(`${r},${c}`); }
+  }
+
+  const edge = (e) => (e ? `${e.w}px ${e.s} ${e.c}` : 'none');
+  // For a merged cell the visible perimeter borders live on the edge cells.
+  const cellBorders = (r, c, span) => {
+    const b0 = borders[`${r},${c}`] || {};
+    if (!span) return b0;
+    return {
+      t: b0.t,
+      l: b0.l,
+      r: (borders[`${r},${span.c2}`] || {}).r,
+      b: (borders[`${span.r2},${c}`] || {}).b,
+    };
+  };
+
+  const colgroup = colW.map(w => `<col style="width:${(w * scale).toFixed(3)}mm">`).join('');
+
+  let body = '';
+  for (let r = 0; r < rows; r++) {
+    body += `<tr style="height:${(rowH[r] * scale).toFixed(3)}mm">`;
+    for (let c = 0; c < cols; c++) {
+      if (covered.has(`${r},${c}`)) continue;
+      const span = spanAt[`${r},${c}`];
+      const b = cellBorders(r, c, span);
+      const fill = fills[`${r},${c}`];
+      const cd = cells[`${r},${c}`];
+      const f = cd && cd.f, a = cd && cd.a;
+      const st = [
+        `border-top:${edge(b.t)}`,
+        `border-right:${edge(b.r)}`,
+        `border-bottom:${edge(b.b)}`,
+        `border-left:${edge(b.l)}`,
+        fill ? `background:${fill}` : '',
+        f && f.name ? `font-family:'${f.name}',Arial,sans-serif` : '',
+        // Always emit a size — cells with data but no xlsx font default to the
+        // SDS base sz=10 (otherwise the browser default ~16px makes them huge).
+        `font-size:${(((f && f.size) || 10) * 1.3333 * scale).toFixed(3)}mm`,
+        f && f.bold ? 'font-weight:bold' : '',
+        f && f.italic ? 'font-style:italic' : '',
+        f && f.color ? `color:${f.color}` : '',
+        `text-align:${(a && a.h) || 'left'}`,
+        `vertical-align:${(a && a.v) || 'middle'}`,
+        a && a.wrap ? 'white-space:normal' : 'white-space:nowrap',
+        // let injected text overflow over empty neighbours (Excel behaviour)
+        a && a.wrap ? 'overflow:hidden' : 'overflow:visible',
+      ].filter(Boolean).join(';');
+      const sp = span ? `${span.cs > 1 ? ` colspan="${span.cs}"` : ''}${span.rs > 1 ? ` rowspan="${span.rs}"` : ''}` : '';
+      const content = cd && cd.img
+        ? `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;margin:0 auto;">`
+        : escHtml(cd && cd.v);
+      body += `<td${sp} style="${st}">${content}</td>`;
+    }
+    body += '</tr>';
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page { size: A4 landscape; margin: 5mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; }
+    table { width: ${PAGE_W_MM}mm; border-collapse: collapse; table-layout: fixed; }
+    td { padding: 0 0.4mm; line-height: 1.05; }
+  </style></head><body>
+    <table><colgroup>${colgroup}</colgroup><tbody>${body}</tbody></table>
+  </body></html>`;
+}
+
+// Excel column letters → 0-based index (A→0, I→8, AN→39 … AV→47)
+function colLettersToIndex(s) {
+  let n = 0;
+  for (const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+function cellAddrToRC(addr) {
+  const m = String(addr).match(/^([A-Z]+)(\d+)$/);
+  return m ? { r: +m[2] - 1, c: colLettersToIndex(m[1]) } : null;
+}
+
+// Fixed image anchor ranges in the SDS layout (mirror of the LibreOffice path).
+const IMAGE_EXTENTS = {
+  tool_image_T01: { tl: 'K18', br: 'P23' }, tool_image_T02: { tl: 'Q18', br: 'V23' },
+  tool_image_T03: { tl: 'W18', br: 'AB23' }, tool_image_T04: { tl: 'AC18', br: 'AH23' },
+  tool_image_T05: { tl: 'AI18', br: 'AN23' }, tool_image_T06: { tl: 'K28', br: 'P33' },
+  tool_image_T07: { tl: 'Q28', br: 'V33' }, tool_image_T08: { tl: 'W28', br: 'AB33' },
+  tool_image_T09: { tl: 'AC28', br: 'AH33' }, tool_image_T10: { tl: 'AI28', br: 'AN33' },
+  tool_image_T11: { tl: 'K38', br: 'P43' }, tool_image_T12: { tl: 'Q38', br: 'V43' },
+  tool_image_T13: { tl: 'W38', br: 'AB43' }, tool_image_T14: { tl: 'AC38', br: 'AH43' },
+  tool_image_T15: { tl: 'AI38', br: 'AN43' }, tool_image_T16: { tl: 'K48', br: 'P53' },
+  tool_image_T17: { tl: 'Q48', br: 'V53' }, tool_image_T18: { tl: 'W48', br: 'AB53' },
+  tool_image_T19: { tl: 'AC48', br: 'AH53' }, tool_image_T20: { tl: 'AI48', br: 'AN53' },
+  grinding_layout_image: { tl: 'AO26', br: 'AU45' },
+};
+
+/** Inject per-CN data into the designed grid by cell address (pure function).
+ *  - mappings: [{ cell_address, param_key }] from sds_excel_mapping (machine wins)
+ *  - valueMap: scalar fields + .params (row_N_X / gw_row_N_X) from buildValueMap
+ *  Designed cell formatting (font/border/merge) is preserved; only text is set. */
+function applyDataToGrid(grid, valueMap, mappings) {
+  const cells = { ...(grid.cells || {}) };
+  const fills = { ...(grid.fills || {}) };
+  const params = valueMap.params || {};
+  const HDR_BG = '#e0e0e0';                 // param/GW header-row highlight (matches CSS config default)
+  const isTrue = (v) => v === '1' || v === 1 || String(v).toLowerCase() === 'true';
+  const findCell = (param_key) => (mappings.find((mp) => mp.param_key === param_key) || {}).cell_address;
+  const setCell = (r, c, v, red) => {
+    if (v == null || v === '' || r < 0 || c < 0) return;
+    const k = `${r},${c}`;
+    const ex = cells[k] || {};
+    cells[k] = { ...ex, v: String(v), f: { ...(ex.f || {}), ...(red ? { color: '#ff0000' } : {}) }, a: ex.a || {} };
+  };
+
+  // Images: place each tool/grinding image at its anchor cell, merging the range
+  // so it fills the region (idempotent vs. any merge already on that top-left).
+  const existingTl = new Set((grid.merges || []).map((m) => `${m.r1},${m.c1}`));
+  const newMerges = [];
+  const placeImage = (extentKey, dataUri) => {
+    if (!dataUri) return;
+    const ext = IMAGE_EXTENTS[extentKey];
+    if (!ext) return;
+    const tl = cellAddrToRC(ext.tl), br = cellAddrToRC(ext.br);
+    if (!tl || !br) return;
+    const k = `${tl.r},${tl.c}`;
+    cells[k] = { ...(cells[k] || {}), img: dataUri };
+    if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
+  };
+
+  // 1) Mapped scalar fields (skip image objects)
+  for (const { cell_address, param_key } of mappings) {
+    const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
+    if (!m) continue;
+    let val = valueMap[param_key];
+    if (val == null) val = params[param_key];
+    if (val && typeof val === 'object') continue; // images handled elsewhere
+    setCell(+m[2] - 1, colLettersToIndex(m[1]), val);
+  }
+
+  // 2) Parameter table (A:I) + GW section (AN:AV) straight from row_N_COL keys
+  for (const [key, val] of Object.entries(params)) {
+    let mm = key.match(/^row_(\d+)_([A-I])$/);
+    if (mm) { setCell(+mm[1] - 1, colLettersToIndex(mm[2]), val, params[`${key}_type`] === 'value'); continue; }
+    mm = key.match(/^gw_row_(\d+)_(A[N-V])$/);
+    if (mm) { setCell(+mm[1] - 1, colLettersToIndex(mm[2]), val, params[`${key}_type`] === 'value'); continue; }
+  }
+
+  // 2b) Header rows (row_N_is_header / gw_row_N_is_header) → grey highlight + bold,
+  //     merged across the section so it reads like the Excel header band.
+  const addHeaderRow = (rowNum, c1, c2, txt) => {
+    const r = rowNum - 1;
+    const k = `${r},${c1}`;
+    fills[k] = HDR_BG;
+    const ex = cells[k] || {};
+    cells[k] = {
+      ...ex,
+      v: txt != null && txt !== '' ? String(txt) : (ex.v || ''),
+      f: { ...(ex.f || {}), bold: true, color: '#000000' },
+      a: { ...(ex.a || {}), h: 'center', v: 'middle' },
+    };
+    if (!existingTl.has(k)) { newMerges.push({ r1: r, c1, r2: r, c2 }); existingTl.add(k); }
+  };
+  for (const [key, val] of Object.entries(params)) {
+    let hm = key.match(/^row_(\d+)_is_header$/);
+    if (hm && isTrue(val)) { addHeaderRow(+hm[1], 0, 8, params[`row_${hm[1]}_A`]); continue; }
+    hm = key.match(/^gw_row_(\d+)_is_header$/);
+    if (hm && isTrue(val)) { addHeaderRow(+hm[1], colLettersToIndex('AN'), colLettersToIndex('AV'), params[`gw_row_${hm[1]}_AN`]); }
+  }
+
+  // 3) Tooling drawing numbers + names — placed at the mapped cells
+  //    (sds_excel_mapping keys: tool_dwg_no_T01 / tool_name_T01 …)
+  (valueMap.tooling || []).forEach((t) => {
+    if (!t) return;
+    if (t.dwg) { const rc = cellAddrToRC(findCell(`tool_dwg_no_${t.slot}`)); if (rc) setCell(rc.r, rc.c, t.dwg, true); }
+    if (t.name) { const rc = cellAddrToRC(findCell(`tool_name_${t.slot}`)); if (rc) setCell(rc.r, rc.c, t.name); }
+  });
+
+  // 4) Tooling + grinding images into their anchor regions
+  (valueMap.tooling || []).forEach((t) => { if (t && t.image) placeImage(`tool_image_${t.slot}`, t.image); });
+  placeImage('grinding_layout_image', valueMap.grinding_layout_image);
+
+  return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
+}
+
+/** GET /api/sds/v2-headless/pdf-chrome/grid
+ *  Renders the saved grid layout to PDF.
+ *  - Blank/design preview: no params, or ?gridOverride=<JSON> for live edits.
+ *  - Production SDS: pass ?cn=&machine_type_name=&process_code= to inject real
+ *    per-CN data into the designed grid (Approach B — grid drives the SDS PDF).
+ *  ?debug=html returns the raw HTML instead of a PDF.
+ */
+router.get('/pdf-chrome/grid', async (req, res) => {
+  const { gridOverride, debug, cn, machine_type_name, process_code } = req.query;
+  try {
+    let grid = null;
+    if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
+    if (!grid) {
+      const r = await engPool.query(
+        `SELECT config_value FROM sds_template_css_config WHERE config_key = 'grid-layout' LIMIT 1`
+      );
+      if (r.rows[0]?.config_value) { try { grid = JSON.parse(r.rows[0].config_value); } catch (_) {} }
+    }
+    if (!grid || typeof grid !== 'object') grid = { rows: 56, cols: 20, borders: {}, fills: {} };
+
+    // Production mode: fill the designed grid with real CN data via cell addresses
+    if (cn && machine_type_name) {
+      const searchData = await getSearchData(cn.trim());
+      const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool);
+      const mq = await engPool.query(
+        `SELECT cell_address, param_key FROM ${TABLES.SDS_EXCEL_MAPPING}
+         WHERE machine_type_name = $1 OR machine_type_name IS NULL
+         ORDER BY (machine_type_name IS NULL) DESC`,
+        [machine_type_name.trim()]
+      );
+      const merged = {};
+      for (const row of mq.rows) merged[row.cell_address] = row.param_key; // machine-specific (later) wins
+      const mappings = Object.entries(merged).map(([cell_address, param_key]) => ({ cell_address, param_key }));
+      grid = applyDataToGrid(grid, valueMap, mappings);
+    }
+
+    const html = buildGridPdfHtml(grid);
+    if (debug === 'html') return res.send(html);
+
+    const pdfBuffer = await renderPdf(html, { margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' } });
+
+    // Stream the buffer directly — no temp-file disk round-trip.
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(500).json({ error: `Grid PDF render failed: ${err.message}` });
+  }
+});
+
 // ── Rendering Endpoint ──────────────────────────────────────────────────────
 
 router.get('/pdf-chrome', async (req, res) => {
@@ -320,7 +657,7 @@ router.get('/pdf-chrome', async (req, res) => {
 
   try {
     console.log('[SDS PDF Chrome] Fetching search data...');
-    const searchData = await searchByCn(cn, maqPool, rodpcPool);
+    const searchData = await getSearchData(cn.trim());
     
     console.log('[SDS PDF Chrome] Building value map...');
     const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool);
@@ -334,7 +671,7 @@ router.get('/pdf-chrome', async (req, res) => {
     const cssVarsBlock = buildCssVarsBlock(cssConfig);
 
     console.log('[SDS PDF Chrome] Loading HTML template...');
-    let html = fs.readFileSync(TEMPLATE_PATH, 'utf8');
+    let html = getTemplateHtml();
     html = html.replace('{{css_vars_block}}', cssVarsBlock);
 
     // ── Scalar fields ──────────────────────────────────────────────────────────
@@ -501,77 +838,22 @@ router.get('/pdf-chrome', async (req, res) => {
       return res.send(html);
     }
 
-    console.log('[SDS PDF Chrome] Launching browser...');
-    const executablePath = getBrowserPath();
-    const launchOptions = {
-        headless: 'new',
-        args: [
-          '--no-sandbox', 
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
-    };
-    if (executablePath) {
-      console.log(`[SDS PDF Chrome] Using browser at: ${executablePath}`);
-      launchOptions.executablePath = executablePath;
-    } else {
-      console.warn('[SDS PDF Chrome] No local browser found, relying on Puppeteer default');
+    console.log('[SDS PDF Chrome] Rendering PDF (warm browser)...');
+    const pdfBuffer = await renderPdf(html); // default 2.54mm margins = Excel page setup
+
+    // Validate PDF Header (%PDF-)
+    const header = pdfBuffer.slice(0, 5).toString('utf8');
+    if (header !== '%PDF-') {
+      console.error('[SDS PDF Chrome] Invalid Header:', header);
+      throw new Error('Generated buffer is not a valid PDF (Missing %PDF- header)');
     }
 
-    const browser = await puppeteer.launch(launchOptions);
-    try {
-      const page = await browser.newPage();
-      await page.setCacheEnabled(false);
-      console.log('[SDS PDF Chrome] Setting content...');
-      await page.setContent(html, { waitUntil: 'networkidle2' });
-      
-      console.log('[SDS PDF Chrome] Generating PDF buffer...');
-      const rawBuffer = await page.pdf({
-          format: 'A4',
-          landscape: true,
-          printBackground: true,
-          // Match Excel page setup: margins 0.1 inch = 2.54mm each side
-          margin: { top: '2.54mm', bottom: '2.54mm', left: '2.54mm', right: '2.54mm' }
-      });
+    console.log(`[SDS PDF Chrome] Success! Buffer size: ${pdfBuffer.length} bytes`);
 
-      // Ensure we have a Node.js Buffer
-      const pdfBuffer = Buffer.from(rawBuffer);
-
-      // Validate PDF Header (%PDF-)
-      const header = pdfBuffer.slice(0, 5).toString('utf8');
-      if (header !== '%PDF-') {
-        console.error('[SDS PDF Chrome] Invalid Header:', header);
-        throw new Error('Generated buffer is not a valid PDF (Missing %PDF- header)');
-      }
-
-      console.log(`[SDS PDF Chrome] Success! Buffer size: ${pdfBuffer.length} bytes`);
-      
-      // Save to temp file and serve via sendFile
-      ensureDir(OUTPUT_DIR);
-      const tempPdfPath = path.join(OUTPUT_DIR, `__render_${Date.now()}_${cn}.pdf`);
-      fs.writeFileSync(tempPdfPath, pdfBuffer);
-
-      // Clean headers to let sendFile set them correctly
-      res.removeHeader('Content-Type'); 
-      
-      res.sendFile(tempPdfPath, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
-        }
-      }, (err) => {
-        if (err) {
-          console.error('[SDS PDF Chrome] sendFile error:', err.message);
-        }
-        safeUnlink(tempPdfPath);
-        console.log('[SDS PDF Chrome] Temp file cleaned up');
-      });
-
-    } finally {
-      await browser.close();
-      console.log('[SDS PDF Chrome] Browser closed');
-    }
+    // Stream the buffer directly — no temp-file disk round-trip.
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(pdfBuffer);
 
   } catch (err) {
     console.error('[SDS PDF Chrome] FATAL ERROR:', err);
