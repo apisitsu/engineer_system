@@ -20,6 +20,17 @@ export const MTC_PATHS = {
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
 };
 
+// Per-system version + last-update, shown in each system's page header (keyed by
+// the sidebar item key). Edit the version/updated values here as systems change.
+export const MTC_VERSIONS = {
+  'tool-request':             { version: '1.0', updated: '2026-06-14' },
+  'tooling-inspect':          { version: '1.0', updated: '2026-06-14' },
+  'tooling-select':           { version: '2.0', updated: '2026-06-14' },
+  'sds-v2':                   { version: '2.0', updated: '2026-06-14' },
+  'tooling-result-dashboard': { version: '1.0', updated: '2026-06-14' },
+  'sds-coverage-report':      { version: '1.0', updated: '2026-06-14' },
+};
+
 export const WORKFLOW_STATUS = {
   PENDING_ENG_CHECK: 'Pending Eng Check',
   PENDING_DRAFT_MAN: 'Pending Draft Man',

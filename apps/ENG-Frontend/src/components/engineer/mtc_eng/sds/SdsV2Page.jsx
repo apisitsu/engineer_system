@@ -6,6 +6,7 @@ import {
 } from 'antd';
 import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useNavigate } from 'react-router-dom';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -572,6 +573,7 @@ const SdsV2Page = () => {
                   <div style={{ padding: '16px' }}>
                     <Title level={2} style={{ marginBottom: 0 }}>
                       Setup Data Sheet
+                      <SystemVersionBadge system="sds-v2" />
                     </Title>
                     <Text type="secondary">Manage and view machine setup data sheets</Text>
                   </div>

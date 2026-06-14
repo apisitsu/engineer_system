@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
 import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import ReportScopeModal from './ReportScopeModal';
@@ -500,6 +501,7 @@ export default function SdsCoverageDashboard() {
               <div>
                 <div style={{ color: C.cyan, fontSize: 18, fontWeight: 800, letterSpacing: '0.05em' }}>
                   Setup Data Sheet Dashboard
+                  <SystemVersionBadge system="sds-coverage-report" dark />
                 </div>
                 {totalCns > 0 && (
                   <div style={{ color: C.textSec, fontSize: 12, marginTop: 2 }}>

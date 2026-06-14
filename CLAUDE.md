@@ -92,7 +92,7 @@ npm run cypress:run  # Cypress E2E headless
 | **Gmail** | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REDIRECT_URI`, `GMAIL_REFRESH_TOKEN` | OAuth2; values stored as JS syntax with quotes → `cleanEnv()` strips before use |
 | **Proxy** | `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS` | Corporate proxy for outbound HTTP |
 | **MTC scripts** | `PYTHON_EXE`, `TOOLING_IMPORT_SCRIPT` | PC-tooling import pipeline |
-| **SDS PDF** | `SOFFICE_PATH`, `SDS_TEMPLATE_DIR` | LibreOffice path; SDS template dir |
+| **SDS PDF** | ~~`SOFFICE_PATH`, `SDS_TEMPLATE_DIR`~~ | **Retired 2026-06-14** — LibreOffice removed; SDS PDF renders via Chrome grid (`/api/sds/v2-headless/pdf-chrome/grid`). These env vars are unused. |
 | **Misc** | `EXTERNAL_JOB_CHECK_API_KEY`, `GAS_EMAIL_URL` | External integrations |
 
 Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.

@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "gen:versions": "node scripts/gen-system-versions.js",
+    "prestart": "node scripts/gen-system-versions.js",
+    "predev": "node scripts/gen-system-versions.js",
+    "prebuild": "node scripts/gen-system-versions.js",
     "start": "react-scripts start",
     "dev": "react-scripts start",
     "build": "react-scripts build",

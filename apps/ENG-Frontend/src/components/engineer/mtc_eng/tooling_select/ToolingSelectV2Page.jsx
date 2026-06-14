@@ -3,6 +3,7 @@ import {
   Input, Button, Card, Table, Tag, Typography, Space,
   Collapse, Empty, Spin, Alert, Row, Col, Badge, Layout, Tooltip
 } from 'antd';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import {
   SearchOutlined, SwapOutlined,
   ToolOutlined, SettingOutlined, WarningOutlined,
@@ -332,7 +333,7 @@ export default function ToolingSelectV2Page() {
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <AssessmentRoundedIcon sx={{ color: primaryColor, fontSize: 60 }} />
                 <div style={{ padding: '16px' }}>
-                  <Title level={2} style={{ marginBottom: 0 }}>Tooling Select</Title>
+                  <Title level={2} style={{ marginBottom: 0 }}>Tooling Select<SystemVersionBadge system="tooling-select" /></Title>
                   <Text type="secondary">DB-driven tooling calculation and selection</Text>
                 </div>
               </div>
