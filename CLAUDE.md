@@ -43,6 +43,7 @@ npm run cypress:run  # Cypress E2E headless
 
 ### Backend (`apps/ENG-Backend`)
 - **Entry:** `server.js` → Express app on port 2005; WebSocket via `api/kanban/websocket.js`
+  - **Body-parser gotcha:** `server.js` registers JSON body parsers **twice**; the FIRST one (`express.json()`) runs before the `bodyParser.json({ limit: '50mb' })` below it, so its limit wins. Both must carry the `50mb` limit or large bodies (e.g. the saved SDS grid layout) throw `PayloadTooLargeError` even though a 50mb parser exists.
 - **Routing:** Most domains register routes inline in `server.js`. MTC has a partial `routes/mtcRoutes.js`, but most MTC controllers are also registered directly in `server.js`
 - **MVC per domain:** routes → controller (HTTP layer) → service (business logic, PDF/Excel) → model (DB access)
 - **Key domains:**

@@ -162,9 +162,18 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   if (!tsResult || !tsResult.success || !Array.isArray(tsResult.results)) return [];
 
   // Direction gate — only rejects on a proven conflict, never on missing data.
-  const expectedDir = directionForProcessCode(opts.processCode);
-  const specDir = String(tsResult.spec?.process ?? '').toUpperCase().trim();
-  if (expectedDir && specDir && specDir !== expectedDir) return [];
+  // SKIPPED when opts.partHasProcess is true: a multi-grind part (e.g. a ball with
+  // BOTH ID grind 1061 and spherical grind 1041) stores only ONE spec.process
+  // direction (deriveProcess returns the first grind in seq). Without this skip the
+  // gate wrongly rejects a spherical-grind machine's tooling (KS-500RD 4033-xx) on
+  // the 1041 row just because the part's stored direction is ID->OD. When the part's
+  // process plan genuinely contains the rendered process_code, that process is real
+  // for this part → its T-Select tooling is legitimate regardless of stored direction.
+  if (!opts.partHasProcess) {
+    const expectedDir = directionForProcessCode(opts.processCode);
+    const specDir = String(tsResult.spec?.process ?? '').toUpperCase().trim();
+    if (expectedDir && specDir && specDir !== expectedDir) return [];
+  }
 
   const out = [];
   const seen = new Set();
