@@ -47,7 +47,10 @@ async function loadPersistedCoverage() {
   try {
     await ensureCoverageTable();
     const r = await engPool.query(`SELECT data, built_at FROM sds_coverage_cache WHERE id = 'coverage' LIMIT 1`);
-    if (r.rows[0]) return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    // Skip an empty/degraded snapshot (total=0) → rebuild instead of serving it.
+    if (r.rows[0] && r.rows[0].data?.kpi?.total > 0) {
+      return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    }
   } catch (e) { console.error('[SDS Report] load persisted coverage failed:', e.message); }
   return null;
 }
@@ -694,9 +697,15 @@ async function buildCoverage() {
 function kickCoverageBuild() {
   if (_coverageBuilding) return _coverageBuilding;
   const p = buildCoverage().then(payload => {
-    const at = Date.now();
-    _coverageCache = { at, data: payload };
-    persistCoverage(payload, at); // fire-and-forget → survives restarts
+    // Don't cache an empty build (total=0 = degraded, e.g. data pool down) — it
+    // would serve an empty report for the whole TTL. This request still gets it.
+    if (payload?.kpi?.total > 0) {
+      const at = Date.now();
+      _coverageCache = { at, data: payload };
+      persistCoverage(payload, at); // fire-and-forget → survives restarts
+    } else {
+      console.warn('[SDS Report] coverage build returned total=0 — not caching');
+    }
     return payload;
   });
   _coverageBuilding = p;

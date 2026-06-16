@@ -55,6 +55,7 @@ const SdsV2Page = () => {
   const [pdfModal, setPdfModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [visibleMachineNames, setVisibleMachineNames] = useState(null); // null = all visible
   const [machineToolsConfig, setMachineToolsConfig] = useState([]);
   const [filteredMachineTypes, setFilteredMachineTypes] = useState([]);
   const [selectedProcess, setSelectedProcess] = useState(null);
@@ -68,15 +69,20 @@ const SdsV2Page = () => {
     setTsData(null);
     setCnHistory(null);
     try {
-      const [searchRes, mtRes, tsRes, mtConfigRes, histRes] = await Promise.all([
+      const [searchRes, mtRes, tsRes, mtConfigRes, histRes, vmRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
         allMachineTypes.length ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } }),
         axios.post(server.TSV2_SEARCH, { cn: cnVal }).catch(() => null),
         axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS).catch(() => null),
         axios.get(server.MTC_SDS_V2_ADMIN_CN_HISTORY, { params: { cn: cnVal } }).catch(() => null),
+        visibleMachineNames !== null ? Promise.resolve(null) : axios.get(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES).catch(() => null),
       ]);
       setData(searchRes.data);
       if (mtRes) setAllMachineTypes(mtRes.data.filter(m => m.is_active && m.machine_type_name));
+      // null payload = "all visible"; store as '*ALL*' sentinel set so we only fetch once.
+      if (vmRes?.data && vmRes.data.visible_machines !== undefined) {
+        setVisibleMachineNames(vmRes.data.visible_machines ? new Set(vmRes.data.visible_machines) : new Set(['*ALL*']));
+      }
       if (tsRes?.data?.success) setTsData(tsRes.data);
       if (mtConfigRes?.data) setMachineToolsConfig(Array.isArray(mtConfigRes.data) ? mtConfigRes.data : []);
       if (histRes?.data?.rows?.length) setCnHistory(histRes.data);
@@ -117,12 +123,41 @@ const SdsV2Page = () => {
     // Merge: config-backed first, then unmatched code-prefix machines
     const mergedMap = {};
     [...byConfig, ...byCode].forEach(m => { mergedMap[m.machine_type_name] = m; });
-    const merged = Object.values(mergedMap);
+
+    // Resolve each represented group to its VISIBLE members (Configure Settings → Visible
+    // Machines). Members of a group share tooling but each has its OWN SDS Excel Parameter /
+    // Grinding Wheel config. A group with several visible members (KS-400B1/B2/B7) yields
+    // several selectable targets; a group with one visible member (TSG-300W/TSG-300ZNC →
+    // TSG-300W) collapses to that single target — keeping the picker consistent with admin.
+    const isVisible = (name) =>
+      !visibleMachineNames || visibleMachineNames.has('*ALL*') || visibleMachineNames.has(name);
+    const mergedGroups = new Set(Object.values(mergedMap).map(m => m.machine_group).filter(Boolean));
+    mergedGroups.forEach(g => {
+      const visibleMembers = allMachineTypes.filter(m => m.machine_group === g && isVisible(m.machine_type_name));
+      // Only "split" a group (offer each member) when MORE THAN ONE member is visible.
+      // A single-visible-member group (e.g. TSG-300W/TSG-300ZNC) stays combined — keep the
+      // existing config-backed representative untouched (no change to its PDF config source).
+      if (visibleMembers.length <= 1) return;
+      Object.keys(mergedMap).forEach(name => { if (mergedMap[name].machine_group === g) delete mergedMap[name]; });
+      visibleMembers.forEach(m => { mergedMap[m.machine_type_name] = m; });
+    });
+    const merged = Object.values(mergedMap)
+      .sort((a, b) => a.machine_type_name.localeCompare(b.machine_type_name));
 
     const list = merged.length ? merged : allMachineTypes;
     setFilteredMachineTypes(list);
     if (list.length === 1) setSelectedMachine(list[0].machine_type_name);
     setPdfModal(true);
+  };
+
+  // Label shown for a machine in the picker / on the PDF: a split group shows the specific
+  // machine name (KS-400B2); a combined group (sole entry in the list) shows the group name
+  // (TSG-300W/TSG-300ZNC). Mirrors the admin Excel Config list rule.
+  const displayLabelFor = (name) => {
+    const m = filteredMachineTypes.find(x => x.machine_type_name === name);
+    if (!m || !m.machine_group) return name;
+    const groupCount = filteredMachineTypes.filter(x => x.machine_group === m.machine_group).length;
+    return groupCount > 1 ? name : m.machine_group;
   };
 
   const handleGeneratePdf = async () => {
@@ -133,6 +168,7 @@ const SdsV2Page = () => {
         cn: data.cn,
         machine_type_name: selectedMachine,
         process_code: selectedProcess?.process_code || '',
+        display_name: displayLabelFor(selectedMachine),
         _t: Date.now(),
         token: localStorage.getItem('token') || '',
       };
@@ -720,7 +756,7 @@ const SdsV2Page = () => {
           }
           options={filteredMachineTypes.map(m => ({
             value: m.machine_type_name,
-            label: m.machine_type_name,
+            label: displayLabelFor(m.machine_type_name),
           }))}
         />
       </Modal>

@@ -81,7 +81,7 @@ function buildCssVarsBlock(config) {
 
 // ── Cloned buildValueMap logic for consistency ──────────────────────────────
 
-async function buildValueMap(searchData, machine_type_name, process_code, engPool) {
+async function buildValueMap(searchData, machine_type_name, process_code, engPool, displayName) {
   // (Identical to Gotenberg/Standard controllers, returns flat map of values + image buffers)
   // For the POC, I'll use the same code as before but return it for HTML consumption.
   
@@ -95,7 +95,13 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   );
   const mtcRow2Data = mtcRow2.rows[0];
   const machineTypeCode = mtcRow2Data ? (mtcRow2Data.tool_code_filter || mtcRow2Data.machine_type_code) : null;
-  const machineDisplayName = mtcRow2Data?.machine_group || machine_type_name;
+  // Label printed on the sheet. The caller (PDF picker) decides: a SPLIT group passes the
+  // specific machine name (e.g. KS-400B2); a COMBINED group passes the group name (e.g.
+  // TSG-300W/TSG-300ZNC). Fallback when no display_name is given: group name, else machine name.
+  const machineDisplayName = displayName || mtcRow2Data?.machine_group || machine_type_name;
+  // The shared group name is still needed to match T-Select fallback tools, which are
+  // keyed by tooling_machine.machine_group (e.g. 'KS-400B1/B2/B7'), not the per-machine name.
+  const machineGroup = mtcRow2Data?.machine_group || null;
 
   const firstProcessInfo = process_code
     ? searchData.process_info.find(r => String(r.process_code) === String(process_code)) || searchData.process_info[0]
@@ -133,13 +139,26 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   let mtRows = [];
   if (machine_type_name && process_code) {
+    // Machine Tool Config (sds_machine_tool) is SHARED across a machine_group — grouped
+    // machines (e.g. KS-400B1/B2/B7) use the same fixtures, so the curated T01–T20 list
+    // lives once on the representative (KS-400B1). Look it up group-wide so B2/B7 reuse it
+    // without duplicating rows. Per-machine differences live only in the Excel config below.
+    const toolMachineNames = machineGroup
+      ? (await engPool.query(
+          `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+           WHERE machine_group = $1 AND is_active`,
+          [machineGroup]
+        )).rows.map(r => r.machine_type_name)
+      : [machine_type_name];
     const mtResult = await engPool.query(
       `SELECT tool_number, tool_drawing_no FROM ${TABLES.SDS_V2_MACHINE_TOOL}
-       WHERE machine_type = $1 AND process_code = $2
+       WHERE machine_type = ANY($1) AND process_code = $2
        ORDER BY LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`,
-      [machine_type_name, String(process_code)]
+      [toolMachineNames, String(process_code)]
     );
-    mtRows = mtResult.rows;
+    // Dedupe by tool slot — group members share one curated list.
+    const seenTool = new Set();
+    mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
 
   if (mtRows.length > 0) {
@@ -172,9 +191,18 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn) : null;
   if (tsResult) {
     const acceptable = new Set([machine_type_name]);
-    if (machineDisplayName) acceptable.add(machineDisplayName);
+    if (machineGroup) acceptable.add(machineGroup);
+    // The PDF is generated for a process_code the part actually has (the user picked
+    // a real process row). Tell the fallback so the direction gate is not applied —
+    // a multi-grind part (ID grind + spherical/OD grind) has only one stored
+    // direction and would otherwise drop a valid machine's T-Select tooling.
+    const partHasProcess = (searchData.process_info || []).some(
+      r => String(r.process_code) === String(process_code)
+    ) || (searchData.process_plan || []).some(
+      r => String(r.process_code) === String(process_code)
+    );
     const existingPrefixes = new Set(slotData.filter(Boolean).map(s => dwgPrefix(s.tool_dwg_no)).filter(Boolean));
-    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code })) {
+    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess })) {
       const pfx = dwgPrefix(tt.tooling_no);
       if (pfx && existingPrefixes.has(pfx)) continue;
       const idx = slotData.findIndex(s => s === null);
@@ -270,6 +298,23 @@ function getBrowserPath() {
 let _browser = null;
 let _browserLaunching = null;
 
+// Chrome buffers the generated PDF to its temp dir (system %TEMP%, which on this
+// Windows host lives on C:). When C: fills up, page.pdf() fails mid-stream with
+// "Protocol error (IO.read): Read failed". Redirect Chrome's temp to a roomy data
+// drive so a full C: no longer breaks PDF generation. Computed once; '' = use the
+// OS default (non-Windows, or no data drive available).
+let _chromeTmp = null;
+function chromeTmpDir() {
+  if (_chromeTmp !== null) return _chromeTmp;
+  _chromeTmp = '';
+  if (process.platform === 'win32') {
+    for (const dir of ['D:\\eng-temp', 'E:\\eng-temp']) {
+      try { fs.mkdirSync(dir, { recursive: true }); _chromeTmp = dir; break; } catch (_) {}
+    }
+  }
+  return _chromeTmp;
+}
+
 async function getBrowser() {
   if (_browser && _browser.isConnected()) return _browser;
   if (_browserLaunching) return _browserLaunching;
@@ -279,6 +324,8 @@ async function getBrowser() {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   };
   if (executablePath) launchOptions.executablePath = executablePath;
+  const tmp = chromeTmpDir();
+  if (tmp) launchOptions.env = { ...process.env, TEMP: tmp, TMP: tmp };
   _browserLaunching = puppeteer.launch(launchOptions).then((b) => {
     _browser = b;
     _browserLaunching = null;
@@ -605,7 +652,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
  *  ?debug=html returns the raw HTML instead of a PDF.
  */
 router.get('/pdf-chrome/grid', async (req, res) => {
-  const { gridOverride, debug, cn, machine_type_name, process_code } = req.query;
+  const { gridOverride, debug, cn, machine_type_name, process_code, display_name } = req.query;
   try {
     let grid = null;
     if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
@@ -620,7 +667,7 @@ router.get('/pdf-chrome/grid', async (req, res) => {
     // Production mode: fill the designed grid with real CN data via cell addresses
     if (cn && machine_type_name) {
       const searchData = await getSearchData(cn.trim());
-      const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool);
+      const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool, display_name?.trim() || null);
       const mq = await engPool.query(
         `SELECT cell_address, param_key FROM ${TABLES.SDS_EXCEL_MAPPING}
          WHERE machine_type_name = $1 OR machine_type_name IS NULL
@@ -650,7 +697,7 @@ router.get('/pdf-chrome/grid', async (req, res) => {
 // ── Rendering Endpoint ──────────────────────────────────────────────────────
 
 router.get('/pdf-chrome', async (req, res) => {
-  const { cn, machine_type_name, process_code, debug, cssOverrides } = req.query;
+  const { cn, machine_type_name, process_code, debug, cssOverrides, display_name } = req.query;
   console.log(`[SDS PDF Chrome] Request: cn=${cn}, machine=${machine_type_name}, process=${process_code}, debug=${debug}`);
   
   if (!cn?.trim() || !machine_type_name?.trim()) return res.status(400).json({ error: 'cn and machine_type_name are required' });
@@ -660,7 +707,7 @@ router.get('/pdf-chrome', async (req, res) => {
     const searchData = await getSearchData(cn.trim());
     
     console.log('[SDS PDF Chrome] Building value map...');
-    const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool);
+    const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool, display_name?.trim() || null);
 
     // Parse live CSS overrides from query (for template config preview)
     let parsedCssOverrides = null;

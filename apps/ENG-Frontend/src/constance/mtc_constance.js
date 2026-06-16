@@ -26,7 +26,7 @@ export const MTC_VERSIONS = {
   'tool-request':             { version: '1.0', updated: '2026-06-14' },
   'tooling-inspect':          { version: '1.0', updated: '2026-06-14' },
   'tooling-select':           { version: '2.0', updated: '2026-06-14' },
-  'sds-v2':                   { version: '2.0', updated: '2026-06-14' },
+  'sds-v2':                   { version: '2.1', updated: '2026-06-15' },
   'tooling-result-dashboard': { version: '1.0', updated: '2026-06-14' },
   'sds-coverage-report':      { version: '1.0', updated: '2026-06-14' },
 };

@@ -883,8 +883,11 @@ router.put('/audit/config', isAdmin, async (req, res) => {
 
 // ── Visible Machines Config ───────────────────────────────────────────────────
 
-/** GET /api/sds/v2/admin/visible-machines — load saved machine visibility list */
-router.get('/visible-machines', isAdmin, async (req, res) => {
+/** GET /api/sds/v2/admin/visible-machines — load saved machine visibility list.
+ *  Public read (display config only, like /machine-types) so the SDS PDF picker — used by
+ *  non-admin operators — can keep grouped machines split/combined consistently with admin.
+ *  The PUT below stays isAdmin. */
+router.get('/visible-machines', async (req, res) => {
   try {
     await ensureAuditConfigTable();
     const r = await engPool.query(`SELECT value FROM sds_audit_config WHERE key='visible_machines'`);
