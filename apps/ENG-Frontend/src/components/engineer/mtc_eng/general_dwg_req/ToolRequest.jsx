@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Layout, Spin, Typography, Card, Table, Input, Button, Select, Space, Radio, Tag, Row, Col, Modal, App, Collapse
+    Layout, Spin, Typography, Card, Table, Input, Button, Space, Radio, Tag, Row, Col, App, Collapse
 } from 'antd';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -20,7 +20,7 @@ import {
     WORKFLOW_STATUS, 
     STATUS_COLORS, 
     FILTER_TYPES, 
-    FILTER_TYPE_LABELS,
+    // FILTER_TYPE_LABELS,
     isDoneStatus,
     isDeniedStatus,
 } from './workflowConstants';
@@ -34,7 +34,7 @@ const ToolRequestContent = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const userName = useAuthStore(state => state.userName);
-    const userSection = useAuthStore(state => state.userSection);
+    // const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
     const userInfo = useAuthStore(state => state.userInfo);
     const userRole = useAuthStore(state => state.userRole);
@@ -58,6 +58,7 @@ const ToolRequestContent = () => {
         if (searchParams.get('action') === 'create') {
             handleCreateNew();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
 
     const fetchRequests = async () => {

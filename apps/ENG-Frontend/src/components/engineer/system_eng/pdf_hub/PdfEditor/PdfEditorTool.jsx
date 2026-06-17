@@ -259,7 +259,8 @@ const PdfEditorTool = () => {
             usedToolsRef.current.clear();
             logPdfUsage('view');
         }
-    }, [pdfDoc, pdfFile, logPdfUsage]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc, pdfFile]);
 
     // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)

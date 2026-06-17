@@ -108,6 +108,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
 
   useEffect(() => {
     fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchSpecs, selectedPartType, pagination.current, pagination.pageSize]);
 
   const handleTableChange = (pag) => {
