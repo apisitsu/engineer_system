@@ -211,27 +211,6 @@ export default function SdsCoverageDashboard() {
     });
   }, [data]);
 
-  // ── Coverage by Part Type stacked bar ────────────────────────────────────────
-  const ptBarData = useMemo(() => ({
-    labels: byPartType.map(pt => pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1)),
-    datasets: [
-      { label: 'KZW Complete',   data: byPartType.map(pt => pt.complete_saved ?? pt.complete), backgroundColor: 'rgba(82,196,26,0.80)',  borderColor: C.green,  borderWidth: 1, stack: 'pt' },
-      { label: 'THAI Complete *', data: byPartType.map(pt => Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0))), backgroundColor: 'rgba(149,222,100,0.75)', borderColor: C.greenSoft, borderWidth: 1, stack: 'pt' },
-      { label: 'Pending',                     data: byPartType.map(pt => pt.pending), backgroundColor: 'rgba(255,197,61,0.75)', borderColor: C.yellow, borderWidth: 1, stack: 'pt' },
-    ],
-  }), [byPartType]);
-  const ptBarOpts = {
-    responsive: true, maintainAspectRatio: false, animation: false,
-    plugins: {
-      legend: { labels: { color: C.textSec, font: { size: 11 } } },
-      tooltip: { mode: 'index', intersect: false },
-      datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
-    },
-    scales: {
-      x: { stacked: true, ticks: { color: C.textSec, font: { size: 12 } }, grid: { color: C.gridLine } },
-      y: { stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
-    },
-  };
 
   const fmtMonth = m => {
     const [y, mo] = m.split('-');

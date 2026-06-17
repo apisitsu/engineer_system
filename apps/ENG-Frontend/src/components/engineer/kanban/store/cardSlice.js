@@ -10,7 +10,7 @@
 import axios from 'axios';
 import { server, GAS_DRIVE_URL } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
-import { message } from 'antd';
+// import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
 import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
 import { uploadFileToDrive, deleteFileFromDrive } from '../../../../utils/uploadFileToDrive';
@@ -838,13 +838,13 @@ export const createCardSlice = (set, get) => ({
 
         try {
             // Level 1: Hierarchy -> Ensure Project Membership
-            if (activeProject && !projectManagers.some(m => m.u_code === uCode)) {
+            if (activeProject && projectManagers && projectManagers.length > 0 && !projectManagers.some(m => m.u_code === uCode)) {
                 await axios.post(`${server.KANBAN_PROJECTS}/${activeProject.id}/managers`, { target_u_code: uCode, role: 'editor' });
                 get().fetchProjectManagers(activeProject.id);
             }
 
             // Level 2: Hierarchy -> Ensure Board Membership (if doing board/list/card actions)
-            if (['board', 'list', 'card'].includes(type) && activeBoard) {
+            if (['board', 'list', 'card'].includes(type) && activeBoard && activeBoardMembers && activeBoardMembers.length > 0) {
                 if (!activeBoardMembers.some(m => m.u_code === uCode)) {
                     await axios.post(`${server.KANBAN_BOARDS}/${activeBoard.id}/members`, { target_u_code: uCode, role: 'editor' });
                     get().fetchBoardMembers(activeBoard.id);

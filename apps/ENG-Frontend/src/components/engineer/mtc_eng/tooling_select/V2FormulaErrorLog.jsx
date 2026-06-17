@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Tag, Typography, Space, Button, Input, 
-  Card, App, Tooltip, Popconfirm
+  App, Tooltip, Popconfirm
 } from 'antd';
 import {
-  SearchOutlined, ReloadOutlined, DeleteOutlined,
-  WarningOutlined, BugOutlined, CalculatorOutlined
+  SearchOutlined, ReloadOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
 import { server } from '../../../../constance/constance';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const FormulaErrorLog = () => {
   const { message } = App.useApp();
