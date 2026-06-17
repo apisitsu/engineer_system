@@ -5,16 +5,105 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const { isAdmin } = require('../../../../middleware/mtcAuth');
 const cache = require('../services/agents/CacheAgent');
+const { invalidateCoverageCache } = require('./sdsV2ReportController');
 
 const router = express.Router();
+const headlessController = require('./sdsV2HeadlessController');
+const ExcelJS = require('exceljs');
+const path = require('path');
+
+const SDS_XLSX_TEMPLATE = path.join(__dirname, '../templates/sds_template.xlsx');
+
+// Excel border style → editor edge { w(px), s(css style) }
+const XLSX_BORDER_STYLE = {
+  hair: { w: 0.5, s: 'solid' }, thin: { w: 1, s: 'solid' }, medium: { w: 1.5, s: 'solid' }, thick: { w: 2.5, s: 'solid' },
+  dotted: { w: 1, s: 'dotted' }, dashed: { w: 1, s: 'dashed' }, dashDot: { w: 1, s: 'dashed' }, dashDotDot: { w: 1, s: 'dashed' },
+  mediumDashed: { w: 1.5, s: 'dashed' }, double: { w: 2.5, s: 'double' }, slantDashDot: { w: 1, s: 'dashed' },
+};
+const argbToHex = (argb) => {
+  if (!argb) return null;
+  const s = String(argb);
+  return '#' + (s.length === 8 ? s.slice(2) : s).toLowerCase();
+};
+const xlsxEdge = (side) => {
+  if (!side || !side.style) return null;
+  const m = XLSX_BORDER_STYLE[side.style] || { w: 1, s: 'solid' };
+  return { w: m.w, s: m.s, c: argbToHex(side.color && side.color.argb) || '#000000' };
+};
+
+/** Parse sds_template.xlsx into the editor's grid model (A1:AV56). */
+async function parseSdsXlsxGrid() {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(SDS_XLSX_TEMPLATE);
+  const ws = wb.worksheets[0];
+  const rows = 56, cols = 48;
+  const colW = [], rowH = [], borders = {}, fills = {}, cells = {};
+  for (let c = 1; c <= cols; c++) {
+    const w = ws.getColumn(c).width;            // Excel char units
+    colW.push(Math.max(8, Math.round((Number(w) || 8.43) * 7 + 5)));
+  }
+  for (let r = 1; r <= rows; r++) {
+    const h = ws.getRow(r).height;              // points
+    rowH.push(Math.max(8, Math.round((Number(h) || 15) * 96 / 72)));
+  }
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = ws.getCell(r, c);
+      const bd = cell.border || {};
+      const e = {};
+      const t = xlsxEdge(bd.top), rr = xlsxEdge(bd.right), bb = xlsxEdge(bd.bottom), ll = xlsxEdge(bd.left);
+      if (t) e.t = t; if (rr) e.r = rr; if (bb) e.b = bb; if (ll) e.l = ll;
+      if (Object.keys(e).length) borders[`${r - 1},${c - 1}`] = e;
+      const f = cell.fill;
+      if (f && f.type === 'pattern' && f.pattern === 'solid' && f.fgColor) {
+        const hex = argbToHex(f.fgColor.argb);
+        if (hex && hex !== '#ffffff') fills[`${r - 1},${c - 1}`] = hex;
+      }
+      // Text + font + alignment (master cell only — reading .text on a covered
+      // merge cell whose master is empty throws inside exceljs, so skip those).
+      const isCovered = cell.isMerged && cell.master && cell.master.address !== cell.address;
+      if (!isCovered) {
+        let txt = '';
+        try { txt = cell.text; } catch (_) { txt = ''; }
+        const hasText = txt != null && String(txt).trim() !== '';
+        const fnt = cell.font || {}, al = cell.alignment || {};
+        const fontColor = argbToHex(fnt.color && fnt.color.argb);
+        // Capture cells with text OR a meaningful font, so EMPTY dynamic-value
+        // placeholders keep their designed colour (e.g. the red header value cells).
+        if (hasText || (fontColor && fontColor !== '#000000') || fnt.bold || fnt.italic) {
+          const cell0 = {
+            f: { name: fnt.name || null, size: fnt.size || null, bold: !!fnt.bold, italic: !!fnt.italic, color: fontColor || null },
+            a: { h: al.horizontal || null, v: al.vertical || null, wrap: !!al.wrapText },
+          };
+          if (hasText) cell0.v = String(txt);
+          cells[`${r - 1},${c - 1}`] = cell0;
+        }
+      }
+    }
+  }
+  const merges = (ws.model.merges || []).map((rng) => {
+    const m = String(rng).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (!m) return null;
+    const col = (s) => { let n = 0; for (const ch of s) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+    return { r1: +m[2] - 1, c1: col(m[1]), r2: +m[4] - 1, c2: col(m[3]) };
+  }).filter(Boolean);
+  return { rows, cols, colW, rowH, borders, fills, cells, merges };
+}
 
 // Flush the SDS search/PDF cache (sds:* keys, 10-min TTL) after a successful
 // config mutation, so edits to parameters / tool lists / cell mappings are
 // reflected on the very next search & PDF. Without this, template-setup edits
 // appear to "not take" until the TTL expires. (machine-types routes already
 // invalidate inline.)
+// Also flushes the coverage cache so the report picks up new machine templates
+// and tool configs immediately without waiting for the 15-min TTL.
 const flushSds = (req, res, next) => {
-  res.on('finish', () => { if (res.statusCode < 400) cache.invalidatePrefix('sds:'); });
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      cache.invalidatePrefix('sds:');
+      invalidateCoverageCache();
+    }
+  });
   next();
 };
 
@@ -711,7 +800,11 @@ const DEFAULT_AUDIT_PROCESS_CODES = ['1011','1012','1021','1022','1041','1042','
 // production at all), C96 tooling/fixtures, C97 fastener blank, C98 others — none
 // have ground production. Broaden via the audit config UI if needed. The frontend
 // Mecha card (prefix 'C9') picks up both C95 and C99 rows.
-const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%','C95%','C99%'];
+// A4% = Spherical (A41–A49) — added 2026-06-13 when spherical entered the SDS
+// coverage scope (OD GRIND 1011 on OC machines); frontend Spherical card = prefix 'A4'.
+// NOTE: the DB row sds_audit_config.sub_class_patterns OVERRIDES this list — when
+// adding a class here, UPDATE the DB row too or the change is invisible.
+const DEFAULT_AUDIT_SUB_CLASSES   = ['C1%','C2%','C3%','C5%','C6%','C95%','C99%','A4%'];
 
 async function ensureAuditConfigTable() {
   await engPool.query(`
@@ -790,8 +883,11 @@ router.put('/audit/config', isAdmin, async (req, res) => {
 
 // ── Visible Machines Config ───────────────────────────────────────────────────
 
-/** GET /api/sds/v2/admin/visible-machines — load saved machine visibility list */
-router.get('/visible-machines', isAdmin, async (req, res) => {
+/** GET /api/sds/v2/admin/visible-machines — load saved machine visibility list.
+ *  Public read (display config only, like /machine-types) so the SDS PDF picker — used by
+ *  non-admin operators — can keep grouped machines split/combined consistently with admin.
+ *  The PUT below stays isAdmin. */
+router.get('/visible-machines', async (req, res) => {
   try {
     await ensureAuditConfigTable();
     const r = await engPool.query(`SELECT value FROM sds_audit_config WHERE key='visible_machines'`);
@@ -1016,6 +1112,210 @@ router.get('/audit/machine-identity', isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[Audit machine-identity]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Template CSS Config ───────────────────────────────────────────────────────
+
+const DEFAULT_CSS_CONFIG = {
+  'font-size-base':       '5.3pt',
+  'font-size-title':      '7pt',
+  'font-size-section':    '9pt',
+  'font-size-badge':      '4.5pt',
+  'height-row-normal':    '3.65mm',
+  'height-row-sep':       '0.84mm',
+  'height-row-img':       '21.9mm',
+  'width-params-panel':   '26.13%',
+  'width-tooling-panel':  '54.60%',
+  'width-grinding-panel': '19.27%',
+  'color-border-outer':   '#000000',
+  'color-border-inner':   '#aaaaaa',
+  'color-badge-bg':       '#1a3a8c',
+  'color-value-red':      '#cc0000',
+  'color-header-bg':      '#e0e0e0',
+  'color-sep-bg':         '#f0f0f0',
+};
+
+async function ensureTemplateCssTable() {
+  await engPool.query(`
+    CREATE TABLE IF NOT EXISTS ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (
+      id          SERIAL PRIMARY KEY,
+      config_key  TEXT NOT NULL UNIQUE,
+      config_value TEXT NOT NULL,
+      description TEXT,
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+/** GET /api/sds/v2/admin/template-config
+ *  Returns all CSS config rows merged with defaults, plus machine-type list.
+ */
+router.get('/template-config', isAdmin, async (req, res) => {
+  try {
+    await ensureTemplateCssTable();
+    const r = await engPool.query(
+      `SELECT config_key, config_value, description, updated_at FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG} ORDER BY config_key`
+    );
+    const stored = Object.fromEntries(r.rows.map(row => [row.config_key, row]));
+    const configs = Object.entries(DEFAULT_CSS_CONFIG).map(([key, defaultVal]) => ({
+      config_key:   key,
+      config_value: stored[key]?.config_value ?? defaultVal,
+      default_value: defaultVal,
+      description:  stored[key]?.description ?? null,
+      updated_at:   stored[key]?.updated_at ?? null,
+      is_modified:  !!stored[key] && stored[key].config_value !== defaultVal,
+    }));
+    res.json({ configs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-config
+ *  Body: { configs: [{ config_key, config_value }] }
+ *  Upserts rows; flushes SDS cache AND headless CSS cache so PDFs pick up changes immediately.
+ */
+router.put('/template-config', isAdmin, flushSds, async (req, res) => {
+  const { configs } = req.body;
+  if (!Array.isArray(configs) || !configs.length) {
+    return res.status(400).json({ error: 'configs array required' });
+  }
+  try {
+    await ensureTemplateCssTable();
+    const client = await engPool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const { config_key, config_value } of configs) {
+        if (!config_key || config_value === undefined) continue;
+        // Reset to default: delete the override row
+        if (config_value === null) {
+          await client.query(
+            `DELETE FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG} WHERE config_key = $1`, [config_key]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (config_key, config_value, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()`,
+            [config_key, String(config_value).trim()]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+    // Flush the headless controller's CSS cache so the next PDF uses new values
+    if (typeof headlessController.flushCssCache === 'function') headlessController.flushCssCache();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-config/common-params
+ *  Returns sds_parameter rows where cn IS NULL (machine-level config), optionally
+ *  filtered by machine_type_name. Also returns sds_excel_mapping rows.
+ */
+router.get('/template-config/common-params', isAdmin, async (req, res) => {
+  const { machine_type_name } = req.query;
+  try {
+    const paramQ = machine_type_name
+      ? await engPool.query(
+          `SELECT machine_type_name, param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+           WHERE cn IS NULL AND machine_type_name = $1 ORDER BY param_key`,
+          [machine_type_name]
+        )
+      : await engPool.query(
+          `SELECT machine_type_name, param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+           WHERE cn IS NULL ORDER BY machine_type_name, param_key`
+        );
+
+    const mappingQ = machine_type_name
+      ? await engPool.query(
+          `SELECT id, cell_address, param_key, machine_type_name FROM ${TABLES.SDS_EXCEL_MAPPING}
+           WHERE machine_type_name = $1 OR machine_type_name IS NULL ORDER BY cell_address`,
+          [machine_type_name]
+        )
+      : await engPool.query(
+          `SELECT id, cell_address, param_key, machine_type_name FROM ${TABLES.SDS_EXCEL_MAPPING}
+           ORDER BY machine_type_name NULLS FIRST, cell_address`
+        );
+
+    // Split params into regular (row_*) and GW (gw_row_*)
+    const params    = paramQ.rows.filter(r => !r.param_key.startsWith('gw_'));
+    const gwParams  = paramQ.rows.filter(r => r.param_key.startsWith('gw_'));
+
+    res.json({
+      params,
+      gw_params: gwParams,
+      mappings:  mappingQ.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grid
+ *  Returns the Excel-like blank-template grid layout (cells, borders, fills)
+ *  stored as a single JSON blob under config_key 'grid-layout'. null if never saved.
+ */
+router.get('/template-grid', isAdmin, async (req, res) => {
+  try {
+    await ensureTemplateCssTable();
+    const r = await engPool.query(
+      `SELECT config_value, updated_at FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG}
+       WHERE config_key = 'grid-layout' LIMIT 1`
+    );
+    let grid = null;
+    if (r.rows[0]?.config_value) {
+      try { grid = JSON.parse(r.rows[0].config_value); } catch (_) { grid = null; }
+    }
+    res.json({ grid, updated_at: r.rows[0]?.updated_at ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grid/from-xlsx
+ *  Parses sds_template.xlsx into the editor grid model (A1:AV56) so the editor
+ *  exactly mirrors the real Excel template — column widths, row heights, borders,
+ *  fills (and merge ranges). Used by the "Import xlsx" action / first-load default.
+ */
+router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
+  try {
+    const grid = await parseSdsXlsxGrid();
+    res.json({ grid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-grid
+ *  Body: { grid: { rows, cols, borders, fills, ... } }
+ *  Upserts the grid layout JSON. Stored in sds_template_css_config.
+ */
+router.put('/template-grid', isAdmin, async (req, res) => {
+  const { grid } = req.body;
+  if (!grid || typeof grid !== 'object' || Array.isArray(grid)) {
+    return res.status(400).json({ error: 'grid object required' });
+  }
+  try {
+    await ensureTemplateCssTable();
+    const json = JSON.stringify(grid);
+    await engPool.query(
+      `INSERT INTO ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (config_key, config_value, description, updated_at)
+       VALUES ('grid-layout', $1, 'Excel-like blank template grid (borders/fills)', NOW())
+       ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()`,
+      [json]
+    );
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -2,9 +2,24 @@
 
 const { engPool } = require('../../../../instance/eng_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
-const formulaService = require('./formulaService');
+const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
+
+// Cap on concurrent inventory queries per search (pg pool max is 20).
+const SEARCH_CONCURRENCY = 8;
+
+// Run `fn` over `items` with at most `limit` in flight at once.
+async function mapLimit(items, limit, fn) {
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+}
 
 // ── Spec ────────────────────────────────────────────────────────────────────
 
@@ -26,7 +41,6 @@ function buildSpecContext(spec) {
   const od = num(spec.od_aft);
   const id = num(spec.id_aft);
   const w = num(spec.w_aft);
-  // const sd = num(spec.sd ?? 0);
   const odBf = num(spec.od_bf);
   const idBf = num(spec.id_bf);
   const wBf = num(spec.w_bf);
@@ -74,6 +88,12 @@ function buildSpecContext(spec) {
 
     // ── Raw strings ───────────────────────────────────────────────────────────
     Type: type, YBall: yball, Process: process,
+
+    // CN class prefix = first 2 digits of the CN (e.g. '614033' → 61). Deterministic,
+    // never clobbered by a factory sync / Part-Management save. KL-20 derives its
+    // grip mode from this (N-chuck classes 23/25/26/41/42/61/63 → 4030-01; ID-chuck
+    // classes 62/64/69 → 4030-02) instead of the manually-set `type` column.
+    cnPrefix: parseInt(String(spec.cn ?? '').slice(0, 2), 10) || 0,
   };
 }
 
@@ -301,7 +321,7 @@ function normalizeSpecCn(cn) {
 
 // ── Main Search ──────────────────────────────────────────────────────────────
 
-async function search(cn) {
+async function search(cn, opts = {}) {
   const specCn = normalizeSpecCn(cn);
   const specRes = await engPool.query(
     `SELECT * FROM ${TSV2_TABLES.SPEC_PROCESS} WHERE cn = $1 LIMIT 1`,
@@ -330,6 +350,9 @@ async function search(cn) {
   const results = [];
   const warnings = [];
 
+  // Phase 1 — eligibility check (limits/tooling names come from the in-memory
+  // config cache, so this is cheap) → flatten to (machine, tooling) tasks.
+  const tasks = [];
   await Promise.all(searchMachines.map(async (machine) => {
     const displayName = machine._displayName || machine.machine_name;
     try {
@@ -338,54 +361,56 @@ async function search(cn) {
         warnings.push({ machine: displayName, reason: limitCheck.reason });
         return;
       }
-
       const toolingNames = await configCache.getToolingNames(machine.id);
-
-      await Promise.all(toolingNames.map(async (tooling_name) => {
-        try {
-          const formulaRows = await configCache.getFormulas(machine.id, tooling_name);
-          const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows });
-
-          // Surface formula evaluation failures (previously swallowed silently) so
-          // a broken/inapplicable formula is visible instead of just a missing tool.
-          if (computedDims._warnings?.length) {
-            for (const w of computedDims._warnings) {
-              warnings.push({ machine: displayName, tooling: tooling_name, reason: `formula ${w.output_key} (${w.phase}) failed: ${w.error}` });
-            }
-          }
-
-          const rules = await configCache.getSearchRules(machine.id, tooling_name);
-          if (!rules.length) return;
-
-          const matches = await searchInventory(machine, rules, computedDims);
-
-          // Map computed key → inventory column (e.g. A → dim_a) for frontend display
-          const columnMap = {};
-          for (const r of rules) columnMap[r.output_key] = r.inventory_column;
-
-          // Inventory columns whose rule feeds the closest-match ranking
-          // (is_match_dim) — used by the UI to highlight those result headers.
-          const matchDimCols = rules
-            .filter(r => r.is_match_dim !== false)
-            .map(r => r.inventory_column);
-
-          results.push({
-            machine: displayName,
-            machineLabel: machine._displayName ? null : machine.label,
-            tooling: tooling_name,
-            computed: computedDims,
-            columnMap,
-            matchDimCols,
-            matches,
-          });
-        } catch (err) {
-          warnings.push({ machine: displayName, tooling: tooling_name, reason: err.message });
-        }
-      }));
+      for (const tooling_name of toolingNames) tasks.push({ machine, displayName, tooling_name });
     } catch (err) {
       warnings.push({ machine: displayName, reason: err.message });
     }
   }));
+
+  // Phase 2 — run the inventory searches with bounded concurrency so a single
+  // request can't fire 100+ simultaneous queries and starve the pg pool (max 20).
+  await mapLimit(tasks, SEARCH_CONCURRENCY, async ({ machine, displayName, tooling_name }) => {
+    try {
+      const formulaRows  = await configCache.getFormulas(machine.id, tooling_name);
+      const computedDims = await formulaService.computeDimensions(machine.id, tooling_name, specCtx, { cn: specCn, formulaRows, user_empno: opts.user_empno ?? null });
+
+      // Surface formula evaluation failures (previously swallowed silently) so
+      // a broken/inapplicable formula is visible instead of just a missing tool.
+      if (computedDims._warnings?.length) {
+        for (const w of computedDims._warnings) {
+          warnings.push({ machine: displayName, tooling: tooling_name, reason: `formula ${w.output_key} (${w.phase}) failed: ${w.error}` });
+        }
+      }
+
+      const rules = await configCache.getSearchRules(machine.id, tooling_name);
+      if (!rules.length) return;
+
+      const matches = await searchInventory(machine, rules, computedDims);
+
+      // Map computed key → inventory column (e.g. A → dim_a) for frontend display
+      const columnMap = {};
+      for (const r of rules) columnMap[r.output_key] = r.inventory_column;
+
+      // Inventory columns whose rule feeds the closest-match ranking
+      // (is_match_dim) — used by the UI to highlight those result headers.
+      const matchDimCols = rules
+        .filter(r => r.is_match_dim !== false)
+        .map(r => r.inventory_column);
+
+      results.push({
+        machine: displayName,
+        machineLabel: machine._displayName ? null : machine.label,
+        tooling: tooling_name,
+        computed: computedDims,
+        columnMap,
+        matchDimCols,
+        matches,
+      });
+    } catch (err) {
+      warnings.push({ machine: displayName, tooling: tooling_name, reason: err.message });
+    }
+  });
 
   // Build displayName → machine config map for post-processing
   const machineByDisplay = {};

@@ -9,9 +9,74 @@
 // keeps repeat lookups (same CN across PDF + report rows) cheap.
 
 const searchService = require('./searchService');
+const { engPool } = require('../../../../instance/eng_db');
 
 const _cache = new Map();            // specCn → { at, result }
 const TTL_MS = 10 * 60 * 1000;       // 10 minutes — matches SDS search cache TTL
+
+// ── Persisted per-CN cache (DB) ───────────────────────────────────────────────
+// The in-memory _cache is lost on restart, so the SDS coverage report re-runs
+// hundreds of full Tooling Select searches on every cold build. Persist each CN's
+// result to a DB row so rebuilds (and PDF generation across restarts) reuse it.
+// Invalidated explicitly when T-Select config or part spec changes (clearPersisted),
+// with a 6h TTL backstop.
+const PERSIST_TTL_MS = 6 * 60 * 60 * 1000;
+let _persistReady = null;
+function ensurePersistTable() {
+  if (!_persistReady) {
+    _persistReady = engPool.query(`
+      CREATE TABLE IF NOT EXISTS tselect_cn_cache (
+        cn       TEXT PRIMARY KEY,
+        result   JSONB,
+        built_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => { _persistReady = null; throw e; });
+  }
+  return _persistReady;
+}
+async function readPersisted(cn) {
+  try {
+    await ensurePersistTable();
+    const r = await engPool.query(
+      `SELECT result FROM tselect_cn_cache WHERE cn = $1 AND built_at > $2`,
+      [cn, new Date(Date.now() - PERSIST_TTL_MS)]
+    );
+    if (r.rowCount) return { hit: true, result: r.rows[0].result };
+  } catch (_) {}
+  return { hit: false };
+}
+async function writePersisted(cn, result) {
+  try {
+    await ensurePersistTable();
+    await engPool.query(
+      `INSERT INTO tselect_cn_cache (cn, result, built_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (cn) DO UPDATE SET result = EXCLUDED.result, built_at = NOW()`,
+      [cn, result]
+    );
+  } catch (_) {}
+}
+// Bulk-load fresh persisted rows into the in-memory cache (one query for the
+// whole CN set, instead of a per-CN round trip). Called by the report before
+// its search loop so most safeSearch() calls hit memory.
+async function preloadPersisted(cns) {
+  const keys = [...new Set((cns || []).map((c) => String(c || '').trim()).filter(Boolean))];
+  if (!keys.length) return 0;
+  try {
+    await ensurePersistTable();
+    const r = await engPool.query(
+      `SELECT cn, result FROM tselect_cn_cache WHERE cn = ANY($1) AND built_at > $2`,
+      [keys, new Date(Date.now() - PERSIST_TTL_MS)]
+    );
+    const now = Date.now();
+    for (const row of r.rows) _cache.set(String(row.cn), { at: now, result: row.result });
+    return r.rowCount;
+  } catch (_) { return 0; }
+}
+// Drop the whole cache (memory + DB) — call on any T-Select config / spec change.
+async function clearPersisted() {
+  _cache.clear();
+  try { await ensurePersistTable(); await engPool.query('DELETE FROM tselect_cn_cache'); } catch (_) {}
+}
 
 // Periodic sweep so expired entries are evicted even when never read again.
 // Without this the Map only checks TTL on read → stale entries accumulate in RAM
@@ -59,10 +124,22 @@ async function safeSearch(cn) {
   if (!key) return null;
   const hit = _cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.result;
-  let result = null;
-  try { result = await searchService.search(key); } catch (_) { result = null; }
-  _cache.set(key, { at: Date.now(), result });
-  return result;
+  // Persisted layer (survives restart; cleared on config/spec change)
+  const p = await readPersisted(key);
+  if (p.hit) { _cache.set(key, { at: Date.now(), result: p.result }); return p.result; }
+  try {
+    // A success OR a legitimate "spec not found" ({success:false}) is cacheable —
+    // both are stable answers for this CN.
+    const result = await searchService.search(key);
+    _cache.set(key, { at: Date.now(), result });
+    writePersisted(key, result); // fire-and-forget → survives restarts
+    return result;
+  } catch (_) {
+    // Transient failure (e.g. a DB blip) — do NOT cache. Caching null here would
+    // serve an empty result for the whole TTL (10 min) and silently drop the CN
+    // from the coverage report / PDF tool list. Return null so the next call retries.
+    return null;
+  }
 }
 
 /**
@@ -85,9 +162,18 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   if (!tsResult || !tsResult.success || !Array.isArray(tsResult.results)) return [];
 
   // Direction gate — only rejects on a proven conflict, never on missing data.
-  const expectedDir = directionForProcessCode(opts.processCode);
-  const specDir = String(tsResult.spec?.process ?? '').toUpperCase().trim();
-  if (expectedDir && specDir && specDir !== expectedDir) return [];
+  // SKIPPED when opts.partHasProcess is true: a multi-grind part (e.g. a ball with
+  // BOTH ID grind 1061 and spherical grind 1041) stores only ONE spec.process
+  // direction (deriveProcess returns the first grind in seq). Without this skip the
+  // gate wrongly rejects a spherical-grind machine's tooling (KS-500RD 4033-xx) on
+  // the 1041 row just because the part's stored direction is ID->OD. When the part's
+  // process plan genuinely contains the rendered process_code, that process is real
+  // for this part → its T-Select tooling is legitimate regardless of stored direction.
+  if (!opts.partHasProcess) {
+    const expectedDir = directionForProcessCode(opts.processCode);
+    const specDir = String(tsResult.spec?.process ?? '').toUpperCase().trim();
+    if (expectedDir && specDir && specDir !== expectedDir) return [];
+  }
 
   const out = [];
   const seen = new Set();
@@ -103,4 +189,4 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   return out;
 }
 
-module.exports = { safeSearch, tselectToolsForMachine, matchNo, directionForProcessCode };
+module.exports = { safeSearch, tselectToolsForMachine, matchNo, directionForProcessCode, preloadPersisted, clearPersisted };

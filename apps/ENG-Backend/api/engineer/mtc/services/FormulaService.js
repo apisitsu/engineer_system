@@ -7,9 +7,13 @@ const { TSV2_TABLES } = require('../tsv2Constants');
 const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 class FormulaServiceV2 {
+  // Dedupe window for the formula error-log DB writes (see logErrorToDb)
+  static ERROR_LOG_TTL_MS = 10 * 60 * 1000;
+
   constructor() {
     this.parser = new Parser();
     this._registerFunctions();
+    this._errorLogThrottle = new Map(); // root-cause key → last logged epoch ms
   }
 
   _registerFunctions() {
@@ -120,12 +124,27 @@ class FormulaServiceV2 {
 
     // Audit a failed evaluation: keep a structured record AND log a greppable line
     // so "why wasn't this tool selected?" is traceable instead of a silent null.
+    // Warning shape keeps the original `expr`/`error` keys — searchService reads
+    // w.error/w.phase when merging into the /search response warnings[].
     const note = (phase, key, expr, error) => {
-      warnings.push({ machine_id: machineId, tooling_name: toolingName, output_key: key, phase, expr, error, cn: meta.cn ?? null });
+      const errorData = {
+        cn: meta.cn ?? null,
+        machine_id: machineId,
+        tooling_name: toolingName,
+        output_key: key,
+        phase,
+        expr,
+        error,
+        user_empno: meta.user_empno ?? null,
+      };
+      warnings.push(errorData);
       console.warn(
         `[formula] FAILED cn=${meta.cn ?? '?'} machine=${machineId} tooling=${JSON.stringify(toolingName)} ` +
         `key=${key} ${phase} expr=${JSON.stringify(expr)} → ${error}`
       );
+
+      // Persist to DB for Admin monitoring (Fire and forget)
+      this.logErrorToDb(errorData).catch(err => console.error('[formula] DB logging failed:', err.message));
     };
 
     for (const row of rows) {
@@ -153,6 +172,38 @@ class FormulaServiceV2 {
     // surface them in the /search response.
     if (warnings.length) Object.defineProperty(result, '_warnings', { value: warnings, enumerable: false });
     return result;
+  }
+
+  /**
+   * Log formula evaluation error to database (fire-and-forget from note()).
+   *
+   * Flood guard: the coverage report re-searches ~800 CNs every rebuild, so one
+   * systematically broken formula row would otherwise insert thousands of
+   * identical rows per hour. Dedupe on the ROOT CAUSE (machine+tooling+key+
+   * phase+error — not CN) with a 10-min TTL: each distinct failure is recorded
+   * at most once per window (first occurrence keeps its cn for context).
+   */
+  async logErrorToDb(data) {
+    const { cn, machine_id, tooling_name, output_key, phase, expr, error, user_empno } = data;
+
+    const throttleKey = `${machine_id}|${tooling_name}|${output_key}|${phase}|${error}`;
+    const now = Date.now();
+    const last = this._errorLogThrottle.get(throttleKey);
+    if (last && now - last < FormulaServiceV2.ERROR_LOG_TTL_MS) return;
+    this._errorLogThrottle.set(throttleKey, now);
+    // Occasional sweep so the map can't grow unbounded
+    if (this._errorLogThrottle.size > 500) {
+      for (const [k, t] of this._errorLogThrottle) {
+        if (now - t >= FormulaServiceV2.ERROR_LOG_TTL_MS) this._errorLogThrottle.delete(k);
+      }
+    }
+
+    const sql = `
+      INSERT INTO ${TSV2_TABLES.FORMULA_ERROR_LOG}
+      (cn, machine_id, tooling_name, output_key, phase, expression, error_message, user_empno)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `;
+    await engPool.query(sql, [cn, machine_id, tooling_name, output_key, phase, expr, error, user_empno]);
   }
 
   /**

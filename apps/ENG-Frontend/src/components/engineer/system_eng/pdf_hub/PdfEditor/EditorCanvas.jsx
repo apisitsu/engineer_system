@@ -40,7 +40,7 @@ const EditorCanvas = ({
     overlayPdfDoc,
     stampData,
 }) => {
-    const { theme } = useTheme();
+
     const pdfCanvasRef = useRef(null);
     const highlightCanvasRef = useRef(null);
     const overlayCanvasRef = useRef(null);
@@ -57,7 +57,7 @@ const EditorCanvas = ({
     const renderTaskRef = useRef(null);
 
     const store = usePdfEditorStore();
-    const { userName, userDepartment } = useAuthStore();
+    const { userName } = useAuthStore();
 
     // ── Constants ──
     const RENDER_SCALE = Math.max(window.devicePixelRatio || 1, 1.5); // DPR-aware super-sample
@@ -150,9 +150,10 @@ const EditorCanvas = ({
         canvas.on('object:added', updateObjectCount);
         canvas.on('object:removed', updateObjectCount);
 
+        const refs = fabricCanvasRefs.current;
         return () => {
             canvas.dispose();
-            delete fabricCanvasRefs.current[pageNum];
+            delete refs[pageNum];
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pageNum]);
@@ -569,6 +570,7 @@ const EditorCanvas = ({
         if (changed) {
             fc.renderAll();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         store.toolSettings, store.activeTool, pageNum
     ]);

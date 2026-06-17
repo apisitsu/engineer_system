@@ -68,6 +68,7 @@ export const server = {
   TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
   TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
+  TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,
@@ -76,6 +77,8 @@ export const server = {
   MTC_TOOLING_SPEC_SYNC_NEW: `${apiUrl}api/tooling-select/spec/sync-new`,
   MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
   MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
+  MTC_SDS_V2_PDF_CHROME: `${apiUrl}api/sds/v2-headless/pdf-chrome`,
+  MTC_SDS_V2_PDF_CHROME_BLANK: `${apiUrl}api/sds/v2-headless/pdf-chrome/blank`,
   MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,
   MTC_SDS_V2_ADMIN_MAPPINGS: `${apiUrl}api/sds/v2/admin/mappings`,
   MTC_SDS_V2_ADMIN_MACHINE_TOOLS: `${apiUrl}api/sds/v2/admin/machine-tools`,
@@ -99,6 +102,11 @@ export const server = {
   MTC_SDS_V2_REPORT_WC_OPTIONS: `${apiUrl}api/sds/v2/report/wc-options`,
   MTC_SDS_V2_REPORT_ACCESS_LOG: `${apiUrl}api/sds/v2/report/access-log`,
   MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG: `${apiUrl}api/sds/v2/admin/template-config`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx`,
+  MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
 
   // Template Tool (APQP Forms)
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,

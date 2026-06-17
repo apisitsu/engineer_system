@@ -13,10 +13,22 @@ export const MTC_PATHS = {
   TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
+  SDS_TEMPLATE_CONFIG: '/eng/mtc_eng/sds-v2/template-config',
   SDS_COVERAGE_REPORT: '/eng/mtc_eng/sds-coverage-report',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
+};
+
+// Per-system version + last-update, shown in each system's page header (keyed by
+// the sidebar item key). Edit the version/updated values here as systems change.
+export const MTC_VERSIONS = {
+  'tool-request':             { version: '1.0', updated: '2026-06-14' },
+  'tooling-inspect':          { version: '1.0', updated: '2026-06-14' },
+  'tooling-select':           { version: '2.0', updated: '2026-06-14' },
+  'sds-v2':                   { version: '2.1', updated: '2026-06-15' },
+  'tooling-result-dashboard': { version: '1.0', updated: '2026-06-14' },
+  'sds-coverage-report':      { version: '1.0', updated: '2026-06-14' },
 };
 
 export const WORKFLOW_STATUS = {

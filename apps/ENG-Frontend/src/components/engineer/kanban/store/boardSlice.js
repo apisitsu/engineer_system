@@ -639,7 +639,6 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     fetchWebhooks: async (boardId) => {
-        await get().checkAndAutoJoin('board', boardId);
         try {
             const res = await axios.get(`${server.KANBAN_BOARDS}/${boardId}/webhooks`);
             set({ webhooks: res.data?.data || [] });

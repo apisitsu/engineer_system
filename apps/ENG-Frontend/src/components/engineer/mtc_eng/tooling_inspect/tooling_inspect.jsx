@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Layout, DatePicker, Spin, Typography, message } from "antd";
 import { Card, Row, Col, Table, Input, Button, Select, Space, Radio, Tag } from 'antd';
+import { SystemVersionBadge } from '../SystemVersionBadge';
 import {
   SyncOutlined, StopOutlined, AuditOutlined, CheckCircleOutlined, ClockCircleOutlined,
 } from '@ant-design/icons';
@@ -194,7 +195,7 @@ function InspectionReport() {
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <AssessmentRoundedIcon sx={{ color: theme.colors.primary, fontSize: 60 }} />
                   <div style={{ padding: '16px' }}>
-                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection</Title>
+                    <Title level={2} style={{ marginBottom: 0 }}>Tooling Inspection<SystemVersionBadge system="tooling-inspect" /></Title>
                     <Text type="secondary">Manage and track tooling inspection records</Text>
                   </div>
                 </div>

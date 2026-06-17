@@ -1192,8 +1192,10 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
   const loadList = useCallback(async () => {
     setListLoading(true);
     try {
+      // nodedupe: show every machine in a group (e.g. KS-400B1/B2/B7) separately —
+      // each physical machine has its OWN Excel Parameter / Grinding Wheel config.
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, {
-        params: search ? { search } : {},
+        params: { nodedupe: 'true', ...(search ? { search } : {}) },
       });
       const seen = new Set();
       setAllMachineTypes(res.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));
@@ -1456,9 +1458,29 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     }
   };
 
+  // Count visible members per machine_group: a group with >1 visible member is shown
+  // "split" (one row per machine, labelled by its own name — e.g. KS-400B1/B2/B7); a
+  // group with a single visible member is shown "combined" (one row labelled by the group
+  // name — e.g. TSG-300W/TSG-300ZNC). Toggle a group's split/combined state by changing
+  // how many of its members are ticked in Configure Settings → Visible Machines.
+  const groupVisibleCount = {};
+  (visibleMachineNames ? allMachineTypes.filter(m => visibleMachineNames.has(m.machine_type_name)) : allMachineTypes)
+    .forEach(m => { if (m.machine_group) groupVisibleCount[m.machine_group] = (groupVisibleCount[m.machine_group] || 0) + 1; });
+
   const machineListCols = [
     { title: 'Machine Type Code', dataIndex: 'machine_type_code', width: 300 },
-    { title: 'Machine Type Name', dataIndex: 'machine_type_name', render: (v, r) => r.machine_group || v },
+    {
+      title: 'Machine Type Name',
+      dataIndex: 'machine_type_name',
+      render: (v, r) => {
+        if (!r.machine_group) return v;
+        // Split group → show the specific machine name with the group as context.
+        // Combined group (sole visible member) → show the group name only.
+        return groupVisibleCount[r.machine_group] > 1
+          ? <span>{v} <Text type="secondary" style={{ fontSize: 11 }}>({r.machine_group})</Text></span>
+          : r.machine_group;
+      },
+    },
     {
       title: '',
       key: 'action',
@@ -1810,11 +1832,6 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
           label: 'Excel Column Mapping',
           children: <ExcelMappingManager theme={theme} />,
         },
-        {
-          key: 'machine-tool',
-          label: 'Machine Tool Config',
-          children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} />,
-        },
       ]}
     />
   );
@@ -1828,6 +1845,7 @@ const AUDIT_STATIC_PART_TYPES = [
   { key: 'body',      label: 'Body',      prefixes: ['C1', 'C5'], color: '#fa8c16' },
   { key: 'sleeve',    label: 'Sleeve',    prefixes: ['C6'],       color: '#722ed1' },
   { key: 'mecha',     label: 'Mecha',     prefixes: ['C9'],       color: '#f5222d' },
+  { key: 'spherical', label: 'Spherical', prefixes: ['A4'],       color: '#eb2f96' },
 ];
 
 const loadSavedExpandedPcs = (catKey) => {
@@ -2256,6 +2274,7 @@ const SdsV2AdminPage = () => {
     { key: 'machine-codes', label: 'Machine Codes', children: <MachineCodes theme={theme} /> },
     { key: 'machine-types', label: 'Machine Types', children: <MachineTypes theme={theme} /> },
     { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
+    { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
     { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
   ];
 
@@ -2268,9 +2287,12 @@ const SdsV2AdminPage = () => {
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(MTC_PATHS.SDS_V2)}>
               Back to Search
             </Button>
-            <Title level={4} style={{ color: theme.colors.text, margin: 0 }}>
+            <Title level={4} style={{ color: theme.colors.text, margin: 0, flex: 1 }}>
               Setup Data Sheet Management
             </Title>
+            <Button icon={<SettingOutlined />} onClick={() => navigate(MTC_PATHS.SDS_TEMPLATE_CONFIG)}>
+              Template Config
+            </Button>
           </div>
           <Card style={{ background: theme.colors.cardBackground }}>
             <Tabs items={tabItems} />

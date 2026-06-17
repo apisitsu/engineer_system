@@ -12,17 +12,31 @@ const searchCtrl      = require('./controllers/searchController');
 const { router: specCtrl, syncNewCns } = require('./controllers/specController');
 const inventoryCtrl   = require('./controllers/inventoryController');
 const configCache     = require('./services/tsv2ConfigCache');
+const tselectFallback = require('./services/tselectFallback');
 
 // Flush the search config cache once a mutation response is sent, so admin edits
 // to machines/limits/formulas/rules take effect on the very next search (the TTL
 // is only a backstop). Fires on any response — a redundant flush is cheap.
-const flushConfig = (req, res, next) => { res.on('finish', configCache.flush); next(); };
+// Also drop the persisted per-CN T-Select cache (config changed → results stale).
+const flushConfig = (req, res, next) => {
+  res.on('finish', () => { configCache.flush(); if (res.statusCode < 400) tselectFallback.clearPersisted(); });
+  next();
+};
+
+// Spec mutations (POST/PUT/DELETE under /spec) also invalidate the persisted
+// per-CN T-Select cache, since a spec edit changes the computed dimensions.
+const flushTselectOnWrite = (req, res, next) => {
+  res.on('finish', () => { if (req.method !== 'GET' && res.statusCode < 400) tselectFallback.clearPersisted(); });
+  next();
+};
 
 // ── Search ─────────────────────────────────────────────────────────────────
 router.post('/search', searchCtrl.search);
 
 // ── Formula test (no machine context needed) ────────────────────────────────
 router.post('/formula/test', formulaCtrl.test);
+router.get('/formula/errors', isAdmin, formulaCtrl.getErrorLogs);
+router.delete('/formula/errors', isAdmin, formulaCtrl.clearErrorLogs);
 
 // ── Machines ────────────────────────────────────────────────────────────────
 router.get('/machines',                       machineCtrl.list);
@@ -60,6 +74,6 @@ router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);
 router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
 
 // ── Spec (Part Management) ──────────────────────────────────────────────────
-router.use('/spec', specCtrl);
+router.use('/spec', flushTselectOnWrite, specCtrl);
 
 module.exports = { router, syncNewCns };

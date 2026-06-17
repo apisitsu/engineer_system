@@ -61,12 +61,26 @@ export const SpecProcessManager = ({ embedded = false }) => {
   const [selectedPartType, setSelectedPartType] = useState(null);
   const [form] = Form.useForm();
   const watchedCn = Form.useWatch('cn', form);
+  const watchedType = Form.useWatch('type', form);
+  const watchedYball = Form.useWatch('yball', form);
+  const watchedOdAft = Form.useWatch('od_aft', form);
+  const watchedWAft = Form.useWatch('w_aft', form);
 
   const [syncNewLoading, setSyncNewLoading] = useState(false);
   const [syncNewResult, setSyncNewResult] = useState(null);  // { synced, failed, errors[] }
   const [specCounts, setSpecCounts] = useState({ total: 0, counts: {} });
 
   const colors = theme?.colors || {};
+
+  const handleCalculateSd = () => {
+    if (watchedOdAft > 0 && watchedWAft > 0 && watchedOdAft > watchedWAft) {
+      const sd = Math.sqrt(watchedOdAft * watchedOdAft - watchedWAft * watchedWAft);
+      form.setFieldsValue({ sd: Number(sd.toFixed(4)) });
+      message.info(`Calculated SD: ${sd.toFixed(4)}`);
+    } else {
+      message.warning('Cannot calculate SD: Ensure OD > W and both are > 0');
+    }
+  };
 
   const fetchSpecs = useCallback(async (page = 1, pageSize = 20, q = '', partType = null) => {
     setLoading(true);
@@ -93,26 +107,24 @@ export const SpecProcessManager = ({ embedded = false }) => {
   useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
   useEffect(() => {
-    if (selectedPartType !== null) {
-      fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
-    }
-  }, [fetchSpecs, selectedPartType, pagination, searchText]);
+    fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchSpecs, selectedPartType, pagination.current, pagination.pageSize]);
 
   const handleTableChange = (pag) => {
     setPagination(pag);
   };
 
-  const handleSearch = () => {
-    if (selectedPartType === null) return;
+  const handleSearch = (value) => {
+    const q = typeof value === 'string' ? value : searchText;
     setPagination({ ...pagination, current: 1 });
-    fetchSpecs(1, pagination.pageSize, searchText, selectedPartType);
+    fetchSpecs(1, pagination.pageSize, q, selectedPartType);
   };
 
   const handlePartTypeSelect = (pt) => {
     if (selectedPartType === pt) {
       setSelectedPartType(null);
-      setData([]);
-      setTotal(0);
+      setPagination({ ...pagination, current: 1 });
     } else {
       setSelectedPartType(pt);
       setPagination({ current: 1, pageSize: 20 });
@@ -189,10 +201,13 @@ export const SpecProcessManager = ({ embedded = false }) => {
     if (cls >= 41 && cls <= 49) return 'SPHERICAL';
     if (cls >= 51 && cls <= 59) return 'BODY';
     if (cls >= 61 && cls <= 69) return 'SLEEVE';
+    if (cls === 95 || cls === 99) return 'MECHA'; // C95/C99 — same scope as SDS coverage mecha
     return null;
   };
 
-  const PART_TYPE_COLOR = { BALL: '#1677ff', RACE: '#52c41a', BODY: '#fa8c16', SLEEVE: '#722ed1', SPHERICAL: '#f5222d' };
+  // MECHA (C95/C99) has no factory dim table — rows must be added manually.
+  // SPHERICAL restored 2026-06-13 via eng_sph+eng_sph_design join (8,786 rows, 8,751 with dims).
+  const PART_TYPE_COLOR = { BALL: '#1677ff', RACE: '#52c41a', BODY: '#fa8c16', SLEEVE: '#722ed1', SPHERICAL: '#f5222d', MECHA: '#13c2c2' };
 
   const isBodyCn = (cn) => ['BODY'].includes(getPartType(cn));
 
@@ -320,18 +335,16 @@ export const SpecProcessManager = ({ embedded = false }) => {
           </Space>
         )}
         <Space>
-          <Input
+          <Input.Search
             placeholder="Search CN, Type, Process..."
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            onPressEnter={handleSearch}
-            prefix={<SearchOutlined />}
+            onSearch={handleSearch}
+            enterButton
             style={{ width: 300 }}
             allowClear
           />
-          {selectedPartType !== null && (
-            <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
-          )}
+          <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
           <Popconfirm
             title="Sync New CNs จาก Factory"
             description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
@@ -392,29 +405,23 @@ export const SpecProcessManager = ({ embedded = false }) => {
           )}
         </Row>
       </Card>
-      {selectedPartType !== null ? (
-        <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
-          <Table
-            dataSource={data.map(r => ({ ...r, key: r.cn }))}
-            columns={columns}
-            loading={loading}
-            size="small"
-            bordered
-            scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
-            pagination={{
-              ...pagination,
-              total,
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} items`
-            }}
-            onChange={handleTableChange}
-          />
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#bfbfbf' }}>
-          Select a Part Type to view specs
-        </div>
-      )}
+      <Card styles={{ body: { padding: 0 } }} style={{ borderRadius: 8, overflow: 'hidden' }}>
+        <Table
+          dataSource={data.map(r => ({ ...r, key: r.cn }))}
+          columns={columns}
+          loading={loading}
+          size="small"
+          bordered
+          scroll={{ x: 3200, y: 'calc(100vh - 250px)' }}
+          pagination={{
+            ...pagination,
+            total,
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total} items`
+          }}
+          onChange={handleTableChange}
+        />
+      </Card>
 
           {/* ── Sync New CNs — Result Modal ──────────────────────────────── */}
           <Modal
@@ -519,7 +526,29 @@ export const SpecProcessManager = ({ embedded = false }) => {
                       </Form.Item>
                     </Col>
                     <Col span={6}>
-                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                      <Form.Item
+                        name="sd"
+                        label={
+                          <Space size={4}>
+                            SD (Shoulder Dia.)
+                            <Button
+                              size="small"
+                              type="link"
+                              icon={<ReloadOutlined style={{ fontSize: 10 }} />}
+                              onClick={handleCalculateSd}
+                              style={{ height: 'auto', padding: 0 }}
+                            >
+                              Calc
+                            </Button>
+                          </Space>
+                        }
+                        rules={[
+                          {
+                            required: watchedType === 'ABR' || watchedYball === 'Y',
+                            message: 'SD is required for ABR/Y-Ball parts',
+                          },
+                        ]}
+                      >
                         <InputNumber style={{ width: '100%' }} precision={4} />
                       </Form.Item>
                     </Col>
@@ -547,7 +576,29 @@ export const SpecProcessManager = ({ embedded = false }) => {
                       </Form.Item>
                     </Col>
                     <Col span={8}>
-                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                      <Form.Item
+                        name="sd"
+                        label={
+                          <Space size={4}>
+                            SD (Shoulder Dia.)
+                            <Button
+                              size="small"
+                              type="link"
+                              icon={<ReloadOutlined style={{ fontSize: 10 }} />}
+                              onClick={handleCalculateSd}
+                              style={{ height: 'auto', padding: 0 }}
+                            >
+                              Calc
+                            </Button>
+                          </Space>
+                        }
+                        rules={[
+                          {
+                            required: watchedType === 'ABR' || watchedYball === 'Y',
+                            message: 'SD is required for ABR/Y-Ball parts',
+                          },
+                        ]}
+                      >
                         <InputNumber style={{ width: '100%' }} precision={4} />
                       </Form.Item>
                     </Col>
@@ -570,7 +621,29 @@ export const SpecProcessManager = ({ embedded = false }) => {
                       </Form.Item>
                     </Col>
                     <Col span={8}>
-                      <Form.Item name="sd" label="SD (Shoulder Dia.)">
+                      <Form.Item
+                        name="sd"
+                        label={
+                          <Space size={4}>
+                            SD (Shoulder Dia.)
+                            <Button
+                              size="small"
+                              type="link"
+                              icon={<ReloadOutlined style={{ fontSize: 10 }} />}
+                              onClick={handleCalculateSd}
+                              style={{ height: 'auto', padding: 0 }}
+                            >
+                              Calc
+                            </Button>
+                          </Space>
+                        }
+                        rules={[
+                          {
+                            required: watchedType === 'ABR' || watchedYball === 'Y',
+                            message: 'SD is required for ABR/Y-Ball parts',
+                          },
+                        ]}
+                      >
                         <InputNumber style={{ width: '100%' }} precision={4} />
                       </Form.Item>
                     </Col>
