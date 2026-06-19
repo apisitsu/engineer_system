@@ -38,7 +38,8 @@ export default function HeaderModeBar({
     onFileUpload,
     usedToolsRef,
     canvasWrapperRef,
-    pdfDoc
+    pdfDoc,
+    onClosePdf
 }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
@@ -213,7 +214,6 @@ export default function HeaderModeBar({
                 <Tooltip title="Apply & Download PDF">
                     <Button size="small" type="primary" icon={<DownloadOutlined />}
                         onClick={onApplyAndDownload}
-                        disabled={(totalAnnotations === 0 && !canUndo && Object.values(fabricCanvasRefs?.current || {}).every(fc => !fc || fc.getObjects().length === 0)) && store.activeMode !== 'merge'}
                         style={{ borderRadius: 7, fontWeight: 600 }}>
                         Save
                     </Button>
@@ -231,6 +231,12 @@ export default function HeaderModeBar({
                         </Button>
                     </Tooltip>
                 </Upload>
+                {/* Close PDF */}
+                <Tooltip title="Close PDF">
+                    <Button size="small" danger onClick={onClosePdf} style={{ borderRadius: 7 }}>
+                        <DeleteOutlined />
+                    </Button>
+                </Tooltip>
             </Space>
         </div>
     );

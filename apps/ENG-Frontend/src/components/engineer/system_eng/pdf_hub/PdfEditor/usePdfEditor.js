@@ -19,7 +19,7 @@ export default function usePdfEditor() {
     // ── 1. Document State ──
     const { 
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf: _loadPdf, loadPdfFromBytes: _loadPdfFromBytes, goToPage, nextPage, prevPage
+        loadPdf: _loadPdf, loadPdfFromBytes: _loadPdfFromBytes, goToPage, nextPage, prevPage, closePdf: _closePdf
     } = usePdfDocument(canvasWrapperRef, setZoom);
 
     // ── 2. Annotation State ──
@@ -122,13 +122,26 @@ export default function usePdfEditor() {
         await _loadPdfFromBytes(bytes, filename, callbacks);
         setThumbnails({});
         clearAllAnnotations();
+        Object.values(fabricCanvasRefs.current || {}).forEach(fc => {
+            if (fc) fc.clear();
+        });
+        clearHistory();
+    };
+
+    const closePdf = () => {
+        _closePdf();
+        setThumbnails({});
+        clearAllAnnotations();
+        Object.values(fabricCanvasRefs.current || {}).forEach(fc => {
+            if (fc) fc.clear();
+        });
         clearHistory();
     };
 
     return {
         // Document
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage,
+        loadPdf, loadPdfFromBytes, closePdf, goToPage, nextPage, prevPage,
         
         // Zoom & UI Refs
         zoom, setZoom, zoomIn, zoomOut, zoomTo,
