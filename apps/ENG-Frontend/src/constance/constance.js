@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -68,6 +68,7 @@ export const server = {
   TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
   TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
   TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
+  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No → tool map; /meta for filters, /:id for PUT/DELETE
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,

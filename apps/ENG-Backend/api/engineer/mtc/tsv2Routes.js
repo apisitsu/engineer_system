@@ -11,6 +11,7 @@ const searchRuleCtrl  = require('./controllers/searchRuleController');
 const searchCtrl      = require('./controllers/searchController');
 const { router: specCtrl, syncNewCns } = require('./controllers/specController');
 const inventoryCtrl   = require('./controllers/inventoryController');
+const partnoMapCtrl   = require('./controllers/partnoMapController');
 const configCache     = require('./services/tsv2ConfigCache');
 const tselectFallback = require('./services/tselectFallback');
 
@@ -73,6 +74,14 @@ router.get('/inventory/:table',         inventoryCtrl.list);
 router.post('/inventory/:table',        isAdmin, inventoryCtrl.create);
 router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);
 router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
+
+// ── Part No → Tool map (formula-less fixtures, e.g. ROTARY DRESSER) ──────────
+// Read fresh by the SDS PDF per render, so no config-cache flush is needed.
+router.get('/partno-map',            partnoMapCtrl.list);
+router.get('/partno-map/meta',       partnoMapCtrl.meta);
+router.post('/partno-map',           isAdmin, partnoMapCtrl.create);
+router.put('/partno-map/:id',        isAdmin, partnoMapCtrl.update);
+router.delete('/partno-map/:id',     isAdmin, partnoMapCtrl.remove);
 
 // ── Spec (Part Management) ──────────────────────────────────────────────────
 router.use('/spec', flushTselectOnWrite, specCtrl);

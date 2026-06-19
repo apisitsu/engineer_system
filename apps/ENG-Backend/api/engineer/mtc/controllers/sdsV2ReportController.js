@@ -349,9 +349,14 @@ async function buildCoverage() {
     // Machines excluded from SDS coverage scope
     const EXCLUDED_MACHINE_TYPES = new Set(['KS-H70(#C41)']);
 
+    // Decommissioned floor machines excluded by machine CODE (not type) — SPG-08 (HIGRIND-1-D)
+    // is retired, but its sibling HIGRIND-1-D units CGM-13/CGM-14 stay, so we drop only SPG-08.
+    const EXCLUDED_MACHINE_CODES = new Set(['SPG-08']);
+
     // Exclude PSG-52AN (SGM-01) entirely; exclude other SGM for face-grind (1021/1022) only
     const cnMachinePairs = cnMachinePairsRes.rows.filter(row => {
       if (row.machine === 'SGM-01') return false;
+      if (EXCLUDED_MACHINE_CODES.has(row.machine)) return false;
       const mName = machineCodeMap[row.machine] || '';
       if (EXCLUDED_MACHINE_TYPES.has(mName)) return false;
       if (row.process !== '1021' && row.process !== '1022') return true;
