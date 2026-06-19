@@ -66,7 +66,7 @@ const PdfMergerWrapper = () => {
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
-        if (active.id !== over.id) {
+        if (over && active.id !== over.id) {
             setFileList((items) => {
                 const oldIndex = items.findIndex((item) => item.uid === active.id);
                 const newIndex = items.findIndex((item) => item.uid === over.id);

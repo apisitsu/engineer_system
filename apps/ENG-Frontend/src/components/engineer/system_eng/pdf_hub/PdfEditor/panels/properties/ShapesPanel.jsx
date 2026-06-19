@@ -1,5 +1,5 @@
 import React from 'react';
-import { ColorPicker, InputNumber, Divider, Select, Slider } from 'antd';
+import { ColorPicker, InputNumber, Divider, Select, Slider, Switch } from 'antd';
 import { useTheme } from '../../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../../stores/usePdfEditorStore';
 import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
@@ -7,6 +7,7 @@ import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
 export default function ShapesPanel() {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
+    const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
 
     return (
         <div className="pdf-ws-right-panel" style={{
@@ -26,8 +27,8 @@ export default function ShapesPanel() {
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #3498db', borderRadius: 4,
-                                    background: store.strokeColor === '#3498db' ? '#3498db' : 'transparent',
-                                    color: store.strokeColor === '#3498db' ? '#fff' : '#3498db',
+                                    background: currentSettings.strokeColor === '#3498db' ? '#3498db' : 'transparent',
+                                    color: currentSettings.strokeColor === '#3498db' ? '#fff' : '#3498db',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
                                 onClick={() => { store.setStrokeColor('#3498db'); store.setFillColor('transparent'); }}
@@ -37,8 +38,8 @@ export default function ShapesPanel() {
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #e74c3c', borderRadius: 4,
-                                    background: store.strokeColor === '#e74c3c' ? '#e74c3c' : 'transparent',
-                                    color: store.strokeColor === '#e74c3c' ? '#fff' : '#e74c3c',
+                                    background: currentSettings.strokeColor === '#e74c3c' ? '#e74c3c' : 'transparent',
+                                    color: currentSettings.strokeColor === '#e74c3c' ? '#fff' : '#e74c3c',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
                                 onClick={() => { store.setStrokeColor('#e74c3c'); store.setFillColor('transparent'); }}
@@ -48,8 +49,8 @@ export default function ShapesPanel() {
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #000000', borderRadius: 4,
-                                    background: store.strokeColor === '#000000' ? '#000000' : 'transparent',
-                                    color: store.strokeColor === '#000000' ? '#fff' : '#000000',
+                                    background: currentSettings.strokeColor === '#000000' ? '#000000' : 'transparent',
+                                    color: currentSettings.strokeColor === '#000000' ? '#fff' : '#000000',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
                                 onClick={() => { store.setStrokeColor('#000000'); store.setFillColor('transparent'); }}
@@ -63,7 +64,7 @@ export default function ShapesPanel() {
                     <SectionTitle>Stroke</SectionTitle>
                     <PropRow label="Color">
                         <ColorPicker
-                            value={store.strokeColor === 'transparent' ? null : store.strokeColor}
+                            value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
                             onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
                             size="small"
                             allowClear
@@ -72,14 +73,14 @@ export default function ShapesPanel() {
                     </PropRow>
                     <PropRow label="Width">
                         <InputNumber
-                            min={1} max={20} value={store.strokeWidth}
+                            min={1} max={20} value={currentSettings.strokeWidth}
                             onChange={store.setStrokeWidth}
                             size="small" style={{ width: 60 }}
                         />
                     </PropRow>
                     <PropRow label="Symbol Size">
                         <InputNumber
-                            min={8} max={72} value={store.fontSize}
+                            min={8} max={72} value={currentSettings.fontSize}
                             onChange={store.setFontSize}
                             size="small" style={{ width: 60 }}
                         />
@@ -90,7 +91,7 @@ export default function ShapesPanel() {
                     <SectionTitle>Fill</SectionTitle>
                     <PropRow label="Color">
                         <ColorPicker
-                            value={store.fillColor === 'transparent' ? null : store.fillColor}
+                            value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
                             onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
                             size="small"
                             allowClear
@@ -103,7 +104,7 @@ export default function ShapesPanel() {
                     <SectionTitle>Opacity</SectionTitle>
                     <Slider
                         min={0.1} max={1} step={0.05}
-                        value={store.opacity}
+                        value={currentSettings.opacity}
                         onChange={store.setOpacity}
                     />
                 </div>
@@ -131,6 +132,30 @@ export default function ShapesPanel() {
                                 { value: 'mm', label: 'mm' },
                                 { value: 'cm', label: 'cm' },
                                 { value: 'in', label: 'in' },
+                            ]}
+                        />
+                    </PropRow>
+                    <Divider style={{ margin: '8px 0', borderColor: 'transparent' }} />
+                    <SectionTitle>Physical Ruler (Overlay)</SectionTitle>
+                    <PropRow label="Show Overlay">
+                        <Switch
+                            size="small"
+                            checked={store.physicalRulerVisible}
+                            onChange={store.setPhysicalRulerVisible}
+                        />
+                    </PropRow>
+                    <PropRow label="Paper Size">
+                        <Select
+                            value={store.paperSize}
+                            onChange={store.setPaperSize}
+                            size="small"
+                            style={{ width: 90 }}
+                            options={[
+                                { value: 'A4', label: 'A4' },
+                                { value: 'A3', label: 'A3' },
+                                { value: 'A2', label: 'A2' },
+                                { value: 'A1', label: 'A1' },
+                                { value: 'A0', label: 'A0' },
                             ]}
                         />
                     </PropRow>

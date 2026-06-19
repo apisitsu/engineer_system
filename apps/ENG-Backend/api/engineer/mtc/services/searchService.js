@@ -57,8 +57,8 @@ function buildSpecContext(spec) {
   // Stored value wins (preserves the manual Y-ball/ABR numbers); fall back to the
   // geometric value only when sd is missing AND the geometry is valid (OD > W).
   const sdStored = num(spec.sd ?? 0);
-  const sdCalc   = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
-  const sd       = sdStored > 0 ? sdStored : sdCalc;
+  const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
+  const sd = sdStored > 0 ? sdStored : sdCalc;
 
   return {
     // ── After (nominal) ───────────────────────────────────────────────────────

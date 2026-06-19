@@ -5,15 +5,30 @@ import { StandardFonts, rgb } from 'pdf-lib';
  */
 
 // ── Color conversion ──
-export function hexToRgb(hex) {
-    if (!hex || hex === 'transparent') return null;
-    hex = hex.replace('#', '');
+export function hexToRgb(color) {
+    if (!color || color === 'transparent') return null;
+    
+    // Handle rgb() and rgba()
+    if (color.startsWith('rgb')) {
+        const matches = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (matches) {
+            return rgb(parseInt(matches[1], 10) / 255, parseInt(matches[2], 10) / 255, parseInt(matches[3], 10) / 255);
+        }
+    }
+    
+    // Handle hex
+    let hex = color.replace('#', '');
     if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
     if (hex.length === 8) hex = hex.substring(0, 6); // Strip alpha
-    const r = parseInt(hex.substring(0, 2), 16) / 255;
-    const g = parseInt(hex.substring(2, 4), 16) / 255;
-    const b = parseInt(hex.substring(4, 6), 16) / 255;
-    return rgb(r, g, b);
+    
+    if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return rgb(r, g, b);
+    }
+    
+    return null;
 }
 
 // ── Coordinate conversion: Fabric.js → PDF ──

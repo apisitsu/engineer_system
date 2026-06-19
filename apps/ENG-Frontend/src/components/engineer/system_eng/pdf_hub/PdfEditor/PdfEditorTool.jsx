@@ -23,6 +23,7 @@ import PropertiesPanel from './panels/PropertiesPanel';
 import SignaturePad from './panels/SignaturePad';
 import ShortcutsHandler from './ShortcutsHandler';
 import MergePreview from './MergePreview';
+import PhysicalRuler from './canvas/PhysicalRuler';
 import PdfUsageDashboard from './wrappers/PdfUsageDashboard.jsx';
 import WatermarkManagerModal from './wrappers/WatermarkManagerModal.jsx';
 import { MODE_OPTIONS, ZOOM_OPTIONS } from './constants.jsx';
@@ -258,7 +259,8 @@ const PdfEditorTool = () => {
             usedToolsRef.current.clear();
             logPdfUsage('view');
         }
-    }, [pdfDoc, pdfFile, logPdfUsage]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc, pdfFile]);
 
     // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)
@@ -417,6 +419,10 @@ const PdfEditorTool = () => {
                 results.push({ url, filename, pageNum });
             }
 
+            // Revoke previous export URLs
+            if (exportedImages?.length > 0) {
+                exportedImages.forEach(img => URL.revokeObjectURL(img.url));
+            }
             setExportedImages(results);
 
             // Auto-download if single page
@@ -769,6 +775,8 @@ const PdfEditorTool = () => {
                                 <p style={{ fontSize: 16 }}>However, you can still open the <b>Watermark</b> tool, use "Apply to All", and click <b>Save</b> to export a clean copy.</p>
                             </div>
                         ) : null}
+
+                        <PhysicalRuler pdfDoc={pdfDoc} zoom={zoom} />
                     </div>
 
                     {/* Status Bar */}
@@ -817,6 +825,7 @@ const PdfEditorTool = () => {
                 pdfDoc={pdfDoc}
                 pdfFile={pdfFile}
                 totalPages={totalPages}
+                currentPage={currentPage}
                 fabricCanvasRefs={fabricCanvasRefs}
                 pushHistory={pushHistory}
                 logPdfUsage={logPdfUsage}

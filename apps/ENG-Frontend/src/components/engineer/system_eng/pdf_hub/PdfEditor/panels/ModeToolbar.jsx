@@ -148,6 +148,12 @@ const ModeToolbar = () => {
                     </div>
                     <ToolDivider />
                     <div className="pdf-ws-toolbar-group">
+                        <ToolBtn tool="highlight" icon={<HighlightOutlined />} label="Highlight" />
+                        <ToolBtn tool="underline" icon={<UnderlineOutlined />} label="Underline" />
+                        <ToolBtn tool="strikethrough" icon={<StrikethroughOutlined />} label="Strikethrough" />
+                    </div>
+                    <ToolDivider />
+                    <div className="pdf-ws-toolbar-group">
                         <ToolBtn tool="stampCheckmark" icon={<CheckOutlined />} label="Checkmark (✓)" />
                         <ToolBtn tool="stampCross" icon={<CloseOutlined />} label="Cross (✕)" />
                         <ToolBtn tool="stampCircle" icon={

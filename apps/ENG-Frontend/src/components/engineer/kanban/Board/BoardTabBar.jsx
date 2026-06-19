@@ -17,7 +17,7 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
 
     const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
 
-    const { canManageProject } = useKanbanPermissions({
+    const { canEditProject } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
     });
@@ -37,7 +37,7 @@ const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGro
             gap: 0,
             overflowX: 'auto',
         }}>
-            {canManageProject && (
+            {canEditProject && (
                 <>
                     <Tooltip title="Create Board">
                         <div
