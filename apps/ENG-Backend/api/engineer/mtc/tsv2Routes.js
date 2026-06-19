@@ -68,6 +68,7 @@ router.put('/search-rules/:id',     isAdmin,                 flushConfig, search
 router.delete('/search-rules/:id',  isAdmin,                 flushConfig, searchRuleCtrl.remove);
 
 // ── Inventory (Tool List) ────────────────────────────────────────────────────
+router.get('/inventory-lookup',         inventoryCtrl.lookup); // dim lookup by tooling_no (SDS compare)
 router.get('/inventory/:table',         inventoryCtrl.list);
 router.post('/inventory/:table',        isAdmin, inventoryCtrl.create);
 router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);

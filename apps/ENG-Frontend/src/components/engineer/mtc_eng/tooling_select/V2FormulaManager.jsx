@@ -162,12 +162,15 @@ function ConditionField({ form }) {
 
 // ── Formula function dropdown ────────────────────────────────────────────────
 const FORMULA_PRESETS = [
-  { group: 'Round up',   label: 'Round up ±0.5',        insert: 'ceil05()',  cursorBack: 1 },
-  { group: 'Round up',   label: 'Round up (integer)',    insert: 'ceil()',    cursorBack: 1 },
-  { group: 'Round',      label: 'Round ±0.5',            insert: 'round05()', cursorBack: 1 },
-  { group: 'Round',      label: 'Round (integer)',        insert: 'round()',   cursorBack: 1 },
-  { group: 'Round down', label: 'Round down ±0.5',       insert: 'floor05()', cursorBack: 1 },
-  { group: 'Round down', label: 'Round down (integer)',   insert: 'floor()',   cursorBack: 1 },
+  { group: 'Round up',   label: 'Round up ±0.5',          insert: 'ceil05()',  cursorBack: 1 },
+  { group: 'Round up',   label: 'Round up (integer)',      insert: 'ceil()',    cursorBack: 1 },
+  { group: 'Round up',   label: 'Round up to N decimals',  insert: 'ceil(, )',  cursorBack: 3 },
+  { group: 'Round',      label: 'Round ±0.5',              insert: 'round05()', cursorBack: 1 },
+  { group: 'Round',      label: 'Round (integer)',          insert: 'round()',   cursorBack: 1 },
+  { group: 'Round',      label: 'Round to N decimals',      insert: 'round(, )', cursorBack: 3 },
+  { group: 'Round down', label: 'Round down ±0.5',         insert: 'floor05()', cursorBack: 1 },
+  { group: 'Round down', label: 'Round down (integer)',     insert: 'floor()',   cursorBack: 1 },
+  { group: 'Round down', label: 'Round down to N decimals', insert: 'floor(, )', cursorBack: 3 },
   { group: 'Conditional', label: 'if  (condition, ✓, ✗)', insert: 'if(, , )',  cursorBack: 5 },
   { group: 'Math',        label: 'abs  (absolute value)', insert: 'abs()',     cursorBack: 1 },
   { group: 'Math',        label: 'lookup  (table)',        insert: 'lookup()',  cursorBack: 1 },

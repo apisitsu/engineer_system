@@ -1146,14 +1146,18 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
   );
 };
 
-// ── Tab 4: Machine Config (A16:I55 + AN50:AV55) ──────────────────────────────
+// ── Tab 4: Machine Config (A16:I58 + AN53:AV58) ──────────────────────────────
 
 const COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const EXCLUDED_ROWS = new Set([17, 27, 37, 47]);
-const ROW_RANGE = Array.from({ length: 40 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
+// Param panel spans grid rows 16–58 (extended from 55 on 2026-06-19 when the grid
+// grew 56→59: rows 56–58 are blank param rows, row 59 is the company footer).
+const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
 
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
-const GW_ROW_RANGE = [50, 51, 52, 53, 54, 55];
+// GW panel = grid rows 53–58 (2026-06-19): rows 50–52 dropped (unused/blank, no machine
+// had data there), 56–58 added with the grid 56→59 grow; row 59 is the footer (excluded).
+const GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
 
 // Header single-cell fields (moved here from the former Per-record Params tab).
 // Stored as machine-level params (cn IS NULL) by default; CN-override aware.
@@ -2098,7 +2102,11 @@ const ConfigureSettingsTab = ({ theme, visibleMachineNames, setVisibleMachineNam
     setLoading(true);
     try {
       const [mtRes, pmRes, cfgRes, vmRes] = await Promise.all([
-        axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES),
+        // nodedupe: grouped machines (KS-400B1/B2/B7) must each appear as a separate
+        // visibility checkbox — otherwise the deduped list only shows the group rep (B1)
+        // and Save would write back a list missing B2/B7, silently hiding them from the
+        // Excel Config / Machine Tool Config tabs.
+        axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } }),
         axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER),
         axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG),
         axios.get(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES),

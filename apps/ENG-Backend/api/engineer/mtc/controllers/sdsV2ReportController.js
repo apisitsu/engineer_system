@@ -493,9 +493,13 @@ async function buildCoverage() {
       if (!tsResult) continue;
       const acceptable = new Set([r.machine_type_name]);
       if (nameToGroup[r.machine_type_name]) acceptable.add(nameToGroup[r.machine_type_name]);
-      // Gate by grinding direction: a T-Select tooling set computed for the part's
-      // direction must not satisfy an opposite-direction process_code row.
-      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code }).length > 0) {
+      // Direction gate is SKIPPED here (partHasProcess:true): every evaluated row is
+      // production-derived (cnMachinePairs = a machine that actually ran this CN+process),
+      // so the part genuinely undergoes this process_code. A multi-grind part (e.g. a ball
+      // with both ID grind 1061 and spherical grind 1041) stores only ONE spec.process
+      // direction, so the gate would otherwise wrongly drop a valid spherical machine's
+      // tooling on the 1041 row — undercounting coverage. Matches the SDS PDF behaviour.
+      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code, partHasProcess: true }).length > 0) {
         r.has_tooling_match = true;
         r.tooling_source = 'tselect';
       }
