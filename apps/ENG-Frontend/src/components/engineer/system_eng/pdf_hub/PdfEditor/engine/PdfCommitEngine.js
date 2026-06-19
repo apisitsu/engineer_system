@@ -4,6 +4,6 @@
  */
 
 export { commitAllToPdf } from './commitEngine';
-export { exportPageToImage } from './exportEngine';
+export { exportPageToImage, exportSelectedPagesToPdf } from './exportEngine';
 export { mergePdfFiles } from './mergeEngine';
 export * from './commitHelpers';

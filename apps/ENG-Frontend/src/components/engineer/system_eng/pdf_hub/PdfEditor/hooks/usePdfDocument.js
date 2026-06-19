@@ -162,6 +162,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
         } catch (err) {
             console.error('Failed to load bytes:', err);
             message.error('Failed to render PDF from bytes.');
+            throw err;
         } finally {
             setPdfLoading(false);
         }
@@ -187,6 +188,6 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
 
     return {
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage, closePdf
+        loadPdf, loadPdfFromBytes, closePdf, goToPage, nextPage, prevPage
     };
 }

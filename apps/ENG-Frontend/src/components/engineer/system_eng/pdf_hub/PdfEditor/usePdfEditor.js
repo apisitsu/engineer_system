@@ -122,6 +122,9 @@ export default function usePdfEditor() {
         await _loadPdfFromBytes(bytes, filename, callbacks);
         setThumbnails({});
         clearAllAnnotations();
+        Object.values(fabricCanvasRefs.current || {}).forEach(fc => {
+            if (fc) fc.clear();
+        });
         clearHistory();
     };
 
