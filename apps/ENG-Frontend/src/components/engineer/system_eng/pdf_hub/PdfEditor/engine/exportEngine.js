@@ -67,3 +67,25 @@ export async function exportPageToImage(pdfDoc, pageNum, fabricData, format = 'j
         );
     });
 }
+
+/**
+ * Export selected pages to a new PDF blob.
+ * 
+ * @param {Uint8Array} annotatedBytes - The full PDF bytes with annotations baked in
+ * @param {Array<number>} selectedPages - 1-indexed page numbers to keep
+ * @returns {Promise<Blob>}
+ */
+export async function exportSelectedPagesToPdf(annotatedBytes, selectedPages) {
+    const { PDFDocument } = await import('pdf-lib');
+    const sourceDoc = await PDFDocument.load(annotatedBytes, { ignoreEncryption: true });
+    
+    const newDoc = await PDFDocument.create();
+    const indicesToCopy = selectedPages.map(pageNum => pageNum - 1);
+    
+    // Copy the selected pages
+    const copiedPages = await newDoc.copyPages(sourceDoc, indicesToCopy);
+    copiedPages.forEach(page => newDoc.addPage(page));
+    
+    const finalBytes = await newDoc.save();
+    return new Blob([finalBytes], { type: 'application/pdf' });
+}

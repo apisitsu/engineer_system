@@ -14,7 +14,7 @@ export default function ExportPanel({
     const { theme } = useTheme();
     
     // Export settings
-    const [exportFormat, setExportFormat] = useState('jpg');
+    const [exportFormat, setExportFormat] = useState('pdf');
     const [exportQuality, setExportQuality] = useState('high');
     const [exportIncludeAnnot, setExportIncludeAnnot] = useState(true);
     
@@ -38,6 +38,7 @@ export default function ExportPanel({
                         value={exportFormat}
                         onChange={setExportFormat}
                         options={[
+                            { value: 'pdf', label: 'PDF' },
                             { value: 'jpg', label: 'JPG' },
                             { value: 'png', label: 'PNG' },
                         ]}
@@ -47,11 +48,12 @@ export default function ExportPanel({
                 </div>
 
                 <div className="pdf-ws-prop-section">
-                    <SectionTitle>Quality</SectionTitle>
+                    <SectionTitle>Quality {exportFormat === 'pdf' ? '(N/A for PDF)' : ''}</SectionTitle>
                     <Radio.Group
                         value={exportQuality}
                         onChange={(e) => setExportQuality(e.target.value)}
                         style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                        disabled={exportFormat === 'pdf'}
                     >
                         <Radio value="low" style={{ fontSize: 12 }}>Low (1x — fast)</Radio>
                         <Radio value="medium" style={{ fontSize: 12 }}>Medium (1.5x)</Radio>
