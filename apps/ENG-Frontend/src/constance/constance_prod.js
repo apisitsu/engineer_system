@@ -80,6 +80,7 @@ export const server = {
   TSV2_LIMIT_ITEM:    `${apiUrl}api/tooling-select/limits`,
   TSV2_SEARCH_RULES:  `${apiUrl}api/tooling-select/machines`,
   TSV2_RULE_ITEM:     `${apiUrl}api/tooling-select/search-rules`,
+  TSV2_PARTNO_MAP:    `${apiUrl}api/tooling-select/partno-map`,
   TSV2_FORMULA_TEST:  `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH:        `${apiUrl}api/tooling-select/search`,

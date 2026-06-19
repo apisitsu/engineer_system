@@ -64,6 +64,10 @@ const TABLES = {
   TOOLING_KS500RD: 'tooling_ks500rd',
   TOOLING_KS400B5: 'tooling_ks400b5',
   TOOLING_KS400B6: 'tooling_ks400b6',
+
+  // Part-No → tool lookup for fixtures selected by workpiece part number (品番),
+  // not by dimensional formula (e.g. ROTARY DRESSER 4800-42 on KS-400B5/B6).
+  TOOLING_PARTNO_MAP: 'tooling_partno_map',
 };
 
 const PATHS = {

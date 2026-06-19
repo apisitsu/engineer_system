@@ -9,6 +9,7 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const tselectFallback = require('../services/tselectFallback');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
+const { toDD, toDwg } = require('../utils/rotaryDwg');
 
 const router = express.Router();
 
@@ -241,6 +242,43 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       return slot >= 1 && slot <= 20 && !slotData[slot - 1] && r.tool_drawing_no;
     });
     if (emptyCfg.length > 0) {
+      // A machine fixture (e.g. ROTARY DRESSER, 4800-42) is shared across grinding
+      // processes, so the part often registers it under a DIFFERENT process_code than the
+      // one this SDS is generated for — `tools` was filtered to the selected process_code,
+      // so that slot fell through here with a blank Tool No. Recover its REAL part-specific
+      // Tool No from the part's FULL process plan (every process_code) by DWG family before
+      // the name-only fallback, so e.g. KS-400B5/B6 show 4800-42-0293 instead of a blank.
+      const planAll = searchData.process_plan || [];
+      const planMatchNo = (family) => {
+        const hit = planAll.find(t => {
+          const d = t.tool_dwg_no;
+          return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
+        });
+        return hit || null;
+      };
+
+      // Part-number-selected fixtures (e.g. ROTARY DRESSER 4800-42 on KS-400B5/B6) have NO
+      // dimensional formula — the engineering TOOLING LIST picks them by the workpiece part
+      // number. tooling_partno_map holds that Part No → DWG lookup (seeded from the xlsx). It
+      // is the AUTHORITATIVE selection, so it wins over the process-plan fallback. Prefer a
+      // non-forbidden (非使用禁止) mapping via the ORDER BY.
+      let partNoRows = [];
+      if (searchData.parts_no) {
+        try {
+          partNoRows = (await engPool.query(
+            `SELECT tool_dwg_no, tooling_name FROM ${TABLES.TOOLING_PARTNO_MAP}
+             WHERE machine_name = $1 AND parts_no = $2
+             ORDER BY is_forbidden ASC, tool_dwg_no ASC`,
+            [machine_type_name, searchData.parts_no]
+          )).rows;
+        } catch (_) { /* part-no map is optional — fall back to plan / name-only */ }
+      }
+      const partNoMatchNo = (family) => partNoRows.find(r => {
+        // Stored as DD#### — convert to the full 4800-42 form so it matches the config family.
+        const d = toDwg(r.tool_dwg_no);
+        return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
+      }) || null;
+
       const families = [...new Set(emptyCfg.map(r => r.tool_drawing_no))];
       const nameByFamily = {};
       try {
@@ -262,9 +300,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       } catch (_) { /* name resolution is best-effort — slot still lists the fixture */ }
       for (const r of emptyCfg) {
         const slot = parseInt(r.tool_number.slice(1), 10);
+        // Part No map (authoritative) → full process plan (any process_code) → name-only blank.
+        const fromMap = partNoMatchNo(r.tool_drawing_no);
+        const fromPlan = fromMap ? null : planMatchNo(r.tool_drawing_no);
+        const dwg = fromMap ? fromMap.tool_dwg_no : (fromPlan ? fromPlan.tool_dwg_no : '');
+        const name = (fromMap && fromMap.tooling_name)
+          || (fromPlan && fromPlan.tool_name)
+          || nameByFamily[r.tool_drawing_no] || '';
         slotData[slot - 1] = {
-          tool_name: nameByFamily[r.tool_drawing_no] || '',
-          tool_dwg_no: '',           // no factory Tool No — name only, per Machine Tool Config
+          tool_name: name,
+          tool_dwg_no: dwg,          // '' only when neither map nor plan has this fixture for the part
           fromTs: false,
           fromConfig: true,
         };
@@ -276,11 +321,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   for (let i = 0; i < 20; i++) {
     const slot = `T${String(i + 1).padStart(2, '0')}`;
     const s = slotData[i];
+    // The rotary diamond dresser (4800-42 family) is PRINTED in its DD#### form regardless of
+    // source (Part No map already stores DD; a factory-plan 4800-42-XXXX is converted) so the
+    // sheet is consistent. toDD is a no-op for every other tool. cleanDwg keeps the full
+    // 4800-42 form for the tooling-image lookup.
+    const printDwg = s ? toDD(s.tool_dwg_no) : '';
     finalTools.push({
       slot,
       name: s ? s.tool_name : '',
-      dwg: s ? (s.fromTs ? `${s.tool_dwg_no} *` : s.tool_dwg_no) : '',
-      cleanDwg: s ? s.tool_dwg_no : null
+      dwg: s ? (s.fromTs ? `${printDwg} *` : printDwg) : '',
+      cleanDwg: s ? toDwg(s.tool_dwg_no) : null
     });
   }
   map['tooling'] = finalTools;

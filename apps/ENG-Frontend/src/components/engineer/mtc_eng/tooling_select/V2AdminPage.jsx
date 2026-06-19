@@ -15,6 +15,7 @@ import V2SearchRuleManager from './V2SearchRuleManager';
 import V2InventoryManager from './V2InventoryManager';
 import SpecProcessManager from './SpecProcessManager';
 import V2FormulaErrorLog from './V2FormulaErrorLog';
+import PartNoMapManager from './PartNoMapManager';
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -90,6 +91,11 @@ export default function V2AdminPage() {
             key: 'spec',
             label: 'Part Management',
             children: <SpecProcessManager embedded />,
+          },
+          {
+            key: 'partno-map',
+            label: 'Part No → Tool',
+            children: <PartNoMapManager />,
           },
           {
             key: 'errors',
