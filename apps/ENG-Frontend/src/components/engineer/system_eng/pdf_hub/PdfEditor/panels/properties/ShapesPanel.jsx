@@ -60,54 +60,63 @@ export default function ShapesPanel() {
                         </div>
                     </div>
                 )}
-                <div className="pdf-ws-prop-section">
-                    <SectionTitle>Stroke</SectionTitle>
-                    <PropRow label="Color">
-                        <ColorPicker
-                            value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
-                            onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
-                            size="small"
-                            allowClear
-                            presets={COLOR_PRESETS}
-                        />
-                    </PropRow>
-                    <PropRow label="Width">
-                        <InputNumber
-                            min={1} max={20} value={currentSettings.strokeWidth}
-                            onChange={store.setStrokeWidth}
-                            size="small" style={{ width: 60 }}
-                        />
-                    </PropRow>
-                    <PropRow label="Symbol Size">
-                        <InputNumber
-                            min={8} max={72} value={currentSettings.fontSize}
-                            onChange={store.setFontSize}
-                            size="small" style={{ width: 60 }}
-                        />
-                    </PropRow>
-                </div>
 
-                <div className="pdf-ws-prop-section">
-                    <SectionTitle>Fill</SectionTitle>
-                    <PropRow label="Color">
-                        <ColorPicker
-                            value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
-                            onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
-                            size="small"
-                            allowClear
-                            presets={COLOR_PRESETS}
-                        />
-                    </PropRow>
-                </div>
+                {(!store.selectedObjectId && ['select', 'pan'].includes(store.activeTool)) ? (
+                    <div style={{ padding: '24px 16px', color: theme.colors.textSecondary, textAlign: 'center', fontSize: 13 }}>
+                        Select an object on the canvas to edit its properties, or select a drawing tool to set its default style.
+                    </div>
+                ) : (
+                    <>
+                        <div className="pdf-ws-prop-section">
+                            <SectionTitle>Stroke</SectionTitle>
+                            <PropRow label="Color">
+                                <ColorPicker
+                                    value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
+                                    onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
+                                    size="small"
+                                    allowClear
+                                    presets={COLOR_PRESETS}
+                                />
+                            </PropRow>
+                            <PropRow label="Width">
+                                <InputNumber
+                                    min={1} max={20} value={currentSettings.strokeWidth}
+                                    onChange={store.setStrokeWidth}
+                                    size="small" style={{ width: 60 }}
+                                />
+                            </PropRow>
+                            <PropRow label="Symbol Size">
+                                <InputNumber
+                                    min={8} max={72} value={currentSettings.fontSize}
+                                    onChange={store.setFontSize}
+                                    size="small" style={{ width: 60 }}
+                                />
+                            </PropRow>
+                        </div>
 
-                <div className="pdf-ws-prop-section">
-                    <SectionTitle>Opacity</SectionTitle>
-                    <Slider
-                        min={0.1} max={1} step={0.05}
-                        value={currentSettings.opacity}
-                        onChange={store.setOpacity}
-                    />
-                </div>
+                        <div className="pdf-ws-prop-section">
+                            <SectionTitle>Fill</SectionTitle>
+                            <PropRow label="Color">
+                                <ColorPicker
+                                    value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
+                                    onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
+                                    size="small"
+                                    allowClear
+                                    presets={COLOR_PRESETS}
+                                />
+                            </PropRow>
+                        </div>
+
+                        <div className="pdf-ws-prop-section">
+                            <SectionTitle>Opacity</SectionTitle>
+                            <Slider
+                                min={0.1} max={1} step={0.05}
+                                value={currentSettings.opacity}
+                                onChange={store.setOpacity}
+                            />
+                        </div>
+                    </>
+                )}
 
                 <Divider style={{ margin: '12px 0' }} />
 

@@ -176,8 +176,17 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
     const nextPage = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
     const prevPage = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
 
+    const closePdf = useCallback(() => {
+        setPdfFile(null);
+        setPdfDoc(null);
+        setPdfLibDoc(null);
+        setPdfBytes(null);
+        setTotalPages(0);
+        setCurrentPage(1);
+    }, []);
+
     return {
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage
+        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage, closePdf
     };
 }

@@ -57,7 +57,7 @@ const PdfEditorTool = () => {
     const editor = usePdfEditor();
     const {
         pdfFile, pdfDoc, pdfBytes, totalPages, currentPage, zoom,
-        pdfLoading, loadPdf, loadPdfFromBytes,
+        pdfLoading, loadPdf, loadPdfFromBytes, closePdf,
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
@@ -182,6 +182,20 @@ const PdfEditorTool = () => {
             message.error('Please upload a PDF file.');
             return Upload.LIST_IGNORE;
         }
+
+        // ── Reset all states (like a full reload) ──
+        store.setActiveMode('view');
+        store.setViewMode('continuous');
+        setZoom(1.0);
+        store.clearSelection();
+        store.setOverlayEnabled(false);
+        setOverlayPdfDoc(null);
+        setOverlayFile(null);
+        setExportedImages([]);
+        setExportSelectedPages([]);
+        setMergeFiles([]);
+        setLeftCollapsed(false);
+        setRightCollapsed(false);
 
         try {
             const buffer = await file.arrayBuffer();
@@ -666,6 +680,7 @@ const PdfEditorTool = () => {
                 onSavePageState={saveCurrentPageState}
                 onPrevPage={handlePrevPage}
                 onNextPage={handleNextPage}
+                onClosePdf={closePdf}
                 currentPage={currentPage}
                 totalPages={totalPages}
                 zoom={zoom}

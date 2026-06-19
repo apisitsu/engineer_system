@@ -4,7 +4,7 @@ import {
     ToolOutlined, DashboardOutlined, AppstoreOutlined, InsertRowAboveOutlined,
     LeftOutlined, RightOutlined, ZoomOutOutlined, ZoomInOutlined,
     UndoOutlined, RedoOutlined, DeleteOutlined, MenuUnfoldOutlined, MenuFoldOutlined,
-    DownloadOutlined, FilePdfOutlined, ClearOutlined, SaveOutlined
+    DownloadOutlined, FilePdfOutlined, ClearOutlined, SaveOutlined, CloseOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
@@ -16,6 +16,7 @@ export default function HeaderModeBar({
     onSavePageState,
     onPrevPage,
     onNextPage,
+    onClosePdf,
     currentPage,
     totalPages,
     zoom,
@@ -231,6 +232,13 @@ export default function HeaderModeBar({
                         </Button>
                     </Tooltip>
                 </Upload>
+                
+                {/* Close PDF */}
+                <Tooltip title="Close PDF">
+                    <Button size="small" danger style={{ borderRadius: 7 }} onClick={onClosePdf}>
+                        <CloseOutlined />
+                    </Button>
+                </Tooltip>
             </Space>
         </div>
     );
