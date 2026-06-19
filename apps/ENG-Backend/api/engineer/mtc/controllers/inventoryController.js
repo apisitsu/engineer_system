@@ -41,6 +41,52 @@ const list = async (req, res) => {
   }
 };
 
+// GET /inventory-lookup?machine=<machine_name|machine_group>&tooling_no=<no>
+// Returns the inventory row for a specific tooling_no from the machine's inventory
+// table — exact match first, then "xxxx-xx" prefix fallback (same family-prefix rule
+// the SDS/T-Select coupling uses). Powers the SDS dim-compare modal, which shows the
+// factory tool's dimensions next to T-Select #1/#2. `row: null` = not found (no error).
+const lookup = async (req, res) => {
+  const machine = (req.query.machine || '').trim();
+  const toolingNo = (req.query.tooling_no || '').trim();
+  try {
+    if (!machine || !toolingNo) {
+      return res.status(400).json({ success: false, error: 'machine and tooling_no are required' });
+    }
+    // Resolve the machine (or its group display name) to its inventory table.
+    const mr = await engPool.query(
+      `SELECT inventory_table FROM tooling_machine
+        WHERE (machine_name = $1 OR machine_group = $1) AND inventory_table IS NOT NULL
+        LIMIT 1`,
+      [machine]
+    );
+    const table = mr.rows[0]?.inventory_table;
+    if (!table) return res.json({ success: true, table: null, row: null });
+    await assertInventoryTable(table);
+
+    // Guard: the standard inventory tables key tools by a "tooling_no" column.
+    const colCheck = await engPool.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=$1 AND column_name='tooling_no'`,
+      [table]
+    );
+    if (!colCheck.rows.length) return res.json({ success: true, table, row: null });
+
+    let q = await engPool.query(`SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`, [toolingNo]);
+    if (!q.rows.length) {
+      const parts = toolingNo.split('-');
+      const prefix = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : toolingNo;
+      q = await engPool.query(
+        `SELECT * FROM "${table}" WHERE tooling_no LIKE $1 ORDER BY tooling_no LIMIT 1`,
+        [`${prefix}-%`]
+      );
+    }
+    res.json({ success: true, table, row: q.rows[0] || null });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+};
+
 // POST /inventory/:table
 const create = async (req, res) => {
   const table = req.params.table;
@@ -128,4 +174,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { list, create, update, remove };
+module.exports = { list, lookup, create, update, remove };

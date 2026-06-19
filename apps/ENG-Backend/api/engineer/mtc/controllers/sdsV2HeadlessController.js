@@ -161,33 +161,51 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
 
+  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
+  const slotData = new Array(20).fill(null);
+
+  // Place a tool honoring its Machine Tool Config slot (1-based T-number) when known
+  // AND free; otherwise drop into the first empty slot so no tool is lost on a
+  // collision or when no config slot applies.
+  const placeTool = (configSlot, payload) => {
+    if (configSlot && configSlot >= 1 && configSlot <= 20 && !slotData[configSlot - 1]) {
+      slotData[configSlot - 1] = payload; return true;
+    }
+    const idx = slotData.findIndex(s => s === null);
+    if (idx === -1) return false;
+    slotData[idx] = payload; return true;
+  };
+
+  // DWG no → configured T-number via exact or prefix match against the whitelist
+  // (null when there is no Machine Tool Config slot for it).
+  let configSlotOf = () => null;
   if (mtRows.length > 0) {
     const allowedKeys = mtRows.map(r => r.tool_drawing_no);
-    const matchesAllowed = (dwgNo) => {
-      if (!dwgNo) return false;
-      return allowedKeys.some(k => dwgNo === k || dwgNo.startsWith(k + '-') || k.startsWith(dwgNo + '-'));
-    };
-    tools = tools.filter(t => matchesAllowed(t.tool_dwg_no));
     const orderMap = {};
     mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
-    const getOrder = (dwgNo) => {
-      if (!dwgNo) return 9999;
+    configSlotOf = (dwgNo) => {
+      if (!dwgNo) return null;
       if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
-      const k = allowedKeys.find(key => dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
-      return k !== undefined ? orderMap[k] : 9999;
+      const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
+      return k !== undefined ? orderMap[k] : null;
     };
-    tools.sort((a, b) => getOrder(a.tool_dwg_no) - getOrder(b.tool_dwg_no));
-  } else if (machineTypeCode) {
-    tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
+    // Factory-plan tools that match the whitelist land in their EXACT configured T-slot
+    // (slot positions are honored, gaps preserved). Sorted by slot so a collision
+    // resolves deterministically (lower T keeps its slot, the other spills to first free).
+    const matched = tools
+      .filter(t => configSlotOf(t.tool_dwg_no) !== null)
+      .sort((a, b) => configSlotOf(a.tool_dwg_no) - configSlotOf(b.tool_dwg_no));
+    for (const t of matched) {
+      placeTool(configSlotOf(t.tool_dwg_no), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
+    }
+  } else {
+    // No Machine Tool Config → legacy compacted fill (prefix-code filter when available).
+    const legacy = machineTypeCode
+      ? tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode)
+      : tools;
+    for (const t of legacy) placeTool(null, { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
   }
 
-  const slotData = [];
-  for (let i = 0; i < 20; i++) {
-    const t = tools[i];
-    slotData.push(t ? { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false } : null);
-  }
-
-  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
   const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn) : null;
   if (tsResult) {
     const acceptable = new Set([machine_type_name]);
@@ -205,10 +223,52 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess })) {
       const pfx = dwgPrefix(tt.tooling_no);
       if (pfx && existingPrefixes.has(pfx)) continue;
-      const idx = slotData.findIndex(s => s === null);
-      if (idx === -1) break;
-      slotData[idx] = { tool_name: tt.tooling_name || '', tool_dwg_no: tt.tooling_no, fromTs: true };
+      // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
+      // lands in the SAME T-slot the config reserves for that tool family (not just the
+      // next empty slot). Falls back to first free slot when no config slot applies/free.
+      if (!placeTool(configSlotOf(tt.tooling_no), { tool_name: tt.tooling_name || '', tool_dwg_no: tt.tooling_no, fromTs: true })) break;
       if (pfx) existingPrefixes.add(pfx);
+    }
+  }
+
+  // Machine Tool Config slots with NO factory/T-Select tool for this CN still get the
+  // configured fixture's NAME (resolved from lpb.eng_tooling by DWG family) so the SDS
+  // always lists every fixture per Machine Tool Config — even when the factory plan
+  // carries no Tool No for it. Tool No cell stays blank (no factory no); name shows.
+  if (mtRows.length > 0) {
+    const emptyCfg = mtRows.filter(r => {
+      const slot = parseInt(r.tool_number.slice(1), 10);
+      return slot >= 1 && slot <= 20 && !slotData[slot - 1] && r.tool_drawing_no;
+    });
+    if (emptyCfg.length > 0) {
+      const families = [...new Set(emptyCfg.map(r => r.tool_drawing_no))];
+      const nameByFamily = {};
+      try {
+        const nr = await maqPool.query(
+          `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING}
+           WHERE ${families.map((_, i) => `tool_dwg_no LIKE $${i + 1}`).join(' OR ')}`,
+          families.map(f => `${f}%`)
+        );
+        const isAscii = (s) => /^[\x00-\x7F]+$/.test(s);
+        for (const row of nr.rows) {
+          if (!row.tool_name) continue;
+          const fam = families.find(f => row.tool_dwg_no === f || row.tool_dwg_no.startsWith(`${f}-`));
+          if (!fam) continue;
+          // Prefer an ASCII/English name over a Japanese one when both exist for the family.
+          if (!nameByFamily[fam] || (!isAscii(nameByFamily[fam]) && isAscii(row.tool_name))) {
+            nameByFamily[fam] = row.tool_name;
+          }
+        }
+      } catch (_) { /* name resolution is best-effort — slot still lists the fixture */ }
+      for (const r of emptyCfg) {
+        const slot = parseInt(r.tool_number.slice(1), 10);
+        slotData[slot - 1] = {
+          tool_name: nameByFamily[r.tool_drawing_no] || '',
+          tool_dwg_no: '',           // no factory Tool No — name only, per Machine Tool Config
+          fromTs: false,
+          fromConfig: true,
+        };
+      }
     }
   }
 
@@ -589,14 +649,35 @@ function applyDataToGrid(grid, valueMap, mappings) {
     if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
   };
 
-  // 1) Mapped scalar fields (skip image objects)
+  // Resolve a cell to the top-left ("master") of any merge that covers it. Only the
+  // master cell of a merged region renders; a value written to a covered cell is hidden.
+  const mergeMaster = (r, c) => {
+    const mg = (grid.merges || []).find((m) => r >= m.r1 && r <= m.r2 && c >= m.c1 && c <= m.c2);
+    return mg ? { r: mg.r1, c: mg.c1 } : { r, c };
+  };
+
+  // 1) Mapped scalar fields (skip image objects). Fields whose mapped cells fall inside
+  //    the SAME merged region are routed to the merge master and concatenated in column
+  //    order — so e.g. the single PROCESS cell (Z3:AF3) shows "<process_code> <process_name>"
+  //    even though process_name maps to AC3, which is hidden under the Z3 merge.
+  const scalarBuckets = new Map(); // "masterR,masterC" -> [{ c, v }]
   for (const { cell_address, param_key } of mappings) {
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
     if (!m) continue;
     let val = valueMap[param_key];
     if (val == null) val = params[param_key];
-    if (val && typeof val === 'object') continue; // images handled elsewhere
-    setCell(+m[2] - 1, colLettersToIndex(m[1]), val);
+    if (val == null || val === '') continue;
+    if (typeof val === 'object') continue; // images handled elsewhere
+    const r = +m[2] - 1, c = colLettersToIndex(m[1]);
+    const master = mergeMaster(r, c);
+    const key = `${master.r},${master.c}`;
+    if (!scalarBuckets.has(key)) scalarBuckets.set(key, []);
+    scalarBuckets.get(key).push({ c, v: String(val) });
+  }
+  for (const [key, items] of scalarBuckets) {
+    const [r, c] = key.split(',').map(Number);
+    items.sort((a, b) => a.c - b.c);
+    setCell(r, c, items.map((it) => it.v).join(' '));
   }
 
   // 2) Parameter table (A:I) + GW section (AN:AV) straight from row_N_COL keys

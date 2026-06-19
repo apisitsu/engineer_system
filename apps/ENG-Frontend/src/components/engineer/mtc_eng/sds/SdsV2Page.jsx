@@ -4,7 +4,7 @@ import {
   Table, Tag, Spin, Layout, App, Descriptions,
   Modal, Select, Space,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +38,55 @@ const dwgPrefix = (no) => {
   return p.length >= 2 ? `${p[0]}-${p[1]}` : no;
 };
 
+// Tolerant numeric equality for dim values stored as strings ("3" vs "3.00"); falls
+// back to string compare for non-numeric values. Used by the dim-compare modal.
+const numEq = (a, b) => {
+  const x = parseFloat(a), y = parseFloat(b);
+  if (Number.isNaN(x) || Number.isNaN(y)) return String(a ?? '') === String(b ?? '');
+  return Math.abs(x - y) < 1e-6;
+};
+const hasVal = (v) => v != null && String(v).trim() !== '';
+
+// Build the dimension-comparison rows for the SDS compare modal. Each row is one DWG
+// dimension (label = formula letter, e.g. dim_a → "A"), with the factory tool value,
+// T-Select #1 / #2 values, and the formula target. `diff` flags rows where the actual
+// tool values (factory/#1/#2) are not all equal — i.e. the dims that differ.
+const buildCompareRows = (result, factory) => {
+  if (!result) return { rows: [], hasFactory: false, has2: false };
+  const m1 = result.matches?.[0] || null;
+  const m2 = result.matches?.[1] || null;
+  const colMap = result.columnMap || {};           // output_key (A) → inventory_column (dim_a)
+  const colToKey = {};
+  Object.entries(colMap).forEach(([k, c]) => { colToKey[c] = k; });
+  const rankSet = new Set(result.matchDimCols || []);
+  const computed = result.computed || {};
+
+  // Candidate dim columns: any dim_* with a value in factory/#1/#2, plus any column
+  // that has a formula target (so a target-only dim still shows).
+  const colsSet = new Set();
+  [factory, m1, m2].forEach((o) => {
+    if (!o) return;
+    Object.keys(o).forEach((c) => { if (/^dim_[a-z]$/i.test(c) && hasVal(o[c])) colsSet.add(c); });
+  });
+  Object.values(colMap).forEach((c) => colsSet.add(c));
+  const cols = [...colsSet].sort((a, b) => a.localeCompare(b));
+
+  const rows = cols.map((col) => {
+    const key = colToKey[col];
+    const label = /^dim_[a-z]$/i.test(col) ? col.slice(4).toUpperCase() : col;
+    const target = key != null && computed[key] != null ? computed[key] : null;
+    const fv = factory ? factory[col] : null;
+    const v1 = m1 ? m1[col] : null;
+    const v2 = m2 ? m2[col] : null;
+    const present = [fv, v1, v2].filter(hasVal);
+    const diff = present.length > 1 && !present.every((v) => numEq(v, present[0]));
+    // Reference for cell-level diff highlight: prefer #1 (the recommendation).
+    const ref = [v1, fv, v2].find(hasVal) ?? null;
+    return { key: col, label, ranked: rankSet.has(col), target, factory: fv, v1, v2, diff, ref };
+  });
+  return { rows, hasFactory: !!factory, has2: !!m2 };
+};
+
 const SdsV2Page = () => {
   const { message } = App.useApp();
   const { theme } = useTheme();
@@ -60,6 +109,34 @@ const SdsV2Page = () => {
   const [filteredMachineTypes, setFilteredMachineTypes] = useState([]);
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
+
+  // Dim-compare modal: compares the factory Tool DWG No against T-Select #1/#2 dims.
+  const [compareModal, setCompareModal] = useState({
+    open: false, loading: false, title: '', result: null, factory: null, factoryNo: null,
+  });
+
+  // Open the compare modal for a tooling row + its T-Select result, then fetch the
+  // factory tool's dimensions (when the row has a real Tool DWG No) so they can be
+  // shown next to #1/#2. result.machine is the display name the lookup resolves.
+  const openCompare = async (row, result) => {
+    const factoryNo = row._isExtra ? null : (row.tool_dwg_no?.trim() || null);
+    const machine = result?.machine || null;
+    setCompareModal({
+      open: true,
+      loading: !!(factoryNo && machine),
+      title: `${result?.machine || ''} · ${result?.tooling || row.tool_name || ''}`,
+      result,
+      factory: null,
+      factoryNo,
+    });
+    if (!factoryNo || !machine) return;
+    try {
+      const res = await axios.get(server.TSV2_INVENTORY_LOOKUP, { params: { machine, tooling_no: factoryNo } });
+      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: res.data?.row || null } : prev));
+    } catch {
+      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: null } : prev));
+    }
+  };
 
   const handleSearch = async () => {
     if (!cn.trim()) return;
@@ -285,19 +362,19 @@ const SdsV2Page = () => {
     // machines that actually ran this process. Lets a face/grind row with no factory
     // tooling still expand to show those machines.
     if ((machineHistoryByProcess[code] || []).some(h => h.machine_type_code)) return true;
-    if (!tsData?.results?.length) return false;
-    // No factory tooling → the machine↔process link comes from sds_machine_tool config.
+    // No factory tooling → a machine CONFIGURED for this process_code (sds_machine_tool)
+    // can still grind any part that runs it, so show it even when Tooling Select computes
+    // no tool (e.g. an off-ID-band ball at a surface-grind 1101 process): the machine
+    // appears in the picker and its tool slots simply stay empty. (Previously this also
+    // required a T-Select dimensional match, which HID a configured machine like GS-64PFII
+    // for parts outside its T-Select inventory's ID band — e.g. CN 320036, ID 30 < limit 38.)
     const configMachineNames = new Set(
       machineToolsConfig
         .filter(c => String(c.process_code) === code)
         .map(c => c.machine_type?.trim())
         .filter(Boolean)
     );
-    if (!configMachineNames.size) return false;
-    const groupToRep = {};
-    for (const m of allMachineTypes) if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
-    const resolveMachine = (name) => groupToRep[name] || name;
-    return tsData.results.some(r => r.matches?.length && configMachineNames.has(resolveMachine(r.machine)));
+    return configMachineNames.size > 0;
   };
 
   const buildExpandedContent = (processRow) => {
@@ -365,7 +442,7 @@ const SdsV2Page = () => {
         const m2 = getMatchNo(result.matches[1]);
 
         if (assignedNo && !matchMap[assignedNo]) {
-          matchMap[assignedNo] = { m1, m2 };
+          matchMap[assignedNo] = { m1, m2, result };
         } else if (!assignedNo && m1) {
           extraRows.push({
             key: `ts_extra_${result.machine}_${result.tooling}`,
@@ -374,6 +451,7 @@ const SdsV2Page = () => {
             rev: null,
             _tsM1: m1,
             _tsM2: m2,
+            _tsResult: result,
             _isExtra: true,
           });
         }
@@ -516,6 +594,21 @@ const SdsV2Page = () => {
             if (!m) return <span style={{ color: '#bbb' }}>-</span>;
             const isSame = !r._isExtra && m === key;
             return <Tag color={isSame ? 'default' : 'geekblue'}>{m}</Tag>;
+          },
+        },
+        {
+          title: '',
+          key: 'cmp',
+          width: 110,
+          align: 'center',
+          render: (_, r) => {
+            const res = r._isExtra ? r._tsResult : matchMap[r.tool_dwg_no?.trim()]?.result;
+            if (!res || !res.matches?.length) return null;
+            return (
+              <Button size="small" type="link" icon={<SwapOutlined />} onClick={() => openCompare(r, res)}>
+                Compare dim
+              </Button>
+            );
           },
         },
       ] : []),
@@ -759,6 +852,78 @@ const SdsV2Page = () => {
             label: displayLabelFor(m.machine_type_name),
           }))}
         />
+      </Modal>
+
+      <Modal
+        title={
+          <span>
+            <SwapOutlined style={{ marginRight: 8 }} />
+            Dimension Compare — {compareModal.title}
+          </span>
+        }
+        open={compareModal.open}
+        onCancel={() => setCompareModal((p) => ({ ...p, open: false }))}
+        footer={[<Button key="close" onClick={() => setCompareModal((p) => ({ ...p, open: false }))}>Close</Button>]}
+        width={720}
+        destroyOnHidden
+      >
+        <Spin spinning={compareModal.loading}>
+          {(() => {
+            const { rows, hasFactory } = buildCompareRows(compareModal.result, compareModal.factory);
+            if (!rows.length) return <Text type="secondary">No dimension data to compare.</Text>;
+
+            const cmpCell = (val, row, isRef) => {
+              if (!hasVal(val)) return <span style={{ color: '#bbb' }}>-</span>;
+              const isDiff = row.diff && !isRef && row.ref != null && !numEq(val, row.ref);
+              return <span style={isDiff ? { color: '#cf1322', fontWeight: 600 } : {}}>{String(val).trim()}</span>;
+            };
+            const cols = [
+              {
+                title: 'Dim', dataIndex: 'label', width: 90,
+                render: (v, r) => (
+                  <span>
+                    <Text strong>{v}</Text>
+                    {r.ranked && <Tag color="gold" style={{ marginLeft: 6 }}>rank</Tag>}
+                  </span>
+                ),
+              },
+              { title: 'Target', dataIndex: 'target', align: 'center', width: 90,
+                render: (v) => (hasVal(v) ? <Text type="secondary">{String(v).trim()}</Text> : <span style={{ color: '#bbb' }}>-</span>) },
+              ...(hasFactory ? [{
+                title: 'Factory', dataIndex: 'factory', align: 'center', width: 110,
+                render: (v, r) => cmpCell(v, r, false),
+              }] : []),
+              { title: 'T-Select #1', dataIndex: 'v1', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, true) },
+              { title: 'T-Select #2', dataIndex: 'v2', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, false) },
+            ];
+            return (
+              <>
+                {hasFactory && compareModal.factoryNo && (
+                  <div style={{ marginBottom: 8, fontSize: 12 }}>
+                    <Text type="secondary">Factory Tool DWG No: </Text>
+                    <Tag>{compareModal.factoryNo}</Tag>
+                  </div>
+                )}
+                {!hasFactory && compareModal.factoryNo && !compareModal.loading && (
+                  <div style={{ marginBottom: 8, fontSize: 12 }}>
+                    <Text type="warning">Factory tool dims not found in inventory — showing T-Select #1/#2 only.</Text>
+                  </div>
+                )}
+                <Table
+                  dataSource={rows}
+                  columns={cols}
+                  pagination={false}
+                  size="small"
+                  rowKey="key"
+                  onRow={(r) => (r.diff ? { style: { background: '#fffbe6' } } : {})}
+                />
+                <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+                  Rows highlighted yellow differ between tools; values in <span style={{ color: '#cf1322', fontWeight: 600 }}>red</span> deviate from T-Select #1. <Tag color="gold" style={{ marginLeft: 4 }}>rank</Tag> = dim used for closest-match ranking.
+                </div>
+              </>
+            );
+          })()}
+        </Spin>
       </Modal>
     </Layout>
   );
