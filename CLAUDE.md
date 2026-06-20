@@ -42,8 +42,7 @@ npm run cypress:run  # Cypress E2E headless
 ## Architecture
 
 ### Backend (`apps/ENG-Backend`)
-- **Entry:** `server.js` → Express app on port 2005; WebSocket via `api/kanban/websocket.js`
-  - **Body-parser gotcha:** `server.js` registers JSON body parsers **twice**; the FIRST one (`express.json()`) runs before the `bodyParser.json({ limit: '50mb' })` below it, so its limit wins. Both must carry the `50mb` limit or large bodies (e.g. the saved SDS grid layout) throw `PayloadTooLargeError` even though a 50mb parser exists.
+- **Entry:** `server.js` → Express app on port 2005; WebSocket via `api/kanban/websocket.js` (body-parser limit gotcha → `.claude/rules/backend-gotchas.md`)
 - **Routing:** Most domains register routes inline in `server.js`. MTC has a partial `routes/mtcRoutes.js`, but most MTC controllers are also registered directly in `server.js`
 - **MVC per domain:** routes → controller (HTTP layer) → service (business logic, PDF/Excel) → model (DB access)
 - **Key domains:**
@@ -98,7 +97,7 @@ npm run cypress:run  # Cypress E2E headless
 
 Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.
 
-> **Gmail creds format:** `.env` stores values as JS assignment syntax (e.g., `GMAIL_CLIENT_ID = '47418...';`). Always use `cleanEnv(key)` from `api/engineer/mtc/utils/emailHelper.js` — **never** `process.env.KEY` directly — or the OAuth call gets `invalid_client` from literal quote characters in the value.
+> Gmail creds are stored as JS assignment syntax → always use `cleanEnv()`, never `process.env.KEY` directly. Details → `.claude/rules/backend-gotchas.md`.
 
 ## Key Conventions
 
@@ -139,6 +138,7 @@ Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
 3. Register route in `App.jsx` and add sidebar entry in `menu_sidebar.jsx`
 4. Add new API endpoint constants to **both** `constance.js` and `constance_prod.js`
 
+> Backend gotchas (body-parser double-registration, Gmail `cleanEnv`) → `.claude/rules/backend-gotchas.md`
 > Bulk DB patterns (bulk fetch/insert, chunk sizes, INSERT column-order pitfall), PDF/Excel generation rules → `.claude/rules/db-patterns.md`
 > V1 MTC tooling pipeline (`ToolingOrchestrator`, `CacheAgent`, `FormulaAgent`, etc.) — full reference: `.claude/rules/mtc-tooling.md`. V1 is retired and fully removed from disk.
 > SDS pipeline, Tooling↔SDS coupling, SDS Admin sub-routes, ECR/Tumble/System routes: `.claude/rules/sds-pipeline.md`
