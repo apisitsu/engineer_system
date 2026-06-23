@@ -278,6 +278,11 @@ app.use('/api/sds/v2/admin', sdsV2AdminController);
 const sdsV2HeadlessController = require('./api/engineer/mtc/controllers/sdsV2HeadlessController');
 app.use('/api/sds/v2-headless', sdsV2HeadlessController);
 
+// Public cross-system SDS PDF link (no JWT — gated by SDS_PDF_LINK_KEY). Under /api/public/*
+// which the global auth middleware whitelists. Lets Ball_Grinding_Plan deep-link a PDF.
+const sdsPublicController = require('./api/engineer/mtc/controllers/sdsPublicController');
+app.use('/api/public', sdsPublicController);
+
 // LibreOffice (soffice) SDS PDF generation has been retired — the Chrome grid
 // renderer (Approach B) fully replaces it. Keep the old path working by
 // redirecting to the grid renderer so existing links/clients don't break.

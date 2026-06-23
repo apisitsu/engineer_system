@@ -147,6 +147,14 @@ const PartTypeCard = ({ pt }) => {
   );
 };
 
+// Friendly labels for the pending_reason filter. Unknown codes fall back to the raw
+// value so a newly introduced reason still shows up rather than disappearing.
+const REASON_LABELS = {
+  NO_EXCEL: 'Tool ✓ — needs Excel config',
+  NO_TOOL: 'No tool match',
+  NO_TOOL_NO_EXCEL: 'No tool + no Excel config',
+};
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
   const { message } = App.useApp();
@@ -380,9 +388,24 @@ export default function SdsCoverageDashboard() {
   };
 
   // ── Needs attention table ─────────────────────────────────────────────────────
+  // All three filter dropdowns are derived from the rows actually in the table
+  // (data.needsAttention), so each only lists values that exist there — selecting any
+  // option always yields rows.
   const machineOptions = useMemo(() => {
     const names = [...new Set((data?.needsAttention || []).map(r => r.machine_type_name).filter(Boolean))].sort();
     return [{ value: '', label: 'All Machines' }, ...names.map(n => ({ value: n, label: n }))];
+  }, [data]);
+
+  const partTypeOptions = useMemo(() => {
+    const types = [...new Set((data?.needsAttention || []).map(r => r.part_type).filter(Boolean))].sort();
+    return [{ value: '', label: 'All Part Types' },
+      ...types.map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))];
+  }, [data]);
+
+  const reasonOptions = useMemo(() => {
+    const reasons = [...new Set((data?.needsAttention || []).map(r => r.pending_reason).filter(Boolean))].sort();
+    return [{ value: '', label: 'All Reasons' },
+      ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r }))];
   }, [data]);
 
   const filteredAttention = useMemo(() => {
@@ -610,23 +633,12 @@ export default function SdsCoverageDashboard() {
                 {sectionTitle('CNs Requiring Action')}
                 <Space>
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}
-                    options={[
-                      { value: '', label: 'All Part Types' },
-                      ...byPartType.map(pt => ({
-                        value: pt.part_type,
-                        label: pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1),
-                      })),
-                    ]} popupMatchSelectWidth={false} />
+                    options={partTypeOptions} popupMatchSelectWidth={false} />
                   <Select size="small" value={filterMc} onChange={setFilterMc} style={{ width: 160 }}
                     options={machineOptions} popupMatchSelectWidth={false} showSearch
                     filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())} />
                   <Select size="small" value={filterReason} onChange={setFilterReason} style={{ width: 190 }}
-                    options={[
-                      { value: '', label: 'All Reasons' },
-                      { value: 'NO_EXCEL', label: 'Tool ✓ — needs Excel config' },
-                      { value: 'NO_TOOL', label: 'No tool match' },
-                      { value: 'NO_TOOL_NO_EXCEL', label: 'No tool + no Excel config' },
-                    ]} popupMatchSelectWidth={false} />
+                    options={reasonOptions} popupMatchSelectWidth={false} />
                   <Text style={{ color: C.textSec, fontSize: 11 }}>{filteredAttention.length} CNs</Text>
                 </Space>
               </div>

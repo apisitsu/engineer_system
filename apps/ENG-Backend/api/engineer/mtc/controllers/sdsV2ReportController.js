@@ -5,7 +5,9 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
 const cnFormat = require('../utils/cnFormat');
-const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
+// SDS coverage-report config is part of the SDS admin surface.
+const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
 
@@ -349,9 +351,14 @@ async function buildCoverage() {
     // Machines excluded from SDS coverage scope
     const EXCLUDED_MACHINE_TYPES = new Set(['KS-H70(#C41)']);
 
+    // Decommissioned floor machines excluded by machine CODE (not type) — SPG-08 (HIGRIND-1-D)
+    // is retired, but its sibling HIGRIND-1-D units CGM-13/CGM-14 stay, so we drop only SPG-08.
+    const EXCLUDED_MACHINE_CODES = new Set(['SPG-08']);
+
     // Exclude PSG-52AN (SGM-01) entirely; exclude other SGM for face-grind (1021/1022) only
     const cnMachinePairs = cnMachinePairsRes.rows.filter(row => {
       if (row.machine === 'SGM-01') return false;
+      if (EXCLUDED_MACHINE_CODES.has(row.machine)) return false;
       const mName = machineCodeMap[row.machine] || '';
       if (EXCLUDED_MACHINE_TYPES.has(mName)) return false;
       if (row.process !== '1021' && row.process !== '1022') return true;
@@ -493,9 +500,13 @@ async function buildCoverage() {
       if (!tsResult) continue;
       const acceptable = new Set([r.machine_type_name]);
       if (nameToGroup[r.machine_type_name]) acceptable.add(nameToGroup[r.machine_type_name]);
-      // Gate by grinding direction: a T-Select tooling set computed for the part's
-      // direction must not satisfy an opposite-direction process_code row.
-      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code }).length > 0) {
+      // Direction gate is SKIPPED here (partHasProcess:true): every evaluated row is
+      // production-derived (cnMachinePairs = a machine that actually ran this CN+process),
+      // so the part genuinely undergoes this process_code. A multi-grind part (e.g. a ball
+      // with both ID grind 1061 and spherical grind 1041) stores only ONE spec.process
+      // direction, so the gate would otherwise wrongly drop a valid spherical machine's
+      // tooling on the 1041 row — undercounting coverage. Matches the SDS PDF behaviour.
+      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code, partHasProcess: true }).length > 0) {
         r.has_tooling_match = true;
         r.tooling_source = 'tselect';
       }

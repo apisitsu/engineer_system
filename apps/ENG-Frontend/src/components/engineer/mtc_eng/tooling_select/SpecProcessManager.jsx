@@ -608,6 +608,87 @@ export const SpecProcessManager = ({ embedded = false }) => {
                 </>
               )}
 
+              {/* ── SPHERICAL (A4x) ── OD/ID/W + Process + SD (dims from eng_sph + eng_sph_design) ── */}
+              {getPartType(watchedCn || editingRecord?.cn) === 'SPHERICAL' && (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                          <Select.Option value="OD Only">OD Only</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="sd"
+                        label={
+                          <Space size={4}>
+                            SD (Shoulder Dia.)
+                            <Button
+                              size="small"
+                              type="link"
+                              icon={<ReloadOutlined style={{ fontSize: 10 }} />}
+                              onClick={handleCalculateSd}
+                              style={{ height: 'auto', padding: 0 }}
+                            >
+                              Calc
+                            </Button>
+                          </Space>
+                        }
+                      >
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <DimCard label="Before Process (Bf)" prefix="bf" />
+                  <DimCard label="After Process (Aft)" prefix="aft" />
+                </>
+              )}
+
+              {/* ── MECHA (C95/C99) ── manual entry (no factory dim table): Process + SD + OD/ID/W ── */}
+              {getPartType(watchedCn || editingRecord?.cn) === 'MECHA' && (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item name="process" label="Process">
+                        <Select allowClear placeholder="Process">
+                          <Select.Option value="OD->ID">OD→ID</Select.Option>
+                          <Select.Option value="ID->OD">ID→OD</Select.Option>
+                          <Select.Option value="OD Only">OD Only</Select.Option>
+                          <Select.Option value="ID Only">ID Only</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="sd"
+                        label={
+                          <Space size={4}>
+                            SD (Shoulder Dia.)
+                            <Button
+                              size="small"
+                              type="link"
+                              icon={<ReloadOutlined style={{ fontSize: 10 }} />}
+                              onClick={handleCalculateSd}
+                              style={{ height: 'auto', padding: 0 }}
+                            >
+                              Calc
+                            </Button>
+                          </Space>
+                        }
+                      >
+                        <InputNumber style={{ width: '100%' }} precision={4} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <DimCard label="Before Process (Bf)" prefix="bf" />
+                  <DimCard label="After Process (Aft)" prefix="aft" />
+                </>
+              )}
+
               {/* ── SLEEVE (C6x) ── OD/ID/W + Process ── */}
               {getPartType(watchedCn || editingRecord?.cn) === 'SLEEVE' && (
                 <>

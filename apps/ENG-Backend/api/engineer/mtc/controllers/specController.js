@@ -7,7 +7,9 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { TABLES } = require('../mtcConstants');
 const cache = require('../services/agents/CacheAgent');
 const invalidateCache = (cn) => cache.invalidate(`tooling:${String(cn).trim().toUpperCase()}`);
-const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
+// Part-spec management is part of the Tooling Select admin surface.
+const isAdmin = hasFeature('tooling_admin');
 const { searchByCn } = require('../services/sdsV2SearchService');
 
 // ── Body-specific column list ─────────────────────────────────────────────────
@@ -574,6 +576,15 @@ async function syncNewCns() {
     // Build value rows
     const rows = newCns.map(cn => {
       const proposed = mapFactoryDimToSpec(dimRowsMap[cn] || {});
+      // mapFactoryDimToSpec reads d.od/d.id/d.w, but the factory dim tables use
+      // class-specific column names — ball: ball_dia/in_dia/width, race: od/id/width
+      // (note `width`, not `w`) — so after-grind nominals come back null/0 for those.
+      // factoryAfterDims() knows the right column per part class; let it fill the gap
+      // (returns null for body, so body's own field handling is untouched).
+      const fad = factoryAfterDims(cnToPrefix(cn), dimRowsMap[cn] || {});
+      if (fad.od_aft != null) proposed.od_aft = fad.od_aft;
+      if (fad.id_aft != null) proposed.id_aft = fad.id_aft;
+      if (fad.w_aft  != null) proposed.w_aft  = fad.w_aft;
       proposed.yball   = deriveYBall(cn);
       const procRows   = (cnToPlanNos[cn] || []).flatMap(pno => planToProcs[pno] || []);
       proposed.process = deriveProcess(procRows);

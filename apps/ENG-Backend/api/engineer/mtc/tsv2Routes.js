@@ -2,7 +2,10 @@
 
 const express = require('express');
 const router  = express.Router();
-const { isAdmin } = require('../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../middleware/mtcAuth');
+// Tooling Select admin mutations: full 'AD' admin OR a user holding the
+// 'tooling_admin' feature permission (granular, non-AD). See hasFeature().
+const isAdmin = hasFeature('tooling_admin');
 
 const machineCtrl     = require('./controllers/machineController');
 const limitCtrl       = require('./controllers/limitController');
@@ -11,6 +14,7 @@ const searchRuleCtrl  = require('./controllers/searchRuleController');
 const searchCtrl      = require('./controllers/searchController');
 const { router: specCtrl, syncNewCns } = require('./controllers/specController');
 const inventoryCtrl   = require('./controllers/inventoryController');
+const partnoMapCtrl   = require('./controllers/partnoMapController');
 const configCache     = require('./services/tsv2ConfigCache');
 const tselectFallback = require('./services/tselectFallback');
 
@@ -68,10 +72,19 @@ router.put('/search-rules/:id',     isAdmin,                 flushConfig, search
 router.delete('/search-rules/:id',  isAdmin,                 flushConfig, searchRuleCtrl.remove);
 
 // ── Inventory (Tool List) ────────────────────────────────────────────────────
+router.get('/inventory-lookup',         inventoryCtrl.lookup); // dim lookup by tooling_no (SDS compare)
 router.get('/inventory/:table',         inventoryCtrl.list);
 router.post('/inventory/:table',        isAdmin, inventoryCtrl.create);
 router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);
 router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
+
+// ── Part No → Tool map (formula-less fixtures, e.g. ROTARY DRESSER) ──────────
+// Read fresh by the SDS PDF per render, so no config-cache flush is needed.
+router.get('/partno-map',            partnoMapCtrl.list);
+router.get('/partno-map/meta',       partnoMapCtrl.meta);
+router.post('/partno-map',           isAdmin, partnoMapCtrl.create);
+router.put('/partno-map/:id',        isAdmin, partnoMapCtrl.update);
+router.delete('/partno-map/:id',     isAdmin, partnoMapCtrl.remove);
 
 // ── Spec (Part Management) ──────────────────────────────────────────────────
 router.use('/spec', flushTselectOnWrite, specCtrl);

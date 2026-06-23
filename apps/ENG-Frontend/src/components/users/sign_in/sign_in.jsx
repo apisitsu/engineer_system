@@ -69,6 +69,8 @@ function Sign_in() {
       auth: data.userInfo?.u_authority || data.userInfo?.user_authority || 5,
       name: data.userInfo?.u_name || data.name,
       empNo: data.userInfo?.u_code || empno || data.empno,
+      // Granular feature permissions (e.g. ['tooling_admin','sds_admin'])
+      perms: data.perms || data.userInfo?.feature_perms || [],
       info: data.userInfo || {}
     };
 

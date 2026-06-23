@@ -8,8 +8,8 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 // export const apiUrl = "http://plbmp130:2005/";
 
 export const server = {
@@ -59,6 +59,7 @@ export const server = {
   TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
   TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
+  TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`, // ?machine=&tooling_no= → dim row (SDS compare)
   TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
   TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
   TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
@@ -67,6 +68,7 @@ export const server = {
   TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
   TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
   TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
+  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No → tool map; /meta for filters, /:id for PUT/DELETE
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
@@ -197,6 +199,7 @@ export const key_constance = {
   USER_DEPARTMENT: "USER_DEPARTMENT",
   USER_SECTION: "USER_SECTION",
   USER_AUTH: "USER_AUTH",
+  USER_PERMS: "USER_PERMS",
 };
 
 export const color = {

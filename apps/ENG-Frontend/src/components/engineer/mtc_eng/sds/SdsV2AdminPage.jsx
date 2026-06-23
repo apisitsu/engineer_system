@@ -3,7 +3,7 @@ import {
   Layout, Typography, Card, Tabs, App, Space,
   Table, Input, Button, Popconfirm, AutoComplete,
   Form, Select, Row, Col, Spin, Upload, Tag, Divider, Checkbox, Image, Modal,
-  InputNumber,
+  InputNumber, Segmented,
 } from 'antd';
 import {
   SaveOutlined, SearchOutlined, UploadOutlined, DeleteOutlined, ReloadOutlined,
@@ -258,6 +258,8 @@ const ToolingImagesTab = ({ theme }) => {
   const [options, setOptions] = useState([]);
   const [fileList, setFileList] = useState([]);
   const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [matchBy, setMatchBy] = useState('dwg');   // 'dwg' | 'name'
+  const [toolName, setToolName] = useState('');     // tool name when matchBy === 'name'
 
   useEffect(() => {
     axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
@@ -307,20 +309,26 @@ const ToolingImagesTab = ({ theme }) => {
     }
   };
 
+  // A NAME-keyed image (tool_dwg_no = 'NAME:<TOOL>') is matched on the SDS PDF by tool
+  // NAME, so one image is shared by that fixture across every dwg/band. Must mirror
+  // NAME_IMG_KEY in sdsV2HeadlessController.js (uppercase + collapse whitespace).
+  const nameImgKey = (n) => 'NAME:' + n.toUpperCase().replace(/\s+/g, ' ').trim();
+
   const handleUpload = async () => {
-    if (!dwgNo.trim()) { message.warning('Enter Tool DWG No'); return; }
+    const byName = matchBy === 'name';
+    const key = byName ? (toolName.trim() && nameImgKey(toolName)) : dwgNo.trim();
+    if (!key) { message.warning(byName ? 'Enter Tool Name' : 'Enter Tool DWG No'); return; }
     if (!fileList.length) { message.warning('Select an image file'); return; }
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append('tool_dwg_no', dwgNo.trim());
-      if (selectedTool?.tool_name) {
-        fd.append('description', selectedTool.tool_name);
-      }
+      fd.append('tool_dwg_no', key);
+      const desc = byName ? toolName.trim() : selectedTool?.tool_name;
+      if (desc) fd.append('description', desc);
       fd.append('image', fileList[0].originFileObj);
       await axios.post(server.MTC_SDS_V2_IMAGES_TOOLING, fd); // Let axios set the correct multipart boundary
       message.success('Uploaded');
-      setDwgNo(''); setOptions([]); setFileList([]); setSelectedTool(null);
+      setDwgNo(''); setOptions([]); setFileList([]); setSelectedTool(null); setToolName('');
       load();
     } catch (err) {
       message.error(err.response?.data?.error || 'Upload failed');
@@ -341,6 +349,7 @@ const ToolingImagesTab = ({ theme }) => {
 
   const inferredMachineName = (tool_dwg_no) => {
     if (!tool_dwg_no) return '-';
+    if (tool_dwg_no.startsWith('NAME:')) return <Text type="secondary">(any — by name)</Text>;
     if (!allMachineTypes || allMachineTypes.length === 0) {
       // Temporary fallback until data loads
       const match = tool_dwg_no.match(/(\d{3})/);
@@ -376,7 +385,12 @@ const ToolingImagesTab = ({ theme }) => {
         />
       ),
     },
-    { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 180 },
+    {
+      title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 180,
+      render: (v) => v && v.startsWith('NAME:')
+        ? <Tag color="blue">By name: {v.slice(5)}</Tag>
+        : v,
+    },
     { title: 'Tool Name', dataIndex: 'tool_name', render: v => v || <Text type="secondary">-</Text> },
     { title: 'Machine Name', key: 'mt', width: 220, render: (_, row) => inferredMachineName(row.tool_dwg_no) },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
@@ -396,6 +410,15 @@ const ToolingImagesTab = ({ theme }) => {
     <div>
       <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Upload Tooling Image">
         <Row gutter={8} align="bottom">
+          <Col>
+            <div style={{ marginBottom: 4 }}><Text>Match by</Text></div>
+            <Segmented
+              value={matchBy}
+              onChange={setMatchBy}
+              options={[{ label: 'DWG No', value: 'dwg' }, { label: 'Tool Name', value: 'name' }]}
+            />
+          </Col>
+          {matchBy === 'dwg' ? (
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool DWG No</Text></div>
             <AutoComplete
@@ -433,6 +456,23 @@ const ToolingImagesTab = ({ theme }) => {
               </div>
             )}
           </Col>
+          ) : (
+          <Col>
+            <div style={{ marginBottom: 4 }}><Text>Tool Name</Text></div>
+            <Input
+              value={toolName}
+              onChange={(e) => setToolName(e.target.value)}
+              placeholder="e.g. COLLET"
+              allowClear
+              style={{ width: 280 }}
+            />
+            <div style={{ marginTop: 4 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Shared by every tool named this, across all DWG/bands (must match the name shown on the SDS)
+              </Text>
+            </div>
+          </Col>
+          )}
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Image File</Text></div>
             <Upload
@@ -1146,14 +1186,18 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
   );
 };
 
-// ── Tab 4: Machine Config (A16:I55 + AN50:AV55) ──────────────────────────────
+// ── Tab 4: Machine Config (A16:I58 + AN53:AV58) ──────────────────────────────
 
 const COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const EXCLUDED_ROWS = new Set([17, 27, 37, 47]);
-const ROW_RANGE = Array.from({ length: 40 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
+// Param panel spans grid rows 16–58 (extended from 55 on 2026-06-19 when the grid
+// grew 56→59: rows 56–58 are blank param rows, row 59 is the company footer).
+const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
 
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
-const GW_ROW_RANGE = [50, 51, 52, 53, 54, 55];
+// GW panel = grid rows 53–58 (2026-06-19): rows 50–52 dropped (unused/blank, no machine
+// had data there), 56–58 added with the grid 56→59 grow; row 59 is the footer (excluded).
+const GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
 
 // Header single-cell fields (moved here from the former Per-record Params tab).
 // Stored as machine-level params (cn IS NULL) by default; CN-override aware.
@@ -2098,7 +2142,11 @@ const ConfigureSettingsTab = ({ theme, visibleMachineNames, setVisibleMachineNam
     setLoading(true);
     try {
       const [mtRes, pmRes, cfgRes, vmRes] = await Promise.all([
-        axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES),
+        // nodedupe: grouped machines (KS-400B1/B2/B7) must each appear as a separate
+        // visibility checkbox — otherwise the deduped list only shows the group rep (B1)
+        // and Save would write back a list missing B2/B7, silently hiding them from the
+        // Excel Config / Machine Tool Config tabs.
+        axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } }),
         axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_PROCESS_MASTER),
         axios.get(server.MTC_SDS_V2_ADMIN_AUDIT_CONFIG),
         axios.get(server.MTC_SDS_V2_ADMIN_VISIBLE_MACHINES),

@@ -9,6 +9,7 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const tselectFallback = require('../services/tselectFallback');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
+const { toDD, toDwg } = require('../utils/rotaryDwg');
 
 const router = express.Router();
 
@@ -17,6 +18,13 @@ const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
+
+// A tooling image whose tool_dwg_no equals NAME_IMG_KEY(name) is matched by TOOL NAME
+// instead of DWG number — one image shared by every slot of that fixture across all
+// dwg variants (e.g. the MSB BASE/COLLET/COLLET ARBOR/COLLAR jigs, whose full dwgs
+// differ per bore-ID band). Upper-cased + whitespace-collapsed so 'Collet  Arbor'
+// and 'COLLET ARBOR' key the same. The frontend builds the same key on upload.
+const NAME_IMG_KEY = (name) => 'NAME:' + String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
 
 // Cache the HTML template in memory — it never changes at runtime, so reading it
 // from disk on every render was pure per-request I/O.
@@ -161,33 +169,51 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
 
+  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
+  const slotData = new Array(20).fill(null);
+
+  // Place a tool honoring its Machine Tool Config slot (1-based T-number) when known
+  // AND free; otherwise drop into the first empty slot so no tool is lost on a
+  // collision or when no config slot applies.
+  const placeTool = (configSlot, payload) => {
+    if (configSlot && configSlot >= 1 && configSlot <= 20 && !slotData[configSlot - 1]) {
+      slotData[configSlot - 1] = payload; return true;
+    }
+    const idx = slotData.findIndex(s => s === null);
+    if (idx === -1) return false;
+    slotData[idx] = payload; return true;
+  };
+
+  // DWG no → configured T-number via exact or prefix match against the whitelist
+  // (null when there is no Machine Tool Config slot for it).
+  let configSlotOf = () => null;
   if (mtRows.length > 0) {
     const allowedKeys = mtRows.map(r => r.tool_drawing_no);
-    const matchesAllowed = (dwgNo) => {
-      if (!dwgNo) return false;
-      return allowedKeys.some(k => dwgNo === k || dwgNo.startsWith(k + '-') || k.startsWith(dwgNo + '-'));
-    };
-    tools = tools.filter(t => matchesAllowed(t.tool_dwg_no));
     const orderMap = {};
     mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
-    const getOrder = (dwgNo) => {
-      if (!dwgNo) return 9999;
+    configSlotOf = (dwgNo) => {
+      if (!dwgNo) return null;
       if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
-      const k = allowedKeys.find(key => dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
-      return k !== undefined ? orderMap[k] : 9999;
+      const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
+      return k !== undefined ? orderMap[k] : null;
     };
-    tools.sort((a, b) => getOrder(a.tool_dwg_no) - getOrder(b.tool_dwg_no));
-  } else if (machineTypeCode) {
-    tools = tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode);
+    // Factory-plan tools that match the whitelist land in their EXACT configured T-slot
+    // (slot positions are honored, gaps preserved). Sorted by slot so a collision
+    // resolves deterministically (lower T keeps its slot, the other spills to first free).
+    const matched = tools
+      .filter(t => configSlotOf(t.tool_dwg_no) !== null)
+      .sort((a, b) => configSlotOf(a.tool_dwg_no) - configSlotOf(b.tool_dwg_no));
+    for (const t of matched) {
+      placeTool(configSlotOf(t.tool_dwg_no), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
+    }
+  } else {
+    // No Machine Tool Config → legacy compacted fill (prefix-code filter when available).
+    const legacy = machineTypeCode
+      ? tools.filter(t => t.tool_dwg_no?.substring(1, 4) === machineTypeCode)
+      : tools;
+    for (const t of legacy) placeTool(null, { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
   }
 
-  const slotData = [];
-  for (let i = 0; i < 20; i++) {
-    const t = tools[i];
-    slotData.push(t ? { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false } : null);
-  }
-
-  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
   const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn) : null;
   if (tsResult) {
     const acceptable = new Set([machine_type_name]);
@@ -201,14 +227,154 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     ) || (searchData.process_plan || []).some(
       r => String(r.process_code) === String(process_code)
     );
-    const existingPrefixes = new Set(slotData.filter(Boolean).map(s => dwgPrefix(s.tool_dwg_no)).filter(Boolean));
-    for (const tt of tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess })) {
-      const pfx = dwgPrefix(tt.tooling_no);
-      if (pfx && existingPrefixes.has(pfx)) continue;
-      const idx = slotData.findIndex(s => s === null);
-      if (idx === -1) break;
-      slotData[idx] = { tool_name: tt.tooling_name || '', tool_dwg_no: tt.tooling_no, fromTs: true };
-      if (pfx) existingPrefixes.add(pfx);
+    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess });
+    // Order the fallback tools by the T-Select machine's tooling DEFINITION order
+    // (tooling_formula sort_order, then id) rather than searchService's alphabetical
+    // sort. For MSB grinders this yields the assembly order WORK FIXED BASE → COLLET →
+    // COLLET ARBOR → COLLAR → ASSY (alphabetical gave ASSY, COLLAR, COLLET, …). The
+    // order is data-driven — an engineer reorders slots by editing tooling_formula
+    // sort_order. Harmless for config-slotted machines (those land in their T-slot
+    // regardless of iteration order; only free-slot spillover follows this order).
+    if (tsTools.length > 1) {
+      try {
+        const ordRes = await engPool.query(
+          `SELECT tf.tooling_name, MIN(tf.sort_order) AS so, MIN(tf.id) AS fid
+             FROM tooling_formula tf JOIN tooling_machine tm ON tm.id = tf.machine_id
+            WHERE tm.machine_name = ANY($1)
+            GROUP BY tf.tooling_name ORDER BY so, fid`,
+          [[machine_type_name, machineGroup].filter(Boolean)]
+        );
+        if (ordRes.rows.length) {
+          const ord = new Map(ordRes.rows.map((r, i) => [r.tooling_name, i]));
+          const rank = (n) => (ord.has(n) ? ord.get(n) : Number.MAX_SAFE_INTEGER);
+          tsTools.forEach((t, i) => { t._i = i; });            // keep stable for ties
+          tsTools.sort((a, b) => (rank(a.tooling_name) - rank(b.tooling_name)) || (a._i - b._i));
+        }
+      } catch (_) { /* ordering is best-effort — fall back to the given order */ }
+    }
+    // Dedup key granularity: some machines (MSB surface grinders PSG-64/GS-64PFII) use ONE
+    // DWG family for SEVERAL DISTINCT fixtures — BASE/COLLET/COLLET ARBOR/COLLAR/ASSY are all
+    // 4547-01-xxxx. Deduping by the 2-segment family prefix would collapse them into a single
+    // tool (only the first ever showed). So for a family that yields >1 distinct fixture here,
+    // key dedup on the FULL dwg; single-fixture families keep prefix dedup (still merges the
+    // rotary-dresser case where factory 4800-42-0293 and a T-Select 4800-42-xxxx are one tool).
+    const famSets = {};
+    for (const tt of tsTools) {
+      const p = dwgPrefix(tt.tooling_no);
+      (famSets[p] = famSets[p] || new Set()).add(toDwg(tt.tooling_no));
+    }
+    const multiFam = new Set(Object.keys(famSets).filter(p => famSets[p].size > 1));
+    const dedupKey = (no) => (multiFam.has(dwgPrefix(no)) ? toDwg(no) : dwgPrefix(no));
+    const existingKeys = new Set(slotData.filter(Boolean).map(s => dedupKey(s.tool_dwg_no)).filter(Boolean));
+    // The ' *' marker means "supplied by Tooling Select, not in the part's factory data".
+    // But a fallback tool is often ALSO listed verbatim in the factory process plan — it only
+    // came through the fallback because its DWG isn't in the (static, band-specific) Machine
+    // Tool Config whitelist (e.g. MSB jigs: the plan lists 4547-01-0029-xx for this part, but
+    // the config whitelists a different bore-ID band). When the plan confirms the exact tool,
+    // treat it as a factory tool: drop the ' *' and prefer the factory tool name.
+    const planByDwg = new Map();
+    for (const t of (searchData.process_plan || [])) {
+      const d = toDwg(t.tool_dwg_no);
+      if (d && !planByDwg.has(d)) planByDwg.set(d, t);
+    }
+    for (const tt of tsTools) {
+      const key = dedupKey(tt.tooling_no);
+      if (key && existingKeys.has(key)) continue;
+      const planHit = planByDwg.get(toDwg(tt.tooling_no));
+      // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
+      // lands in the SAME T-slot the config reserves for that tool family (not just the
+      // next empty slot). Falls back to first free slot when no config slot applies/free.
+      if (!placeTool(configSlotOf(tt.tooling_no), {
+        tool_name: (planHit && planHit.tool_name) || tt.tooling_name || '',
+        tool_dwg_no: tt.tooling_no,
+        fromTs: !planHit,
+      })) break;
+      if (key) existingKeys.add(key);
+    }
+  }
+
+  // Machine Tool Config slots with NO factory/T-Select tool for this CN still get the
+  // configured fixture's NAME (resolved from lpb.eng_tooling by DWG family) so the SDS
+  // always lists every fixture per Machine Tool Config — even when the factory plan
+  // carries no Tool No for it. Tool No cell stays blank (no factory no); name shows.
+  if (mtRows.length > 0) {
+    const emptyCfg = mtRows.filter(r => {
+      const slot = parseInt(r.tool_number.slice(1), 10);
+      return slot >= 1 && slot <= 20 && !slotData[slot - 1] && r.tool_drawing_no;
+    });
+    if (emptyCfg.length > 0) {
+      // A machine fixture (e.g. ROTARY DRESSER, 4800-42) is shared across grinding
+      // processes, so the part often registers it under a DIFFERENT process_code than the
+      // one this SDS is generated for — `tools` was filtered to the selected process_code,
+      // so that slot fell through here with a blank Tool No. Recover its REAL part-specific
+      // Tool No from the part's FULL process plan (every process_code) by DWG family before
+      // the name-only fallback, so e.g. KS-400B5/B6 show 4800-42-0293 instead of a blank.
+      const planAll = searchData.process_plan || [];
+      const planMatchNo = (family) => {
+        const hit = planAll.find(t => {
+          const d = t.tool_dwg_no;
+          return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
+        });
+        return hit || null;
+      };
+
+      // Part-number-selected fixtures (e.g. ROTARY DRESSER 4800-42 on KS-400B5/B6) have NO
+      // dimensional formula — the engineering TOOLING LIST picks them by the workpiece part
+      // number. tooling_partno_map holds that Part No → DWG lookup (seeded from the xlsx). It
+      // is the AUTHORITATIVE selection, so it wins over the process-plan fallback. Prefer a
+      // non-forbidden (非使用禁止) mapping via the ORDER BY.
+      let partNoRows = [];
+      if (searchData.parts_no) {
+        try {
+          partNoRows = (await engPool.query(
+            `SELECT tool_dwg_no, tooling_name FROM ${TABLES.TOOLING_PARTNO_MAP}
+             WHERE machine_name = $1 AND parts_no = $2
+             ORDER BY is_forbidden ASC, tool_dwg_no ASC`,
+            [machine_type_name, searchData.parts_no]
+          )).rows;
+        } catch (_) { /* part-no map is optional — fall back to plan / name-only */ }
+      }
+      const partNoMatchNo = (family) => partNoRows.find(r => {
+        // Stored as DD#### — convert to the full 4800-42 form so it matches the config family.
+        const d = toDwg(r.tool_dwg_no);
+        return d && (d === family || d.startsWith(`${family}-`) || family.startsWith(`${d}-`));
+      }) || null;
+
+      const families = [...new Set(emptyCfg.map(r => r.tool_drawing_no))];
+      const nameByFamily = {};
+      try {
+        const nr = await maqPool.query(
+          `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING}
+           WHERE ${families.map((_, i) => `tool_dwg_no LIKE $${i + 1}`).join(' OR ')}`,
+          families.map(f => `${f}%`)
+        );
+        const isAscii = (s) => /^[\x00-\x7F]+$/.test(s);
+        for (const row of nr.rows) {
+          if (!row.tool_name) continue;
+          const fam = families.find(f => row.tool_dwg_no === f || row.tool_dwg_no.startsWith(`${f}-`));
+          if (!fam) continue;
+          // Prefer an ASCII/English name over a Japanese one when both exist for the family.
+          if (!nameByFamily[fam] || (!isAscii(nameByFamily[fam]) && isAscii(row.tool_name))) {
+            nameByFamily[fam] = row.tool_name;
+          }
+        }
+      } catch (_) { /* name resolution is best-effort — slot still lists the fixture */ }
+      for (const r of emptyCfg) {
+        const slot = parseInt(r.tool_number.slice(1), 10);
+        // Part No map (authoritative) → full process plan (any process_code) → name-only blank.
+        const fromMap = partNoMatchNo(r.tool_drawing_no);
+        const fromPlan = fromMap ? null : planMatchNo(r.tool_drawing_no);
+        const dwg = fromMap ? fromMap.tool_dwg_no : (fromPlan ? fromPlan.tool_dwg_no : '');
+        const name = (fromMap && fromMap.tooling_name)
+          || (fromPlan && fromPlan.tool_name)
+          || nameByFamily[r.tool_drawing_no] || '';
+        slotData[slot - 1] = {
+          tool_name: name,
+          tool_dwg_no: dwg,          // '' only when neither map nor plan has this fixture for the part
+          fromTs: false,
+          fromConfig: true,
+        };
+      }
     }
   }
 
@@ -216,11 +382,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   for (let i = 0; i < 20; i++) {
     const slot = `T${String(i + 1).padStart(2, '0')}`;
     const s = slotData[i];
+    // The rotary diamond dresser (4800-42 family) is PRINTED in its DD#### form regardless of
+    // source (Part No map already stores DD; a factory-plan 4800-42-XXXX is converted) so the
+    // sheet is consistent. toDD is a no-op for every other tool. cleanDwg keeps the full
+    // 4800-42 form for the tooling-image lookup.
+    const printDwg = s ? toDD(s.tool_dwg_no) : '';
     finalTools.push({
       slot,
       name: s ? s.tool_name : '',
-      dwg: s ? (s.fromTs ? `${s.tool_dwg_no} *` : s.tool_dwg_no) : '',
-      cleanDwg: s ? s.tool_dwg_no : null
+      dwg: s ? (s.fromTs ? `${printDwg} *` : printDwg) : '',
+      cleanDwg: s ? toDwg(s.tool_dwg_no) : null
     });
   }
   map['tooling'] = finalTools;
@@ -242,21 +413,33 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // Images — only fetch the rows we might match (stored tool_dwg_no can be a
   // prefix of the full dwg, so include every cumulative prefix as a candidate)
   // instead of loading the entire image-BLOB table on every render.
+  // A DWG-specific image always wins; a NAME-keyed image (tool_dwg_no = 'NAME:<TOOL>')
+  // is a fallback shared by every slot with that tool name regardless of band/dwg —
+  // so MSB fixtures (BASE / COLLET / COLLET ARBOR / COLLAR) need ONE image each, not
+  // one per bore-ID band (their full dwgs differ per band: 4547-01-{band}-{comp}).
   const dwgNos = slotData.slice(0, 20).map(s => s?.tool_dwg_no).filter(Boolean);
-  if (dwgNos.length) {
-    const dwgCandidates = new Set();
+  const slotNames = map.tooling.map(t => t.name).filter(Boolean);
+  if (dwgNos.length || slotNames.length) {
+    const candidates = new Set();
     for (const d of dwgNos) {
-      dwgCandidates.add(d);
+      candidates.add(d);
       const parts = String(d).split('-');
-      for (let i = 1; i < parts.length; i++) dwgCandidates.add(parts.slice(0, i).join('-'));
+      for (let i = 1; i < parts.length; i++) candidates.add(parts.slice(0, i).join('-'));
     }
+    for (const n of slotNames) candidates.add(NAME_IMG_KEY(n));
     const allImgRows = await engPool.query(
       `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
-      [[...dwgCandidates]]
+      [[...candidates]]
     );
     for (const tool of map.tooling) {
-        if (!tool.cleanDwg) continue;
-        const img = allImgRows.rows.find(i => tool.cleanDwg === i.tool_dwg_no || tool.cleanDwg.startsWith(i.tool_dwg_no + '-'));
+        // 1) DWG-specific image (exact or family-prefix). 2) name-keyed fallback.
+        let img = tool.cleanDwg
+          ? allImgRows.rows.find(i => tool.cleanDwg === i.tool_dwg_no || tool.cleanDwg.startsWith(i.tool_dwg_no + '-'))
+          : null;
+        if (!img && tool.name) {
+          const nk = NAME_IMG_KEY(tool.name);
+          img = allImgRows.rows.find(i => i.tool_dwg_no === nk);
+        }
         if (img) tool.image = `data:${img.mime_type};base64,${img.image_data.toString('base64')}`;
     }
   }
@@ -589,14 +772,35 @@ function applyDataToGrid(grid, valueMap, mappings) {
     if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
   };
 
-  // 1) Mapped scalar fields (skip image objects)
+  // Resolve a cell to the top-left ("master") of any merge that covers it. Only the
+  // master cell of a merged region renders; a value written to a covered cell is hidden.
+  const mergeMaster = (r, c) => {
+    const mg = (grid.merges || []).find((m) => r >= m.r1 && r <= m.r2 && c >= m.c1 && c <= m.c2);
+    return mg ? { r: mg.r1, c: mg.c1 } : { r, c };
+  };
+
+  // 1) Mapped scalar fields (skip image objects). Fields whose mapped cells fall inside
+  //    the SAME merged region are routed to the merge master and concatenated in column
+  //    order — so e.g. the single PROCESS cell (Z3:AF3) shows "<process_code> <process_name>"
+  //    even though process_name maps to AC3, which is hidden under the Z3 merge.
+  const scalarBuckets = new Map(); // "masterR,masterC" -> [{ c, v }]
   for (const { cell_address, param_key } of mappings) {
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
     if (!m) continue;
     let val = valueMap[param_key];
     if (val == null) val = params[param_key];
-    if (val && typeof val === 'object') continue; // images handled elsewhere
-    setCell(+m[2] - 1, colLettersToIndex(m[1]), val);
+    if (val == null || val === '') continue;
+    if (typeof val === 'object') continue; // images handled elsewhere
+    const r = +m[2] - 1, c = colLettersToIndex(m[1]);
+    const master = mergeMaster(r, c);
+    const key = `${master.r},${master.c}`;
+    if (!scalarBuckets.has(key)) scalarBuckets.set(key, []);
+    scalarBuckets.get(key).push({ c, v: String(val) });
+  }
+  for (const [key, items] of scalarBuckets) {
+    const [r, c] = key.split(',').map(Number);
+    items.sort((a, b) => a.c - b.c);
+    setCell(r, c, items.map((it) => it.v).join(' '));
   }
 
   // 2) Parameter table (A:I) + GW section (AN:AV) straight from row_N_COL keys
@@ -651,36 +855,43 @@ function applyDataToGrid(grid, valueMap, mappings) {
  *    per-CN data into the designed grid (Approach B — grid drives the SDS PDF).
  *  ?debug=html returns the raw HTML instead of a PDF.
  */
+// Core of the grid SDS PDF: builds the print-ready HTML for a given CN/machine/process
+// (or the blank/override design preview). Shared by the authenticated route below and
+// the public cross-system link endpoint (sdsPublicController) so both render identically.
+async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name }) {
+  let grid = null;
+  if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
+  if (!grid) {
+    const r = await engPool.query(
+      `SELECT config_value FROM sds_template_css_config WHERE config_key = 'grid-layout' LIMIT 1`
+    );
+    if (r.rows[0]?.config_value) { try { grid = JSON.parse(r.rows[0].config_value); } catch (_) {} }
+  }
+  if (!grid || typeof grid !== 'object') grid = { rows: 56, cols: 20, borders: {}, fills: {} };
+
+  // Production mode: fill the designed grid with real CN data via cell addresses
+  if (cn && machine_type_name) {
+    const searchData = await getSearchData(cn.trim());
+    const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool, display_name?.trim() || null);
+    const mq = await engPool.query(
+      `SELECT cell_address, param_key FROM ${TABLES.SDS_EXCEL_MAPPING}
+       WHERE machine_type_name = $1 OR machine_type_name IS NULL
+       ORDER BY (machine_type_name IS NULL) DESC`,
+      [machine_type_name.trim()]
+    );
+    const merged = {};
+    for (const row of mq.rows) merged[row.cell_address] = row.param_key; // machine-specific (later) wins
+    const mappings = Object.entries(merged).map(([cell_address, param_key]) => ({ cell_address, param_key }));
+    grid = applyDataToGrid(grid, valueMap, mappings);
+  }
+
+  return buildGridPdfHtml(grid);
+}
+
 router.get('/pdf-chrome/grid', async (req, res) => {
   const { gridOverride, debug, cn, machine_type_name, process_code, display_name } = req.query;
   try {
-    let grid = null;
-    if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
-    if (!grid) {
-      const r = await engPool.query(
-        `SELECT config_value FROM sds_template_css_config WHERE config_key = 'grid-layout' LIMIT 1`
-      );
-      if (r.rows[0]?.config_value) { try { grid = JSON.parse(r.rows[0].config_value); } catch (_) {} }
-    }
-    if (!grid || typeof grid !== 'object') grid = { rows: 56, cols: 20, borders: {}, fills: {} };
-
-    // Production mode: fill the designed grid with real CN data via cell addresses
-    if (cn && machine_type_name) {
-      const searchData = await getSearchData(cn.trim());
-      const valueMap = await buildValueMap(searchData, machine_type_name.trim(), process_code?.trim() || null, engPool, display_name?.trim() || null);
-      const mq = await engPool.query(
-        `SELECT cell_address, param_key FROM ${TABLES.SDS_EXCEL_MAPPING}
-         WHERE machine_type_name = $1 OR machine_type_name IS NULL
-         ORDER BY (machine_type_name IS NULL) DESC`,
-        [machine_type_name.trim()]
-      );
-      const merged = {};
-      for (const row of mq.rows) merged[row.cell_address] = row.param_key; // machine-specific (later) wins
-      const mappings = Object.entries(merged).map(([cell_address, param_key]) => ({ cell_address, param_key }));
-      grid = applyDataToGrid(grid, valueMap, mappings);
-    }
-
-    const html = buildGridPdfHtml(grid);
+    const html = await buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name });
     if (debug === 'html') return res.send(html);
 
     const pdfBuffer = await renderPdf(html, { margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' } });
@@ -912,3 +1123,6 @@ router.get('/pdf-chrome', async (req, res) => {
 router.flushCssCache = () => { _cssCache = null; _cssCacheAt = 0; };
 
 module.exports = router;
+// Reused by sdsPublicController (the cross-system public PDF link endpoint).
+module.exports.buildGridHtmlForRequest = buildGridHtmlForRequest;
+module.exports.renderPdf = renderPdf;
