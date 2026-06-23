@@ -721,7 +721,6 @@ const PdfEditorTool = () => {
                 usedToolsRef={usedToolsRef}
                 canvasWrapperRef={canvasWrapperRef}
                 pdfDoc={pdfDoc}
-                onClosePdf={closePdf}
             />
 
             {/* ── Mode-Specific Toolbar ── */}

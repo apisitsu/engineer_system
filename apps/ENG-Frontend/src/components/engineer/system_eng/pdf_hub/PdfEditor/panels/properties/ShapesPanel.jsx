@@ -1,13 +1,30 @@
-import React from 'react';
-import { ColorPicker, InputNumber, Divider, Select, Slider, Switch } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { ColorPicker, InputNumber, Divider, Select, Slider, Switch, Input } from 'antd';
 import { useTheme } from '../../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../../stores/usePdfEditorStore';
 import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
 
-export default function ShapesPanel() {
+export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
     const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
+
+    const isTextSelected = store.selectedObjectProps?.type === 'i-text' || store.selectedObjectProps?.type === 'textbox' || store.selectedObjectProps?.type === 'text';
+    const isTextMode = store.activeTool === 'addText' || isTextSelected;
+
+    const [textContent, setTextContent] = useState('');
+
+    useEffect(() => {
+        if (isTextSelected && store.selectedObjectProps?.text !== undefined) {
+            setTextContent(store.selectedObjectProps.text);
+        }
+    }, [isTextSelected, store.selectedObjectProps?.text, store.selectedObjectId]);
+
+    const handleTextChange = (e) => {
+        const val = e.target.value;
+        setTextContent(val);
+        store.updateSelectedTextContent(val, fabricCanvasRefs, currentPage);
+    };
 
     return (
         <div className="pdf-ws-right-panel" style={{
@@ -27,33 +44,33 @@ export default function ShapesPanel() {
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #3498db', borderRadius: 4,
-                                    background: currentSettings.strokeColor === '#3498db' ? '#3498db' : 'transparent',
-                                    color: currentSettings.strokeColor === '#3498db' ? '#fff' : '#3498db',
+                                    background: store.currentDwgRole === 'drawer' ? '#3498db' : 'transparent',
+                                    color: store.currentDwgRole === 'drawer' ? '#fff' : '#3498db',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setStrokeColor('#3498db'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('drawer', '#3498db'); store.setFillColor('transparent'); }}
                             >
                                 Drawer
                             </button>
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #e74c3c', borderRadius: 4,
-                                    background: currentSettings.strokeColor === '#e74c3c' ? '#e74c3c' : 'transparent',
-                                    color: currentSettings.strokeColor === '#e74c3c' ? '#fff' : '#e74c3c',
+                                    background: store.currentDwgRole === 'checker' ? '#e74c3c' : 'transparent',
+                                    color: store.currentDwgRole === 'checker' ? '#fff' : '#e74c3c',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setStrokeColor('#e74c3c'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('checker', '#e74c3c'); store.setFillColor('transparent'); }}
                             >
                                 Checker
                             </button>
                             <button
                                 style={{
                                     flex: 1, padding: '6px 0', border: '1px solid #000000', borderRadius: 4,
-                                    background: currentSettings.strokeColor === '#000000' ? '#000000' : 'transparent',
-                                    color: currentSettings.strokeColor === '#000000' ? '#fff' : '#000000',
+                                    background: store.currentDwgRole === 'approver' ? '#000000' : 'transparent',
+                                    color: store.currentDwgRole === 'approver' ? '#fff' : '#000000',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setStrokeColor('#000000'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('approver', '#000000'); store.setFillColor('transparent'); }}
                             >
                                 Approver
                             </button>
@@ -67,45 +84,92 @@ export default function ShapesPanel() {
                     </div>
                 ) : (
                     <>
-                        <div className="pdf-ws-prop-section">
-                            <SectionTitle>Stroke</SectionTitle>
-                            <PropRow label="Color">
-                                <ColorPicker
-                                    value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
-                                    onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
-                                    size="small"
-                                    allowClear
-                                    presets={COLOR_PRESETS}
-                                />
-                            </PropRow>
-                            <PropRow label="Width">
-                                <InputNumber
-                                    min={1} max={20} value={currentSettings.strokeWidth}
-                                    onChange={store.setStrokeWidth}
-                                    size="small" style={{ width: 60 }}
-                                />
-                            </PropRow>
-                            <PropRow label="Symbol Size">
-                                <InputNumber
-                                    min={8} max={72} value={currentSettings.fontSize}
-                                    onChange={store.setFontSize}
-                                    size="small" style={{ width: 60 }}
-                                />
-                            </PropRow>
-                        </div>
+                        {isTextMode ? (
+                            <div className="pdf-ws-prop-section">
+                                <SectionTitle>Text Properties</SectionTitle>
+                                {isTextSelected && (
+                                    <div style={{ marginBottom: 16 }}>
+                                        <div style={{ fontSize: 12, marginBottom: 4, color: theme.colors.textSecondary }}>Edit Text Content</div>
+                                        <Input.TextArea 
+                                            value={textContent}
+                                            onChange={handleTextChange}
+                                            autoSize={{ minRows: 2, maxRows: 6 }}
+                                        />
+                                    </div>
+                                )}
+                                <PropRow label="Text Color">
+                                    <ColorPicker
+                                        value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
+                                        onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
+                                        size="small"
+                                        allowClear
+                                        presets={COLOR_PRESETS}
+                                    />
+                                </PropRow>
+                                <PropRow label="Font Size">
+                                    <InputNumber
+                                        min={8} max={120} value={currentSettings.fontSize}
+                                        onChange={store.setFontSize}
+                                        size="small" style={{ width: 60 }}
+                                    />
+                                </PropRow>
+                                <PropRow label="Font Family">
+                                    <Select
+                                        value={currentSettings.fontFamily || 'Helvetica'}
+                                        onChange={store.setFontFamily}
+                                        size="small" style={{ width: 100 }}
+                                        options={[
+                                            { value: 'Helvetica', label: 'Helvetica' },
+                                            { value: 'Arial', label: 'Arial' },
+                                            { value: 'Times New Roman', label: 'Times' },
+                                            { value: 'Courier', label: 'Courier' },
+                                        ]}
+                                    />
+                                </PropRow>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="pdf-ws-prop-section">
+                                    <SectionTitle>Stroke</SectionTitle>
+                                    <PropRow label="Color">
+                                        <ColorPicker
+                                            value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
+                                            onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
+                                            size="small"
+                                            allowClear
+                                            presets={COLOR_PRESETS}
+                                        />
+                                    </PropRow>
+                                    <PropRow label="Width">
+                                        <InputNumber
+                                            min={1} max={20} value={currentSettings.strokeWidth}
+                                            onChange={store.setStrokeWidth}
+                                            size="small" style={{ width: 60 }}
+                                        />
+                                    </PropRow>
+                                    <PropRow label="Symbol Size">
+                                        <InputNumber
+                                            min={8} max={72} value={currentSettings.fontSize}
+                                            onChange={store.setFontSize}
+                                            size="small" style={{ width: 60 }}
+                                        />
+                                    </PropRow>
+                                </div>
 
-                        <div className="pdf-ws-prop-section">
-                            <SectionTitle>Fill</SectionTitle>
-                            <PropRow label="Color">
-                                <ColorPicker
-                                    value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
-                                    onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
-                                    size="small"
-                                    allowClear
-                                    presets={COLOR_PRESETS}
-                                />
-                            </PropRow>
-                        </div>
+                                <div className="pdf-ws-prop-section">
+                                    <SectionTitle>Fill</SectionTitle>
+                                    <PropRow label="Color">
+                                        <ColorPicker
+                                            value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
+                                            onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
+                                            size="small"
+                                            allowClear
+                                            presets={COLOR_PRESETS}
+                                        />
+                                    </PropRow>
+                                </div>
+                            </>
+                        )}
 
                         <div className="pdf-ws-prop-section">
                             <SectionTitle>Opacity</SectionTitle>
