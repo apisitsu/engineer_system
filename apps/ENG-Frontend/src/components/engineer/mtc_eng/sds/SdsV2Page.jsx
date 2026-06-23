@@ -93,7 +93,8 @@ const SdsV2Page = () => {
   const navigate = useNavigate();
   const userRole = useAuthStore(state => state.userRole);
   const userDepartment = useAuthStore(state => state.userDepartment);
-  const isAdmin = userRole === 'AD' || userDepartment === 'AD';
+  const userPerms = useAuthStore(state => state.userPerms);
+  const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);

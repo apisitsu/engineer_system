@@ -11,6 +11,10 @@ const generateToken = (user) => {
         department: user.u_department || user.department || null,
         group: user.user_group || user.group || null,
         role: user.u_role || user.role,
+        // Granular feature permissions (e.g. ['tooling_admin','sds_admin']) — let a
+        // non-AD user administer one section. Checked by hasFeature() middleware.
+        perms: Array.isArray(user.perms) ? user.perms
+             : (Array.isArray(user.feature_perms) ? user.feature_perms : []),
     };
 
     // Calculate expiration: Min(Now + 2 hours, Midnight of current day)

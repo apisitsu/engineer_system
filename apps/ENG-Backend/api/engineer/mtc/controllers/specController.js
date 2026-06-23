@@ -7,7 +7,9 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { TABLES } = require('../mtcConstants');
 const cache = require('../services/agents/CacheAgent');
 const invalidateCache = (cn) => cache.invalidate(`tooling:${String(cn).trim().toUpperCase()}`);
-const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
+// Part-spec management is part of the Tooling Select admin surface.
+const isAdmin = hasFeature('tooling_admin');
 const { searchByCn } = require('../services/sdsV2SearchService');
 
 // ── Body-specific column list ─────────────────────────────────────────────────

@@ -10,9 +10,10 @@
  *   RACE PUSHER (4560-18): pushes the work through the grinding gap.
  *     DWG dims: A(col E)=pusher OD, B(F)=ID, C(G)=c'bore depth, D(H)=notch depth,
  *     E(I)=inner chamfer, F(J)=note, G(K)=notch width, H(L)=notch pos.
- *     AUTHORITATIVE DWG FORMULA (confirmed by SME 2026-06-11):
- *       A = largest 0.5-step value ≤ OD−1  →  floor05(OD − 1)
+ *     AUTHORITATIVE WORKBOOK FORMULA (xlsx RACE PUSHER sheet I12, re-audited 2026-06-21):
+ *       A = OD − 0.5  (pusher OD is 0.5 under the work OD; I13/I14: pusher OD must be < work OD)
  *       B = integer ≤ A−3                   →  floor(A − 3)
+ *       (Was floor05(OD−1) — undershot the factory pusher by ~0.5; top-1 22%→70% after fix.)
  *       C = (BW−SW)/2 + 0.5  (TYPE.1 bar only; pipe/Race/Sleeve = None)  ← design-time
  *       D = round(A×0.3) for 12≤A<40 (THAI/BOTH); 12 for A≥40; None for MTD & A<12  ← needs destination
  *       E = 0.5 (basic);  F = note text;  G = 12 if D else None;  H = 25 if D else None
@@ -25,9 +26,10 @@
  *
  *   SET PIN (4560-21): centerless SETTING GAUGE pin — its diameter equals the
  *     work OUTER diameter (used to set the regulating-wheel gap), NOT the bore.
- *     DIM A (col C) = pin dia (rounded to 3rd decimal). Formula: A = OD before grind
- *     = if(odBf>0, odBf, OD). (Was wrongly A = ID; e.g. CN 614033 od_bf=14.47 →
- *     correct pin 4560-21-0044 dim_a=14.42, but id_aft=11.15 gave the wrong pin.)
+ *     DIM A (col C) = pin dia (rounded to 3rd decimal). Formula (re-audited 2026-06-21):
+ *     A = roundN(OD + 0.1, 3) — the gauge dia = finished OD + grind stock (pin−od_aft is
+ *     centered on +0.1; 97.3% within ±0.15). (Was if(odBf>0,odBf,OD)=od_aft → 0.1 low →
+ *     ranking picked the neighbour; top-1 17%→93% after fix.)
  *     Search: dim_a within ±0.15 of work OD. 218 rows imported; two deprecated
  *     entries excluded (4560-21-0154: "use 0015", 4560-21-0163: "prohibited").
  *
@@ -55,12 +57,16 @@ const LIMITS = [
   { input_var: 'OD', min_value: 3,  max_value: 85, min_inclusive: true, max_inclusive: true },
 ];
 
+// RACE PUSHER A and SET PIN A corrected 2026-06-21 to match the workbook + factory plan
+// (see db_migrations/20260621_fix_oc16a_pusher_setpin_formulas.js):
+//   RACE PUSHER A = OD − 0.5   (xlsx I12 "A = OD−0.5"; pusher OD < work OD). top-1 22%→70%.
+//   SET PIN     A = OD + 0.1   (setting gauge = finished OD + grind stock; xlsx "round 3rd dec"). 17%→93%.
 const FORMULAS = {
   'RACE PUSHER': [
-    { key: 'A', expr: 'floor05(OD - 1)' },  // pusher OD: largest 0.5-step ≤ OD−1 (DWG)
+    { key: 'A', expr: 'OD - 0.5' },         // pusher OD = work OD − 0.5 (xlsx RACE PUSHER I12)
     { key: 'B', expr: 'floor(A - 3)' },     // pusher ID: integer ≤ A−3 (display; follows A)
   ],
-  'SET PIN':     [{ key: 'A', expr: 'if(odBf > 0, odBf, OD)' }],  // setting-gauge pin dia = work OD (before grind, od_aft fallback)
+  'SET PIN':     [{ key: 'A', expr: 'roundN(OD + 0.1, 3)' }],  // setting-gauge pin dia = finished OD + grind stock (~0.1)
 };
 
 // [output_key, inventory_col, tol_plus, tol_minus, is_match_dim, label]

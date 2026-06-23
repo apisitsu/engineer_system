@@ -8,6 +8,7 @@ export const useAuthStore = create((set) => ({
   userRole: localStorage.getItem(key_constance.ROLE) || "",
   userSection: localStorage.getItem(key_constance.USER_SECTION) || "",
   userAuth: localStorage.getItem(key_constance.USER_AUTH) || "",
+  userPerms: JSON.parse(localStorage.getItem(key_constance.USER_PERMS) || "[]"),
   userName: localStorage.getItem(key_constance.USER_NAME) || "",
   userInfo: JSON.parse(localStorage.getItem(key_constance.USER_INFO) || "{}"),
   empNo: localStorage.getItem(key_constance.USER_EMPNO) || "",
@@ -33,6 +34,7 @@ export const useAuthStore = create((set) => ({
     localStorage.setItem(key_constance.USER_DEPARTMENT, userData.department || "");
     localStorage.setItem(key_constance.USER_SECTION, userData.section || "");
     localStorage.setItem(key_constance.USER_AUTH, userData.auth || "");
+    localStorage.setItem(key_constance.USER_PERMS, JSON.stringify(userData.perms || []));
     localStorage.setItem(key_constance.USER_NAME, userData.name || "");
     localStorage.setItem(key_constance.USER_EMPNO, userData.empNo || "");
     localStorage.setItem(key_constance.USER_INFO, JSON.stringify(userData.info || {}));
@@ -44,6 +46,7 @@ export const useAuthStore = create((set) => ({
       userDepartment: userData.department || "",
       userSection: userData.section || "",
       userAuth: userData.auth || "",
+      userPerms: userData.perms || [],
       userName: userData.name || "",
       empNo: userData.empNo || "",
       userInfo: userData.info || {}
@@ -72,6 +75,7 @@ export const useAuthStore = create((set) => ({
       userDepartment: "",
       userSection: "",
       userAuth: "",
+      userPerms: [],
       userName: "",
       empNo: "",
       userInfo: {}

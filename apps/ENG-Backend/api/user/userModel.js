@@ -69,7 +69,8 @@ const LoginUser = async (req, res) => {
                 ...user,
                 u_department: userInfo?.u_department || null,
                 user_group: userInfo?.user_group || null,
-                u_role: userInfo?.role || user.u_role || 'ENG' // Prefer role from profile if set
+                u_role: userInfo?.role || user.u_role || 'ENG', // Prefer role from profile if set
+                perms: userInfo?.feature_perms || [] // granular feature permissions → JWT
             };
 
             const tokenData = generateToken(tokenPayload);
@@ -81,6 +82,7 @@ const LoginUser = async (req, res) => {
                 group: tokenPayload.user_group,
                 role: tokenPayload.u_role,
                 department: tokenPayload.u_department,
+                perms: userInfo?.feature_perms || [],
                 secondauth: user.permission_set,
                 message: 'เข้าสู่ระบบสำเร็จ',
                 userInfo: userInfo || {},
@@ -279,7 +281,8 @@ const RefreshToken = async (req, res) => {
             u_name: decoded.name,
             u_department: decoded.department,
             user_group: decoded.group,
-            u_role: decoded.role
+            u_role: decoded.role,
+            perms: decoded.perms || []
         });
 
         return res.json({

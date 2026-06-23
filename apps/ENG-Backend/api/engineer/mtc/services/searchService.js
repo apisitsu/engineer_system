@@ -94,6 +94,13 @@ function buildSpecContext(spec) {
     // grip mode from this (N-chuck classes 23/25/26/41/42/61/63 → 4030-01; ID-chuck
     // classes 62/64/69 → 4030-02) instead of the manually-set `type` column.
     cnPrefix: parseInt(String(spec.cn ?? '').slice(0, 2), 10) || 0,
+
+    // MSB surface-grinder COLLET variant: the 2MSB48-605~607-T races take a THAI-plant
+    // COLLET (4547-01-0039-01) while sharing the 0030 base/arbor/collar (per
+    // MSB_SURFACE-GRINDING_TOOLING xlsx). It has the SAME bore as the 0030 family, so
+    // bore ID can't tell them apart → gate on parts_no. PSG-64/GS-64PFII COLLET formula
+    // emits this as output_key B against the tooling_psg64 dim_b discriminator (1 = 0039).
+    isThaiMsb48Collet: flag(/^2MSB48-60[567]/.test(str(spec.pn))),
   };
 }
 

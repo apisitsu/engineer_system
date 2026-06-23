@@ -66,7 +66,15 @@ describe('tselectToolsForMachine', () => {
 });
 
 describe('safeSearch caching', () => {
-  beforeEach(() => searchService.search.mockReset());
+  // safeSearch persists results to the tselect_cn_cache DB table (survives restarts),
+  // so without clearing it a prior run's rows would be served on the next run and the
+  // searchService mock would never be called. clearPersisted() resets both the
+  // in-memory Map and the DB rows, keeping each test hermetic.
+  beforeEach(async () => {
+    searchService.search.mockReset();
+    await fallback.clearPersisted();
+  });
+  afterAll(() => fallback.clearPersisted());
 
   it('does NOT cache a thrown (transient) error — the next call retries', async () => {
     searchService.search

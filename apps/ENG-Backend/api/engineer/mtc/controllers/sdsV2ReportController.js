@@ -5,7 +5,9 @@ const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
 const cnFormat = require('../utils/cnFormat');
-const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
+// SDS coverage-report config is part of the SDS admin surface.
+const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
 
