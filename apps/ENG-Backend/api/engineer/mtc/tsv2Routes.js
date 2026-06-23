@@ -2,7 +2,10 @@
 
 const express = require('express');
 const router  = express.Router();
-const { isAdmin } = require('../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../middleware/mtcAuth');
+// Tooling Select admin mutations: full 'AD' admin OR a user holding the
+// 'tooling_admin' feature permission (granular, non-AD). See hasFeature().
+const isAdmin = hasFeature('tooling_admin');
 
 const machineCtrl     = require('./controllers/machineController');
 const limitCtrl       = require('./controllers/limitController');

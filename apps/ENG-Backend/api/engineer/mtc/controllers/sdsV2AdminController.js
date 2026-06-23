@@ -3,7 +3,10 @@ const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
-const { isAdmin } = require('../../../../middleware/mtcAuth');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
+// SDS admin mutations: full 'AD' admin OR a user holding the 'sds_admin'
+// feature permission (granular, non-AD). See hasFeature().
+const isAdmin = hasFeature('sds_admin');
 const cache = require('../services/agents/CacheAgent');
 const { invalidateCoverageCache } = require('./sdsV2ReportController');
 

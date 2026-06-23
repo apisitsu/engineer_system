@@ -217,6 +217,7 @@ export const key_constance = {
   USER_DEPARTMENT: "USER_DEPARTMENT",
   USER_SECTION: "USER_SECTION",
   USER_AUTH: "USER_AUTH",
+  USER_PERMS: "USER_PERMS",
 };
 
 export const color = {
