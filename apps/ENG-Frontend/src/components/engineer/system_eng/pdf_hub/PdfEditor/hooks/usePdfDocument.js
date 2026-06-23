@@ -76,7 +76,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     finalBytes = new Uint8Array(res.data);
                     
                     doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
-                    libDoc = await PDFDocument.load(finalBytes); 
+                    libDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true }); 
                     message.success('PDF unlocked successfully via backend!');
                 } catch (unlockErr) {
                     console.error('Failed to unlock PDF:', unlockErr);

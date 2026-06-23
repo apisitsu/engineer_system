@@ -79,8 +79,7 @@ const EditorCanvas = ({
 
         fabricCanvasRefs.current[pageNum] = canvas;
 
-        // ── Object selection events ──
-        canvas.on('selection:created', (e) => {
+        const handleSelection = (e) => {
             const obj = e.selected?.[0];
             if (obj) {
                 store.setSelectedObject(obj.id || obj.__uid, {
@@ -94,46 +93,41 @@ const EditorCanvas = ({
                     text: obj.text,
                     customData: obj.customData,
                 });
+
+                // Sync back to global store to update PropertiesPanel
+                const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text';
+                const isStamp = obj.customData?.type && obj.customData.type.startsWith('stamp');
                 
-                // Sync back to global store to update PropertiesPanel
-                if (obj.stroke) store.setStrokeColor(obj.stroke);
-                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
-                    // Stamps often have transparent fill
-                    store.setFillColor(obj.fill);
+                if (isText) {
+                    if (obj.fill) store.setStrokeColor(obj.fill);
+                } else if (isStamp) {
+                    if (obj.type === 'group') {
+                        let mainColor = '#e74c3c';
+                        obj.getObjects().forEach(child => {
+                           if(child.stroke) mainColor = child.stroke; 
+                           else if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') mainColor = child.fill;
+                        });
+                        store.setStrokeColor(mainColor);
+                    } else {
+                        if (obj.stroke) store.setStrokeColor(obj.stroke);
+                        else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') store.setStrokeColor(obj.fill);
+                    }
+                } else {
+                    if (obj.stroke) store.setStrokeColor(obj.stroke);
+                    if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                        store.setFillColor(obj.fill);
+                    }
                 }
+                
                 if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
                 if (obj.fontSize) store.setFontSize(obj.fontSize);
                 if (obj.opacity) store.setOpacity(obj.opacity);
                 if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
             }
-        });
+        };
 
-        canvas.on('selection:updated', (e) => {
-            const obj = e.selected?.[0];
-            if (obj) {
-                store.setSelectedObject(obj.id || obj.__uid, {
-                    type: obj.type,
-                    fill: obj.fill,
-                    stroke: obj.stroke,
-                    strokeWidth: obj.strokeWidth,
-                    opacity: obj.opacity,
-                    fontSize: obj.fontSize,
-                    fontFamily: obj.fontFamily,
-                    text: obj.text,
-                    customData: obj.customData,
-                });
-
-                // Sync back to global store to update PropertiesPanel
-                if (obj.stroke) store.setStrokeColor(obj.stroke);
-                if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
-                    store.setFillColor(obj.fill);
-                }
-                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
-                if (obj.fontSize) store.setFontSize(obj.fontSize);
-                if (obj.opacity) store.setOpacity(obj.opacity);
-                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
-            }
-        });
+        canvas.on('selection:created', handleSelection);
+        canvas.on('selection:updated', handleSelection);
 
         canvas.on('selection:cleared', () => {
             store.clearSelection();
@@ -433,7 +427,7 @@ const EditorCanvas = ({
                 // --- Color Update ---
                 if (!isSticky) {
                     if (isText) {
-                        if (activeObj.fill !== currentSettings.strokeColor) {
+                        if (currentSettings.strokeColor !== undefined && activeObj.fill !== currentSettings.strokeColor) {
                             activeObj.set('fill', currentSettings.strokeColor);
                             changed = true;
                         }
@@ -441,19 +435,19 @@ const EditorCanvas = ({
                         // Regular shapes
                         if (activeObj.type === 'group') {
                             activeObj.getObjects().forEach(child => {
-                                if (child.stroke) child.set('stroke', currentSettings.strokeColor);
-                                if (child.type === 'triangle' && child.fill) child.set('fill', currentSettings.strokeColor);
+                                if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
+                                if (child.type === 'triangle' && child.fill && currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
                                 if (child.type === 'text' || child.type === 'i-text') {
-                                    child.set('fill', currentSettings.strokeColor);
+                                    if (currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
                                 }
                             });
                             changed = true;
                         } else {
-                            if (activeObj.stroke !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
+                            if (activeObj.stroke !== undefined && currentSettings.strokeColor !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
                                 activeObj.set('stroke', currentSettings.strokeColor);
                                 changed = true;
                             }
-                            if (activeObj.fill !== undefined && activeObj.fill !== currentSettings.fillColor) {
+                            if (activeObj.fill !== undefined && currentSettings.fillColor !== undefined && activeObj.fill !== currentSettings.fillColor) {
                                 activeObj.set('fill', currentSettings.fillColor);
                                 changed = true;
                             }
@@ -462,17 +456,17 @@ const EditorCanvas = ({
                         // Stamps
                         if (activeObj.type === 'group') {
                             activeObj.getObjects().forEach(child => {
-                                if (child.stroke) child.set('stroke', currentSettings.strokeColor);
-                                if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') {
+                                if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
+                                if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff' && currentSettings.strokeColor !== undefined) {
                                     child.set('fill', currentSettings.strokeColor);
                                 }
                             });
                             changed = true;
                         } else {
-                            if (activeObj.fill && activeObj.fill !== 'transparent') {
+                            if (activeObj.fill && activeObj.fill !== 'transparent' && currentSettings.strokeColor !== undefined) {
                                 activeObj.set('fill', currentSettings.strokeColor);
                             }
-                            if (activeObj.stroke) {
+                            if (activeObj.stroke && currentSettings.strokeColor !== undefined) {
                                 activeObj.set('stroke', currentSettings.strokeColor);
                             }
                             changed = true;
@@ -484,13 +478,13 @@ const EditorCanvas = ({
                 if (activeObj.type === 'group' && !isStamp) {
                     activeObj.getObjects().forEach(child => {
                         if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) {
-                            if (child.strokeWidth !== currentSettings.strokeWidth) {
+                            if (currentSettings.strokeWidth !== undefined && child.strokeWidth !== currentSettings.strokeWidth) {
                                 child.set('strokeWidth', currentSettings.strokeWidth);
                                 changed = true;
                             }
                         }
                         if (child.type === 'triangle') {
-                            if (child.width !== currentSettings.fontSize || child.height !== currentSettings.fontSize) {
+                            if (currentSettings.fontSize !== undefined && (child.width !== currentSettings.fontSize || child.height !== currentSettings.fontSize)) {
                                 child.set({ width: currentSettings.fontSize, height: currentSettings.fontSize });
                                 changed = true;
                             }
@@ -500,7 +494,7 @@ const EditorCanvas = ({
                         activeObj.set({ dirty: true });
                         activeObj.setCoords();
                     }
-                } else if (activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== currentSettings.strokeWidth) {
+                } else if (currentSettings.strokeWidth !== undefined && activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== currentSettings.strokeWidth) {
                     if (!isText && !isSticky) {
                         activeObj.set('strokeWidth', currentSettings.strokeWidth);
                         changed = true;
@@ -508,18 +502,18 @@ const EditorCanvas = ({
                 }
 
                 // --- Opacity ---
-                if (activeObj.opacity !== undefined && activeObj.opacity !== currentSettings.opacity) {
+                if (currentSettings.opacity !== undefined && activeObj.opacity !== undefined && activeObj.opacity !== currentSettings.opacity) {
                     activeObj.set('opacity', currentSettings.opacity);
                     changed = true;
                 }
 
                 // --- Font Size (and Stamp Size) ---
                 if (isText || isSticky) {
-                    if (activeObj.fontSize !== currentSettings.fontSize) {
+                    if (currentSettings.fontSize !== undefined && activeObj.fontSize !== currentSettings.fontSize) {
                         activeObj.set('fontSize', currentSettings.fontSize);
                         changed = true;
                     }
-                    if (activeObj.fontFamily !== currentSettings.fontFamily) {
+                    if (currentSettings.fontFamily !== undefined && activeObj.fontFamily !== currentSettings.fontFamily) {
                         activeObj.set('fontFamily', currentSettings.fontFamily);
                         changed = true;
                     }
@@ -527,7 +521,7 @@ const EditorCanvas = ({
                     let textChanged = false;
                     activeObj.getObjects().forEach(child => {
                         if (child.type === 'i-text' || child.type === 'text') {
-                            if (child.fontSize !== currentSettings.fontSize) {
+                            if (currentSettings.fontSize !== undefined && child.fontSize !== currentSettings.fontSize) {
                                 child.set('fontSize', currentSettings.fontSize);
                                 textChanged = true;
                             }
@@ -540,22 +534,24 @@ const EditorCanvas = ({
                     }
                 } else if (isStamp) {
                     // Resize stamps dynamically
-                    if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
-                        activeObj.set('fontSize', currentSettings.fontSize * 2.5);
-                        changed = true;
-                    } else if (activeObj.customData.type === 'stampCircle') {
-                        activeObj.set('radius', currentSettings.fontSize);
-                        changed = true;
-                    } else if (activeObj.customData.type === 'stampOk') {
-                        activeObj.getObjects()[0].set('radius', currentSettings.fontSize * 1.2);
-                        activeObj.getObjects()[1].set('fontSize', currentSettings.fontSize * 1.1);
-                        activeObj.set({ dirty: true });
-                        activeObj.setCoords();
-                        changed = true;
-                    } else if (activeObj.customData.type === 'stampUserDate') {
-                        const scale = (currentSettings.fontSize / 16) * 0.75;
-                        activeObj.set({ scaleX: scale, scaleY: scale });
-                        changed = true;
+                    if (currentSettings.fontSize !== undefined) {
+                        if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
+                            activeObj.set('fontSize', currentSettings.fontSize * 2.5);
+                            changed = true;
+                        } else if (activeObj.customData.type === 'stampCircle') {
+                            activeObj.set('radius', currentSettings.fontSize);
+                            changed = true;
+                        } else if (activeObj.customData.type === 'stampOk') {
+                            activeObj.getObjects()[0].set('radius', currentSettings.fontSize * 1.2);
+                            activeObj.getObjects()[1].set('fontSize', currentSettings.fontSize * 1.1);
+                            activeObj.set({ dirty: true });
+                            activeObj.setCoords();
+                            changed = true;
+                        } else if (activeObj.customData.type === 'stampUserDate') {
+                            const scale = (currentSettings.fontSize / 16) * 0.75;
+                            activeObj.set({ scaleX: scale, scaleY: scale });
+                            changed = true;
+                        }
                     }
                 }
             }

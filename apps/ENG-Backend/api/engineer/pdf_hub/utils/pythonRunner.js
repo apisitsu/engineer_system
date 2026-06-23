@@ -11,7 +11,7 @@ const { execFile } = require('child_process');
  * Windows uses the 'py' launcher, Unix-like systems use 'python3'.
  */
 function getPythonCmd() {
-    if (process.platform === 'win32') return 'py';
+    if (process.platform === 'win32') return 'python';
     return 'python3';
 }
 

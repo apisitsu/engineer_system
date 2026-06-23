@@ -1,8 +1,15 @@
 {
   "tool-request": "2026-06-17",
   "tooling-inspect": "2026-06-14",
+<<<<<<< HEAD
   "tooling-select": "2026-06-19",
   "sds-v2": "2026-06-19",
   "tooling-result-dashboard": "2026-06-14",
   "sds-coverage-report": "2026-06-19"
+=======
+  "tooling-select": "2026-06-17",
+  "sds-v2": "2026-06-16",
+  "tooling-result-dashboard": "2026-06-14",
+  "sds-coverage-report": "2026-06-17"
+>>>>>>> d3f377c (fix: PDF Hub audit findings and fixes)
 }
