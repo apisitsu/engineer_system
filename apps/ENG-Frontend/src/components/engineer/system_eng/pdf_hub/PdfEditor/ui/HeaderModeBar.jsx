@@ -39,8 +39,7 @@ export default function HeaderModeBar({
     onFileUpload,
     usedToolsRef,
     canvasWrapperRef,
-    pdfDoc,
-    onClosePdf
+    pdfDoc
 }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
