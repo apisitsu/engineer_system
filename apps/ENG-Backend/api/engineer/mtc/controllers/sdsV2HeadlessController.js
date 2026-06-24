@@ -694,9 +694,22 @@ function buildGridPdfHtml(grid) {
         a && a.wrap ? 'overflow:hidden' : 'overflow:visible',
       ].filter(Boolean).join(';');
       const sp = span ? `${span.cs > 1 ? ` colspan="${span.cs}"` : ''}${span.rs > 1 ? ` rowspan="${span.rs}"` : ''}` : '';
-      const content = cd && cd.img
-        ? `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;margin:0 auto;">`
-        : escHtml(cd && cd.v);
+      // Image cells: a bare <img max-height:100%> inside a (row-spanned) td has no definite
+      // height to resolve 100% against, so a tall/narrow image stretches the td and grows the
+      // whole row. Wrap it in a div whose height is PINNED to the summed height of the spanned
+      // rows (with overflow:hidden) so the row height stays fixed and the image just contains
+      // itself inside that box.
+      let content;
+      if (cd && cd.img) {
+        const rs = span ? span.rs : 1;
+        let cellHmm = 0;
+        for (let i = r; i < r + rs; i++) cellHmm += (rowH[i] || 0) * scale;
+        content = `<div style="height:${cellHmm.toFixed(3)}mm;width:100%;overflow:hidden;`
+          + `display:flex;align-items:center;justify-content:center;">`
+          + `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"></div>`;
+      } else {
+        content = escHtml(cd && cd.v);
+      }
       body += `<td${sp} style="${st}">${content}</td>`;
     }
     body += '</tr>';

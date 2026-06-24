@@ -27,6 +27,7 @@ const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const headless = require('./sdsV2HeadlessController');
+const cnFormat = require('../utils/cnFormat');
 
 const router = express.Router();
 
@@ -85,9 +86,13 @@ router.get('/sds/pdf', async (req, res) => {
   if (!expected) return res.status(503).json({ error: 'Public SDS PDF link is not configured' });
   if (String(req.query.key || '') !== expected) return res.status(401).json({ error: 'Invalid key' });
 
-  const cn = String(req.query.cn || '').trim();
+  // Accept either the 6-digit item number (e.g. 310368) or a control number (C31-00368) — the
+  // calling team's links use the plain 6-digit form. Normalize to the canonical control-no here
+  // (the public-link boundary) so it works regardless of the downstream search version.
+  const cnRaw = String(req.query.cn || '').trim();
+  const cn = cnFormat.toControlNo(cnRaw) || cnRaw;
   const process_code = String(req.query.process_code || '').trim();
-  if (!cn) return res.status(400).json({ error: 'cn is required' });
+  if (!cnRaw) return res.status(400).json({ error: 'cn is required' });
 
   try {
     // machine_type_name wins if given; otherwise resolve the machine code / WC / group.

@@ -317,6 +317,47 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
   }
 }
 
+// ── Part-number override (hybrid lookup) ─────────────────────────────────────
+//
+// Some tooling is NOT selected by a dimensional formula — it is pinned by the
+// workpiece **part number** (品番 / parts_no). Examples: the KS-400B5/B6 ROTARY
+// DRESSER, and the KS-H70 grinding holder/base/grindstone (the grindstone SIZE
+// the factory actually uses deviates ~40% from any single-dim formula). Those
+// mappings live in `tooling_partno_map (machine_name, tooling_name, parts_no,
+// tool_dwg_no)`. After the formula-driven search runs (it supplies a sensible
+// DEFAULT for parts with no map entry), we overwrite the match with the pinned
+// inventory row whenever the part has a non-forbidden mapping.
+//
+// One indexed query per search, guarded: parts with no map row (every machine
+// that doesn't use the table) get zero rows back → no-op, no behaviour change.
+async function _applyPartnoOverrides(results, machineByDisplay, partsNo) {
+  if (!partsNo) return;
+  const { rows } = await engPool.query(
+    `SELECT machine_name, tooling_name, tool_dwg_no
+       FROM ${TSV2_TABLES.PARTNO_MAP}
+      WHERE parts_no = $1 AND is_forbidden = false`,
+    [partsNo]
+  );
+  if (!rows.length) return;
+
+  const override = {};
+  for (const r of rows) override[`${r.machine_name}||${r.tooling_name}`] = r.tool_dwg_no;
+
+  for (const res of results) {
+    const mcfg = machineByDisplay[res.machine];
+    const machineName = mcfg?.machine_name || res.machine;
+    const dwg = override[`${machineName}||${res.tooling}`];
+    if (!dwg) continue;
+    const table = mcfg?.inventory_table;
+    if (!table) continue;
+    const { rows: inv } = await engPool.query(
+      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+      [dwg]
+    );
+    if (inv.length) { res.matches = inv; res.overrideBy = 'parts_no'; }
+  }
+}
+
 // ── CN Normalization ─────────────────────────────────────────────────────────
 // tooling_spec_process stores CNs in 6-digit format (e.g. '250190').
 // Accept Cxx-0YYYY input and normalize so both formats find the spec.
@@ -425,6 +466,7 @@ async function search(cn, opts = {}) {
     machineByDisplay[m._displayName || m.machine_name] = m;
   }
   await _linkSupportBlockToLoadingChute(results, machineByDisplay);
+  await _applyPartnoOverrides(results, machineByDisplay, spec.pn);
 
   results.sort((a, b) =>
     a.machine.localeCompare(b.machine) || a.tooling.localeCompare(b.tooling)
