@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select, Space,
+  Modal, Select, Space, Tooltip,
 } from 'antd';
 import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
@@ -359,6 +359,12 @@ const SdsV2Page = () => {
   const processHasExpandableContent = (processRow) => {
     const code = String(processRow.process_code || '').trim();
     if ((toolingByCode[processRow.process_code] || []).length > 0) return true;
+    // A Tooling Select similar-part suggestion bound to this process_code (e.g.
+    // KL-20 collet 4030 → 2561 "Trim") makes the row expandable so the suggestion
+    // is reachable even when the part's factory plan lists no tool for it.
+    if ((tsData?.results || []).some(r =>
+      r.overrideBy === 'similar_part' && r.matches?.length &&
+      String(r.similarPart?.process_code || '') === code)) return true;
     // Production history with a resolved grinding machine (machine_type_code) — the
     // machines that actually ran this process. Lets a face/grind row with no factory
     // tooling still expand to show those machines.
@@ -421,7 +427,15 @@ const SdsV2Page = () => {
       for (const result of tsData.results) {
         if (!result.matches?.length) continue;
         const resolvedMachine = resolveMachine(result.machine);
-        const isRelevant = processMachineNames.has(resolvedMachine) ||
+        // Similar-part suggestion: the machine isn't in this part's factory plan
+        // (so the usual relevance checks below fail), but the backend tags the
+        // process_code the suggested tool family runs under. Show it under THAT
+        // process row only (e.g. KL-20 collet 4030 → 2561 "Trim").
+        const isSimilar = result.overrideBy === 'similar_part';
+        const similarHere = isSimilar &&
+          String(result.similarPart?.process_code || '') === String(processRow.process_code);
+        const isRelevant = similarHere ||
+          processMachineNames.has(resolvedMachine) ||
           configMachineNames.has(resolvedMachine) ||
           result.matches.some(m => {
             const no = getMatchNo(m);
@@ -454,6 +468,8 @@ const SdsV2Page = () => {
             _tsM2: m2,
             _tsResult: result,
             _isExtra: true,
+            _isSimilar: isSimilar,
+            _similarPart: isSimilar ? result.similarPart : null,
           });
         }
       }
@@ -566,9 +582,24 @@ const SdsV2Page = () => {
       {
         title: 'Tool Name',
         dataIndex: 'tool_name',
-        render: (v, r) => r._isExtra
-          ? <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>
-          : v,
+        render: (v, r) => {
+          if (!r._isExtra) return v;
+          if (r._isSimilar) {
+            const sp = r._similarPart;
+            return (
+              <Space size={4} wrap>
+                <Tag color="gold" style={{ margin: 0 }}>SIMILAR PART</Tag>
+                <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>
+                {sp && (
+                  <Tooltip title={`อ้างอิงงานคล้าย C/N ${sp.ref_cn}${sp.parts_no ? ` · P/N ${sp.parts_no}` : ''} · ${Number(sp.distance) <= 0.001 ? 'มิติตรงกัน' : `Δ ${Number(sp.distance).toFixed(2)} mm`} — โปรดตรวจสอบก่อนใช้`}>
+                    <Text style={{ fontSize: 11, color: '#ad6800' }}>(อ้างอิง C/N {sp.ref_cn})</Text>
+                  </Tooltip>
+                )}
+              </Space>
+            );
+          }
+          return <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>;
+        },
       },
       ...(tsData ? [
         {
@@ -809,6 +840,7 @@ const SdsV2Page = () => {
                       }}
                     />
                   </Card>
+
                 </>
               )}
             </Spin>

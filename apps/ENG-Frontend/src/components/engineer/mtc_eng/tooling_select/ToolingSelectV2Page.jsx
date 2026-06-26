@@ -77,8 +77,12 @@ function NewDesignCard({ tooling, computed }) {
   );
 }
 
-function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, primaryColor }) {
+function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, overrideBy, similarPart, primaryColor }) {
   if (!matches?.length) return <NewDesignCard tooling={tooling} computed={computed} />;
+
+  // similar_part = no exact formula/part-no match; this is the factory's pick for
+  // the most dimensionally-similar part. Surfaced as a suggestion, not confirmed.
+  const isSimilar = overrideBy === 'similar_part';
 
   // Inventory columns that feed the closest-match ranking (is_match_dim) —
   // their result headers get highlighted so users see what drove the match.
@@ -156,11 +160,49 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
   return (
     <Card
       size="small"
-      title={<Space><ToolOutlined /><Text strong>{tooling}</Text></Space>}
+      title={
+        <Space>
+          <ToolOutlined />
+          <Text strong>{tooling}</Text>
+          {isSimilar && <Tag color="orange" style={{ fontWeight: 600 }}>SIMILAR PART (อ้างอิง)</Tag>}
+        </Space>
+      }
       extra={<Badge count={matches.length} showZero color="#8c8c8c" />}
-      style={{ marginBottom: 12, borderRadius: 8, overflow: 'hidden' }}
+      style={{
+        marginBottom: 12, borderRadius: 8, overflow: 'hidden',
+        border: isSimilar ? '1.5px solid #faad14' : undefined,
+      }}
       styles={{ body: { padding: 0 } }}
     >
+      {isSimilar && (
+        <div style={{
+          padding: '8px 12px', background: '#fffbe6', borderBottom: '1px solid #ffe58f',
+          fontSize: 12, color: '#ad6800',
+        }}>
+          <div style={{ marginBottom: similarPart ? 6 : 0 }}>
+            ⚠ ไม่พบ tooling ที่ตรงกับงานนี้โดยตรง — เสนอจากงานที่มิติใกล้เคียงที่สุด
+            {' '}<b>โปรดให้วิศวกรตรวจสอบก่อนใช้งาน</b>
+          </div>
+          {similarPart && (
+            <Space size={[6, 4]} wrap align="center">
+              <Text strong style={{ color: '#ad6800', fontSize: 12 }}>อ้างอิงจากงานคล้าย:</Text>
+              <Tag color="gold" style={{ margin: 0, fontWeight: 600 }}>
+                C/N {similarPart.ref_cn}
+              </Tag>
+              {similarPart.parts_no && (
+                <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace' }}>
+                  P/N {similarPart.parts_no}
+                </Tag>
+              )}
+              <Tag color={Number(similarPart.distance) <= 0.001 ? 'green' : 'orange'} style={{ margin: 0 }}>
+                {Number(similarPart.distance) <= 0.001
+                  ? 'มิติตรงกันทุกประการ'
+                  : `ระยะห่างมิติ ${Number(similarPart.distance).toFixed(2)} mm`}
+              </Tag>
+            </Space>
+          )}
+        </div>
+      )}
       <Table
         rowKey={(_, i) => i}
         dataSource={matches}
@@ -288,6 +330,7 @@ export default function ToolingSelectV2Page() {
 
   const collapseItems = machineGroups.map(group => {
     const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
+    const similarCount = group.toolings.filter(t => t.overrideBy === 'similar_part').length;
     return {
       key: group.machine,
       label: (
@@ -297,6 +340,9 @@ export default function ToolingSelectV2Page() {
             <Tag color="default">{group.machineLabel}</Tag>
           )}
           <Tag color={found < total ? 'orange' : 'geekblue'}>{found} / {total} Tooling</Tag>
+          {similarCount > 0 && (
+            <Tag color="gold">⚠ Similar Part × {similarCount}</Tag>
+          )}
         </Space>
       ),
       children: (
@@ -309,6 +355,8 @@ export default function ToolingSelectV2Page() {
               computed={t.computed}
               columnMap={t.columnMap}
               matchDimCols={t.matchDimCols}
+              overrideBy={t.overrideBy}
+              similarPart={t.similarPart}
               primaryColor={primaryColor}
             />
           ))}
@@ -420,7 +468,14 @@ export default function ToolingSelectV2Page() {
 
                   {hasResults && (
                     <Collapse
-                      defaultActiveKey={[]}
+                      // Remount per search so the default expansion re-applies.
+                      key={result?.cn}
+                      // Auto-expand machines that have at least one match (incl.
+                      // similar-part suggestions) so results aren't hidden behind
+                      // a collapsed panel.
+                      defaultActiveKey={machineGroups
+                        .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0)
+                        .map(g => g.machine)}
                       items={collapseItems}
                       style={{ marginBottom: 16 }}
                     />

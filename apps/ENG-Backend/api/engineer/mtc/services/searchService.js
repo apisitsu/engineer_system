@@ -1,6 +1,7 @@
 'use strict';
 
 const { engPool } = require('../../../../instance/eng_db');
+const { maqPool } = require('../../../../instance/maq_db');
 const { TSV2_TABLES } = require('../tsv2Constants');
 const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
@@ -8,6 +9,32 @@ const cnFormat = require('../utils/cnFormat');
 
 // Cap on concurrent inventory queries per search (pg pool max is 20).
 const SEARCH_CONCURRENCY = 8;
+
+// Similar-part fallback: max combined finished-dim distance (mm) for a reference
+// part to be offered as a suggestion. Dimensional twins score ~0; this caps how
+// far the "nearest historically-tooled part" may be before we stop suggesting.
+const SIMILAR_DIST_MAX = 2.0;
+
+// Cache: tool DWG family (first dash-segment, e.g. '4030') → the factory
+// process_code it predominantly runs under. Lets the SDS page place a
+// similar-part suggestion under the matching process row. Effectively constant.
+const _famProcessCache = new Map();
+async function processCodeForToolFamily(toolDwgNo) {
+  const fam = String(toolDwgNo || '').split('-')[0];
+  if (!fam) return null;
+  if (_famProcessCache.has(fam)) return _famProcessCache.get(fam);
+  let pc = null;
+  try {
+    const r = await maqPool.query(
+      `SELECT process_code FROM lpb.eng_r_pi_tool WHERE tool_dwg_no LIKE $1
+        GROUP BY process_code ORDER BY count(*) DESC LIMIT 1`,
+      [fam + '-%']
+    );
+    pc = r.rows[0]?.process_code ?? null;
+  } catch (_) { pc = null; }
+  _famProcessCache.set(fam, pc);
+  return pc;
+}
 
 // Run `fn` over `items` with at most `limit` in flight at once.
 async function mapLimit(items, limit, fn) {
@@ -358,6 +385,95 @@ async function _applyPartnoOverrides(results, machineByDisplay, partsNo) {
   }
 }
 
+// ── Similar-part fallback (suggestion only) ──────────────────────────────────
+//
+// When a tooling produces NO match (formula gated to the -999 sentinel, or the
+// part has no part-number map entry) we can still help the engineer by offering
+// the choice the factory made for the most dimensionally-similar part it HAS
+// tooled on this machine. The reference set is `tooling_partno_map` (the
+// factory-confirmed parts_no → tool_dwg_no mappings) joined to the spec dims of
+// those parts.
+//
+// Guards keep this conservative — it can only ever FILL an empty result, never
+// replace a real match:
+//   • same CN class prefix (first 2 digits) — keeps it within the part family /
+//     grip mode (KL-20 OD-chuck vs ID-chuck collets share an inventory table but
+//     differ by class), so we don't suggest a wrong-family fixture;
+//   • SIMILAR_DIST_MAX cap on combined finished-dim distance;
+//   • ONE suggestion per machine — the globally-nearest reference across all the
+//     machine's empty toolings. For grip-exclusive machines (one fixture per
+//     part) this picks the true dimensional twin (dist≈0) and avoids offering a
+//     second, wrong-grip fixture whose class merely overlaps.
+//
+// Marked `overrideBy='similar_part'` + `similarPart={ref_cn, parts_no, distance}`
+// so the UI can label it a suggestion (not a factory-confirmed selection).
+async function _applySimilarPartFallback(results, machineByDisplay, spec, specCtx) {
+  const cls = String(spec.cn ?? '').slice(0, 2);
+  if (!/^\d{2}$/.test(cls)) return;
+
+  const od = Number(specCtx.OD) || 0;
+  const id = Number(specCtx.ID) || 0;
+  const w = Number(specCtx.W) || 0;
+
+  // Group empty, non-overridden results by display machine.
+  const byMachine = {};
+  for (const res of results) {
+    if (res.matches?.length || res.overrideBy) continue;
+    (byMachine[res.machine] ??= []).push(res);
+  }
+
+  for (const [displayName, emptyResults] of Object.entries(byMachine)) {
+    const mcfg = machineByDisplay[displayName];
+    const machineName = mcfg?.machine_name || displayName;
+    const table = mcfg?.inventory_table;
+    if (!table) continue;
+    const toolingNames = emptyResults.map(r => r.tooling);
+
+    // Globally-nearest reference part across this machine's empty toolings.
+    const { rows } = await engPool.query(
+      `SELECT m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
+              (ABS(COALESCE(s.od_aft,0) - $1)
+             + ABS(COALESCE(s.id_aft,0) - $2)
+             + 0.5 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+         FROM ${TSV2_TABLES.PARTNO_MAP} m
+         JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
+        WHERE m.machine_name = $4
+          AND m.tooling_name = ANY($5)
+          AND m.is_forbidden = false
+          AND left(s.cn, 2) = $6
+          AND s.cn <> $7
+        ORDER BY dist ASC
+        LIMIT 1`,
+      [od, id, w, machineName, toolingNames, cls, String(spec.cn)]
+    );
+    if (!rows.length) continue;
+
+    const best = rows[0];
+    if (Number(best.dist) > SIMILAR_DIST_MAX) continue;
+
+    const target = emptyResults.find(r => r.tooling === best.tooling_name);
+    if (!target) continue;
+
+    const { rows: inv } = await engPool.query(
+      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+      [best.tool_dwg_no]
+    );
+    if (inv.length) {
+      target.matches = inv;
+      target.overrideBy = 'similar_part';
+      target.similarPart = {
+        ref_cn: best.ref_cn,
+        parts_no: best.parts_no,
+        distance: Number(best.dist),
+        // The factory process_code this tool family runs under — lets the SDS
+        // page place the suggestion under the matching process row (e.g. KL-20
+        // collet 4030 → 2561 "Trim") instead of a separate part-level list.
+        process_code: await processCodeForToolFamily(best.tool_dwg_no),
+      };
+    }
+  }
+}
+
 // ── CN Normalization ─────────────────────────────────────────────────────────
 // tooling_spec_process stores CNs in 6-digit format (e.g. '250190').
 // Accept Cxx-0YYYY input and normalize so both formats find the spec.
@@ -467,6 +583,9 @@ async function search(cn, opts = {}) {
   }
   await _linkSupportBlockToLoadingChute(results, machineByDisplay);
   await _applyPartnoOverrides(results, machineByDisplay, spec.pn);
+  // Last resort — fill any still-empty tooling with the factory's pick for the
+  // most dimensionally-similar part (suggestion only; flagged similar_part).
+  await _applySimilarPartFallback(results, machineByDisplay, spec, specCtx);
 
   results.sort((a, b) =>
     a.machine.localeCompare(b.machine) || a.tooling.localeCompare(b.tooling)

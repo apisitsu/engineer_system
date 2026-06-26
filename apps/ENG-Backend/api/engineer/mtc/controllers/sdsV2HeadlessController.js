@@ -227,7 +227,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     ) || (searchData.process_plan || []).some(
       r => String(r.process_code) === String(process_code)
     );
-    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess });
+    // includeSimilar: the Setup Data Sheet should still carry a Tool No when the
+    // only available pick is the factory's choice for the most dimensionally-
+    // similar part (similar-part fallback). These come through fromTs → ' *'
+    // marker (= "supplied by Tooling Select, not the part's factory data").
+    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess, includeSimilar: true });
     // Order the fallback tools by the T-Select machine's tooling DEFINITION order
     // (tooling_formula sort_order, then id) rather than searchService's alphabetical
     // sort. For MSB grinders this yields the assembly order WORK FIXED BASE → COLLET →

@@ -299,7 +299,10 @@ const createToolRequest = async (req, res) => {
                         extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
                         actionBy: requester,
                     });
-                    await sendMtcEmail(recipients.join(','), subject, html);
+                    await sendMtcEmail(recipients.join(','), subject, html, {
+                        fromName: requester ? `${requester} (General DWG Request)` : 'General DWG Request',
+                        replyTo: requester_email || undefined,
+                    });
                 } else {
                     logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
                 }
@@ -587,7 +590,13 @@ const submitAction = async (req, res) => {
             if (recipients.length > 0) {
                 const subject = generateSubject(stage, decision, request);
                 const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
-                sendMtcEmail(recipients.join(','), subject, html).catch(err => logger.error('Email failed', { error: err.message }));
+                // Attribute the email to the person who performed this stage action
+                // (display name + Reply-To), falling back to the requester, so the
+                // recipient sees the real sender instead of the script owner.
+                sendMtcEmail(recipients.join(','), subject, html, {
+                    fromName: action_by ? `${action_by} (General DWG Request)` : 'General DWG Request',
+                    replyTo: req.body.action_by_email || request.requester_email || undefined,
+                }).catch(err => logger.error('Email failed', { error: err.message }));
             }
         } catch (emailErr) {
             logger.warn('Email failed', { error: emailErr.message });
@@ -697,7 +706,10 @@ const testEmail = async (req, res) => {
             actionBy: req.user?.userName || 'Test User',
         });
 
-        await sendMtcEmail(to, subject, html);
+        await sendMtcEmail(to, subject, html, {
+            fromName: `${req.user?.userName || 'Test User'} (General DWG Request)`,
+            replyTo: req.user?.gmail_email || undefined,
+        });
         logger.info('Test email sent', { to });
         res.json({ success: true, message: `Test email sent to: ${to}` });
     } catch (err) {
