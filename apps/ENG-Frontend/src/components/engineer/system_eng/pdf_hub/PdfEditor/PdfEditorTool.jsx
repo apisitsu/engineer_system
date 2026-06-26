@@ -33,7 +33,7 @@ import UploadLanding from './ui/UploadLanding';
 import StatusBar from './ui/StatusBar';
 import HeaderModeBar from './ui/HeaderModeBar';
 
-import { commitAllToPdf, exportPageToImage, mergePdfFiles } from './engine/PdfCommitEngine';
+import { commitAllToPdf, exportPageToImage, mergePdfFiles, exportSelectedPagesToPdf } from './engine/PdfCommitEngine';
 import JSZip from 'jszip';
 import axios from 'axios';
 import './PdfEditorTool.css';
@@ -57,7 +57,7 @@ const PdfEditorTool = () => {
     const editor = usePdfEditor();
     const {
         pdfFile, pdfDoc, pdfBytes, totalPages, currentPage, zoom,
-        pdfLoading, loadPdf, loadPdfFromBytes,
+        pdfLoading, loadPdf, loadPdfFromBytes, closePdf,
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
@@ -182,6 +182,20 @@ const PdfEditorTool = () => {
             message.error('Please upload a PDF file.');
             return Upload.LIST_IGNORE;
         }
+
+        // ── Reset all states (like a full reload) ──
+        store.setActiveMode('view');
+        store.setViewMode('continuous');
+        setZoom(1.0);
+        store.clearSelection();
+        store.setOverlayEnabled(false);
+        setOverlayPdfDoc(null);
+        setOverlayFile(null);
+        setExportedImages([]);
+        setExportSelectedPages([]);
+        setMergeFiles([]);
+        setLeftCollapsed(false);
+        setRightCollapsed(false);
 
         try {
             const buffer = await file.arrayBuffer();
@@ -408,15 +422,42 @@ const PdfEditorTool = () => {
                 }
             });
 
-            for (const pageNum of exportSelectedPages) {
-                const blob = await exportPageToImage(
-                    pdfDoc, pageNum,
-                    allAnnotations[pageNum] || null,
-                    format, scale
-                );
+            if (format === 'pdf') {
+                // Export as PDF
+                const annotatedBytes = await commitAllToPdf(pdfBytes, allAnnotations, null, pageHighlights);
+                const blob = await exportSelectedPagesToPdf(annotatedBytes, exportSelectedPages);
                 const url = URL.createObjectURL(blob);
-                const filename = `${(pdfFile?.name || 'page').replace('.pdf', '')}_p${pageNum}.${format}`;
-                results.push({ url, filename, pageNum });
+                const filename = `${(pdfFile?.name || 'document').replace('.pdf', '')}_extracted.pdf`;
+                results.push({ url, filename, pageNum: 'PDF' });
+                
+                // Auto download PDF
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                for (const pageNum of exportSelectedPages) {
+                    const blob = await exportPageToImage(
+                        pdfDoc, pageNum,
+                        allAnnotations[pageNum] || null,
+                        format, scale
+                    );
+                    const url = URL.createObjectURL(blob);
+                    const filename = `${(pdfFile?.name || 'page').replace('.pdf', '')}_p${pageNum}.${format}`;
+                    results.push({ url, filename, pageNum });
+                }
+
+                // Auto-download if single page
+                if (results.length === 1) {
+                    const link = document.createElement('a');
+                    link.href = results[0].url;
+                    link.download = results[0].filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
             }
 
             // Revoke previous export URLs
@@ -425,17 +466,7 @@ const PdfEditorTool = () => {
             }
             setExportedImages(results);
 
-            // Auto-download if single page
-            if (results.length === 1) {
-                const link = document.createElement('a');
-                link.href = results[0].url;
-                link.download = results[0].filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-
-            logPdfUsage('export_image');
+            logPdfUsage(format === 'pdf' ? 'export_pdf_extracted' : 'export_image');
             message.success(`Exported ${results.length} page(s) as ${format.toUpperCase()}`);
         } catch (err) {
             console.error('Export error:', err);
@@ -666,6 +697,7 @@ const PdfEditorTool = () => {
                 onSavePageState={saveCurrentPageState}
                 onPrevPage={handlePrevPage}
                 onNextPage={handleNextPage}
+                onClosePdf={closePdf}
                 currentPage={currentPage}
                 totalPages={totalPages}
                 zoom={zoom}

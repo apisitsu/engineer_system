@@ -258,7 +258,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                 owner_empno: empNo,
                 name: values.name,
                 text: values.text,
-                color: typeof values.color === 'string' ? values.color : values.color.toHexString(),
+                color: typeof values.color === 'string' ? values.color : (values.color?.toHexString ? values.color.toHexString() : '#000000'),
                 opacity: values.opacity,
                 font_size: values.font_size,
                 angle: values.angle,
@@ -653,7 +653,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
                         <Row gutter={16}>
                             <Col span={8}>
                                 <Form.Item name="color" label="Color">
-                                    <ColorPicker showText presets={COLOR_PRESETS} />
+                                    <ColorPicker format="hex" showText presets={COLOR_PRESETS} />
                                 </Form.Item>
                             </Col>
                             <Col span={8}>

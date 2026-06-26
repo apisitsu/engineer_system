@@ -37,6 +37,8 @@ const PropertiesPanel = ({
     overlayFile,
     onLoadOverlay,
     onClearOverlay,
+    fabricCanvasRefs,
+    currentPage,
 }) => {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
@@ -59,7 +61,7 @@ const PropertiesPanel = ({
     }
 
     if (store.activeMode === 'shapes' || store.activeMode === 'dwgCheck') {
-        return <ShapesPanel />;
+        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
     }
 
     if (store.activeMode === 'sign') {

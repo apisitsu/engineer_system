@@ -163,14 +163,13 @@ export default function useHighlightTools({
                 if (w < 2 || h < 2) continue;
 
                 if (activeTool === 'highlight') {
-                    // Shift Y up slightly (by 40% of height) to center visually over text body
-                    // and slightly adjust height to wrap nicely.
+                    // Map directly to the selection rect bounds without artificial shifting
                     newHighlights.push({
                         id: `hl_${Date.now()}_${Math.random().toString(36).substr(2, 5)}_${i}`,
                         normX: x / cssW,
-                        normY: (y - (h * 0.35)) / cssH,
+                        normY: y / cssH,
                         normW: w / cssW,
-                        normH: (h * 1.05) / cssH,
+                        normH: h / cssH,
                         color: store.highlightColor || '#ffeb3b',
                     });
                 } else if (activeTool === 'underline' || activeTool === 'strikethrough') {

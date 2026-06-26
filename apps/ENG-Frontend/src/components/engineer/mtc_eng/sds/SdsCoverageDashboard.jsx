@@ -37,17 +37,17 @@ const C = {
 };
 
 const PART_TYPE_COLOR = {
-  ball:      '#1890ff',
-  race:      '#52c41a',
-  body:      '#fa8c16',
-  sleeve:    '#722ed1',
+  ball: '#1890ff',
+  race: '#52c41a',
+  body: '#fa8c16',
+  sleeve: '#722ed1',
   spherical: '#ff4d4f',
-  mecha:     '#eb2f96',
-  other:     '#6fa3c7',
+  mecha: '#eb2f96',
+  other: '#6fa3c7',
 };
 
 const LEVEL_CFG = {
-  COMPLETE:     { color: C.green,  label: 'Complete',     icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
+  COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
 };
 
@@ -158,8 +158,8 @@ const REASON_LABELS = {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
   const { message } = App.useApp();
-  const [data, setData]         = useState(null);
-  const [loading, setLoading]   = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
   const [filterPt, setFilterPt] = useState('');
   const [filterMc, setFilterMc] = useState('');
@@ -245,8 +245,8 @@ export default function SdsCoverageDashboard() {
   const newPartsChartData = useMemo(() => ({
     labels: monthlyNewParts.map(r => fmtMonth(r.month)),
     datasets: [
-      { label: 'Ball',  data: monthlyNewParts.map(r => r.ball  || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball,  borderWidth: 1, stack: 'np' },
-      { label: 'Race',  data: monthlyNewParts.map(r => r.race  || 0), backgroundColor: 'rgba(82,196,26,0.75)',  borderColor: PART_TYPE_COLOR.race,  borderWidth: 1, stack: 'np' },
+      { label: 'Ball', data: monthlyNewParts.map(r => r.ball || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball, borderWidth: 1, stack: 'np' },
+      { label: 'Race', data: monthlyNewParts.map(r => r.race || 0), backgroundColor: 'rgba(82,196,26,0.75)', borderColor: PART_TYPE_COLOR.race, borderWidth: 1, stack: 'np' },
       { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: 'rgba(235,47,150,0.65)', borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
     ],
   }), [monthlyNewParts]);

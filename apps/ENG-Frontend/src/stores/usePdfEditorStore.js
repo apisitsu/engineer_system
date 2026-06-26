@@ -13,6 +13,7 @@ export const usePdfEditorStore = create((set, get) => ({
     // ── Operating Mode ──
     // view | annotate | shapes | sign | dwgCheck | merge | export
     activeMode: 'view',
+    currentDwgRole: null, // 'drawer' | 'checker' | 'approver'
 
     // ── Active Tool within current mode ──
     // View:     select, pan
@@ -36,13 +37,13 @@ export const usePdfEditorStore = create((set, get) => ({
         strikethrough: { strokeColor: '#e74c3c', strokeWidth: 2 },
         addText: { strokeColor: '#000000', fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0 },
         maskReplace: { strokeColor: '#cccccc', fillColor: '#ffffff', strokeWidth: 1, opacity: 1.0 },
-        stampCheckmark: { strokeColor: '#27ae60', strokeWidth: 3, fontSize: 16 },
-        stampCross: { strokeColor: '#e74c3c', strokeWidth: 3, fontSize: 16 },
-        stampCircle: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 16 },
-        stampOk: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 16 },
+        stampCheckmark: { strokeColor: '#27ae60', strokeWidth: 3, fontSize: 12 },
+        stampCross: { strokeColor: '#e74c3c', strokeWidth: 3, fontSize: 12 },
+        stampCircle: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
+        stampOk: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
         stampUserDate: { strokeColor: '#e74c3c', fontSize: 16 },
         // Fallback for missing tools
-        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 12, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
+        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
     },
 
     // ── Selected Object ──
@@ -135,4 +136,35 @@ export const usePdfEditorStore = create((set, get) => ({
 
     // View Mode
     setViewMode: (v) => set({ viewMode: v }),
+
+    // DWG Role Setter
+    setDwgRoleColor: (roleName, color) => set(state => {
+        const toolsToUpdate = [
+            'rect', 'circle', 'arrow', 'line', 'freehand', 'addText',
+            'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate',
+            'underline', 'strikethrough'
+        ];
+        const newSettings = { ...state.toolSettings };
+        toolsToUpdate.forEach(t => {
+            newSettings[t] = { ...(newSettings[t] || state.toolSettings.default), strokeColor: color };
+        });
+        // Also update the 'select' tool so that if we have a selected object, its properties take this new color
+        newSettings['select'] = { ...(newSettings['select'] || state.toolSettings.default), strokeColor: color };
+        newSettings['pan'] = { ...(newSettings['pan'] || state.toolSettings.default), strokeColor: color };
+        return { toolSettings: newSettings, currentDwgRole: roleName };
+    }),
+
+    // Update Text Content
+    updateSelectedTextContent: (newText, fabricCanvasRefs, currentPage) => set(state => {
+        const fc = fabricCanvasRefs?.current?.[currentPage];
+        if (fc && state.selectedObjectId) {
+            const obj = fc.getObjects().find(o => (o.id === state.selectedObjectId || o.__uid === state.selectedObjectId));
+            if (obj && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                obj.set('text', newText);
+                fc.renderAll();
+                return { selectedObjectProps: { ...state.selectedObjectProps, text: newText } };
+            }
+        }
+        return state;
+    }),
 }));

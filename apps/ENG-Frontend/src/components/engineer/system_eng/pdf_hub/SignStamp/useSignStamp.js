@@ -118,7 +118,7 @@ export default function useSignStamp() {
             setCurrentPage(1);
 
             // Load with pdf-lib for manipulation
-            const libDoc = await PDFDocument.load(arrayBuffer.slice(0));
+            const libDoc = await PDFDocument.load(arrayBuffer.slice(0), { ignoreEncryption: true });
             setPdfLibDoc(libDoc);
 
             setPdfFile(file);
@@ -232,7 +232,7 @@ export default function useSignStamp() {
 
         try {
             // Create a fresh pdf-lib document from the original bytes
-            const doc = await PDFDocument.load(pdfBytes);
+            const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             const pages = doc.getPages();
 
             // Prepare stamp/signature images

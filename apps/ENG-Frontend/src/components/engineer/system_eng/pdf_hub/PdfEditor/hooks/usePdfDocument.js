@@ -76,7 +76,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                     finalBytes = new Uint8Array(res.data);
                     
                     doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
-                    libDoc = await PDFDocument.load(finalBytes); 
+                    libDoc = await PDFDocument.load(finalBytes, { ignoreEncryption: true }); 
                     message.success('PDF unlocked successfully via backend!');
                 } catch (unlockErr) {
                     console.error('Failed to unlock PDF:', unlockErr);
@@ -162,6 +162,7 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
         } catch (err) {
             console.error('Failed to load bytes:', err);
             message.error('Failed to render PDF from bytes.');
+            throw err;
         } finally {
             setPdfLoading(false);
         }
@@ -176,8 +177,17 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
     const nextPage = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
     const prevPage = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
 
+    const closePdf = useCallback(() => {
+        setPdfFile(null);
+        setPdfDoc(null);
+        setPdfLibDoc(null);
+        setPdfBytes(null);
+        setTotalPages(0);
+        setCurrentPage(1);
+    }, []);
+
     return {
         pdfFile, pdfDoc, pdfLibDoc, pdfBytes, totalPages, currentPage, pdfLoading, pageSize,
-        loadPdf, loadPdfFromBytes, goToPage, nextPage, prevPage
+        loadPdf, loadPdfFromBytes, closePdf, goToPage, nextPage, prevPage
     };
 }

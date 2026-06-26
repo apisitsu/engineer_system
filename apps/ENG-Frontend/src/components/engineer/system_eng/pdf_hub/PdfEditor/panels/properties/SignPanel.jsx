@@ -86,23 +86,7 @@ export default function SignPanel({ stampData, onOpenSignaturePad, onPlaceStamp 
                     </>
                 )}
 
-                <Divider style={{ margin: '12px 0 8px' }} />
 
-                {/* Draw new signature */}
-                <div className="pdf-ws-prop-section">
-                    <SectionTitle>
-                        <EditOutlined style={{ marginRight: 4 }} />
-                        Draw New Signature
-                    </SectionTitle>
-                    <Button
-                        icon={<EditOutlined />}
-                        block
-                        onClick={onOpenSignaturePad}
-                        style={{ borderRadius: 8 }}
-                    >
-                        Create Signature
-                    </Button>
-                </div>
             </div>
         </div>
     );
