@@ -47,6 +47,8 @@ const TABLES = {
   SDS_MACHINE_CODE:       'sds_machine_code',    // factory floor code → machine type mapping
   SDS_ACCESS_LOG:         'sds_access_log',      // VIEW/PDF/ADMIN access tracking
   SDS_TEMPLATE_CSS_CONFIG: 'sds_template_css_config', // CSS variable overrides for Chrome PDF template
+  SDS_APPROVAL:           'sds_approval',          // Prepared/Checked/Approved sign records per (cn, machine_type, process_code, sds_rev)
+  SDS_APPROVAL_ROLE_CONFIG: 'sds_approval_role_config', // configurable: which users may sign each role
   LPB_PC_PRODUCTION:      'lpb.pc_production',   // factory production records
 
   // Tooling Selection & Rules

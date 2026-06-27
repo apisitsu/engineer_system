@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select, Space, Tooltip,
+  Modal, Select, Space, Tooltip, Divider, Popconfirm, DatePicker,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined, CheckCircleOutlined, EditOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useNavigate } from 'react-router-dom';
@@ -94,16 +94,27 @@ const SdsV2Page = () => {
   const userRole = useAuthStore(state => state.userRole);
   const userDepartment = useAuthStore(state => state.userDepartment);
   const userPerms = useAuthStore(state => state.userPerms);
+  const empNo = useAuthStore(state => state.empNo);
   const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [tsData, setTsData] = useState(null);
   const [cnHistory, setCnHistory] = useState(null);
+  // true once the cn-history request has completed (success OR empty result).
+  // Stays false on a fetch error so the production filter can fail-open instead
+  // of blanking every machine when the history source is unavailable.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // PDF modal state
   const [pdfModal, setPdfModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Approval (Prepared/Checked/Approved) state for the selected machine+process
+  const [approval, setApproval] = useState(null);        // { state:[...], isAdmin }
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [signingRole, setSigningRole] = useState(null);  // role currently being signed
+  const [backfill, setBackfill] = useState(null);        // admin historical-sign form { role, em_id, signer_name, signed_at }
   const [allMachineTypes, setAllMachineTypes] = useState([]);
   const [visibleMachineNames, setVisibleMachineNames] = useState(null); // null = all visible
   const [machineToolsConfig, setMachineToolsConfig] = useState([]);
@@ -146,6 +157,7 @@ const SdsV2Page = () => {
     setData(null);
     setTsData(null);
     setCnHistory(null);
+    setHistoryLoaded(false);
     try {
       const [searchRes, mtRes, tsRes, mtConfigRes, histRes, vmRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
@@ -164,6 +176,7 @@ const SdsV2Page = () => {
       if (tsRes?.data?.success) setTsData(tsRes.data);
       if (mtConfigRes?.data) setMachineToolsConfig(Array.isArray(mtConfigRes.data) ? mtConfigRes.data : []);
       if (histRes?.data?.rows?.length) setCnHistory(histRes.data);
+      setHistoryLoaded(histRes != null);
     } catch (err) {
       message.error(err.response?.data?.error || 'Can not find');
     } finally {
@@ -271,6 +284,134 @@ const SdsV2Page = () => {
     }
   };
 
+  // ── Approval (Prepared/Checked/Approved) ───────────────────────────────────
+  const ROLE_LABEL = { prepared: 'PREPARED', checked: 'CHECKED', approved: 'APPROVED' };
+  const PREV_ROLE = { checked: 'prepared', approved: 'checked' };
+
+  // Approval is keyed per CN (this Setup Data Sheet). The backend resolves the SDS
+  // revision from sds_parameter — the same source the PDF renderer uses — so we only
+  // send the CN; a new SDS rev automatically starts unsigned and stays in sync.
+  const approvalCn = data?.cn || '';
+
+  const fetchApproval = useCallback(async () => {
+    if (!approvalCn || !selectedMachine || !selectedProcess?.process_code) { setApproval(null); return; }
+    setApprovalLoading(true);
+    try {
+      const res = await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
+        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
+      });
+      setApproval(res.data?.success ? res.data : null);
+    } catch (_) {
+      setApproval(null);
+    } finally {
+      setApprovalLoading(false);
+    }
+  }, [approvalCn, selectedMachine, selectedProcess]);
+
+  // Load approval status whenever the PDF modal opens or its machine/process changes.
+  useEffect(() => {
+    if (pdfModal && selectedMachine && selectedProcess?.process_code) fetchApproval();
+    else setApproval(null);
+  }, [pdfModal, selectedMachine, selectedProcess, fetchApproval]);
+
+  const handleSign = async (role) => {
+    setSigningRole(role);
+    try {
+      const res = await axios.post(server.MTC_SDS_V2_APPROVAL, {
+        cn: approvalCn,
+        machine_type_name: selectedMachine,
+        process_code: selectedProcess.process_code,
+        role,
+      });
+      if (res.data?.success) { message.success(`Signed as ${ROLE_LABEL[role]}`); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Sign failed');
+    } finally {
+      setSigningRole(null);
+    }
+  };
+
+  const handleRevoke = async (role) => {
+    try {
+      const res = await axios.delete(server.MTC_SDS_V2_APPROVAL, {
+        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
+      });
+      if (res.data?.success) { message.success('Signature revoked'); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Revoke failed');
+    }
+  };
+
+  const submitBackfill = async () => {
+    if (!backfill?.em_id?.trim() || !backfill?.signer_name?.trim()) {
+      message.warning('กรอก Employee No และชื่อผู้เซ็น');
+      return;
+    }
+    try {
+      const res = await axios.post(`${server.MTC_SDS_V2_APPROVAL}/backfill`, {
+        cn: approvalCn,
+        machine_type_name: selectedMachine,
+        process_code: selectedProcess.process_code,
+        role: backfill.role,
+        em_id: backfill.em_id.trim(),
+        signer_name: backfill.signer_name.trim(),
+        signed_at: backfill.signed_at ? backfill.signed_at.format('YYYY-MM-DD') : null,
+      });
+      if (res.data?.success) { message.success('บันทึกอนุมัติย้อนหลังแล้ว'); setBackfill(null); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'บันทึกไม่สำเร็จ');
+    }
+  };
+
+  const renderApprovalSection = () => {
+    if (!selectedMachine) return null;
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('th-TH-u-ca-gregory') : '';
+    return (
+      <>
+        <Divider style={{ margin: '16px 0 8px' }} orientation="left" orientationMargin={0}>
+          <Text strong style={{ fontSize: 13 }}>Approval</Text>
+        </Divider>
+        <Spin spinning={approvalLoading}>
+          <Space direction="vertical" style={{ width: '100%' }} size={6}>
+            {(approval?.state || []).map((s) => {
+              const canRevoke = s.signed && (approval?.isAdmin || String(s.em_id) === String(empNo));
+              return (
+                <div key={s.role} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color={s.signed ? 'red' : 'default'} style={{ width: 90, textAlign: 'center', margin: 0 }}>
+                    {ROLE_LABEL[s.role]}
+                  </Tag>
+                  {s.signed ? (
+                    <Space size={6} wrap style={{ flex: 1 }}>
+                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                      <Text strong>{s.signer_name}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{fmtDate(s.signed_at)}</Text>
+                    </Space>
+                  ) : (
+                    <Text type="secondary" style={{ flex: 1, fontStyle: 'italic' }}>
+                      {s.blockedByOrder ? `รอเซ็น ${ROLE_LABEL[PREV_ROLE[s.role]]} ก่อน` : 'ยังไม่เซ็น'}
+                    </Text>
+                  )}
+                  {s.canSign && !s.signed && (
+                    <Button size="small" type="primary" icon={<EditOutlined />}
+                      loading={signingRole === s.role} onClick={() => handleSign(s.role)}>
+                      Sign
+                    </Button>
+                  )}
+                  {canRevoke && (
+                    <Popconfirm title="ยกเลิกลายเซ็นนี้?" okText="ยกเลิก" cancelText="ไม่"
+                      onConfirm={() => handleRevoke(s.role)}>
+                      <Button size="small" danger>Revoke</Button>
+                    </Popconfirm>
+                  )}
+                </div>
+              );
+            })}
+          </Space>
+        </Spin>
+      </>
+    );
+  };
+
   const renderDimension = () => {
     if (!data?.dimension) return <Text type="secondary">No Dimension Data</Text>;
     const entries = Object.entries(data.dimension).filter(([k]) => k !== 'control_no' && k !== 'update_date');
@@ -327,7 +468,7 @@ const SdsV2Page = () => {
                 key={i}
                 color={h.machine_type_code ? 'blue' : 'default'}
                 style={{ margin: 0 }}
-                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}
+                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}
               >
                 {h.machine_name || 'Unknown'}
                 <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
@@ -576,6 +717,28 @@ const SdsV2Page = () => {
       }
     });
 
+    // ── Hard-filter: machine + production history ────────────────────────────
+    // Show ONLY machines that actually produced this CN under THIS process_code
+    // (lpb.pc_production, via cn-history). Production-history machine_name is a
+    // resolved member type name; collapse both it and the displayed block name to
+    // the machine_group label so a part run on KS-400B2 keeps the grouped block.
+    // Fail-open when history hasn't loaded (fetch error) so a source outage never
+    // blanks every machine; a genuine "never produced" (loaded + empty) hides all.
+    const memberToGroup = {};
+    for (const m of allMachineTypes) if (m.machine_group) memberToGroup[m.machine_type_name] = m.machine_group;
+    const canonMachine = (name) => memberToGroup[name] || name;
+    const producedCanon = new Set(
+      (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
+        .filter(h => h.machine_type_code)
+        .map(h => canonMachine((h.machine_name || '').trim()))
+        .filter(Boolean)
+    );
+    if (historyLoaded) {
+      for (const machineName of Object.keys(machineStatus)) {
+        if (!producedCanon.has(canonMachine(machineName))) delete machineStatus[machineName];
+      }
+    }
+
     const columns = [
       { title: 'Rev', dataIndex: 'rev', width: 60 },
       { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 150 },
@@ -660,7 +823,7 @@ const SdsV2Page = () => {
             <Space size={[4, 4]} wrap>
               {historyMachines.map((h, i) => (
                 <Tag key={i} color="purple" style={{ margin: 0 }}
-                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}>
+                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}>
                   {h.machine_name}
                   <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
                 </Tag>
@@ -866,7 +1029,7 @@ const SdsV2Page = () => {
             onClick={() => handleGeneratePdf()}
             loading={pdfLoading}
           >
-            Generate PDF
+            PDF
           </Button>
         ]}
         destroyOnHidden
@@ -885,6 +1048,38 @@ const SdsV2Page = () => {
             label: displayLabelFor(m.machine_type_name),
           }))}
         />
+        {renderApprovalSection()}
+      </Modal>
+
+      <Modal
+        title={<span><EditOutlined style={{ marginRight: 8 }} />บันทึกอนุมัติย้อนหลัง</span>}
+        open={!!backfill}
+        onCancel={() => setBackfill(null)}
+        onOk={submitBackfill}
+        okText="บันทึก"
+        cancelText="ยกเลิก"
+        destroyOnHidden
+      >
+        {backfill && (
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <div>
+              <Tag color="red">{ROLE_LABEL[backfill.role]}</Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {selectedMachine} · {selectedProcess?.process_code}
+              </Text>
+            </div>
+            <Input placeholder="Employee No (em_id)" value={backfill.em_id}
+              onChange={(e) => setBackfill((b) => ({ ...b, em_id: e.target.value }))} />
+            <Input placeholder="ชื่อผู้เซ็น (เช่น S.APISIT)" value={backfill.signer_name}
+              onChange={(e) => setBackfill((b) => ({ ...b, signer_name: e.target.value }))} />
+            <DatePicker style={{ width: '100%' }} placeholder="วันที่เซ็น (ย้อนหลัง)" format="DD/MM/YYYY"
+              value={backfill.signed_at}
+              onChange={(d) => setBackfill((b) => ({ ...b, signed_at: d }))} />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              เว้นวันที่ = ใช้วันนี้ · การบันทึกย้อนหลังข้ามลำดับ Prepared→Checked→Approved ได้
+            </Text>
+          </Space>
+        )}
       </Modal>
 
       <Modal

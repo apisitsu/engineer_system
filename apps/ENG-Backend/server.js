@@ -275,6 +275,10 @@ app.use('/api/sds/v2/images', sdsV2ImageController);
 const sdsV2AdminController = require('./api/engineer/mtc/controllers/sdsV2AdminController');
 app.use('/api/sds/v2/admin', sdsV2AdminController);
 
+// Prepared/Checked/Approved sign records (per machine_type + process_code + rev)
+const sdsApprovalController = require('./api/engineer/mtc/controllers/sdsApprovalController');
+app.use('/api/sds/v2/approval', sdsApprovalController);
+
 const sdsV2HeadlessController = require('./api/engineer/mtc/controllers/sdsV2HeadlessController');
 app.use('/api/sds/v2-headless', sdsV2HeadlessController);
 

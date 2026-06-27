@@ -10,6 +10,11 @@ const tselectFallback = require('../services/tselectFallback');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
+const { getApprovalSeals } = require('./sdsApprovalController');
+
+// Approval-stamp param keys → role. The seal image comes from the sds_approval
+// sign records (see getApprovalSeals), keyed per CN by (cn, machine_type, process_code, sds_rev).
+const STAMP_PARAM_KEYS = { stamp_prepared: 'prepared', stamp_checked: 'checked', stamp_approved: 'approved' };
 
 const router = express.Router();
 
@@ -800,8 +805,26 @@ function applyDataToGrid(grid, valueMap, mappings) {
   //    the SAME merged region are routed to the merge master and concatenated in column
   //    order — so e.g. the single PROCESS cell (Z3:AF3) shows "<process_code> <process_name>"
   //    even though process_name maps to AC3, which is hidden under the Z3 merge.
+  // Approval seals: place each signed role's seal image at the mapped cell's merge
+  // master (the designed stamp box). Source = sds_approval sign records, prefetched
+  // into valueMap._approvalSeals (see buildGridHtmlForRequest). Unsigned → blank.
+  const approvalSeals = valueMap._approvalSeals || {};
+  for (const { cell_address, param_key } of mappings) {
+    const role = STAMP_PARAM_KEYS[param_key];
+    if (!role) continue;
+    const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
+    if (!m) continue;
+    const uri = approvalSeals[role]?.dataUri;
+    if (!uri) continue;
+    const r = +m[2] - 1, c = colLettersToIndex(m[1]);
+    const master = mergeMaster(r, c);
+    const k = `${master.r},${master.c}`;
+    cells[k] = { ...(cells[k] || {}), img: uri };
+  }
+
   const scalarBuckets = new Map(); // "masterR,masterC" -> [{ c, v }]
   for (const { cell_address, param_key } of mappings) {
+    if (STAMP_PARAM_KEYS[param_key]) continue; // handled as seal images above
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
     if (!m) continue;
     let val = valueMap[param_key];
@@ -899,6 +922,12 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
     const merged = {};
     for (const row of mq.rows) merged[row.cell_address] = row.param_key; // machine-specific (later) wins
     const mappings = Object.entries(merged).map(([cell_address, param_key]) => ({ cell_address, param_key }));
+    // Approval seals (Prepared/Checked/Approved) — keyed per CN by
+    // (cn, machine, process, sds_rev). sds_rev is the Setup Data Sheet revision
+    // (valueMap.sds_rev, from sds_parameter) so a new SDS rev starts unsigned and
+    // old seals don't carry over. resolveSdsRev in sdsApprovalController uses the
+    // identical source, so the sign endpoints and this renderer always agree.
+    valueMap._approvalSeals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     grid = applyDataToGrid(grid, valueMap, mappings);
   }
 
@@ -967,9 +996,11 @@ router.get('/pdf-chrome', async (req, res) => {
     html = html.replace(/{{ct}}/g,                   esc(valueMap.ct));
 
     const p = valueMap.params || {};
-    html = html.replace(/{{stamp_prepared}}/g,  esc(p['stamp_prepared']));
-    html = html.replace(/{{stamp_checked}}/g,   esc(p['stamp_checked']));
-    html = html.replace(/{{stamp_approved}}/g,  esc(p['stamp_approved']));
+    // Approval stamps from the sds_approval sign records (keyed per CN by cn+machine+process+sds_rev).
+    const seals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    html = html.replace(/{{stamp_prepared}}/g,  seals.prepared?.svg || '');
+    html = html.replace(/{{stamp_checked}}/g,   seals.checked?.svg || '');
+    html = html.replace(/{{stamp_approved}}/g,  seals.approved?.svg || '');
     html = html.replace(/{{program_no}}/g,      esc(p['program_no'] || ''));
     html = html.replace(/{{program_name}}/g,    esc(p['program_name'] || ''));
 
