@@ -667,6 +667,84 @@ async function buildCoverage() {
         };
       });
 
+    // ── Stamp (approval) status ───────────────────────────────────────────────
+    // Cross-reference each tracked SDS sheet against sds_approval (the Prepared/
+    // Checked/Approved seal records). A stamp is keyed (cn, machine_type_name,
+    // process_code); align its machine to the group representative (repOf) so a
+    // stamp recorded under any group member matches the report's rep-named sheet.
+    let stampSrc = { rows: [] };
+    try {
+      stampSrc = await engPool.query(`
+        SELECT cn, machine_type_name, process_code,
+               (prepared_em_id IS NOT NULL AND checked_em_id IS NOT NULL AND approved_em_id IS NOT NULL) AS full
+        FROM ${TABLES.SDS_APPROVAL}`);
+    } catch (e) { /* table may not exist yet → every sheet reads as un-stamped */ }
+    const anyStamp = new Set(), fullStamp = new Set();
+    for (const s of stampSrc.rows) {
+      const k = `${s.cn}||${repOf(s.machine_type_name)}||${s.process_code}`;
+      anyStamp.add(k);
+      if (s.full) fullStamp.add(k);
+    }
+    for (const r of evaluated) {
+      const k = `${r.cn}||${r.machine_type_name}||${r.process_code}`;
+      r.stamped      = anyStamp.has(k);
+      r.stamped_full = fullStamp.has(k);
+    }
+
+    const completeRows        = evaluated.filter(r => r.coverage_level === 'COMPLETE');
+    const stampStamped        = evaluated.filter(r => r.stamped).length;
+    const stampFull           = evaluated.filter(r => r.stamped_full).length;
+    const stampRemaining      = total - stampStamped;
+    const stampCompleteDone   = completeRows.filter(r => r.stamped).length;
+    const stampCompleteRemain = completeRows.length - stampCompleteDone;
+
+    // Un-stamped sheets (both COMPLETE and PENDING) — the worklist.
+    const stampRemainingRows = evaluated
+      .filter(r => !r.stamped)
+      .map(r => ({
+        cn: r.cn, machine_type_name: r.machine_type_name, machine_code: r.machine_code,
+        process_code: r.process_code, part_type: r.part_type,
+        coverage_level: r.coverage_level, last_prod_date: r.last_prod_date,
+      }))
+      .sort((a, b) => a.cn.localeCompare(b.cn));
+
+    // Remaining grouped by machine — PDF-ready (COMPLETE) only = the actionable set.
+    const stampMachineMap = new Map();
+    for (const r of completeRows) {
+      if (r.stamped) continue;
+      const name = displayGroup(r.machine_type_name) || r.machine_code || '(unmapped)';
+      const e = stampMachineMap.get(name) || { machine: name, sheets: 0, cns: new Set() };
+      e.sheets += 1; e.cns.add(r.cn); stampMachineMap.set(name, e);
+    }
+    const stampByMachine = [...stampMachineMap.values()]
+      .map(e => ({ machine: e.machine, sheets: e.sheets, cn_count: e.cns.size }))
+      .sort((a, b) => b.sheets - a.sheets);
+
+    const stampByPartType = partTypes.map(pt => {
+      const rows = evaluated.filter(r => r.part_type === pt);
+      if (!rows.length) return null;
+      return {
+        part_type: pt,
+        total:     rows.length,
+        stamped:   rows.filter(r => r.stamped).length,
+        remaining: rows.filter(r => !r.stamped).length,
+      };
+    }).filter(Boolean);
+
+    const stamp = {
+      total,
+      stamped:           stampStamped,
+      stampedFull:       stampFull,
+      remaining:         stampRemaining,
+      stampedPct:        total > 0 ? parseFloat(((stampStamped / total) * 100).toFixed(1)) : 0,
+      completeTotal:     completeRows.length,
+      completeStamped:   stampCompleteDone,
+      completeRemaining: stampCompleteRemain,
+      byMachine:         stampByMachine,
+      byPartType:        stampByPartType,
+      remainingRows:     stampRemainingRows,
+    };
+
     const payload = {
       kpi: {
         total,
@@ -689,6 +767,7 @@ async function buildCoverage() {
         grindingImageCount: parseInt(grindingImagesRes.rows[0].cnt, 10),
         machineCodeMapped:  machineCodesRes.rows.length,
       },
+      stamp,
       byPartType,
       monthlyTrend,
       monthlyNewParts,
