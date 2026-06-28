@@ -13,7 +13,9 @@ const SEARCH_CONCURRENCY = 8;
 // Similar-part fallback: max combined finished-dim distance (mm) for a reference
 // part to be offered as a suggestion. Dimensional twins score ~0; this caps how
 // far the "nearest historically-tooled part" may be before we stop suggesting.
-const SIMILAR_DIST_MAX = 2.0;
+// Tightened 2026-06-28 from 2.0 → 0.2 (±0.2 mm) so only near-exact dimensional
+// twins are suggested — a high-confidence reference, not a loose neighbour.
+const SIMILAR_DIST_MAX = 0.2;
 
 // Cache: tool DWG family (first dash-segment, e.g. '4030') → the factory
 // process_code it predominantly runs under. Lets the SDS page place a
@@ -474,6 +476,174 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
   }
 }
 
+// ── Similar-part REFERENCE column (informational, runs alongside any match) ──
+//
+// Independent of the empty-fill fallback above: for EVERY tooling that has a
+// factory parts_no map, find the tool the most dimensionally-similar produced
+// part used and attach it as `similarRef` — WITHOUT touching `matches`. The UI
+// renders it as a leading "Similar" column so the engineer sees the real-world
+// reference next to the algorithmic T-Select match. Especially useful for a new
+// model that has no production history of its own.
+//
+// One DISTINCT ON query per machine returns the nearest reference per tooling.
+async function _attachSimilarRef(results, machineByDisplay, spec, specCtx) {
+  const cls = String(spec.cn ?? '').slice(0, 2);
+  if (!/^\d{2}$/.test(cls)) return;
+
+  const od = Number(specCtx.OD) || 0;
+  const id = Number(specCtx.ID) || 0;
+  const w  = Number(specCtx.W)  || 0;
+
+  // Group ALL results by display machine (matched or not).
+  const byMachine = {};
+  for (const res of results) (byMachine[res.machine] ??= []).push(res);
+
+  await Promise.all(Object.entries(byMachine).map(async ([displayName, machineResults]) => {
+    const mcfg = machineByDisplay[displayName];
+    const machineName = mcfg?.machine_name || displayName;
+    const toolingNames = [...new Set(machineResults.map(r => r.tooling))];
+    if (!toolingNames.length) return;
+
+    // Nearest reference part PER tooling_name (DISTINCT ON picks the min-distance
+    // row once the set is ordered by tooling_name, dist).
+    let rows;
+    try {
+      ({ rows } = await engPool.query(
+        `SELECT DISTINCT ON (m.tooling_name)
+                m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
+                (ABS(COALESCE(s.od_aft,0) - $1)
+               + ABS(COALESCE(s.id_aft,0) - $2)
+               + 0.5 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+           FROM ${TSV2_TABLES.PARTNO_MAP} m
+           JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
+          WHERE m.machine_name = $4
+            AND m.tooling_name = ANY($5)
+            AND m.is_forbidden = false
+            AND left(s.cn, 2) = $6
+            AND s.cn <> $7
+          ORDER BY m.tooling_name, dist ASC`,
+        [od, id, w, machineName, toolingNames, cls, String(spec.cn)]
+      ));
+    } catch (_) { return; }   // machine has no partno_map / query issue → no column
+
+    const refByTooling = {};
+    for (const r of rows) {
+      if (Number(r.dist) > SIMILAR_DIST_MAX) continue;
+      refByTooling[r.tooling_name] = r;
+    }
+    for (const res of machineResults) {
+      const ref = refByTooling[res.tooling];
+      if (!ref) continue;
+      res.similarRef = {
+        ref_cn: ref.ref_cn,
+        parts_no: ref.parts_no,
+        tool_dwg_no: ref.tool_dwg_no,
+        distance: Number(ref.dist),
+        source: 'partno_map',   // curated factory mapping (highest confidence)
+      };
+    }
+  }));
+}
+
+// ── Generic similar-part REFERENCE from the factory process plan (ALL machines) ──
+//
+// `tooling_partno_map` only covers a handful of curated machines. To extend the
+// "Similar" reference column to EVERY machine, fall back to the factory ground
+// truth in maqdb: `lpb.eng_r_pi_tool` (the real tool each produced CN used).
+//
+// We tie a factory tool to a T-Select tooling via its DWG FAMILY (the first two
+// dash-segments, e.g. 4866-10) — taken from the machine's own #1 inventory match.
+// The same family uniquely identifies the tooling/fixture, so a CN whose process
+// plan used that family was tooled with the same fixture. Among those, we pick the
+// dimensionally-nearest part (≤ SIMILAR_DIST_MAX) to the searched CN and surface
+// the exact tool it used. Cross-pool but fully fail-safe: any miss → no column.
+//
+// Dim source per class (maqdb): ball/race/sleeve only — body/spherical store dims
+// indirectly and are skipped (the column simply doesn't show for them).
+const _CLASS_DIM = {
+  ball:   { table: 'lpb.eng_ball',   od: 'ball_dia', id: 'in_dia', w: 'width' },
+  race:   { table: 'lpb.eng_race',   od: 'od',       id: 'id',     w: 'width' },
+  sleeve: { table: 'lpb.eng_sleeve', od: 'od',       id: 'id',     w: 'full_length' },
+};
+function _classDimFor(cn) {
+  const n = parseInt(String(cn).slice(0, 2), 10);
+  if (n >= 31 && n <= 39) return _CLASS_DIM.ball;
+  if (n >= 21 && n <= 29) return _CLASS_DIM.race;
+  if ((n >= 61 && n <= 64) || n === 69) return _CLASS_DIM.sleeve;
+  return null; // body / spherical / unknown → no factory reference
+}
+// First tool-DWG-shaped value (XXXX-XX-NNNN…) in an inventory row → its family.
+function _familyFromMatch(row) {
+  for (const v of Object.values(row || {})) {
+    if (typeof v !== 'string') continue;
+    const m = v.match(/^(\d{4}-\d{2})-\d/);
+    if (m) return m[1];
+  }
+  return null;
+}
+async function _attachSimilarRefFactory(results, spec, specCtx) {
+  const dim = _classDimFor(spec.cn);
+  if (!dim) return;
+  const targetCn = cnFormat.itemNoToControlNo(String(spec.cn)); // 6-digit → Cxx-0YYYY
+  if (!targetCn) return;
+
+  const od = Number(specCtx.OD) || 0;
+  const id = Number(specCtx.ID) || 0;
+  const w  = Number(specCtx.W)  || 0;
+  // Same CN PREFIX (e.g. "C31"), not just the broad class table (any 3x ball).
+  // Mirrors the partno_map paths' left(cn,2) filter so the factory reference never
+  // crosses sub-classes — e.g. a C35 yball is not suggested for a C31 ball.
+  const cnPrefix = targetCn.slice(0, 3);
+
+  // Candidates = matched toolings that have NO curated/fill reference yet.
+  const famByResult = new Map(); // result → family
+  const families = new Set();
+  for (const res of results) {
+    if (res.similarRef || res.overrideBy || !res.matches?.length) continue;
+    const fam = _familyFromMatch(res.matches[0]);
+    if (!fam) continue;
+    famByResult.set(res, fam);
+    families.add(fam);
+  }
+  if (!families.size) return;
+
+  // One query: nearest same-CN-prefix produced part per tool family (DISTINCT ON).
+  let rows;
+  try {
+    const famExpr = `split_part(t.tool_dwg_no,'-',1)||'-'||split_part(t.tool_dwg_no,'-',2)`;
+    ({ rows } = await maqPool.query(
+      `SELECT DISTINCT ON (fam) ${famExpr} AS fam,
+              t.process_plan_no AS ref_cn, t.tool_dwg_no,
+              (ABS(COALESCE(d.${dim.od},0) - $1)
+             + ABS(COALESCE(d.${dim.id},0) - $2)
+             + 0.5 * ABS(COALESCE(d.${dim.w},0) - $3)) AS dist
+         FROM lpb.eng_r_pi_tool t
+         JOIN ${dim.table} d ON d.control_no = t.process_plan_no
+        WHERE ${famExpr} = ANY($4)
+          AND left(t.process_plan_no, 3) = $6
+          AND t.process_plan_no <> $5
+        ORDER BY fam, dist ASC`,
+      [od, id, w, [...families], targetCn, cnPrefix]
+    ));
+  } catch (_) { return; }   // maqdb unavailable / class table issue → no column
+
+  const refByFam = {};
+  for (const r of rows) {
+    if (Number(r.dist) > SIMILAR_DIST_MAX) continue;
+    refByFam[r.fam] = r;
+  }
+  for (const [res, fam] of famByResult) {
+    const ref = refByFam[fam];
+    if (!ref) continue;
+    res.similarRef = {
+      ref_cn: ref.ref_cn,
+      tool_dwg_no: ref.tool_dwg_no,
+      distance: Number(ref.dist),
+      source: 'factory',   // derived from lpb.eng_r_pi_tool production plan
+    };
+  }
+}
+
 // ── CN Normalization ─────────────────────────────────────────────────────────
 // tooling_spec_process stores CNs in 6-digit format (e.g. '250190').
 // Accept Cxx-0YYYY input and normalize so both formats find the spec.
@@ -586,6 +756,13 @@ async function search(cn, opts = {}) {
   // Last resort — fill any still-empty tooling with the factory's pick for the
   // most dimensionally-similar part (suggestion only; flagged similar_part).
   await _applySimilarPartFallback(results, machineByDisplay, spec, specCtx);
+  // Attach the nearest-similar-part reference tool to EVERY tooling (matched or
+  // not) for the UI's "Similar" reference column — does not alter matches.
+  // (1) curated partno_map (4 machines, ties tool→tooling_name);
+  await _attachSimilarRef(results, machineByDisplay, spec, specCtx);
+  // (2) generic factory fallback (ALL machines) for matched toolings still without
+  //     a reference — derived from lpb.eng_r_pi_tool via the matched tool family.
+  await _attachSimilarRefFactory(results, spec, specCtx);
 
   results.sort((a, b) =>
     a.machine.localeCompare(b.machine) || a.tooling.localeCompare(b.tooling)

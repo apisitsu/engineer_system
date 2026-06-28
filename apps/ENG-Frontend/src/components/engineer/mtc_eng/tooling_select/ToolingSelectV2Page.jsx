@@ -29,6 +29,13 @@ const formatColName = (k) => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
+// Rotary-dresser tools are referred to by their DD#### short form
+// (4800-42-0226 → DD0226); other tools show their raw DWG no.
+const ddForm = (no) => {
+  const m = String(no || '').match(/^4800-42-0*(\d+)$/);
+  return m ? `DD${m[1].padStart(4, '0')}` : String(no || '');
+};
+
 function RankBadge({ rank }) {
   if (rank === 1) return <Badge count={1} style={{ backgroundColor: '#ffc107' }} />;
   if (rank === 2) return <Badge count={2} style={{ backgroundColor: '#adb5bd' }} />;
@@ -77,7 +84,7 @@ function NewDesignCard({ tooling, computed }) {
   );
 }
 
-function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, overrideBy, similarPart, primaryColor }) {
+function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, overrideBy, similarPart, similarRef, primaryColor }) {
   if (!matches?.length) return <NewDesignCard tooling={tooling} computed={computed} />;
 
   // similar_part = no exact formula/part-no match; this is the factory's pick for
@@ -111,6 +118,35 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
     return m ? m[1].toUpperCase() : null;
   };
 
+  // "Similar" reference column (leftmost, before the T-Select dims): the tool the
+  // nearest dimensionally-similar produced part actually used. Same value on every
+  // row (one reference per tooling); only rendered when the backend found one.
+  const similarCol = (similarRef && !isSimilar) ? [{
+    title: (
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#ad6800' }}>Similar</div>
+        <div style={{ fontSize: 9, color: '#ad6800' }}>งานคล้าย</div>
+      </div>
+    ),
+    key: '__similar',
+    width: 110,
+    align: 'center',
+    onHeaderCell: () => ({ style: { backgroundColor: '#fffbe6', borderTop: '2px solid #faad14' } }),
+    onCell: () => ({ style: { backgroundColor: '#fffef5' } }),
+    render: () => (
+      <Tooltip
+        title={`อ้างอิงจากงานคล้าย C/N ${similarRef.ref_cn}` +
+          (similarRef.parts_no ? ` / P/N ${similarRef.parts_no}` : '') +
+          ` · ระยะห่างมิติ ${Number(similarRef.distance).toFixed(2)} mm` +
+          (similarRef.source === 'factory' ? ' · จากแผนผลิตจริง (process plan)' : ' · จาก TOOLING LIST')}
+      >
+        <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace', fontWeight: 600 }}>
+          {ddForm(similarRef.tool_dwg_no)}
+        </Tag>
+      </Tooltip>
+    ),
+  }] : [];
+
   const tableCols = [
     {
       title: '#',
@@ -119,6 +155,7 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
       align: 'center',
       render: (_, __, index) => <RankBadge rank={index + 1} />,
     },
+    ...similarCol,
     ...ordered.map(k => {
       const computedKey = resolveComputedKey(k);
       const computedVal = computedKey != null ? computed?.[computedKey] : undefined;
@@ -275,11 +312,22 @@ function groupByMachine(results) {
   const map = new Map();
   for (const r of results) {
     if (!map.has(r.machine)) {
-      map.set(r.machine, { machine: r.machine, machineLabel: r.machineLabel, toolings: [] });
+      map.set(r.machine, {
+        machine: r.machine, machineLabel: r.machineLabel,
+        // producedHistory may be undefined (fail-open / no production source) —
+        // only an explicit false marks a machine as "never produced this CN".
+        producedHistory: r.producedHistory,
+        toolings: [],
+      });
     }
     map.get(r.machine).toolings.push(r);
   }
-  return [...map.values()];
+  // Produced machines first; no-history machines sink to the bottom (kept, not hidden).
+  return [...map.values()].sort((a, b) => {
+    const an = a.producedHistory === false ? 1 : 0;
+    const bn = b.producedHistory === false ? 1 : 0;
+    return an - bn || a.machine.localeCompare(b.machine);
+  });
 }
 
 export default function ToolingSelectV2Page() {
@@ -331,17 +379,23 @@ export default function ToolingSelectV2Page() {
   const collapseItems = machineGroups.map(group => {
     const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
     const similarCount = group.toolings.filter(t => t.overrideBy === 'similar_part').length;
+    const noHistory = group.producedHistory === false;
     return {
       key: group.machine,
       label: (
         <Space>
-          <Text strong>{group.machine}</Text>
+          <Text strong style={noHistory ? { color: '#8c8c8c' } : undefined}>{group.machine}</Text>
           {group.machineLabel && group.machineLabel !== group.machine && (
             <Tag color="default">{group.machineLabel}</Tag>
           )}
           <Tag color={found < total ? 'orange' : 'geekblue'}>{found} / {total} Tooling</Tag>
           {similarCount > 0 && (
             <Tag color="gold">⚠ Similar Part × {similarCount}</Tag>
+          )}
+          {noHistory && (
+            <Tooltip title="ไม่พบประวัติการผลิต C/N นี้บนเครื่องนี้ (lpb.pc_production) — แสดงไว้เผื่อเป็นงานใหม่ที่ยังไม่เคยผลิต">
+              <Tag color="default" style={{ opacity: 0.65 }}>ไม่มีประวัติผลิต</Tag>
+            </Tooltip>
           )}
         </Space>
       ),
@@ -357,6 +411,7 @@ export default function ToolingSelectV2Page() {
               matchDimCols={t.matchDimCols}
               overrideBy={t.overrideBy}
               similarPart={t.similarPart}
+              similarRef={t.similarRef}
               primaryColor={primaryColor}
             />
           ))}
@@ -426,6 +481,27 @@ export default function ToolingSelectV2Page() {
                     <SpecCard cn={result.cn} spec={result.spec} primaryColor={primaryColor} />
                   )}
 
+                  {result.productionFilter?.applied && result.productionFilter.hadProduction === false && (
+                    <Alert
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message="C/N นี้ยังไม่มีประวัติการผลิต — อาจเป็นงานใหม่ (new model)"
+                      description="แสดงทุกเครื่องที่ทำงานนี้ได้ตามขนาด (ยังไม่มีเครื่องไหนเคยผลิตจริง) — โปรดเลือกเครื่องและตรวจสอบ tooling ก่อนใช้งาน"
+                      showIcon
+                    />
+                  )}
+
+                  {result.productionFilter?.applied && result.productionFilter.hadProduction
+                    && result.productionFilter.machinesWithoutHistory > 0
+                    && result.productionFilter.machinesWithHistory > 0 && (
+                    <Alert
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message={`เครื่องที่มีประวัติผลิต C/N นี้แสดงด้านบน (${result.productionFilter.machinesWithHistory}) — อีก ${result.productionFilter.machinesWithoutHistory} เครื่องที่ทำได้แต่ไม่มีประวัติถูกยุบไว้ด้านล่าง`}
+                      showIcon
+                    />
+                  )}
+
                   {isIncomplete && (
                     <Alert
                       type="error"
@@ -474,7 +550,10 @@ export default function ToolingSelectV2Page() {
                       // similar-part suggestions) so results aren't hidden behind
                       // a collapsed panel.
                       defaultActiveKey={machineGroups
-                        .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0)
+                        // Auto-expand machines WITH production history that found a
+                        // match; no-history machines stay collapsed to reduce clutter
+                        // (they're still listed and can be opened manually).
+                        .filter(g => g.producedHistory !== false && (machineToolingCounts[g.machine]?.found || 0) > 0)
                         .map(g => g.machine)}
                       items={collapseItems}
                       style={{ marginBottom: 16 }}

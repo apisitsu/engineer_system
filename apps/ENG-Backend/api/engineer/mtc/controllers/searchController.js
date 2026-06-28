@@ -12,12 +12,16 @@ const search = async (req, res) => {
     const result = await searchService.search(cn.toString().trim(), { user_empno: req.user?.empno ?? null });
     if (!result.success) return res.status(404).json(result);
 
-    // Hard-filter results to machines that actually PRODUCED this CN
-    // (lpb.pc_production). Tooling Select results carry no process_code, so the
-    // filter is machine-level here (machine+process granularity applies on the
-    // SDS side, whose blocks are per process). Applied only in this user-facing
-    // controller — the shared searchService stays unfiltered for the coverage
-    // report / SDS overlay that call it via tselectFallback.
+    // Annotate (do NOT remove) each result with whether the machine actually
+    // PRODUCED this CN (lpb.pc_production). Previously this hard-removed machines
+    // with no production history — but that hid every result for a brand-new model
+    // (never produced anywhere), so the engineer couldn't see what tooling it could
+    // use. Now we keep all results and flag `producedHistory`; the UI de-emphasises
+    // (collapses + greys) the no-history machines so the view stays uncluttered
+    // while new models remain visible. Tooling Select carries no process_code, so
+    // the flag is machine-level. Applied only in this user-facing controller — the
+    // shared searchService stays unannotated for the coverage report / SDS overlay
+    // that call it via tselectFallback.
     await applyProductionFilter(result, cn);
 
     res.json(result);
@@ -29,21 +33,27 @@ const search = async (req, res) => {
 
 async function applyProductionFilter(result, cn) {
   const produced = await productionHistoryService.getProducedMachines(cn);
-  // Production source unavailable / CN shape unparseable → fail-open (no filter),
-  // so a maqPool outage never silently empties every search.
+  // Production source unavailable / CN shape unparseable → fail-open (no flag),
+  // so a maqPool outage never mislabels every machine as "no history". Leaving
+  // producedHistory undefined makes the UI treat each machine as normal.
   if (!produced) {
     result.productionFilter = { applied: false, reason: 'production_source_unavailable' };
     return;
   }
 
-  const before = result.results.length;
-  result.results = result.results.filter(r => produced.machineTypes.has(r.machine));
+  // Keep every result; just flag which machines have real production history.
+  let withHistory = 0;
+  for (const r of result.results) {
+    r.producedHistory = produced.machineTypes.has(r.machine);
+    if (r.producedHistory) withHistory++;
+  }
 
   result.productionFilter = {
     applied: true,
-    hadProduction: produced.hasData,
+    hadProduction: produced.hasData,   // false = brand-new model (never produced)
     producedMachines: [...produced.machineTypes],
-    removed: before - result.results.length,
+    machinesWithHistory: withHistory,
+    machinesWithoutHistory: result.results.length - withHistory,
   };
 }
 

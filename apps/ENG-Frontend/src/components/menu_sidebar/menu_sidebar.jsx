@@ -88,7 +88,6 @@ export const mtc = createMenu([
         children: [
             { label: "Inspection Dashboard", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
             { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
-            { label: "SDS Stamp Tracking", path: MTC_PATHS.SDS_STAMP_TRACKING, key: "sds-stamp-tracking" },
         ]
     },
 ]);
