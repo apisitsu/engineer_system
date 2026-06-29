@@ -38,6 +38,13 @@ const dwgPrefix = (no) => {
   return p.length >= 2 ? `${p[0]}-${p[1]}` : no;
 };
 
+// Rotary-dresser tools are referred to by their DD#### short form (4800-42-0226 →
+// DD0226); every other tool shows its raw DWG no. Mirrors ToolingSelectV2Page.
+const ddForm = (no) => {
+  const m = String(no || '').match(/^4800-42-0*(\d+)$/);
+  return m ? `DD${m[1].padStart(4, '0')}` : String(no || '');
+};
+
 // Tolerant numeric equality for dim values stored as strings ("3" vs "3.00"); falls
 // back to string compare for non-numeric values. Used by the dim-compare modal.
 const numEq = (a, b) => {
@@ -49,10 +56,12 @@ const hasVal = (v) => v != null && String(v).trim() !== '';
 
 // Build the dimension-comparison rows for the SDS compare modal. Each row is one DWG
 // dimension (label = formula letter, e.g. dim_a → "A"), with the factory tool value,
-// T-Select #1 / #2 values, and the formula target. `diff` flags rows where the actual
-// tool values (factory/#1/#2) are not all equal — i.e. the dims that differ.
-const buildCompareRows = (result, factory) => {
-  if (!result) return { rows: [], hasFactory: false, has2: false };
+// T-Select #1 / #2 values, the nearest similar-part REFERENCE tool, and the formula
+// target. `diff` flags rows where the actual tool values (factory/#1/#2/similar) are
+// not all equal — i.e. the dims that differ. `similar` is the inventory row of the
+// `similarRef` tool (the real tool the most dimensionally-similar produced part used).
+const buildCompareRows = (result, factory, similar) => {
+  if (!result) return { rows: [], hasFactory: false, has2: false, hasSimilar: false };
   const m1 = result.matches?.[0] || null;
   const m2 = result.matches?.[1] || null;
   const colMap = result.columnMap || {};           // output_key (A) → inventory_column (dim_a)
@@ -61,10 +70,10 @@ const buildCompareRows = (result, factory) => {
   const rankSet = new Set(result.matchDimCols || []);
   const computed = result.computed || {};
 
-  // Candidate dim columns: any dim_* with a value in factory/#1/#2, plus any column
-  // that has a formula target (so a target-only dim still shows).
+  // Candidate dim columns: any dim_* with a value in factory/#1/#2/similar, plus any
+  // column that has a formula target (so a target-only dim still shows).
   const colsSet = new Set();
-  [factory, m1, m2].forEach((o) => {
+  [factory, m1, m2, similar].forEach((o) => {
     if (!o) return;
     Object.keys(o).forEach((c) => { if (/^dim_[a-z]$/i.test(c) && hasVal(o[c])) colsSet.add(c); });
   });
@@ -78,13 +87,14 @@ const buildCompareRows = (result, factory) => {
     const fv = factory ? factory[col] : null;
     const v1 = m1 ? m1[col] : null;
     const v2 = m2 ? m2[col] : null;
-    const present = [fv, v1, v2].filter(hasVal);
+    const sv = similar ? similar[col] : null;
+    const present = [fv, v1, v2, sv].filter(hasVal);
     const diff = present.length > 1 && !present.every((v) => numEq(v, present[0]));
     // Reference for cell-level diff highlight: prefer #1 (the recommendation).
-    const ref = [v1, fv, v2].find(hasVal) ?? null;
-    return { key: col, label, ranked: rankSet.has(col), target, factory: fv, v1, v2, diff, ref };
+    const ref = [v1, fv, v2, sv].find(hasVal) ?? null;
+    return { key: col, label, ranked: rankSet.has(col), target, factory: fv, v1, v2, similar: sv, diff, ref };
   });
-  return { rows, hasFactory: !!factory, has2: !!m2 };
+  return { rows, hasFactory: !!factory, has2: !!m2, hasSimilar: !!similar };
 };
 
 const SdsV2Page = () => {
@@ -122,32 +132,41 @@ const SdsV2Page = () => {
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
 
-  // Dim-compare modal: compares the factory Tool DWG No against T-Select #1/#2 dims.
+  // Dim-compare modal: compares the factory Tool DWG No against T-Select #1/#2 dims
+  // and the nearest similar-part REFERENCE tool (result.similarRef).
   const [compareModal, setCompareModal] = useState({
-    open: false, loading: false, title: '', result: null, factory: null, factoryNo: null,
+    open: false, loading: false, title: '', result: null,
+    factory: null, factoryNo: null, similar: null, similarRef: null,
   });
 
-  // Open the compare modal for a tooling row + its T-Select result, then fetch the
-  // factory tool's dimensions (when the row has a real Tool DWG No) so they can be
+  // Open the compare modal for a tooling row + its T-Select result, then fetch (in
+  // parallel) the inventory dims of BOTH the factory Tool DWG No (when the row has a
+  // real one) AND the similar-part reference tool (result.similarRef) so they can be
   // shown next to #1/#2. result.machine is the display name the lookup resolves.
   const openCompare = async (row, result) => {
     const factoryNo = row._isExtra ? null : (row.tool_dwg_no?.trim() || null);
     const machine = result?.machine || null;
+    const similarRef = result?.similarRef || null;
+    const similarNo = similarRef?.tool_dwg_no?.trim() || null;
     setCompareModal({
       open: true,
-      loading: !!(factoryNo && machine),
+      loading: !!(machine && (factoryNo || similarNo)),
       title: `${result?.machine || ''} · ${result?.tooling || row.tool_name || ''}`,
       result,
       factory: null,
       factoryNo,
+      similar: null,
+      similarRef,
     });
-    if (!factoryNo || !machine) return;
-    try {
-      const res = await axios.get(server.TSV2_INVENTORY_LOOKUP, { params: { machine, tooling_no: factoryNo } });
-      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: res.data?.row || null } : prev));
-    } catch {
-      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: null } : prev));
-    }
+    if (!machine || (!factoryNo && !similarNo)) return;
+    // Both lookups fail-soft to null (e.g. a factory-plan similar tool may not exist
+    // in this machine's T-Select inventory table → no dims, just the DWG no shown).
+    const lookup = (no) => (no
+      ? axios.get(server.TSV2_INVENTORY_LOOKUP, { params: { machine, tooling_no: no } })
+          .then((r) => r.data?.row || null).catch(() => null)
+      : Promise.resolve(null));
+    const [factory, similar] = await Promise.all([lookup(factoryNo), lookup(similarNo)]);
+    setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory, similar } : prev));
   };
 
   const handleSearch = async () => {
@@ -344,7 +363,7 @@ const SdsV2Page = () => {
 
   const submitBackfill = async () => {
     if (!backfill?.em_id?.trim() || !backfill?.signer_name?.trim()) {
-      message.warning('กรอก Employee No และชื่อผู้เซ็น');
+      message.warning('Enter Employee No and signer name');
       return;
     }
     try {
@@ -357,9 +376,9 @@ const SdsV2Page = () => {
         signer_name: backfill.signer_name.trim(),
         signed_at: backfill.signed_at ? backfill.signed_at.format('YYYY-MM-DD') : null,
       });
-      if (res.data?.success) { message.success('บันทึกอนุมัติย้อนหลังแล้ว'); setBackfill(null); fetchApproval(); }
+      if (res.data?.success) { message.success('Backdated approval saved'); setBackfill(null); fetchApproval(); }
     } catch (e) {
-      message.error(e.response?.data?.error || 'บันทึกไม่สำเร็จ');
+      message.error(e.response?.data?.error || 'Save failed');
     }
   };
 
@@ -388,7 +407,7 @@ const SdsV2Page = () => {
                     </Space>
                   ) : (
                     <Text type="secondary" style={{ flex: 1, fontStyle: 'italic' }}>
-                      {s.blockedByOrder ? `รอเซ็น ${ROLE_LABEL[PREV_ROLE[s.role]]} ก่อน` : 'ยังไม่เซ็น'}
+                      {s.blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
                     </Text>
                   )}
                   {s.canSign && !s.signed && (
@@ -398,7 +417,7 @@ const SdsV2Page = () => {
                     </Button>
                   )}
                   {canRevoke && (
-                    <Popconfirm title="ยกเลิกลายเซ็นนี้?" okText="ยกเลิก" cancelText="ไม่"
+                    <Popconfirm title="Revoke this signature?" okText="Revoke" cancelText="No"
                       onConfirm={() => handleRevoke(s.role)}>
                       <Button size="small" danger>Revoke</Button>
                     </Popconfirm>
@@ -754,8 +773,8 @@ const SdsV2Page = () => {
                 <Tag color="gold" style={{ margin: 0 }}>SIMILAR PART</Tag>
                 <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>
                 {sp && (
-                  <Tooltip title={`อ้างอิงงานคล้าย C/N ${sp.ref_cn}${sp.parts_no ? ` · P/N ${sp.parts_no}` : ''} · ${Number(sp.distance) <= 0.001 ? 'มิติตรงกัน' : `Δ ${Number(sp.distance).toFixed(2)} mm`} — โปรดตรวจสอบก่อนใช้`}>
-                    <Text style={{ fontSize: 11, color: '#ad6800' }}>(อ้างอิง C/N {sp.ref_cn})</Text>
+                  <Tooltip title={`Similar-work ref C/N ${sp.ref_cn}${sp.parts_no ? ` · P/N ${sp.parts_no}` : ''} · ${Number(sp.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(sp.distance).toFixed(2)} mm`} — verify before use`}>
+                    <Text style={{ fontSize: 11, color: '#ad6800' }}>(ref C/N {sp.ref_cn})</Text>
                   </Tooltip>
                 )}
               </Space>
@@ -789,6 +808,31 @@ const SdsV2Page = () => {
             if (!m) return <span style={{ color: '#bbb' }}>-</span>;
             const isSame = !r._isExtra && m === key;
             return <Tag color={isSame ? 'default' : 'geekblue'}>{m}</Tag>;
+          },
+        },
+        {
+          // The tool the most dimensionally-similar produced part actually used —
+          // a real-world reference (NOT a T-Select pick), valuable for new models.
+          title: (
+            <Tooltip title="Tool used by the most dimensionally-similar produced part (reference, not a selection)">
+              <span>Similar <span style={{ fontSize: 10, color: '#ad6800' }}>ref</span></span>
+            </Tooltip>
+          ),
+          key: 'similarRef',
+          width: 130,
+          align: 'center',
+          render: (_, r) => {
+            const res = r._isExtra ? r._tsResult : matchMap[r.tool_dwg_no?.trim()]?.result;
+            const sr = res?.similarRef;
+            if (!sr) return <span style={{ color: '#bbb' }}>-</span>;
+            return (
+              <Tooltip title={`Similar-work ref C/N ${sr.ref_cn}` +
+                (sr.parts_no ? ` · P/N ${sr.parts_no}` : '') +
+                ` · ${Number(sr.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(sr.distance).toFixed(2)} mm`}` +
+                (sr.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST')}>
+                <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace' }}>{ddForm(sr.tool_dwg_no)}</Tag>
+              </Tooltip>
+            );
           },
         },
         {
@@ -1052,12 +1096,12 @@ const SdsV2Page = () => {
       </Modal>
 
       <Modal
-        title={<span><EditOutlined style={{ marginRight: 8 }} />บันทึกอนุมัติย้อนหลัง</span>}
+        title={<span><EditOutlined style={{ marginRight: 8 }} />Backdated Approval</span>}
         open={!!backfill}
         onCancel={() => setBackfill(null)}
         onOk={submitBackfill}
-        okText="บันทึก"
-        cancelText="ยกเลิก"
+        okText="Save"
+        cancelText="Cancel"
         destroyOnHidden
       >
         {backfill && (
@@ -1070,13 +1114,13 @@ const SdsV2Page = () => {
             </div>
             <Input placeholder="Employee No (em_id)" value={backfill.em_id}
               onChange={(e) => setBackfill((b) => ({ ...b, em_id: e.target.value }))} />
-            <Input placeholder="ชื่อผู้เซ็น (เช่น S.APISIT)" value={backfill.signer_name}
+            <Input placeholder="Signer name (e.g. S.APISIT)" value={backfill.signer_name}
               onChange={(e) => setBackfill((b) => ({ ...b, signer_name: e.target.value }))} />
-            <DatePicker style={{ width: '100%' }} placeholder="วันที่เซ็น (ย้อนหลัง)" format="DD/MM/YYYY"
+            <DatePicker style={{ width: '100%' }} placeholder="Sign date (backdated)" format="DD/MM/YYYY"
               value={backfill.signed_at}
               onChange={(d) => setBackfill((b) => ({ ...b, signed_at: d }))} />
             <Text type="secondary" style={{ fontSize: 12 }}>
-              เว้นวันที่ = ใช้วันนี้ · การบันทึกย้อนหลังข้ามลำดับ Prepared→Checked→Approved ได้
+              Leave date empty = today · Backdated entries may skip the Prepared→Checked→Approved order
             </Text>
           </Space>
         )}
@@ -1097,8 +1141,9 @@ const SdsV2Page = () => {
       >
         <Spin spinning={compareModal.loading}>
           {(() => {
-            const { rows, hasFactory } = buildCompareRows(compareModal.result, compareModal.factory);
+            const { rows, hasFactory, hasSimilar } = buildCompareRows(compareModal.result, compareModal.factory, compareModal.similar);
             if (!rows.length) return <Text type="secondary">No dimension data to compare.</Text>;
+            const similarRef = compareModal.similarRef;
 
             const cmpCell = (val, row, isRef) => {
               if (!hasVal(val)) return <span style={{ color: '#bbb' }}>-</span>;
@@ -1123,6 +1168,11 @@ const SdsV2Page = () => {
               }] : []),
               { title: 'T-Select #1', dataIndex: 'v1', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, true) },
               { title: 'T-Select #2', dataIndex: 'v2', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, false) },
+              ...(hasSimilar ? [{
+                title: <span style={{ color: '#ad6800' }}>Similar<br /><span style={{ fontSize: 10 }}>ref</span></span>,
+                dataIndex: 'similar', align: 'center', width: 110,
+                render: (v, r) => cmpCell(v, r, false),
+              }] : []),
             ];
             return (
               <>
@@ -1135,6 +1185,21 @@ const SdsV2Page = () => {
                 {!hasFactory && compareModal.factoryNo && !compareModal.loading && (
                   <div style={{ marginBottom: 8, fontSize: 12 }}>
                     <Text type="warning">Factory tool dims not found in inventory — showing T-Select #1/#2 only.</Text>
+                  </div>
+                )}
+                {similarRef && (
+                  <div style={{ marginBottom: 8, fontSize: 12 }}>
+                    <Text style={{ color: '#ad6800' }}>Similar: </Text>
+                    <Tag color="gold" style={{ fontFamily: 'monospace' }}>{ddForm(similarRef.tool_dwg_no)}</Tag>
+                    <Text type="secondary">
+                      ref C/N {similarRef.ref_cn}
+                      {similarRef.parts_no ? ` · P/N ${similarRef.parts_no}` : ''}
+                      {` · ${Number(similarRef.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(similarRef.distance).toFixed(2)} mm`}`}
+                      {similarRef.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST'}
+                    </Text>
+                    {!hasSimilar && !compareModal.loading && (
+                      <Text type="warning"> — dims not found in inventory (showing DWG no only)</Text>
+                    )}
                   </div>
                 )}
                 <Table

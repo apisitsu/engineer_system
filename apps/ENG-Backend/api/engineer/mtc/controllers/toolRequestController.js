@@ -220,7 +220,7 @@ const createToolRequest = async (req, res) => {
         if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
             return res.status(400).json({
                 result: 'false',
-                message: 'กรุณากรอกข้อมูลให้ครบถ้วน'
+                message: 'Please fill in all required fields'
             });
         }
 
@@ -311,7 +311,7 @@ const createToolRequest = async (req, res) => {
             }
         })();
 
-        res.json({ result: 'true', message: 'บันทึกคำขอเรียบร้อยแล้ว', id: requestId });
+        res.json({ result: 'true', message: 'Request saved successfully', id: requestId });
     } catch (error) {
         await client.query('ROLLBACK');
         logger.error('Server Error during creation', { error: error.message });
@@ -374,9 +374,9 @@ const updateToolRequest = async (req, res) => {
     try {
         const result = await engPool.query(sql, params);
         if (result.rowCount === 0) {
-            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการแก้ไข' });
+            return res.status(404).json({ result: 'false', message: 'Record to edit not found' });
         }
-        res.json({ result: 'true', message: 'อัพเดทข้อมูลเรียบร้อยแล้ว', changes: result.rowCount });
+        res.json({ result: 'true', message: 'Updated successfully', changes: result.rowCount });
     } catch (err) {
         console.error('Error updating tool request:', err.message);
         return res.status(500).json({ result: 'false', message: err.message });
@@ -395,9 +395,9 @@ const deleteToolRequest = async (req, res) => {
             [id]
         );
         if (result.rowCount === 0) {
-            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการลบ' });
+            return res.status(404).json({ result: 'false', message: 'Record to delete not found' });
         }
-        res.json({ result: 'true', message: 'ลบข้อมูลเรียบร้อยแล้ว' });
+        res.json({ result: 'true', message: 'Deleted successfully' });
     } catch (err) {
         console.error('Error deleting tool request:', err.message);
         return res.status(500).json({ result: 'false', message: err.message });
@@ -529,7 +529,7 @@ const submitAction = async (req, res) => {
             const userEmailVal = (req.body.action_by_email || '').toLowerCase();
             const isAllowed = allowedCodes.includes(userCode) ||
                 recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
-            if (!isAllowed) return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
+            if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
     } catch (err) {
         logger.warn('Permission check failed', { error: err.message });

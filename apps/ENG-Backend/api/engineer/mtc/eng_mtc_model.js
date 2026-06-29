@@ -116,7 +116,7 @@ const ToolDWGRequestAdd = async (req, res) => {
         if (!date_req || !item) {
             return res.json({
                 result: "false",
-                message: "กรุณากรอกข้อมูลวันที่และ Item ให้ครบถ้วน"
+                message: "Please fill in the date and Item completely"
             });
         }
 
@@ -136,7 +136,7 @@ const ToolDWGRequestAdd = async (req, res) => {
         console.error("Error Adding DWG Request:", error);
         res.json({
             result: "false",
-            message: error.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล"
+            message: error.message || "An error occurred while saving"
         });
     }
 }
@@ -145,7 +145,7 @@ const ToolDWGRequestUpdate = async (req, res) => {
     try {
         const { id, status } = req.body;
         if (!id) {
-            return res.json({ result: "false", message: "กรุณาระบุ ID" });
+            return res.json({ result: "false", message: "Please specify an ID" });
         }
 
         const finalStatus = status || 'Complete';
@@ -153,18 +153,18 @@ const ToolDWGRequestUpdate = async (req, res) => {
         const result = await engPool.query(`UPDATE ${TABLES.TI_DWG_JOB} SET status = $1 WHERE id = $2 RETURNING id`, [finalStatus, id]);
 
         if (result.rowCount === 0) {
-            return res.json({ result: "false", message: "ไม่พบข้อมูล" });
+            return res.json({ result: "false", message: "Data not found" });
         }
 
         res.json({
             result: "true",
-            message: "อัพเดทสถานะเรียบร้อยแล้ว!"
+            message: "Status updated successfully!"
         });
     } catch (error) {
         console.error("Error Updating DWG Request:", error);
         res.json({
             result: "false",
-            message: error.message || "เกิดข้อผิดพลาดในการอัพเดทข้อมูล"
+            message: error.message || "An error occurred while updating"
         });
     }
 }
@@ -373,7 +373,7 @@ const ToolingReturnAdd = async (req, res) => {
         const { date_return, wc_code, qty, measuring_tool, remark } = req.body;
 
         if (!wc_code || !qty) {
-            return res.json({ result: "false", message: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+            return res.json({ result: "false", message: "Please fill in all required fields" });
         }
 
         // Keep raw digit string to preserve leading zeros (e.g., "09" stays "09")
@@ -422,7 +422,7 @@ const ToolingReturnAdd = async (req, res) => {
         console.log(`✅ บันทึกข้อมูล ${TABLES.TI_RETURN} -> ID: ${result.rows[0].id} เรียบร้อย`);
         res.json({
             result: "true",
-            message: "บันทึกสำเร็จ",
+            message: "Saved successfully",
             id: result.rows[0].id
         });
 
@@ -480,10 +480,10 @@ const ToolingInspectUpdate = async (req, res) => {
         const result = await engPool.query(sql, params);
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ result: "false", message: "ไม่พบข้อมูลที่ต้องการแก้ไข" });
+            return res.status(404).json({ result: "false", message: "Record to edit not found" });
         }
 
-        res.json({ result: "true", message: "อัพเดทข้อมูลเรียบร้อยแล้ว", changes: result.rowCount });
+        res.json({ result: "true", message: "Updated successfully", changes: result.rowCount });
     } catch (err) {
         console.error("SQL Error:", err.message);
         return res.status(500).json({ result: "false", message: "Database error: " + err.message });

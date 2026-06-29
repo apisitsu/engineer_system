@@ -654,13 +654,13 @@ const FormulaBuilderInput = ({
               onClick={toggleTextMode}
               style={{ fontSize: 11, padding: 0, color: '#bbb' }}
             >
-              {showTextMode ? '▲ ซ่อน Text mode' : '▼ Advanced (edit text directly)'}
+              {showTextMode ? '▲ Hide Text mode' : '▼ Advanced (edit text directly)'}
             </Button>
           </div>
         </div>
       ) : (
         <Text type="secondary" style={{ fontSize: 10, display: 'block', marginBottom: 4 }}>
-          formula ซับซ้อน — ใช้ Text mode
+          complex formula — use Text mode
         </Text>
       )}
 

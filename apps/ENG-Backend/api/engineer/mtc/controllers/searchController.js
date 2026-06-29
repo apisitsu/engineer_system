@@ -9,7 +9,12 @@ const search = async (req, res) => {
     return res.status(400).json({ success: false, error: 'cn (CN number) is required' });
   }
   try {
-    const result = await searchService.search(cn.toString().trim(), { user_empno: req.user?.empno ?? null });
+    // withSimilarRef: only the user-facing search renders the "Similar" reference
+    // column, so only it pays for the extra per-machine + cross-pool lookups.
+    const result = await searchService.search(cn.toString().trim(), {
+      user_empno: req.user?.empno ?? null,
+      withSimilarRef: true,
+    });
     if (!result.success) return res.status(404).json(result);
 
     // Annotate (do NOT remove) each result with whether the machine actually

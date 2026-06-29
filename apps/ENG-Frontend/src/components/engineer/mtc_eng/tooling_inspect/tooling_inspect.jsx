@@ -116,7 +116,7 @@ function InspectionReport() {
   const handleBlacklist = useCallback(async (id) => {
     const { isConfirmed } = await Swal.fire({
       title: 'Blacklist Item',
-      text: 'ยืนยันการ Blacklist รายการนี้?',
+      text: 'Confirm blacklisting this item?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Confirm',

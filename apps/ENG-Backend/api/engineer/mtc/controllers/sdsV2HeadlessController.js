@@ -92,6 +92,24 @@ function buildCssVarsBlock(config) {
   return `:root {\n${lines}\n}`;
 }
 
+// Canonical MSB surface-grind fixture TYPE from a (factory or whitelist) tool name.
+// A bore-band stores the SAME fixture (BASE/COLLET/COLLET ARBOR/COLLAR/SPACER) at
+// DIFFERENT DWG positions — e.g. band 0031 puts COLLET/ARBOR/COLLAR at -07/-08/-09
+// while the whitelist lists them at -02/-03/-04 — so neither the DWG suffix nor the
+// position is a reliable slot key; the fixture NAME is. Returns null for names that
+// aren't one of these fixtures, so the name-match tier stays inert for non-MSB
+// machines (their whitelist names don't canonicalize → empty slotByFixture map).
+function canonFixtureName(name) {
+  const n = String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  if (n.includes('ARBOR')) return 'COLLET_ARBOR';          // check BEFORE COLLET (substring)
+  if (n.includes('COLLAR')) return 'COLLAR';
+  if (n.includes('COLLET') || n.includes('コレット')) return 'COLLET';
+  if (n.includes('BASE') || n.includes('ベース')) return 'BASE';
+  if (n.includes('SPACER') || n.includes('スペーサ')) return 'SPACER';
+  return null;
+}
+
 // ── Cloned buildValueMap logic for consistency ──────────────────────────────
 
 async function buildValueMap(searchData, machine_type_name, process_code, engPool, displayName) {
@@ -189,27 +207,62 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     slotData[idx] = payload; return true;
   };
 
-  // DWG no → configured T-number via exact or prefix match against the whitelist
-  // (null when there is no Machine Tool Config slot for it).
+  // DWG no (+ optional fixture NAME) → configured T-number. Tiers: 1) exact DWG,
+  // 2) dash-prefix family, 3) fixture NAME (MSB grinders). null = no slot.
   let configSlotOf = () => null;
   if (mtRows.length > 0) {
     const allowedKeys = mtRows.map(r => r.tool_drawing_no);
     const orderMap = {};
     mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
-    configSlotOf = (dwgNo) => {
+
+    // Resolve each whitelist slot's fixture NAME (from lpb.eng_tooling) so a factory /
+    // T-Select tool can be matched to its slot by fixture TYPE — the only key that
+    // survives the bore-band DWG shuffle (band 0031 lists COLLET/ARBOR/COLLAR at
+    // -07/-08/-09; the whitelist lists them at -02/-03/-04). slotByFixture keeps a
+    // canonical fixture only when it maps to exactly ONE slot (never guesses) and stays
+    // EMPTY for non-MSB whitelists (names don't canonicalize) → the name tier is inert.
+    const slotByFixture = new Map();   // canon fixture → { slot, family }
+    try {
+      const nameRows = (await maqPool.query(
+        `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING} WHERE tool_dwg_no = ANY($1)`,
+        [allowedKeys]
+      )).rows;
+      const nameByDwg = {};
+      for (const r of nameRows) if (r.tool_name && !nameByDwg[r.tool_dwg_no]) nameByDwg[r.tool_dwg_no] = r.tool_name;
+      const canonCount = {};
+      for (const r of mtRows) {
+        const canon = canonFixtureName(nameByDwg[r.tool_drawing_no]);
+        if (!canon) continue;
+        canonCount[canon] = (canonCount[canon] || 0) + 1;
+        slotByFixture.set(canon, { slot: orderMap[r.tool_drawing_no], family: dwgPrefix(r.tool_drawing_no) });
+      }
+      for (const [c, n] of Object.entries(canonCount)) if (n > 1) slotByFixture.delete(c); // ambiguous → drop
+    } catch (_) { /* name resolution is best-effort → fall back to DWG-only matching */ }
+
+    configSlotOf = (dwgNo, toolName) => {
       if (!dwgNo) return null;
       if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
       const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
-      return k !== undefined ? orderMap[k] : null;
+      if (k !== undefined) return orderMap[k];
+      // Fixture-NAME fallback (MSB surface grinders): the part's REAL band tool
+      // (e.g. 4547-01-0031-07 COLLET) lands in the whitelist's COLLET slot even though
+      // its DWG position (-07) differs from the whitelisted variant (-02). Requires the
+      // SAME DWG family so a same-named tool of a different fixture family can't cross over.
+      const canon = canonFixtureName(toolName);
+      if (canon && slotByFixture.has(canon)) {
+        const e = slotByFixture.get(canon);
+        if (dwgPrefix(dwgNo) === e.family) return e.slot;
+      }
+      return null;
     };
-    // Factory-plan tools that match the whitelist land in their EXACT configured T-slot
+    // Factory-plan tools that match the whitelist land in their configured T-slot
     // (slot positions are honored, gaps preserved). Sorted by slot so a collision
     // resolves deterministically (lower T keeps its slot, the other spills to first free).
     const matched = tools
-      .filter(t => configSlotOf(t.tool_dwg_no) !== null)
-      .sort((a, b) => configSlotOf(a.tool_dwg_no) - configSlotOf(b.tool_dwg_no));
+      .filter(t => configSlotOf(t.tool_dwg_no, t.tool_name) !== null)
+      .sort((a, b) => configSlotOf(a.tool_dwg_no, a.tool_name) - configSlotOf(b.tool_dwg_no, b.tool_name));
     for (const t of matched) {
-      placeTool(configSlotOf(t.tool_dwg_no), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
+      placeTool(configSlotOf(t.tool_dwg_no, t.tool_name), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
     }
   } else {
     // No Machine Tool Config → legacy compacted fill (prefix-code filter when available).
@@ -275,6 +328,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     const multiFam = new Set(Object.keys(famSets).filter(p => famSets[p].size > 1));
     const dedupKey = (no) => (multiFam.has(dwgPrefix(no)) ? toDwg(no) : dwgPrefix(no));
     const existingKeys = new Set(slotData.filter(Boolean).map(s => dedupKey(s.tool_dwg_no)).filter(Boolean));
+    // Fixture types the FACTORY plan already placed (by name). A T-Select fallback tool
+    // for the SAME fixture is a wrong-band duplicate (e.g. factory COLLET 4547-01-0031-07
+    // already in T2 → suppress T-Select's COLLET 4547-01-0017-05 ` *`). MSB-scoped:
+    // canonFixtureName is null for non-grinder tools, so this never suppresses elsewhere.
+    const existingFixtures = new Set(slotData.filter(Boolean).map(s => canonFixtureName(s.tool_name)).filter(Boolean));
     // The ' *' marker means "supplied by Tooling Select, not in the part's factory data".
     // But a fallback tool is often ALSO listed verbatim in the factory process plan — it only
     // came through the fallback because its DWG isn't in the (static, band-specific) Machine
@@ -289,16 +347,22 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     for (const tt of tsTools) {
       const key = dedupKey(tt.tooling_no);
       if (key && existingKeys.has(key)) continue;
+      // Skip a T-Select tool whose fixture the factory plan already supplied (factory-first):
+      // its DWG differs (different bore band) but it's the same fixture → would otherwise add
+      // a misleading wrong-band ` *` duplicate beside the real factory tool.
+      const canonTs = canonFixtureName(tt.tooling_name);
+      if (canonTs && existingFixtures.has(canonTs) && !planByDwg.has(toDwg(tt.tooling_no))) continue;
       const planHit = planByDwg.get(toDwg(tt.tooling_no));
       // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
       // lands in the SAME T-slot the config reserves for that tool family (not just the
       // next empty slot). Falls back to first free slot when no config slot applies/free.
-      if (!placeTool(configSlotOf(tt.tooling_no), {
+      if (!placeTool(configSlotOf(tt.tooling_no, tt.tooling_name), {
         tool_name: (planHit && planHit.tool_name) || tt.tooling_name || '',
         tool_dwg_no: tt.tooling_no,
         fromTs: !planHit,
       })) break;
       if (key) existingKeys.add(key);
+      if (canonTs) existingFixtures.add(canonTs);
     }
   }
 

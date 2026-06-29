@@ -120,14 +120,14 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
         const { value: selectedReason, isConfirmed } = await Swal.fire({
           icon: 'warning',
           title: 'Status: Delay',
-          html: `ใช้เวลา <b>${workingDays}</b> วันทำการ กรุณาระบุสาเหตุ`,
+          html: `Took <b>${workingDays}</b> working days. Please specify the reason`,
           input: 'select',
           inputOptions,
           inputPlaceholder: '-- Select Reason --',
           showCancelButton: true,
           confirmButtonText: 'Submit',
           cancelButtonText: 'Cancel',
-          inputValidator: (v) => !v && 'กรุณาเลือกสาเหตุ',
+          inputValidator: (v) => !v && 'Please select a reason',
         });
         if (!isConfirmed) return;
         reason = selectedReason;
@@ -171,7 +171,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
         await Swal.fire({
           icon: 'success',
           title: 'Success',
-          text: res.data.message || 'ข้อมูลถูกบันทึกเรียบร้อยแล้ว',
+          text: res.data.message || 'Data saved successfully',
           timer: 2000,
           showConfirmButton: false
         });
@@ -179,7 +179,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
         if (onSuccess) { onSuccess(payload) }
 
       } else {
-        throw new Error(res.data.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+        throw new Error(res.data.message || 'An error occurred while saving');
       }
 
     } catch (error) {
@@ -188,7 +188,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: error.response?.data?.message || error.message || 'กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ',
+        text: error.response?.data?.message || error.message || 'Please try again or contact the administrator',
       });
     }
   };
@@ -290,15 +290,15 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
       {/* --- Conflict Modal --- */}
       <Modal
-        title="⚠️ ตรวจพบข้อมูลขัดแย้ง (Data Conflict)"
+        title="⚠️ Data Conflict detected"
         open={isConflictModalOpen}
         onOk={handleConfirmResolution}
         onCancel={() => setIsConflictModalOpen(false)}
         width={800}
-        okText="ยืนยันการแก้ไข"
-        cancelText="ยกเลิก"
+        okText="Confirm changes"
+        cancelText="Cancel"
       >
-        <p>มีการแก้ไขข้อมูลใน <b>Initial Data</b> และ <b>Form Value</b> ไม่ตรงกัน กรุณาเลือกข้อมูลที่ต้องการบันทึก:</p>
+        <p><b>Initial Data</b> and <b>Form Value</b> differ. Please choose the data to save:</p>
 
         <Table
           dataSource={conflictList}
@@ -306,27 +306,27 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
           pagination={false}
           columns={[
             {
-              title: 'หัวข้อ (Field)',
+              title: 'Field',
               dataIndex: 'field',
               key: 'field',
               render: (text) => <Tag color="blue">{text}</Tag>
             },
             {
-              title: 'ข้อมูลเดิม (Initial)',
+              title: 'Initial',
               dataIndex: 'oldValue',
               key: 'oldValue',
               width: '25%',
               render: (text) => <span style={{ color: 'gray' }}>{text}</span>
             },
             {
-              title: 'ข้อมูลใหม่ (New)',
+              title: 'New',
               dataIndex: 'newValue',
               key: 'newValue',
               width: '25%',
               render: (text) => <span style={{ color: 'green', fontWeight: 'bold' }}>{text}</span>
             },
             {
-              title: 'การตัดสินใจ',
+              title: 'Decision',
               key: 'action',
               render: (_, record) => (
                 <Radio.Group
@@ -336,10 +336,10 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
                   }}
                 >
                   <Space direction="vertical">
-                    <Radio value="old">ใช้ข้อมูลเดิม</Radio>
-                    <Radio value="new">ใช้ข้อมูลใหม่</Radio>
+                    <Radio value="old">Use original</Radio>
+                    <Radio value="new">Use new</Radio>
                     {(record.field === 'remark') && (
-                      <Radio value="both">เก็บไว้ทั้งคู่</Radio>
+                      <Radio value="both">Keep both</Radio>
                     )}
                   </Space>
                 </Radio.Group>

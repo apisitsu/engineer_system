@@ -10,11 +10,19 @@ const cnFormat = require('../utils/cnFormat');
 // Cap on concurrent inventory queries per search (pg pool max is 20).
 const SEARCH_CONCURRENCY = 8;
 
-// Similar-part fallback: max combined finished-dim distance (mm) for a reference
-// part to be offered as a suggestion. Dimensional twins score ~0; this caps how
-// far the "nearest historically-tooled part" may be before we stop suggesting.
-// Tightened 2026-06-28 from 2.0 → 0.2 (±0.2 mm) so only near-exact dimensional
-// twins are suggested — a high-confidence reference, not a loose neighbour.
+// Combined finished-dim distance weighting: OD and ID count fully, axial width
+// (W) counts half — OD/ID dominate whether a fixture fits. Used by every
+// similar-part distance computation below (kept as one constant so the SQL and
+// the JS cap stay in sync).
+const W_DIST_WEIGHT = 0.5;
+
+// Max combined finished-dim distance (mm) before a part stops being "similar".
+// 0.2 mm (±0.2) — near-exact dimensional twins only. Applies to ALL similar-part
+// paths: the empty-tooling FILL fallback (_applySimilarPartFallback) AND the
+// informational "Similar" REFERENCE column (_attachSimilarRefFromPartnoMap /
+// _attachSimilarRefFromFactoryPlan). Confirmed 2026-06-29 the 2026-06-28
+// tightening from 2.0 → 0.2 is intentional for every path — a similar-part
+// suggestion must be a high-confidence twin, not a loose neighbour.
 const SIMILAR_DIST_MAX = 0.2;
 
 // Cache: tool DWG family (first dash-segment, e.g. '4030') → the factory
@@ -416,6 +424,10 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
   const od = Number(specCtx.OD) || 0;
   const id = Number(specCtx.ID) || 0;
   const w = Number(specCtx.W) || 0;
+  // Guard: a searched spec with NO usable dims would score distance 0 against any
+  // other dim-less row (COALESCE(NULL,0) on both sides) → a spurious "exact" twin.
+  // Require at least one real dim before offering a dimension-based suggestion.
+  if (!od && !id && !w) return;
 
   // Group empty, non-overridden results by display machine.
   const byMachine = {};
@@ -436,7 +448,7 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
       `SELECT m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
               (ABS(COALESCE(s.od_aft,0) - $1)
              + ABS(COALESCE(s.id_aft,0) - $2)
-             + 0.5 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+             + ${W_DIST_WEIGHT} * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
          FROM ${TSV2_TABLES.PARTNO_MAP} m
          JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
         WHERE m.machine_name = $4
@@ -486,13 +498,16 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
 // model that has no production history of its own.
 //
 // One DISTINCT ON query per machine returns the nearest reference per tooling.
-async function _attachSimilarRef(results, machineByDisplay, spec, specCtx) {
+async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, specCtx) {
   const cls = String(spec.cn ?? '').slice(0, 2);
   if (!/^\d{2}$/.test(cls)) return;
 
   const od = Number(specCtx.OD) || 0;
   const id = Number(specCtx.ID) || 0;
   const w  = Number(specCtx.W)  || 0;
+  // Guard against the NULL→0 distance-0 trap (see _applySimilarPartFallback): a
+  // dim-less searched part must not match every dim-less reference at distance 0.
+  if (!od && !id && !w) return;
 
   // Group ALL results by display machine (matched or not).
   const byMachine = {};
@@ -513,7 +528,7 @@ async function _attachSimilarRef(results, machineByDisplay, spec, specCtx) {
                 m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
                 (ABS(COALESCE(s.od_aft,0) - $1)
                + ABS(COALESCE(s.id_aft,0) - $2)
-               + 0.5 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+               + ${W_DIST_WEIGHT} * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
            FROM ${TSV2_TABLES.PARTNO_MAP} m
            JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
           WHERE m.machine_name = $4
@@ -581,7 +596,7 @@ function _familyFromMatch(row) {
   }
   return null;
 }
-async function _attachSimilarRefFactory(results, spec, specCtx) {
+async function _attachSimilarRefFromFactoryPlan(results, spec, specCtx) {
   const dim = _classDimFor(spec.cn);
   if (!dim) return;
   const targetCn = cnFormat.itemNoToControlNo(String(spec.cn)); // 6-digit → Cxx-0YYYY
@@ -590,6 +605,9 @@ async function _attachSimilarRefFactory(results, spec, specCtx) {
   const od = Number(specCtx.OD) || 0;
   const id = Number(specCtx.ID) || 0;
   const w  = Number(specCtx.W)  || 0;
+  // Guard against the NULL→0 distance-0 trap: a dim-less searched part must not
+  // match every dim-less factory part at distance 0 (see _applySimilarPartFallback).
+  if (!od && !id && !w) return;
   // Same CN PREFIX (e.g. "C31"), not just the broad class table (any 3x ball).
   // Mirrors the partno_map paths' left(cn,2) filter so the factory reference never
   // crosses sub-classes — e.g. a C35 yball is not suggested for a C31 ball.
@@ -616,7 +634,7 @@ async function _attachSimilarRefFactory(results, spec, specCtx) {
               t.process_plan_no AS ref_cn, t.tool_dwg_no,
               (ABS(COALESCE(d.${dim.od},0) - $1)
              + ABS(COALESCE(d.${dim.id},0) - $2)
-             + 0.5 * ABS(COALESCE(d.${dim.w},0) - $3)) AS dist
+             + ${W_DIST_WEIGHT} * ABS(COALESCE(d.${dim.w},0) - $3)) AS dist
          FROM lpb.eng_r_pi_tool t
          JOIN ${dim.table} d ON d.control_no = t.process_plan_no
         WHERE ${famExpr} = ANY($4)
@@ -756,13 +774,19 @@ async function search(cn, opts = {}) {
   // Last resort — fill any still-empty tooling with the factory's pick for the
   // most dimensionally-similar part (suggestion only; flagged similar_part).
   await _applySimilarPartFallback(results, machineByDisplay, spec, specCtx);
-  // Attach the nearest-similar-part reference tool to EVERY tooling (matched or
+  // Attach the nearest-similar-part REFERENCE tool to EVERY tooling (matched or
   // not) for the UI's "Similar" reference column — does not alter matches.
-  // (1) curated partno_map (4 machines, ties tool→tooling_name);
-  await _attachSimilarRef(results, machineByDisplay, spec, specCtx);
-  // (2) generic factory fallback (ALL machines) for matched toolings still without
-  //     a reference — derived from lpb.eng_r_pi_tool via the matched tool family.
-  await _attachSimilarRefFactory(results, spec, specCtx);
+  // Gated behind opts.withSimilarRef: these add per-machine + cross-pool queries
+  // PER search, so only the user-facing controller turns them on. The coverage
+  // report / SDS overlay call search() via tselectFallback WITHOUT the flag, so
+  // their hundreds of per-CN searches don't pay for a column they never render.
+  if (opts.withSimilarRef) {
+    // (1) curated partno_map (4 machines, ties tool→tooling_name);
+    await _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, specCtx);
+    // (2) generic factory fallback (ALL machines) for matched toolings still
+    //     without a reference — derived from lpb.eng_r_pi_tool via tool family.
+    await _attachSimilarRefFromFactoryPlan(results, spec, specCtx);
+  }
 
   results.sort((a, b) =>
     a.machine.localeCompare(b.machine) || a.tooling.localeCompare(b.tooling)
@@ -778,3 +802,7 @@ function _clearCaches() {
 }
 
 module.exports = { search, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };
+// Exported for unit testing the NULL-safety guard + distance cap of the
+// informational "Similar" reference column (tests/mtc/searchSimilarRef.test.js).
+module.exports._attachSimilarRefFromPartnoMap = _attachSimilarRefFromPartnoMap;
+module.exports._attachSimilarRefFromFactoryPlan = _attachSimilarRefFromFactoryPlan;

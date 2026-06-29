@@ -78,7 +78,7 @@ function NewDesignCard({ tooling, computed }) {
         }
       </Space>
       <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>
-        ไม่พบ tooling ที่เหมาะสมในสต๊อก — กรุณา New Design ตามขนาดที่คำนวณได้
+        No suitable tooling found in stock — please New Design per the computed dimensions
       </div>
     </Card>
   );
@@ -125,7 +125,7 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
     title: (
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#ad6800' }}>Similar</div>
-        <div style={{ fontSize: 9, color: '#ad6800' }}>งานคล้าย</div>
+        <div style={{ fontSize: 9, color: '#ad6800' }}>ref</div>
       </div>
     ),
     key: '__similar',
@@ -135,10 +135,10 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
     onCell: () => ({ style: { backgroundColor: '#fffef5' } }),
     render: () => (
       <Tooltip
-        title={`อ้างอิงจากงานคล้าย C/N ${similarRef.ref_cn}` +
+        title={`Similar-work ref C/N ${similarRef.ref_cn}` +
           (similarRef.parts_no ? ` / P/N ${similarRef.parts_no}` : '') +
-          ` · ระยะห่างมิติ ${Number(similarRef.distance).toFixed(2)} mm` +
-          (similarRef.source === 'factory' ? ' · จากแผนผลิตจริง (process plan)' : ' · จาก TOOLING LIST')}
+          ` · dim distance ${Number(similarRef.distance).toFixed(2)} mm` +
+          (similarRef.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST')}
       >
         <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace', fontWeight: 600 }}>
           {ddForm(similarRef.tool_dwg_no)}
@@ -201,7 +201,7 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
         <Space>
           <ToolOutlined />
           <Text strong>{tooling}</Text>
-          {isSimilar && <Tag color="orange" style={{ fontWeight: 600 }}>SIMILAR PART (อ้างอิง)</Tag>}
+          {isSimilar && <Tag color="orange" style={{ fontWeight: 600 }}>SIMILAR PART (ref)</Tag>}
         </Space>
       }
       extra={<Badge count={matches.length} showZero color="#8c8c8c" />}
@@ -217,12 +217,12 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
           fontSize: 12, color: '#ad6800',
         }}>
           <div style={{ marginBottom: similarPart ? 6 : 0 }}>
-            ⚠ ไม่พบ tooling ที่ตรงกับงานนี้โดยตรง — เสนอจากงานที่มิติใกล้เคียงที่สุด
-            {' '}<b>โปรดให้วิศวกรตรวจสอบก่อนใช้งาน</b>
+            ⚠ No tooling directly matches this part — suggested from the most dimensionally-similar part
+            {' '}<b>Please have an engineer verify before use</b>
           </div>
           {similarPart && (
             <Space size={[6, 4]} wrap align="center">
-              <Text strong style={{ color: '#ad6800', fontSize: 12 }}>อ้างอิงจากงานคล้าย:</Text>
+              <Text strong style={{ color: '#ad6800', fontSize: 12 }}>Similar-work reference:</Text>
               <Tag color="gold" style={{ margin: 0, fontWeight: 600 }}>
                 C/N {similarPart.ref_cn}
               </Tag>
@@ -233,8 +233,8 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
               )}
               <Tag color={Number(similarPart.distance) <= 0.001 ? 'green' : 'orange'} style={{ margin: 0 }}>
                 {Number(similarPart.distance) <= 0.001
-                  ? 'มิติตรงกันทุกประการ'
-                  : `ระยะห่างมิติ ${Number(similarPart.distance).toFixed(2)} mm`}
+                  ? 'All dimensions identical'
+                  : `dim distance ${Number(similarPart.distance).toFixed(2)} mm`}
               </Tag>
             </Space>
           )}
@@ -393,8 +393,8 @@ export default function ToolingSelectV2Page() {
             <Tag color="gold">⚠ Similar Part × {similarCount}</Tag>
           )}
           {noHistory && (
-            <Tooltip title="ไม่พบประวัติการผลิต C/N นี้บนเครื่องนี้ (lpb.pc_production) — แสดงไว้เผื่อเป็นงานใหม่ที่ยังไม่เคยผลิต">
-              <Tag color="default" style={{ opacity: 0.65 }}>ไม่มีประวัติผลิต</Tag>
+            <Tooltip title="No production history for this C/N on this machine (lpb.pc_production) — shown in case it's a new model not yet produced">
+              <Tag color="default" style={{ opacity: 0.65 }}>No production history</Tag>
             </Tooltip>
           )}
         </Space>
@@ -485,8 +485,8 @@ export default function ToolingSelectV2Page() {
                     <Alert
                       type="info"
                       style={{ marginBottom: 16 }}
-                      message="C/N นี้ยังไม่มีประวัติการผลิต — อาจเป็นงานใหม่ (new model)"
-                      description="แสดงทุกเครื่องที่ทำงานนี้ได้ตามขนาด (ยังไม่มีเครื่องไหนเคยผลิตจริง) — โปรดเลือกเครื่องและตรวจสอบ tooling ก่อนใช้งาน"
+                      message="This C/N has no production history — may be a new model"
+                      description="Showing all machines that can run this part by size (none has actually produced it yet) — please choose a machine and verify tooling before use"
                       showIcon
                     />
                   )}
@@ -497,7 +497,7 @@ export default function ToolingSelectV2Page() {
                     <Alert
                       type="info"
                       style={{ marginBottom: 16 }}
-                      message={`เครื่องที่มีประวัติผลิต C/N นี้แสดงด้านบน (${result.productionFilter.machinesWithHistory}) — อีก ${result.productionFilter.machinesWithoutHistory} เครื่องที่ทำได้แต่ไม่มีประวัติถูกยุบไว้ด้านล่าง`}
+                      message={`Machines with production history for this C/N are shown above (${result.productionFilter.machinesWithHistory}) — ${result.productionFilter.machinesWithoutHistory} more machines that can run it but have no history are collapsed below`}
                       showIcon
                     />
                   )}

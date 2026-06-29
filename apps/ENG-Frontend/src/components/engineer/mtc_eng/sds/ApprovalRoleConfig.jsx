@@ -19,17 +19,17 @@ const ROLE_OPTIONS = [
 const ROLE_COLOR = { prepared: 'blue', checked: 'gold', approved: 'red' };
 
 const MATCH_OPTIONS = [
-  { value: 'any', label: 'ทุกคน (any)' },
-  { value: 'department', label: 'ตามแผนก (department)' },
-  { value: 'role', label: 'ตาม role' },
-  { value: 'feature_perm', label: 'ตาม feature permission' },
-  { value: 'em_id', label: 'รายบุคคล (employee no)' },
+  { value: 'any', label: 'Anyone (any)' },
+  { value: 'department', label: 'By department' },
+  { value: 'role', label: 'By role' },
+  { value: 'feature_perm', label: 'By feature permission' },
+  { value: 'em_id', label: 'Individual (employee no)' },
 ];
 const MATCH_HINT = {
-  department: 'เช่น Engineering',
-  role: "เช่น AD",
-  feature_perm: 'เช่น sds_admin',
-  em_id: 'Employee No เช่น T1460',
+  department: 'e.g. Engineering',
+  role: "e.g. AD",
+  feature_perm: 'e.g. sds_admin',
+  em_id: 'Employee No, e.g. T1460',
 };
 
 const ApprovalRoleConfig = ({ theme }) => {
@@ -109,7 +109,7 @@ const ApprovalRoleConfig = ({ theme }) => {
     },
     {
       title: 'Match Value', dataIndex: 'match_value',
-      render: (v) => v ? <code>{v}</code> : <span style={{ color: '#999' }}>— (ทุกคน)</span>,
+      render: (v) => v ? <code>{v}</code> : <span style={{ color: '#999' }}>— (anyone)</span>,
     },
     {
       title: 'Enabled', dataIndex: 'enabled', width: 90, align: 'center',
@@ -119,7 +119,7 @@ const ApprovalRoleConfig = ({ theme }) => {
     {
       title: '', width: 60, align: 'center',
       render: (_, row) => (
-        <Popconfirm title="ลบ rule นี้?" onConfirm={() => handleDelete(row.id)} okText="ลบ" okType="danger">
+        <Popconfirm title="Delete this rule?" onConfirm={() => handleDelete(row.id)} okText="Delete" okType="danger">
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -130,11 +130,11 @@ const ApprovalRoleConfig = ({ theme }) => {
     <div>
       <Alert
         type="info" showIcon style={{ marginBottom: 12 }}
-        message="กำหนดสิทธิ์การเซ็น SDS (Prepared / Checked / Approved)"
+        message="Configure SDS signing permissions (Prepared / Checked / Approved)"
         description={
           <Text type="secondary" style={{ fontSize: 12 }}>
-            แต่ละ rule ให้สิทธิ์ "ผู้ที่ตรงเงื่อนไข" เซ็น role นั้นได้ (รวมกันแบบ OR หลาย rule).
-            ผู้ดูแลระบบ (department/role = AD) เซ็นได้ทุก role อยู่แล้วโดยไม่ต้องมี rule.
+            Each rule grants "anyone matching the condition" the right to sign that role (multiple rules combine with OR).
+            Admins (department/role = AD) can already sign every role without a rule.
           </Text>
         }
       />
@@ -165,7 +165,7 @@ const ApprovalRoleConfig = ({ theme }) => {
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }} initialValues={{ match_type: 'department' }}>
           <Form.Item name="role" label="Role" rules={[{ required: true, message: 'Required' }]}>
-            <Select placeholder="เลือก role" options={ROLE_OPTIONS} />
+            <Select placeholder="Select role" options={ROLE_OPTIONS} />
           </Form.Item>
           <Form.Item name="match_type" label="Match Type" rules={[{ required: true, message: 'Required' }]}>
             <Select options={MATCH_OPTIONS} />

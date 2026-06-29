@@ -13,7 +13,7 @@
  *   ground truth in maqdb `lpb.eng_r_pi_tool` (the real tool each CN used).
  *
  *   Alignment is by DWG FAMILY (first two dash-segments, e.g. `4027-01`) —
- *   the same key `searchService._attachSimilarRefFactory` uses. A (machine,
+ *   the same key `searchService._attachSimilarRefFromFactoryPlan` uses. A (machine,
  *   tooling) is scored on a CN only when the factory used a tool of that
  *   tooling's family for that CN (auto-scoping: no per-machine process_code
  *   table needed). Within scope:

@@ -770,10 +770,10 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
       <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 6 }}>
         {view === 'template'
-          ? 'SDS template (HTML render) — มุมมองอ้างอิง'
+          ? 'SDS template (HTML render) — reference view'
           : overlay
-            ? 'Overlay: template อยู่ใต้กริด — ปรับความเข้มเพื่อทาบ • เลือก cell แล้ววาด border / Merge • Save / PDF'
-            : 'กริด A1:AV56 จาก sds_template.xlsx (merge + ฟอนต์จริง) • ดับเบิลคลิก/Enter เพื่อพิมพ์ข้อความ • ลากขอบหัวตารางปรับขนาด • เลือก cell → border / fill / Merge • Del ล้าง • Save / PDF'}
+            ? 'Overlay: template sits under the grid — adjust opacity to align • select a cell then draw border / Merge • Save / PDF'
+            : 'A1:AV56 grid from sds_template.xlsx (merge + real fonts) • double-click/Enter to type text • drag header borders to resize • select cell → border / fill / Merge • Del to clear • Save / PDF'}
       </Text>
     </div>
   );
