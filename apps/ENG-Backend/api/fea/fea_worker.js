@@ -69,4 +69,8 @@ feaWorker.on('failed', (job, err) => {
   console.log(`[Worker] Job ${job.id} has failed with ${err.message}`);
 });
 
+feaWorker.on('error', err => {
+  // Suppress connection errors when Redis is offline
+});
+
 module.exports = feaWorker;

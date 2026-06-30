@@ -452,6 +452,7 @@ const requireSystemEngineer = (req, res, next) => {
   if (dept === 'AD' || role === 'AD') {
     next();
   } else {
+    console.log(`[DEBUG] requireSystemEngineer rejected user: ${req.user?.empno}, dept: ${dept}, role: ${role}`);
     return res.status(403).json({ result: 'false', message: 'Unauthorized setting permission. System Engineer only.' });
   }
 };
@@ -459,4 +460,7 @@ const requireSystemEngineer = (req, res, next) => {
 const settingsModel = require('./api/system/settingsModel');
 app.get('/api/system/settings', settingsModel.getSettings);
 app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSettings);
+
+const updateLogController = require('./api/system/updateLogController');
+app.get('/api/system/update-logs', requireSystemEngineer, updateLogController.getUpdateLogs);
 

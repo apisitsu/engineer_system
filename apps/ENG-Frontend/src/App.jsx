@@ -29,6 +29,7 @@ import HtmlToPdfDashboard from './components/engineer/newprod_eng/tool/html_to_p
 import PdfMergerTool from './components/engineer/newprod_eng/tool/PdfMergerTool';
 import PdfToImageConverter from './components/engineer/system_eng/tool/pdf-to-image/PdfToImageConverter';
 import ToolGallery from './components/engineer/system_eng/tool/ToolGallery';
+import UpdateLogView from './components/engineer/system_eng/tool/UpdateLogView';
 
 
 import KanbanMain from './components/engineer/kanban/KanbanMain';
@@ -387,6 +388,7 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/user_management" element={<UserManagement />} />
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
+                  <Route path="/eng/system_eng/tool/update-logs" element={<UpdateLogView />} />
 
                   {/* ------ For Test Only ------ */}
 

@@ -55,6 +55,7 @@ export const system = createMenu([
     { label: "Home", path: "/eng/system_eng", key: "1" },
     { label: "User Management", path: "/eng/system_eng/user_management", key: "2" },
     { label: "Tools", path: "/eng/system_eng/tool/gallery", key: "3" },
+    { label: "Update Logs", path: "/eng/system_eng/tool/update-logs", key: "4" },
 ]);
 
 export const process = createMenu([
