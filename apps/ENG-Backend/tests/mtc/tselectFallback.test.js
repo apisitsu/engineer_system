@@ -30,7 +30,7 @@ describe('directionForProcessCode', () => {
 describe('tselectToolsForMachine', () => {
   it('returns matches for an acceptable machine name', () => {
     const out = fallback.tselectToolsForMachine(RESULT, new Set(['KS-400B1']));
-    expect(out).toEqual([{ tooling_name: 'CHUCK JAW', tooling_no: '4556-01-0048' }]);
+    expect(out).toEqual([{ tooling_name: 'CHUCK JAW', tooling_no: '4556-01-0048', isSimilar: false }]);
   });
 
   it('matches via machine_group label too', () => {
@@ -62,6 +62,27 @@ describe('tselectToolsForMachine', () => {
   it('returns [] for an unsuccessful / empty result', () => {
     expect(fallback.tselectToolsForMachine(null, new Set(['X']))).toEqual([]);
     expect(fallback.tselectToolsForMachine({ success: false }, new Set(['X']))).toEqual([]);
+  });
+
+  describe('similar_part fallback handling', () => {
+    const SIMILAR = {
+      success: true,
+      spec: { process: '' },
+      results: [
+        { machine: 'KL-20', tooling: '4030-01_COLLET', overrideBy: 'similar_part',
+          matches: [{ tooling_no: '4030-01-1002' }] },
+      ],
+    };
+
+    it('EXCLUDES similar_part by default (coverage stays confirmed-only)', () => {
+      const out = fallback.tselectToolsForMachine(SIMILAR, new Set(['KL-20']));
+      expect(out).toEqual([]);
+    });
+
+    it('INCLUDES similar_part when includeSimilar is set (Setup Data Sheet), flagged isSimilar', () => {
+      const out = fallback.tselectToolsForMachine(SIMILAR, new Set(['KL-20']), { includeSimilar: true });
+      expect(out).toEqual([{ tooling_name: '4030-01_COLLET', tooling_no: '4030-01-1002', isSimilar: true }]);
+    });
   });
 });
 

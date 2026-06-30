@@ -178,13 +178,13 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
       {stage === 'Draft Man' && (
         <>
           <Form.Item
-            label="แนบไฟล์ Drawing"
+            label="Attach Drawing file"
             name="dwg_file"
             valuePropName="fileList"
             getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
           >
             <Upload beforeUpload={() => false} multiple maxCount={10}>
-              <Button icon={<UploadOutlined />}>เลือกไฟล์ (ทุกประเภท)</Button>
+              <Button icon={<UploadOutlined />}>Select file (any type)</Button>
             </Upload>
           </Form.Item>
           <Form.Item label="Drawing File Path (optional)" name="dwg_files">
@@ -202,7 +202,7 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
       {/* DWG Check */}
       {stage === 'DWG Check' && (
         <>
-          <FileLinks paths={draftManFiles} names={draftManFileNames} label="ไฟล์จาก Draft Man" />
+          <FileLinks paths={draftManFiles} names={draftManFileNames} label="Files from Draft Man" />
           <ApproveDenyForm
             approveDenyLabels={['Approve — Drawing is correct', 'Deny — Need revision']}
           />
@@ -212,7 +212,7 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
       {/* Eng Review */}
       {stage === 'Eng Review' && (
         <>
-          <FileLinks paths={draftManFiles} names={draftManFileNames} label="ไฟล์จาก Draft Man" />
+          <FileLinks paths={draftManFiles} names={draftManFileNames} label="Files from Draft Man" />
           <Form.Item label="Section" name="section" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="Section name" />
           </Form.Item>
@@ -262,13 +262,13 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
             </Col>
           </Row>
           <Form.Item
-            label="แนบไฟล์"
+            label="Attach file"
             name="review_file"
             valuePropName="fileList"
             getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
           >
             <Upload beforeUpload={() => false} multiple maxCount={10}>
-              <Button icon={<UploadOutlined />}>เลือกไฟล์ (ทุกประเภท)</Button>
+              <Button icon={<UploadOutlined />}>Select file (any type)</Button>
             </Upload>
           </Form.Item>
           <Form.Item label="Comment" name="comment">
@@ -283,7 +283,7 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
       {/* Eng Approve */}
       {stage === 'Eng Approve' && (
         <>
-          <FileLinks paths={reviewFiles} names={reviewFileNames} label="ไฟล์จาก Eng Review" />
+          <FileLinks paths={reviewFiles} names={reviewFileNames} label="Files from Eng Review" />
           <ApproveDenyForm
             approveDenyLabels={['Approve — Request is completed', 'Deny — Need more work']}
           />
@@ -301,7 +301,7 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
               message={<Text><strong>Email will be sent to:</strong> {request.requester_email}</Text>}
             />
           )}
-          <FileLinks paths={reviewFiles} names={reviewFileNames} label="ไฟล์ที่จะส่งให้ Requestor (Eng Review)" />
+          <FileLinks paths={reviewFiles} names={reviewFileNames} label="Files to send to Requestor (Eng Review)" />
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item label="Cost (if applicable)" name="cost">
@@ -673,7 +673,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
             <div style={{ whiteSpace: 'pre-wrap' }}>{request.detail}</div>
           </Descriptions.Item>
           {request.file_path && (
-            <Descriptions.Item label="ไฟล์แนบ (Requestor)" span={2}>
+            <Descriptions.Item label="Attachments (Requestor)" span={2}>
               <a href={`${server.API_URL}${request.file_path}`} target="_blank" rel="noreferrer">
                 {request.file_path.split('/').pop()}
               </a>
@@ -708,7 +708,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
                       {extra.dwg_files && <div><Text type="secondary">Files: {extra.dwg_files}</Text></div>}
                       {extra.dwg_file_paths?.length > 0 && (
                         <div>
-                          <Text type="secondary">ไฟล์แนบ: </Text>
+                          <Text type="secondary">Attachments: </Text>
                           <Space wrap>
                             {extra.dwg_file_paths.map((p, i) => (
                               <a key={i} href={`${server.API_URL}${p}`} target="_blank" rel="noreferrer">
@@ -720,7 +720,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
                       )}
                       {extra.review_file_paths?.length > 0 && (
                         <div>
-                          <Text type="secondary">ไฟล์ Review: </Text>
+                          <Text type="secondary">Review files: </Text>
                           <Space wrap>
                             {extra.review_file_paths.map((p, i) => (
                               <a key={i} href={`${server.API_URL}${p}`} target="_blank" rel="noreferrer">
@@ -767,8 +767,8 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
               <Alert
                 type="warning"
                 showIcon
-                message={`คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${currentStageConfig.label}`}
-                description={`กรุณาติดต่อผู้รับผิดชอบในขั้นตอนนี้`}
+                message={`You don't have permission to act in the ${currentStageConfig.label} stage`}
+                description={`Please contact the person responsible for this stage`}
               />
             )}
           </>

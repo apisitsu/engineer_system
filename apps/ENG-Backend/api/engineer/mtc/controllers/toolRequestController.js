@@ -220,7 +220,7 @@ const createToolRequest = async (req, res) => {
         if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
             return res.status(400).json({
                 result: 'false',
-                message: 'กรุณากรอกข้อมูลให้ครบถ้วน'
+                message: 'Please fill in all required fields'
             });
         }
 
@@ -299,7 +299,10 @@ const createToolRequest = async (req, res) => {
                         extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
                         actionBy: requester,
                     });
-                    await sendMtcEmail(recipients.join(','), subject, html);
+                    await sendMtcEmail(recipients.join(','), subject, html, {
+                        fromName: requester ? `${requester} (General DWG Request)` : 'General DWG Request',
+                        replyTo: requester_email || undefined,
+                    });
                 } else {
                     logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
                 }
@@ -308,7 +311,7 @@ const createToolRequest = async (req, res) => {
             }
         })();
 
-        res.json({ result: 'true', message: 'บันทึกคำขอเรียบร้อยแล้ว', id: requestId });
+        res.json({ result: 'true', message: 'Request saved successfully', id: requestId });
     } catch (error) {
         await client.query('ROLLBACK');
         logger.error('Server Error during creation', { error: error.message });
@@ -371,9 +374,9 @@ const updateToolRequest = async (req, res) => {
     try {
         const result = await engPool.query(sql, params);
         if (result.rowCount === 0) {
-            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการแก้ไข' });
+            return res.status(404).json({ result: 'false', message: 'Record to edit not found' });
         }
-        res.json({ result: 'true', message: 'อัพเดทข้อมูลเรียบร้อยแล้ว', changes: result.rowCount });
+        res.json({ result: 'true', message: 'Updated successfully', changes: result.rowCount });
     } catch (err) {
         console.error('Error updating tool request:', err.message);
         return res.status(500).json({ result: 'false', message: err.message });
@@ -392,9 +395,9 @@ const deleteToolRequest = async (req, res) => {
             [id]
         );
         if (result.rowCount === 0) {
-            return res.status(404).json({ result: 'false', message: 'ไม่พบข้อมูลที่ต้องการลบ' });
+            return res.status(404).json({ result: 'false', message: 'Record to delete not found' });
         }
-        res.json({ result: 'true', message: 'ลบข้อมูลเรียบร้อยแล้ว' });
+        res.json({ result: 'true', message: 'Deleted successfully' });
     } catch (err) {
         console.error('Error deleting tool request:', err.message);
         return res.status(500).json({ result: 'false', message: err.message });
@@ -526,7 +529,7 @@ const submitAction = async (req, res) => {
             const userEmailVal = (req.body.action_by_email || '').toLowerCase();
             const isAllowed = allowedCodes.includes(userCode) ||
                 recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
-            if (!isAllowed) return res.status(403).json({ error: `คุณไม่มีสิทธิ์ดำเนินการในขั้นตอน ${stage}` });
+            if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
     } catch (err) {
         logger.warn('Permission check failed', { error: err.message });
@@ -587,7 +590,13 @@ const submitAction = async (req, res) => {
             if (recipients.length > 0) {
                 const subject = generateSubject(stage, decision, request);
                 const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
-                sendMtcEmail(recipients.join(','), subject, html).catch(err => logger.error('Email failed', { error: err.message }));
+                // Attribute the email to the person who performed this stage action
+                // (display name + Reply-To), falling back to the requester, so the
+                // recipient sees the real sender instead of the script owner.
+                sendMtcEmail(recipients.join(','), subject, html, {
+                    fromName: action_by ? `${action_by} (General DWG Request)` : 'General DWG Request',
+                    replyTo: req.body.action_by_email || request.requester_email || undefined,
+                }).catch(err => logger.error('Email failed', { error: err.message }));
             }
         } catch (emailErr) {
             logger.warn('Email failed', { error: emailErr.message });
@@ -697,7 +706,10 @@ const testEmail = async (req, res) => {
             actionBy: req.user?.userName || 'Test User',
         });
 
-        await sendMtcEmail(to, subject, html);
+        await sendMtcEmail(to, subject, html, {
+            fromName: `${req.user?.userName || 'Test User'} (General DWG Request)`,
+            replyTo: req.user?.gmail_email || undefined,
+        });
         logger.info('Test email sent', { to });
         res.json({ success: true, message: `Test email sent to: ${to}` });
     } catch (err) {

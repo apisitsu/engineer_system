@@ -107,6 +107,8 @@ export const server = {
   MTC_SDS_V2_ADMIN_VISIBLE_MACHINES: `${apiUrl}api/sds/v2/admin/visible-machines`,
   MTC_SDS_V2_ADMIN_MACHINE_CODES: `${apiUrl}api/sds/v2/admin/machine-codes`,
   MTC_SDS_V2_ADMIN_CN_HISTORY: `${apiUrl}api/sds/v2/admin/cn-history`,
+  MTC_SDS_V2_APPROVAL: `${apiUrl}api/sds/v2/approval`,
+  MTC_SDS_V2_APPROVAL_ROLE_CONFIG: `${apiUrl}api/sds/v2/approval/role-config`,
   MTC_SDS_V2_PRODUCTION_SUMMARY: `${apiUrl}api/sds/v2/admin/production-summary`,
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,

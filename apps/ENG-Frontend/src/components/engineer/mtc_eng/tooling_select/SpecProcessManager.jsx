@@ -185,7 +185,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
       setSyncNewResult(res.data);
       if (res.data.synced > 0) fetchSpecs(1, pagination.pageSize, searchText, selectedPartType);
     } catch (err) {
-      message.error(err.response?.data?.error || 'Sync ล้มเหลว');
+      message.error(err.response?.data?.error || 'Sync failed');
     } finally {
       setSyncNewLoading(false);
     }
@@ -346,10 +346,10 @@ export const SpecProcessManager = ({ embedded = false }) => {
           />
           <Button icon={<ReloadOutlined />} onClick={() => fetchSpecs(pagination.current, pagination.pageSize, searchText, selectedPartType)} />
           <Popconfirm
-            title="Sync New CNs จาก Factory"
-            description="จะ insert CN ที่ยังไม่มีใน spec_process (สูงสุด 500 CN)"
+            title="Sync New CNs from Factory"
+            description="Inserts CNs not yet in spec_process (up to 500 CNs)"
             onConfirm={runSyncNew}
-            okText="Sync เลย"
+            okText="Sync now"
             cancelText="Cancel"
           >
             <Button icon={<DatabaseOutlined />} loading={syncNewLoading}>Sync New CNs</Button>
@@ -437,7 +437,7 @@ export const SpecProcessManager = ({ embedded = false }) => {
                 <Alert
                   type={syncNewResult.failed === 0 ? 'success' : 'warning'}
                   showIcon
-                  message={`สำเร็จ ${syncNewResult.synced} / ล้มเหลว ${syncNewResult.failed} จากทั้งหมด ${syncNewResult.total_found} CN ใหม่`}
+                  message={`Success ${syncNewResult.synced} / Failed ${syncNewResult.failed} of ${syncNewResult.total_found} new CNs`}
                 />
                 {syncNewResult.table_status?.length > 0 && (
                   <Card size="small" title="Factory Table Status">

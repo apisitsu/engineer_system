@@ -38,8 +38,8 @@ const ToolingReturnForm = ({ open, onCancel, onSuccess }) => {
             if (res.data.result === "true" || res.data === "OK") {
                 await Swal.fire({
                     icon: 'success',
-                    title: 'บันทึกสำเร็จ',
-                    text: 'ข้อมูลถูกบันทึกเรียบร้อยแล้ว',
+                    title: 'Saved successfully',
+                    text: 'Data saved successfully',
                     showConfirmButton: false,
                     timer: 1500
                 });
@@ -52,8 +52,8 @@ const ToolingReturnForm = ({ open, onCancel, onSuccess }) => {
                 console.error("API Error:", res.data);
                 Swal.fire({
                     icon: 'error',
-                    title: 'เกิดข้อผิดพลาด',
-                    text: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+                    title: 'An error occurred',
+                    text: 'Could not save data. Please try again',
                 });
             }
         } catch (error) {
@@ -64,7 +64,7 @@ const ToolingReturnForm = ({ open, onCancel, onSuccess }) => {
                 Swal.fire({
                     icon: 'error',
                     title: 'Connection Error',
-                    text: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้',
+                    text: 'Could not connect to the server',
                     footer: error.message
                 });
             }

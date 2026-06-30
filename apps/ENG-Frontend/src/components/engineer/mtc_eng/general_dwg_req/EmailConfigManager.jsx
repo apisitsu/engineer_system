@@ -204,7 +204,7 @@ const EmailConfigManager = () => {
                                     name="stage"
                                     //label="Workflow Stage Name" 
                                     rules={[{ required: true, message: 'Please input stage name!' }]}
-                                    help="ตัวอย่าง: Eng Check หรือ CC_Eng Check"
+                                    help="Example: Eng Check or CC_Eng Check"
                                 >
                                     <Input placeholder="Enter stage name" />
                                 </Form.Item>

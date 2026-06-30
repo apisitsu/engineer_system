@@ -5,3 +5,8 @@ apps/ENG-Backend/instance/*.db
 .env
 
 apps/uploads/html_to_pdf
+
+# Ad-hoc DB backup/dump dropped by maintenance scripts — may contain employee PII
+# (approval em_ids/names). Keep these out of version control.
+scripts/*_backup.json
+scripts/*_dump.json
