@@ -333,23 +333,31 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
   }
 
   for (const [machineName, toolings] of Object.entries(byMachine)) {
-    const lc = toolings['LOADING CHUTE'];
-    const sb = toolings['SUPPORT BLOCK'];
-    if (!lc?.matches?.[0] || !sb) continue;
+    // Fail-open: a DB error linking this machine's SUPPORT BLOCK must skip only this
+    // machine, never abort the whole search (runs on every search). The core formula
+    // matches are already in `results`; the link is a refinement.
+    try {
+      const lc = toolings['LOADING CHUTE'];
+      const sb = toolings['SUPPORT BLOCK'];
+      if (!lc?.matches?.[0] || !sb) continue;
 
-    const lcNo = lc.matches[0].tooling_no;
-    if (!lcNo || !/^4664-02-/.test(lcNo)) continue;
+      const lcNo = lc.matches[0].tooling_no;
+      if (!lcNo || !/^4664-02-/.test(lcNo)) continue;
 
-    const sbNo = lcNo.replace('4664-02-', '4664-03-');
-    const table = machineByDisplay[machineName]?.inventory_table;
-    if (!table) continue;
+      const sbNo = lcNo.replace('4664-02-', '4664-03-');
+      const table = machineByDisplay[machineName]?.inventory_table;
+      if (!table) continue;
 
-    const { rows } = await engPool.query(
-      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
-      [sbNo]
-    );
-    if (rows.length > 0) {
-      sb.matches = rows;
+      const { rows } = await engPool.query(
+        `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+        [sbNo]
+      );
+      if (rows.length > 0) {
+        sb.matches = rows;
+      }
+    } catch (err) {
+      console.warn(`[tselect] support-block link skipped for ${machineName}: ${err.message}`);
+      continue;
     }
   }
 }
@@ -369,29 +377,36 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
 // that doesn't use the table) get zero rows back → no-op, no behaviour change.
 async function _applyPartnoOverrides(results, machineByDisplay, partsNo) {
   if (!partsNo) return;
-  const { rows } = await engPool.query(
-    `SELECT machine_name, tooling_name, tool_dwg_no
-       FROM ${TSV2_TABLES.PARTNO_MAP}
-      WHERE parts_no = $1 AND is_forbidden = false`,
-    [partsNo]
-  );
-  if (!rows.length) return;
-
-  const override = {};
-  for (const r of rows) override[`${r.machine_name}||${r.tooling_name}`] = r.tool_dwg_no;
-
-  for (const res of results) {
-    const mcfg = machineByDisplay[res.machine];
-    const machineName = mcfg?.machine_name || res.machine;
-    const dwg = override[`${machineName}||${res.tooling}`];
-    if (!dwg) continue;
-    const table = mcfg?.inventory_table;
-    if (!table) continue;
-    const { rows: inv } = await engPool.query(
-      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
-      [dwg]
+  // Fail-open: this runs on every search. A DB error must leave the formula-driven
+  // matches intact (a sensible default) rather than 500 the whole search — the pinned
+  // override resumes once a transient error clears.
+  try {
+    const { rows } = await engPool.query(
+      `SELECT machine_name, tooling_name, tool_dwg_no
+         FROM ${TSV2_TABLES.PARTNO_MAP}
+        WHERE parts_no = $1 AND is_forbidden = false`,
+      [partsNo]
     );
-    if (inv.length) { res.matches = inv; res.overrideBy = 'parts_no'; }
+    if (!rows.length) return;
+
+    const override = {};
+    for (const r of rows) override[`${r.machine_name}||${r.tooling_name}`] = r.tool_dwg_no;
+
+    for (const res of results) {
+      const mcfg = machineByDisplay[res.machine];
+      const machineName = mcfg?.machine_name || res.machine;
+      const dwg = override[`${machineName}||${res.tooling}`];
+      if (!dwg) continue;
+      const table = mcfg?.inventory_table;
+      if (!table) continue;
+      const { rows: inv } = await engPool.query(
+        `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+        [dwg]
+      );
+      if (inv.length) { res.matches = inv; res.overrideBy = 'parts_no'; }
+    }
+  } catch (err) {
+    console.warn(`[tselect] parts_no override skipped for ${partsNo}: ${err.message}`);
   }
 }
 
@@ -443,47 +458,55 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
     if (!table) continue;
     const toolingNames = emptyResults.map(r => r.tooling);
 
-    // Globally-nearest reference part across this machine's empty toolings.
-    const { rows } = await engPool.query(
-      `SELECT m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
-              (ABS(COALESCE(s.od_aft,0) - $1)
-             + ABS(COALESCE(s.id_aft,0) - $2)
-             + ${W_DIST_WEIGHT} * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
-         FROM ${TSV2_TABLES.PARTNO_MAP} m
-         JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
-        WHERE m.machine_name = $4
-          AND m.tooling_name = ANY($5)
-          AND m.is_forbidden = false
-          AND left(s.cn, 2) = $6
-          AND s.cn <> $7
-        ORDER BY dist ASC
-        LIMIT 1`,
-      [od, id, w, machineName, toolingNames, cls, String(spec.cn)]
-    );
-    if (!rows.length) continue;
+    // Fail-open: this runs on EVERY search (incl. the high-volume coverage-report /
+    // SDS-overlay batch). A DB error here must skip THIS machine's suggestion, never
+    // abort the whole search — mirrors the catch-and-skip of the similar-ref attachers.
+    try {
+      // Globally-nearest reference part across this machine's empty toolings.
+      const { rows } = await engPool.query(
+        `SELECT m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
+                (ABS(COALESCE(s.od_aft,0) - $1)
+               + ABS(COALESCE(s.id_aft,0) - $2)
+               + $8 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+           FROM ${TSV2_TABLES.PARTNO_MAP} m
+           JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
+          WHERE m.machine_name = $4
+            AND m.tooling_name = ANY($5)
+            AND m.is_forbidden = false
+            AND left(s.cn, 2) = $6
+            AND s.cn <> $7
+          ORDER BY dist ASC
+          LIMIT 1`,
+        [od, id, w, machineName, toolingNames, cls, String(spec.cn), W_DIST_WEIGHT]
+      );
+      if (!rows.length) continue;
 
-    const best = rows[0];
-    if (Number(best.dist) > SIMILAR_DIST_MAX) continue;
+      const best = rows[0];
+      if (Number(best.dist) > SIMILAR_DIST_MAX) continue;
 
-    const target = emptyResults.find(r => r.tooling === best.tooling_name);
-    if (!target) continue;
+      const target = emptyResults.find(r => r.tooling === best.tooling_name);
+      if (!target) continue;
 
-    const { rows: inv } = await engPool.query(
-      `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
-      [best.tool_dwg_no]
-    );
-    if (inv.length) {
-      target.matches = inv;
-      target.overrideBy = 'similar_part';
-      target.similarPart = {
-        ref_cn: best.ref_cn,
-        parts_no: best.parts_no,
-        distance: Number(best.dist),
-        // The factory process_code this tool family runs under — lets the SDS
-        // page place the suggestion under the matching process row (e.g. KL-20
-        // collet 4030 → 2561 "Trim") instead of a separate part-level list.
-        process_code: await processCodeForToolFamily(best.tool_dwg_no),
-      };
+      const { rows: inv } = await engPool.query(
+        `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+        [best.tool_dwg_no]
+      );
+      if (inv.length) {
+        target.matches = inv;
+        target.overrideBy = 'similar_part';
+        target.similarPart = {
+          ref_cn: best.ref_cn,
+          parts_no: best.parts_no,
+          distance: Number(best.dist),
+          // The factory process_code this tool family runs under — lets the SDS
+          // page place the suggestion under the matching process row (e.g. KL-20
+          // collet 4030 → 2561 "Trim") instead of a separate part-level list.
+          process_code: await processCodeForToolFamily(best.tool_dwg_no),
+        };
+      }
+    } catch (err) {
+      console.warn(`[tselect] similar-part fallback skipped for ${displayName}: ${err.message}`);
+      continue;
     }
   }
 }
@@ -528,7 +551,7 @@ async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, s
                 m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
                 (ABS(COALESCE(s.od_aft,0) - $1)
                + ABS(COALESCE(s.id_aft,0) - $2)
-               + ${W_DIST_WEIGHT} * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+               + $8 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
            FROM ${TSV2_TABLES.PARTNO_MAP} m
            JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
           WHERE m.machine_name = $4
@@ -537,7 +560,7 @@ async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, s
             AND left(s.cn, 2) = $6
             AND s.cn <> $7
           ORDER BY m.tooling_name, dist ASC`,
-        [od, id, w, machineName, toolingNames, cls, String(spec.cn)]
+        [od, id, w, machineName, toolingNames, cls, String(spec.cn), W_DIST_WEIGHT]
       ));
     } catch (_) { return; }   // machine has no partno_map / query issue → no column
 
@@ -573,19 +596,31 @@ async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, s
 // dimensionally-nearest part (≤ SIMILAR_DIST_MAX) to the searched CN and surface
 // the exact tool it used. Cross-pool but fully fail-safe: any miss → no column.
 //
-// Dim source per class (maqdb): ball/race/sleeve only — body/spherical store dims
-// indirectly and are skipped (the column simply doesn't show for them).
+// Dim source per class (maqdb). Each entry's `join` is a JOIN clause that exposes the
+// dim columns under alias `d`, so the shared SELECT/dist expression below is identical
+// across classes. ball/race/sleeve are single-table; spherical chains two tables.
+// (body still has no dim source → skipped.)
 const _CLASS_DIM = {
-  ball:   { table: 'lpb.eng_ball',   od: 'ball_dia', id: 'in_dia', w: 'width' },
-  race:   { table: 'lpb.eng_race',   od: 'od',       id: 'id',     w: 'width' },
-  sleeve: { table: 'lpb.eng_sleeve', od: 'od',       id: 'id',     w: 'full_length' },
+  ball:   { join: 'JOIN lpb.eng_ball d   ON d.control_no = t.process_plan_no', od: 'ball_dia', id: 'in_dia', w: 'width' },
+  race:   { join: 'JOIN lpb.eng_race d   ON d.control_no = t.process_plan_no', od: 'od',       id: 'id',     w: 'width' },
+  sleeve: { join: 'JOIN lpb.eng_sleeve d ON d.control_no = t.process_plan_no', od: 'od',       id: 'id',     w: 'full_length' },
+  // Spherical (A4x) dims live in a 2-table chain: eng_sph (control_no → sph_design_no,
+  // no dim cols) → eng_sph_design (sph_od / dall_id / sph_width, keyed sph_design_cn).
+  // A4x spec od_aft/id_aft/w_aft are themselves synced from these same cols, so the
+  // distance comparison stays apples-to-apples.
+  spherical: {
+    join: 'JOIN lpb.eng_sph sph        ON sph.control_no = t.process_plan_no '
+        + 'JOIN lpb.eng_sph_design d   ON d.sph_design_cn = sph.sph_design_no',
+    od: 'sph_od', id: 'dall_id', w: 'sph_width',
+  },
 };
 function _classDimFor(cn) {
   const n = parseInt(String(cn).slice(0, 2), 10);
   if (n >= 31 && n <= 39) return _CLASS_DIM.ball;
   if (n >= 21 && n <= 29) return _CLASS_DIM.race;
   if ((n >= 61 && n <= 64) || n === 69) return _CLASS_DIM.sleeve;
-  return null; // body / spherical / unknown → no factory reference
+  if ((n >= 41 && n <= 44) || n === 48 || n === 49) return _CLASS_DIM.spherical;
+  return null; // body / unknown → no factory reference
 }
 // First tool-DWG-shaped value (XXXX-XX-NNNN…) in an inventory row → its family.
 function _familyFromMatch(row) {
@@ -634,14 +669,14 @@ async function _attachSimilarRefFromFactoryPlan(results, spec, specCtx) {
               t.process_plan_no AS ref_cn, t.tool_dwg_no,
               (ABS(COALESCE(d.${dim.od},0) - $1)
              + ABS(COALESCE(d.${dim.id},0) - $2)
-             + ${W_DIST_WEIGHT} * ABS(COALESCE(d.${dim.w},0) - $3)) AS dist
+             + $7 * ABS(COALESCE(d.${dim.w},0) - $3)) AS dist
          FROM lpb.eng_r_pi_tool t
-         JOIN ${dim.table} d ON d.control_no = t.process_plan_no
+         ${dim.join}
         WHERE ${famExpr} = ANY($4)
           AND left(t.process_plan_no, 3) = $6
           AND t.process_plan_no <> $5
         ORDER BY fam, dist ASC`,
-      [od, id, w, [...families], targetCn, cnPrefix]
+      [od, id, w, [...families], targetCn, cnPrefix, W_DIST_WEIGHT]
     ));
   } catch (_) { return; }   // maqdb unavailable / class table issue → no column
 

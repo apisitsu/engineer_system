@@ -63,7 +63,18 @@ const FIXES = [
     }
     await client.query('COMMIT');
     console.log(`\nDone. ${changed} row(s) updated, ${skipped} skipped.`);
-    console.log('Note: flush the tooling cache (or wait for TTL) so search reflects the new formulas.');
+    if (changed > 0) {
+      // The running backend serves formulas from the in-memory tsv2ConfigCache snapshot
+      // (TTL 60s). This standalone script CANNOT flush that other process's cache, so the
+      // new formulas are NOT live until the snapshot refreshes. Make that loud so the fix
+      // isn't silently shadowed by stale cache.
+      console.log('\n' + '='.repeat(72));
+      console.log('  ⚠  CACHE: the backend caches formulas in tsv2ConfigCache (60s TTL).');
+      console.log('     New formulas go live automatically within ~60s. For an IMMEDIATE');
+      console.log('     effect, save any row in the T-Select admin UI (flushes the cache)');
+      console.log('     or restart the backend. Until then, search serves the OLD formulas.');
+      console.log('='.repeat(72));
+    }
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('Migration failed, rolled back:', e.message);
