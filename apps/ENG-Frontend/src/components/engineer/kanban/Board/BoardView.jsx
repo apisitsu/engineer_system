@@ -553,18 +553,21 @@ const BoardView = () => {
         const overId = String(over.id);
 
         if (activeId.startsWith('list-') && overId.startsWith('list-')) {
-            const activeListId = parseInt(activeId.replace('list-', ''));
-            const overListId = parseInt(overId.replace('list-', ''));
-            if (activeListId === overListId) return;
+            const activeListIdStr = activeId.replace('list-', '');
+            const overListIdStr = overId.replace('list-', '');
+            if (activeListIdStr === overListIdStr) return;
 
-            const overIndex = visibleLists.findIndex(l => l.id === overListId);
-            const sortedWithout = visibleLists.filter(l => l.id !== activeListId);
+            const overIndex = visibleLists.findIndex(l => String(l.id) === overListIdStr);
+            const sortedWithout = visibleLists.filter(l => String(l.id) !== activeListIdStr);
+            const activeListObj = visibleLists.find(l => String(l.id) === activeListIdStr);
 
-            const prevPos = overIndex > 0 ? sortedWithout[overIndex - 1]?.position ?? 0 : 0;
-            const nextPos = sortedWithout[overIndex]?.position ?? prevPos + GAP;
-            const newPos = prevPos + (nextPos - prevPos) / 2;
+            const pPrev = Number(overIndex > 0 ? sortedWithout[overIndex - 1]?.position ?? 0 : 0);
+            const pNext = Number(sortedWithout[overIndex]?.position ?? pPrev + GAP);
+            const newPos = pPrev + (pNext - pPrev) / 2;
 
-            reorderList(activeBoard.id, activeListId, newPos);
+            if (activeListObj) {
+                reorderList(activeBoard.id, activeListObj.id, newPos);
+            }
             return;
         }
 
@@ -582,15 +585,15 @@ const BoardView = () => {
                 const targetCards = (cards[targetListId] || []).filter(c => c.id !== draggedCard.id);
                 const overIdx = targetCards.findIndex(c => c.id === overEntry.card.id);
 
-                const prevPos = overIdx > 0 ? targetCards[overIdx - 1].position : 0;
-                const nextPos = targetCards[overIdx]?.position ?? prevPos + GAP;
-                targetPosition = prevPos + (nextPos - prevPos) / 2;
+                const pPrev = Number(overIdx > 0 ? targetCards[overIdx - 1].position : 0);
+                const pNext = Number(targetCards[overIdx]?.position ?? pPrev + GAP);
+                targetPosition = pPrev + (pNext - pPrev) / 2;
             } else if (overId.startsWith('list-')) {
-                targetListId = parseInt(overId.replace('list-', ''));
-                const targetCards = (cards[targetListId] || []).filter(c => c.id !== draggedCard.id);
-                const lastPos = targetCards.length > 0
+                targetListId = isNaN(Number(overId.replace('list-', ''))) ? overId.replace('list-', '') : Number(overId.replace('list-', ''));
+                const targetCards = (cards[targetListId] || []).filter(c => String(c.id) !== String(draggedCard.id));
+                const lastPos = Number(targetCards.length > 0
                     ? targetCards[targetCards.length - 1].position
-                    : 0;
+                    : 0);
                 targetPosition = lastPos + GAP;
             } else {
                 return;
@@ -598,8 +601,8 @@ const BoardView = () => {
 
             if (targetListId === sourceListId) {
                 const sameCards = (cards[sourceListId] || []);
-                const origIdx = sameCards.findIndex(c => c.id === draggedCard.id);
-                const newIdx = sameCards.findIndex(c => c.id === parseInt(overId.replace('card-', '')));
+                const origIdx = sameCards.findIndex(c => String(c.id) === String(draggedCard.id));
+                const newIdx = sameCards.findIndex(c => String(c.id) === overId.replace('card-', ''));
                 if (origIdx === newIdx) return;
             }
 

@@ -1555,12 +1555,11 @@ const ReorderCard = async (req, res) => {
         }
 
         // Get all sibling cards in the target list (excluding the card being moved)
-        const { rows: siblings } = await client.query(
-            `SELECT id, position FROM kb_card
-             WHERE list_id=$1 AND id!=$2
-             ORDER BY position ASC`,
+        const { rows } = await client.query(
+            `SELECT id, position FROM kb_card WHERE list_id=$1 AND id!=$2 ORDER BY position ASC`,
             [list_id, id]
         );
+        const siblings = rows.map(r => ({ ...r, position: Number(r.position) }));
 
         const { position: newPosition, repositions } = insertToPositionables(position, siblings);
 
