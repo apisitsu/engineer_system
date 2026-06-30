@@ -17,6 +17,7 @@ import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import MachineCodes from './MachineCodes';
 import MachineTypes from './MachineTypes';
+import ApprovalRoleConfig from './ApprovalRoleConfig';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -2323,6 +2324,7 @@ const SdsV2AdminPage = () => {
     { key: 'machine-types', label: 'Machine Types', children: <MachineTypes theme={theme} /> },
     { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
     { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
+    { key: 'approval-roles', label: 'Approval Roles', children: <ApprovalRoleConfig theme={theme} /> },
     { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
   ];
 

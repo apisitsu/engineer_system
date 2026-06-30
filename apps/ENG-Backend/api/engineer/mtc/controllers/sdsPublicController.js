@@ -27,6 +27,7 @@ const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const headless = require('./sdsV2HeadlessController');
+const cnFormat = require('../utils/cnFormat');
 
 const router = express.Router();
 
@@ -52,14 +53,25 @@ async function sdsMachineByAny(value) {
 }
 
 // Resolve whatever the caller sent as "machine" to a real sds_machine_type_code.machine_type_name.
-// m_setup_datasheet is the SDS-scoped machine list (machine_code → machine_name, where
-// machine_name = the machine_type_name). Look the code up there first, then match the
-// resolved machine_name (or the raw value) against the SDS machine types. Returns null on
-// no match. (sheet_name is intentionally not used — machine_name is the SSOT identifier.)
+// Resolution priority (mirrors buildMachineResolver elsewhere): the local override table
+// sds_machine_code wins, THEN rodpc.m_setup_datasheet, THEN the raw value. The override must
+// come first because the factory floor-code tables go stale — e.g. m_setup_datasheet still
+// maps VSG-02 → 'TSG300W' (the old machine) even though VSG-02 is now HAMAI 5B; without the
+// override-first lookup this public link renders the wrong (TSG-300W) Setup Data Sheet.
+// (sheet_name is intentionally not used — machine_name is the SSOT identifier.)
 async function resolveMachineTypeName(raw) {
   const v = String(raw || '').trim();
   if (!v) return null;
   const candidates = [];
+  try {
+    const o = await engPool.query(
+      `SELECT machine_name FROM sds_machine_code
+        WHERE machine_code = $1 AND machine_name IS NOT NULL AND TRIM(machine_name) <> '' LIMIT 1`,
+      [v]
+    );
+    const oname = o.rows[0]?.machine_name && o.rows[0].machine_name.trim();
+    if (oname) candidates.push(oname);         // local override (sds_machine_code) wins
+  } catch (_) { /* override table optional — fall back to factory + direct match */ }
   try {
     const r = await rodpcPool.query(
       `SELECT machine_name FROM rodpc.m_setup_datasheet
@@ -67,7 +79,7 @@ async function resolveMachineTypeName(raw) {
       [v]
     );
     const name = r.rows[0]?.machine_name && r.rows[0].machine_name.trim();
-    if (name) candidates.push(name);          // m_setup_datasheet machine_name wins
+    if (name) candidates.push(name);          // then factory m_setup_datasheet machine_name
   } catch (_) { /* factory DB optional — fall back to direct SDS match */ }
   candidates.push(v);                          // also accept a name/code/group passed directly
 
@@ -85,9 +97,13 @@ router.get('/sds/pdf', async (req, res) => {
   if (!expected) return res.status(503).json({ error: 'Public SDS PDF link is not configured' });
   if (String(req.query.key || '') !== expected) return res.status(401).json({ error: 'Invalid key' });
 
-  const cn = String(req.query.cn || '').trim();
+  // Accept either the 6-digit item number (e.g. 310368) or a control number (C31-00368) — the
+  // calling team's links use the plain 6-digit form. Normalize to the canonical control-no here
+  // (the public-link boundary) so it works regardless of the downstream search version.
+  const cnRaw = String(req.query.cn || '').trim();
+  const cn = cnFormat.toControlNo(cnRaw) || cnRaw;
   const process_code = String(req.query.process_code || '').trim();
-  if (!cn) return res.status(400).json({ error: 'cn is required' });
+  if (!cnRaw) return res.status(400).json({ error: 'cn is required' });
 
   try {
     // machine_type_name wins if given; otherwise resolve the machine code / WC / group.

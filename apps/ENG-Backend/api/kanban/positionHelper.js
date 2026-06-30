@@ -99,22 +99,23 @@ function getFullRepositionsMap(positions) {
  * @returns {{ position: number, repositions: Array<{record, position}> }}
  */
 function insertToPositionables(targetPosition, records) {
+    const numTargetPosition = Number(targetPosition);
     const lowers = [];
     const uppers = [];
 
     records.forEach((record) => {
-        (record.position <= targetPosition ? lowers : uppers).push(record.position);
+        (record.position <= numTargetPosition ? lowers : uppers).push(record.position);
     });
 
-    const beginnings = findBeginnings([...lowers, targetPosition]);
+    const beginnings = findBeginnings([...lowers, numTargetPosition]);
 
     const repositionsMap =
         getRepositionsMap([...beginnings, ...uppers]) ||
-        getFullRepositionsMap([...lowers, targetPosition, ...uppers]);
+        getFullRepositionsMap([...lowers, numTargetPosition, ...uppers]);
 
-    const position = repositionsMap[targetPosition]
-        ? repositionsMap[targetPosition].pop()
-        : targetPosition;
+    const position = repositionsMap[numTargetPosition]
+        ? repositionsMap[numTargetPosition].pop()
+        : numTargetPosition;
 
     const repositions = [];
 

@@ -10,6 +10,11 @@ const tselectFallback = require('../services/tselectFallback');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
+const { getApprovalSeals } = require('./sdsApprovalController');
+
+// Approval-stamp param keys → role. The seal image comes from the sds_approval
+// sign records (see getApprovalSeals), keyed per CN by (cn, machine_type, process_code, sds_rev).
+const STAMP_PARAM_KEYS = { stamp_prepared: 'prepared', stamp_checked: 'checked', stamp_approved: 'approved' };
 
 const router = express.Router();
 
@@ -85,6 +90,77 @@ function buildCssVarsBlock(config) {
     .map(([k, v]) => `  --${k}: ${v};`)
     .join('\n');
   return `:root {\n${lines}\n}`;
+}
+
+// Canonical MSB surface-grind fixture TYPE from a (factory or whitelist) tool name.
+// A bore-band stores the SAME fixture (BASE/COLLET/COLLET ARBOR/COLLAR/SPACER) at
+// DIFFERENT DWG positions — e.g. band 0031 puts COLLET/ARBOR/COLLAR at -07/-08/-09
+// while the whitelist lists them at -02/-03/-04 — so neither the DWG suffix nor the
+// position is a reliable slot key; the fixture NAME is. Returns null for names that
+// aren't one of these fixtures, so the name-match tier stays inert for non-MSB
+// machines (their whitelist names don't canonicalize → empty slotByFixture map).
+function canonFixtureName(name) {
+  const n = String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  // "BASE ASSY" (組立図 = the assembly drawing) is NOT a physical slot fixture — it must
+  // be excluded BEFORE the BASE substring check below, or it canonicalizes to BASE and
+  // collides with the real BASE slot: the factory plan often lists the -99 ASSY alongside
+  // the BASE fixture, so the ASSY steals BASE's T-slot and cascades every following
+  // fixture out of the configured tool-no order (e.g. CN 290794 → T1 ASSY, T2 BASE, …).
+  // Returning null drops it from slotting (the T-Select ASSY tooling was already removed
+  // for the same reason — see 20260622_remove_gs64pfii_assy_tooling.js).
+  if (n.includes('ASSY') || n.includes('組立')) return null;
+  if (n.includes('ARBOR')) return 'COLLET_ARBOR';          // check BEFORE COLLET (substring)
+  if (n.includes('COLLAR')) return 'COLLAR';
+  if (n.includes('COLLET') || n.includes('コレット')) return 'COLLET';
+  if (n.includes('BASE') || n.includes('ベース')) return 'BASE';
+  if (n.includes('SPACER') || n.includes('スペーサ')) return 'SPACER';
+  return null;
+}
+
+// First two dash-segments of a DWG no (the tool family / machine-type key), e.g.
+// 4547-01-0031-07 → 4547-01. Falls back to the raw value when it has < 2 segments.
+function dwgPrefixOf(no) {
+  const p = String(no || '').split('-');
+  return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || '');
+}
+
+// Build the canonical-fixture → { slot, family } map for the fixture-NAME slot tier.
+// `mtRows` = whitelist slots ({ tool_drawing_no, tool_number }); `nameByDwg` maps a
+// whitelist DWG → its fixture name (lpb.eng_tooling); `orderMap` maps a whitelist DWG →
+// its 1-based T-slot. A canonical fixture is kept ONLY when it maps to exactly ONE slot —
+// a fixture that lands in >1 slot is ambiguous and dropped (never guess). Stays EMPTY for
+// non-MSB whitelists whose names don't canonicalize → the name tier is inert there.
+function buildSlotByFixture(mtRows, nameByDwg, orderMap) {
+  const slotByFixture = new Map();   // canon fixture → { slot, family }
+  const canonCount = {};
+  for (const r of mtRows) {
+    const canon = canonFixtureName(nameByDwg[r.tool_drawing_no]);
+    if (!canon) continue;
+    canonCount[canon] = (canonCount[canon] || 0) + 1;
+    slotByFixture.set(canon, { slot: orderMap[r.tool_drawing_no], family: dwgPrefixOf(r.tool_drawing_no) });
+  }
+  for (const [c, n] of Object.entries(canonCount)) if (n > 1) slotByFixture.delete(c); // ambiguous → drop
+  return slotByFixture;
+}
+
+// DWG no (+ optional fixture NAME) → configured T-slot. Three tiers, in order: 1) exact
+// DWG in the whitelist, 2) dash-prefix family overlap, 3) fixture NAME (MSB grinders) —
+// the name tier fires only when the candidate shares the whitelisted fixture's DWG family,
+// so a same-named tool of a DIFFERENT family can't cross over. null = no slot.
+function makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture }) {
+  return (dwgNo, toolName) => {
+    if (!dwgNo) return null;
+    if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
+    const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
+    if (k !== undefined) return orderMap[k];
+    const canon = canonFixtureName(toolName);
+    if (canon && slotByFixture.has(canon)) {
+      const e = slotByFixture.get(canon);
+      if (dwgPrefixOf(dwgNo) === e.family) return e.slot;
+    }
+    return null;
+  };
 }
 
 // ── Cloned buildValueMap logic for consistency ──────────────────────────────
@@ -169,7 +245,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
 
-  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
+  const dwgPrefix = dwgPrefixOf;
   const slotData = new Array(20).fill(null);
 
   // Place a tool honoring its Machine Tool Config slot (1-based T-number) when known
@@ -184,27 +260,42 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     slotData[idx] = payload; return true;
   };
 
-  // DWG no → configured T-number via exact or prefix match against the whitelist
-  // (null when there is no Machine Tool Config slot for it).
+  // DWG no (+ optional fixture NAME) → configured T-number. Tiers: 1) exact DWG,
+  // 2) dash-prefix family, 3) fixture NAME (MSB grinders). null = no slot.
   let configSlotOf = () => null;
   if (mtRows.length > 0) {
     const allowedKeys = mtRows.map(r => r.tool_drawing_no);
     const orderMap = {};
     mtRows.forEach(r => { orderMap[r.tool_drawing_no] = parseInt(r.tool_number.slice(1)); });
-    configSlotOf = (dwgNo) => {
-      if (!dwgNo) return null;
-      if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
-      const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
-      return k !== undefined ? orderMap[k] : null;
-    };
-    // Factory-plan tools that match the whitelist land in their EXACT configured T-slot
+
+    // Resolve each whitelist slot's fixture NAME (from lpb.eng_tooling) so a factory /
+    // T-Select tool can be matched to its slot by fixture TYPE — the only key that
+    // survives the bore-band DWG shuffle (band 0031 lists COLLET/ARBOR/COLLAR at
+    // -07/-08/-09; the whitelist lists them at -02/-03/-04). Best-effort: a name-resolution
+    // failure is LOGGED (not silently swallowed) and falls back to DWG-only matching
+    // (slotByFixture stays empty → the fixture-NAME tier is inert).
+    let slotByFixture = new Map();   // canon fixture → { slot, family }
+    try {
+      const nameRows = (await maqPool.query(
+        `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING} WHERE tool_dwg_no = ANY($1)`,
+        [allowedKeys]
+      )).rows;
+      const nameByDwg = {};
+      for (const r of nameRows) if (r.tool_name && !nameByDwg[r.tool_dwg_no]) nameByDwg[r.tool_dwg_no] = r.tool_name;
+      slotByFixture = buildSlotByFixture(mtRows, nameByDwg, orderMap);
+    } catch (err) {
+      console.warn(`[sds-pdf] fixture-name resolution failed for [${allowedKeys.join(', ')}] — falling back to DWG-only slotting: ${err.message}`);
+    }
+
+    configSlotOf = makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture });
+    // Factory-plan tools that match the whitelist land in their configured T-slot
     // (slot positions are honored, gaps preserved). Sorted by slot so a collision
     // resolves deterministically (lower T keeps its slot, the other spills to first free).
     const matched = tools
-      .filter(t => configSlotOf(t.tool_dwg_no) !== null)
-      .sort((a, b) => configSlotOf(a.tool_dwg_no) - configSlotOf(b.tool_dwg_no));
+      .filter(t => configSlotOf(t.tool_dwg_no, t.tool_name) !== null)
+      .sort((a, b) => configSlotOf(a.tool_dwg_no, a.tool_name) - configSlotOf(b.tool_dwg_no, b.tool_name));
     for (const t of matched) {
-      placeTool(configSlotOf(t.tool_dwg_no), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
+      placeTool(configSlotOf(t.tool_dwg_no, t.tool_name), { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
     }
   } else {
     // No Machine Tool Config → legacy compacted fill (prefix-code filter when available).
@@ -227,7 +318,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     ) || (searchData.process_plan || []).some(
       r => String(r.process_code) === String(process_code)
     );
-    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess });
+    // includeSimilar: the Setup Data Sheet should still carry a Tool No when the
+    // only available pick is the factory's choice for the most dimensionally-
+    // similar part (similar-part fallback). These come through fromTs → ' *'
+    // marker (= "supplied by Tooling Select, not the part's factory data").
+    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess, includeSimilar: true });
     // Order the fallback tools by the T-Select machine's tooling DEFINITION order
     // (tooling_formula sort_order, then id) rather than searchService's alphabetical
     // sort. For MSB grinders this yields the assembly order WORK FIXED BASE → COLLET →
@@ -266,6 +361,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     const multiFam = new Set(Object.keys(famSets).filter(p => famSets[p].size > 1));
     const dedupKey = (no) => (multiFam.has(dwgPrefix(no)) ? toDwg(no) : dwgPrefix(no));
     const existingKeys = new Set(slotData.filter(Boolean).map(s => dedupKey(s.tool_dwg_no)).filter(Boolean));
+    // Fixture types the FACTORY plan already placed (by name). A T-Select fallback tool
+    // for the SAME fixture is a wrong-band duplicate (e.g. factory COLLET 4547-01-0031-07
+    // already in T2 → suppress T-Select's COLLET 4547-01-0017-05 ` *`). MSB-scoped:
+    // canonFixtureName is null for non-grinder tools, so this never suppresses elsewhere.
+    const existingFixtures = new Set(slotData.filter(Boolean).map(s => canonFixtureName(s.tool_name)).filter(Boolean));
     // The ' *' marker means "supplied by Tooling Select, not in the part's factory data".
     // But a fallback tool is often ALSO listed verbatim in the factory process plan — it only
     // came through the fallback because its DWG isn't in the (static, band-specific) Machine
@@ -280,16 +380,32 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     for (const tt of tsTools) {
       const key = dedupKey(tt.tooling_no);
       if (key && existingKeys.has(key)) continue;
+      // Skip a T-Select tool whose fixture the factory plan already supplied (factory-first):
+      // its DWG differs (different bore band) but it's the same fixture → would otherwise add
+      // a misleading wrong-band ` *` duplicate beside the real factory tool.
+      const canonTs = canonFixtureName(tt.tooling_name);
+      if (canonTs && existingFixtures.has(canonTs) && !planByDwg.has(toDwg(tt.tooling_no))) continue;
       const planHit = planByDwg.get(toDwg(tt.tooling_no));
       // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
       // lands in the SAME T-slot the config reserves for that tool family (not just the
       // next empty slot). Falls back to first free slot when no config slot applies/free.
-      if (!placeTool(configSlotOf(tt.tooling_no), {
+      const cfgSlot = configSlotOf(tt.tooling_no, tt.tooling_name);
+      // When a Machine Tool Config exists it is the AUTHORITATIVE tool whitelist — the
+      // factory-plan path above is already filtered to configSlotOf !== null, so apply the
+      // same gate to T-Select fallback tools. A tool whose DWG family isn't in the config
+      // (cfgSlot === null) must NOT be jammed into a free slot: that both ADDS a tool the
+      // config never listed (e.g. KS-400B5 4906-15, absent from the 4906-01..12 whitelist)
+      // and DISPLACES a configured slot, breaking the config T-order (e.g. KS-400B6 4931-14
+      // stealing T01 from 4664-34). Drop it — the config's own slots are filled by the
+      // emptyCfg fixture-name backfill below. (No config → free-slot fill is unchanged.)
+      if (mtRows.length > 0 && cfgSlot === null) continue;
+      if (!placeTool(cfgSlot, {
         tool_name: (planHit && planHit.tool_name) || tt.tooling_name || '',
         tool_dwg_no: tt.tooling_no,
         fromTs: !planHit,
       })) break;
       if (key) existingKeys.add(key);
+      if (canonTs) existingFixtures.add(canonTs);
     }
   }
 
@@ -694,9 +810,22 @@ function buildGridPdfHtml(grid) {
         a && a.wrap ? 'overflow:hidden' : 'overflow:visible',
       ].filter(Boolean).join(';');
       const sp = span ? `${span.cs > 1 ? ` colspan="${span.cs}"` : ''}${span.rs > 1 ? ` rowspan="${span.rs}"` : ''}` : '';
-      const content = cd && cd.img
-        ? `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;margin:0 auto;">`
-        : escHtml(cd && cd.v);
+      // Image cells: a bare <img max-height:100%> inside a (row-spanned) td has no definite
+      // height to resolve 100% against, so a tall/narrow image stretches the td and grows the
+      // whole row. Wrap it in a div whose height is PINNED to the summed height of the spanned
+      // rows (with overflow:hidden) so the row height stays fixed and the image just contains
+      // itself inside that box.
+      let content;
+      if (cd && cd.img) {
+        const rs = span ? span.rs : 1;
+        let cellHmm = 0;
+        for (let i = r; i < r + rs; i++) cellHmm += (rowH[i] || 0) * scale;
+        content = `<div style="height:${cellHmm.toFixed(3)}mm;width:100%;overflow:hidden;`
+          + `display:flex;align-items:center;justify-content:center;">`
+          + `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"></div>`;
+      } else {
+        content = escHtml(cd && cd.v);
+      }
       body += `<td${sp} style="${st}">${content}</td>`;
     }
     body += '</tr>';
@@ -783,8 +912,26 @@ function applyDataToGrid(grid, valueMap, mappings) {
   //    the SAME merged region are routed to the merge master and concatenated in column
   //    order — so e.g. the single PROCESS cell (Z3:AF3) shows "<process_code> <process_name>"
   //    even though process_name maps to AC3, which is hidden under the Z3 merge.
+  // Approval seals: place each signed role's seal image at the mapped cell's merge
+  // master (the designed stamp box). Source = sds_approval sign records, prefetched
+  // into valueMap._approvalSeals (see buildGridHtmlForRequest). Unsigned → blank.
+  const approvalSeals = valueMap._approvalSeals || {};
+  for (const { cell_address, param_key } of mappings) {
+    const role = STAMP_PARAM_KEYS[param_key];
+    if (!role) continue;
+    const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
+    if (!m) continue;
+    const uri = approvalSeals[role]?.dataUri;
+    if (!uri) continue;
+    const r = +m[2] - 1, c = colLettersToIndex(m[1]);
+    const master = mergeMaster(r, c);
+    const k = `${master.r},${master.c}`;
+    cells[k] = { ...(cells[k] || {}), img: uri };
+  }
+
   const scalarBuckets = new Map(); // "masterR,masterC" -> [{ c, v }]
   for (const { cell_address, param_key } of mappings) {
+    if (STAMP_PARAM_KEYS[param_key]) continue; // handled as seal images above
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
     if (!m) continue;
     let val = valueMap[param_key];
@@ -882,6 +1029,12 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
     const merged = {};
     for (const row of mq.rows) merged[row.cell_address] = row.param_key; // machine-specific (later) wins
     const mappings = Object.entries(merged).map(([cell_address, param_key]) => ({ cell_address, param_key }));
+    // Approval seals (Prepared/Checked/Approved) — keyed per CN by
+    // (cn, machine, process, sds_rev). sds_rev is the Setup Data Sheet revision
+    // (valueMap.sds_rev, from sds_parameter) so a new SDS rev starts unsigned and
+    // old seals don't carry over. resolveSdsRev in sdsApprovalController uses the
+    // identical source, so the sign endpoints and this renderer always agree.
+    valueMap._approvalSeals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     grid = applyDataToGrid(grid, valueMap, mappings);
   }
 
@@ -950,9 +1103,11 @@ router.get('/pdf-chrome', async (req, res) => {
     html = html.replace(/{{ct}}/g,                   esc(valueMap.ct));
 
     const p = valueMap.params || {};
-    html = html.replace(/{{stamp_prepared}}/g,  esc(p['stamp_prepared']));
-    html = html.replace(/{{stamp_checked}}/g,   esc(p['stamp_checked']));
-    html = html.replace(/{{stamp_approved}}/g,  esc(p['stamp_approved']));
+    // Approval stamps from the sds_approval sign records (keyed per CN by cn+machine+process+sds_rev).
+    const seals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    html = html.replace(/{{stamp_prepared}}/g,  seals.prepared?.svg || '');
+    html = html.replace(/{{stamp_checked}}/g,   seals.checked?.svg || '');
+    html = html.replace(/{{stamp_approved}}/g,  seals.approved?.svg || '');
     html = html.replace(/{{program_no}}/g,      esc(p['program_no'] || ''));
     html = html.replace(/{{program_name}}/g,    esc(p['program_name'] || ''));
 
@@ -1126,3 +1281,8 @@ module.exports = router;
 // Reused by sdsPublicController (the cross-system public PDF link endpoint).
 module.exports.buildGridHtmlForRequest = buildGridHtmlForRequest;
 module.exports.renderPdf = renderPdf;
+// Exported for unit testing the fixture-NAME slot-matching tier (the riskiest, highest
+// blast-radius logic in this controller). See tests/mtc/sdsFixtureSlot.test.js.
+module.exports.canonFixtureName = canonFixtureName;
+module.exports.buildSlotByFixture = buildSlotByFixture;
+module.exports.makeConfigSlotResolver = makeConfigSlotResolver;

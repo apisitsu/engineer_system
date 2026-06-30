@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select, Space,
+  Modal, Select, Space, Tooltip, Divider, Popconfirm, DatePicker,
 } from 'antd';
-import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined } from '@ant-design/icons';
+import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined, CheckCircleOutlined, EditOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { ddForm } from '../dwgFormat';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -49,10 +50,12 @@ const hasVal = (v) => v != null && String(v).trim() !== '';
 
 // Build the dimension-comparison rows for the SDS compare modal. Each row is one DWG
 // dimension (label = formula letter, e.g. dim_a → "A"), with the factory tool value,
-// T-Select #1 / #2 values, and the formula target. `diff` flags rows where the actual
-// tool values (factory/#1/#2) are not all equal — i.e. the dims that differ.
-const buildCompareRows = (result, factory) => {
-  if (!result) return { rows: [], hasFactory: false, has2: false };
+// T-Select #1 / #2 values, the nearest similar-part REFERENCE tool, and the formula
+// target. `diff` flags rows where the actual tool values (factory/#1/#2/similar) are
+// not all equal — i.e. the dims that differ. `similar` is the inventory row of the
+// `similarRef` tool (the real tool the most dimensionally-similar produced part used).
+const buildCompareRows = (result, factory, similar) => {
+  if (!result) return { rows: [], hasFactory: false, has2: false, hasSimilar: false };
   const m1 = result.matches?.[0] || null;
   const m2 = result.matches?.[1] || null;
   const colMap = result.columnMap || {};           // output_key (A) → inventory_column (dim_a)
@@ -61,10 +64,10 @@ const buildCompareRows = (result, factory) => {
   const rankSet = new Set(result.matchDimCols || []);
   const computed = result.computed || {};
 
-  // Candidate dim columns: any dim_* with a value in factory/#1/#2, plus any column
-  // that has a formula target (so a target-only dim still shows).
+  // Candidate dim columns: any dim_* with a value in factory/#1/#2/similar, plus any
+  // column that has a formula target (so a target-only dim still shows).
   const colsSet = new Set();
-  [factory, m1, m2].forEach((o) => {
+  [factory, m1, m2, similar].forEach((o) => {
     if (!o) return;
     Object.keys(o).forEach((c) => { if (/^dim_[a-z]$/i.test(c) && hasVal(o[c])) colsSet.add(c); });
   });
@@ -78,13 +81,14 @@ const buildCompareRows = (result, factory) => {
     const fv = factory ? factory[col] : null;
     const v1 = m1 ? m1[col] : null;
     const v2 = m2 ? m2[col] : null;
-    const present = [fv, v1, v2].filter(hasVal);
+    const sv = similar ? similar[col] : null;
+    const present = [fv, v1, v2, sv].filter(hasVal);
     const diff = present.length > 1 && !present.every((v) => numEq(v, present[0]));
     // Reference for cell-level diff highlight: prefer #1 (the recommendation).
-    const ref = [v1, fv, v2].find(hasVal) ?? null;
-    return { key: col, label, ranked: rankSet.has(col), target, factory: fv, v1, v2, diff, ref };
+    const ref = [v1, fv, v2, sv].find(hasVal) ?? null;
+    return { key: col, label, ranked: rankSet.has(col), target, factory: fv, v1, v2, similar: sv, diff, ref };
   });
-  return { rows, hasFactory: !!factory, has2: !!m2 };
+  return { rows, hasFactory: !!factory, has2: !!m2, hasSimilar: !!similar };
 };
 
 const SdsV2Page = () => {
@@ -94,16 +98,27 @@ const SdsV2Page = () => {
   const userRole = useAuthStore(state => state.userRole);
   const userDepartment = useAuthStore(state => state.userDepartment);
   const userPerms = useAuthStore(state => state.userPerms);
+  const empNo = useAuthStore(state => state.empNo);
   const isAdmin = userRole === 'AD' || userDepartment === 'AD' || (userPerms || []).includes('sds_admin');
   const [cn, setCn] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [tsData, setTsData] = useState(null);
   const [cnHistory, setCnHistory] = useState(null);
+  // true once the cn-history request has completed (success OR empty result).
+  // Stays false on a fetch error so the production filter can fail-open instead
+  // of blanking every machine when the history source is unavailable.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // PDF modal state
   const [pdfModal, setPdfModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Approval (Prepared/Checked/Approved) state for the selected machine+process
+  const [approval, setApproval] = useState(null);        // { state:[...], isAdmin }
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [signingRole, setSigningRole] = useState(null);  // role currently being signed
+  const [backfill, setBackfill] = useState(null);        // admin historical-sign form { role, em_id, signer_name, signed_at }
   const [allMachineTypes, setAllMachineTypes] = useState([]);
   const [visibleMachineNames, setVisibleMachineNames] = useState(null); // null = all visible
   const [machineToolsConfig, setMachineToolsConfig] = useState([]);
@@ -111,32 +126,41 @@ const SdsV2Page = () => {
   const [selectedProcess, setSelectedProcess] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
 
-  // Dim-compare modal: compares the factory Tool DWG No against T-Select #1/#2 dims.
+  // Dim-compare modal: compares the factory Tool DWG No against T-Select #1/#2 dims
+  // and the nearest similar-part REFERENCE tool (result.similarRef).
   const [compareModal, setCompareModal] = useState({
-    open: false, loading: false, title: '', result: null, factory: null, factoryNo: null,
+    open: false, loading: false, title: '', result: null,
+    factory: null, factoryNo: null, similar: null, similarRef: null,
   });
 
-  // Open the compare modal for a tooling row + its T-Select result, then fetch the
-  // factory tool's dimensions (when the row has a real Tool DWG No) so they can be
+  // Open the compare modal for a tooling row + its T-Select result, then fetch (in
+  // parallel) the inventory dims of BOTH the factory Tool DWG No (when the row has a
+  // real one) AND the similar-part reference tool (result.similarRef) so they can be
   // shown next to #1/#2. result.machine is the display name the lookup resolves.
   const openCompare = async (row, result) => {
     const factoryNo = row._isExtra ? null : (row.tool_dwg_no?.trim() || null);
     const machine = result?.machine || null;
+    const similarRef = result?.similarRef || null;
+    const similarNo = similarRef?.tool_dwg_no?.trim() || null;
     setCompareModal({
       open: true,
-      loading: !!(factoryNo && machine),
+      loading: !!(machine && (factoryNo || similarNo)),
       title: `${result?.machine || ''} · ${result?.tooling || row.tool_name || ''}`,
       result,
       factory: null,
       factoryNo,
+      similar: null,
+      similarRef,
     });
-    if (!factoryNo || !machine) return;
-    try {
-      const res = await axios.get(server.TSV2_INVENTORY_LOOKUP, { params: { machine, tooling_no: factoryNo } });
-      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: res.data?.row || null } : prev));
-    } catch {
-      setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory: null } : prev));
-    }
+    if (!machine || (!factoryNo && !similarNo)) return;
+    // Both lookups fail-soft to null (e.g. a factory-plan similar tool may not exist
+    // in this machine's T-Select inventory table → no dims, just the DWG no shown).
+    const lookup = (no) => (no
+      ? axios.get(server.TSV2_INVENTORY_LOOKUP, { params: { machine, tooling_no: no } })
+          .then((r) => r.data?.row || null).catch(() => null)
+      : Promise.resolve(null));
+    const [factory, similar] = await Promise.all([lookup(factoryNo), lookup(similarNo)]);
+    setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory, similar } : prev));
   };
 
   const handleSearch = async () => {
@@ -146,6 +170,7 @@ const SdsV2Page = () => {
     setData(null);
     setTsData(null);
     setCnHistory(null);
+    setHistoryLoaded(false);
     try {
       const [searchRes, mtRes, tsRes, mtConfigRes, histRes, vmRes] = await Promise.all([
         axios.get(server.MTC_SDS_V2_SEARCH, { params: { cn: cnVal } }),
@@ -164,6 +189,7 @@ const SdsV2Page = () => {
       if (tsRes?.data?.success) setTsData(tsRes.data);
       if (mtConfigRes?.data) setMachineToolsConfig(Array.isArray(mtConfigRes.data) ? mtConfigRes.data : []);
       if (histRes?.data?.rows?.length) setCnHistory(histRes.data);
+      setHistoryLoaded(histRes != null);
     } catch (err) {
       message.error(err.response?.data?.error || 'Can not find');
     } finally {
@@ -271,6 +297,134 @@ const SdsV2Page = () => {
     }
   };
 
+  // ── Approval (Prepared/Checked/Approved) ───────────────────────────────────
+  const ROLE_LABEL = { prepared: 'PREPARED', checked: 'CHECKED', approved: 'APPROVED' };
+  const PREV_ROLE = { checked: 'prepared', approved: 'checked' };
+
+  // Approval is keyed per CN (this Setup Data Sheet). The backend resolves the SDS
+  // revision from sds_parameter — the same source the PDF renderer uses — so we only
+  // send the CN; a new SDS rev automatically starts unsigned and stays in sync.
+  const approvalCn = data?.cn || '';
+
+  const fetchApproval = useCallback(async () => {
+    if (!approvalCn || !selectedMachine || !selectedProcess?.process_code) { setApproval(null); return; }
+    setApprovalLoading(true);
+    try {
+      const res = await axios.get(`${server.MTC_SDS_V2_APPROVAL}/state`, {
+        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code },
+      });
+      setApproval(res.data?.success ? res.data : null);
+    } catch (_) {
+      setApproval(null);
+    } finally {
+      setApprovalLoading(false);
+    }
+  }, [approvalCn, selectedMachine, selectedProcess]);
+
+  // Load approval status whenever the PDF modal opens or its machine/process changes.
+  useEffect(() => {
+    if (pdfModal && selectedMachine && selectedProcess?.process_code) fetchApproval();
+    else setApproval(null);
+  }, [pdfModal, selectedMachine, selectedProcess, fetchApproval]);
+
+  const handleSign = async (role) => {
+    setSigningRole(role);
+    try {
+      const res = await axios.post(server.MTC_SDS_V2_APPROVAL, {
+        cn: approvalCn,
+        machine_type_name: selectedMachine,
+        process_code: selectedProcess.process_code,
+        role,
+      });
+      if (res.data?.success) { message.success(`Signed as ${ROLE_LABEL[role]}`); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Sign failed');
+    } finally {
+      setSigningRole(null);
+    }
+  };
+
+  const handleRevoke = async (role) => {
+    try {
+      const res = await axios.delete(server.MTC_SDS_V2_APPROVAL, {
+        params: { cn: approvalCn, machine_type_name: selectedMachine, process_code: selectedProcess.process_code, role },
+      });
+      if (res.data?.success) { message.success('Signature revoked'); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Revoke failed');
+    }
+  };
+
+  const submitBackfill = async () => {
+    if (!backfill?.em_id?.trim() || !backfill?.signer_name?.trim()) {
+      message.warning('Enter Employee No and signer name');
+      return;
+    }
+    try {
+      const res = await axios.post(`${server.MTC_SDS_V2_APPROVAL}/backfill`, {
+        cn: approvalCn,
+        machine_type_name: selectedMachine,
+        process_code: selectedProcess.process_code,
+        role: backfill.role,
+        em_id: backfill.em_id.trim(),
+        signer_name: backfill.signer_name.trim(),
+        signed_at: backfill.signed_at ? backfill.signed_at.format('YYYY-MM-DD') : null,
+      });
+      if (res.data?.success) { message.success('Backdated approval saved'); setBackfill(null); fetchApproval(); }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Save failed');
+    }
+  };
+
+  const renderApprovalSection = () => {
+    if (!selectedMachine) return null;
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('th-TH-u-ca-gregory') : '';
+    return (
+      <>
+        <Divider style={{ margin: '16px 0 8px' }} orientation="left" orientationMargin={0}>
+          <Text strong style={{ fontSize: 13 }}>Approval</Text>
+        </Divider>
+        <Spin spinning={approvalLoading}>
+          <Space direction="vertical" style={{ width: '100%' }} size={6}>
+            {(approval?.state || []).map((s) => {
+              const canRevoke = s.signed && (approval?.isAdmin || String(s.em_id) === String(empNo));
+              return (
+                <div key={s.role} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color={s.signed ? 'red' : 'default'} style={{ width: 90, textAlign: 'center', margin: 0 }}>
+                    {ROLE_LABEL[s.role]}
+                  </Tag>
+                  {s.signed ? (
+                    <Space size={6} wrap style={{ flex: 1 }}>
+                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                      <Text strong>{s.signer_name}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{fmtDate(s.signed_at)}</Text>
+                    </Space>
+                  ) : (
+                    <Text type="secondary" style={{ flex: 1, fontStyle: 'italic' }}>
+                      {s.blockedByOrder ? `Waiting for ${ROLE_LABEL[PREV_ROLE[s.role]]} to sign first` : 'Not signed yet'}
+                    </Text>
+                  )}
+                  {s.canSign && !s.signed && (
+                    <Button size="small" type="primary" icon={<EditOutlined />}
+                      loading={signingRole === s.role} onClick={() => handleSign(s.role)}>
+                      Sign
+                    </Button>
+                  )}
+                  {canRevoke && (
+                    <Popconfirm title="Revoke this signature?" okText="Revoke" cancelText="No"
+                      onConfirm={() => handleRevoke(s.role)}>
+                      <Button size="small" danger>Revoke</Button>
+                    </Popconfirm>
+                  )}
+                </div>
+              );
+            })}
+          </Space>
+        </Spin>
+      </>
+    );
+  };
+
   const renderDimension = () => {
     if (!data?.dimension) return <Text type="secondary">No Dimension Data</Text>;
     const entries = Object.entries(data.dimension).filter(([k]) => k !== 'control_no' && k !== 'update_date');
@@ -327,7 +481,7 @@ const SdsV2Page = () => {
                 key={i}
                 color={h.machine_type_code ? 'blue' : 'default'}
                 style={{ margin: 0 }}
-                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}
+                title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}
               >
                 {h.machine_name || 'Unknown'}
                 <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
@@ -359,6 +513,12 @@ const SdsV2Page = () => {
   const processHasExpandableContent = (processRow) => {
     const code = String(processRow.process_code || '').trim();
     if ((toolingByCode[processRow.process_code] || []).length > 0) return true;
+    // A Tooling Select similar-part suggestion bound to this process_code (e.g.
+    // KL-20 collet 4030 → 2561 "Trim") makes the row expandable so the suggestion
+    // is reachable even when the part's factory plan lists no tool for it.
+    if ((tsData?.results || []).some(r =>
+      r.overrideBy === 'similar_part' && r.matches?.length &&
+      String(r.similarPart?.process_code || '') === code)) return true;
     // Production history with a resolved grinding machine (machine_type_code) — the
     // machines that actually ran this process. Lets a face/grind row with no factory
     // tooling still expand to show those machines.
@@ -421,7 +581,15 @@ const SdsV2Page = () => {
       for (const result of tsData.results) {
         if (!result.matches?.length) continue;
         const resolvedMachine = resolveMachine(result.machine);
-        const isRelevant = processMachineNames.has(resolvedMachine) ||
+        // Similar-part suggestion: the machine isn't in this part's factory plan
+        // (so the usual relevance checks below fail), but the backend tags the
+        // process_code the suggested tool family runs under. Show it under THAT
+        // process row only (e.g. KL-20 collet 4030 → 2561 "Trim").
+        const isSimilar = result.overrideBy === 'similar_part';
+        const similarHere = isSimilar &&
+          String(result.similarPart?.process_code || '') === String(processRow.process_code);
+        const isRelevant = similarHere ||
+          processMachineNames.has(resolvedMachine) ||
           configMachineNames.has(resolvedMachine) ||
           result.matches.some(m => {
             const no = getMatchNo(m);
@@ -454,6 +622,8 @@ const SdsV2Page = () => {
             _tsM2: m2,
             _tsResult: result,
             _isExtra: true,
+            _isSimilar: isSimilar,
+            _similarPart: isSimilar ? result.similarPart : null,
           });
         }
       }
@@ -560,15 +730,59 @@ const SdsV2Page = () => {
       }
     });
 
+    // ── Hard-filter: machine + production history ────────────────────────────
+    // Show ONLY machines that actually produced this CN under THIS process_code
+    // (lpb.pc_production, via cn-history). Production-history machine_name is a
+    // resolved member type name; collapse both it and the displayed block name to
+    // the machine_group label so a part run on KS-400B2 keeps the grouped block.
+    // Fail-open when history hasn't loaded (fetch error) so a source outage never
+    // blanks every machine. Also fail-open for a genuine NEW MODEL (loaded but the CN
+    // was never produced on ANY process/machine): hard-filtering it to nothing would
+    // hide the very T-Select setup recommendations the engineer needs to run the part
+    // for the first time. This mirrors the Tooling Select page, which shows all
+    // size-eligible machines when the CN has no production history. The per-process
+    // hard-filter still applies normally once the CN HAS been produced somewhere.
+    const memberToGroup = {};
+    for (const m of allMachineTypes) if (m.machine_group) memberToGroup[m.machine_type_name] = m.machine_group;
+    const canonMachine = (name) => memberToGroup[name] || name;
+    const producedCanon = new Set(
+      (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
+        .filter(h => h.machine_type_code)
+        .map(h => canonMachine((h.machine_name || '').trim()))
+        .filter(Boolean)
+    );
+    const cnEverProduced = Object.values(machineHistoryByProcess)
+      .some(arr => arr.some(h => h.machine_type_code));
+    if (historyLoaded && cnEverProduced) {
+      for (const machineName of Object.keys(machineStatus)) {
+        if (!producedCanon.has(canonMachine(machineName))) delete machineStatus[machineName];
+      }
+    }
+
     const columns = [
       { title: 'Rev', dataIndex: 'rev', width: 60 },
       { title: 'Tool DWG No', dataIndex: 'tool_dwg_no', width: 150 },
       {
         title: 'Tool Name',
         dataIndex: 'tool_name',
-        render: (v, r) => r._isExtra
-          ? <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>
-          : v,
+        render: (v, r) => {
+          if (!r._isExtra) return v;
+          if (r._isSimilar) {
+            const sp = r._similarPart;
+            return (
+              <Space size={4} wrap>
+                <Tag color="gold" style={{ margin: 0 }}>SIMILAR PART</Tag>
+                <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>
+                {sp && (
+                  <Tooltip title={`Similar-work ref C/N ${sp.ref_cn}${sp.parts_no ? ` · P/N ${sp.parts_no}` : ''} · ${Number(sp.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(sp.distance).toFixed(2)} mm`} — verify before use`}>
+                    <Text style={{ fontSize: 11, color: '#ad6800' }}>(ref C/N {sp.ref_cn})</Text>
+                  </Tooltip>
+                )}
+              </Space>
+            );
+          }
+          return <Text type="secondary" style={{ fontStyle: 'italic' }}>{v}</Text>;
+        },
       },
       ...(tsData ? [
         {
@@ -595,6 +809,31 @@ const SdsV2Page = () => {
             if (!m) return <span style={{ color: '#bbb' }}>-</span>;
             const isSame = !r._isExtra && m === key;
             return <Tag color={isSame ? 'default' : 'geekblue'}>{m}</Tag>;
+          },
+        },
+        {
+          // The tool the most dimensionally-similar produced part actually used —
+          // a real-world reference (NOT a T-Select pick), valuable for new models.
+          title: (
+            <Tooltip title="Tool used by the most dimensionally-similar produced part (reference, not a selection)">
+              <span>Similar <span style={{ fontSize: 10, color: '#ad6800' }}>ref</span></span>
+            </Tooltip>
+          ),
+          key: 'similarRef',
+          width: 130,
+          align: 'center',
+          render: (_, r) => {
+            const res = r._isExtra ? r._tsResult : matchMap[r.tool_dwg_no?.trim()]?.result;
+            const sr = res?.similarRef;
+            if (!sr) return <span style={{ color: '#bbb' }}>-</span>;
+            return (
+              <Tooltip title={`Similar-work ref C/N ${sr.ref_cn}` +
+                (sr.parts_no ? ` · P/N ${sr.parts_no}` : '') +
+                ` · ${Number(sr.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(sr.distance).toFixed(2)} mm`}` +
+                (sr.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST')}>
+                <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace' }}>{ddForm(sr.tool_dwg_no)}</Tag>
+              </Tooltip>
+            );
           },
         },
         {
@@ -629,7 +868,7 @@ const SdsV2Page = () => {
             <Space size={[4, 4]} wrap>
               {historyMachines.map((h, i) => (
                 <Tag key={i} color="purple" style={{ margin: 0 }}
-                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH')}` : ''}`}>
+                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}>
                   {h.machine_name}
                   <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
                 </Tag>
@@ -809,6 +1048,7 @@ const SdsV2Page = () => {
                       }}
                     />
                   </Card>
+
                 </>
               )}
             </Spin>
@@ -834,7 +1074,7 @@ const SdsV2Page = () => {
             onClick={() => handleGeneratePdf()}
             loading={pdfLoading}
           >
-            Generate PDF
+            PDF
           </Button>
         ]}
         destroyOnHidden
@@ -853,6 +1093,38 @@ const SdsV2Page = () => {
             label: displayLabelFor(m.machine_type_name),
           }))}
         />
+        {renderApprovalSection()}
+      </Modal>
+
+      <Modal
+        title={<span><EditOutlined style={{ marginRight: 8 }} />Backdated Approval</span>}
+        open={!!backfill}
+        onCancel={() => setBackfill(null)}
+        onOk={submitBackfill}
+        okText="Save"
+        cancelText="Cancel"
+        destroyOnHidden
+      >
+        {backfill && (
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <div>
+              <Tag color="red">{ROLE_LABEL[backfill.role]}</Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {selectedMachine} · {selectedProcess?.process_code}
+              </Text>
+            </div>
+            <Input placeholder="Employee No (em_id)" value={backfill.em_id}
+              onChange={(e) => setBackfill((b) => ({ ...b, em_id: e.target.value }))} />
+            <Input placeholder="Signer name (e.g. S.APISIT)" value={backfill.signer_name}
+              onChange={(e) => setBackfill((b) => ({ ...b, signer_name: e.target.value }))} />
+            <DatePicker style={{ width: '100%' }} placeholder="Sign date (backdated)" format="DD/MM/YYYY"
+              value={backfill.signed_at}
+              onChange={(d) => setBackfill((b) => ({ ...b, signed_at: d }))} />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Leave date empty = today · Backdated entries may skip the Prepared→Checked→Approved order
+            </Text>
+          </Space>
+        )}
       </Modal>
 
       <Modal
@@ -870,8 +1142,9 @@ const SdsV2Page = () => {
       >
         <Spin spinning={compareModal.loading}>
           {(() => {
-            const { rows, hasFactory } = buildCompareRows(compareModal.result, compareModal.factory);
+            const { rows, hasFactory, hasSimilar } = buildCompareRows(compareModal.result, compareModal.factory, compareModal.similar);
             if (!rows.length) return <Text type="secondary">No dimension data to compare.</Text>;
+            const similarRef = compareModal.similarRef;
 
             const cmpCell = (val, row, isRef) => {
               if (!hasVal(val)) return <span style={{ color: '#bbb' }}>-</span>;
@@ -896,6 +1169,11 @@ const SdsV2Page = () => {
               }] : []),
               { title: 'T-Select #1', dataIndex: 'v1', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, true) },
               { title: 'T-Select #2', dataIndex: 'v2', align: 'center', width: 110, render: (v, r) => cmpCell(v, r, false) },
+              ...(hasSimilar ? [{
+                title: <span style={{ color: '#ad6800' }}>Similar<br /><span style={{ fontSize: 10 }}>ref</span></span>,
+                dataIndex: 'similar', align: 'center', width: 110,
+                render: (v, r) => cmpCell(v, r, false),
+              }] : []),
             ];
             return (
               <>
@@ -908,6 +1186,21 @@ const SdsV2Page = () => {
                 {!hasFactory && compareModal.factoryNo && !compareModal.loading && (
                   <div style={{ marginBottom: 8, fontSize: 12 }}>
                     <Text type="warning">Factory tool dims not found in inventory — showing T-Select #1/#2 only.</Text>
+                  </div>
+                )}
+                {similarRef && (
+                  <div style={{ marginBottom: 8, fontSize: 12 }}>
+                    <Text style={{ color: '#ad6800' }}>Similar: </Text>
+                    <Tag color="gold" style={{ fontFamily: 'monospace' }}>{ddForm(similarRef.tool_dwg_no)}</Tag>
+                    <Text type="secondary">
+                      ref C/N {similarRef.ref_cn}
+                      {similarRef.parts_no ? ` · P/N ${similarRef.parts_no}` : ''}
+                      {` · ${Number(similarRef.distance) <= 0.001 ? 'dims identical' : `Δ ${Number(similarRef.distance).toFixed(2)} mm`}`}
+                      {similarRef.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST'}
+                    </Text>
+                    {!hasSimilar && !compareModal.loading && (
+                      <Text type="warning"> — dims not found in inventory (showing DWG no only)</Text>
+                    )}
                   </div>
                 )}
                 <Table

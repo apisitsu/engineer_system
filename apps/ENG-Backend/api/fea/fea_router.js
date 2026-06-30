@@ -34,6 +34,10 @@ queueEvents.on('failed', ({ jobId, failedReason }) => {
     emitFeaProgress(jobId, { status: 'failed', error: failedReason });
 });
 
+queueEvents.on('error', err => {
+    // Suppress connection errors when Redis is offline
+});
+
 // Middleware to capture IO instance
 router.use((req, res, next) => {
     if (!ioInstance && req.app.get('io')) {

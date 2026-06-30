@@ -106,6 +106,11 @@ app.get("/", (req, res) => {
   res.send(secretHtml);
 });
 
+// --- Health Check (public — used by auto_update_and_run.cmd) ---
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // --- Verify Token Middleware Setup ---
 const { verifyToken } = require('./middleware/auth');
 
@@ -274,6 +279,10 @@ app.use('/api/sds/v2/images', sdsV2ImageController);
 
 const sdsV2AdminController = require('./api/engineer/mtc/controllers/sdsV2AdminController');
 app.use('/api/sds/v2/admin', sdsV2AdminController);
+
+// Prepared/Checked/Approved sign records (per machine_type + process_code + rev)
+const sdsApprovalController = require('./api/engineer/mtc/controllers/sdsApprovalController');
+app.use('/api/sds/v2/approval', sdsApprovalController);
 
 const sdsV2HeadlessController = require('./api/engineer/mtc/controllers/sdsV2HeadlessController');
 app.use('/api/sds/v2-headless', sdsV2HeadlessController);
@@ -448,6 +457,7 @@ const requireSystemEngineer = (req, res, next) => {
   if (dept === 'AD' || role === 'AD') {
     next();
   } else {
+    console.log(`[DEBUG] requireSystemEngineer rejected user: ${req.user?.empno}, dept: ${dept}, role: ${role}`);
     return res.status(403).json({ result: 'false', message: 'Unauthorized setting permission. System Engineer only.' });
   }
 };
@@ -455,4 +465,7 @@ const requireSystemEngineer = (req, res, next) => {
 const settingsModel = require('./api/system/settingsModel');
 app.get('/api/system/settings', settingsModel.getSettings);
 app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSettings);
+
+const updateLogController = require('./api/system/updateLogController');
+app.get('/api/system/update-logs', requireSystemEngineer, updateLogController.getUpdateLogs);
 

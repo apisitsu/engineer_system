@@ -395,6 +395,22 @@ export const createBoardSlice = (set, get) => ({
     // ====================================================================
 
     reorderList: async (boardId, listId, position) => {
+        // Optimistic UI Update
+        const originalLists = get().lists;
+        set(state => {
+            const nextLists = state.lists.map(l => 
+                String(l.id) === String(listId) ? { ...l, position } : l
+            );
+            nextLists.sort((a, b) => {
+                if (a.list_type !== b.list_type) {
+                    const order = { 'active': 1, 'closed': 2, 'archive': 3, 'trash': 4 };
+                    return (order[a.list_type] || 99) - (order[b.list_type] || 99);
+                }
+                return a.position - b.position;
+            });
+            return { lists: nextLists };
+        });
+
         try {
             const res = await axios.patch(
                 `${server.KANBAN_BOARDS}/${boardId}/lists/reorder`,
@@ -405,6 +421,8 @@ export const createBoardSlice = (set, get) => ({
             }
         } catch (err) {
             console.error('Failed to reorder list', err);
+            // Rollback on error
+            set({ lists: originalLists });
             get().fetchBoardDetails(boardId);
         }
     },

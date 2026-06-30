@@ -179,12 +179,19 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   const seen = new Set();
   for (const r of tsResult.results) {
     if (!acceptableNames.has(r.machine)) continue;
+    // Similar-part fallbacks are suggestions (the factory's pick for the most
+    // dimensionally-similar part), not a factory-confirmed tool. The SDS Setup
+    // Data Sheet opts IN (opts.includeSimilar) so the sheet still carries a Tool
+    // No — flagged isSimilar so the caller can mark it. The coverage report
+    // leaves it OUT (default) so reported coverage stays confirmed-only.
+    const isSimilar = r.overrideBy === 'similar_part';
+    if (isSimilar && !opts.includeSimilar) continue;
     const no = matchNo(r.matches && r.matches[0]);
     if (!no) continue;
     const key = `${r.tooling}||${no}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ tooling_name: r.tooling, tooling_no: no });
+    out.push({ tooling_name: r.tooling, tooling_no: no, isSimilar });
   }
   return out;
 }

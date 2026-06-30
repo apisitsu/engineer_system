@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../../stores/authStore';
 import { server } from '../../../../constance/constance';
 import { MTC_PATHS } from '../../../../constance/mtc_constance';
+import { ddForm } from '../dwgFormat';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import ScrollbarStyle from '../../../common/scrollbar';
@@ -71,14 +72,18 @@ function NewDesignCard({ tooling, computed }) {
         }
       </Space>
       <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>
-        ไม่พบ tooling ที่เหมาะสมในสต๊อก — กรุณา New Design ตามขนาดที่คำนวณได้
+        No suitable tooling found in stock — please New Design per the computed dimensions
       </div>
     </Card>
   );
 }
 
-function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, primaryColor }) {
+function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols, overrideBy, similarPart, similarRef, primaryColor }) {
   if (!matches?.length) return <NewDesignCard tooling={tooling} computed={computed} />;
+
+  // similar_part = no exact formula/part-no match; this is the factory's pick for
+  // the most dimensionally-similar part. Surfaced as a suggestion, not confirmed.
+  const isSimilar = overrideBy === 'similar_part';
 
   // Inventory columns that feed the closest-match ranking (is_match_dim) —
   // their result headers get highlighted so users see what drove the match.
@@ -107,6 +112,35 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
     return m ? m[1].toUpperCase() : null;
   };
 
+  // "Similar" reference column (leftmost, before the T-Select dims): the tool the
+  // nearest dimensionally-similar produced part actually used. Same value on every
+  // row (one reference per tooling); only rendered when the backend found one.
+  const similarCol = (similarRef && !isSimilar) ? [{
+    title: (
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#ad6800' }}>Similar</div>
+        <div style={{ fontSize: 9, color: '#ad6800' }}>ref</div>
+      </div>
+    ),
+    key: '__similar',
+    width: 110,
+    align: 'center',
+    onHeaderCell: () => ({ style: { backgroundColor: '#fffbe6', borderTop: '2px solid #faad14' } }),
+    onCell: () => ({ style: { backgroundColor: '#fffef5' } }),
+    render: () => (
+      <Tooltip
+        title={`Similar-work ref C/N ${similarRef.ref_cn}` +
+          (similarRef.parts_no ? ` / P/N ${similarRef.parts_no}` : '') +
+          ` · dim distance ${Number(similarRef.distance).toFixed(2)} mm` +
+          (similarRef.source === 'factory' ? ' · from production plan' : ' · from TOOLING LIST')}
+      >
+        <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace', fontWeight: 600 }}>
+          {ddForm(similarRef.tool_dwg_no)}
+        </Tag>
+      </Tooltip>
+    ),
+  }] : [];
+
   const tableCols = [
     {
       title: '#',
@@ -115,6 +149,7 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
       align: 'center',
       render: (_, __, index) => <RankBadge rank={index + 1} />,
     },
+    ...similarCol,
     ...ordered.map(k => {
       const computedKey = resolveComputedKey(k);
       const computedVal = computedKey != null ? computed?.[computedKey] : undefined;
@@ -156,11 +191,49 @@ function ToolingMatchCard({ tooling, matches, computed, columnMap, matchDimCols,
   return (
     <Card
       size="small"
-      title={<Space><ToolOutlined /><Text strong>{tooling}</Text></Space>}
+      title={
+        <Space>
+          <ToolOutlined />
+          <Text strong>{tooling}</Text>
+          {isSimilar && <Tag color="orange" style={{ fontWeight: 600 }}>SIMILAR PART (ref)</Tag>}
+        </Space>
+      }
       extra={<Badge count={matches.length} showZero color="#8c8c8c" />}
-      style={{ marginBottom: 12, borderRadius: 8, overflow: 'hidden' }}
+      style={{
+        marginBottom: 12, borderRadius: 8, overflow: 'hidden',
+        border: isSimilar ? '1.5px solid #faad14' : undefined,
+      }}
       styles={{ body: { padding: 0 } }}
     >
+      {isSimilar && (
+        <div style={{
+          padding: '8px 12px', background: '#fffbe6', borderBottom: '1px solid #ffe58f',
+          fontSize: 12, color: '#ad6800',
+        }}>
+          <div style={{ marginBottom: similarPart ? 6 : 0 }}>
+            ⚠ No tooling directly matches this part — suggested from the most dimensionally-similar part
+            {' '}<b>Please have an engineer verify before use</b>
+          </div>
+          {similarPart && (
+            <Space size={[6, 4]} wrap align="center">
+              <Text strong style={{ color: '#ad6800', fontSize: 12 }}>Similar-work reference:</Text>
+              <Tag color="gold" style={{ margin: 0, fontWeight: 600 }}>
+                C/N {similarPart.ref_cn}
+              </Tag>
+              {similarPart.parts_no && (
+                <Tag color="gold" style={{ margin: 0, fontFamily: 'monospace' }}>
+                  P/N {similarPart.parts_no}
+                </Tag>
+              )}
+              <Tag color={Number(similarPart.distance) <= 0.001 ? 'green' : 'orange'} style={{ margin: 0 }}>
+                {Number(similarPart.distance) <= 0.001
+                  ? 'All dimensions identical'
+                  : `dim distance ${Number(similarPart.distance).toFixed(2)} mm`}
+              </Tag>
+            </Space>
+          )}
+        </div>
+      )}
       <Table
         rowKey={(_, i) => i}
         dataSource={matches}
@@ -233,11 +306,22 @@ function groupByMachine(results) {
   const map = new Map();
   for (const r of results) {
     if (!map.has(r.machine)) {
-      map.set(r.machine, { machine: r.machine, machineLabel: r.machineLabel, toolings: [] });
+      map.set(r.machine, {
+        machine: r.machine, machineLabel: r.machineLabel,
+        // producedHistory may be undefined (fail-open / no production source) —
+        // only an explicit false marks a machine as "never produced this CN".
+        producedHistory: r.producedHistory,
+        toolings: [],
+      });
     }
     map.get(r.machine).toolings.push(r);
   }
-  return [...map.values()];
+  // Produced machines first; no-history machines sink to the bottom (kept, not hidden).
+  return [...map.values()].sort((a, b) => {
+    const an = a.producedHistory === false ? 1 : 0;
+    const bn = b.producedHistory === false ? 1 : 0;
+    return an - bn || a.machine.localeCompare(b.machine);
+  });
 }
 
 export default function ToolingSelectV2Page() {
@@ -288,15 +372,25 @@ export default function ToolingSelectV2Page() {
 
   const collapseItems = machineGroups.map(group => {
     const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
+    const similarCount = group.toolings.filter(t => t.overrideBy === 'similar_part').length;
+    const noHistory = group.producedHistory === false;
     return {
       key: group.machine,
       label: (
         <Space>
-          <Text strong>{group.machine}</Text>
+          <Text strong style={noHistory ? { color: '#8c8c8c' } : undefined}>{group.machine}</Text>
           {group.machineLabel && group.machineLabel !== group.machine && (
             <Tag color="default">{group.machineLabel}</Tag>
           )}
           <Tag color={found < total ? 'orange' : 'geekblue'}>{found} / {total} Tooling</Tag>
+          {similarCount > 0 && (
+            <Tag color="gold">⚠ Similar Part × {similarCount}</Tag>
+          )}
+          {noHistory && (
+            <Tooltip title="No production history for this C/N on this machine (lpb.pc_production) — shown in case it's a new model not yet produced">
+              <Tag color="default" style={{ opacity: 0.65 }}>No production history</Tag>
+            </Tooltip>
+          )}
         </Space>
       ),
       children: (
@@ -309,6 +403,9 @@ export default function ToolingSelectV2Page() {
               computed={t.computed}
               columnMap={t.columnMap}
               matchDimCols={t.matchDimCols}
+              overrideBy={t.overrideBy}
+              similarPart={t.similarPart}
+              similarRef={t.similarRef}
               primaryColor={primaryColor}
             />
           ))}
@@ -378,6 +475,27 @@ export default function ToolingSelectV2Page() {
                     <SpecCard cn={result.cn} spec={result.spec} primaryColor={primaryColor} />
                   )}
 
+                  {result.productionFilter?.applied && result.productionFilter.hadProduction === false && (
+                    <Alert
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message="This C/N has no production history — may be a new model"
+                      description="Showing all machines that can run this part by size (none has actually produced it yet) — please choose a machine and verify tooling before use"
+                      showIcon
+                    />
+                  )}
+
+                  {result.productionFilter?.applied && result.productionFilter.hadProduction
+                    && result.productionFilter.machinesWithoutHistory > 0
+                    && result.productionFilter.machinesWithHistory > 0 && (
+                    <Alert
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message={`Machines with production history for this C/N are shown above (${result.productionFilter.machinesWithHistory}) — ${result.productionFilter.machinesWithoutHistory} more machines that can run it but have no history are collapsed below`}
+                      showIcon
+                    />
+                  )}
+
                   {isIncomplete && (
                     <Alert
                       type="error"
@@ -420,7 +538,21 @@ export default function ToolingSelectV2Page() {
 
                   {hasResults && (
                     <Collapse
-                      defaultActiveKey={[]}
+                      // Remount per search so the default expansion re-applies.
+                      key={result?.cn}
+                      // Auto-expand machines that have at least one match (incl.
+                      // similar-part suggestions) so results aren't hidden behind
+                      // a collapsed panel.
+                      defaultActiveKey={machineGroups
+                        // Auto-expand machines that found a match. When SOME machine has
+                        // production history, expand only those (no-history machines stay
+                        // collapsed to reduce clutter). But for a BRAND-NEW model (no
+                        // machine has any history) that rule would collapse EVERYTHING —
+                        // contradicting the "showing all machines" alert — so expand every
+                        // matched machine instead.
+                        .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0
+                          && (result.productionFilter?.hadProduction === false || g.producedHistory !== false))
+                        .map(g => g.machine)}
                       items={collapseItems}
                       style={{ marginBottom: 16 }}
                     />

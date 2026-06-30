@@ -221,6 +221,29 @@ export const createCardSlice = (set, get) => ({
     },
 
     reorderCard: async (cardId, targetListId, position, sourceListId) => {
+        // Optimistic UI Update
+        const originalCards = get().cards;
+        set(state => {
+            const newCards = { ...state.cards };
+            let draggedCard = null;
+
+            if (sourceListId && newCards[sourceListId]) {
+                const idx = newCards[sourceListId].findIndex(c => String(c.id) === String(cardId));
+                if (idx > -1) {
+                    draggedCard = { ...newCards[sourceListId][idx], position, list_id: targetListId };
+                    newCards[sourceListId] = newCards[sourceListId].filter(c => String(c.id) !== String(cardId));
+                }
+            }
+            
+            if (draggedCard) {
+                if (!newCards[targetListId]) newCards[targetListId] = [];
+                newCards[targetListId] = [...newCards[targetListId], draggedCard];
+                newCards[targetListId].sort((a, b) => a.position - b.position);
+            }
+            
+            return { cards: newCards };
+        });
+
         try {
             const res = await axios.patch(
                 `${server.KANBAN_CARDS}/${cardId}/reorder`,
@@ -235,6 +258,8 @@ export const createCardSlice = (set, get) => ({
             }
         } catch (err) {
             console.error('Failed to reorder card', err);
+            // Rollback on error
+            set({ cards: originalCards });
             if (err.response?.status === 400 || err.response?.status === 403) {
                 Swal.fire('การดำเนินการถูกปฏิเสธ', err.response?.data?.error || 'Validation failed. Action not allowed.', 'error');
             } else {

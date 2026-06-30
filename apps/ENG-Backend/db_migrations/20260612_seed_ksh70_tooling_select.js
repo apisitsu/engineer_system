@@ -37,18 +37,32 @@ const INV_TABLE = 'tooling_ksh70';
 const MACHINE = { machine_name: 'KS-H70', label: 'KS-H70' };
 const XLSX_PATH = path.join(__dirname, '../api/engineer/mtc/templates/Select_tool_backup/20210210_TOOLING LIST_SUPER SPHERE FINISH.xlsx');
 
-// COLLET/BODY/STOPPER all match the workpiece ID against the band midpoint (dim_a).
+// Two collet families, split by the part ID at ID_SPLIT (there is a real gap between the
+// 4691-03 max band [12,12.5] and the 4691-19 min band [12.7,…]):
+//   COLLET / BODY / STOPPER  = the AC collet 4691-19 (large balls, ID ≥ 12.6)
+//   COLLET (A)               = the small drawbar collet 4691-03 (small balls, ID 4–12.5)
+// Each branch is gated with the -999 sentinel so the OTHER family's parts produce no match
+// (a bare `ID` would otherwise let a small ball match the smallest 4691-19 band, and vice
+// versa). All match the workpiece ID against the band start (dim_a).
+const ID_SPLIT = 12.6;
 const FORMULAS = {
-  COLLET:      [{ key: 'A', expr: 'ID' }],
-  'COLLET BODY': [{ key: 'A', expr: 'ID' }],
-  STOPPER:     [{ key: 'A', expr: 'ID' }],
+  COLLET:        [{ key: 'A', expr: `if(ID >= ${ID_SPLIT}, ID, -999)` }],
+  'COLLET BODY': [{ key: 'A', expr: `if(ID >= ${ID_SPLIT}, ID, -999)` }],
+  STOPPER:       [{ key: 'A', expr: `if(ID >= ${ID_SPLIT}, ID, -999)` }],
+  'COLLET (A)':  [{ key: 'A', expr: `if(ID < ${ID_SPLIT}, ID, -999)` }],
 };
 // [output_key, inventory_col, tol_plus, tol_minus, is_match_dim, label]
-// dim_a = band OD MIN; rank-only (null tol) → closest used collet band to the part ID.
+// dim_a = band OD MIN; ranked closest to the part ID. The tolerance is WIDE (±GATE_TOL) on
+// purpose: real band starts (3–38) always fall inside [ID±GATE_TOL] so ranking is unrestricted
+// (= the old rank-only closest match), but the gated-out family's -999 sentinel falls far
+// outside the BETWEEN window → that family correctly returns NO match. A null tolerance can't
+// do this (no WHERE filter → the search returns the closest row regardless of the sentinel).
+const GATE_TOL = 500;
 const RULES = {
-  COLLET:        [['A', 'dim_a', null, null, true, 'Grip dia (ID → nearest band start)']],
-  'COLLET BODY': [['A', 'dim_a', null, null, true, 'Grip dia (ID → nearest band start)']],
-  STOPPER:       [['A', 'dim_a', null, null, true, 'Grip dia (ID → nearest band start)']],
+  COLLET:        [['A', 'dim_a', GATE_TOL, GATE_TOL, true, 'Grip dia (ID → nearest band start)']],
+  'COLLET BODY': [['A', 'dim_a', GATE_TOL, GATE_TOL, true, 'Grip dia (ID → nearest band start)']],
+  STOPPER:       [['A', 'dim_a', GATE_TOL, GATE_TOL, true, 'Grip dia (ID → nearest band start)']],
+  'COLLET (A)':  [['A', 'dim_a', GATE_TOL, GATE_TOL, true, 'Grip bore (small-ball ID → nearest band start)']],
 };
 
 async function readBands() {
@@ -96,14 +110,64 @@ async function usedColletSet() {
   return new Set(r.rows.map(x => x.tool_dwg_no.replace('4691-19-', '').trim()));
 }
 
+// COLLET (A) 4691-03 — the small-ball drawbar collet. Sheet `(工事中)COLLET対応表` rows 9-27 is
+// an ID-band table (cols labeled "OD" are actually the grip-BORE = part ID, same trap as 4691-19):
+// A=ID min, B=ID max, C=4691-03-XXXX. Validated 83.3% vs live (closest band start, used-only).
+async function read03Bands() {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(XLSX_PATH);
+  const ws = wb.getWorksheet('(工事中)COLLET対応表');
+  const cell = (row, c) => { let x = row.getCell(c).value; if (x && typeof x === 'object') x = x.result ?? x.text ?? null; return x; };
+  const bands = [];
+  for (let r = 9; r <= 27; r++) {
+    const row = ws.getRow(r);
+    const idmin = Number(cell(row, 1)), idmax = Number(cell(row, 2));
+    const dwg = cell(row, 3);
+    if (!Number.isFinite(idmin)) continue;
+    const m = dwg != null && String(dwg).match(/4691-03-(\d{4})/);
+    if (!m) continue;
+    bands.push({ collet: m[1], odmin: idmin, odmax: Number.isFinite(idmax) ? idmax : idmin });
+  }
+  return bands;
+}
+
+async function used03Set() {
+  const r = await maqPool.query(
+    `SELECT DISTINCT tool_dwg_no FROM lpb.eng_r_pi_tool
+     WHERE process_code='1241' AND tool_dwg_no LIKE '4691-03-%'`);
+  return new Set(r.rows.map(x => x.tool_dwg_no.replace('4691-03-', '').trim()));
+}
+
+// COLLET (A) inventory: one row per used 4691-03 band (dedup by band start). dim_a = ID band start.
+function build03Rows(bands) {
+  const rows = [];
+  const seen = new Set();
+  for (const b of bands) {
+    if (seen.has(b.odmin)) continue;
+    seen.add(b.odmin);
+    rows.push(['COLLET (A)', `4691-03-${b.collet}`, b.odmin, null, b.odmin, b.odmax]);
+  }
+  return rows;
+}
+
 async function run() {
   const allBands = await readBands();
   const used = await usedColletSet();
   const bands = allBands.filter(b => used.has(b.collet));
-  const rows = buildRows(bands);
-  const idMin = Math.floor(Math.min(...bands.map(b => b.odmin)) - 0.5);
-  const idMax = Math.ceil(Math.max(...bands.map(b => b.odmax)) + 0.5);
-  console.log(`Read ${allBands.length} design bands; ${bands.length} factory-used → ${rows.length} inventory rows; ID range ${idMin}-${idMax}`);
+
+  // COLLET (A) 4691-03 — small-ball collets (ID 4–12.5), complementary to 4691-19.
+  const all03 = await read03Bands();
+  const used03 = await used03Set();
+  const bands03 = all03.filter(b => used03.has(b.collet));
+  const rows = [...buildRows(bands), ...build03Rows(bands03)];
+
+  // ID-eligibility spans BOTH families now (4691-03 reaches down to ~4 mm) so small balls
+  // aren't gated out of the machine before COLLET (A) can match them.
+  const allOdmin = [...bands, ...bands03].map(b => b.odmin);
+  const allOdmax = [...bands, ...bands03].map(b => b.odmax);
+  const idMin = Math.floor(Math.min(...allOdmin) - 0.5);
+  const idMax = Math.ceil(Math.max(...allOdmax) + 0.5);
+  console.log(`Read ${allBands.length} design bands (${bands.length} used) + ${all03.length} small-ball bands (${bands03.length} used) → ${rows.length} inventory rows; ID range ${idMin}-${idMax}`);
 
   const client = await engPool.connect();
   try {
@@ -118,7 +182,11 @@ async function run() {
         dim_c NUMERIC,   -- band OD MIN (display)
         dim_d NUMERIC    -- band OD MAX (display)
       )`);
-    await client.query(`DELETE FROM ${INV_TABLE}`);
+    // Scope deletes to THIS seed's tooling lines so the companion grinding-hybrid
+    // migration (20260623) can manage GRINDSTONE BASE / GRIND STONE HOLDER in the
+    // same machine/tables without either seed clobbering the other on re-run.
+    const OWN = Object.keys(FORMULAS); // COLLET, COLLET BODY, STOPPER
+    await client.query(`DELETE FROM ${INV_TABLE} WHERE tooling_name = ANY($1)`, [OWN]);
     for (const [name, no, a, b, c, d] of rows) {
       await client.query(
         `INSERT INTO ${INV_TABLE} (tooling_name, tooling_no, dim_a, dim_b, dim_c, dim_d) VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -139,7 +207,7 @@ async function run() {
       `INSERT INTO tooling_machine_limit (machine_id, input_var, min_value, max_value, min_inclusive, max_inclusive, sort_order)
        VALUES ($1,'ID',$2,$3,true,true,0)`, [id, idMin, idMax]);
 
-    await client.query(`DELETE FROM tooling_formula WHERE machine_id=$1`, [id]);
+    await client.query(`DELETE FROM tooling_formula WHERE machine_id=$1 AND tooling_name = ANY($2)`, [id, OWN]);
     for (const [tooling, frows] of Object.entries(FORMULAS)) {
       let order = 0;
       for (const r of frows) {
@@ -149,7 +217,7 @@ async function run() {
       }
     }
 
-    await client.query(`DELETE FROM tooling_search_rule WHERE machine_id=$1`, [id]);
+    await client.query(`DELETE FROM tooling_search_rule WHERE machine_id=$1 AND tooling_name = ANY($2)`, [id, OWN]);
     for (const [tooling, rules] of Object.entries(RULES)) {
       let prio = 0;
       for (const [key, col, tolP, tolM, matchDim, label] of rules) {
