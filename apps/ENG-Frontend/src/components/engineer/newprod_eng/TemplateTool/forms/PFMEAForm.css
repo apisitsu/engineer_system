@@ -275,9 +275,12 @@ table.pfmea-data-table th {
         margin: 5mm;
     }
 
-    body {
-        background: none !important;
+    body, html, #root, .pfmea-body {
+        background: white !important;
         padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        min-height: auto !important;
     }
 
     .pfmea-topbar,
@@ -289,13 +292,15 @@ table.pfmea-data-table th {
         gap: 0 !important;
         zoom: 1 !important;
         padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
     }
 
     .pfmea-a2-page {
         width: 594mm !important;
         height: 420mm !important;
-        box-shadow: none;
-        margin: 0;
+        box-shadow: none !important;
+        margin: 0 !important;
         page-break-after: always;
         overflow: hidden;
         padding: 5mm;

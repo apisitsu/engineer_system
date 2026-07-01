@@ -269,9 +269,12 @@ table.cp-data-table th {
         margin: 5mm;
     }
 
-    body {
-        background: none !important;
+    body, html, #root, .cp-body {
+        background: white !important;
         padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        min-height: auto !important;
     }
 
     .cp-topbar,
@@ -285,13 +288,14 @@ table.cp-data-table th {
         transform: none !important;
         margin: 0 !important;
         padding: 0 !important;
+        display: block !important;
     }
 
     .cp-a3-page {
         width: 420mm !important;
         height: 297mm !important;
-        box-shadow: none;
-        margin: 0;
+        box-shadow: none !important;
+        margin: 0 !important;
         page-break-after: always;
         overflow: hidden;
         padding: 5mm;
