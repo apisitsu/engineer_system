@@ -12,9 +12,13 @@ import {
   Title as ChartTitle,
   Tooltip as ChartTooltip, Legend,
 } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Bar } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ChartTitle, ChartTooltip, Legend);
+// Register datalabels here so per-dataset labels (Complete % line) render even when
+// this page loads first. Every chart on this page opts out via `datalabels:{display:false}`
+// except the datasets that explicitly enable it.
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ChartTitle, ChartTooltip, Legend, ChartDataLabels);
 
 const { Content } = Layout;
 const { Text } = Typography;
@@ -228,10 +232,9 @@ export default function SdsCoverageDashboard() {
 
   // ── Monthly New Parts chart ───────────────────────────────────────────────────
   const monthlyNewParts = useMemo(() => {
+    const all = data?.monthlyNewParts || [];
     const raw = Object.fromEntries(
-      (data?.monthlyNewParts || [])
-        .filter(r => r.month >= '2026-04' && r.month <= '2027-03')
-        .map(r => [r.month, r])
+      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
     );
     const months = [];
     let d = new Date('2026-04-01');
@@ -240,14 +243,21 @@ export default function SdsCoverageDashboard() {
       months.push(raw[key] || { month: key, ball: 0, race: 0, mecha: 0 });
       d.setMonth(d.getMonth() + 1);
     }
+    // Prepend a baseline bar = previous FYE monthly average (Apr 2025 – Mar 2026),
+    // averaged over the months that had new parts. Sits before Apr as a muted reference.
+    const prev = all.filter(r => r.month >= '2025-04' && r.month <= '2026-03');
+    if (prev.length) {
+      const avg = k => Math.round(prev.reduce((s, r) => s + (r[k] || 0), 0) / prev.length);
+      months.unshift({ label: 'FYE26 avg', isAvg: true, ball: avg('ball'), race: avg('race'), mecha: avg('mecha') });
+    }
     return months;
   }, [data]);
   const newPartsChartData = useMemo(() => ({
-    labels: monthlyNewParts.map(r => fmtMonth(r.month)),
+    labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
     datasets: [
-      { label: 'Ball', data: monthlyNewParts.map(r => r.ball || 0), backgroundColor: 'rgba(24,144,255,0.75)', borderColor: PART_TYPE_COLOR.ball, borderWidth: 1, stack: 'np' },
-      { label: 'Race', data: monthlyNewParts.map(r => r.race || 0), backgroundColor: 'rgba(82,196,26,0.75)', borderColor: PART_TYPE_COLOR.race, borderWidth: 1, stack: 'np' },
-      { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: 'rgba(235,47,150,0.65)', borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
+      { label: 'Ball', data: monthlyNewParts.map(r => r.ball || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(24,144,255,0.35)' : 'rgba(24,144,255,0.75)'), borderColor: PART_TYPE_COLOR.ball, borderWidth: 1, stack: 'np' },
+      { label: 'Race', data: monthlyNewParts.map(r => r.race || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(82,196,26,0.35)' : 'rgba(82,196,26,0.75)'), borderColor: PART_TYPE_COLOR.race, borderWidth: 1, stack: 'np' },
+      { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(235,47,150,0.30)' : 'rgba(235,47,150,0.65)'), borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
     ],
   }), [monthlyNewParts]);
   const newPartsChartOpts = {
@@ -265,10 +275,9 @@ export default function SdsCoverageDashboard() {
 
   // ── Monthly Coverage Status chart (bar: complete/pending + line: complete%) ──
   const monthlyStatus = useMemo(() => {
+    const all = data?.monthlyStatus || [];
     const raw = Object.fromEntries(
-      (data?.monthlyStatus || [])
-        .filter(r => r.month >= '2026-04' && r.month <= '2027-03')
-        .map(r => [r.month, r])
+      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
     );
     const months = [];
     let d = new Date('2026-04-01');
@@ -277,17 +286,23 @@ export default function SdsCoverageDashboard() {
       months.push(raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
       d.setMonth(d.getMonth() + 1);
     }
+    // Prepend the previous FYE's final cumulative bar (latest month ≤ Mar 2026) so the
+    // current-FY running total starts from a visible carry-over baseline. `all` is sorted
+    // ascending by month, so the last matching row is the FYE-end value.
+    const prevRows = all.filter(r => r.month <= '2026-03');
+    const prevLast = prevRows.length ? prevRows[prevRows.length - 1] : null;
+    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true });
     return months;
   }, [data]);
 
   const statusChartData = useMemo(() => ({
-    labels: monthlyStatus.map(r => fmtMonth(r.month)),
+    labels: monthlyStatus.map(r => r.isPrevLast ? 'FYE26 end' : fmtMonth(r.month)),
     datasets: [
       {
         type: 'bar',
         label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
-        backgroundColor: 'rgba(82,196,26,0.75)',
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(82,196,26,0.30)' : 'rgba(82,196,26,0.75)'),
         borderColor: C.green,
         borderWidth: 1,
         stack: 'status',
@@ -297,7 +312,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: 'rgba(149,222,100,0.70)',
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(149,222,100,0.30)' : 'rgba(149,222,100,0.70)'),
         borderColor: C.greenSoft,
         borderWidth: 1,
         stack: 'status',
@@ -307,7 +322,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'Pending',
         data: monthlyStatus.map(r => r.pending),
-        backgroundColor: 'rgba(255,197,61,0.65)',
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(255,197,61,0.28)' : 'rgba(255,197,61,0.65)'),
         borderColor: C.yellow,
         borderWidth: 1,
         stack: 'status',
@@ -317,24 +332,27 @@ export default function SdsCoverageDashboard() {
         type: 'line',
         label: 'Complete % (KZW+THAI)',
         data: monthlyStatus.map(r => r.complete_pct),
-        borderColor: C.cyan,
-        backgroundColor: 'rgba(0,212,255,0.15)',
+        borderColor: C.orange,
+        backgroundColor: 'rgba(250,140,22,0.15)',
         borderWidth: 2,
         pointRadius: 3,
-        pointBackgroundColor: C.cyan,
+        pointBackgroundColor: C.orange,
         tension: 0.3,
         yAxisID: 'y1',
-      },
-      {
-        type: 'line',
-        label: 'KZW Complete %',
-        data: monthlyStatus.map(r => r.complete_saved_pct ?? r.complete_pct),
-        borderColor: C.green,
-        borderWidth: 1.5,
-        borderDash: [4, 3],
-        pointRadius: 0,
-        tension: 0.3,
-        yAxisID: 'y1',
+        datalabels: {
+          display: true,
+          color: C.green,
+          anchor: 'end',
+          align: 'top',
+          offset: 4,
+          font: { size: 10, weight: 700 },
+          // Only label months that actually have parts — skip empty future months
+          formatter: (v, ctx) => {
+            const row = monthlyStatus[ctx.dataIndex];
+            const hasData = ((row?.complete || 0) + (row?.pending || 0)) > 0;
+            return hasData ? `${v}%` : '';
+          },
+        },
       },
       {
         type: 'line',

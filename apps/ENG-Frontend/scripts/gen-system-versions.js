@@ -1,10 +1,16 @@
 /**
  * Generates src/constance/mtc_version_dates.json — the real "last updated" date
- * per MTC system, taken from the latest git commit that touched that system's
- * source files (frontend + backend). Run automatically by `prestart`/`prebuild`.
+ * per MTC system. Run automatically by `predev`/`prestart`/`prebuild`.
+ *
+ * Date resolution per system:
+ *   1. If the system's files have UNCOMMITTED changes (staged or unstaged) → TODAY.
+ *      This makes the badge update *before* a git commit — the moment you edit a
+ *      system its date reflects the work-in-progress, not the last release.
+ *   2. Otherwise → the date of the latest git commit that touched those files.
+ *   3. No git (shallow clone / not a repo) → null (badge uses the manual `updated`).
  *
  * Version NUMBERS stay manual in mtc_constance.js → MTC_VERSIONS; only the dates
- * are derived here. Falls back to null (badge then uses the manual `updated`).
+ * are derived here.
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -43,6 +49,26 @@ const SYSTEMS = {
   ],
 };
 
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; // local YYYY-MM-DD
+}
+
+// True when any of `paths` has staged or unstaged changes (incl. new/untracked files).
+function hasUncommittedChanges(paths) {
+  try {
+    const args = paths.map((p) => `"${p}"`).join(' ');
+    const out = execSync(
+      `git -C "${repoRoot}" status --porcelain -- ${args}`,
+      { encoding: 'utf8' }
+    ).trim();
+    return out.length > 0;
+  } catch (_) {
+    return false; // no git → treat as clean, fall through to lastCommitDate (also null)
+  }
+}
+
 function lastCommitDate(paths) {
   try {
     const args = paths.map((p) => `"${p}"`).join(' ');
@@ -57,7 +83,10 @@ function lastCommitDate(paths) {
 }
 
 const dates = {};
-for (const [key, paths] of Object.entries(SYSTEMS)) dates[key] = lastCommitDate(paths);
+for (const [key, paths] of Object.entries(SYSTEMS)) {
+  // Uncommitted work → today (updates the badge before you commit); else last commit date.
+  dates[key] = hasUncommittedChanges(paths) ? todayStr() : lastCommitDate(paths);
+}
 
 const outPath = path.join(__dirname, '../src/constance/mtc_version_dates.json');
 fs.writeFileSync(outPath, JSON.stringify(dates, null, 2) + '\n');

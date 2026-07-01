@@ -582,6 +582,8 @@ const ToolingResultDashboard = async (req, res) => {
         const month = req.query.month ? parseInt(req.query.month) : null; // 1-12 calendar
 
         const { start: fyeStart, end: fyeEnd } = fyeToRange(fye);
+        // Previous FYE range — used to draw an "avg" baseline bar before Apr
+        const { start: prevStart, end: prevEnd } = fyeToRange(fye - 1);
 
         // Period filter — full FYE or one specific calendar month within it
         let periodStart, periodEnd;
@@ -600,7 +602,7 @@ const ToolingResultDashboard = async (req, res) => {
                               AND NULLIF(TRIM(issue_date::TEXT), '') IS NOT NULL`;
         const issueFilter = `issue_date  ~ '^\\d{4}-\\d{2}-\\d{2}' AND issue_date::DATE  BETWEEN $1 AND $2`;
 
-        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes] = await Promise.all([
+        const [kpiRes, delayCausesRes, measuringToolsRes, wcRes, monthlyRes, dailyRes, detailRowsRes, prevMonthlyRes] = await Promise.all([
             engPool.query(`
                 SELECT
                     COUNT(*) as total_po,
@@ -667,7 +669,18 @@ const ToolingResultDashboard = async (req, res) => {
                 WHERE ${rcvFilter}
                 ORDER BY receive_date DESC
                 LIMIT 500
-            `, [periodStart, periodEnd])
+            `, [periodStart, periodEnd]),
+
+            // Previous-FYE monthly on-time/delay — averaged in JS for the baseline bar
+            engPool.query(`
+                SELECT
+                    TO_CHAR(issue_date::DATE, 'YYYY-MM') as month_key,
+                    SUM(CASE WHEN status = 'On time' THEN 1 ELSE 0 END) as on_time,
+                    SUM(CASE WHEN status = 'Delay'   THEN 1 ELSE 0 END) as delay
+                FROM ${TABLES.TI_LIST}
+                WHERE ${issueFilter}
+                GROUP BY month_key
+            `, [prevStart, prevEnd])
         ]);
 
         const kpi = kpiRes.rows[0];
@@ -677,7 +690,23 @@ const ToolingResultDashboard = async (req, res) => {
         const onTimePct  = totalItems > 0
             ? parseFloat(((onTime / totalItems) * 100).toFixed(1)) : 0;
 
+        // Previous-FYE average — mean per month (over months that had activity), so the
+        // baseline bar is comparable to a single month's on-time/delay stack.
+        const prevRows   = prevMonthlyRes.rows;
+        const prevMonths = prevRows.length;
+        const prevOnTime = prevRows.reduce((s, r) => s + Number(r.on_time), 0);
+        const prevDelay  = prevRows.reduce((s, r) => s + Number(r.delay),   0);
+        const prevFyeAvg = prevMonths > 0 ? {
+            fye:       fye - 1,
+            months:    prevMonths,
+            onTime:    Math.round(prevOnTime / prevMonths),
+            delay:     Math.round(prevDelay  / prevMonths),
+            onTimePct: (prevOnTime + prevDelay) > 0
+                ? parseFloat(((prevOnTime / (prevOnTime + prevDelay)) * 100).toFixed(1)) : 0,
+        } : null;
+
         res.json({
+            prevFyeAvg,
             kpi: { totalPO: Number(kpi.total_po)||0, totalQty, onTime,
                    delay: Number(kpi.delay)||0, accept: Number(kpi.accept)||0,
                    reject: Number(kpi.reject)||0, totalItems, onTimePct },
