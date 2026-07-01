@@ -256,9 +256,12 @@ table.pfd-data-table th {
         margin: 5mm;
     }
 
-    body {
-        background: none !important;
+    body, html, #root, .pfd-body {
+        background: white !important;
         padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        min-height: auto !important;
     }
 
     .pfd-topbar,
@@ -271,13 +274,15 @@ table.pfd-data-table th {
         zoom: 1 !important;
         transform: none !important;
         padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
     }
 
     .pfd-a4-page {
         width: 297mm !important;
         height: 210mm !important;
-        box-shadow: none;
-        margin: 0;
+        box-shadow: none !important;
+        margin: 0 !important;
         page-break-after: always;
         overflow: hidden;
         padding: 5mm;

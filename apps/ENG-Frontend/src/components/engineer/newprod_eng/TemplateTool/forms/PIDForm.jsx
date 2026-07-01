@@ -39,10 +39,10 @@ const STYLES = `
 .pid-sign-label { font-weight:bold; font-size:10pt; }
 @media print {
   @page { size:A4 portrait; margin:5mm; }
-  body { background:none!important; padding:0!important; }
+  body, html, #root, .pid-body { background: white !important; padding:0!important; margin:0!important; display:block !important; min-height:auto !important; }
   .pid-topbar { display:none!important; }
-  .pid-pages { gap:0!important; zoom:1!important; padding:0!important; }
-  .pid-a4 { width:210mm!important; height:297mm!important; box-shadow:none; margin:0; padding:10mm 15mm; page-break-after:always; }
+  .pid-pages { gap:0!important; zoom:1!important; padding:0!important; margin:0!important; display:block !important; }
+  .pid-a4 { width:210mm!important; height:297mm!important; box-shadow:none !important; margin:0 !important; padding:10mm 15mm; page-break-after:always; }
 }
 `;
 
