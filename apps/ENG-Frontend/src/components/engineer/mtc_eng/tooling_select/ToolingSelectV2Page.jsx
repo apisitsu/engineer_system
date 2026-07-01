@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../../stores/authStore';
 import { server } from '../../../../constance/constance';
 import { MTC_PATHS } from '../../../../constance/mtc_constance';
+import { ddForm } from '../dwgFormat';
 import { useTheme } from '../../../../theme';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import ScrollbarStyle from '../../../common/scrollbar';
@@ -27,13 +28,6 @@ const HIDE_COLS = new Set(['id', 'tooling_name', 'machine', 'Machine']);
 const formatColName = (k) => {
   const s = k.replace(/_/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
-};
-
-// Rotary-dresser tools are referred to by their DD#### short form
-// (4800-42-0226 → DD0226); other tools show their raw DWG no.
-const ddForm = (no) => {
-  const m = String(no || '').match(/^4800-42-0*(\d+)$/);
-  return m ? `DD${m[1].padStart(4, '0')}` : String(no || '');
 };
 
 function RankBadge({ rank }) {
@@ -550,10 +544,14 @@ export default function ToolingSelectV2Page() {
                       // similar-part suggestions) so results aren't hidden behind
                       // a collapsed panel.
                       defaultActiveKey={machineGroups
-                        // Auto-expand machines WITH production history that found a
-                        // match; no-history machines stay collapsed to reduce clutter
-                        // (they're still listed and can be opened manually).
-                        .filter(g => g.producedHistory !== false && (machineToolingCounts[g.machine]?.found || 0) > 0)
+                        // Auto-expand machines that found a match. When SOME machine has
+                        // production history, expand only those (no-history machines stay
+                        // collapsed to reduce clutter). But for a BRAND-NEW model (no
+                        // machine has any history) that rule would collapse EVERYTHING —
+                        // contradicting the "showing all machines" alert — so expand every
+                        // matched machine instead.
+                        .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0
+                          && (result.productionFilter?.hadProduction === false || g.producedHistory !== false))
                         .map(g => g.machine)}
                       items={collapseItems}
                       style={{ marginBottom: 16 }}

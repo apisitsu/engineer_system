@@ -13,6 +13,7 @@ import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
 import { useAuthStore } from '../../../../stores/authStore';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { ddForm } from '../dwgFormat';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -36,13 +37,6 @@ const dwgPrefix = (no) => {
   if (!no) return null;
   const p = no.split('-');
   return p.length >= 2 ? `${p[0]}-${p[1]}` : no;
-};
-
-// Rotary-dresser tools are referred to by their DD#### short form (4800-42-0226 →
-// DD0226); every other tool shows its raw DWG no. Mirrors ToolingSelectV2Page.
-const ddForm = (no) => {
-  const m = String(no || '').match(/^4800-42-0*(\d+)$/);
-  return m ? `DD${m[1].padStart(4, '0')}` : String(no || '');
 };
 
 // Tolerant numeric equality for dim values stored as strings ("3" vs "3.00"); falls
@@ -742,7 +736,12 @@ const SdsV2Page = () => {
     // resolved member type name; collapse both it and the displayed block name to
     // the machine_group label so a part run on KS-400B2 keeps the grouped block.
     // Fail-open when history hasn't loaded (fetch error) so a source outage never
-    // blanks every machine; a genuine "never produced" (loaded + empty) hides all.
+    // blanks every machine. Also fail-open for a genuine NEW MODEL (loaded but the CN
+    // was never produced on ANY process/machine): hard-filtering it to nothing would
+    // hide the very T-Select setup recommendations the engineer needs to run the part
+    // for the first time. This mirrors the Tooling Select page, which shows all
+    // size-eligible machines when the CN has no production history. The per-process
+    // hard-filter still applies normally once the CN HAS been produced somewhere.
     const memberToGroup = {};
     for (const m of allMachineTypes) if (m.machine_group) memberToGroup[m.machine_type_name] = m.machine_group;
     const canonMachine = (name) => memberToGroup[name] || name;
@@ -752,7 +751,9 @@ const SdsV2Page = () => {
         .map(h => canonMachine((h.machine_name || '').trim()))
         .filter(Boolean)
     );
-    if (historyLoaded) {
+    const cnEverProduced = Object.values(machineHistoryByProcess)
+      .some(arr => arr.some(h => h.machine_type_code));
+    if (historyLoaded && cnEverProduced) {
       for (const machineName of Object.keys(machineStatus)) {
         if (!producedCanon.has(canonMachine(machineName))) delete machineStatus[machineName];
       }

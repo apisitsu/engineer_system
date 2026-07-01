@@ -102,12 +102,65 @@ function buildCssVarsBlock(config) {
 function canonFixtureName(name) {
   const n = String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
   if (!n) return null;
+  // "BASE ASSY" (組立図 = the assembly drawing) is NOT a physical slot fixture — it must
+  // be excluded BEFORE the BASE substring check below, or it canonicalizes to BASE and
+  // collides with the real BASE slot: the factory plan often lists the -99 ASSY alongside
+  // the BASE fixture, so the ASSY steals BASE's T-slot and cascades every following
+  // fixture out of the configured tool-no order (e.g. CN 290794 → T1 ASSY, T2 BASE, …).
+  // Returning null drops it from slotting (the T-Select ASSY tooling was already removed
+  // for the same reason — see 20260622_remove_gs64pfii_assy_tooling.js).
+  if (n.includes('ASSY') || n.includes('組立')) return null;
   if (n.includes('ARBOR')) return 'COLLET_ARBOR';          // check BEFORE COLLET (substring)
   if (n.includes('COLLAR')) return 'COLLAR';
   if (n.includes('COLLET') || n.includes('コレット')) return 'COLLET';
   if (n.includes('BASE') || n.includes('ベース')) return 'BASE';
   if (n.includes('SPACER') || n.includes('スペーサ')) return 'SPACER';
   return null;
+}
+
+// First two dash-segments of a DWG no (the tool family / machine-type key), e.g.
+// 4547-01-0031-07 → 4547-01. Falls back to the raw value when it has < 2 segments.
+function dwgPrefixOf(no) {
+  const p = String(no || '').split('-');
+  return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || '');
+}
+
+// Build the canonical-fixture → { slot, family } map for the fixture-NAME slot tier.
+// `mtRows` = whitelist slots ({ tool_drawing_no, tool_number }); `nameByDwg` maps a
+// whitelist DWG → its fixture name (lpb.eng_tooling); `orderMap` maps a whitelist DWG →
+// its 1-based T-slot. A canonical fixture is kept ONLY when it maps to exactly ONE slot —
+// a fixture that lands in >1 slot is ambiguous and dropped (never guess). Stays EMPTY for
+// non-MSB whitelists whose names don't canonicalize → the name tier is inert there.
+function buildSlotByFixture(mtRows, nameByDwg, orderMap) {
+  const slotByFixture = new Map();   // canon fixture → { slot, family }
+  const canonCount = {};
+  for (const r of mtRows) {
+    const canon = canonFixtureName(nameByDwg[r.tool_drawing_no]);
+    if (!canon) continue;
+    canonCount[canon] = (canonCount[canon] || 0) + 1;
+    slotByFixture.set(canon, { slot: orderMap[r.tool_drawing_no], family: dwgPrefixOf(r.tool_drawing_no) });
+  }
+  for (const [c, n] of Object.entries(canonCount)) if (n > 1) slotByFixture.delete(c); // ambiguous → drop
+  return slotByFixture;
+}
+
+// DWG no (+ optional fixture NAME) → configured T-slot. Three tiers, in order: 1) exact
+// DWG in the whitelist, 2) dash-prefix family overlap, 3) fixture NAME (MSB grinders) —
+// the name tier fires only when the candidate shares the whitelisted fixture's DWG family,
+// so a same-named tool of a DIFFERENT family can't cross over. null = no slot.
+function makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture }) {
+  return (dwgNo, toolName) => {
+    if (!dwgNo) return null;
+    if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
+    const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
+    if (k !== undefined) return orderMap[k];
+    const canon = canonFixtureName(toolName);
+    if (canon && slotByFixture.has(canon)) {
+      const e = slotByFixture.get(canon);
+      if (dwgPrefixOf(dwgNo) === e.family) return e.slot;
+    }
+    return null;
+  };
 }
 
 // ── Cloned buildValueMap logic for consistency ──────────────────────────────
@@ -192,7 +245,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
 
-  const dwgPrefix = (no) => { const p = String(no || '').split('-'); return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || ''); };
+  const dwgPrefix = dwgPrefixOf;
   const slotData = new Array(20).fill(null);
 
   // Place a tool honoring its Machine Tool Config slot (1-based T-number) when known
@@ -218,10 +271,10 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     // Resolve each whitelist slot's fixture NAME (from lpb.eng_tooling) so a factory /
     // T-Select tool can be matched to its slot by fixture TYPE — the only key that
     // survives the bore-band DWG shuffle (band 0031 lists COLLET/ARBOR/COLLAR at
-    // -07/-08/-09; the whitelist lists them at -02/-03/-04). slotByFixture keeps a
-    // canonical fixture only when it maps to exactly ONE slot (never guesses) and stays
-    // EMPTY for non-MSB whitelists (names don't canonicalize) → the name tier is inert.
-    const slotByFixture = new Map();   // canon fixture → { slot, family }
+    // -07/-08/-09; the whitelist lists them at -02/-03/-04). Best-effort: a name-resolution
+    // failure is LOGGED (not silently swallowed) and falls back to DWG-only matching
+    // (slotByFixture stays empty → the fixture-NAME tier is inert).
+    let slotByFixture = new Map();   // canon fixture → { slot, family }
     try {
       const nameRows = (await maqPool.query(
         `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING} WHERE tool_dwg_no = ANY($1)`,
@@ -229,32 +282,12 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       )).rows;
       const nameByDwg = {};
       for (const r of nameRows) if (r.tool_name && !nameByDwg[r.tool_dwg_no]) nameByDwg[r.tool_dwg_no] = r.tool_name;
-      const canonCount = {};
-      for (const r of mtRows) {
-        const canon = canonFixtureName(nameByDwg[r.tool_drawing_no]);
-        if (!canon) continue;
-        canonCount[canon] = (canonCount[canon] || 0) + 1;
-        slotByFixture.set(canon, { slot: orderMap[r.tool_drawing_no], family: dwgPrefix(r.tool_drawing_no) });
-      }
-      for (const [c, n] of Object.entries(canonCount)) if (n > 1) slotByFixture.delete(c); // ambiguous → drop
-    } catch (_) { /* name resolution is best-effort → fall back to DWG-only matching */ }
+      slotByFixture = buildSlotByFixture(mtRows, nameByDwg, orderMap);
+    } catch (err) {
+      console.warn(`[sds-pdf] fixture-name resolution failed for [${allowedKeys.join(', ')}] — falling back to DWG-only slotting: ${err.message}`);
+    }
 
-    configSlotOf = (dwgNo, toolName) => {
-      if (!dwgNo) return null;
-      if (orderMap[dwgNo] !== undefined) return orderMap[dwgNo];
-      const k = allowedKeys.find(key => dwgNo === key || dwgNo.startsWith(key + '-') || key.startsWith(dwgNo + '-'));
-      if (k !== undefined) return orderMap[k];
-      // Fixture-NAME fallback (MSB surface grinders): the part's REAL band tool
-      // (e.g. 4547-01-0031-07 COLLET) lands in the whitelist's COLLET slot even though
-      // its DWG position (-07) differs from the whitelisted variant (-02). Requires the
-      // SAME DWG family so a same-named tool of a different fixture family can't cross over.
-      const canon = canonFixtureName(toolName);
-      if (canon && slotByFixture.has(canon)) {
-        const e = slotByFixture.get(canon);
-        if (dwgPrefix(dwgNo) === e.family) return e.slot;
-      }
-      return null;
-    };
+    configSlotOf = makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture });
     // Factory-plan tools that match the whitelist land in their configured T-slot
     // (slot positions are honored, gaps preserved). Sorted by slot so a collision
     // resolves deterministically (lower T keeps its slot, the other spills to first free).
@@ -1246,3 +1279,8 @@ module.exports = router;
 // Reused by sdsPublicController (the cross-system public PDF link endpoint).
 module.exports.buildGridHtmlForRequest = buildGridHtmlForRequest;
 module.exports.renderPdf = renderPdf;
+// Exported for unit testing the fixture-NAME slot-matching tier (the riskiest, highest
+// blast-radius logic in this controller). See tests/mtc/sdsFixtureSlot.test.js.
+module.exports.canonFixtureName = canonFixtureName;
+module.exports.buildSlotByFixture = buildSlotByFixture;
+module.exports.makeConfigSlotResolver = makeConfigSlotResolver;

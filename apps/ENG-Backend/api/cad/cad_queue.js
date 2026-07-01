@@ -28,6 +28,10 @@ const getRedisConnection = () => {
 const connection = getRedisConnection();
 const cadQueue = new Queue('cad-generation-queue', { connection });
 
+cadQueue.on('error', err => {
+  // Suppress connection errors when Redis is offline
+});
+
 module.exports = {
   cadQueue,
   connection,

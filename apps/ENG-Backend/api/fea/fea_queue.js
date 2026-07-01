@@ -24,6 +24,10 @@ const getRedisConnection = () => {
 const connection = getRedisConnection();
 const feaQueue = new Queue('fea-simulation-queue', { connection });
 
+feaQueue.on('error', err => {
+  // Suppress connection errors when Redis is offline
+});
+
 module.exports = {
   feaQueue,
   connection,

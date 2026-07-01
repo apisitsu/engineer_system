@@ -205,6 +205,18 @@ export const server = {
   KANBAN_BACKGROUND_IMAGES: `${apiUrl}api/kanban/background-images`,
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
   KANBAN_TEMPLATES: `${apiUrl}api/kanban/templates`,
+
+  // Activity Tracking
+  ACTIVITY_TRACK: `${apiUrl}api/activity/track`,
+  ACTIVITY_SESSION_START: `${apiUrl}api/activity/session/start`,
+  ACTIVITY_SESSION_HEARTBEAT: `${apiUrl}api/activity/session/heartbeat`,
+  ACTIVITY_SESSION_END: `${apiUrl}api/activity/session/end`,
+  ACTIVITY_LOGS: `${apiUrl}api/activity/logs`,
+  ACTIVITY_STATS: `${apiUrl}api/activity/stats`,
+  ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
+  ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
+  ACTIVITY_USER: `${apiUrl}api/activity/user`,
+
 };
 
 export const key_constance = {

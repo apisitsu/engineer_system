@@ -223,4 +223,8 @@ cadWorker.on('failed', (job, err) => {
   console.log(`[CAD Worker] Job ${job?.id} has failed: ${err.message}`);
 });
 
+cadWorker.on('error', err => {
+  // Suppress connection errors when Redis is offline
+});
+
 module.exports = cadWorker;

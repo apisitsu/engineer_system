@@ -30,6 +30,9 @@ function doGet(e) {
             case "sendKanbanNotification":
                 sendKanbanNotification(e.parameter);
                 break;
+            case "sendNotification":
+                sendNotification(e.parameter)
+                break;
             default:
                 break;
         }
@@ -74,7 +77,7 @@ function doGet(e) {
 //  Template 1: Original Drawing/ECR Notification
 // ============================================================
 function sendNotificationEmail(params) {
-    var recipients = "nanthiwa.k@minebea.co.th";
+    var recipients = params.user_to || "nanthiwa.k@minebea.co.th";
     var subject = "⚠️ POC: Drawing Accessed - C/N: " + (params.cn || "N/A");
 
     var body = "มีคนเปิด drawing จ้ะ\n\n"
@@ -90,11 +93,25 @@ function sendNotificationEmail(params) {
     }
 }
 
+function sendNotification(params) {
+    var recipients = params.user_to || "nanthiwa.k@minebea.co.th";
+    var subject = params.subject || "Test : " + "N/A";
+
+    var body = params.body || "Test : Body";
+
+    try {
+        MailApp.sendEmail(recipients, subject, body);
+        console.log("Email sent successfully to: " + recipients);
+    } catch (e) {
+        console.error("Failed to send email: " + e.toString());
+    }
+}
+
 // ============================================================
 //  Template 2: Kanban Error Report
 // ============================================================
 function sendErrorReport(params) {
-    var recipients = "nanthiwa.k@minebea.co.th";
+    var recipients = params.user_to || "nanthiwa.k@minebea.co.th";
     var subject = params.subject || "🚨 Kanban System Error";
 
     var body = "═══════════════════════════════════════\n"

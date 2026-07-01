@@ -558,12 +558,13 @@ const ReorderLists = async (req, res) => {
         await client.query('BEGIN');
 
         // Get all sibling lists (excluding the one being moved), only finite lists
-        const { rows: siblings } = await client.query(
+        const { rows } = await client.query(
             `SELECT id, position FROM kb_list
              WHERE board_id=$1 AND id!=$2 AND list_type IN ('active','closed')
              ORDER BY position ASC`,
             [boardId, list_id]
         );
+        const siblings = rows.map(r => ({ ...r, position: Number(r.position) }));
 
         const { position: newPosition, repositions } = insertToPositionables(position, siblings);
 

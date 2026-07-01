@@ -4,13 +4,13 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
+// export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
-// export const apiUrl = "http://localhost:2005/";
+export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
-// export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -186,6 +186,17 @@ export const server = {
   KANBAN_STORAGE_USAGE: `${apiUrl}api/kanban/storage-usage`,
   KANBAN_WORKLOAD: `${apiUrl}api/kanban/workload/team-workload`,
   KANBAN_TEMPLATES: `${apiUrl}api/kanban/templates`,
+
+  // Activity Tracking
+  ACTIVITY_TRACK: `${apiUrl}api/activity/track`,
+  ACTIVITY_SESSION_START: `${apiUrl}api/activity/session/start`,
+  ACTIVITY_SESSION_HEARTBEAT: `${apiUrl}api/activity/session/heartbeat`,
+  ACTIVITY_SESSION_END: `${apiUrl}api/activity/session/end`,
+  ACTIVITY_LOGS: `${apiUrl}api/activity/logs`,
+  ACTIVITY_STATS: `${apiUrl}api/activity/stats`,
+  ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
+  ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
+  ACTIVITY_USER: `${apiUrl}api/activity/user`,
 
 };
 
