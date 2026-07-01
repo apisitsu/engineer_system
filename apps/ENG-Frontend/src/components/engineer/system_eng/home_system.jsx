@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Layout, Spin, Row, Col, Card, Typography } from "antd";
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 import { useTheme } from '../../../theme';
-import { TeamOutlined, AppstoreOutlined, FileSearchOutlined } from '@ant-design/icons';
+import { TeamOutlined, AppstoreOutlined, FileSearchOutlined, BarChartOutlined } from '@ant-design/icons';
 import ScrollbarStyle from '../../common/scrollbar';
 import { useNavigate } from 'react-router-dom';
 
@@ -28,6 +28,13 @@ function HomeSystemEng() {
       icon: <AppstoreOutlined style={{ fontSize: 40, color: theme.colors.success || '#52c41a' }} />,
       path: "/eng/system_eng/tool/gallery",
       gradient: `linear-gradient(135deg, ${(theme.colors.success || '#52c41a')}15, ${(theme.colors.success || '#52c41a')}05)`,
+    },
+    {
+      title: "Activity Dashboard",
+      description: "ดูสถิติการเข้าใช้งานระบบ กิจกรรมของผู้ใช้ และ Session ที่ใช้งานอยู่",
+      icon: <BarChartOutlined style={{ fontSize: 40, color: '#722ed1' }} />,
+      path: "/eng/system_eng/activity-dashboard",
+      gradient: `linear-gradient(135deg, #722ed115, #722ed105)`,
     },
   ];
 

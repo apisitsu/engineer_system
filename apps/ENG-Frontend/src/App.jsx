@@ -71,6 +71,7 @@ import FeaSimulation from './components/engineer/newprod_eng/fea_simulation/FeaS
 import CadJobDashboard from './components/engineer/newprod_eng/3d_pdf/CadJobDashboard';
 import UserGuidePage from './components/engineer/user_guide/UserGuidePage';
 import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideFullPage';
+import RouteTracker from './components/common/RouteTracker';
 
 // Engineer Record
 import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
@@ -83,6 +84,7 @@ import PdfMergerWrapper from './components/engineer/system_eng/pdf_hub/PdfMerger
 import PdfToImageWrapper from './components/engineer/system_eng/pdf_hub/PdfToImageWrapper';
 import DwgCheckWrapper from './components/engineer/system_eng/pdf_hub/DwgCheckWrapper';
 import PdfEditorTool from './components/engineer/system_eng/pdf_hub/PdfEditor/PdfEditorTool';
+import ActivityDashboard from './components/engineer/system_eng/activity/ActivityDashboard';
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -280,6 +282,7 @@ const AppContent = () => {
     <ConfigProvider theme={getAntdTheme(theme)}>  {/* Dynamic theme! */}
       <AntdApp>
         <Router>
+          <RouteTracker />
           <Routes>
 
             <Route path="/sign_in" element={<AuthRedirectWrapper><SignIn /></AuthRedirectWrapper>} />
@@ -389,6 +392,7 @@ const AppContent = () => {
                   <Route path="/eng/system_eng/tool/pdf-to-image" element={<PdfToImageConverter />} />
                   <Route path="/eng/system_eng/tool/gallery" element={<ToolGallery />} />
                   <Route path="/eng/system_eng/tool/update-logs" element={<UpdateLogView />} />
+                  <Route path="/eng/system_eng/activity-dashboard" element={<ActivityDashboard />} />
 
                   {/* ------ For Test Only ------ */}
 

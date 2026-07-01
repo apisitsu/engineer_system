@@ -116,7 +116,8 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')) {
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
+      || req.path === '/activity/session/end') {  // sendBeacon can't set Auth headers
     return next();
   }
 
@@ -468,4 +469,24 @@ app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSett
 
 const updateLogController = require('./api/system/updateLogController');
 app.get('/api/system/update-logs', requireSystemEngineer, updateLogController.getUpdateLogs);
+
+//--------------------Activity Tracking (User Activity & Session Logs)---------------------//
+const activityController = require('./api/system/activityController');
+app.use('/api/activity', activityController);
+
+// ── Cleanup cron: delete activity logs older than 30 days ──
+cron.schedule('0 2 * * *', async () => {
+  const { engPool: _engPool } = require('./instance/eng_db');
+  try {
+    const res1 = await _engPool.query(
+      `DELETE FROM user_activity_log WHERE created_at < NOW() - INTERVAL '30 days'`
+    );
+    const res2 = await _engPool.query(
+      `DELETE FROM user_session_log WHERE created_at < NOW() - INTERVAL '30 days'`
+    );
+    console.log(`[cron] Activity cleanup: removed ${res1.rowCount} activity logs, ${res2.rowCount} session logs (>30 days)`);
+  } catch (err) {
+    console.error('[cron] Activity cleanup failed:', err.message);
+  }
+}, { timezone: 'Asia/Bangkok' });
 
