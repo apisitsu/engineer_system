@@ -4,11 +4,11 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
-// export const apiUrl = "http://localhost:2005/";
+export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 

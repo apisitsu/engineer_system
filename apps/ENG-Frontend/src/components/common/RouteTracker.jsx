@@ -56,13 +56,13 @@ const RouteTracker = () => {
                 if (!token) return;
 
                 await axios.post(
-                    `${server.API_URL}api/activity/session/start`,
+                    `${server.ACTIVITY_SESSION_START}`,
                     { sessionId: TAB_SESSION_ID },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
                 sessionStarted.current = true;
-            } catch {
-                // Silent fail — don't impact user experience
+            } catch (err) {
+                console.error('[RouteTracker] Session start failed:', err);
             }
         };
 
@@ -75,7 +75,7 @@ const RouteTracker = () => {
                 if (!token) return;
 
                 await axios.post(
-                    `${server.API_URL}api/activity/session/heartbeat`,
+                    `${server.ACTIVITY_SESSION_HEARTBEAT}`,
                     { sessionId: TAB_SESSION_ID },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
@@ -92,7 +92,7 @@ const RouteTracker = () => {
             // Use sendBeacon for reliable delivery during page unload
             const payload = JSON.stringify({ sessionId: TAB_SESSION_ID });
             navigator.sendBeacon(
-                `${server.API_URL}api/activity/session/end`,
+                `${server.ACTIVITY_SESSION_END}`,
                 new Blob([payload], { type: 'application/json' })
             );
         };
@@ -121,10 +121,13 @@ const RouteTracker = () => {
         const timer = setTimeout(async () => {
             try {
                 const token = getToken();
-                if (!token) return;
+                if (!token) {
+                    console.log('[RouteTracker] No token found, skipping track');
+                    return;
+                }
 
                 await axios.post(
-                    `${server.API_URL}api/activity/track`,
+                    `${server.ACTIVITY_TRACK}`,
                     {
                         path: currentPath,
                         title: document.title || null,
@@ -133,8 +136,8 @@ const RouteTracker = () => {
                     },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
-            } catch {
-                // Silent fail — never block user navigation
+            } catch (err) {
+                console.error('[RouteTracker] Track failed:', err);
             }
 
             previousPath.current = currentPath;
@@ -150,7 +153,7 @@ const RouteTracker = () => {
             const token = getToken();
             if (token) {
                 axios.post(
-                    `${server.API_URL}api/activity/session/end`,
+                    `${server.ACTIVITY_SESSION_END}`,
                     { sessionId: TAB_SESSION_ID },
                     { headers: { Authorization: `Bearer ${token}` } }
                 ).catch(() => {});
