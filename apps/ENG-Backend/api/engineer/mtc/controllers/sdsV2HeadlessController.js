@@ -356,7 +356,15 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
       // lands in the SAME T-slot the config reserves for that tool family (not just the
       // next empty slot). Falls back to first free slot when no config slot applies/free.
-      if (!placeTool(configSlotOf(tt.tooling_no, tt.tooling_name), {
+      const cfgSlot = configSlotOf(tt.tooling_no, tt.tooling_name);
+      // When a Machine Tool Config whitelist exists it is authoritative — a T-Select tool
+      // outside the whitelist (no configured slot, no fixture-name match) must NOT spill
+      // into a free slot reserved for a whitelisted fixture. e.g. KS-H70's T-Select returns
+      // LOADER 4907-05/06, which are not in the curated 4691/4907-01/03 list; without this
+      // gate they squatted in slots T4/T5 (reserved for 4691-03/4691-10) and displaced the
+      // configured fixtures. No whitelist (mtRows empty) → legacy free-fill still applies.
+      if (mtRows.length > 0 && cfgSlot === null) continue;
+      if (!placeTool(cfgSlot, {
         tool_name: (planHit && planHit.tool_name) || tt.tooling_name || '',
         tool_dwg_no: tt.tooling_no,
         fromTs: !planHit,

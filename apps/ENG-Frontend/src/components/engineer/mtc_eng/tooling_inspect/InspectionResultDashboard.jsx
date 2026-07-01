@@ -101,7 +101,8 @@ const DonutChart = ({ data, colors, centerLabel, centerSub, size = 140 }) => {
         cutout: '68%',
         plugins: {
             legend: { display: false },
-            tooltip: { enabled: total > 0 }
+            tooltip: { enabled: total > 0 },
+            datalabels: { display: false }
         },
         animation: { duration: 600 }
     };
@@ -174,14 +175,23 @@ export default function InspectionResultDashboard() {
             const total = (row.onTime || 0) + (row.delay || 0);
             return total > 0 ? parseFloat(((row.onTime / total) * 100).toFixed(1)) : null;
         });
+
+        // Prepend a baseline bar = the previous FYE's monthly average (a muted-colour
+        // reference at index 0, before Apr). null when there is no prior-year data.
+        const prev = data?.prevFyeAvg;
+        const avgLabel = prev ? `FYE${prev.fye} avg` : 'Prev avg';
+        const labels = [avgLabel, ...FYE_MONTH_LABELS];
+        const lead = (arr, val) => [val, ...arr];
+
         return {
-            labels: FYE_MONTH_LABELS,
+            labels,
             datasets: [
                 {
                     type: 'bar',
                     label: 'On Time',
-                    data: FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0),
-                    backgroundColor: 'rgba(82,196,26,0.7)',
+                    data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null),
+                    // muted green for the avg baseline bar, normal green for the FYE months
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => 'rgba(82,196,26,0.7)'), 'rgba(82,196,26,0.3)'),
                     borderColor: C.green,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -191,8 +201,8 @@ export default function InspectionResultDashboard() {
                 {
                     type: 'bar',
                     label: 'Delay',
-                    data: FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0),
-                    backgroundColor: 'rgba(255,77,79,0.7)',
+                    data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => 'rgba(255,77,79,0.7)'), 'rgba(255,77,79,0.3)'),
                     borderColor: C.red,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -202,7 +212,7 @@ export default function InspectionResultDashboard() {
                 {
                     type: 'line',
                     label: '% On Time',
-                    data: ontimePctData,
+                    data: lead(ontimePctData, prev?.onTimePct ?? null),
                     borderColor: C.yellow,
                     backgroundColor: 'rgba(255,197,61,0.15)',
                     tension: 0.4,
@@ -212,11 +222,20 @@ export default function InspectionResultDashboard() {
                     yAxisID: 'yRight',
                     order: 1,
                     spanGaps: true,
+                    datalabels: {
+                        display: true,
+                        color: C.green,
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4,
+                        font: { size: 10, weight: 700 },
+                        formatter: (v) => (v === null ? '' : `${v}%`),
+                    },
                 },
                 {
                     type: 'line',
                     label: 'Target 90%',
-                    data: FYE_MONTH_LABELS.map(() => 90),
+                    data: labels.map(() => 90),
                     borderColor: 'rgba(255,77,79,0.85)',
                     borderWidth: 1.5,
                     borderDash: [6, 4],
@@ -233,7 +252,8 @@ export default function InspectionResultDashboard() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: { labels: { color: C.textSec, font: { size: 11 } } },
+            legend: { labels: { color: C.textPri, font: { size: 11 } } },
+            datalabels: { display: false },
             tooltip: {
                 mode: 'index',
                 intersect: false,
@@ -289,7 +309,7 @@ export default function InspectionResultDashboard() {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: {} },
+        plugins: { legend: { display: false }, tooltip: {}, datalabels: { display: false } },
         scales: {
             x: { ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } },
             y: { ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine } }
@@ -317,8 +337,9 @@ export default function InspectionResultDashboard() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: { labels: { color: C.textSec, font: { size: 11 } } },
-            tooltip: { mode: 'index', intersect: false }
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false },
+            datalabels: { display: false }
         },
         scales: {
             x: {
@@ -347,7 +368,8 @@ export default function InspectionResultDashboard() {
                 position: 'bottom',
                 labels: { color: C.textSec, font: { size: 10 }, boxWidth: 12, padding: 8 }
             },
-            tooltip: { enabled: delayArr.length > 0 }
+            tooltip: { enabled: delayArr.length > 0 },
+            datalabels: { display: false }
         },
         animation: { duration: 600 }
     };
@@ -419,7 +441,6 @@ export default function InspectionResultDashboard() {
                                     {(() => {
                                         const judged = (kpi?.accept || 0) + (kpi?.reject || 0);
                                         const acceptPct = judged > 0 ? ((kpi.accept / judged) * 100).toFixed(1) : 0;
-                                        const rejectPct = judged > 0 ? ((kpi.reject / judged) * 100).toFixed(1) : 0;
                                         return (<>
                                             <DonutChart
                                                 data={data?.judgementRatio || []}
@@ -428,18 +449,6 @@ export default function InspectionResultDashboard() {
                                                 centerSub="Accept"
                                                 size={100}
                                             />
-                                            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
-                                                {[{ label: 'Accept', pct: acceptPct, color: C.green },
-                                                  { label: 'Reject', pct: rejectPct, color: C.red }]
-                                                    .map(({ label, pct, color }) => (
-                                                    <span key={label} style={{ color: C.textSec, fontSize: 11 }}>
-                                                        <span style={{ display: 'inline-block', width: 10, height: 10,
-                                                                       borderRadius: '50%', background: color,
-                                                                       marginRight: 4 }} />
-                                                        {label} <span style={{ color, fontWeight: 700 }}>{pct}%</span>
-                                                    </span>
-                                                ))}
-                                            </div>
                                         </>);
                                     })()}
                                 </div>
@@ -456,17 +465,6 @@ export default function InspectionResultDashboard() {
                                         centerSub="On Time"
                                         size={100}
                                     />
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
-                                        {[{ label: 'On time', color: C.blue }, { label: 'Delay', color: C.red }]
-                                            .map(({ label, color }) => (
-                                            <span key={label} style={{ color: C.textSec, fontSize: 11 }}>
-                                                <span style={{ display: 'inline-block', width: 10, height: 10,
-                                                               borderRadius: '50%', background: color,
-                                                               marginRight: 4 }} />
-                                                {label}
-                                            </span>
-                                        ))}
-                                    </div>
                                 </div>
                             </Col>
 
