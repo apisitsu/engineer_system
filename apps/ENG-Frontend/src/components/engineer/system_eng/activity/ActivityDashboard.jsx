@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Layout, Card, Row, Col, Statistic, Table, DatePicker, Select, Spin,
-    Typography, Tag, Space, Tooltip, Tabs, Badge, Empty, Progress
+    Typography, Tag, Space, Tooltip, Tabs, Badge, Empty, Progress, Button
 } from 'antd';
 import {
     EyeOutlined, UserOutlined, TeamOutlined, ClockCircleOutlined,
@@ -79,6 +79,9 @@ function ActivityDashboard() {
         empno: null,
     });
     const [activeTab, setActiveTab] = useState('overview');
+    const [showAllModules, setShowAllModules] = useState(false);
+    const [showAllUsers, setShowAllUsers] = useState(false);
+    const [showAllPages, setShowAllPages] = useState(false);
 
     const token = localStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -250,10 +253,11 @@ function ActivityDashboard() {
         if (!stats?.byModule?.length) return <Empty description="No data" />;
 
         const maxViews = Math.max(...stats.byModule.map(m => parseInt(m.views)));
+        const displayData = showAllModules ? stats.byModule : stats.byModule.slice(0, 10);
 
         return (
             <div>
-                {stats.byModule.map((mod, i) => (
+                {displayData.map((mod, i) => (
                     <div key={i} style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                             <Space>
@@ -277,6 +281,13 @@ function ActivityDashboard() {
                         />
                     </div>
                 ))}
+                {stats.byModule.length > 10 && (
+                    <div style={{ textAlign: 'center', marginTop: 12 }}>
+                        <Button type="link" onClick={() => setShowAllModules(!showAllModules)}>
+                            {showAllModules ? 'แสดงน้อยลง' : `แสดงทั้งหมด (${stats.byModule.length})`}
+                        </Button>
+                    </div>
+                )}
             </div>
         );
     };
@@ -285,9 +296,11 @@ function ActivityDashboard() {
     const renderTopUsers = () => {
         if (!stats?.topUsers?.length) return <Empty description="No data" />;
 
+        const displayData = showAllUsers ? stats.topUsers : stats.topUsers.slice(0, 10);
+
         return (
             <div>
-                {stats.topUsers.slice(0, 10).map((user, i) => (
+                {displayData.map((user, i) => (
                     <div key={i} style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '8px 12px', marginBottom: 4,
@@ -312,6 +325,13 @@ function ActivityDashboard() {
                         <Tag color="blue">{parseInt(user.views).toLocaleString()} views</Tag>
                     </div>
                 ))}
+                {stats.topUsers.length > 10 && (
+                    <div style={{ textAlign: 'center', marginTop: 12 }}>
+                        <Button type="link" onClick={() => setShowAllUsers(!showAllUsers)}>
+                            {showAllUsers ? 'แสดงน้อยลง' : `แสดงทั้งหมด (${stats.topUsers.length})`}
+                        </Button>
+                    </div>
+                )}
             </div>
         );
     };
@@ -356,14 +376,23 @@ function ActivityDashboard() {
         ];
 
         return (
-            <Table
-                dataSource={stats.topPages}
-                columns={columns}
-                rowKey="path"
-                size="small"
-                pagination={false}
-                style={{ marginTop: 8 }}
-            />
+            <div>
+                <Table
+                    dataSource={showAllPages ? stats.topPages : stats.topPages.slice(0, 10)}
+                    columns={columns}
+                    rowKey="path"
+                    size="small"
+                    pagination={false}
+                    style={{ marginTop: 8 }}
+                />
+                {stats.topPages.length > 10 && (
+                    <div style={{ textAlign: 'center', marginTop: 12, paddingBottom: 12 }}>
+                        <Button type="link" onClick={() => setShowAllPages(!showAllPages)}>
+                            {showAllPages ? 'แสดงน้อยลง' : `แสดงทั้งหมด (${stats.topPages.length})`}
+                        </Button>
+                    </div>
+                )}
+            </div>
         );
     };
 
@@ -554,12 +583,12 @@ function ActivityDashboard() {
                     {renderStatCards()}
                     <Row gutter={[16, 16]}>
                         <Col xs={24} md={12}>
-                            <Card title="📊 Module Usage" style={cardStyle} bodyStyle={{ padding: '16px', maxHeight: 400, overflowY: 'auto' }}>
+                            <Card title="📊 Module Usage" style={cardStyle} bodyStyle={{ padding: '16px' }}>
                                 {renderModuleUsage()}
                             </Card>
                         </Col>
                         <Col xs={24} md={12}>
-                            <Card title="👥 Top Users" style={cardStyle} bodyStyle={{ padding: '16px', maxHeight: 400, overflowY: 'auto' }}>
+                            <Card title="👥 Top Users" style={cardStyle} bodyStyle={{ padding: '16px' }}>
                                 {renderTopUsers()}
                             </Card>
                         </Col>
