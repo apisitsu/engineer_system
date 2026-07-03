@@ -205,7 +205,7 @@ export default function ShortcutsHandler({
                     break;
             }
         }
-    }, [store, fabricCanvasRefs, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave]);
+    }, [store, fabricCanvasRefs, onUndo, onRedo, onPrevPage, onNextPage, onZoomIn, onZoomOut, onDelete, onSave, currentPage]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
