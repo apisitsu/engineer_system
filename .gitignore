@@ -47,3 +47,5 @@ CLAUDE.md
 GEMINI.md
 
 ./apps/uploads
+
+git_sync_mtc.ps1
