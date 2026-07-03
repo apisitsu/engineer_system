@@ -119,20 +119,27 @@ function matchNo(m) {
  * the result for TTL_MS. `cn` may be 6-digit (e.g. "350528") or Cxx-0YYYY form —
  * searchService normalizes internally.
  */
-async function safeSearch(cn) {
+async function safeSearch(cn, opts = {}) {
   const key = String(cn || '').trim();
   if (!key) return null;
-  const hit = _cache.get(key);
+  // withSimilarRef enriches every result with `similarRef` (the tool a dimensionally
+  // SIMILAR produced part actually used). It costs extra per-machine + cross-pool
+  // queries, so it is OPT-IN — only the SDS PDF requests it. The cache/persist key is
+  // namespaced (`::sim`) so the coverage report (plain safeSearch) never pays for it
+  // and the two variants never collide.
+  const withSimilarRef = !!opts.withSimilarRef;
+  const ck = withSimilarRef ? `${key}::sim` : key;
+  const hit = _cache.get(ck);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.result;
   // Persisted layer (survives restart; cleared on config/spec change)
-  const p = await readPersisted(key);
-  if (p.hit) { _cache.set(key, { at: Date.now(), result: p.result }); return p.result; }
+  const p = await readPersisted(ck);
+  if (p.hit) { _cache.set(ck, { at: Date.now(), result: p.result }); return p.result; }
   try {
     // A success OR a legitimate "spec not found" ({success:false}) is cacheable —
     // both are stable answers for this CN.
-    const result = await searchService.search(key);
-    _cache.set(key, { at: Date.now(), result });
-    writePersisted(key, result); // fire-and-forget → survives restarts
+    const result = await searchService.search(key, withSimilarRef ? { withSimilarRef: true } : {});
+    _cache.set(ck, { at: Date.now(), result });
+    writePersisted(ck, result); // fire-and-forget → survives restarts
     return result;
   } catch (_) {
     // Transient failure (e.g. a DB blip) — do NOT cache. Caching null here would
@@ -179,14 +186,26 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
   const seen = new Set();
   for (const r of tsResult.results) {
     if (!acceptableNames.has(r.machine)) continue;
-    // Similar-part fallbacks are suggestions (the factory's pick for the most
-    // dimensionally-similar part), not a factory-confirmed tool. The SDS Setup
-    // Data Sheet opts IN (opts.includeSimilar) so the sheet still carries a Tool
-    // No — flagged isSimilar so the caller can mark it. The coverage report
-    // leaves it OUT (default) so reported coverage stays confirmed-only.
-    const isSimilar = r.overrideBy === 'similar_part';
-    if (isSimilar && !opts.includeSimilar) continue;
-    const no = matchNo(r.matches && r.matches[0]);
+    // Similar-part suggestions (not a factory-confirmed selection). Two forms:
+    //   1. overrideBy='similar_part' — a partno_map twin that FILLED an empty tooling
+    //      (matches was replaced with the twin's tool).
+    //   2. similarRef — a dimensionally-similar PRODUCED part's actual tool, attached
+    //      ALONGSIDE a real dimensional match (only present when searched withSimilarRef).
+    // The coverage report opts OUT (includeSimilar unset) → confirmed dimensional
+    // matches only, so its counts are unaffected by this preference.
+    const isOverrideSimilar = r.overrideBy === 'similar_part';
+    if (isOverrideSimilar && !opts.includeSimilar) continue;
+    // Preference order for the SDS PDF fallback (includeSimilar): pick the SIMILAR
+    // produced part's tool (similarRef) FIRST; only when there is none fall back to
+    // the raw dimensional closest inventory match (matches[0] = "T-Select #1").
+    let no, isSimilar;
+    if (opts.includeSimilar && r.similarRef && r.similarRef.tool_dwg_no) {
+      no = String(r.similarRef.tool_dwg_no).trim();
+      isSimilar = true;
+    } else {
+      no = matchNo(r.matches && r.matches[0]);
+      isSimilar = isOverrideSimilar;
+    }
     if (!no) continue;
     const key = `${r.tooling}||${no}`;
     if (seen.has(key)) continue;

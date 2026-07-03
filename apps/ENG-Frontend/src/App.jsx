@@ -56,6 +56,8 @@ import SdsCoverageDashboard from './components/engineer/mtc_eng/sds/SdsCoverageD
 import SdsTemplateConfigPage from './components/engineer/mtc_eng/sds/SdsTemplateConfigPage';
 import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/ToolingSelectV2Page';
 import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
+import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
+import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
@@ -325,6 +327,8 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOL_REQUEST} element={<ToolRequest />} />
                   <Route path={MTC_PATHS.TOOLING_SELECT} element={<ToolingSelectPage />} />
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
+                  <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
+                  <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />

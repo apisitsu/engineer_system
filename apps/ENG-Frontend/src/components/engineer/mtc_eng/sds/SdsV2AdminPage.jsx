@@ -1901,7 +1901,7 @@ const loadSavedExpandedPcs = (catKey) => {
   } catch { return new Set(); }
 };
 
-const AuditTab = ({ theme }) => {
+export const AuditTab = ({ theme }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ itemCounts: [], noProcessPlan: [], missingTooling: [], totals: {} });
@@ -2325,7 +2325,7 @@ const SdsV2AdminPage = () => {
     { key: 'config', label: 'Configure Settings', children: <ConfigureSettingsTab theme={theme} visibleMachineNames={visibleMachineNames} setVisibleMachineNames={setVisibleMachineNames} /> },
     { key: 'machine-tool', label: 'Machine Tool Config', children: <MachineToolManager theme={theme} visibleMachineNames={visibleMachineNames} /> },
     { key: 'approval-roles', label: 'Approval Roles', children: <ApprovalRoleConfig theme={theme} /> },
-    { key: 'audit', label: 'Data Integrity', children: <AuditTab theme={theme} /> },
+    // 'CN Enable' (AuditTab) moved to its own sidebar page — see CnEnablePage / MTC_PATHS.CN_ENABLE
   ];
 
   return (
