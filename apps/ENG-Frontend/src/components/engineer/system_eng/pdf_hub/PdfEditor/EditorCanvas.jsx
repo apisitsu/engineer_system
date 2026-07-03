@@ -120,7 +120,10 @@ const EditorCanvas = ({
                 }
 
                 if (isText) {
-                    if (obj.fill) store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                    if (obj.fill) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                        store.setToolSetting('select', 'strokeColor', obj.fill);
+                    }
                 } else if (isStamp) {
                     if (obj.type === 'group') {
                         let mainColor = '#e74c3c';
@@ -129,21 +132,43 @@ const EditorCanvas = ({
                            else if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') mainColor = child.fill;
                         });
                         store.setToolSetting(targetTool, 'strokeColor', mainColor);
+                        store.setToolSetting('select', 'strokeColor', mainColor);
                     } else {
-                        if (obj.stroke) store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
-                        else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                        if (obj.stroke) {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                            store.setToolSetting('select', 'strokeColor', obj.stroke);
+                        } else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                            store.setToolSetting('select', 'strokeColor', obj.fill);
+                        }
                     }
                 } else {
-                    if (obj.stroke) store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                    if (obj.stroke) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                        store.setToolSetting('select', 'strokeColor', obj.stroke);
+                    }
                     if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
                         store.setToolSetting(targetTool, 'fillColor', obj.fill);
+                        store.setToolSetting('select', 'fillColor', obj.fill);
                     }
                 }
                 
-                if (obj.strokeWidth) store.setToolSetting(targetTool, 'strokeWidth', obj.strokeWidth);
-                if (obj.fontSize) store.setToolSetting(targetTool, 'fontSize', obj.fontSize);
-                if (obj.opacity) store.setToolSetting(targetTool, 'opacity', obj.opacity);
-                if (obj.fontFamily) store.setToolSetting(targetTool, 'fontFamily', obj.fontFamily);
+                if (obj.strokeWidth) {
+                    store.setToolSetting(targetTool, 'strokeWidth', obj.strokeWidth);
+                    store.setToolSetting('select', 'strokeWidth', obj.strokeWidth);
+                }
+                if (obj.fontSize) {
+                    store.setToolSetting(targetTool, 'fontSize', obj.fontSize);
+                    store.setToolSetting('select', 'fontSize', obj.fontSize);
+                }
+                if (obj.opacity) {
+                    store.setToolSetting(targetTool, 'opacity', obj.opacity);
+                    store.setToolSetting('select', 'opacity', obj.opacity);
+                }
+                if (obj.fontFamily) {
+                    store.setToolSetting(targetTool, 'fontFamily', obj.fontFamily);
+                    store.setToolSetting('select', 'fontFamily', obj.fontFamily);
+                }
             }
         };
 
@@ -468,19 +493,13 @@ const EditorCanvas = ({
                                 changed = true;
                             }
                         } else {
-                            // Only force-apply stroke/fill from tool settings when using a drawing tool.
-                            // In select/pan mode, don't mutate the object — this prevents the bug where
-                            // ellipses/rects get filled with black or stale colors on re-selection.
-                            const isSelectMode = ['select', 'pan'].includes(store.activeTool);
-                            if (!isSelectMode) {
-                                if (activeObj.stroke !== undefined && currentSettings.strokeColor !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
-                                    activeObj.set('stroke', currentSettings.strokeColor);
-                                    changed = true;
-                                }
-                                if (activeObj.fill !== undefined && currentSettings.fillColor !== undefined && activeObj.fill !== currentSettings.fillColor) {
-                                    activeObj.set('fill', currentSettings.fillColor);
-                                    changed = true;
-                                }
+                            if (activeObj.stroke !== undefined && currentSettings.strokeColor !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
+                                activeObj.set('stroke', currentSettings.strokeColor);
+                                changed = true;
+                            }
+                            if (activeObj.fill !== undefined && currentSettings.fillColor !== undefined && activeObj.fill !== currentSettings.fillColor) {
+                                activeObj.set('fill', currentSettings.fillColor);
+                                changed = true;
                             }
                         }
                     } else {
