@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 title Auto Update and Run
 color 0A
 
-set "ProjectPath=D:\00_system\EngineerSystem"
+set "ProjectPath=%~dp0"
 set "HealthCheckUrl=http://localhost:2005/api/health"
 set "HealthCheckTimeout=60"
 set "HealthCheckInterval=5"

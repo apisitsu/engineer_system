@@ -24,8 +24,15 @@ exports.triggerUpdate = async (req, res) => {
         const scriptPath = path.resolve(__dirname, '../../../../auto_update_and_run.cmd');
         const cwdPath = path.resolve(__dirname, '../../../../');
         
-        // Spawn the batch file detached so it can kill the node process without getting killed itself
-        const child = spawn('cmd.exe', ['/c', scriptPath], {
+        // Spawn the batch file using PowerShell's Start-Process to break the process tree chain.
+        // This prevents the batch file from committing suicide when it runs `taskkill /T` on the Node.js server.
+        const child = spawn('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            `Start-Process cmd.exe -ArgumentList '/c', '""${scriptPath}""' -WindowStyle Hidden`
+        ], {
             detached: true,
             stdio: 'ignore',
             cwd: cwdPath
