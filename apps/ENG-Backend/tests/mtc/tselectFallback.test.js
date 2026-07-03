@@ -84,6 +84,44 @@ describe('tselectToolsForMachine', () => {
       expect(out).toEqual([{ tooling_name: '4030-01_COLLET', tooling_no: '4030-01-1002', isSimilar: true }]);
     });
   });
+
+  // The empty-slot SDS PDF fill: when a factory Tool No is blank, T-Select supplies one.
+  // A dimensionally-similar PRODUCED part's actual tool (similarRef) must WIN over the raw
+  // closest dimensional inventory match (matches[0] = "T-Select #1"). Regression guard for
+  // the reported bug "PDF still uses T-Select #1 even though a similar part was detected".
+  describe('similarRef preference (SDS PDF empty-slot fill)', () => {
+    const WITH_SIMILAR_REF = {
+      success: true,
+      spec: { process: '' },
+      results: [
+        { machine: 'KS-03A', tooling: 'CPX SHOE',
+          matches: [{ tooling_no: '4559-40-0024' }],          // T-Select #1 (raw dimensional)
+          similarRef: { tool_dwg_no: '4559-40-0056', source: 'factory' } }, // produced-twin tool
+      ],
+    };
+
+    it('prefers similarRef over matches[0] when includeSimilar is set', () => {
+      const out = fallback.tselectToolsForMachine(WITH_SIMILAR_REF, new Set(['KS-03A']), { includeSimilar: true });
+      expect(out).toEqual([{ tooling_name: 'CPX SHOE', tooling_no: '4559-40-0056', isSimilar: true }]);
+    });
+
+    it('falls back to matches[0] when includeSimilar is set but there is no similarRef', () => {
+      const noRef = { ...WITH_SIMILAR_REF, results: [{ ...WITH_SIMILAR_REF.results[0], similarRef: undefined }] };
+      const out = fallback.tselectToolsForMachine(noRef, new Set(['KS-03A']), { includeSimilar: true });
+      expect(out).toEqual([{ tooling_name: 'CPX SHOE', tooling_no: '4559-40-0024', isSimilar: false }]);
+    });
+
+    it('ignores similarRef without includeSimilar (coverage report stays confirmed-only)', () => {
+      const out = fallback.tselectToolsForMachine(WITH_SIMILAR_REF, new Set(['KS-03A']));
+      expect(out).toEqual([{ tooling_name: 'CPX SHOE', tooling_no: '4559-40-0024', isSimilar: false }]);
+    });
+
+    it('ignores a similarRef that has no tool_dwg_no (guards against a partial ref row)', () => {
+      const emptyRef = { ...WITH_SIMILAR_REF, results: [{ ...WITH_SIMILAR_REF.results[0], similarRef: { source: 'factory' } }] };
+      const out = fallback.tselectToolsForMachine(emptyRef, new Set(['KS-03A']), { includeSimilar: true });
+      expect(out).toEqual([{ tooling_name: 'CPX SHOE', tooling_no: '4559-40-0024', isSimilar: false }]);
+    });
+  });
 });
 
 describe('safeSearch caching', () => {

@@ -4,6 +4,7 @@ const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
+const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 // SDS coverage-report config is part of the SDS admin surface.
@@ -547,6 +548,50 @@ async function buildCoverage() {
       }
     }
 
+    // ── Limit-excluded-but-produced anomalies ─────────────────────────────────
+    // A CN may appear in production on a machine whose Tooling Select size LIMIT
+    // (tooling_machine_limit) says the part cannot physically run there — a data
+    // anomaly (wrong limit, or an odd production record). Such (CN × machine)
+    // rows must NOT be counted in coverage. Uses the same limit check as T-Select
+    // (searchService.limitExcludedMachines) — cheap: spec context + in-memory
+    // limit cache, no inventory search. Runs for EVERY spec'd CN (not just the
+    // unmatched ones searched above) since a produced-there part is often matched.
+    const needLimit = new Map(); // report cn → spec cn
+    for (const r of evaluated) {
+      if (!r.machine_type_name) continue;
+      const sc = toSpecCn(r.cn);
+      if (sc && specCnSet.has(sc)) needLimit.set(r.cn, sc);
+    }
+    const limitExcludedByCn = new Map(); // report cn → Set<displayName>
+    const limitEntries = [...needLimit.entries()];
+    for (let i = 0; i < limitEntries.length; i += TS_CONCURRENCY) {
+      const batch = limitEntries.slice(i, i + TS_CONCURRENCY);
+      await Promise.all(batch.map(async ([cn, sc]) => {
+        try {
+          const ex = await searchService.limitExcludedMachines(sc);
+          if (ex && ex.size) limitExcludedByCn.set(cn, ex);
+        } catch (_) { /* fail-open: cannot judge → keep the row */ }
+      }));
+    }
+    // A row is a limit anomaly when its machine (rep name OR its group label — the
+    // form searchService emits) is in the CN's excluded set. Fail-open otherwise.
+    const isLimitExcluded = (r) => {
+      const ex = limitExcludedByCn.get(r.cn);
+      if (!ex || !r.machine_type_name) return false;
+      if (ex.has(r.machine_type_name)) return true;
+      const g = nameToGroup[r.machine_type_name];
+      return g ? ex.has(g) : false;
+    };
+    // COUNT-BACK (2026-07-02): previously these produced-but-limit-excluded rows were
+    // SPLICED OUT of `evaluated` (dropped from every count). They are now KEPT in the
+    // count and instead FLAGGED (`limit_excluded`) so the UI can highlight them red —
+    // matching the SDS page's red anomaly badge. limitExcludedCount stays as an
+    // informational KPI. The row still classifies normally (usually PENDING) and so
+    // shows up in `needsAttention` with the red flag riding along.
+    const limitExcludedRows = evaluated.filter(isLimitExcluded);
+    for (const r of limitExcludedRows) r.limit_excluded = true;
+    const limitExcludedCount = limitExcludedRows.length;
+
     // ── Stamp (approval) status — computed BEFORE coverage so COMPLETE can require
     // a FULL stamp (prepared+checked+approved). A stamp is keyed (cn, machine,
     // process); align to the group rep (repOf) so a stamp under any group member
@@ -758,6 +803,9 @@ async function buildCoverage() {
         toolImageCount:     toolImagesRes.rows.length,
         grindingImageCount: parseInt(grindingImagesRes.rows[0].cnt, 10),
         machineCodeMapped:  machineCodesRes.rows.length,
+        // Produced-but-size-limit-excluded (CN × machine) rows. Now COUNTED IN the
+        // totals (flagged limit_excluded for the red UI highlight), not dropped.
+        limitExcluded:      limitExcludedCount,
       },
       byPartType,
       monthlyTrend,
@@ -994,3 +1042,4 @@ setTimeout(() => {
 module.exports = router;
 module.exports.invalidateCoverageCache = invalidateCoverageCache;
 module.exports.classifyCoverage = classifyCoverage;
+module.exports.buildCoverage = buildCoverage; // exposed for tests / CLI verification

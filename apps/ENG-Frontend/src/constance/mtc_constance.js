@@ -11,6 +11,8 @@ export const MTC_PATHS = {
   TOOLING_SELECT: '/eng/mtc_eng/tooling-select',
   TOOLING_MANAGEMENT: '/eng/mtc_eng/tooling-management',
   TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
+  PART_MANAGEMENT: '/eng/mtc_eng/part-management',
+  CN_ENABLE: '/eng/mtc_eng/cn-enable',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
   SDS_TEMPLATE_CONFIG: '/eng/mtc_eng/sds-v2/template-config',
