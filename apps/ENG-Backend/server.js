@@ -469,6 +469,7 @@ app.post('/api/system/settings', requireSystemEngineer, settingsModel.updateSett
 
 const updateLogController = require('./api/system/updateLogController');
 app.get('/api/system/update-logs', requireSystemEngineer, updateLogController.getUpdateLogs);
+app.post('/api/system/trigger-update', requireSystemEngineer, updateLogController.triggerUpdate);
 
 //--------------------Activity Tracking (User Activity & Session Logs)---------------------//
 const activityController = require('./api/system/activityController');
