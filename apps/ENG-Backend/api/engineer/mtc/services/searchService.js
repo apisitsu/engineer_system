@@ -163,6 +163,42 @@ async function checkMachineLimits(machineId, ctx) {
   return { ok: true };
 }
 
+/**
+ * Machines a CN is size-limit EXCLUDED from (tooling_machine_limit fails) — i.e.
+ * the part physically can't run on them. Lightweight: reuses the same spec context
+ * + limit check as search() but SKIPS all inventory searches. Grouped machines are
+ * deduped to the group name (mirrors search()'s displayName), so the returned Set
+ * matches the `warnings[].machine` values the user-facing search emits.
+ *
+ * @returns Set<displayName> of excluded machines, or null when the CN has no spec
+ *          row (caller fails open — eligibility is unknowable without dimensions).
+ */
+async function limitExcludedMachines(cn) {
+  const specCn = normalizeSpecCn(cn);
+  const specRes = await engPool.query(
+    `SELECT * FROM ${TSV2_TABLES.SPEC_PROCESS} WHERE cn = $1 LIMIT 1`,
+    [specCn]
+  );
+  if (!specRes.rows.length) return null;
+  const specCtx = buildSpecContext(specRes.rows[0]);
+  const machines = await configCache.getMachines();
+  const seenGroups = new Set();
+  const excluded = new Set();
+  for (const m of machines) {
+    // one check per group (first member holds the shared limits — matches search())
+    if (m.machine_group) {
+      if (seenGroups.has(m.machine_group)) continue;
+      seenGroups.add(m.machine_group);
+    }
+    const displayName = m.machine_group || m.machine_name;
+    try {
+      const lc = await checkMachineLimits(m.id, specCtx);
+      if (!lc.ok) excluded.add(displayName);
+    } catch (_) { /* per-machine fail-open */ }
+  }
+  return excluded;
+}
+
 // ── Inventory Table Validation ───────────────────────────────────────────────
 
 const _validatedTables = new Set();
@@ -745,7 +781,10 @@ async function search(cn, opts = {}) {
     try {
       const limitCheck = await checkMachineLimits(machine.id, specCtx);
       if (!limitCheck.ok) {
-        warnings.push({ machine: displayName, reason: limitCheck.reason });
+        // type:'limit' distinguishes a size-limit exclusion (part can't run on this
+        // machine) from formula/error warnings — consumers (SDS Production-History
+        // red badge, coverage report anomaly filter) key on it.
+        warnings.push({ machine: displayName, reason: limitCheck.reason, type: 'limit' });
         return;
       }
       const toolingNames = await configCache.getToolingNames(machine.id);
@@ -836,7 +875,7 @@ function _clearCaches() {
   configCache.flush();
 }
 
-module.exports = { search, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };
+module.exports = { search, limitExcludedMachines, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };
 // Exported for unit testing the NULL-safety guard + distance cap of the
 // informational "Similar" reference column (tests/mtc/searchSimilarRef.test.js).
 module.exports._attachSimilarRefFromPartnoMap = _attachSimilarRefFromPartnoMap;

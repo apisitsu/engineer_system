@@ -10,6 +10,7 @@ const tselectFallback = require('../services/tselectFallback');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
+const cnFormat = require('../utils/cnFormat');
 const { getApprovalSeals } = require('./sdsApprovalController');
 
 // Approval-stamp param keys → role. The seal image comes from the sds_approval
@@ -305,7 +306,9 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     for (const t of legacy) placeTool(null, { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
   }
 
-  const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn) : null;
+  // withSimilarRef so buildValueMap can prefer a dimensionally-similar produced part's
+  // tool (similarRef) over the raw dimensional match when filling an empty slot.
+  const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn, { withSimilarRef: true }) : null;
   if (tsResult) {
     const acceptable = new Set([machine_type_name]);
     if (machineGroup) acceptable.add(machineGroup);
@@ -510,11 +513,18 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   }
   map['tooling'] = finalTools;
 
+  // Per-CN override must win over the machine default. `searchData.cn` is control-no
+  // form (e.g. C32-00641), but the admin Excel-Config UI may store the override cn in
+  // item-no form (e.g. 320641) — so match BOTH forms, else the override silently never
+  // matches and the PDF falls back to the machine default. Ordered so cn IS NULL
+  // (default) is applied first and the cn-specific override overwrites it last.
+  const cnCtrl = searchData.cn;                               // control-no: C32-00641
+  const cnItem = cnFormat.toItemNo(searchData.cn) || cnCtrl;  // item-no:    320641
   const paramRows = await engPool.query(
     `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
-     WHERE machine_type_name = $2 AND (cn IS NULL OR cn = $1)
+     WHERE machine_type_name = $3 AND (cn IS NULL OR cn = $1 OR cn = $2)
      ORDER BY (cn IS NULL) DESC`,
-    [searchData.cn, machine_type_name]
+    [cnCtrl, cnItem, machine_type_name]
   );
   const rawParams = {};
   paramRows.rows.forEach(r => { rawParams[r.param_key] = r.param_value || ''; });

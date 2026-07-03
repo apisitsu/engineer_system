@@ -24,8 +24,11 @@ const MACHINE = {
   inventory_machine_filter: null, machine_group: null,
 };
 
+// Work envelope per DIMENSION sheet A2–A4 (対応ワークサイズ): ID φ14–38.125, OD φ26–59.531.
+// (The WORK sheet has stray OD→64/ID→3 rows = unrelated legacy KS-400B data, not the envelope.)
 const LIMITS = [
-  { input_var: 'OD', min_value: 24, max_value: 62, min_inclusive: true, max_inclusive: true },
+  { input_var: 'ID', min_value: 14, max_value: 38.125, min_inclusive: true, max_inclusive: true },
+  { input_var: 'OD', min_value: 26, max_value: 59.531, min_inclusive: true, max_inclusive: true },
 ];
 
 const FORMULAS = {

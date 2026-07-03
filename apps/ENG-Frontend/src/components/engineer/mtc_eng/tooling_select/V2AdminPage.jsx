@@ -13,7 +13,6 @@ import V2LimitManager from './V2LimitManager';
 import V2FormulaManager from './V2FormulaManager';
 import V2SearchRuleManager from './V2SearchRuleManager';
 import V2InventoryManager from './V2InventoryManager';
-import SpecProcessManager from './SpecProcessManager';
 import V2FormulaErrorLog from './V2FormulaErrorLog';
 import PartNoMapManager from './PartNoMapManager';
 
@@ -87,11 +86,8 @@ export default function V2AdminPage() {
               <V2MachineManager token={token} onMachineSelect={(m) => setSelectedMachine(m)} />
             ),
           },
-          {
-            key: 'spec',
-            label: 'Part Management',
-            children: <SpecProcessManager embedded />,
-          },
+          // 'Part Management' (SpecProcessManager) moved to its own sidebar page
+          // under the Master Data menu — see MTC_PATHS.PART_MANAGEMENT
           {
             key: 'partno-map',
             label: 'Part No → Tool',

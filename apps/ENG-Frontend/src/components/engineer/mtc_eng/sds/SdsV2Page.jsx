@@ -860,19 +860,42 @@ const SdsV2Page = () => {
     const historyMachines = (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
       .filter(h => h.machine_type_code);
 
+    // Machines this CN is size-limit EXCLUDED from in Tooling Select (the part's
+    // dims fall outside tooling_machine_limit → it physically can't run there).
+    // A production-history machine that is ALSO limit-excluded is an anomaly
+    // (produced on a machine the part shouldn't fit) → flagged with a red badge.
+    const limitExcludedCanon = new Set(
+      (tsData?.warnings || [])
+        .filter(w => w.type === 'limit')
+        .map(w => canonMachine(resolveMachine((w.machine || '').trim())))
+        .filter(Boolean)
+    );
+    const isHistLimitExcluded = (h) => limitExcludedCanon.has(canonMachine((h.machine_name || '').trim()));
+
     return (
       <div style={{ padding: '8px', background: '#f9f9f9', borderRadius: '4px' }}>
         {historyMachines.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <Text strong style={{ fontSize: 12, marginRight: 8 }}>Production History:</Text>
             <Space size={[4, 4]} wrap>
-              {historyMachines.map((h, i) => (
-                <Tag key={i} color="purple" style={{ margin: 0 }}
-                  title={`${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`}>
-                  {h.machine_name}
-                  <Text style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>{h.production_count}</Text>
-                </Tag>
-              ))}
+              {historyMachines.map((h, i) => {
+                const excluded = isHistLimitExcluded(h);
+                const lots = `${h.production_count} lots${h.last_date ? ` · last ${new Date(h.last_date).toLocaleDateString('th-TH-u-ca-gregory')}` : ''}`;
+                return (
+                  <Tooltip key={i} title={excluded
+                    ? `⚠ ผลิตบนเครื่องนี้ ${lots} — แต่ Tooling Select LIMIT ระบุว่าชิ้นงานเกินพิกัดของเครื่อง (ขึ้นเครื่องไม่ได้). ตรวจสอบ machine limit หรือข้อมูลการผลิต`
+                    : lots}>
+                    <Tag
+                      color={excluded ? 'error' : 'purple'}
+                      icon={excluded ? <WarningOutlined /> : null}
+                      style={{ margin: 0, ...(excluded ? { fontWeight: 700 } : {}) }}
+                    >
+                      {h.machine_name}
+                      <Text style={{ fontSize: 10, marginLeft: 4, ...(excluded ? { color: '#a8071a', fontWeight: 700 } : { opacity: 0.7 }) }}>{h.production_count}</Text>
+                    </Tag>
+                  </Tooltip>
+                );
+              })}
             </Space>
           </div>
         )}
