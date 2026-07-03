@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
-import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
@@ -331,7 +331,11 @@ export default function SdsCoverageDashboard() {
       {
         type: 'line',
         label: 'Complete % (KZW+THAI)',
-        data: monthlyStatus.map(r => r.complete_pct),
+        // Cut the line at the last month that actually has data (null → no point),
+        // so it stops at the latest month instead of diving to 0% across empty
+        // future months — same behaviour as the Inspection "Monthly Trend — FYE" line.
+        data: monthlyStatus.map(r => ((r.complete || 0) + (r.pending || 0)) > 0 ? r.complete_pct : null),
+        spanGaps: true,
         borderColor: C.orange,
         backgroundColor: 'rgba(250,140,22,0.15)',
         borderWidth: 2,
@@ -493,6 +497,11 @@ export default function SdsCoverageDashboard() {
             <Tag color={r.has_tooling_match ? 'success' : 'error'} style={{ fontSize: 10 }}>Tooling Match</Tag>
           )}
           <Tag color={r.has_machine_template ? 'success' : 'error'} style={{ fontSize: 10 }}>Excel Config</Tag>
+          {r.limit_excluded && (
+            <Tooltip title="ผลิตบนเครื่องนี้จริง แต่ Tooling Select LIMIT ระบุว่าชิ้นงานเกินพิกัดของเครื่อง (ขึ้นเครื่องไม่ได้) — ตรวจสอบ machine limit หรือข้อมูลการผลิต">
+              <Tag color="error" icon={<WarningOutlined />} style={{ fontSize: 10, fontWeight: 700 }}>Limit Anomaly</Tag>
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -667,7 +676,7 @@ export default function SdsCoverageDashboard() {
                 pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
                 scroll={{ x: 'max-content' }}
                 style={{ background: C.bg }}
-                rowClassName={() => 'sds-report-row'}
+                rowClassName={(r) => r.limit_excluded ? 'sds-report-row sds-limit-excluded' : 'sds-report-row'}
               />
             </div>
 
@@ -678,6 +687,8 @@ export default function SdsCoverageDashboard() {
       <style>{`
         .sds-report-row td { background: ${C.bg} !important; color: ${C.textPri}; }
         .sds-report-row:hover td { background: ${C.card} !important; }
+        .sds-limit-excluded td { background: rgba(255,77,79,0.12) !important; box-shadow: inset 3px 0 0 #ff4d4f; }
+        .sds-limit-excluded:hover td { background: rgba(255,77,79,0.20) !important; }
         .ant-table-thead > tr > th { background: ${C.card} !important; color: ${C.textSec} !important; border-bottom: 1px solid ${C.border} !important; font-size: 11px; }
         .ant-table { background: ${C.bg} !important; }
         .ant-table-tbody > tr > td { border-bottom: 1px solid ${C.border} !important; }
