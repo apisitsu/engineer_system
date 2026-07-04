@@ -111,7 +111,7 @@ async function searchByCn(cn, maqPool, rodpcPool) {
       LEFT JOIN ${TABLES.LPB_ENG_TOOLING} tl ON tl.tool_dwg_no = t.tool_dwg_no
       WHERE t.process_plan_no = $1 OR t.process_plan_no IN (SELECT process_plan_no FROM ${TABLES.LPB_ENG_R_PI_ITEM} WHERE control_no = $1)
     `, [cnUpper]),
-    maqPool.query(`SELECT parts_no, gnk, remark FROM ${TABLES.LPB_ENG_ITEM} WHERE control_no = $1 LIMIT 1`, [cnUpper]),
+    maqPool.query(`SELECT parts_no, parts_name, gnk, remark FROM ${TABLES.LPB_ENG_ITEM} WHERE control_no = $1 LIMIT 1`, [cnUpper]),
     maqPool.query(`SELECT draw_rev_0 AS dwg_rev FROM ${TABLES.LPB_ENG_CAD_REV_DATA} WHERE drawing_no = $1 LIMIT 1`, [`${cnUpper}_1`]),
     maqPool.query(`
       SELECT seq_no, process_seqno, rev, process_code, wc, ct, st, batch_size
@@ -185,6 +185,10 @@ async function searchByCn(cn, maqPool, rodpcPool) {
     part_type: partInfo.type,
     part_info: partTypeResult.rows[0] || null,
     parts_no: itemData?.parts_no || null,
+    // Per-CN specific part name from eng_item (e.g. "OUTER RING"); the SDS page header
+    // prefers this over part_info.sub_class_name ("Others"). Blank for ~52% of items,
+    // so the frontend falls back to sub_class_name when this is empty.
+    parts_name: (itemData?.parts_name && itemData.parts_name.trim()) ? itemData.parts_name.trim() : null,
     dwg_rev: /^[A-Z]$/i.test(cadRevResult.rows[0]?.dwg_rev?.trim())
       ? cadRevResult.rows[0].dwg_rev.trim().toUpperCase() : 'NC',
     material: finalMaterial,

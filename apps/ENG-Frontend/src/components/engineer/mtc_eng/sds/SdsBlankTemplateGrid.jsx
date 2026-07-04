@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Button, Space, Popover, Select, Tooltip, App, InputNumber, Divider, Typography,
-  Segmented, Slider, Switch,
+  Segmented, Slider, Switch, Modal, Input, Popconfirm, Tag,
 } from 'antd';
 import {
   BorderOutlined, BorderTopOutlined, BorderBottomOutlined, BorderLeftOutlined,
@@ -11,6 +11,7 @@ import {
   BoldOutlined, ItalicOutlined, FontColorsOutlined, UndoOutlined, RedoOutlined,
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined,
+  PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, StarFilled, StarOutlined,
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -127,6 +128,11 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Multi-template: the list + the currently-edited template. templateId === null means
+  // the legacy single-layout fallback (no sds_grid_template rows on this DB yet).
+  const [templates, setTemplates] = useState([]);
+  const [templateId, setTemplateId] = useState(null);
+  const [nameModal, setNameModal] = useState(null); // { mode:'new'|'duplicate'|'rename', name, targetId }
   const dragging = useRef(false);
   const resizing = useRef(false);
 
@@ -186,20 +192,45 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   };
   const pushUndoRef = useRef(pushUndo); pushUndoRef.current = pushUndo;
 
-  const load = useCallback(async () => {
+  // Load one template's grid (id) into the editor. id === null → legacy single-layout
+  // fallback (singular endpoint, then xlsx) for a DB without sds_grid_template rows.
+  const loadTemplate = useCallback(async (id) => {
     setLoading(true);
     try {
+      if (id) {
+        const r = await axios.get(`${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${id}`);
+        if (r.data?.grid && typeof r.data.grid === 'object') { applyGrid(r.data.grid); return; }
+      }
       const r = await axios.get(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID);
-      if (r.data?.grid && typeof r.data.grid === 'object') {
-        applyGrid(r.data.grid);
-      } else {
+      if (r.data?.grid && typeof r.data.grid === 'object') applyGrid(r.data.grid);
+      else {
         const x = await axios.get(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX);
         if (x.data?.grid) applyGrid(x.data.grid);
       }
     } catch (_) { /* start blank */ } finally { setLoading(false); }
   }, [applyGrid]);
 
-  useEffect(() => { load(); }, [load]);
+  // Fetch the template list, pick one (given id, else the default, else first), load it.
+  const loadTemplates = useCallback(async (selectId) => {
+    try {
+      const r = await axios.get(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS);
+      const list = Array.isArray(r.data) ? r.data : [];
+      setTemplates(list);
+      const pick = selectId != null ? list.find(t => t.id === selectId)
+        : (list.find(t => t.is_default) || list[0]);
+      const pickId = pick ? pick.id : null;
+      setTemplateId(pickId);
+      await loadTemplate(pickId);
+    } catch (_) {
+      setTemplates([]); setTemplateId(null);
+      await loadTemplate(null);
+    }
+  }, [loadTemplate]);
+
+  // Reload the currently-selected template (Reload button).
+  const load = useCallback(() => loadTemplate(templateId), [loadTemplate, templateId]);
+
+  useEffect(() => { loadTemplates(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const importXlsx = async () => {
     setLoading(true);
@@ -214,7 +245,12 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   const save = async () => {
     setSaving(true);
     try {
-      await axios.put(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID, { grid: { rows, cols, colW, rowH, borders, fills, cells, merges } });
+      const grid = { rows, cols, colW, rowH, borders, fills, cells, merges };
+      if (templateId) {
+        await axios.put(`${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${templateId}`, { grid });
+      } else {
+        await axios.put(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID, { grid });
+      }
       message.success('Saved grid layout');
       return true;
     } catch (err) {
@@ -227,9 +263,61 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
     const win = window.open('', '_blank');
     const ok = await save();
     const token = localStorage.getItem('token') || '';
-    if (ok && win) win.location.href = `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}`;
+    // Preview THIS template (not necessarily the default) by passing its id.
+    const tp = templateId ? `&template_id=${templateId}` : '';
+    if (ok && win) win.location.href = `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}${tp}`;
     else if (win) win.close();
   };
+
+  // ── Template management ──────────────────────────────────────────────────────
+  const switchTemplate = async (id) => { setTemplateId(id); await loadTemplate(id); };
+
+  const submitNameModal = async () => {
+    const nm = (nameModal?.name || '').trim();
+    if (!nm) { message.warning('Enter a template name'); return; }
+    try {
+      if (nameModal.mode === 'rename') {
+        await axios.put(`${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${nameModal.targetId}`, { name: nm });
+        message.success('Renamed');
+        await loadTemplates(nameModal.targetId);
+      } else {
+        // new = copy the current default; duplicate = copy the current editor's saved grid
+        const body = nameModal.mode === 'duplicate'
+          ? { name: nm, grid: { rows, cols, colW, rowH, borders, fills, cells, merges } }
+          : { name: nm, copyFromId: templateId };
+        const r = await axios.post(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS, body);
+        message.success('Template created');
+        await loadTemplates(r.data?.id);
+      }
+      setNameModal(null);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed');
+    }
+  };
+
+  const setDefaultTemplate = async () => {
+    if (!templateId) return;
+    try {
+      await axios.put(`${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${templateId}/default`);
+      message.success('Set as default template');
+      await loadTemplates(templateId);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed');
+    }
+  };
+
+  const deleteTemplate = async () => {
+    if (!templateId) return;
+    try {
+      await axios.delete(`${server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS}/${templateId}`);
+      message.success('Template deleted');
+      await loadTemplates();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed');
+    }
+  };
+
+  const currentTpl = templates.find(t => t.id === templateId);
 
   // ── Stable selection callbacks ────────────────────────────────────────────────
   const onDown = useCallback((r, c, shift) => {
@@ -653,6 +741,68 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   return (
     <div onKeyDown={onKeyDown} tabIndex={0} style={{ outline: 'none' }}>
+
+      {/* Template selector */}
+      <Space wrap size={4} style={{ marginBottom: 8 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>Template</Text>
+        <Select
+          size="small"
+          style={{ minWidth: 220 }}
+          value={templateId ?? undefined}
+          placeholder={templates.length ? 'Select template' : 'Legacy single layout'}
+          disabled={!templates.length}
+          onChange={switchTemplate}
+          options={templates.map(t => ({
+            value: t.id,
+            label: `${t.name}${t.is_default ? ' ★' : ''}${t.assigned_count > 0 ? ` (${t.assigned_count})` : ''}`,
+          }))}
+        />
+        {currentTpl?.is_default && <Tag color="gold" icon={<StarFilled />}>Default</Tag>}
+        <Tooltip title="New template (copies the currently-selected template's saved layout)">
+          <Button size="small" icon={<PlusOutlined />} onClick={() => setNameModal({ mode: 'new', name: '' })}>New</Button>
+        </Tooltip>
+        <Tooltip title="Duplicate — save the current editor layout as a new template">
+          <Button size="small" icon={<CopyOutlined />} disabled={!templateId}
+            onClick={() => setNameModal({ mode: 'duplicate', name: (currentTpl?.name || 'Template') + ' copy' })}>Duplicate</Button>
+        </Tooltip>
+        <Tooltip title="Rename this template">
+          <Button size="small" icon={<EditOutlined />} disabled={!templateId}
+            onClick={() => setNameModal({ mode: 'rename', name: currentTpl?.name || '', targetId: templateId })}>Rename</Button>
+        </Tooltip>
+        <Tooltip title="Make this the default template (used when a machine has none assigned)">
+          <Button size="small" icon={currentTpl?.is_default ? <StarFilled /> : <StarOutlined />}
+            disabled={!templateId || currentTpl?.is_default} onClick={setDefaultTemplate}>Set default</Button>
+        </Tooltip>
+        <Popconfirm
+          title="Delete this template?"
+          description="Machines assigned to it fall back to the default."
+          onConfirm={deleteTemplate}
+          okText="Delete" okButtonProps={{ danger: true }}
+          disabled={!templateId || currentTpl?.is_default}
+        >
+          <Tooltip title={currentTpl?.is_default ? 'Cannot delete the default template' : 'Delete this template'}>
+            <Button size="small" danger icon={<DeleteOutlined />} disabled={!templateId || currentTpl?.is_default} />
+          </Tooltip>
+        </Popconfirm>
+      </Space>
+
+      <Modal
+        title={nameModal?.mode === 'rename' ? 'Rename template'
+          : nameModal?.mode === 'duplicate' ? 'Duplicate template' : 'New template'}
+        open={!!nameModal}
+        onOk={submitNameModal}
+        onCancel={() => setNameModal(null)}
+        okText="Save"
+        destroyOnHidden
+      >
+        <Input
+          autoFocus
+          placeholder="Template name"
+          value={nameModal?.name || ''}
+          onChange={(e) => setNameModal(m => ({ ...m, name: e.target.value }))}
+          onPressEnter={submitNameModal}
+        />
+      </Modal>
 
       {/* Font toolbar */}
       <Space wrap size={4} style={{ marginBottom: 8 }}>

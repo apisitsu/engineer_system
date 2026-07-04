@@ -1017,7 +1017,7 @@ const SdsV2Page = () => {
                         {data.part_info && (
                           <Col>
                             <Text type="secondary">
-                              {data.part_info.class1_name} — {data.part_info.sub_class_name}
+                              {data.part_info.class1_name} — {data.parts_name || data.part_info.sub_class_name}
                             </Text>
                           </Col>
                         )}

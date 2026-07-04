@@ -251,8 +251,11 @@ export default function InspectionResultDashboard() {
     const monthlyChartOpts = {
         responsive: true,
         maintainAspectRatio: false,
+        // Legend at the BOTTOM so the 'top'-aligned % On Time datalabels on the near-100%
+        // line never collide with it; top padding + axis headroom keep the 100% label visible.
+        layout: { padding: { top: 24 } },
         plugins: {
-            legend: { labels: { color: C.textPri, font: { size: 11 } } },
+            legend: { position: 'bottom', labels: { color: C.textPri, font: { size: 11 }, boxWidth: 12, padding: 12 } },
             datalabels: { display: false },
             tooltip: {
                 mode: 'index',
@@ -281,11 +284,14 @@ export default function InspectionResultDashboard() {
                 type: 'linear',
                 position: 'right',
                 min: 0,
-                max: 100,
+                // Headroom above 100 so a 100% point sits below the top edge and its
+                // 'top'-aligned datalabel stays inside the canvas; ticks over 100 hidden.
+                max: 115,
                 ticks: {
                     color: C.yellow,
                     font: { size: 10 },
-                    callback: (v) => `${v}%`
+                    stepSize: 20,
+                    callback: (v) => (v > 100 ? '' : `${v}%`)
                 },
                 grid: { drawOnChartArea: false }
             }

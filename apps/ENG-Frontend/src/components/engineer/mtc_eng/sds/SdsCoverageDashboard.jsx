@@ -61,9 +61,10 @@ const cardStyle = {
 
 // Tooltip body for the orange gap tags: top 2 (machine / process) with the largest
 // gap (lowest coverage) — i.e. configure these first to gain the most completes.
-const gapTooltip = (gaps, heading) => {
+// `note` (optional) prints a clarifying footer, e.g. how the count maps to the table filter.
+const gapTooltip = (gaps, heading, note) => {
   const list = (gaps || []).slice(0, 2);
-  if (!list.length) return heading;
+  if (!list.length && !note) return heading;
   return (
     <div style={{ fontSize: 11 }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{heading}</div>
@@ -72,9 +73,15 @@ const gapTooltip = (gaps, heading) => {
           {i + 1}. {g.machine} / {g.process} — <b>{g.count.toLocaleString()}</b>
         </div>
       ))}
+      {note && <div style={{ marginTop: 6, opacity: 0.85, whiteSpace: 'normal', maxWidth: 260 }}>{note}</div>}
     </div>
   );
 };
+
+// Shared clarifier for the "no tool match" badges — the count aggregates BOTH pending
+// reasons, so no single reason filter in the table reproduces it (filter by part-type
+// only, with no reason, to list exactly these rows).
+const NO_TOOL_MATCH_NOTE = 'Counts NO_TOOL + NO_TOOL_NO_EXCEL sheets (no tooling match, excludes “no fixture needed”). To see this exact list, filter the table by this Part Type only — not by a single Reason.';
 
 const sectionTitle = (label) => (
   <div style={{
@@ -117,7 +124,17 @@ const PartTypeCard = ({ pt }) => {
           <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(pt.cn_count ?? 0).toLocaleString()} Unique CNs</Text>
         </Tooltip>
       </div>
-      <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
+        <Tooltip title="Complete / Pending sheets">
+          <Text style={{ fontSize: 10, cursor: 'help' }}>
+            <span style={{ color: C.green, fontWeight: 700 }}>{(pt.complete ?? 0).toLocaleString()}</span>
+            <span style={{ color: C.textSec }}> comp / </span>
+            <span style={{ color: C.yellow, fontWeight: 700 }}>{(pt.pending ?? 0).toLocaleString()}</span>
+            <span style={{ color: C.textSec }}> pend</span>
+          </Text>
+        </Tooltip>
+      </div>
       {/* Two-tone bar: solid = KZW baseline, soft green = THAI Complete (T-Select #1 boost, * ) */}
       <Tooltip title={`KZW ${pctSaved}% + THAI ${(pct - pctSaved).toFixed(1)}% = ${pct}%`}>
         <div style={{ background: C.border, borderRadius: 3, height: 6, overflow: 'hidden', margin: '3px 0 2px', display: 'flex', cursor: 'help' }}>
@@ -140,8 +157,8 @@ const PartTypeCard = ({ pt }) => {
             <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
           </Tooltip>
         )}
-        <Tooltip title={gapTooltip(pt.gaps?.noToolMatch, 'Config tooling here → +complete')}>
-          <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.tool_match ?? 0)).toLocaleString()} no tool match</Tag>
+        <Tooltip title={gapTooltip(pt.gaps?.noToolMatch, 'Config tooling here → +complete', NO_TOOL_MATCH_NOTE)}>
+          <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.tool_match ?? 0) - (pt.tooling_not_required ?? 0)).toLocaleString()} no tool match</Tag>
         </Tooltip>
         <Tooltip title={gapTooltip(pt.gaps?.noExcelConfig, 'Add Excel config here → +complete')}>
           <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.excel_config ?? 0)).toLocaleString()} no excel config</Tag>
@@ -375,9 +392,12 @@ export default function SdsCoverageDashboard() {
   const statusChartOpts = {
     responsive: true, animation: false,
     maintainAspectRatio: false,
+    // Legend at the BOTTOM so the 'top'-aligned % datalabels on the near-100% Complete-%
+    // line never collide with it; top padding + axis headroom keep the 100% label visible.
+    layout: { padding: { top: 24 } },
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { labels: { color: C.textSec, font: { size: 11 } } },
+      legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
       datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
       tooltip: {
         callbacks: {
@@ -401,8 +421,10 @@ export default function SdsCoverageDashboard() {
       },
       y1: {
         position: 'right',
-        min: 0, max: 100,
-        ticks: { color: C.cyan, font: { size: 10 }, callback: v => `${v}%` },
+        // Headroom above 100 so a 100% point sits below the top edge and its 'top'-aligned
+        // datalabel stays inside the canvas; ticks over 100 hidden.
+        min: 0, max: 115,
+        ticks: { color: C.cyan, font: { size: 10 }, stepSize: 20, callback: v => (v > 100 ? '' : `${v}%`) },
         grid: { drawOnChartArea: false },
         title: { display: true, text: 'Complete %', color: C.cyan, font: { size: 10 } },
       },
@@ -590,6 +612,17 @@ export default function SdsCoverageDashboard() {
                         <Text style={{ color: C.textSec, fontSize: 10, cursor: 'help' }}>{(data?.kpi?.uniqueCnCount ?? 0).toLocaleString()} Unique CNs</Text>
                       </Tooltip>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <Text style={{ color: C.textSec, fontSize: 10 }}>PDF Ready</Text>
+                      <Tooltip title="Complete / Pending sheets">
+                        <Text style={{ fontSize: 10, cursor: 'help' }}>
+                          <span style={{ color: C.green, fontWeight: 700 }}>{(data?.kpi?.complete ?? 0).toLocaleString()}</span>
+                          <span style={{ color: C.textSec }}> comp / </span>
+                          <span style={{ color: C.yellow, fontWeight: 700 }}>{(data?.kpi?.pending ?? 0).toLocaleString()}</span>
+                          <span style={{ color: C.textSec }}> pend</span>
+                        </Text>
+                      </Tooltip>
+                    </div>
                     {(() => {
                       const pct = data?.kpi?.completePct ?? 0;
                       const pctSaved = data?.kpi?.completeSavedPct ?? pct;
@@ -614,9 +647,14 @@ export default function SdsCoverageDashboard() {
                           <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
-                      <Tooltip title={gapTooltip(data?.kpi?.gaps?.noToolMatch, 'Config tooling here → +complete')}>
-                        <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.toolMatch ?? 0)).toLocaleString()} no tool match</Tag>
+                      <Tooltip title={gapTooltip(data?.kpi?.gaps?.noToolMatch, 'Config tooling here → +complete', NO_TOOL_MATCH_NOTE)}>
+                        <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.toolMatch ?? 0) - (data?.kpi?.toolingNotRequired ?? 0)).toLocaleString()} no tool match</Tag>
                       </Tooltip>
+                      {(data?.kpi?.toolingNotRequired ?? 0) > 0 && (
+                        <Tooltip title="Surface-grind (magnetic-chuck) parts that need no fixture — counted as tooling-satisfied, not a gap">
+                          <Tag color="blue" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{(data?.kpi?.toolingNotRequired ?? 0).toLocaleString()} no tooling needed</Tag>
+                        </Tooltip>
+                      )}
                       <Tooltip title={gapTooltip(data?.kpi?.gaps?.noExcelConfig, 'Add Excel config here → +complete')}>
                         <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.excelConfig ?? 0)).toLocaleString()} no excel config</Tag>
                       </Tooltip>

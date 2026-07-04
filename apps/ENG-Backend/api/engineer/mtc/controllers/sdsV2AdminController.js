@@ -396,26 +396,31 @@ router.delete('/mappings/:id', isAdmin, flushSds, async (req, res) => {
  * cn=C31-01234     → per-record data
  */
 router.get('/parameters', async (req, res) => {
-  const { cn, machine_type_name } = req.query;
+  const { cn, machine_type_name, process_code } = req.query;
   if (!machine_type_name?.trim()) return res.status(400).json({ error: 'machine_type_name is required' });
   try {
     const isNull = !cn || cn === 'null';
     let result;
     if (isNull) {
+      // Machine-default rows are always process-agnostic (process_code IS NULL).
       result = await engPool.query(
         `SELECT id, machine_type_name, param_key, param_value, updated_by, updated_at
          FROM ${TABLES.SDS_PARAMETER}
-         WHERE cn IS NULL AND machine_type_name = $1
+         WHERE cn IS NULL AND machine_type_name = $1 AND process_code IS NULL
          ORDER BY param_key`,
         [machine_type_name.trim()]
       );
     } else {
+      // CN override — scoped to one process. Empty/absent process_code = the process-agnostic
+      // override (applies to every process of this CN, matching pre-migration rows).
+      // IS NOT DISTINCT FROM matches NULL↔NULL so both scopes load cleanly without mixing.
+      const pc = process_code && process_code !== 'null' ? String(process_code).trim() : null;
       result = await engPool.query(
-        `SELECT id, cn, machine_type_name, param_key, param_value, updated_by, updated_at
+        `SELECT id, cn, machine_type_name, param_key, param_value, process_code, updated_by, updated_at
          FROM ${TABLES.SDS_PARAMETER}
-         WHERE cn = $1 AND machine_type_name = $2
+         WHERE cn = $1 AND machine_type_name = $2 AND process_code IS NOT DISTINCT FROM $3
          ORDER BY param_key`,
-        [cn.trim(), machine_type_name.trim()]
+        [cn.trim(), machine_type_name.trim(), pc]
       );
     }
     res.json(result.rows);
@@ -430,21 +435,23 @@ router.get('/parameters', async (req, res) => {
  * cn null/omitted → machine config row
  */
 router.put('/parameters', isAdmin, flushSds, async (req, res) => {
-  const { cn, machine_type_name, param_key, param_value } = req.body;
+  const { cn, machine_type_name, param_key, param_value, process_code } = req.body;
   if (!machine_type_name?.trim() || !param_key?.trim()) {
     return res.status(400).json({ error: 'machine_type_name and param_key are required' });
   }
   const cnVal = cn && cn !== 'null' ? cn.trim() : null;
+  // Only CN overrides may pin a process_code; machine-default rows stay process-agnostic.
+  const pcVal = cnVal && process_code && process_code !== 'null' ? String(process_code).trim() : null;
   try {
     const result = await engPool.query(
-      `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, updated_by)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key)
+      `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, process_code, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
        DO UPDATE SET param_value = EXCLUDED.param_value,
                      updated_by  = EXCLUDED.updated_by,
                      updated_at  = NOW()
        RETURNING *`,
-      [cnVal, machine_type_name.trim(), param_key.trim(), param_value ?? null, req.user?.empno || null]
+      [cnVal, machine_type_name.trim(), param_key.trim(), param_value ?? null, pcVal, req.user?.empno || null]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -457,11 +464,13 @@ router.put('/parameters', isAdmin, flushSds, async (req, res) => {
  * Body: { cn, machine_type_name, params: [{ param_key, param_value }, ...] }
  */
 router.put('/parameters/bulk', isAdmin, flushSds, async (req, res) => {
-  const { cn, machine_type_name, params } = req.body;
+  const { cn, machine_type_name, params, process_code } = req.body;
   if (!machine_type_name?.trim()) return res.status(400).json({ error: 'machine_type_name is required' });
   if (!Array.isArray(params) || !params.length) return res.status(400).json({ error: 'params array is required' });
 
   const cnVal = cn && cn !== 'null' ? cn.trim() : null;
+  // Only CN overrides may pin a process_code; machine-default rows stay process-agnostic.
+  const pcVal = cnVal && process_code && process_code !== 'null' ? String(process_code).trim() : null;
   const updatedBy = req.user?.empno || null;
 
   const client = await engPool.connect();
@@ -471,14 +480,14 @@ router.put('/parameters/bulk', isAdmin, flushSds, async (req, res) => {
     for (const { param_key, param_value } of params) {
       if (!param_key?.trim()) continue;
       const r = await client.query(
-        `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, updated_by)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key)
+        `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, process_code, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
          DO UPDATE SET param_value = EXCLUDED.param_value,
                        updated_by  = EXCLUDED.updated_by,
                        updated_at  = NOW()
          RETURNING id, param_key, param_value`,
-        [cnVal, machine_type_name.trim(), param_key.trim(), param_value ?? null, updatedBy]
+        [cnVal, machine_type_name.trim(), param_key.trim(), param_value ?? null, pcVal, updatedBy]
       );
       saved.push(r.rows[0]);
     }
@@ -1152,6 +1161,48 @@ async function ensureTemplateCssTable() {
   `);
 }
 
+// Multi-template support (see db_migrations/20260703_create_sds_grid_template.js).
+// Self-heals on a DB where the migration hasn't been run: creates the table + the
+// per-machine assignment column, and lazily seeds a 'Standard' default from the legacy
+// single grid-layout so nothing renders blank.
+async function ensureGridTemplateTable() {
+  await engPool.query(`
+    CREATE TABLE IF NOT EXISTS ${TABLES.SDS_GRID_TEMPLATE} (
+      id          SERIAL PRIMARY KEY,
+      name        VARCHAR(120) NOT NULL UNIQUE,
+      grid_json   TEXT NOT NULL,
+      is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by  VARCHAR(50),
+      updated_by  VARCHAR(50),
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await engPool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS sds_grid_template_one_default
+       ON ${TABLES.SDS_GRID_TEMPLATE} (is_default) WHERE is_default`
+  );
+  await engPool.query(
+    `ALTER TABLE ${TABLES.SDS_MACHINE_TYPE_CODE}
+       ADD COLUMN IF NOT EXISTS grid_template_id INTEGER
+       REFERENCES ${TABLES.SDS_GRID_TEMPLATE}(id) ON DELETE SET NULL`
+  );
+  const any = await engPool.query(`SELECT 1 FROM ${TABLES.SDS_GRID_TEMPLATE} LIMIT 1`);
+  if (!any.rows.length) {
+    await ensureTemplateCssTable();
+    const legacy = await engPool.query(
+      `SELECT config_value FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG} WHERE config_key = 'grid-layout' LIMIT 1`
+    );
+    const gridJson = legacy.rows[0]?.config_value
+      || JSON.stringify({ rows: 56, cols: 48, borders: {}, fills: {}, cells: {}, merges: [] });
+    await engPool.query(
+      `INSERT INTO ${TABLES.SDS_GRID_TEMPLATE} (name, grid_json, is_default, created_by)
+       VALUES ('Standard', $1, TRUE, 'auto') ON CONFLICT (name) DO NOTHING`,
+      [gridJson]
+    );
+  }
+}
+
 /** GET /api/sds/v2/admin/template-config
  *  Returns all CSS config rows merged with defaults, plus machine-type list.
  */
@@ -1270,14 +1321,14 @@ router.get('/template-config/common-params', isAdmin, async (req, res) => {
  */
 router.get('/template-grid', isAdmin, async (req, res) => {
   try {
-    await ensureTemplateCssTable();
+    await ensureGridTemplateTable();
     const r = await engPool.query(
-      `SELECT config_value, updated_at FROM ${TABLES.SDS_TEMPLATE_CSS_CONFIG}
-       WHERE config_key = 'grid-layout' LIMIT 1`
+      `SELECT grid_json, updated_at FROM ${TABLES.SDS_GRID_TEMPLATE}
+       WHERE is_default LIMIT 1`
     );
     let grid = null;
-    if (r.rows[0]?.config_value) {
-      try { grid = JSON.parse(r.rows[0].config_value); } catch (_) { grid = null; }
+    if (r.rows[0]?.grid_json) {
+      try { grid = JSON.parse(r.rows[0].grid_json); } catch (_) { grid = null; }
     }
     res.json({ grid, updated_at: r.rows[0]?.updated_at ?? null });
   } catch (err) {
@@ -1309,15 +1360,193 @@ router.put('/template-grid', isAdmin, async (req, res) => {
     return res.status(400).json({ error: 'grid object required' });
   }
   try {
-    await ensureTemplateCssTable();
+    await ensureGridTemplateTable();
     const json = JSON.stringify(grid);
-    await engPool.query(
-      `INSERT INTO ${TABLES.SDS_TEMPLATE_CSS_CONFIG} (config_key, config_value, description, updated_at)
-       VALUES ('grid-layout', $1, 'Excel-like blank template grid (borders/fills)', NOW())
-       ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()`,
-      [json]
+    // Backward-compat: the legacy singular editor writes to the DEFAULT template.
+    const upd = await engPool.query(
+      `UPDATE ${TABLES.SDS_GRID_TEMPLATE}
+         SET grid_json = $1, updated_at = NOW(), updated_by = $2
+       WHERE is_default RETURNING id`,
+      [json, req.user?.empno || null]
     );
+    if (!upd.rows.length) {
+      await engPool.query(
+        `INSERT INTO ${TABLES.SDS_GRID_TEMPLATE} (name, grid_json, is_default, created_by)
+         VALUES ('Standard', $1, TRUE, $2)
+         ON CONFLICT (name) DO UPDATE SET grid_json = EXCLUDED.grid_json, updated_at = NOW()`,
+        [json, req.user?.empno || null]
+      );
+    }
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Multi-template CRUD (sds_grid_template) ─────────────────────────────────
+// The SDS PDF grid layout used to be a single blob; these routes let several named
+// layouts coexist and be assigned per machine (sds_machine_type_code.grid_template_id).
+
+/** GET /api/sds/v2/admin/template-grids — list templates (metadata only, no grid_json) */
+router.get('/template-grids', isAdmin, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `SELECT gt.id, gt.name, gt.is_default, gt.updated_at,
+              (SELECT COUNT(*) FROM ${TABLES.SDS_MACHINE_TYPE_CODE} m
+                WHERE m.grid_template_id = gt.id) AS assigned_count
+         FROM ${TABLES.SDS_GRID_TEMPLATE} gt
+        ORDER BY gt.is_default DESC, gt.name`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/template-grids/:id — one template with its grid */
+router.get('/template-grids/:id', isAdmin, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `SELECT id, name, is_default, grid_json, updated_at FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    let grid = null;
+    try { grid = JSON.parse(r.rows[0].grid_json); } catch (_) { grid = null; }
+    res.json({ id: r.rows[0].id, name: r.rows[0].name, is_default: r.rows[0].is_default, grid, updated_at: r.rows[0].updated_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/sds/v2/admin/template-grids — create { name, grid?, copyFromId? } */
+router.post('/template-grids', isAdmin, flushSds, async (req, res) => {
+  const { name, grid, copyFromId } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    await ensureGridTemplateTable();
+    let gridJson;
+    if (grid && typeof grid === 'object' && !Array.isArray(grid)) {
+      gridJson = JSON.stringify(grid);
+    } else if (copyFromId) {
+      const src = await engPool.query(`SELECT grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`, [copyFromId]);
+      gridJson = src.rows[0]?.grid_json;
+    }
+    if (!gridJson) {
+      // Fall back to a copy of the default, else an empty grid.
+      const def = await engPool.query(`SELECT grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE is_default LIMIT 1`);
+      gridJson = def.rows[0]?.grid_json
+        || JSON.stringify({ rows: 56, cols: 48, borders: {}, fills: {}, cells: {}, merges: [] });
+    }
+    const r = await engPool.query(
+      `INSERT INTO ${TABLES.SDS_GRID_TEMPLATE} (name, grid_json, is_default, created_by)
+       VALUES ($1, $2, FALSE, $3) RETURNING id, name, is_default, updated_at`,
+      [String(name).trim(), gridJson, req.user?.empno || null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-grids/:id — update { name?, grid? } */
+router.put('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
+  const { name, grid } = req.body;
+  if (name == null && grid == null) return res.status(400).json({ error: 'name or grid required' });
+  if (grid != null && (typeof grid !== 'object' || Array.isArray(grid))) {
+    return res.status(400).json({ error: 'grid must be an object' });
+  }
+  try {
+    await ensureGridTemplateTable();
+    const sets = [], vals = [];
+    if (name != null) { vals.push(String(name).trim()); sets.push(`name = $${vals.length}`); }
+    if (grid != null) { vals.push(JSON.stringify(grid)); sets.push(`grid_json = $${vals.length}`); }
+    vals.push(req.user?.empno || null); sets.push(`updated_by = $${vals.length}`);
+    vals.push(req.params.id);
+    const r = await engPool.query(
+      `UPDATE ${TABLES.SDS_GRID_TEMPLATE} SET ${sets.join(', ')}, updated_at = NOW()
+       WHERE id = $${vals.length} RETURNING id, name, is_default, updated_at`,
+      vals
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A template with that name already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/template-grids/:id/default — make this the default template */
+router.put('/template-grids/:id/default', isAdmin, flushSds, async (req, res) => {
+  const client = await engPool.connect();
+  try {
+    await ensureGridTemplateTable();
+    await client.query('BEGIN');
+    await client.query(`UPDATE ${TABLES.SDS_GRID_TEMPLATE} SET is_default = FALSE WHERE is_default`);
+    const r = await client.query(
+      `UPDATE ${TABLES.SDS_GRID_TEMPLATE} SET is_default = TRUE, updated_at = NOW() WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Template not found' }); }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/** DELETE /api/sds/v2/admin/template-grids/:id — delete (default is protected) */
+router.delete('/template-grids/:id', isAdmin, flushSds, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const row = await engPool.query(`SELECT is_default FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`, [req.params.id]);
+    if (!row.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    if (row.rows[0].is_default) return res.status(400).json({ error: 'Cannot delete the default template — set another default first' });
+    // Assigned machines fall back to the default (ON DELETE SET NULL).
+    await engPool.query(`DELETE FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sds/v2/admin/machine-types/grid-assignments
+ *  Active machine types with their assigned template id (self-heals the column).
+ *  Kept separate from the public /machine-types list so that endpoint never depends
+ *  on the multi-template migration having run. */
+router.get('/machine-types/grid-assignments', isAdmin, async (req, res) => {
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `SELECT id, machine_type_code, machine_type_name, machine_group, grid_template_id
+         FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+        WHERE is_active AND machine_type_name IS NOT NULL
+        ORDER BY machine_type_name, machine_type_code`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PUT /api/sds/v2/admin/machine-types/:id/grid-template — assign { grid_template_id|null } */
+router.put('/machine-types/:id/grid-template', isAdmin, flushSds, async (req, res) => {
+  const { grid_template_id } = req.body;
+  try {
+    await ensureGridTemplateTable();
+    const r = await engPool.query(
+      `UPDATE ${TABLES.SDS_MACHINE_TYPE_CODE} SET grid_template_id = $1 WHERE id = $2
+       RETURNING id, machine_type_name, grid_template_id`,
+      [grid_template_id || null, req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Machine type not found' });
+    res.json(r.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

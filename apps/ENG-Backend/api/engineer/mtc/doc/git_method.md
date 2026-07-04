@@ -27,7 +27,7 @@ git pull origin main
 git merge dev
 
 // 9. push to origin dev
-git push origin main
+// git push origin main
 
 // ============================== //
 
