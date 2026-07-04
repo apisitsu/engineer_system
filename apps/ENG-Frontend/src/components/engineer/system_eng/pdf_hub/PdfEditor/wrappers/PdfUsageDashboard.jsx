@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Row, Col, Card, Statistic, Table, DatePicker, message, Spin, Space, Tabs, Tag, Progress, Empty } from 'antd';
+import { Modal, Row, Col, Card, Statistic, Table, DatePicker, message, Spin, Space, Tabs, Tag, Progress, Empty, Checkbox } from 'antd';
 import { FilePdfOutlined, CheckCircleOutlined, InfoCircleOutlined, DollarOutlined, HistoryOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
@@ -21,18 +21,20 @@ const PdfUsageDashboard = ({ open, onClose }) => {
         details: [],
         chartData: []
     });
-    const [selectedYear, setSelectedYear] = useState(dayjs());
+    const [selectedMonthDate, setSelectedMonthDate] = useState(dayjs());
     const [activeTab, setActiveTab] = useState('1');
     const [usageHistory, setUsageHistory] = useState([]);
     const [watermarkHistory, setWatermarkHistory] = useState([]);
+    const [includeSoftwareCost, setIncludeSoftwareCost] = useState(false);
+    const softwareCostPerMonth = 271500 / 12;
 
     useEffect(() => {
         if (open) {
-            fetchStats(selectedYear);
+            fetchStats(selectedMonthDate);
             fetchUsageHistory();
             fetchWatermarkHistory();
         }
-    }, [open, selectedYear]);
+    }, [open, selectedMonthDate]);
 
     const fetchUsageHistory = async () => {
         try {
@@ -81,44 +83,29 @@ const PdfUsageDashboard = ({ open, onClose }) => {
         }
     };
 
-    const yearStr = selectedYear ? selectedYear.year().toString() : dayjs().year().toString();
+    const yearStr = selectedMonthDate ? selectedMonthDate.year().toString() : dayjs().year().toString();
+    const selectedMonthIndex = selectedMonthDate ? selectedMonthDate.month() : dayjs().month();
     const allMonths = Array.from({ length: 12 }, (_, i) => {
         const monthNum = (i + 1).toString().padStart(2, '0');
         return `${yearStr}-${monthNum}`;
     });
 
-    const currentMonthStr = dayjs().format('YYYY-MM');
-    const currentMonthData = stats.chartData.find(d => d.month === currentMonthStr);
-    const currentMonthSavings = currentMonthData
-        ? (parseInt(currentMonthData.view_pages || 0) * 0.10) + (parseInt(currentMonthData.action_pages || 0) * 0.50)
-        : 0;
+    const targetMonthStr = selectedMonthDate ? selectedMonthDate.format('YYYY-MM') : dayjs().format('YYYY-MM');
+    const selectedMonthData = stats.chartData.find(d => d.month === targetMonthStr);
+    const selectedMonthSavings = selectedMonthData
+        ? (parseInt(selectedMonthData.view_pages || 0) * 0.25) + (parseInt(selectedMonthData.action_pages || 0) * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0)
+        : (includeSoftwareCost ? softwareCostPerMonth : 0);
 
     const savingsData = allMonths.map(monthLabel => {
         const found = stats.chartData.find(d => d.month === monthLabel);
+        // Only apply empty month software cost if the month is past or current, and starts from 2026-06
+        const monthDate = dayjs(monthLabel + '-01');
+        const isEligibleMonth = monthDate.isBefore(dayjs().endOf('month')) && monthDate.isAfter(dayjs('2026-05-31'));
         if (found) {
-            return (parseInt(found.view_pages || 0) * 0.10) + (parseInt(found.action_pages || 0) * 0.50);
+            return (parseInt(found.view_pages || 0) * 0.25) + (parseInt(found.action_pages || 0) * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
         }
-        return 0; // Show 0 for months without data
+        return (includeSoftwareCost && isEligibleMonth) ? softwareCostPerMonth : 0;
     });
-
-    const targetDataset = {
-        label: 'Target',
-        data: allMonths.map(() => 8000),
-        borderColor: theme.colors.success,
-        borderWidth: 1.5,
-        borderDash: [5, 5],
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        fill: false,
-        datalabels: {
-            display: (context) => context.dataIndex === context.dataset.data.length - 1,
-            formatter: () => 'Target',
-            align: 'top',
-            anchor: 'end',
-            color: theme.colors.success,
-            font: { size: 12 }
-        }
-    };
 
     const lineData = {
         labels: allMonths,
@@ -138,8 +125,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                     formatter: (value) => value > 0 ? value.toLocaleString() : '',
                     font: { size: 11, weight: 'bold' }
                 }
-            },
-            targetDataset
+            }
         ]
     };
 
@@ -154,7 +140,6 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             tooltip: {
                 callbacks: {
                     label: (context) => {
-                        if (context.dataset.label === 'Target') return `Target: ฿8,000.00`;
                         return `฿${context.raw.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                     }
                 }
@@ -164,7 +149,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             y: {
                 beginAtZero: true,
                 title: { display: true, text: 'THB' },
-                suggestedMax: Math.max(...savingsData, 8000) * 1.2
+                suggestedMax: Math.max(...savingsData, 0) * 1.2
             },
             x: { title: { display: true, text: 'Month' } }
         }
@@ -173,7 +158,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
     const columns = [
         { title: 'Month', dataIndex: 'month', key: 'month' },
         {
-            title: 'View Pages (0.10 THB)',
+            title: 'View Pages (0.25 THB)',
             dataIndex: 'view_pages',
             key: 'view_pages',
             render: (val) => <span style={{ color: theme.colors.primary }}>{parseInt(val || 0).toLocaleString()} Pages</span>
@@ -190,7 +175,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             render: (_, record) => {
                 const vPages = parseInt(record.view_pages) || 0;
                 const aPages = parseInt(record.action_pages) || 0;
-                const total = (vPages * 0.10) + (aPages * 0.50);
+                const total = (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
                 return <strong style={{ color: '#52c41a' }}>฿{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>;
             }
         }
@@ -253,7 +238,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             open={open}
             onCancel={onClose}
             footer={null}
-            width={1200}
+            width={1300}
             styles={{ body: { padding: '24px 0' } }}
         >
             <Spin spinning={loading}>
@@ -271,15 +256,15 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                     <Row gutter={24} style={{ marginBottom: 24, marginTop: 16 }}>
                                         {/* Left Column */}
                                         <Col span={8}>
-                                            <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: 16, color: theme.colors.textPrimary }}>Current Month Target: ฿8,000.00</div>
+                                            <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: 16, color: theme.colors.textPrimary }}>Target ({targetMonthStr}): Not specified</div>
                                             <div style={{ background: '#f5f5f5', padding: '16px', borderRadius: 8 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12, color: theme.colors.textSecondary }}>
-                                                    <span>Current Month Target</span>
-                                                    <strong style={{ color: theme.colors.textPrimary }}>฿8,000.00</strong>
+                                                    <span>Target ({targetMonthStr})</span>
+                                                    <strong style={{ color: theme.colors.textPrimary }}>Not specified</strong>
                                                 </div>
-                                                <Progress percent={(currentMonthSavings / 8000) * 100} showInfo={false} strokeColor={theme.colors.success} strokeWidth={10} />
+                                                <Progress percent={0} showInfo={false} strokeColor={theme.colors.success} strokeWidth={10} />
                                                 <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
-                                                    Progress Month: ฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    Progress ({targetMonthStr}): ฿{selectedMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </div>
                                             </div>
                                         </Col>
@@ -288,9 +273,14 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                         <Col span={16}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                                                 <div style={{ fontWeight: 'bold', fontSize: 16, color: theme.colors.textPrimary }}>Overall Performance</div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <span>Year:</span>
-                                                    <DatePicker picker="year" value={selectedYear} onChange={(val) => setSelectedYear(val)} allowClear={false} size="small" />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                                    <Checkbox checked={includeSoftwareCost} onChange={(e) => setIncludeSoftwareCost(e.target.checked)}>
+                                                        Include Software Cost (271,500/Yr)
+                                                    </Checkbox>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <span>Select Month:</span>
+                                                        <DatePicker picker="month" format="YYYY-MM" value={selectedMonthDate} onChange={(val) => setSelectedMonthDate(val)} allowClear={false} size="small" />
+                                                    </div>
                                                 </div>
                                             </div>
                                             <Row gutter={12}>
@@ -308,14 +298,14 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                                 </Col>
                                                 <Col span={6}>
                                                     <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
-                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Current Month Savings</div>
-                                                        <div style={{ fontSize: 20, color: theme.colors.success }}>฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                                        <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Savings ({targetMonthStr})</div>
+                                                        <div style={{ fontSize: 20, color: theme.colors.success }}>฿{selectedMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                                     </Card>
                                                 </Col>
                                                 <Col span={6}>
                                                     <Card size="small" bordered style={{ textAlign: 'center', height: '100%', borderRadius: 8 }}>
                                                         <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>Target Progress (Month)</div>
-                                                        <div style={{ fontSize: 20 }}>{((currentMonthSavings / 8000) * 100).toFixed(1)}%</div>
+                                                        <div style={{ fontSize: 20 }}>Not specified</div>
                                                     </Card>
                                                 </Col>
                                             </Row>
@@ -351,7 +341,13 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                                                 {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.action_pages) || 0), 0).toLocaleString()} Pages
                                                             </Table.Summary.Cell>
                                                             <Table.Summary.Cell index={3}>
-                                                                <span style={{ color: '#52c41a' }}>฿{(stats.totalSavings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                <span style={{ color: '#52c41a' }}>
+                                                                    ฿{stats.chartData.reduce((acc, curr) => {
+                                                                        const vPages = parseInt(curr.view_pages) || 0;
+                                                                        const aPages = parseInt(curr.action_pages) || 0;
+                                                                        return acc + (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
+                                                                    }, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                </span>
                                                             </Table.Summary.Cell>
                                                         </Table.Summary.Row>
                                                     </Table.Summary>
@@ -362,12 +358,12 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                             <h4 style={{ marginBottom: 16 }}>Action Cost Info</h4>
                                             <Card style={{ background: '#f8f9fa', borderRadius: 8, border: 'none' }} styles={{ body: { padding: 16 } }}>
                                                 <p style={{ margin: '0 0 16px 0', color: theme.colors.textSecondary, fontSize: 13 }}>
-                                                    Monitor and have info the action costs of action savings saved: <strong>฿{currentMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.
+                                                    Monitor and have info the action costs of action savings saved: <strong>฿{selectedMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.
                                                 </p>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: theme.colors.textSecondary }}>
                                                     <div style={{ display: 'flex', gap: 8 }}>
                                                         <InfoCircleOutlined style={{ color: theme.colors.primary, marginTop: 2 }} />
-                                                        <span>View Action: 0.10 THB / Page</span>
+                                                        <span>View Action: 0.25 THB / Page</span>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: 8 }}>
                                                         <InfoCircleOutlined style={{ color: theme.colors.success, marginTop: 2 }} />
