@@ -4,13 +4,13 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-// export const apiUrl = "http://plbmp130:2005/";
+export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -110,6 +110,7 @@ export const server = {
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS: `${apiUrl}api/sds/v2/admin/template-grids`,
   MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
 
   // Template Tool (APQP Forms)

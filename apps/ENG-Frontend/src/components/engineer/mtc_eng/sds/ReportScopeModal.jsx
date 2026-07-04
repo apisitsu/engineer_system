@@ -153,6 +153,20 @@ export default function ReportScopeModal({ open, onClose, onSaved }) {
                 </Text>
               </Col>
             </Row>
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            <Row gutter={[24, 12]}>
+              <Col xs={24}>
+                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Tooling-optional machines (surface grind)</Text>
+                <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', ' ']} placeholder="PSG-64  GS-64PFII  MSG-410 …"
+                  value={scope.tooling_optional_machines || []} onChange={v => set('tooling_optional_machines', v)} />
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  Machine type names where a fixture is optional. A CN whose process plan lists no tool on
+                  these machines counts as “tooling not required” (COMPLETE) instead of a missing-tooling gap.
+                </Text>
+              </Col>
+            </Row>
           </>
         )}
       </Spin>

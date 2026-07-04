@@ -26,24 +26,30 @@ const router = express.Router();
  * @returns {{coverage_level:string, coverage_level_saved:string, pending_reason:?string}}
  */
 function classifyCoverage(r) {
+  // Tooling gate: a matched factory/T-Select tool OR a legitimate "no fixture needed"
+  // (tooling_not_required — set for surface-grind parts on tooling-optional machines
+  // whose process plan lists no tool). The latter is a real N/A state, NOT a T-Select
+  // #1 boost, so it also satisfies the SAVED baseline gate below.
+  const toolingSatisfied      = r.has_tooling_match || r.tooling_not_required;
+  const toolingSatisfiedSaved = r.tooling_source === 'saved' || r.tooling_not_required;
   const coverage_level =
-    r.has_tooling_match && r.has_machine_template && r.stamped_full ? 'COMPLETE' :
-    r.has_process                                                   ? 'PENDING'  :
-                                                                      'MISSING';
+    toolingSatisfied && r.has_machine_template && r.stamped_full ? 'COMPLETE' :
+    r.has_process                                                ? 'PENDING'  :
+                                                                   'MISSING';
   // Baseline (saved factory-plan tool only, no T-Select #1). Also stamp-gated, so
   // complete − complete_saved isolates the T-Select #1 boost AMONG signed sheets.
   const coverage_level_saved =
-    r.tooling_source === 'saved' && r.has_machine_template && r.stamped_full ? 'COMPLETE' :
-    r.has_process                                                            ? 'PENDING'  :
-                                                                               'MISSING';
+    toolingSatisfiedSaved && r.has_machine_template && r.stamped_full ? 'COMPLETE' :
+    r.has_process                                                     ? 'PENDING'  :
+                                                                        'MISSING';
   // WHY the row is pending — separates "no tool", "no Excel config", and "ready but
   // not yet signed" (NO_STAMP). Order matters: tool/excel gaps are reported first;
   // a tool+excel-ready row that is still pending must be NO_STAMP.
   const pending_reason = coverage_level !== 'PENDING' ? null :
-    !r.has_tooling_match && !r.has_machine_template ? 'NO_TOOL_NO_EXCEL' :
-    !r.has_tooling_match                            ? 'NO_TOOL'          :
-    !r.has_machine_template                         ? 'NO_EXCEL'         :
-                                                      'NO_STAMP';
+    !toolingSatisfied && !r.has_machine_template ? 'NO_TOOL_NO_EXCEL' :
+    !toolingSatisfied                            ? 'NO_TOOL'          :
+    !r.has_machine_template                      ? 'NO_EXCEL'         :
+                                                   'NO_STAMP';
   return { coverage_level, coverage_level_saved, pending_reason };
 }
 
@@ -106,6 +112,12 @@ const DEFAULT_REPORT_SCOPE = {
   work_centers:  ['05', '09', '29', '30', '31', '32', '37'],
   excluded_cns:  ['C39-00209', 'C29-04044', 'C29-04045'],
   since_date:    '2023-01-01',
+  // Surface-grind machines where a fixture is genuinely optional: most parts are held
+  // on a magnetic chuck with no dedicated tooling. For these machines, a CN whose
+  // process plan lists NO tool for that process_code is treated as "tooling not
+  // required" (satisfies the tooling gate) instead of the false "missing tooling"
+  // gap. A plan that DOES list a tool which fails to match config stays a real NO_TOOL.
+  tooling_optional_machines: ['PSG-64', 'GS-64PFII', 'MSG-410'],  // wc-32 MSB surface grinders (magnetic chuck); MSG-410 onboarded 2026-07-04
 };
 
 // part_type → pc_production item-number leading-digit prefix. Taxonomy stays in code
@@ -464,6 +476,9 @@ async function buildCoverage() {
     //               OR tool matches but machine has no Excel Parameter Config (cn IS NULL)
     // COMPLETE     : tool match ✅ + machine Excel Config ✅ → PDF ready
     //               (per-record params are optional — PDF generates with empty fields if absent)
+    // Machines where a fixture is genuinely optional (surface grind — magnetic chuck).
+    const toolingOptionalMachines = new Set(scope.tooling_optional_machines || []);
+
     const evaluated = [];
     for (const row of cnMachinePairsDeduped) {
       const cn = normalizeCn(row.control_no);
@@ -479,6 +494,13 @@ async function buildCoverage() {
       const hasMachineTemplate  = machineTypeName ? machineTemplateSet.has(machineTypeName) : false;
       const perRecordCount      = machineTypeName
         ? (hasParamsByMachine.get(`${cn}||${machineTypeName}`) || 0) : 0;
+      // Tooling-optional machine + the CN's process plan lists NO tool for this
+      // process_code → the part legitimately needs no fixture (not a missing-tooling
+      // gap). If a tool IS listed but fails to match config, this stays false so the
+      // row is still a real NO_TOOL.
+      const toolingNotRequired  = !hasTooling
+        && toolingOptionalMachines.has(machineTypeName)
+        && !cnProcessToolPrefixes.has(`${cn}||${row.process}`);
 
       evaluated.push({
         cn,
@@ -490,9 +512,10 @@ async function buildCoverage() {
         first_prod_date:      row.first_seen,
         has_process:          hasPlan,
         has_tooling_match:    hasTooling,
+        tooling_not_required: toolingNotRequired,
         has_machine_template: hasMachineTemplate,
         param_count:          perRecordCount,
-        tooling_source:       hasTooling ? 'saved' : null,
+        tooling_source:       hasTooling ? 'saved' : (toolingNotRequired ? 'not_required' : null),
         // coverage_level computed after the Tooling Select fallback pass below
       });
     }
@@ -507,7 +530,7 @@ async function buildCoverage() {
     // Unique CNs (report format → spec CN) that need a lookup
     const needTs = new Map();
     for (const r of evaluated) {
-      if (r.has_tooling_match || !r.machine_type_name) continue;
+      if (r.has_tooling_match || r.tooling_not_required || !r.machine_type_name) continue;
       const sc = toSpecCn(r.cn);
       if (sc && specCnSet.has(sc)) needTs.set(r.cn, sc);
     }
@@ -531,7 +554,7 @@ async function buildCoverage() {
     }
 
     for (const r of evaluated) {
-      if (r.has_tooling_match || !r.machine_type_name) continue;
+      if (r.has_tooling_match || r.tooling_not_required || !r.machine_type_name) continue;
       const tsResult = tsByCn.get(r.cn);
       if (!tsResult) continue;
       const acceptable = new Set([r.machine_type_name]);
@@ -637,6 +660,9 @@ async function buildCoverage() {
     const completeSaved = evaluated.filter(r => r.coverage_level_saved === 'COMPLETE').length;
     const missing       = evaluated.filter(r => r.coverage_level === 'MISSING').length;
     const toolMatch     = evaluated.filter(r => r.has_tooling_match).length;
+    // Surface-grind rows counted as tooling-satisfied because no fixture is required
+    // (informational — explains part of the tooling-gate pass rate).
+    const toolingNotRequired = evaluated.filter(r => r.tooling_not_required).length;
     const excelConfig   = evaluated.filter(r => r.has_machine_template).length;
     // PDF-ready = tool + Excel config, regardless of approval stamp. Since COMPLETE
     // now also requires a full stamp, this is the only metric that answers "what %
@@ -659,7 +685,9 @@ async function buildCoverage() {
       }
       return [...m.values()].sort((a, b) => b.count - a.count).slice(0, 5);
     };
-    const noToolMatchPred   = r => !r.has_tooling_match;
+    // A tooling-not-required (surface-grind) row has no matched tool but is NOT a gap —
+    // exclude it so it never appears in the "missing tooling" gap breakdown.
+    const noToolMatchPred   = r => !r.has_tooling_match && !r.tooling_not_required;
     const noExcelConfigPred = r => !r.has_machine_template;
 
     // ── CNs needing attention — build first so pending KPI matches table row count ──
@@ -710,6 +738,10 @@ async function buildCoverage() {
         complete_saved: ptCompleteSaved,  // baseline (saved only); complete - complete_saved = T-Select #1 boost
         pending:      ptPending,
         tool_match:   rows.filter(r => r.has_tooling_match).length,
+        // Surface-grind rows counted as tooling-satisfied (no fixture needed) — NOT a
+        // "no tool match" gap. Subtracted from the card's gap badge so they don't show
+        // as missing tooling.
+        tooling_not_required: rows.filter(r => r.tooling_not_required).length,
         excel_config: rows.filter(r => r.has_machine_template).length,
         complete_pct: parseFloat(((ptComplete / rows.length) * 100).toFixed(1)),
         complete_saved_pct: parseFloat(((ptCompleteSaved / rows.length) * 100).toFixed(1)),
@@ -795,6 +827,7 @@ async function buildCoverage() {
         pendingByReason,
         missing,
         toolMatch,
+        toolingNotRequired,   // surface-grind rows satisfied because no fixture needed
         excelConfig,
         gaps: {
           noToolMatch:   topGaps(evaluated, noToolMatchPred),
@@ -953,9 +986,11 @@ router.post('/parameters/bulk-import', async (req, res) => {
         r.cn, r.machine_type_name, r.param_key, String(r.param_value), updated_by || null,
       ]);
       await client.query(
+        // process_code omitted → defaults NULL (process-agnostic); the ON CONFLICT target
+        // must still list all four index expressions to match the rebuilt uq_sds_parameter.
         `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, updated_by)
          VALUES ${placeholders}
-         ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key)
+         ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
          DO UPDATE SET param_value = EXCLUDED.param_value,
                        updated_by  = EXCLUDED.updated_by,
                        updated_at  = NOW()`,
@@ -998,7 +1033,7 @@ router.get('/wc-options', async (req, res) => {
 
 /** PUT /api/sds/v2/report/config — upsert scope keys; flushes the coverage cache so the next build uses the new scope */
 router.put('/config', isAdmin, async (req, res) => {
-  const ARRAY_KEYS = ['part_types', 'process_codes', 'work_centers', 'excluded_cns'];
+  const ARRAY_KEYS = ['part_types', 'process_codes', 'work_centers', 'excluded_cns', 'tooling_optional_machines'];
   try {
     await ensureReportConfigTable();
     const entries = Object.entries(req.body || {}).filter(([k]) => k in DEFAULT_REPORT_SCOPE);

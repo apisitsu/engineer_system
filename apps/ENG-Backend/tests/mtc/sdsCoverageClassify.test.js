@@ -54,6 +54,27 @@ describe('classifyCoverage — COMPLETE / PENDING / NO_STAMP rules', () => {
     expect(r.pending_reason).toBeNull();
   });
 
+  it('tooling_not_required satisfies the tooling gate → COMPLETE (surface grind, no fixture)', () => {
+    // No matched tool, but the part needs none: with Excel template + full stamp it is
+    // COMPLETE, and it counts in the SAVED baseline too (it is not a T-Select #1 boost).
+    const r = classifyCoverage(sheet({ has_tooling_match: false, tooling_not_required: true, tooling_source: 'not_required' }));
+    expect(r.coverage_level).toBe('COMPLETE');
+    expect(r.coverage_level_saved).toBe('COMPLETE');
+    expect(r.pending_reason).toBeNull();
+  });
+
+  it('tooling_not_required but no Excel template → PENDING NO_EXCEL (not NO_TOOL)', () => {
+    const r = classifyCoverage(sheet({ has_tooling_match: false, tooling_not_required: true, tooling_source: 'not_required', has_machine_template: false, stamped_full: false }));
+    expect(r.coverage_level).toBe('PENDING');
+    expect(r.pending_reason).toBe('NO_EXCEL');
+  });
+
+  it('tooling_not_required but unsigned → PENDING NO_STAMP', () => {
+    const r = classifyCoverage(sheet({ has_tooling_match: false, tooling_not_required: true, tooling_source: 'not_required', stamped_full: false }));
+    expect(r.coverage_level).toBe('PENDING');
+    expect(r.pending_reason).toBe('NO_STAMP');
+  });
+
   it('baseline coverage_level_saved is also stamp-gated (signed T-Select #1 row)', () => {
     // tselect tool, fully signed: COMPLETE overall, but the saved-only baseline is
     // still PENDING — so complete − complete_saved isolates the T-Select #1 boost.

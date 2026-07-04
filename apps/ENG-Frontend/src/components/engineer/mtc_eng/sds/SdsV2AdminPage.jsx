@@ -532,9 +532,15 @@ const GrindingImagesTab = ({ theme }) => {
     if (!fileList.length) { message.warning('Select an image file'); return; }
     try {
       const vals = await form.validateFields();
+      // A grinding image can target a whole CN family (prefix, e.g. C39) and/or one or
+      // more specific control-nos (e.g. C39-04137). Both are stored in cn_prefixes; the
+      // PDF renderer ranks a full-CN match above a family-prefix match.
+      const specificCns = (vals.cn_full || []).map(c => String(c).trim().toUpperCase()).filter(Boolean);
+      const targets = [...new Set([...(vals.cn_prefixes || []), ...specificCns])];
+      if (!targets.length) { message.warning('Select a CN prefix or enter a specific CN'); return; }
       setUploading(true);
       const fd = new FormData();
-      fd.append('cn_prefixes', JSON.stringify(vals.cn_prefixes));
+      fd.append('cn_prefixes', JSON.stringify(targets));
       fd.append('process_codes', JSON.stringify(vals.process_codes || []));
       fd.append('image', fileList[0].originFileObj);
       await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd);
@@ -575,13 +581,20 @@ const GrindingImagesTab = ({ theme }) => {
       ),
     },
     {
-      title: 'CN Prefixes',
+      title: 'CN / Prefix',
       dataIndex: 'cn_prefixes',
       render: (v) => (
         <Space size={2} wrap>
-          {(Array.isArray(v) ? v : [v]).map(p => (
-            <Tag key={p}>{CN_PREFIX_LABEL_MAP[p] || p}</Tag>
-          ))}
+          {(Array.isArray(v) ? v : [v]).map(p => {
+            // A specific control-no (contains a dash, e.g. C39-04137) is a per-CN
+            // override; a bare family prefix (C39) is shown plain.
+            const isSpecificCn = String(p).includes('-');
+            return (
+              <Tag key={p} color={isSpecificCn ? 'blue' : undefined}>
+                {isSpecificCn ? p : (CN_PREFIX_LABEL_MAP[p] || p)}
+              </Tag>
+            );
+          })}
         </Space>
       ),
     },
@@ -610,13 +623,23 @@ const GrindingImagesTab = ({ theme }) => {
     <div>
       <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Upload Grinding Layout Image">
         <Form form={form} layout="inline">
-          <Form.Item name="cn_prefixes" label="CN Prefix" rules={[{ required: true, message: 'Select at least one CN Prefix' }]}>
+          <Form.Item name="cn_prefixes" label="CN Prefix (family)">
             <Select
               mode="multiple"
               options={CN_PREFIX_OPTIONS}
               style={{ minWidth: 220 }}
               maxTagCount="responsive"
               optionFilterProp="label"
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="cn_full" label="Specific CN" tooltip="e.g. C39-04137 — overrides the family-prefix image for just this control-no">
+            <Select
+              mode="tags"
+              style={{ minWidth: 200 }}
+              placeholder="e.g. C39-04137"
+              tokenSeparators={[',', ' ']}
+              maxTagCount="responsive"
             />
           </Form.Item>
           <Form.Item name="process_codes" label="Process Code">
@@ -1206,6 +1229,9 @@ const GW_ROW_RANGE = [53, 54, 55, 56, 57, 58];
 const HEADER_CELL_FIELDS = [
   { key: 'program_no',   label: 'Program No',   cell: 'Z4' },
   { key: 'program_name', label: 'Program Name', cell: 'Z5' },
+  // ct (CYCLE TIME, cell B4) is auto-filled from the factory process data by default.
+  // A machine-default or per-CN value entered here overrides that factory value.
+  { key: 'ct',           label: 'Cycle Time (CT)', cell: 'B4' },
 ];
 
 const MachineConfigTab = ({ theme, visibleMachineNames }) => {
@@ -1227,6 +1253,11 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
   const [cnOverrideData, setCnOverrideData] = useState({});
   const [cnGwOverrideData, setCnGwOverrideData] = useState({});
   const [cnRowIds, setCnRowIds] = useState({});
+  // Per-process CN override: '' = applies to all processes (process-agnostic override);
+  // a specific code (e.g. '1021' / '1022') scopes the override to that grinding pass so a
+  // CN run under both 1021 and 1022 can carry a different condition grid per process.
+  const [selectedProcess, setSelectedProcess] = useState('');
+  const [machineProcessCodes, setMachineProcessCodes] = useState([]);
   // UI state
   const [listLoading, setListLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -1262,6 +1293,12 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     setCnOverrideData({});
     setCnGwOverrideData({});
     setCnRowIds({});
+    setSelectedProcess('');
+    // Process codes this machine runs (from configured tool combos) → drive the CN-override
+    // process picker. Best-effort: a failure just leaves the picker with the "All" option.
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TOOLS_COMBOS, { params: { machine_type: machineName } })
+      .then(r => setMachineProcessCodes([...new Set((r.data || []).map(c => String(c.process_code)).filter(Boolean))].sort()))
+      .catch(() => setMachineProcessCodes([]));
     setConfigLoading(true);
     setCellData({});
     setCellTypes({});
@@ -1304,10 +1341,14 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     }
   }, [message]);
 
-  const loadCnConfig = useCallback(async (cn) => {
+  const loadCnConfig = useCallback(async (cn, processArg) => {
     if (!selectedMachine) return;
     const trimmed = cn.trim().toUpperCase();
+    // processArg lets the process picker reload a different scope explicitly; when omitted
+    // (e.g. the Save refresh) keep the currently selected process scope.
+    const proc = processArg !== undefined ? (processArg || '') : selectedProcess;
     setSelectedCn(trimmed);
+    setSelectedProcess(proc);
     setConfigLoading(true);
     setCnOverrideData({});
     setCnGwOverrideData({});
@@ -1315,7 +1356,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     setDirty(false);
     try {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_PARAMETERS, {
-        params: { cn: trimmed, machine_type_name: selectedMachine },
+        params: { cn: trimmed, machine_type_name: selectedMachine, process_code: proc || undefined },
       });
       const overrides = {}, gwOverrides = {}, ids = {};
       res.data.forEach(r => {
@@ -1334,7 +1375,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     } finally {
       setConfigLoading(false);
     }
-  }, [selectedMachine, message]);
+  }, [selectedMachine, selectedProcess, message]);
 
   const exitCnMode = () => {
     setSelectedCn(null);
@@ -1342,6 +1383,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
     setCnOverrideData({});
     setCnGwOverrideData({});
     setCnRowIds({});
+    setSelectedProcess('');
     setDirty(false);
   };
 
@@ -1434,12 +1476,13 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
         if (upsertParams.length) {
           await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, {
             cn: selectedCn, machine_type_name: selectedMachine, params: upsertParams,
+            process_code: selectedProcess || null,
           });
         }
         await Promise.all(deleteIds.map(id =>
           axios.delete(`${server.MTC_SDS_V2_ADMIN_PARAMETERS}/${id}`)
         ));
-        message.success(`Saved CN override for ${selectedCn}`);
+        message.success(`Saved CN override for ${selectedCn}${selectedProcess ? ` (process ${selectedProcess})` : ''}`);
         setDirty(false);
         await loadCnConfig(selectedCn); // refresh IDs
       } else {
@@ -1728,8 +1771,30 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
             </Tag>
           </Col>
           <Col>
+            <Space size={4}>
+              <Text type="secondary" style={{ fontSize: 12 }}>Process:</Text>
+              <Select
+                size="small"
+                style={{ width: 160 }}
+                value={selectedProcess}
+                // Switching process reloads that scope's overrides (like switching CN, any
+                // unsaved edits are discarded). '' = the process-agnostic override.
+                onChange={(v) => loadCnConfig(selectedCn, v)}
+                showSearch
+                options={[
+                  { value: '', label: 'All processes' },
+                  ...machineProcessCodes.map(pc => ({ value: pc, label: pc })),
+                  ...(selectedProcess && !machineProcessCodes.includes(selectedProcess)
+                    ? [{ value: selectedProcess, label: selectedProcess }] : []),
+                ]}
+              />
+            </Space>
+          </Col>
+          <Col>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Edit any cell — blue cell = override, normal = uses machine default
+              {selectedProcess
+                ? `Overrides apply to process ${selectedProcess} only`
+                : 'Edit any cell — blue = override, normal = machine default'}
             </Text>
           </Col>
           <Col flex="auto" />
@@ -1774,6 +1839,7 @@ const MachineConfigTab = ({ theme, visibleMachineNames }) => {
       <Col>
         <Text strong>{selectedMachine}</Text>
         {selectedCn && <Tag color="blue" style={{ marginLeft: 8 }}>{selectedCn}</Tag>}
+        {selectedCn && selectedProcess && <Tag color="geekblue">proc {selectedProcess}</Tag>}
       </Col>
       <Col flex="auto" />
       {dirty && <Col><Text type="warning" style={{ fontSize: 12 }}>Please Save</Text></Col>}

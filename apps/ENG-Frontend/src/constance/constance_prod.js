@@ -122,6 +122,7 @@ export const server = {
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS: `${apiUrl}api/sds/v2/admin/template-grids`,
   MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
   // -------------------- ECNT --------------------
   ECR_REQUIRE_CREATE: `${apiUrl}api/ecr/create`,
