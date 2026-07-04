@@ -94,40 +94,43 @@ export default function useHighlightTools({
             ctx.fillRect(hx, hy, hw, hh);
         });
 
+        const activeTool = store.activeTool;
+        const currentSettings = store.toolSettings?.[activeTool] || store.toolSettings?.default || {};
+
         // Draw live preview for freehand drag
-        if (store.activeTool === 'highlight') {
+        if (activeTool === 'highlight') {
             const isVertical = e.ctrlKey;
             const previewX = isVertical ? startX - 10 : Math.min(startX, currentX);
             const previewW = isVertical ? 20 : Math.abs(currentX - startX);
             const previewY = isVertical ? Math.min(startY, currentY) : startY - 10;
             const previewH = isVertical ? Math.abs(currentY - startY) : 20;
-            ctx.fillStyle = store.highlightColor || '#ffeb3b';
+            ctx.fillStyle = currentSettings.highlightColor || '#ffeb3b';
             ctx.globalAlpha = 0.6;
             ctx.fillRect(previewX, previewY, previewW, previewH);
             ctx.globalAlpha = 1.0;
         } else {
             // Underline/Strikethrough preview line
             const isVertical = e.ctrlKey;
-            ctx.strokeStyle = store.strokeColor || '#000000';
-            ctx.lineWidth = store.strokeWidth || 2;
+            ctx.strokeStyle = currentSettings.strokeColor || '#000000';
+            ctx.lineWidth = currentSettings.strokeWidth || 2;
             ctx.beginPath();
             
             if (isVertical) {
                 const previewY = Math.min(startY, currentY);
                 const previewH = Math.abs(currentY - startY);
-                const previewX = store.activeTool === 'underline' ? startX - 5 : startX;
+                const previewX = activeTool === 'underline' ? startX - 5 : startX;
                 ctx.moveTo(previewX, previewY);
                 ctx.lineTo(previewX, previewY + previewH);
             } else {
                 const previewX = Math.min(startX, currentX);
                 const previewW = Math.abs(currentX - startX);
-                const previewY = store.activeTool === 'underline' ? startY + 5 : startY;
+                const previewY = activeTool === 'underline' ? startY + 5 : startY;
                 ctx.moveTo(previewX, previewY);
                 ctx.lineTo(previewX + previewW, previewY);
             }
             ctx.stroke();
         }
-    }, [pageHighlights, pageNum, store.highlightColor, store.activeTool, store.strokeColor, store.strokeWidth, canvasSize, hlDrawRef, highlightCanvasRef]);
+    }, [pageHighlights, pageNum, store.toolSettings, store.activeTool, canvasSize, hlDrawRef, highlightCanvasRef]);
 
     const handleHybridMouseUp = useCallback((e) => {
         const activeTool = store.activeTool;
@@ -145,6 +148,8 @@ export default function useHighlightTools({
 
         const containerRect = textLayerDiv.getBoundingClientRect();
         const selection = window.getSelection();
+        
+        const currentSettings = store.toolSettings?.[activeTool] || store.toolSettings?.default || {};
 
         // ── CONDITION A: Native Text Selection Exists ──
         if (selection && !selection.isCollapsed && textLayerDiv.contains(selection.anchorNode)) {
@@ -170,7 +175,7 @@ export default function useHighlightTools({
                         normY: y / cssH,
                         normW: w / cssW,
                         normH: h / cssH,
-                        color: store.highlightColor || '#ffeb3b',
+                        color: currentSettings.highlightColor || '#ffeb3b',
                     });
                 } else if (activeTool === 'underline' || activeTool === 'strikethrough') {
                     if (fc) {
@@ -182,9 +187,10 @@ export default function useHighlightTools({
                         const line = new fabric.Line(
                             [x, lineY, x + w, lineY],
                             {
-                                stroke: store.strokeColor || '#000000',
+                                id: `hl_${Date.now()}_${Math.random().toString(36).substr(2, 5)}_${i}`,
+                                stroke: currentSettings.strokeColor || '#000000',
                                 strokeWidth: dynamicThickness,
-                                opacity: store.opacity,
+                                opacity: currentSettings.opacity || 1.0,
                                 selectable: true,
                                 customData: { type: activeTool },
                             }
@@ -237,7 +243,7 @@ export default function useHighlightTools({
                     normY: finalY / cssH,
                     normW: finalW / cssW,
                     normH: finalH / cssH,
-                    color: store.highlightColor || '#ffeb3b',
+                    color: currentSettings.highlightColor || '#ffeb3b',
                 };
                 setPageHighlights(prev => ({
                     ...prev,
@@ -256,9 +262,10 @@ export default function useHighlightTools({
                     const line = new fabric.Line(
                         coords,
                         {
-                            stroke: store.strokeColor || '#000000',
-                            strokeWidth: store.strokeWidth || 2, // Fixed thickness for freehand
-                            opacity: store.opacity,
+                            id: `hl_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                            stroke: currentSettings.strokeColor || '#000000',
+                            strokeWidth: currentSettings.strokeWidth || 2, // Fixed thickness for freehand
+                            opacity: currentSettings.opacity || 1.0,
                             selectable: true,
                             customData: { type: activeTool },
                         }
