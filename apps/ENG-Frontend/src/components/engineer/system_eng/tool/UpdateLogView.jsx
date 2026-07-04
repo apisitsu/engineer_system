@@ -49,12 +49,14 @@ const UpdateLogView = () => {
 
             if (response.data.success) {
                 message.success({ content: response.data.message, key: 'update', duration: 5 });
+                setTimeout(() => fetchLogs(), 2000); // Refresh logs to see TRIGGERED entry
             } else {
                 message.error({ content: 'Failed to trigger update.', key: 'update', duration: 3 });
             }
         } catch (error) {
             console.error('Error triggering update:', error);
-            message.error({ content: 'Error triggering update.', key: 'update', duration: 3 });
+            const detail = error.response?.data?.message || error.message || 'Unknown error';
+            message.error({ content: `Error: ${detail}`, key: 'update', duration: 5 });
         }
     };
 
