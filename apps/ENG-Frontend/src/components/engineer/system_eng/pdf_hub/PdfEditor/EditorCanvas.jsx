@@ -94,12 +94,36 @@ const EditorCanvas = ({
                     customData: obj.customData,
                 });
 
-                // Sync back to global store to update PropertiesPanel
+                // Sync selected object's properties to the PropertiesPanel.
+                // Target the object's OWN tool type so we don't pollute 'select'/'pan' settings
+                // which would cause stale colors to be force-applied on re-selection.
+                const objToolType = obj.customData?.type || obj.type;
                 const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text';
                 const isStamp = obj.customData?.type && obj.customData.type.startsWith('stamp');
                 
+                // Determine the target tool to update settings for
+                let targetTool = store.activeTool;
+                if (['select', 'pan'].includes(store.activeTool)) {
+                    // Map fabric type back to the drawing tool that created it
+                    if (isText) targetTool = 'addText';
+                    else if (isStamp) targetTool = objToolType;
+                    else if (obj.type === 'ellipse') targetTool = 'circle';
+                    else if (obj.type === 'rect') targetTool = 'rect';
+                    else if (obj.type === 'line') targetTool = 'line';
+                    else if (obj.type === 'path') targetTool = 'freehand';
+                    else if (obj.type === 'group') {
+                        const cdType = obj.customData?.type;
+                        if (cdType === 'arrow') targetTool = 'arrow';
+                        else if (cdType === 'ruler') targetTool = 'ruler';
+                        else targetTool = 'rect'; // fallback
+                    }
+                }
+
                 if (isText) {
-                    if (obj.fill) store.setStrokeColor(obj.fill);
+                    if (obj.fill) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                        store.setToolSetting('select', 'strokeColor', obj.fill);
+                    }
                 } else if (isStamp) {
                     if (obj.type === 'group') {
                         let mainColor = '#e74c3c';
@@ -107,22 +131,44 @@ const EditorCanvas = ({
                            if(child.stroke) mainColor = child.stroke; 
                            else if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') mainColor = child.fill;
                         });
-                        store.setStrokeColor(mainColor);
+                        store.setToolSetting(targetTool, 'strokeColor', mainColor);
+                        store.setToolSetting('select', 'strokeColor', mainColor);
                     } else {
-                        if (obj.stroke) store.setStrokeColor(obj.stroke);
-                        else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') store.setStrokeColor(obj.fill);
+                        if (obj.stroke) {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                            store.setToolSetting('select', 'strokeColor', obj.stroke);
+                        } else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                            store.setToolSetting('select', 'strokeColor', obj.fill);
+                        }
                     }
                 } else {
-                    if (obj.stroke) store.setStrokeColor(obj.stroke);
+                    if (obj.stroke) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                        store.setToolSetting('select', 'strokeColor', obj.stroke);
+                    }
                     if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
-                        store.setFillColor(obj.fill);
+                        store.setToolSetting(targetTool, 'fillColor', obj.fill);
+                        store.setToolSetting('select', 'fillColor', obj.fill);
                     }
                 }
                 
-                if (obj.strokeWidth) store.setStrokeWidth(obj.strokeWidth);
-                if (obj.fontSize) store.setFontSize(obj.fontSize);
-                if (obj.opacity) store.setOpacity(obj.opacity);
-                if (obj.fontFamily) store.setFontFamily(obj.fontFamily);
+                if (obj.strokeWidth) {
+                    store.setToolSetting(targetTool, 'strokeWidth', obj.strokeWidth);
+                    store.setToolSetting('select', 'strokeWidth', obj.strokeWidth);
+                }
+                if (obj.fontSize) {
+                    store.setToolSetting(targetTool, 'fontSize', obj.fontSize);
+                    store.setToolSetting('select', 'fontSize', obj.fontSize);
+                }
+                if (obj.opacity) {
+                    store.setToolSetting(targetTool, 'opacity', obj.opacity);
+                    store.setToolSetting('select', 'opacity', obj.opacity);
+                }
+                if (obj.fontFamily) {
+                    store.setToolSetting(targetTool, 'fontFamily', obj.fontFamily);
+                    store.setToolSetting('select', 'fontFamily', obj.fontFamily);
+                }
             }
         };
 
@@ -434,14 +480,18 @@ const EditorCanvas = ({
                     } else if (!isStamp) {
                         // Regular shapes
                         if (activeObj.type === 'group') {
-                            activeObj.getObjects().forEach(child => {
-                                if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
-                                if (child.type === 'triangle' && child.fill && currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
-                                if (child.type === 'text' || child.type === 'i-text') {
-                                    if (currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
-                                }
-                            });
-                            changed = true;
+                            // Also guard groups against mutation in select/pan mode
+                            const isSelectModeGroup = ['select', 'pan'].includes(store.activeTool);
+                            if (!isSelectModeGroup) {
+                                activeObj.getObjects().forEach(child => {
+                                    if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
+                                    if (child.type === 'triangle' && child.fill && currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
+                                    if (child.type === 'text' || child.type === 'i-text') {
+                                        if (currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
+                                    }
+                                });
+                                changed = true;
+                            }
                         } else {
                             if (activeObj.stroke !== undefined && currentSettings.strokeColor !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
                                 activeObj.set('stroke', currentSettings.strokeColor);

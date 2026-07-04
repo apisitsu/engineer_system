@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 title Auto Update and Run
 color 0A
 
-set "ProjectPath=D:\00_system\EngineerSystem"
+set "ProjectPath=%~dp0"
 set "HealthCheckUrl=http://localhost:2005/api/health"
 set "HealthCheckTimeout=60"
 set "HealthCheckInterval=5"
@@ -101,7 +101,7 @@ echo.
 echo ==============================================
 echo Modifying constance.js...
 echo ==============================================
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$f='apps\ENG-Frontend\src\constance\constance.js'; if(Test-Path $f){ $c = Get-Content $f -Raw; $u = $c -replace '(?m)^(\s*)export const apiUrl\s*=', '$1// export const apiUrl ='; $u = $u -replace '(?m)^(\s*)//\s*export const apiUrl\s*=\s*\"http://plbmp130:2005/\";', '$1export const apiUrl = \"http://plbmp130:2005/\";'; if($c -ne $u){ Set-Content $f -Value $u -Encoding UTF8; Write-Host '[SUCCESS] Modified constance.js to use plbmp130' -ForegroundColor Green } else { Write-Host '[INFO] constance.js is already configured' -ForegroundColor Cyan } } else { Write-Host '[WARNING] Could not find constance.js' -ForegroundColor Yellow }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\fix_constance_prod.ps1
 
 REM ============================================
 REM Step 6: Stop existing processes on ports 2005 and 3000
@@ -186,7 +186,7 @@ if !ERRORLEVEL! NEQ 0 (
 echo [INFO] Rolled back to %PreviousHash%. Re-applying constance.js...
 
 REM Re-apply constance.js for the rolled-back version
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$f='apps\ENG-Frontend\src\constance\constance.js'; if(Test-Path $f){ $c = Get-Content $f -Raw; $u = $c -replace '(?m)^(\s*)export const apiUrl\s*=', '$1// export const apiUrl ='; $u = $u -replace '(?m)^(\s*)//\s*export const apiUrl\s*=\s*\"http://plbmp130:2005/\";', '$1export const apiUrl = \"http://plbmp130:2005/\";'; if($c -ne $u){ Set-Content $f -Value $u -Encoding UTF8; Write-Host '[SUCCESS] Modified constance.js to use plbmp130' -ForegroundColor Green } else { Write-Host '[INFO] constance.js is already configured' -ForegroundColor Cyan } } else { Write-Host '[WARNING] Could not find constance.js' -ForegroundColor Yellow }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\fix_constance_prod.ps1
 
 REM Start the previous version
 echo.

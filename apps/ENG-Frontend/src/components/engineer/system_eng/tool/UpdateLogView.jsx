@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Typography, Card, Spin, message, Tag, Layout } from 'antd';
+import { Table, Typography, Card, Spin, message, Tag, Layout, Button, Popconfirm } from 'antd';
 import axios from 'axios';
 import { apiUrl } from '../../../../constance/constance';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -38,6 +38,25 @@ const UpdateLogView = () => {
     useEffect(() => {
         fetchLogs();
     }, []);
+
+    const triggerUpdate = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            message.loading({ content: 'Initiating server update...', key: 'update' });
+            const response = await axios.post(`${apiUrl}api/system/trigger-update`, {}, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.data.success) {
+                message.success({ content: response.data.message, key: 'update', duration: 5 });
+            } else {
+                message.error({ content: 'Failed to trigger update.', key: 'update', duration: 3 });
+            }
+        } catch (error) {
+            console.error('Error triggering update:', error);
+            message.error({ content: 'Error triggering update.', key: 'update', duration: 3 });
+        }
+    };
 
     const columns = [
         {
@@ -99,7 +118,22 @@ const UpdateLogView = () => {
                     padding: '24px'
                 }}>
                     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-                        <Card title={<Title level={3} style={{ margin: 0 }}>System Update Logs</Title>} bordered={false}>
+                        <Card 
+                            title={<Title level={3} style={{ margin: 0 }}>System Update Logs</Title>} 
+                            extra={
+                                <Popconfirm
+                                    title="Run Server Update"
+                                    description="Are you sure you want to run the auto-update script on the server? This will pull latest code and restart the server."
+                                    onConfirm={triggerUpdate}
+                                    okText="Yes, Run Update"
+                                    cancelText="Cancel"
+                                    placement="bottomRight"
+                                >
+                                    <Button type="primary" danger>Run Server Update</Button>
+                                </Popconfirm>
+                            }
+                            bordered={false}
+                        >
                             <Table
                                 columns={columns}
                                 dataSource={logs}
