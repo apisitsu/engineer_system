@@ -252,6 +252,18 @@ async function searchInventory(machine, rules, computedDims) {
   await assertTableExists(table);
   const validCols = await getTableColumns(table);
 
+  // Guard: at least one rule must resolve to a computed dim mapped to a valid
+  // inventory column, or there is nothing to filter/rank on. Without this the SQL
+  // below degrades to `SELECT * FROM table [machine/tooling filter] LIMIT 2` — no
+  // WHERE from a dim, no ORDER BY — and returns ARBITRARY rows presented as real
+  // matches (a silent wrong-match). This path is reached when every match-dim
+  // formula ERRORS: computeDimensions omits the failed key, so computedDims[key]
+  // is undefined and every rule is skipped below. Return no match instead.
+  const anyComputed = rules.some(
+    r => computedDims[r.output_key] !== undefined && validCols.has(r.inventory_column)
+  );
+  if (!anyComputed) return [];
+
   const conditions = [];
   const params = [];
   let pi = 1;
