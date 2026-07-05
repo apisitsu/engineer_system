@@ -26,6 +26,38 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
         store.updateSelectedTextContent(val, fabricCanvasRefs, currentPage);
     };
 
+    const handleSetStrokeColor = (color) => {
+        const hex = color ? color.toHexString() : 'transparent';
+        store.setStrokeColor(hex);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('strokeColor', hex, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetFillColor = (color) => {
+        const hex = color ? color.toHexString() : 'transparent';
+        store.setFillColor(hex);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('fillColor', hex, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetStrokeWidth = (w) => {
+        store.setStrokeWidth(w);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('strokeWidth', w, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetFontSize = (s) => {
+        store.setFontSize(s);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontSize', s, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetFontFamily = (f) => {
+        store.setFontFamily(f);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontFamily', f, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetOpacity = (o) => {
+        store.setOpacity(o);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('opacity', o, fabricCanvasRefs, currentPage);
+    };
+
     return (
         <div className="pdf-ws-right-panel" style={{
             '--ws-border': theme.colors.border,
@@ -48,7 +80,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'drawer' ? '#fff' : '#3498db',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('drawer', '#3498db'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('drawer', '#3498db'); handleSetFillColor(null); }}
                             >
                                 Drawer
                             </button>
@@ -59,7 +91,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'checker' ? '#fff' : '#e74c3c',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('checker', '#e74c3c'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('checker', '#e74c3c'); handleSetFillColor(null); }}
                             >
                                 Checker
                             </button>
@@ -70,7 +102,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     color: store.currentDwgRole === 'approver' ? '#fff' : '#000000',
                                     cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
                                 }}
-                                onClick={() => { store.setDwgRoleColor('approver', '#000000'); store.setFillColor('transparent'); }}
+                                onClick={() => { store.setDwgRoleColor('approver', '#000000'); handleSetFillColor(null); }}
                             >
                                 Approver
                             </button>
@@ -100,7 +132,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                 <PropRow label="Text Color">
                                     <ColorPicker
                                         value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
-                                        onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
+                                        onChangeComplete={handleSetStrokeColor}
                                         size="small"
                                         allowClear
                                         presets={COLOR_PRESETS}
@@ -109,14 +141,14 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                 <PropRow label="Font Size">
                                     <InputNumber
                                         min={8} max={120} value={currentSettings.fontSize}
-                                        onChange={store.setFontSize}
+                                        onChange={handleSetFontSize}
                                         size="small" style={{ width: 60 }}
                                     />
                                 </PropRow>
                                 <PropRow label="Font Family">
                                     <Select
                                         value={currentSettings.fontFamily || 'Helvetica'}
-                                        onChange={store.setFontFamily}
+                                        onChange={handleSetFontFamily}
                                         size="small" style={{ width: 100 }}
                                         options={[
                                             { value: 'Helvetica', label: 'Helvetica' },
@@ -134,7 +166,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     <PropRow label="Color">
                                         <ColorPicker
                                             value={currentSettings.strokeColor === 'transparent' ? null : currentSettings.strokeColor}
-                                            onChangeComplete={(color) => store.setStrokeColor(color ? color.toHexString() : 'transparent')}
+                                            onChangeComplete={handleSetStrokeColor}
                                             size="small"
                                             allowClear
                                             presets={COLOR_PRESETS}
@@ -143,14 +175,14 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     <PropRow label="Width">
                                         <InputNumber
                                             min={1} max={20} value={currentSettings.strokeWidth}
-                                            onChange={store.setStrokeWidth}
+                                            onChange={handleSetStrokeWidth}
                                             size="small" style={{ width: 60 }}
                                         />
                                     </PropRow>
                                     <PropRow label="Symbol Size">
                                         <InputNumber
                                             min={8} max={72} value={currentSettings.fontSize}
-                                            onChange={store.setFontSize}
+                                            onChange={handleSetFontSize}
                                             size="small" style={{ width: 60 }}
                                         />
                                     </PropRow>
@@ -161,7 +193,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                     <PropRow label="Color">
                                         <ColorPicker
                                             value={currentSettings.fillColor === 'transparent' ? null : currentSettings.fillColor}
-                                            onChangeComplete={(color) => store.setFillColor(color ? color.toHexString() : 'transparent')}
+                                            onChangeComplete={handleSetFillColor}
                                             size="small"
                                             allowClear
                                             presets={COLOR_PRESETS}
@@ -176,7 +208,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                             <Slider
                                 min={0.1} max={1} step={0.05}
                                 value={currentSettings.opacity}
-                                onChange={store.setOpacity}
+                                onChange={handleSetOpacity}
                             />
                         </div>
                     </>

@@ -79,10 +79,18 @@ const EditorCanvas = ({
 
         fabricCanvasRefs.current[pageNum] = canvas;
 
+        canvas.on('object:added', (e) => {
+            if (e.target && !e.target.id) {
+                e.target.id = `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            }
+        });
+
         const handleSelection = (e) => {
             const obj = e.selected?.[0];
             if (obj) {
-                store.setSelectedObject(obj.id || obj.__uid, {
+                if (!obj.id) obj.id = `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                
+                store.setSelectedObject(obj.id, {
                     type: obj.type,
                     fill: obj.fill,
                     stroke: obj.stroke,
@@ -100,7 +108,7 @@ const EditorCanvas = ({
                 const objToolType = obj.customData?.type || obj.type;
                 const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text';
                 const isStamp = obj.customData?.type && obj.customData.type.startsWith('stamp');
-                
+
                 // Determine the target tool to update settings for
                 let targetTool = store.activeTool;
                 if (['select', 'pan'].includes(store.activeTool)) {
@@ -120,30 +128,55 @@ const EditorCanvas = ({
                 }
 
                 if (isText) {
-                    if (obj.fill) store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                    if (obj.fill) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                        store.setToolSetting('select', 'strokeColor', obj.fill);
+                    }
                 } else if (isStamp) {
                     if (obj.type === 'group') {
                         let mainColor = '#e74c3c';
                         obj.getObjects().forEach(child => {
-                           if(child.stroke) mainColor = child.stroke; 
-                           else if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') mainColor = child.fill;
+                            if (child.stroke) mainColor = child.stroke;
+                            else if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') mainColor = child.fill;
                         });
                         store.setToolSetting(targetTool, 'strokeColor', mainColor);
+                        store.setToolSetting('select', 'strokeColor', mainColor);
                     } else {
-                        if (obj.stroke) store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
-                        else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                        if (obj.stroke) {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                            store.setToolSetting('select', 'strokeColor', obj.stroke);
+                        } else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
+                            store.setToolSetting(targetTool, 'strokeColor', obj.fill);
+                            store.setToolSetting('select', 'strokeColor', obj.fill);
+                        }
                     }
                 } else {
-                    if (obj.stroke) store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                    if (obj.stroke) {
+                        store.setToolSetting(targetTool, 'strokeColor', obj.stroke);
+                        store.setToolSetting('select', 'strokeColor', obj.stroke);
+                    }
                     if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') {
                         store.setToolSetting(targetTool, 'fillColor', obj.fill);
+                        store.setToolSetting('select', 'fillColor', obj.fill);
                     }
                 }
-                
-                if (obj.strokeWidth) store.setToolSetting(targetTool, 'strokeWidth', obj.strokeWidth);
-                if (obj.fontSize) store.setToolSetting(targetTool, 'fontSize', obj.fontSize);
-                if (obj.opacity) store.setToolSetting(targetTool, 'opacity', obj.opacity);
-                if (obj.fontFamily) store.setToolSetting(targetTool, 'fontFamily', obj.fontFamily);
+
+                if (obj.strokeWidth) {
+                    store.setToolSetting(targetTool, 'strokeWidth', obj.strokeWidth);
+                    store.setToolSetting('select', 'strokeWidth', obj.strokeWidth);
+                }
+                if (obj.fontSize) {
+                    store.setToolSetting(targetTool, 'fontSize', obj.fontSize);
+                    store.setToolSetting('select', 'fontSize', obj.fontSize);
+                }
+                if (obj.opacity) {
+                    store.setToolSetting(targetTool, 'opacity', obj.opacity);
+                    store.setToolSetting('select', 'opacity', obj.opacity);
+                }
+                if (obj.fontFamily) {
+                    store.setToolSetting(targetTool, 'fontFamily', obj.fontFamily);
+                    store.setToolSetting('select', 'fontFamily', obj.fontFamily);
+                }
             }
         };
 
@@ -194,7 +227,7 @@ const EditorCanvas = ({
                 const canvas = pdfCanvasRef.current;
                 canvas.style.width = `${displayW}px`;
                 canvas.style.height = `${displayH}px`;
-                
+
                 setCanvasSize({ width: displayW, height: displayH });
 
                 const fc = fabricCanvasRefs.current[pageNum];
@@ -202,26 +235,10 @@ const EditorCanvas = ({
                     const oldW = fc.width || displayW;
                     const scaleX = displayW / oldW;
                     const scaleY = displayH / (fc.height || displayH);
-                    
+
                     fc.setDimensions({ width: displayW, height: displayH });
-                    
-                    if (fc.getObjects().length === 0 && pageAnnotations[pageNum] && pageAnnotations[pageNum].objects?.length > 0) {
-                        // Initial load
-                        await fc.loadFromJSON(pageAnnotations[pageNum]);
-                        const savedW = pageAnnotations[pageNum]._canvasWidth || displayW;
-                        const savedH = pageAnnotations[pageNum]._canvasHeight || displayH;
-                        const initScaleX = displayW / savedW;
-                        const initScaleY = displayH / savedH;
-                        if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
-                            fc.getObjects().forEach(obj => {
-                                obj.set({
-                                    left: obj.left * initScaleX, top: obj.top * initScaleY,
-                                    scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
-                                });
-                                obj.setCoords();
-                            });
-                        }
-                    } else if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
+
+                    if (Math.abs(scaleX - 1) > 0.01 || Math.abs(scaleY - 1) > 0.01) {
                         // Scale existing objects on zoom
                         fc.getObjects().forEach(obj => {
                             obj.set({
@@ -252,12 +269,12 @@ const EditorCanvas = ({
                 clearTimeout(renderTimeoutId);
                 renderTimeoutId = setTimeout(async () => {
                     if (cancelled) return;
-                    
+
                     try {
                         const ctx = canvas.getContext('2d');
                         canvas.width = viewport.width;
                         canvas.height = viewport.height;
-                        
+
                         const renderTask = page.render({ canvasContext: ctx, viewport });
                         renderTaskRef.current = renderTask;
                         await renderTask.promise;
@@ -267,9 +284,9 @@ const EditorCanvas = ({
                         // Render Text Layer
                         const textContent = await page.getTextContent();
                         if (cancelled) return;
-                        
+
                         if (textLayerDiv) {
-                            textLayerDiv.innerHTML = ''; 
+                            textLayerDiv.innerHTML = '';
                             const textViewport = page.getViewport({ scale: zoom });
                             textLayerDiv.style.setProperty('--scale-factor', textViewport.scale);
 
@@ -284,7 +301,7 @@ const EditorCanvas = ({
                         if (!cancelled) console.error('Render error:', renderErr);
                     }
                 }, 250); // 250ms debounce for smooth zooming
-                
+
             } catch (err) {
                 if (!cancelled) console.error('Page init error:', err);
             }
@@ -302,6 +319,37 @@ const EditorCanvas = ({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc, pageNum, zoom]);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Re-hydrate Annotations (Layer 2) when data arrives
+    // ══════════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const fc = fabricCanvasRefs.current[pageNum];
+        if (!fc || !pageAnnotations[pageNum] || !pageAnnotations[pageNum].objects?.length) return;
+
+        // Only load if canvas is currently empty (initial load)
+        if (fc.getObjects().length === 0 && canvasSize.width > 0) {
+            let isMounted = true;
+            fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
+                if (!isMounted) return;
+                const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
+                const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
+                const initScaleX = canvasSize.width / savedW;
+                const initScaleY = canvasSize.height / savedH;
+                if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
+                    fc.getObjects().forEach(obj => {
+                        obj.set({
+                            left: obj.left * initScaleX, top: obj.top * initScaleY,
+                            scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
+                        });
+                        obj.setCoords();
+                    });
+                }
+                fc.renderAll();
+            }).catch(e => console.error("loadFromJSON Error:", e));
+            return () => { isMounted = false; };
+        }
+    }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs]);
 
     // ══════════════════════════════════════════════════════════════════
     // Render Overlay PDF (Layer 1.5)
@@ -426,192 +474,18 @@ const EditorCanvas = ({
         fabricCanvasRefs,
     });
 
-    // ══════════════════════════════════════════════════════════════════
-    // Live update active object when store properties change
-    // ══════════════════════════════════════════════════════════════════
-    useEffect(() => {
-        const fc = fabricCanvasRefs.current[pageNum];
-        if (!fc) return;
-        const activeSelection = fc.getActiveObject();
-        if (!activeSelection) return;
 
-        let changed = false;
-        const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
-
-        const processObject = (activeObj) => {
-            // Skip highlights as they are not standard Fabric objects
-            if (activeObj.customData?.type !== 'highlight') {
-                const isText = activeObj.type === 'i-text' || activeObj.type === 'textbox' || activeObj.type === 'text';
-                const isSticky = activeObj.customData?.type === 'sticky';
-                const isStamp = activeObj.customData?.type && activeObj.customData.type.startsWith('stamp');
-
-                // --- Color Update ---
-                if (!isSticky) {
-                    if (isText) {
-                        if (currentSettings.strokeColor !== undefined && activeObj.fill !== currentSettings.strokeColor) {
-                            activeObj.set('fill', currentSettings.strokeColor);
-                            changed = true;
-                        }
-                    } else if (!isStamp) {
-                        // Regular shapes
-                        if (activeObj.type === 'group') {
-                            // Also guard groups against mutation in select/pan mode
-                            const isSelectModeGroup = ['select', 'pan'].includes(store.activeTool);
-                            if (!isSelectModeGroup) {
-                                activeObj.getObjects().forEach(child => {
-                                    if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
-                                    if (child.type === 'triangle' && child.fill && currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
-                                    if (child.type === 'text' || child.type === 'i-text') {
-                                        if (currentSettings.strokeColor !== undefined) child.set('fill', currentSettings.strokeColor);
-                                    }
-                                });
-                                changed = true;
-                            }
-                        } else {
-                            // Only force-apply stroke/fill from tool settings when using a drawing tool.
-                            // In select/pan mode, don't mutate the object — this prevents the bug where
-                            // ellipses/rects get filled with black or stale colors on re-selection.
-                            const isSelectMode = ['select', 'pan'].includes(store.activeTool);
-                            if (!isSelectMode) {
-                                if (activeObj.stroke !== undefined && currentSettings.strokeColor !== undefined && activeObj.stroke !== currentSettings.strokeColor) {
-                                    activeObj.set('stroke', currentSettings.strokeColor);
-                                    changed = true;
-                                }
-                                if (activeObj.fill !== undefined && currentSettings.fillColor !== undefined && activeObj.fill !== currentSettings.fillColor) {
-                                    activeObj.set('fill', currentSettings.fillColor);
-                                    changed = true;
-                                }
-                            }
-                        }
-                    } else {
-                        // Stamps
-                        if (activeObj.type === 'group') {
-                            activeObj.getObjects().forEach(child => {
-                                if (child.stroke && currentSettings.strokeColor !== undefined) child.set('stroke', currentSettings.strokeColor);
-                                if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff' && currentSettings.strokeColor !== undefined) {
-                                    child.set('fill', currentSettings.strokeColor);
-                                }
-                            });
-                            changed = true;
-                        } else {
-                            if (activeObj.fill && activeObj.fill !== 'transparent' && currentSettings.strokeColor !== undefined) {
-                                activeObj.set('fill', currentSettings.strokeColor);
-                            }
-                            if (activeObj.stroke && currentSettings.strokeColor !== undefined) {
-                                activeObj.set('stroke', currentSettings.strokeColor);
-                            }
-                            changed = true;
-                        }
-                    }
-                }
-
-                // --- Stroke Width ---
-                if (activeObj.type === 'group' && !isStamp) {
-                    activeObj.getObjects().forEach(child => {
-                        if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) {
-                            if (currentSettings.strokeWidth !== undefined && child.strokeWidth !== currentSettings.strokeWidth) {
-                                child.set('strokeWidth', currentSettings.strokeWidth);
-                                changed = true;
-                            }
-                        }
-                        if (child.type === 'triangle') {
-                            if (currentSettings.fontSize !== undefined && (child.width !== currentSettings.fontSize || child.height !== currentSettings.fontSize)) {
-                                child.set({ width: currentSettings.fontSize, height: currentSettings.fontSize });
-                                changed = true;
-                            }
-                        }
-                    });
-                    if (changed) {
-                        activeObj.set({ dirty: true });
-                        activeObj.setCoords();
-                    }
-                } else if (currentSettings.strokeWidth !== undefined && activeObj.strokeWidth !== undefined && activeObj.strokeWidth !== currentSettings.strokeWidth) {
-                    if (!isText && !isSticky) {
-                        activeObj.set('strokeWidth', currentSettings.strokeWidth);
-                        changed = true;
-                    }
-                }
-
-                // --- Opacity ---
-                if (currentSettings.opacity !== undefined && activeObj.opacity !== undefined && activeObj.opacity !== currentSettings.opacity) {
-                    activeObj.set('opacity', currentSettings.opacity);
-                    changed = true;
-                }
-
-                // --- Font Size (and Stamp Size) ---
-                if (isText || isSticky) {
-                    if (currentSettings.fontSize !== undefined && activeObj.fontSize !== currentSettings.fontSize) {
-                        activeObj.set('fontSize', currentSettings.fontSize);
-                        changed = true;
-                    }
-                    if (currentSettings.fontFamily !== undefined && activeObj.fontFamily !== currentSettings.fontFamily) {
-                        activeObj.set('fontFamily', currentSettings.fontFamily);
-                        changed = true;
-                    }
-                } else if (activeObj.type === 'group' && !isStamp) {
-                    let textChanged = false;
-                    activeObj.getObjects().forEach(child => {
-                        if (child.type === 'i-text' || child.type === 'text') {
-                            if (currentSettings.fontSize !== undefined && child.fontSize !== currentSettings.fontSize) {
-                                child.set('fontSize', currentSettings.fontSize);
-                                textChanged = true;
-                            }
-                        }
-                    });
-                    if (textChanged) {
-                        activeObj.set({ dirty: true });
-                        activeObj.setCoords();
-                        changed = true;
-                    }
-                } else if (isStamp) {
-                    // Resize stamps dynamically
-                    if (currentSettings.fontSize !== undefined) {
-                        if (activeObj.customData.type === 'stampCheckmark' || activeObj.customData.type === 'stampCross') {
-                            activeObj.set('fontSize', currentSettings.fontSize * 2.5);
-                            changed = true;
-                        } else if (activeObj.customData.type === 'stampCircle') {
-                            activeObj.set('radius', currentSettings.fontSize);
-                            changed = true;
-                        } else if (activeObj.customData.type === 'stampOk') {
-                            activeObj.getObjects()[0].set('radius', currentSettings.fontSize * 1.2);
-                            activeObj.getObjects()[1].set('fontSize', currentSettings.fontSize * 1.1);
-                            activeObj.set({ dirty: true });
-                            activeObj.setCoords();
-                            changed = true;
-                        } else if (activeObj.customData.type === 'stampUserDate') {
-                            const scale = (currentSettings.fontSize / 16) * 0.75;
-                            activeObj.set({ scaleX: scale, scaleY: scale });
-                            changed = true;
-                        }
-                    }
-                }
-            }
-        };
-
-        if (activeSelection.type === 'activeSelection') {
-            activeSelection.getObjects().forEach(obj => processObject(obj));
-        } else {
-            processObject(activeSelection);
-        }
-
-        if (changed) {
-            fc.renderAll();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        store.toolSettings, store.activeTool, pageNum
-    ]);
 
     // ══════════════════════════════════════════════════════════════════
     // Highlight Layer — Drawing, Rendering, Deletion
     // ══════════════════════════════════════════════════════════════════
 
     // Sync highlight canvas size with PDF canvas size (DPR-aware) AND Redraw highlights
-    useEffect(() => {
+    const redrawHighlights = useCallback(() => {
         const hlCanvas = highlightCanvasRef.current;
         if (!hlCanvas || canvasSize.width === 0) return;
         const dpr = window.devicePixelRatio || 1;
-        
+
         // 1. Resize canvas (Note: resizing a canvas automatically clears its content)
         hlCanvas.width = canvasSize.width * dpr;
         hlCanvas.height = canvasSize.height * dpr;
@@ -641,6 +515,31 @@ const EditorCanvas = ({
         });
     }, [pageHighlights, pageNum, canvasSize]);
 
+    useEffect(() => {
+        redrawHighlights();
+    }, [redrawHighlights]);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Restore Canvas on Tab Resume (Browser Context Loss Fix)
+    // ══════════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                const fc = fabricCanvasRefs.current[pageNum];
+                if (fc) fc.renderAll();
+                redrawHighlights();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleVisibilityChange);
+        };
+    }, [pageNum, fabricCanvasRefs, redrawHighlights]);
+
     // ── Hybrid Selection Handlers (Extracted to useHighlightTools) ──
     const {
         handleHybridMouseDown,
@@ -666,10 +565,10 @@ const EditorCanvas = ({
     // ── Mouse tracking for tool preview ──
     const handleContainerMouseMove = useCallback((e) => {
         if (!previewRef.current || !containerRef.current) return;
-        
+
         const tool = store.activeTool;
         const activeTools = ['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'];
-        
+
         if (!activeTools.includes(tool)) {
             previewRef.current.style.display = 'none';
             return;

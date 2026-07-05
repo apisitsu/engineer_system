@@ -24,13 +24,34 @@ exports.triggerUpdate = async (req, res) => {
         const scriptPath = path.resolve(__dirname, '../../../../auto_update_and_run.cmd');
         const cwdPath = path.resolve(__dirname, '../../../../');
         
-        // Spawn the batch file detached so it can kill the node process without getting killed itself
-        const child = spawn('cmd.exe', ['/c', scriptPath], {
+        // Pre-log to DB so the user always sees that a trigger happened
+        try {
+            await engPool.query(
+                'INSERT INTO system_update_logs (action_type, description) VALUES ($1, $2)',
+                ['TRIGGERED', `Manual trigger by user ${req.user?.empno || 'unknown'}`]
+            );
+        } catch (logErr) {
+            console.error('[WARN] Failed to pre-log trigger:', logErr.message);
+        }
+
+        // Spawn the batch file using PowerShell's Start-Process to break the process tree chain.
+        // This prevents the batch file from committing suicide when it runs `taskkill /T` on the Node.js server.
+        const child = spawn('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            `Start-Process cmd.exe -ArgumentList '/c ""${scriptPath}""' -WorkingDirectory '${cwdPath}'`
+        ], {
             detached: true,
             stdio: 'ignore',
             cwd: cwdPath
         });
         
+        child.on('error', (err) => {
+            console.error('[ERROR] Failed to spawn update process:', err);
+        });
+
         child.unref();
 
         res.json({ success: true, message: 'Update process started successfully. Server will restart shortly.' });
