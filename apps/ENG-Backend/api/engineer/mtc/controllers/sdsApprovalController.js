@@ -35,6 +35,10 @@ const { engPool } = require('../../../../instance/eng_db');
 const { isAdmin } = require('../../../../middleware/mtcAuth');
 const { TABLES } = require('../mtcConstants');
 const { buildSealSvg, buildSealDataUri, toSealName } = require('../utils/stampSeal');
+// Auto-intake: mirror each SDS approval sheet onto the shared Kanban board, moving
+// the card as it advances prepared→checked→approved. Fail-open (never blocks sign).
+const kanbanIntake = require('../services/kanbanIntake');
+const SDS_SOURCE = 'sds_approval';
 
 const router = express.Router();
 
@@ -272,6 +276,19 @@ router.post('/', async (req, res) => {
       em_id: user.empno, signer_name: user.name || String(user.empno),
       dept: deptOf(user) || null, signed_at: null, source: 'live', created_by: user.empno,
     });
+
+    // --- Move/create the board card for this approval sheet (fail-open) ---
+    // stageKey = the role just signed; admin maps prepared/checked/approved → lists.
+    // Backfill (historical bulk import) is intentionally NOT hooked to avoid flooding.
+    kanbanIntake.syncCard({
+      io: req.app.get('io'),
+      sourceType: SDS_SOURCE,
+      sourceRef: `${cn}||${machine_type_name}||${process_code}`,
+      stageKey: role,
+      name: `SDS ${cn} · ${machine_type_name} · ${process_code}`,
+      description: `Signed ${role} by ${user.name || user.empno}`,
+    }).catch((e) => console.warn('[sdsApproval] kanban intake failed:', e.message));
+
     res.json({ success: true, approval: row });
   } catch (e) {
     console.error('sdsApproval sign:', e.message);

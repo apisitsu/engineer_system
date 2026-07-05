@@ -17,6 +17,10 @@ const {
 const { verifyToken, optionalAuth, checkStagePermission } = require('../utils/toolRequestAuth');
 const { validateFileUpload, sanitizeFilename } = require('../utils/fileUpload');
 const fs = require('fs');
+// Auto-intake: mirror each request onto the shared Kanban board (create on new,
+// move on stage change). Fail-open — a board-sync failure never blocks the request.
+const kanbanIntake = require('../services/kanbanIntake');
+const TR_SOURCE = 'tool_request';
 
 // ── Logger utility ───────────────────────────────────────────────────────────
 const logger = {
@@ -311,6 +315,17 @@ const createToolRequest = async (req, res) => {
             }
         })();
 
+        // --- Auto-intake onto the Kanban board (fire-and-forget, fail-open) ---
+        kanbanIntake.syncCard({
+            io: req.app.get('io'),
+            sourceType: TR_SOURCE,
+            sourceRef: requestId,
+            stageKey: WORKFLOW_STAGES.ENG_CHECK,
+            name: `${request_item}: ${title}`,
+            description: detail,
+            dueDate: req_due_date,
+        }).catch((e) => logger.warn('Kanban intake (create) failed', { error: e.message }));
+
         res.json({ result: 'true', message: 'Request saved successfully', id: requestId });
     } catch (error) {
         await client.query('ROLLBACK');
@@ -601,6 +616,22 @@ const submitAction = async (req, res) => {
         } catch (emailErr) {
             logger.warn('Email failed', { error: emailErr.message });
         }
+
+        // --- Move the board card to the new stage's list (fail-open) ---
+        // Next-stage KEY = emailApprove/emailDeny (the workflow stage this advances
+        // to); terminal transitions (null) route to the 'completed' / 'denied' bucket.
+        const nextStageKey = isApprove
+            ? (stageConfig.emailApprove || 'completed')
+            : (stageConfig.emailDeny || 'denied');
+        kanbanIntake.syncCard({
+            io: req.app.get('io'),
+            sourceType: TR_SOURCE,
+            sourceRef: id,
+            stageKey: nextStageKey,
+            name: `${request.request_item}: ${request.title}`,
+            description: request.detail,
+            dueDate: request.req_due_date,
+        }).catch((e) => logger.warn('Kanban intake (move) failed', { error: e.message }));
 
         res.json({ success: true, status: nextStatus, current_stage: nextStage });
     } catch (err) {
