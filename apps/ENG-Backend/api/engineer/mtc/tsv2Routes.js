@@ -17,6 +17,7 @@ const inventoryCtrl   = require('./controllers/inventoryController');
 const partnoMapCtrl   = require('./controllers/partnoMapController');
 const configCache     = require('./services/tsv2ConfigCache');
 const tselectFallback = require('./services/tselectFallback');
+const kanbanIntake    = require('./services/kanbanIntake');
 
 // Flush the search config cache once a mutation response is sent, so admin edits
 // to machines/limits/formulas/rules take effect on the very next search (the TTL
@@ -72,19 +73,38 @@ router.put('/search-rules/:id',     isAdmin,                 flushConfig, search
 router.delete('/search-rules/:id',  isAdmin,                 flushConfig, searchRuleCtrl.remove);
 
 // ── Inventory (Tool List) ────────────────────────────────────────────────────
+// Inventory rows are queried LIVE by searchInventory (not in the config cache),
+// but a search RESULT is persisted per-CN in tselect_cn_cache (6h TTL) via
+// tselectFallback — consumed by the SDS coverage report + SDS PDF. So an inventory
+// edit must drop that persisted cache or those consumers serve stale tool matches
+// for up to 6h. flushTselectOnWrite clears it on any non-GET success.
 router.get('/inventory-lookup',         inventoryCtrl.lookup); // dim lookup by tooling_no (SDS compare)
 router.get('/inventory/:table',         inventoryCtrl.list);
-router.post('/inventory/:table',        isAdmin, inventoryCtrl.create);
-router.put('/inventory/:table/:id',     isAdmin, inventoryCtrl.update);
-router.delete('/inventory/:table/:id',  isAdmin, inventoryCtrl.remove);
+router.post('/inventory/:table',        isAdmin, flushTselectOnWrite, inventoryCtrl.create);
+router.put('/inventory/:table/:id',     isAdmin, flushTselectOnWrite, inventoryCtrl.update);
+router.delete('/inventory/:table/:id',  isAdmin, flushTselectOnWrite, inventoryCtrl.remove);
 
 // ── Part No → Tool map (formula-less fixtures, e.g. ROTARY DRESSER) ──────────
-// Read fresh by the SDS PDF per render, so no config-cache flush is needed.
+// Read fresh by the SDS PDF per render, but _applyPartnoOverrides feeds the
+// persisted per-CN T-Select cache too — so a map edit must invalidate it (same
+// reason as inventory above).
 router.get('/partno-map',            partnoMapCtrl.list);
 router.get('/partno-map/meta',       partnoMapCtrl.meta);
-router.post('/partno-map',           isAdmin, partnoMapCtrl.create);
-router.put('/partno-map/:id',        isAdmin, partnoMapCtrl.update);
-router.delete('/partno-map/:id',     isAdmin, partnoMapCtrl.remove);
+router.post('/partno-map',           isAdmin, flushTselectOnWrite, partnoMapCtrl.create);
+router.put('/partno-map/:id',        isAdmin, flushTselectOnWrite, partnoMapCtrl.update);
+router.delete('/partno-map/:id',     isAdmin, flushTselectOnWrite, partnoMapCtrl.remove);
+
+// ── Board intake config (MTC → Kanban auto-cards) ───────────────────────────
+// Per-source config (tool_request / sds_approval): target board + stage→list map
+// + system user + enabled flag. Disabled/absent → the workflow hooks no-op.
+router.get('/board-config/:sourceType', isAdmin, async (req, res) => {
+  try { res.json({ data: await kanbanIntake.getConfig(req.params.sourceType) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/board-config/:sourceType', isAdmin, async (req, res) => {
+  try { res.json({ data: await kanbanIntake.setConfig(req.params.sourceType, req.body) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Spec (Part Management) ──────────────────────────────────────────────────
 router.use('/spec', flushTselectOnWrite, specCtrl);

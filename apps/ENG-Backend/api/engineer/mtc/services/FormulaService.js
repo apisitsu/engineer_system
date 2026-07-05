@@ -26,10 +26,13 @@ class FormulaServiceV2 {
 
     // roundN / ceilN / floorN — expr-eval treats built-in round/ceil/floor as unary,
     // so _preprocess rewrites round(x,n) → roundN(x,n) before the parser sees it.
+    // Single rounding method for all n (was: Math.round for n<=1 but x.toFixed for
+    // n>1, which round differently at the .5 boundary and on float error). Scale →
+    // round-half-up → unscale, consistently.
     p.functions.roundN = (x, n) => {
       if (n == null) return Math.round(x);
-      if (n <= 1) { const f = Math.pow(10, n); return Math.round(x * f) / f; }
-      return parseFloat(x.toFixed(n));
+      const f = Math.pow(10, n);
+      return Math.round(x * f) / f;
     };
     p.functions.ceilN  = (x, n) => {
       if (n == null) return Math.ceil(x);
@@ -52,6 +55,10 @@ class FormulaServiceV2 {
     // ── Conditional ─────────────────────────────────────────────────────────
     // if(condition, trueValue, falseValue)
     // e.g.  if(isBallInner, 18.5 + W - 2, 18.5 + W/2 + 3)
+    // ⚠ expr-eval evaluates BOTH branches eagerly (no short-circuit) before this
+    // runs — a non-finite value in the DEAD branch is harmless (only the chosen
+    // branch is returned and _evalChecked tests the final result), but do NOT
+    // write formulas that rely on the false branch being skipped to avoid an error.
     p.functions.if = (cond, trueVal, falseVal) => (cond ? trueVal : falseVal);
 
     // ── Table lookup ─────────────────────────────────────────────────────────

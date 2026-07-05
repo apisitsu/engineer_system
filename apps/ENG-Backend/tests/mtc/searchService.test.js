@@ -227,6 +227,22 @@ describe('edge cases', () => {
     expect(sql).not.toMatch(/ABS\("dim_b"/);
   });
 
+  it('returns [] (no arbitrary rows) when every rule\'s computed dim is undefined', async () => {
+    // Simulates all match-dim formulas erroring → computeDimensions omits the keys.
+    // Without the guard this degrades to `SELECT * ... LIMIT 2` and returns garbage.
+    mockTableSetup();
+
+    const rules = [
+      { output_key: 'A', inventory_column: 'dim_a', tol_plus: '0.5', tol_minus: '0.5', sort_priority: 0 },
+      { output_key: 'B', inventory_column: 'dim_b', tol_plus: null,  tol_minus: null,  sort_priority: 1 },
+    ];
+
+    const rows = await searchService._searchInventory(MACHINE, rules, {}); // no computed dims
+    expect(rows).toEqual([]);
+    // Only the 2 setup queries ran — the inventory SELECT was never issued.
+    expect(engPool.query).toHaveBeenCalledTimes(2);
+  });
+
   it('includes machine filter in WHERE when machineFilter is set', async () => {
     const colsWithMachine = [...COLS, 'Machine'];
     engPool.query
