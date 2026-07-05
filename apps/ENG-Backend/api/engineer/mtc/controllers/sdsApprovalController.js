@@ -163,9 +163,11 @@ function userCanSign(user, role, cfgRows) {
 async function resolveSdsRev(cn, machine_type_name) {
   try {
     const { rows } = await engPool.query(
+      // sds_rev is per-(cn, machine) — never per-process — so read the process-agnostic
+      // row only (process_code IS NULL); a per-process CN override must not shift the rev.
       `SELECT param_value FROM ${TABLES.SDS_PARAMETER}
         WHERE machine_type_name = $2 AND param_key = 'sds_rev'
-          AND (cn IS NULL OR cn = $1)
+          AND (cn IS NULL OR cn = $1) AND process_code IS NULL
         ORDER BY (cn IS NULL) DESC`,
       [cn, machine_type_name]
     );

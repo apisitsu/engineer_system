@@ -1,0 +1,8 @@
+[dotenv@17.2.4] injecting env (35) from .env -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+[dotenv@17.2.4] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.2.4] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+✅ PostgreSQL eng_system Connected!
+✅ PostgreSQL plb018 Connected!
+tooling_not_required sheets: 147
+=> would be COMPLETE (template+full stamp): 147
+   missing template: 0 | missing full stamp: 0

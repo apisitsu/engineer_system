@@ -520,11 +520,18 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // (default) is applied first and the cn-specific override overwrites it last.
   const cnCtrl = searchData.cn;                               // control-no: C32-00641
   const cnItem = cnFormat.toItemNo(searchData.cn) || cnCtrl;  // item-no:    320641
+  // Per-process CN overrides: a machine grinding one CN under both 1021 and 1022 needs a
+  // different condition grid per process. Machine-default rows stay process-agnostic
+  // (process_code IS NULL = applies to every process); a CN override may pin a process_code.
+  // Precedence (least → most specific, later rows overwrite earlier in rawParams):
+  //   machine default → CN (any process) → CN + this process.
+  // cn-specificity is the PRIMARY sort so a per-CN value beats a process-specific one.
   const paramRows = await engPool.query(
     `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
      WHERE machine_type_name = $3 AND (cn IS NULL OR cn = $1 OR cn = $2)
-     ORDER BY (cn IS NULL) DESC`,
-    [cnCtrl, cnItem, machine_type_name]
+       AND (process_code IS NULL OR process_code = $4)
+     ORDER BY (cn IS NULL) DESC, (process_code IS NULL) DESC`,
+    [cnCtrl, cnItem, machine_type_name, process_code || null]
   );
   const rawParams = {};
   paramRows.rows.forEach(r => { rawParams[r.param_key] = r.param_value || ''; });
@@ -568,12 +575,20 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     }
   }
 
-  const cnPrefix = searchData.cn.slice(0, 3);
+  // Grinding layout image: a per-CN image (full control-no stored in cn_prefixes, e.g.
+  // 'C39-04137') wins over a family-wide prefix image ('C39'); within the same specificity
+  // a process-specific image wins over the process-default. cn_prefixes is matched against
+  // BOTH the full CN and its 3-char prefix so either granularity resolves.
+  const cnFull = searchData.cn;                 // control-no: C39-04137
+  const cnPrefix = searchData.cn.slice(0, 3);   // family prefix: C39
   const grindingQ = await engPool.query(
     `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-     WHERE $1 = ANY(cn_prefixes) AND ($2::text IS NULL OR process_codes IS NULL OR process_codes = '{}' OR $2::text = ANY(process_codes))
-     ORDER BY ($2::text IS NOT NULL AND process_codes IS NOT NULL AND process_codes != '{}' AND $2::text = ANY(process_codes)) DESC NULLS LAST LIMIT 1`,
-    [cnPrefix, process_code || null]
+     WHERE ($1 = ANY(cn_prefixes) OR $2 = ANY(cn_prefixes))
+       AND ($3::text IS NULL OR process_codes IS NULL OR process_codes = '{}' OR $3::text = ANY(process_codes))
+     ORDER BY ($1 = ANY(cn_prefixes)) DESC,
+              ($3::text IS NOT NULL AND process_codes IS NOT NULL AND process_codes != '{}' AND $3::text = ANY(process_codes)) DESC NULLS LAST
+     LIMIT 1`,
+    [cnFull, cnPrefix, process_code || null]
   );
   if (grindingQ.rows[0]) {
     map['grinding_layout_image'] = `data:${grindingQ.rows[0].mime_type};base64,${grindingQ.rows[0].image_data.toString('base64')}`;
@@ -942,8 +957,12 @@ function applyDataToGrid(grid, valueMap, mappings) {
     if (STAMP_PARAM_KEYS[param_key]) continue; // handled as seal images above
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
     if (!m) continue;
-    let val = valueMap[param_key];
-    if (val == null) val = params[param_key];
+    // An explicitly-configured param (machine default OR per-CN override, resolved
+    // CN-wins in buildValueMap) takes precedence over the auto-derived factory scalar,
+    // so a CN override of a field like `ct` (CYCLE TIME → B4) actually reaches the PDF.
+    // Falls back to the factory scalar when no param is set for the key.
+    let val = params[param_key];
+    if (val == null || val === '') val = valueMap[param_key];
     if (val == null || val === '') continue;
     if (typeof val === 'object') continue; // images handled elsewhere
     const r = +m[2] - 1, c = colLettersToIndex(m[1]);
@@ -1010,18 +1029,51 @@ function applyDataToGrid(grid, valueMap, mappings) {
  *    per-CN data into the designed grid (Approach B — grid drives the SDS PDF).
  *  ?debug=html returns the raw HTML instead of a PDF.
  */
+// Resolve the grid layout for a render: the machine's assigned template
+// (sds_machine_type_code.grid_template_id) → the default template → the legacy single
+// grid-layout config → null. Robust against a DB where the multi-template migration
+// hasn't run yet (falls back to the legacy config on any query error).
+async function loadGridForMachine(machine_type_name) {
+  const parse = (s) => { try { return s ? JSON.parse(s) : null; } catch (_) { return null; } };
+  try {
+    if (machine_type_name) {
+      const m = await engPool.query(
+        `SELECT gt.grid_json
+           FROM ${TABLES.SDS_MACHINE_TYPE_CODE} mc
+           JOIN ${TABLES.SDS_GRID_TEMPLATE} gt ON gt.id = mc.grid_template_id
+          WHERE mc.machine_type_name = $1 AND mc.is_active AND mc.grid_template_id IS NOT NULL
+          ORDER BY mc.machine_type_code LIMIT 1`,
+        [machine_type_name.trim()]
+      );
+      if (m.rows[0]?.grid_json) return parse(m.rows[0].grid_json);
+    }
+    const def = await engPool.query(
+      `SELECT grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE is_default LIMIT 1`
+    );
+    if (def.rows[0]?.grid_json) return parse(def.rows[0].grid_json);
+  } catch (_) { /* multi-template not provisioned — fall back to legacy config below */ }
+  const legacy = await engPool.query(
+    `SELECT config_value FROM sds_template_css_config WHERE config_key = 'grid-layout' LIMIT 1`
+  );
+  return parse(legacy.rows[0]?.config_value);
+}
+
 // Core of the grid SDS PDF: builds the print-ready HTML for a given CN/machine/process
 // (or the blank/override design preview). Shared by the authenticated route below and
 // the public cross-system link endpoint (sdsPublicController) so both render identically.
-async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name }) {
+async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id }) {
   let grid = null;
   if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
-  if (!grid) {
-    const r = await engPool.query(
-      `SELECT config_value FROM sds_template_css_config WHERE config_key = 'grid-layout' LIMIT 1`
-    );
-    if (r.rows[0]?.config_value) { try { grid = JSON.parse(r.rows[0].config_value); } catch (_) {} }
+  // Editor preview of one specific template (no machine context) — load it by id.
+  if (!grid && template_id && !(cn && machine_type_name)) {
+    try {
+      const t = await engPool.query(
+        `SELECT grid_json FROM ${TABLES.SDS_GRID_TEMPLATE} WHERE id = $1`, [template_id]
+      );
+      if (t.rows[0]?.grid_json) { try { grid = JSON.parse(t.rows[0].grid_json); } catch (_) {} }
+    } catch (_) { /* fall through to machine/default resolution */ }
   }
+  if (!grid) grid = await loadGridForMachine(machine_type_name);
   if (!grid || typeof grid !== 'object') grid = { rows: 56, cols: 20, borders: {}, fills: {} };
 
   // Production mode: fill the designed grid with real CN data via cell addresses
@@ -1050,9 +1102,9 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
 }
 
 router.get('/pdf-chrome/grid', async (req, res) => {
-  const { gridOverride, debug, cn, machine_type_name, process_code, display_name } = req.query;
+  const { gridOverride, debug, cn, machine_type_name, process_code, display_name, template_id } = req.query;
   try {
-    const html = await buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name });
+    const html = await buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id });
     if (debug === 'html') return res.send(html);
 
     const pdfBuffer = await renderPdf(html, { margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' } });
@@ -1108,7 +1160,7 @@ router.get('/pdf-chrome', async (req, res) => {
     html = html.replace(/{{current_date}}/g,         esc(valueMap.current_date));
     html = html.replace(/{{sds_rev}}/g,              esc(valueMap.sds_rev));
     html = html.replace(/{{grinding_area_label}}/g,  esc(valueMap.grinding_area_label));
-    html = html.replace(/{{ct}}/g,                   esc(valueMap.ct));
+    html = html.replace(/{{ct}}/g,                   esc((valueMap.params && valueMap.params.ct) || valueMap.ct));
 
     const p = valueMap.params || {};
     // Approval stamps from the sds_approval sign records (keyed per CN by cn+machine+process+sds_rev).

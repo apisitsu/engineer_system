@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Switch, Popconfirm,
-  Space, Tag, App, Input as AntInput,
+  Space, Tag, App, Input as AntInput, Select,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
@@ -19,17 +19,39 @@ const MachineTypes = ({ theme }) => {
   const [editingRow, setEditingRow] = useState(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [templates, setTemplates] = useState([]);
   const [form] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } });
-      setRows(res.data);
+      // Merge each machine's assigned grid template id (fetched from a self-healing
+      // endpoint so the public machine-types list never depends on the template migration).
+      let assignById = {};
+      try {
+        const [tplRes, asgRes] = await Promise.all([
+          axios.get(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS),
+          axios.get(`${server.MTC_SDS_V2_ADMIN_MACHINE_TYPES}/grid-assignments`),
+        ]);
+        setTemplates(Array.isArray(tplRes.data) ? tplRes.data : []);
+        (Array.isArray(asgRes.data) ? asgRes.data : []).forEach(a => { assignById[a.id] = a.grid_template_id; });
+      } catch { /* multi-template not provisioned — column just shows Default */ }
+      setRows(res.data.map(r => ({ ...r, grid_template_id: assignById[r.id] ?? null })));
     } catch {
       message.error('Load failed');
     } finally {
       setLoading(false);
+    }
+  }, [message]);
+
+  const assignTemplate = useCallback(async (row, val) => {
+    try {
+      await axios.put(`${server.MTC_SDS_V2_ADMIN_MACHINE_TYPES}/${row.id}/grid-template`, { grid_template_id: val ?? null });
+      setRows(prev => prev.map(r => (r.id === row.id ? { ...r, grid_template_id: val ?? null } : r)));
+      message.success(`Template ${val ? 'assigned' : 'reset to default'} for ${row.machine_type_name}`);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Assign failed');
     }
   }, [message]);
 
@@ -155,6 +177,23 @@ const MachineTypes = ({ theme }) => {
     {
       title: 'Active', dataIndex: 'is_active', width: 80, align: 'center',
       render: v => v !== false ? <Tag color="success">Yes</Tag> : <Tag>No</Tag>,
+    },
+    {
+      title: 'SDS Grid Template',
+      dataIndex: 'grid_template_id',
+      width: 200,
+      render: (v, row) => (
+        <Select
+          size="small"
+          style={{ width: 180 }}
+          value={v ?? null}
+          onChange={(val) => assignTemplate(row, val)}
+          options={[
+            { value: null, label: 'Default template' },
+            ...templates.map(t => ({ value: t.id, label: `${t.name}${t.is_default ? ' ★' : ''}` })),
+          ]}
+        />
+      ),
     },
     {
       title: '',
