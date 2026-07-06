@@ -84,27 +84,33 @@ const PdfUsageDashboard = ({ open, onClose }) => {
     };
 
     const yearStr = selectedMonthDate ? selectedMonthDate.year().toString() : dayjs().year().toString();
-    const selectedMonthIndex = selectedMonthDate ? selectedMonthDate.month() : dayjs().month();
     const allMonths = Array.from({ length: 12 }, (_, i) => {
         const monthNum = (i + 1).toString().padStart(2, '0');
         return `${yearStr}-${monthNum}`;
     });
 
     const targetMonthStr = selectedMonthDate ? selectedMonthDate.format('YYYY-MM') : dayjs().format('YYYY-MM');
-    const selectedMonthData = stats.chartData.find(d => d.month === targetMonthStr);
+    const filteredChartData = allMonths.map(monthLabel => {
+        if (monthLabel <= targetMonthStr) {
+            const found = (stats.chartData || []).find(d => d.month === monthLabel);
+            if (found) return found;
+        }
+        return {
+            month: monthLabel,
+            view_pages: 0,
+            action_pages: 0
+        };
+    });
+    const selectedMonthData = filteredChartData.find(d => d.month === targetMonthStr);
     const selectedMonthSavings = selectedMonthData
         ? (parseInt(selectedMonthData.view_pages || 0) * 0.25) + (parseInt(selectedMonthData.action_pages || 0) * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0)
         : (includeSoftwareCost ? softwareCostPerMonth : 0);
 
-    const savingsData = allMonths.map(monthLabel => {
-        const found = stats.chartData.find(d => d.month === monthLabel);
-        // Only apply empty month software cost if the month is past or current, and starts from 2026-06
-        const monthDate = dayjs(monthLabel + '-01');
+    const savingsData = filteredChartData.map(data => {
+        if (data.month > targetMonthStr) return 0;
+        const monthDate = dayjs(data.month + '-01');
         const isEligibleMonth = monthDate.isBefore(dayjs().endOf('month')) && monthDate.isAfter(dayjs('2026-05-31'));
-        if (found) {
-            return (parseInt(found.view_pages || 0) * 0.25) + (parseInt(found.action_pages || 0) * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
-        }
-        return (includeSoftwareCost && isEligibleMonth) ? softwareCostPerMonth : 0;
+        return (parseInt(data.view_pages || 0) * 0.25) + (parseInt(data.action_pages || 0) * 0.50) + (includeSoftwareCost && isEligibleMonth ? softwareCostPerMonth : 0);
     });
 
     const lineData = {
@@ -173,9 +179,14 @@ const PdfUsageDashboard = ({ open, onClose }) => {
             title: 'Cost Saved (THB)',
             key: 'cost_saved',
             render: (_, record) => {
+                if (record.month > targetMonthStr) {
+                    return <strong style={{ color: '#52c41a' }}>฿0.00</strong>;
+                }
                 const vPages = parseInt(record.view_pages) || 0;
                 const aPages = parseInt(record.action_pages) || 0;
-                const total = (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
+                const monthDate = dayjs(record.month + '-01');
+                const isEligibleMonth = monthDate.isBefore(dayjs().endOf('month')) && monthDate.isAfter(dayjs('2026-05-31'));
+                const total = (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost && isEligibleMonth ? softwareCostPerMonth : 0);
                 return <strong style={{ color: '#52c41a' }}>฿{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>;
             }
         }
@@ -325,7 +336,7 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                         <Col span={18}>
                                             <h4 style={{ marginBottom: 16 }}>Details by Month</h4>
                                             <Table
-                                                dataSource={stats.chartData}
+                                                dataSource={filteredChartData.filter(d => parseInt(d.view_pages || 0) > 0 || parseInt(d.action_pages || 0) > 0)}
                                                 columns={columns}
                                                 rowKey="month"
                                                 pagination={false}
@@ -335,17 +346,20 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                                         <Table.Summary.Row style={{ background: theme.colors.background, fontWeight: 'bold' }}>
                                                             <Table.Summary.Cell index={0}>Total (Selected Period)</Table.Summary.Cell>
                                                             <Table.Summary.Cell index={1}>
-                                                                {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.view_pages) || 0), 0).toLocaleString()} Pages
+                                                                {filteredChartData.reduce((acc, curr) => acc + (parseInt(curr.view_pages) || 0), 0).toLocaleString()} Pages
                                                             </Table.Summary.Cell>
                                                             <Table.Summary.Cell index={2}>
-                                                                {stats.chartData.reduce((acc, curr) => acc + (parseInt(curr.action_pages) || 0), 0).toLocaleString()} Pages
+                                                                {filteredChartData.reduce((acc, curr) => acc + (parseInt(curr.action_pages) || 0), 0).toLocaleString()} Pages
                                                             </Table.Summary.Cell>
                                                             <Table.Summary.Cell index={3}>
                                                                 <span style={{ color: '#52c41a' }}>
-                                                                    ฿{stats.chartData.reduce((acc, curr) => {
+                                                                    ฿{filteredChartData.reduce((acc, curr) => {
+                                                                        if (curr.month > targetMonthStr) return acc;
+                                                                        const monthDate = dayjs(curr.month + '-01');
+                                                                        const isEligibleMonth = monthDate.isBefore(dayjs().endOf('month')) && monthDate.isAfter(dayjs('2026-05-31'));
                                                                         const vPages = parseInt(curr.view_pages) || 0;
                                                                         const aPages = parseInt(curr.action_pages) || 0;
-                                                                        return acc + (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost ? softwareCostPerMonth : 0);
+                                                                        return acc + (vPages * 0.25) + (aPages * 0.50) + (includeSoftwareCost && isEligibleMonth ? softwareCostPerMonth : 0);
                                                                     }, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                 </span>
                                                             </Table.Summary.Cell>
