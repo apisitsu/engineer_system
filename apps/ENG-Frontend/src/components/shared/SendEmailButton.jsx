@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react';
-import { Button, message, Tooltip } from 'antd';
-import { App } from 'antd';
+import { Button, Tooltip, App } from 'antd';
 import { MailOutlined } from '@ant-design/icons';
-import useGASEmail from '../../hooks/useGASEmail';
+import { useEmail } from '../../services/centralEmailService';
 import { useTheme } from '../../theme';
 
 /**
@@ -103,14 +102,14 @@ const SendEmailButton = ({
     const { theme } = useTheme(); // ใช้ useTheme ตามแผนงาน 
 
     // ดึงตัวแปรทั้งหมดออกจาก Hook รวมถึง cleanup ด้วย
-    const { triggerEmail, isSending, IframeRenderer, cleanup } = useGASEmail((result) => {
-        console.log('[SendEmailButton] Received result from useGASEmail:', result);
+    const { triggerEmail, isSending, IframeRenderer, cleanup } = useEmail((result) => {
+        console.log('[SendEmailButton] Received result from useEmail:', result);
         if (result.status === 'success') {
             message.success({ content: 'Notification sent!', key: 'gas-email' });
             if (onSuccess) onSuccess(result);
         } else {
             message.error({ content: `Failed: ${result.message}`, key: 'gas-email' });
-            if (onError) onError(result); // ตอนนี้ onError จะไม่ undefined แล้ว
+            if (onError) onError(result); 
         }
     });
 

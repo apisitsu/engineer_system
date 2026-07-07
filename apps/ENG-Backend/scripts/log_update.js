@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { sendUpdateAlert } = require('../api/system/emailService');
 
 const pool = new Pool({
     host: 'plbmp130',
@@ -27,6 +28,11 @@ async function logUpdate() {
             );
         `);
 
+        // Add new columns if they don't exist
+        await pool.query('ALTER TABLE system_update_logs ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(50);');
+        await pool.query('ALTER TABLE system_update_logs ADD COLUMN IF NOT EXISTS commit_message TEXT;');
+        await pool.query('ALTER TABLE system_update_logs ADD COLUMN IF NOT EXISTS duration_ms INTEGER;');
+
         // Insert log
         await pool.query(
             'INSERT INTO system_update_logs (action_type, description, local_hash, remote_hash) VALUES ($1, $2, $3, $4)',
@@ -34,6 +40,17 @@ async function logUpdate() {
         );
 
         console.log(`[LOG_UPDATE] Success: ${actionType} - ${description}`);
+
+        // Trigger Email Alert on Failure States
+        if (['ERROR', 'CRITICAL', 'ROLLBACK_SUCCESS'].includes(actionType)) {
+            console.log(`[LOG_UPDATE] Triggering email alert for ${actionType}`);
+            await sendUpdateAlert(actionType, {
+                previousHash: localHash,
+                attemptedHash: remoteHash,
+                errorMsg: description,
+                body: `System entered state: ${actionType}\nDescription: ${description}`
+            });
+        }
     } catch (err) {
         console.error('[LOG_UPDATE] Error logging update:', err);
     } finally {

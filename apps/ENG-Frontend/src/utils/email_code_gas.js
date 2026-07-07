@@ -33,6 +33,9 @@ function doGet(e) {
             case "sendNotification":
                 sendNotification(e.parameter)
                 break;
+            case "sendSystemUpdateAlert":
+                sendSystemUpdateAlert(e.parameter);
+                break;
             default:
                 break;
         }
@@ -169,3 +172,38 @@ function sendKanbanNotification(params) {
         console.error("[KanbanNotif] Failed: " + e.toString());
     }
 }
+
+// ============================================================
+//  Template 4: System Update Alert
+// ============================================================
+function sendSystemUpdateAlert(params) {
+    var recipients = params.user_to || "nanthiwa.k@minebea.co.th";
+    var alertType = params.alert_type || "UNKNOWN";
+
+    var subjectMap = {
+        "ROLLBACK_SUCCESS": "⚠️ [EngineerSystem] Update Rolled Back",
+        "CRITICAL": "🚨 [CRITICAL] EngineerSystem Server DOWN",
+        "UPDATE_FAILED": "❌ [EngineerSystem] Update Failed",
+    };
+
+    var subject = subjectMap[alertType] || "⚠️ [EngineerSystem] Update Alert";
+
+    var body = "═══════════════════════════════════════\n"
+        + "  🔄 SYSTEM UPDATE ALERT\n"
+        + "═══════════════════════════════════════\n\n"
+        + "🔹 Alert Type:     " + alertType + "\n"
+        + "🔹 Previous Hash:  " + (params.previous_hash || "N/A") + "\n"
+        + "🔹 Attempted Hash: " + (params.attempted_hash || "N/A") + "\n"
+        + "🔹 Error:          " + (params.error_msg || "N/A") + "\n"
+        + "🔹 Time:           " + new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) + "\n\n"
+        + "─── Details ───────────────────────────\n"
+        + (params.body || "No additional details") + "\n";
+
+    try {
+        MailApp.sendEmail(recipients, subject, body);
+        console.log("[UpdateAlert] Sent to: " + recipients);
+    } catch (e) {
+        console.error("[UpdateAlert] Failed: " + e.toString());
+    }
+}
+
