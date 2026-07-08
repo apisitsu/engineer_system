@@ -2,17 +2,44 @@ const { engPool } = require('../../instance/eng_db');
 const { spawn, exec } = require('child_process');
 const util = require('util');
 const path = require('path');
+const fs = require('fs');
 const execPromise = util.promisify(exec);
 
+const TRIGGER_EXPIRY_MINUTES = 5;
+
 exports.getUpdateLogs = async (req, res) => {
-    console.log('[DEBUG] getUpdateLogs called by user:', req.user?.empno);
     try {
         const limit = parseInt(req.query.limit, 10) || 100;
+
+        // Auto-expire stale TRIGGERED records
+        // If the latest log is TRIGGERED and older than TRIGGER_EXPIRY_MINUTES, mark it as ERROR
+        try {
+            const staleCheck = await engPool.query(
+                `SELECT id, action_type, executed_at FROM system_update_logs
+                 ORDER BY executed_at DESC LIMIT 1`
+            );
+            if (staleCheck.rows.length > 0) {
+                const latest = staleCheck.rows[0];
+                if (latest.action_type === 'TRIGGERED') {
+                    const ageMs = Date.now() - new Date(latest.executed_at).getTime();
+                    if (ageMs > TRIGGER_EXPIRY_MINUTES * 60 * 1000) {
+                        await engPool.query(
+                            `INSERT INTO system_update_logs (action_type, description, triggered_by)
+                             VALUES ($1, $2, $3)`,
+                            ['ERROR', `Update trigger timed out after ${TRIGGER_EXPIRY_MINUTES} minutes — script may not have executed`, 'system']
+                        );
+                        console.log('[UpdateLog] Auto-expired stale TRIGGERED record (id:', latest.id, ')');
+                    }
+                }
+            }
+        } catch (expireErr) {
+            console.error('[UpdateLog] Error checking stale triggers:', expireErr.message);
+        }
+
         const result = await engPool.query(
             'SELECT * FROM system_update_logs ORDER BY executed_at DESC LIMIT $1',
             [limit]
         );
-        console.log('[DEBUG] getUpdateLogs fetched rows:', result.rows.length);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('[ERROR] Error fetching update logs:', err);
@@ -22,10 +49,15 @@ exports.getUpdateLogs = async (req, res) => {
 
 exports.triggerUpdate = async (req, res) => {
     try {
-        console.log('[DEBUG] triggerUpdate called by user:', req.user?.empno);
         const scriptPath = path.resolve(__dirname, '../../../../auto_update_and_run.cmd');
         const cwdPath = path.resolve(__dirname, '../../../../');
-        
+
+        // Validate script exists
+        if (!fs.existsSync(scriptPath)) {
+            console.error('[UpdateLog] Script not found:', scriptPath);
+            return res.status(500).json({ success: false, message: `Update script not found: ${scriptPath}` });
+        }
+
         // Pre-log to DB so the user always sees that a trigger happened
         try {
             let commitMsg = 'Manual trigger';
@@ -39,29 +71,31 @@ exports.triggerUpdate = async (req, res) => {
                 ['TRIGGERED', `Manual trigger by user ${req.user?.empno || 'unknown'}`, req.user?.empno || 'unknown', commitMsg]
             );
         } catch (logErr) {
-            console.error('[WARN] Failed to pre-log trigger:', logErr.message);
+            console.error('[UpdateLog] Failed to pre-log trigger:', logErr.message);
         }
 
-        // Spawn the batch file using PowerShell's Start-Process to break the process tree chain.
-        // This prevents the batch file from committing suicide when it runs `taskkill /T` on the Node.js server.
-        const child = spawn('powershell.exe', [
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-Command',
-            `Start-Process cmd.exe -ArgumentList '/c ""${scriptPath}""' -WorkingDirectory '${cwdPath}'`
+        // Spawn the batch file in a fully detached window.
+        // Uses `cmd /c start` to create a new independent process that survives
+        // when the batch file kills port 2005 (this Node.js server) during update.
+        const child = spawn('cmd.exe', [
+            '/c', 'start',
+            '"EngineerSystem Update"',  // window title (required by start)
+            '/D', cwdPath,              // working directory
+            scriptPath                   // script to execute
         ], {
             detached: true,
             stdio: 'ignore',
-            cwd: cwdPath
+            cwd: cwdPath,
+            windowsHide: false  // show the CMD window so admin can see progress
         });
-        
+
         child.on('error', (err) => {
-            console.error('[ERROR] Failed to spawn update process:', err);
+            console.error('[UpdateLog] Failed to spawn update process:', err);
         });
 
         child.unref();
 
+        console.log('[UpdateLog] Update triggered by', req.user?.empno, '- script:', scriptPath);
         res.json({ success: true, message: 'Update process started successfully. Server will restart shortly.' });
     } catch (err) {
         console.error('[ERROR] Error triggering update:', err);
@@ -83,7 +117,7 @@ exports.checkUpdates = async (req, res) => {
         const localHash = localHashRaw.trim();
         const remoteHash = remoteHashRaw.trim();
         
-        const hasUpdate = localHash !== remoteHash;
+        let hasUpdate = localHash !== remoteHash;
         
         let commitsBehind = 0;
         let latestCommitMessage = '';
@@ -102,6 +136,7 @@ exports.checkUpdates = async (req, res) => {
             }
             const { stdout: countOut } = await execPromise('git rev-list --count HEAD..origin/main', { cwd: cwdPath });
             commitsBehind = parseInt(countOut.trim(), 10) || 0;
+            hasUpdate = commitsBehind > 0;
         }
         
         res.json({
