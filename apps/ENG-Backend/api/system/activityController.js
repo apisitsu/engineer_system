@@ -35,12 +35,30 @@ function extractModule(routePath) {
 }
 
 /**
- * Safely extract client IP from request.
+ * Safely extract and sanitize client IP from request.
+ * - Strips IPv6 zone IDs (e.g. %12, %eth0) which PostgreSQL inet doesn't support
+ * - Converts IPv6-mapped IPv4 (::ffff:192.168.1.1) to plain IPv4
  */
 function getClientIp(req) {
+    let ip;
     const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) return forwarded.split(',')[0].trim();
-    return req.socket?.remoteAddress || req.ip || null;
+    if (forwarded) {
+        ip = forwarded.split(',')[0].trim();
+    } else {
+        ip = req.socket?.remoteAddress || req.ip || null;
+    }
+
+    if (!ip) return null;
+
+    // Strip IPv6 zone ID suffix (e.g. "fe80::1%12" → "fe80::1")
+    ip = ip.replace(/%[^%]*$/, '');
+
+    // Convert IPv6-mapped IPv4 to plain IPv4 (e.g. "::ffff:192.168.1.1" → "192.168.1.1")
+    if (ip.startsWith('::ffff:')) {
+        ip = ip.slice(7);
+    }
+
+    return ip;
 }
 
 // ── Track Page Visit ─────────────────────────────────────────────────────────
