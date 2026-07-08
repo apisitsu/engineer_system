@@ -23,6 +23,7 @@ async function getUsageHistory() {
     const result = await engPool.query(
         `SELECT id, filename, empno, user_name, total_pages, action_type, details, created_at
          FROM tt_pdf_usage_logs
+         WHERE created_at >= '2026-06-01'
          ORDER BY created_at DESC
          LIMIT 100`
     );
@@ -36,22 +37,22 @@ async function getUsageHistory() {
  * @returns {{ totalDocs, totalPagesSaved, totalSavings, chartData }}
  */
 async function getUsageStats({ year, month } = {}) {
-    let dateFilter = '';
-    let params = [];
+    let dateFilter = 'AND created_at >= $1';
+    let params = ['2026-06-01'];
 
     if (year && month) {
-        dateFilter = 'AND EXTRACT(YEAR FROM created_at) = $1::numeric AND EXTRACT(MONTH FROM created_at) = $2::numeric';
-        params = [year, month];
+        dateFilter += ' AND EXTRACT(YEAR FROM created_at) = $2::numeric AND EXTRACT(MONTH FROM created_at) = $3::numeric';
+        params.push(year, month);
     } else if (year) {
-        dateFilter = 'AND EXTRACT(YEAR FROM created_at) = $1::numeric';
-        params = [year];
+        dateFilter += ' AND EXTRACT(YEAR FROM created_at) = $2::numeric';
+        params.push(year);
     }
 
     const statsResult = await engPool.query(
         `SELECT 
             COUNT(*) as total_docs,
             SUM(total_pages) as total_pages,
-            SUM(CASE WHEN action_type = 'view' THEN total_pages * 0.10 ELSE total_pages * 0.50 END) as total_savings
+            SUM(CASE WHEN action_type = 'view' THEN total_pages * 0.25 ELSE total_pages * 0.50 END) as total_savings
          FROM tt_pdf_usage_logs
          WHERE 1=1 ${dateFilter}`,
         params

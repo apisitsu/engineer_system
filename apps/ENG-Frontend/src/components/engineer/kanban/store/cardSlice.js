@@ -12,7 +12,7 @@ import { server, GAS_DRIVE_URL } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
 // import { message } from 'antd';
 import { useAuthStore } from '../../../../stores/authStore';
-import { sendErrorReport } from '../../../../utils/sendEmailViaGAS';
+import { sendErrorReport } from '../../../../services/centralEmailService';
 import { uploadFileToDrive, deleteFileFromDrive } from '../../../../utils/uploadFileToDrive';
 
 export const createCardSlice = (set, get) => ({

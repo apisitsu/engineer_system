@@ -1,22 +1,92 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GAS_WEBAPP_URL } from '../constance/constance';
 
-/**
- * useGASEmail – Custom hook for sending email notifications via Google Apps Script (GAS).
- *
- * Uses a Hybrid approach: 
- * 1. Popup Window for first-time use (bypass Google X-Frame-Options Auth block)
- * 2. Hidden Iframe for subsequent uses (fast and silent, checks localStorage)
- */
-const useGASEmail = (onResult) => {
+// ============================================================================
+// Core: Low-level GAS trigger (Silent iframe injection, no response tracking)
+// ============================================================================
+export const sendEmailSilent = (params = {}) => {
+    if (!params.funct) params.funct = 'sendNotificationEmail';
+
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            queryParams.append(key, String(value));
+        }
+    });
+    queryParams.append('t', Date.now());
+
+    const url = `${GAS_WEBAPP_URL}?${queryParams.toString()}`;
+
+    // Create hidden iframe, inject, and auto-cleanup
+    const iframe = document.createElement('iframe');
+    iframe.src = url;
+    iframe.style.cssText = 'display:none;position:absolute;left:-9999px;width:0;height:0;';
+    iframe.title = 'gas-email-silent';
+
+    document.body.appendChild(iframe);
+
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch { /* already removed */ }
+    }, 10000);
+};
+
+// ============================================================================
+// Templates: Pre-built email payloads
+// ============================================================================
+
+export const sendErrorReport = (action, error, context = {}) => {
+    const errMsg = error?.response?.data?.error || error?.message || String(error);
+    const status = error?.response?.status || 'N/A';
+    const user = context.user || context.uCode || 'Unknown';
+
+    const subject = `🚨 Kanban Error: ${action} (${status})`;
+    const body = [
+        `Action: ${action}`,
+        `Status: ${status}`,
+        `Error: ${errMsg}`,
+        `User: ${user}`,
+        `Context: ${JSON.stringify(context)}`,
+        `Time: ${new Date().toLocaleString('th-TH')}`,
+        `URL: ${window.location.href}`,
+    ].join('\n');
+
+    sendEmailSilent({
+        funct: 'sendErrorReport',
+        subject,
+        body,
+        action,
+        status: String(status),
+        error_msg: errMsg,
+        user,
+        context: JSON.stringify(context),
+    });
+};
+
+export const sendKanbanNotification = (type, details = {}) => {
+    sendEmailSilent({
+        funct: 'sendKanbanNotification',
+        notification_type: type,
+        card_name: details.cardName || '',
+        board_name: details.boardName || '',
+        project_name: details.projectName || '',
+        user_from: details.userFrom || '',
+        user_to: details.userTo || '',
+        message: details.message || '',
+    });
+};
+
+// ============================================================================
+// React Hook: Interactive Email (Popup / Hidden Iframe with Auth)
+// ============================================================================
+
+export const useEmail = (onResult) => {
     const [isSending, setIsSending] = useState(false);
     const [iframeUrl, setIframeUrl] = useState(null);
     const popupRef = useRef(null);
     const timeoutRef = useRef(null);
 
-    // แก้ไข: เพิ่มการตรวจจับข้อความ postMessage จาก Google Apps Script
     useEffect(() => {
-        console.log('[useGASEmail] Setting up message listener');
         const handleMessage = (event) => {
             if (!event.origin.includes("google.com") && !event.origin.includes("googleusercontent.com")) {
                 return;
@@ -24,20 +94,17 @@ const useGASEmail = (onResult) => {
 
             const data = event.data;
             if (data && data.type === 'GAS_MAIL_RESULT') {
-                console.log('[useGASEmail] Processed GAS_MAIL_RESULT:', data);
                 setIsSending(false);
                 setIframeUrl(null);
 
                 if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-                // หากสำเร็จ ให้จดจำไว้ในเครื่องว่าเคยกดยอมรับเรียบร้อยแล้ว
                 if (data.status === 'success') {
                     localStorage.setItem('gas_email_authorized', 'true');
                 }
 
                 if (onResult) onResult(data);
 
-                // สั่งปิด Popup window หากยังเปิดค้างอยู่
                 if (popupRef.current && !popupRef.current.closed) {
                     popupRef.current.close();
                 }
@@ -61,28 +128,19 @@ const useGASEmail = (onResult) => {
         const url = `${GAS_WEBAPP_URL}?${queryParams.toString()}`;
         setIsSending(true);
 
-        // เช็คว่าเคยกดยอมรับสิทธิ์ไปแล้วหรือยังผ่าน Local Storage
         const isAuthorized = localStorage.getItem('gas_email_authorized') === 'true';
 
         if (isAuthorized) {
-            // 🔥 หากเคยยอมรับแล้ว -> ซ่อนหน้าต่างเงียบๆ ด้วย Iframe (ไม่ต้องกวนใจเปิด Popup อีกรอบ)
-            console.log('[useGASEmail] Using Hidden Iframe mode (Already Authorized)');
             setIframeUrl(url);
-
-            // เซฟตี้: ถ้า Iframe ค้างเกิน 8 วินาที แสดงว่าสิทธิ์ Auth อาจจะหมดอายุ ให้เด้งออกและลบสิทธิ์ทิ้ง
             timeoutRef.current = setTimeout(() => {
-                console.warn('[useGASEmail] Iframe timeout (Auth might have expired). Resetting auth status.');
                 localStorage.removeItem('gas_email_authorized');
                 setIsSending(false);
                 setIframeUrl(null);
                 if (onResult) {
-                    onResult({ status: 'error', message: 'เซสชันการส่งหมดอายุ กรุณากดปุ่มส่งใหม่อีกครั้งเพื่อยืนยันตัวตน' });
+                    onResult({ status: 'error', message: 'Session expired. Please click again to authorize.' });
                 }
             }, 8000);
-
         } else {
-            // 🚨 หากยังไม่เคยส่งเลย หรือเซสชันหมดอายุ -> เปิด Popup เพื่อให้กดยอมรับหน้าจอผู้ใช้
-            console.log('[useGASEmail] Using Popup mode for Initial Authorization');
             const width = 600;
             const height = 650;
             const left = (window.innerWidth / 2) - (width / 2) + window.screenX;
@@ -94,14 +152,13 @@ const useGASEmail = (onResult) => {
                 `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no,scrollbars=yes`
             );
 
-            // ตรวจเช็คกรณีผู้ใช้เปลี่ยนใจ กดกากบาททิ้งก่อนตอบตกลงยอมรับสิทธิ์
             const checkClosedInterval = setInterval(() => {
                 if (popupRef.current && popupRef.current.closed) {
                     clearInterval(checkClosedInterval);
                     setIsSending((prevSending) => {
                         if (prevSending) {
                             if (onResult) {
-                                onResult({ status: 'error', message: 'หน้าต่างการอนุญาตถูกปิดก่อนดำเนินรายการสำเร็จ' });
+                                onResult({ status: 'error', message: 'Authorization window was closed before completion.' });
                             }
                             return false;
                         }
@@ -110,10 +167,8 @@ const useGASEmail = (onResult) => {
                 }
             }, 1000);
         }
-
     }, [isSending, onResult]);
 
-    // เคลียร์ค่าที่หลงเหลือ
     const cleanup = useCallback(() => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         if (popupRef.current && !popupRef.current.closed) {
@@ -139,5 +194,3 @@ const useGASEmail = (onResult) => {
         cleanup,
     };
 };
-
-export default useGASEmail;

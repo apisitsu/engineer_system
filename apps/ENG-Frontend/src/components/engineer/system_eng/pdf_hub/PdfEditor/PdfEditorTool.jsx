@@ -128,6 +128,7 @@ const PdfEditorTool = () => {
 
     // Override manual navigation for smooth scroll
     const handleGoToPage = useCallback((pageNum) => {
+        saveCurrentPageState();
         goToPage(pageNum);
         if (store.viewMode === 'continuous' && pageRefs.current[pageNum]) {
             isProgrammaticScroll.current = true;
@@ -135,7 +136,7 @@ const PdfEditorTool = () => {
             // Release lock after scroll completes
             setTimeout(() => { isProgrammaticScroll.current = false; }, 600);
         }
-    }, [goToPage, store.viewMode]);
+    }, [goToPage, store.viewMode, saveCurrentPageState]);
 
     const handleNextPage = () => handleGoToPage(currentPage + 1);
     const handlePrevPage = () => handleGoToPage(currentPage - 1);
@@ -201,28 +202,52 @@ const PdfEditorTool = () => {
             const buffer = await file.arrayBuffer();
             const bytes = new Uint8Array(buffer);
             
-            const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
-            let sigIndex = -1;
-            for (let i = bytes.length - signature.length; i >= 0; i--) {
-                let match = true;
-                for (let j = 0; j < signature.length; j++) {
-                    if (bytes[i + j] !== signature[j]) {
-                        match = false;
+            let projectData = null;
+            let originalPdfBytes = bytes;
+            
+            // 1. Try to read from pdf-lib Custom Metadata first
+            try {
+                const { PDFDocument } = await import('pdf-lib');
+                const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+                const infoDict = doc.getInfoDict();
+                const engDataObj = infoDict.get(doc.context.obj('EngProjectData'));
+                if (engDataObj && engDataObj.value) {
+                    const base64Str = engDataObj.value;
+                    const jsonStr = decodeURIComponent(escape(window.atob(base64Str)));
+                    projectData = JSON.parse(jsonStr);
+                    // The PDF is perfectly valid as is, no slicing needed
+                }
+            } catch (e) {
+                console.warn('No valid pdf-lib metadata found, checking legacy EOF...');
+            }
+            
+            // 2. Fallback to Legacy EOF Appending if not found
+            if (!projectData) {
+                const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
+                let sigIndex = -1;
+                for (let i = bytes.length - signature.length; i >= 0; i--) {
+                    let match = true;
+                    for (let j = 0; j < signature.length; j++) {
+                        if (bytes[i + j] !== signature[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        sigIndex = i;
                         break;
                     }
                 }
-                if (match) {
-                    sigIndex = i;
-                    break;
+    
+                if (sigIndex !== -1) {
+                    const jsonBytes = bytes.slice(sigIndex + signature.length);
+                    const jsonStr = new TextDecoder().decode(jsonBytes);
+                    projectData = JSON.parse(jsonStr);
+                    originalPdfBytes = bytes.slice(0, sigIndex);
                 }
             }
 
-            if (sigIndex !== -1) {
-                const jsonBytes = bytes.slice(sigIndex + signature.length);
-                const jsonStr = new TextDecoder().decode(jsonBytes);
-                const projectData = JSON.parse(jsonStr);
-                
-                const originalPdfBytes = bytes.slice(0, sigIndex);
+            if (projectData) {
                 await loadPdfFromBytes(originalPdfBytes, file.name);
                 
                 setTimeout(() => {
@@ -308,24 +333,53 @@ const PdfEditorTool = () => {
             highlights: pageHighlights,
         };
         const jsonStr = JSON.stringify(projectData);
-        const jsonBytes = new TextEncoder().encode('\nENG_PROJECT_DATA:' + jsonStr);
         
-        const finalBytes = new Uint8Array(pdfBytes.length + jsonBytes.length);
-        finalBytes.set(pdfBytes);
-        finalBytes.set(jsonBytes, pdfBytes.length);
-
-        const blob = new Blob([finalBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `editable_${pdfFile?.name || 'document.pdf'}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        logPdfUsage('export_editable_pdf');
-        message.success('Editable PDF saved! You can load it back to edit annotations.');
+        try {
+            // First, try to embed it natively using pdf-lib Custom Metadata
+            const { PDFDocument, PDFString } = await import('pdf-lib');
+            const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+            
+            // Encode JSON to Base64 to safely store in PDFString (which expects ASCII)
+            const base64Str = window.btoa(unescape(encodeURIComponent(jsonStr)));
+            
+            // Set custom Document Info Dictionary property
+            doc.getInfoDict().set(doc.context.obj('EngProjectData'), PDFString.of(base64Str));
+            
+            const finalBytes = await doc.save();
+            const blob = new Blob([finalBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `editable_${pdfFile?.name || 'document.pdf'}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            logPdfUsage('export_editable_pdf');
+            message.success('Editable PDF saved! You can load it back to edit annotations.');
+        } catch (e) {
+            console.error('Failed to save editable PDF using pdf-lib, falling back to raw appending:', e);
+            
+            // Fallback (Legacy EOF Appending)
+            const jsonBytes = new TextEncoder().encode('\nENG_PROJECT_DATA:' + jsonStr);
+            const finalBytes = new Uint8Array(pdfBytes.length + jsonBytes.length);
+            finalBytes.set(pdfBytes);
+            finalBytes.set(jsonBytes, pdfBytes.length);
+    
+            const blob = new Blob([finalBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `editable_${pdfFile?.name || 'document.pdf'}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            logPdfUsage('export_editable_pdf');
+            message.success('Editable PDF saved (Legacy Mode)!');
+        }
     }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
 
 
@@ -841,6 +895,8 @@ const PdfEditorTool = () => {
                         overlayFile={overlayFile}
                         onLoadOverlay={handleLoadOverlay}
                         onClearOverlay={handleClearOverlay}
+                        fabricCanvasRefs={fabricCanvasRefs}
+                        currentPage={currentPage}
                     />
                 )}
             </div>

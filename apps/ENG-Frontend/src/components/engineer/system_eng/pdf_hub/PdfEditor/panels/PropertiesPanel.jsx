@@ -43,6 +43,34 @@ const PropertiesPanel = ({
     const { theme } = useTheme();
     const store = usePdfEditorStore();
 
+    // If an object is selected, determine the best panel for it
+    if (store.selectedObjectId && store.selectedObjectProps) {
+        const type = store.selectedObjectProps.type;
+        const customType = store.selectedObjectProps.customData?.type;
+        
+        const annotateTools = ['highlight', 'underline', 'strikethrough', 'sticky', 'maskReplace'];
+        const isText = type === 'i-text' || type === 'textbox' || type === 'text';
+        
+        if (annotateTools.includes(customType) || isText) {
+            return <AnnotatePanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+        }
+        
+        const signTools = ['stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate', 'stamp', 'signature', 'date', 'formFill'];
+        if (signTools.includes(customType)) {
+            return (
+                <SignPanel
+                    stampData={stampData}
+                    onOpenSignaturePad={onOpenSignaturePad}
+                    onPlaceStamp={onPlaceStamp}
+                />
+            );
+        }
+        
+        // Default for rect, circle, arrow, line, freehand, ruler
+        return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+    }
+
+    // Otherwise, fall back to current activeMode
     if (store.activeMode === 'view') {
         return (
             <ViewPanel
@@ -57,7 +85,7 @@ const PropertiesPanel = ({
     }
 
     if (store.activeMode === 'annotate') {
-        return <AnnotatePanel />;
+        return <AnnotatePanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
     }
 
     if (store.activeMode === 'shapes' || store.activeMode === 'dwgCheck') {

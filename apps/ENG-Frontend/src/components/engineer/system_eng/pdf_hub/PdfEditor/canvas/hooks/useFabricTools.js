@@ -32,6 +32,7 @@ export default function useFabricTools({
                         day: '2-digit', month: '2-digit', year: 'numeric',
                     });
                     const dateText = new fabric.FabricText(today, {
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         fontSize: 14,
@@ -51,6 +52,7 @@ export default function useFabricTools({
                     const l1 = new fabric.Line([-10, 0, -3, 10], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const l2 = new fabric.Line([-3, 10, 15, -15], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const checkGroup = new fabric.Group([l1, l2], {
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         originX: 'center',
@@ -71,6 +73,7 @@ export default function useFabricTools({
                     const l1 = new fabric.Line([-12, -12, 12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const l2 = new fabric.Line([12, -12, -12, 12], { stroke: color, strokeWidth: w, strokeLineCap: 'round' });
                     const crossGroup = new fabric.Group([l1, l2], {
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         originX: 'center',
@@ -86,6 +89,7 @@ export default function useFabricTools({
 
                 case 'stampCircle': {
                     const circleShape = new fabric.Circle({
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         radius: currentSettings.fontSize || 16,
@@ -119,6 +123,7 @@ export default function useFabricTools({
                         originY: 'center',
                     });
                     const okGroup = new fabric.Group([okCircle, okText], {
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         originX: 'center',
@@ -193,6 +198,7 @@ export default function useFabricTools({
                     });
 
                     const userDateGroup = new fabric.Group([bgCircle, line1, line2, deptText, dateTextObj, ...nameObjects], {
+                        id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         left: pointer.x,
                         top: pointer.y,
                         originX: 'center',
@@ -217,6 +223,7 @@ export default function useFabricTools({
                     imgEl.src = `data:image/png;base64,${imgSrc}`;
                     imgEl.onload = () => {
                         const imgInstance = new fabric.FabricImage(imgEl, {
+                            id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                             left: pointer.x,
                             top: pointer.y,
                             originX: 'center',
@@ -259,10 +266,10 @@ export default function useFabricTools({
                         ...commonProps,
                         width: 0,
                         height: 0,
-                        fill: tool === 'maskReplace' ? '#ffffff' : currentSettings.fillColor,
-                        stroke: tool === 'maskReplace' ? '#cccccc' : currentSettings.strokeColor,
-                        strokeWidth: tool === 'maskReplace' ? 1 : currentSettings.strokeWidth,
-                        opacity: currentSettings.opacity,
+                        fill: tool === 'maskReplace' ? '#ffffff' : (currentSettings.fillColor || 'transparent'),
+                        stroke: tool === 'maskReplace' ? '#cccccc' : (currentSettings.strokeColor || '#e74c3c'),
+                        strokeWidth: tool === 'maskReplace' ? 1 : (currentSettings.strokeWidth || 2),
+                        opacity: currentSettings.opacity || 1.0,
                         rx: 2,
                         ry: 2,
                     });
@@ -306,23 +313,30 @@ export default function useFabricTools({
                         ...commonProps,
                         rx: 0,
                         ry: 0,
-                        fill: currentSettings.fillColor,
-                        stroke: currentSettings.strokeColor,
-                        strokeWidth: currentSettings.strokeWidth,
-                        opacity: currentSettings.opacity,
+                        fill: currentSettings.fillColor || 'transparent',
+                        stroke: currentSettings.strokeColor || '#e74c3c',
+                        strokeWidth: currentSettings.strokeWidth || 2,
+                        opacity: currentSettings.opacity || 1.0,
                     });
                     break;
 
                 case 'line':
                 case 'arrow':
+                    tempObj = new fabric.Line([startX, startY, startX, startY], {
+                        ...commonProps,
+                        stroke: currentSettings.strokeColor || '#e74c3c',
+                        strokeWidth: currentSettings.strokeWidth || 2,
+                        opacity: currentSettings.opacity || 1.0,
+                        strokeLineCap: 'round',
+                    });
+                    break;
+
                 case 'ruler':
                     tempObj = new fabric.Line([startX, startY, startX, startY], {
-                        stroke: tool === 'ruler' ? '#2196f3' : currentSettings.strokeColor,
-                        strokeWidth: tool === 'ruler' ? 2 : currentSettings.strokeWidth,
+                        ...commonProps,
+                        stroke: '#2196f3',
+                        strokeWidth: 2,
                         opacity: currentSettings.opacity,
-                        evented: false,
-                        selectable: false,
-                        customData: { type: tool },
                     });
                     break;
 
