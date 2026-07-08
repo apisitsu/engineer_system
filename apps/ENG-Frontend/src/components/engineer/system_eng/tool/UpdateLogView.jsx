@@ -18,7 +18,12 @@ const UpdateLogView = () => {
     const [updateStatus, setUpdateStatus] = useState(null);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [staleUpdate, setStaleUpdate] = useState(false);
     const pollIntervalRef = useRef(null);
+    const pollCountRef = useRef(0);
+
+    const MAX_POLL_ATTEMPTS = 60; // 60 x 5s = 5 minutes
+    const STALE_TRIGGER_MS = 5 * 60 * 1000; // 5 minutes
 
     const fetchLogs = async () => {
         try {
@@ -30,17 +35,26 @@ const UpdateLogView = () => {
             if (response.data.success) {
                 setLogs(response.data.data);
                 
-                // If latest log is TRIGGERED, we are updating
                 if (response.data.data.length > 0) {
                     const latestLog = response.data.data[0];
                     if (latestLog.action_type === 'TRIGGERED') {
-                        setIsUpdating(true);
-                        startPolling();
+                        // Check if this trigger is stale (older than 5 minutes)
+                        const triggerAge = Date.now() - new Date(latestLog.executed_at).getTime();
+                        if (triggerAge > STALE_TRIGGER_MS) {
+                            setIsUpdating(false);
+                            setStaleUpdate(true);
+                            stopPolling();
+                        } else {
+                            setStaleUpdate(false);
+                            setIsUpdating(true);
+                            startPolling();
+                        }
                     } else {
                         setIsUpdating(false);
+                        setStaleUpdate(false);
                         stopPolling();
 
-                        // Trigger frontend email via iframe if update failed
+                        // Trigger email alert if update failed
                         if (['ERROR', 'CRITICAL', 'ROLLBACK_SUCCESS'].includes(latestLog.action_type)) {
                             const lastAlertedId = localStorage.getItem('last_update_alert_id');
                             if (lastAlertedId !== String(latestLog.id)) {
@@ -94,7 +108,19 @@ const UpdateLogView = () => {
 
     const startPolling = () => {
         if (!pollIntervalRef.current) {
+            pollCountRef.current = 0;
             pollIntervalRef.current = setInterval(() => {
+                pollCountRef.current += 1;
+                if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
+                    // Polling timed out — stop and show stale warning
+                    stopPolling();
+                    setIsUpdating(false);
+                    setStaleUpdate(true);
+                    message.warning('Update polling timed out. The update may have stalled or completed outside this session.');
+                    // Fetch one more time to pick up any auto-expired record from the backend
+                    fetchLogs();
+                    return;
+                }
                 fetchLogs();
             }, 5000);
         }
@@ -105,6 +131,7 @@ const UpdateLogView = () => {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
+        pollCountRef.current = 0;
     };
 
     useEffect(() => {
@@ -308,6 +335,18 @@ const UpdateLogView = () => {
                                 type="warning"
                                 showIcon
                                 icon={<SyncOutlined spin />}
+                                style={{ marginBottom: 24, borderRadius: 12 }}
+                            />
+                        )}
+
+                        {/* STALE UPDATE BANNER */}
+                        {staleUpdate && (
+                            <Alert
+                                message={<span style={{ fontWeight: 'bold', fontSize: 16 }}>Update May Have Stalled</span>}
+                                description="A previous update trigger was detected but did not complete within the expected time. The update script may not have executed properly, or it completed while the server was restarting. Check the server console for details."
+                                type="error"
+                                showIcon
+                                icon={<ExclamationCircleOutlined />}
                                 style={{ marginBottom: 24, borderRadius: 12 }}
                             />
                         )}
