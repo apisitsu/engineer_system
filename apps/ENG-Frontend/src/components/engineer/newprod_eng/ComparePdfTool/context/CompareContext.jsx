@@ -141,6 +141,11 @@ function compareReducer(state, action) {
         }
       }
 
+      // Auto-hide non-pending diffs by default
+      for (const diff of newDiffs) {
+        diff.visible = (diff.status === 'pending');
+      }
+
       return {
         ...state,
         comparison: {
@@ -227,7 +232,11 @@ function compareReducer(state, action) {
           ...state.review,
           diffs: state.review.diffs.map(d =>
             d.id === action.payload.id
-              ? { ...d, status: action.payload.status }
+              ? { 
+                  ...d, 
+                  status: action.payload.status,
+                  visible: action.payload.status === 'pending'
+                }
               : d
           ),
         },
@@ -254,6 +263,7 @@ function compareReducer(state, action) {
           diffs: state.review.diffs.map(d => ({
             ...d,
             status: action.payload.status,
+            visible: action.payload.status === 'pending',
           })),
         },
       };
