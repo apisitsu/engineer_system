@@ -83,7 +83,7 @@ exports.checkUpdates = async (req, res) => {
         const localHash = localHashRaw.trim();
         const remoteHash = remoteHashRaw.trim();
         
-        const hasUpdate = localHash !== remoteHash;
+        let hasUpdate = localHash !== remoteHash;
         
         let commitsBehind = 0;
         let latestCommitMessage = '';
@@ -102,6 +102,7 @@ exports.checkUpdates = async (req, res) => {
             }
             const { stdout: countOut } = await execPromise('git rev-list --count HEAD..origin/main', { cwd: cwdPath });
             commitsBehind = parseInt(countOut.trim(), 10) || 0;
+            hasUpdate = commitsBehind > 0;
         }
         
         res.json({
