@@ -60,6 +60,7 @@ import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/Spe
 import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
 
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
+import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
 import OrganizationEng from './components/engineer/overall_eng/home_overall';
 
@@ -340,6 +341,7 @@ const AppContent = () => {
                   <Route path="/eng/newprod_eng" element={<HomeNewProdEng />} />
                   <Route path="/eng/pdf_merger_tool" element={<PdfMergerTool />} />
                   <Route path="/eng/html-to-pdf" element={<HtmlToPdfDashboard />} />
+                  <Route path="/eng/compare_pdf" element={<ComparePdfTool />} />
 
                   {/* ------ Overall Engineer ------ */}
                   <Route path="/eng/overall_eng" element={<OrganizationEng />} />
