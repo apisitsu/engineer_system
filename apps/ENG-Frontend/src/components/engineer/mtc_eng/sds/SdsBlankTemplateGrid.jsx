@@ -12,6 +12,7 @@ import {
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined,
   PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, StarFilled, StarOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -461,6 +462,38 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const clearSelection = () => { pushUndo(); applyBorder('none', false); applyFill(true, false); };
 
+  // ── Cell image (insert / remove at the anchor cell) ───────────────────────────
+  // Stored as a data-URI on the cell (cells[k].img); persists in grid_json and renders
+  // in both the editor (cd.img) and the PDF (applyDataToGrid). Merge cells first to size it.
+  const imageInputRef = useRef(null);
+  const onImageFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';                       // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { message.warning('Please choose an image file'); return; }
+    if (file.size > 4 * 1024 * 1024) { message.warning('Image too large (max 4 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const k = ckey(anchor.r, anchor.c);
+      pushUndo();
+      setCells((prev) => ({ ...prev, [k]: { f: {}, a: {}, ...(prev[k] || {}), img: reader.result } }));
+      message.success(`Image inserted at ${colLabel(anchor.c)}${anchor.r + 1}`);
+    };
+    reader.readAsDataURL(file);
+  };
+  const removeImage = () => {
+    const k = ckey(anchor.r, anchor.c);
+    if (!cells[k] || !cells[k].img) { message.info('Selected cell has no image'); return; }
+    pushUndo();
+    setCells((prev) => {
+      const next = { ...prev };
+      const ex = { ...next[k] }; delete ex.img;
+      if (!ex.v && !ex.f && !ex.a) delete next[k]; else next[k] = ex;
+      return next;
+    });
+    message.success('Image removed');
+  };
+
   // ── Cell text editing ─────────────────────────────────────────────────────────
   const commitEdit = () => {
     if (!editing) return;
@@ -516,7 +549,13 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   };
 
   const onKeyDown = (e) => {
-    if (editing) return; // let the input handle keys while typing
+    if (editing) return; // let the in-cell editor handle keys while typing
+    // Ignore keys typed into any form field — AntD Modal/Select portals still bubble
+    // their synthetic events up the React tree, so without this the grid's
+    // Backspace/Delete/Enter/Ctrl+A shortcuts hijack the template-name input (and any
+    // other input), e.g. Backspace can't erase a mistyped template name.
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
     else if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); }
@@ -667,7 +706,19 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
               boxShadow: anchor.r === r && anchor.c === c ? `inset 0 0 0 1px ${SEL_EDGE}` : undefined,
             }}>
             {cd && cd.img
-              ? <img src={cd.img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+              ? (() => {
+                  // Constrain the image to the cell's fixed height (sum of spanned rows)
+                  // so it scales to fit instead of stretching the row taller. A bare
+                  // <img max-height:100%> has no definite height to resolve against in a
+                  // table cell, so it would grow the row — mirror the PDF's fixed wrapper.
+                  const rs = (span && span.rs) || 1;
+                  let h = 0; for (let i = 0; i < rs; i++) h += (rowH[r + i] ?? CELL_H);
+                  return (
+                    <div style={{ height: h, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={cd.img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                    </div>
+                  );
+                })()
               : (cd && cd.v)}
           </td>
         );
@@ -869,6 +920,16 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
         <Tooltip title="Merge selected cells"><Button size="small" onClick={mergeSelection}>Merge</Button></Tooltip>
         <Tooltip title="Unmerge selected cells"><Button size="small" onClick={unmergeSelection}>Unmerge</Button></Tooltip>
+
+        <Divider type="vertical" style={{ margin: '0 2px' }} />
+
+        <Tooltip title="Insert an image into the selected cell (merge cells first to size the area)">
+          <Button size="small" icon={<PictureOutlined />} onClick={() => imageInputRef.current && imageInputRef.current.click()}>Image</Button>
+        </Tooltip>
+        <Tooltip title="Remove the image from the selected cell">
+          <Button size="small" icon={<DeleteOutlined />} onClick={removeImage} />
+        </Tooltip>
+        <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onImageFile} />
       </Space>
 
       {/* View / layout toolbar */}
