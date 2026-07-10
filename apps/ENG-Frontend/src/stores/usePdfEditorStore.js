@@ -41,7 +41,7 @@ export const usePdfEditorStore = create((set, get) => ({
         stampCross: { strokeColor: '#e74c3c', strokeWidth: 3, fontSize: 12 },
         stampCircle: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
         stampOk: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
-        stampUserDate: { strokeColor: '#e74c3c', fontSize: 16 },
+        stampUserDate: { strokeColor: '#e74c3c', fontSize: 12 },
         // Fallback for missing tools
         default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
     },
@@ -154,15 +154,73 @@ export const usePdfEditorStore = create((set, get) => ({
         return { toolSettings: newSettings, currentDwgRole: roleName };
     }),
 
-    // Update Text Content
-    updateSelectedTextContent: (newText, fabricCanvasRefs, currentPage) => set(state => {
+    // Update Text Content or Any Property
+    updateSelectedObjectProperty: (key, value, fabricCanvasRefs, currentPage) => set(state => {
         const fc = fabricCanvasRefs?.current?.[currentPage];
         if (fc && state.selectedObjectId) {
             const obj = fc.getObjects().find(o => (o.id === state.selectedObjectId || o.__uid === state.selectedObjectId));
-            if (obj && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
-                obj.set('text', newText);
+            if (obj) {
+                if (key === 'text' && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                    obj.set('text', value);
+                } else if (key === 'strokeColor') {
+                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') obj.set('fill', value);
+                    else if (obj.customData?.type?.startsWith('stamp')) {
+                        if (obj.type === 'group') {
+                            obj.getObjects().forEach(child => {
+                                if (child.stroke) child.set('stroke', value);
+                                if (child.fill && child.fill !== 'transparent' && child.fill !== '#ffffff') child.set('fill', value);
+                            });
+                        } else {
+                            if (obj.stroke) obj.set('stroke', value);
+                            else if (obj.fill && obj.fill !== 'transparent' && obj.fill !== '#ffffff') obj.set('fill', value);
+                        }
+                    } else if (obj.type === 'group') {
+                        obj.getObjects().forEach(child => {
+                            if (child.stroke) child.set('stroke', value);
+                            if (child.type === 'triangle' && child.fill) child.set('fill', value);
+                        });
+                    } else {
+                        if (obj.stroke !== undefined) obj.set('stroke', value);
+                    }
+                } else if (key === 'fillColor') {
+                    if (obj.fill !== undefined) obj.set('fill', value);
+                } else if (key === 'strokeWidth') {
+                    if (obj.type === 'group' && !obj.customData?.type?.startsWith('stamp')) {
+                        obj.getObjects().forEach(child => {
+                            if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) child.set('strokeWidth', value);
+                        });
+                    } else if (obj.strokeWidth !== undefined) {
+                        obj.set('strokeWidth', value);
+                    }
+                } else if (key === 'fontSize') {
+                    if (obj.fontSize !== undefined) obj.set('fontSize', value);
+                    else if (obj.type === 'group' && !obj.customData?.type?.startsWith('stamp')) {
+                        obj.getObjects().forEach(child => {
+                            if (child.type === 'i-text' || child.type === 'text') child.set('fontSize', value);
+                            if (child.type === 'triangle') child.set({ width: value, height: value });
+                        });
+                    } else if (obj.customData?.type?.startsWith('stamp')) {
+                        if (obj.customData.type === 'stampCheckmark' || obj.customData.type === 'stampCross') obj.set('fontSize', value * 2.5);
+                        else if (obj.customData.type === 'stampCircle') obj.set('radius', value);
+                        else if (obj.customData.type === 'stampOk') {
+                            obj.getObjects()[0].set('radius', value * 1.2);
+                            obj.getObjects()[1].set('fontSize', value * 1.1);
+                        } else if (obj.customData.type === 'stampUserDate') {
+                            const scale = (value / 16) * 0.75;
+                            obj.set({ scaleX: scale, scaleY: scale });
+                        }
+                    }
+                } else if (key === 'fontFamily') {
+                    if (obj.fontFamily !== undefined) obj.set('fontFamily', value);
+                } else if (key === 'opacity') {
+                    if (obj.opacity !== undefined) obj.set('opacity', value);
+                }
+
+                obj.set({ dirty: true });
+                obj.setCoords();
                 fc.renderAll();
-                return { selectedObjectProps: { ...state.selectedObjectProps, text: newText } };
+
+                return { selectedObjectProps: { ...state.selectedObjectProps, [key]: value } };
             }
         }
         return state;

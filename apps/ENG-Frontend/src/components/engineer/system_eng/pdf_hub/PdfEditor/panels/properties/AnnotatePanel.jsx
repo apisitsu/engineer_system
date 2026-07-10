@@ -4,7 +4,7 @@ import { useTheme } from '../../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../../stores/usePdfEditorStore';
 import { SectionTitle, COLOR_PRESETS } from './SharedProperties';
 
-export default function AnnotatePanel() {
+export default function AnnotatePanel({ fabricCanvasRefs, currentPage }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
     const currentSettings = store.toolSettings[store.activeTool] || store.toolSettings.default;
@@ -30,7 +30,10 @@ export default function AnnotatePanel() {
                                 {['#ffeb3b', '#4caf50', '#2196f3', '#ff9800', '#f44336', '#9c27b0'].map(c => (
                                     <div
                                         key={c}
-                                        onClick={() => store.setHighlightColor(c)}
+                                        onClick={() => {
+                                            store.setHighlightColor(c);
+                                            if (store.selectedObjectId) store.updateSelectedObjectProperty('highlightColor', c, fabricCanvasRefs, currentPage);
+                                        }}
                                         style={{
                                             width: 24, height: 24, borderRadius: '50%', cursor: 'pointer',
                                             background: c,
@@ -48,7 +51,11 @@ export default function AnnotatePanel() {
                             <SectionTitle>Stroke Color</SectionTitle>
                             <ColorPicker
                                 value={currentSettings.strokeColor}
-                                onChangeComplete={(color) => store.setStrokeColor(color.toHexString())}
+                                onChangeComplete={(color) => {
+                                    const hex = color.toHexString();
+                                    store.setStrokeColor(hex);
+                                    if (store.selectedObjectId) store.updateSelectedObjectProperty('strokeColor', hex, fabricCanvasRefs, currentPage);
+                                }}
                                 size="small"
                                 presets={COLOR_PRESETS}
                             />
@@ -59,7 +66,10 @@ export default function AnnotatePanel() {
                             <Slider
                                 min={0.1} max={1} step={0.05}
                                 value={currentSettings.opacity}
-                                onChange={store.setOpacity}
+                                onChange={(val) => {
+                                    store.setOpacity(val);
+                                    if (store.selectedObjectId) store.updateSelectedObjectProperty('opacity', val, fabricCanvasRefs, currentPage);
+                                }}
                             />
                         </div>
                     </>

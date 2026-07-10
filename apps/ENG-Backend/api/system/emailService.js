@@ -132,4 +132,45 @@ const mailPermitRecord = async (u_code,) => {
 
 }
 
-module.exports = { sendEmail, sendEmailViaAS, sendEmailWithFallback };
+/**
+ * Format the body of an update alert email
+ */
+const formatUpdateAlertBody = (type, details) => {
+    return `═══════════════════════════════════════
+  🔄 SYSTEM UPDATE ALERT
+═══════════════════════════════════════
+
+🔹 Alert Type:     ${type}
+🔹 Previous Hash:  ${details.previousHash || "N/A"}
+🔹 Attempted Hash: ${details.attemptedHash || "N/A"}
+🔹 Error:          ${details.errorMsg || "N/A"}
+🔹 Time:           ${new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}
+
+─── Details ───────────────────────────
+${details.body || "No additional details"}
+`;
+};
+
+/**
+ * Send an update alert (Failure/Rollback)
+ * @param {string} type - 'ROLLBACK_SUCCESS' | 'CRITICAL' | 'UPDATE_FAILED'
+ * @param {object} details - { previousHash, attemptedHash, errorMsg, body }
+ */
+const sendUpdateAlert = async (type, details) => {
+    const subject = type === 'CRITICAL'
+        ? '🚨 CRITICAL: EngineerSystem Server DOWN'
+        : type === 'UPDATE_FAILED'
+        ? '❌ [EngineerSystem] Update Failed'
+        : '⚠️ EngineerSystem Update Rolled Back';
+    
+    // Defaulting to the known recipient for system alerts
+    const recipient = 'nanthiwa.k@minebea.co.th';
+    
+    try {
+        await sendEmailViaAS(recipient, subject, formatUpdateAlertBody(type, details));
+    } catch (error) {
+        console.error('❌ sendUpdateAlert Error:', error.message);
+    }
+};
+
+module.exports = { sendEmail, sendEmailViaAS, sendEmailWithFallback, sendUpdateAlert };
