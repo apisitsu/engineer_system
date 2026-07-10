@@ -902,7 +902,9 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 
   const [machineTypeOpts, setMachineTypeOpts] = useState([]);
   useEffect(() => {
-    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
+    // nodedupe: Machine Tool Config is now per-machine, so grouped machines
+    // (e.g. KS-400B1/B2/B7) must each appear separately as a configurable target.
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES, { params: { nodedupe: 'true' } })
       .then(r => {
         const seen = new Set();
         setMachineTypeOpts(r.data.filter(m => m.is_active && m.machine_type_name && !seen.has(m.machine_type_name) && seen.add(m.machine_type_name)));

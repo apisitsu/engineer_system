@@ -224,24 +224,27 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   let mtRows = [];
   if (machine_type_name && process_code) {
-    // Machine Tool Config (sds_machine_tool) is SHARED across a machine_group — grouped
-    // machines (e.g. KS-400B1/B2/B7) use the same fixtures, so the curated T01–T20 list
-    // lives once on the representative (KS-400B1). Look it up group-wide so B2/B7 reuse it
-    // without duplicating rows. Per-machine differences live only in the Excel config below.
-    const toolMachineNames = machineGroup
-      ? (await engPool.query(
-          `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
-           WHERE machine_group = $1 AND is_active`,
-          [machineGroup]
-        )).rows.map(r => r.machine_type_name)
-      : [machine_type_name];
-    const mtResult = await engPool.query(
+    // Machine Tool Config (sds_machine_tool) is per-machine FIRST: each physical grinder
+    // owns its ordered T01–Tn fixture whitelist, so a SPLIT group member (e.g. KS-400B2)
+    // uses its own list. Only when a machine has NO rows of its own do we fall back to the
+    // group-wide list (COMBINED groups / not-yet-split members keep working — the curated
+    // list lives once on the representative and siblings reuse it).
+    const runToolQuery = (names) => engPool.query(
       `SELECT tool_number, tool_drawing_no FROM ${TABLES.SDS_V2_MACHINE_TOOL}
        WHERE machine_type = ANY($1) AND process_code = $2
        ORDER BY LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`,
-      [toolMachineNames, String(process_code)]
+      [names, String(process_code)]
     );
-    // Dedupe by tool slot — group members share one curated list.
+    let mtResult = await runToolQuery([machine_type_name]);
+    if (mtResult.rows.length === 0 && machineGroup) {
+      const toolMachineNames = (await engPool.query(
+        `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+         WHERE machine_group = $1 AND is_active`,
+        [machineGroup]
+      )).rows.map(r => r.machine_type_name);
+      mtResult = await runToolQuery(toolMachineNames);
+    }
+    // Dedupe by tool slot (belt-and-braces for the group-fallback path).
     const seenTool = new Set();
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }

@@ -114,8 +114,14 @@ router.get('/sds/pdf', async (req, res) => {
       return res.status(400).json({ error: `Unknown machine: ${req.query.machine ?? '(none)'}` });
     }
 
+    // The public link always resolves a SPECIFIC factory floor code (e.g. SPG-03 → KS-400B1),
+    // so label the sheet with that specific machine — NOT the shared machine_group
+    // ('KS-400B1/B2/B7'). Passing display_name explicitly mirrors the in-app picker, which for a
+    // split group (multiple visible members) shows the per-machine name. Without it buildValueMap
+    // falls back to machine_group and the header wrongly prints all sibling machines. Config
+    // lookups still key off machine_type_name, so this only changes the printed label.
     const html = await headless.buildGridHtmlForRequest({
-      cn, machine_type_name, process_code: process_code || null, display_name: null,
+      cn, machine_type_name, process_code: process_code || null, display_name: machine_type_name,
     });
     const pdfBuffer = await headless.renderPdf(html, {
       margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' },

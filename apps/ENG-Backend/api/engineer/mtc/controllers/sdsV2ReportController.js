@@ -840,6 +840,11 @@ async function buildCoverage() {
         // totals (flagged limit_excluded for the red UI highlight), not dropped.
         limitExcluded:      limitExcludedCount,
       },
+      // The configured part-type set (scope.part_types), in config order. Exposed so the
+      // frontend charts (esp. "New Parts per Month") build their series from the scope
+      // instead of a hardcoded ball/race/mecha list — add/remove a type in the report
+      // config and the charts follow.
+      partTypes,
       byPartType,
       monthlyTrend,
       monthlyNewParts,
