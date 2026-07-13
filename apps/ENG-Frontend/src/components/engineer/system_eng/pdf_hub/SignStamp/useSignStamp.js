@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { message } from 'antd';
 import axios from 'axios';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -234,6 +234,21 @@ export default function useSignStamp() {
             // Create a fresh pdf-lib document from the original bytes
             const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             const pages = doc.getPages();
+
+            // ── Normalize page rotation (same fix as commitEngine) ──
+            // Landscape PDFs stored as portrait MediaBox + /Rotate 90 need
+            // their dimensions swapped so coordinate mapping is correct.
+            for (const page of pages) {
+                const rotation = page.getRotation().angle || 0;
+                const normalizedRotation = ((rotation % 360) + 360) % 360;
+                if (normalizedRotation !== 0) {
+                    const { width, height } = page.getSize();
+                    if (normalizedRotation === 90 || normalizedRotation === 270) {
+                        page.setSize(height, width);
+                    }
+                    page.setRotation(degrees(0));
+                }
+            }
 
             // Prepare stamp/signature images
             let stampImg = null;

@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize } from './commitHelpers';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -20,6 +20,34 @@ import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
     const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pages = doc.getPages();
+
+    // ══════════════════════════════════════════════════════════════════
+    // PRE-PASS: Normalize page rotation
+    //
+    // Landscape PDFs are often stored as portrait MediaBox + /Rotate 90.
+    // PDF.js viewport accounts for this → Fabric canvas is landscape.
+    // But pdf-lib draws on raw MediaBox which is still portrait.
+    //
+    // FIX: For any rotated page, adjust the MediaBox to match the visual
+    // dimensions and set rotation to 0.  This makes the raw coordinate
+    // space identical to the visual space, so all existing coordinate
+    // math (toPdf, toPdfY) works correctly without further changes.
+    // ══════════════════════════════════════════════════════════════════
+    for (const page of pages) {
+        const rotation = page.getRotation().angle || 0;
+        const normalizedRotation = ((rotation % 360) + 360) % 360;
+
+        if (normalizedRotation !== 0) {
+            const { width, height } = page.getSize(); // Raw MediaBox
+
+            if (normalizedRotation === 90 || normalizedRotation === 270) {
+                // Swap MediaBox dimensions to match the visual layout
+                page.setSize(height, width);
+            }
+            // Remove rotation — the MediaBox now represents the visual layout directly
+            page.setRotation(degrees(0));
+        }
+    }
 
     // ── Commit highlights per page (drawn first so text stays on top) ──
     if (pageHighlights) {

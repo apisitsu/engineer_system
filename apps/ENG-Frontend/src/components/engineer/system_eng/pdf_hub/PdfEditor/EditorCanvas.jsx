@@ -228,6 +228,14 @@ const EditorCanvas = ({
                 canvas.style.width = `${displayW}px`;
                 canvas.style.height = `${displayH}px`;
 
+                // Set canvas buffer size immediately too (prevents layout glitch
+                // where container momentarily uses wrong dimensions due to
+                // overflow:hidden clipping the un-styled canvas element).
+                // The debounced render below will overwrite these with the
+                // final high-res values.
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
                 setCanvasSize({ width: displayW, height: displayH });
 
                 const fc = fabricCanvasRefs.current[pageNum];
