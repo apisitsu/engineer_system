@@ -192,7 +192,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     ? searchData.process_info.find(r => String(r.process_code) === String(process_code)) || searchData.process_info[0]
     : searchData.process_info[0];
 
-  map['cn']               = searchData.cn || '';
+  // Display the CN as the 6-digit item-no (e.g. 320641), not the control-no (C32-00641).
+  // `_cn_control` keeps the control-no form for internal lookups (approval seals are
+  // keyed by control-no in sds_approval) — it is `_`-prefixed so it never renders in a grid cell.
+  map['cn']               = cnFormat.toItemNo(searchData.cn) || searchData.cn || '';
+  map['_cn_control']      = searchData.cn || '';
   map['parts_no']         = searchData.parts_no || '';
   map['dwg_rev']          = searchData.dwg_rev || 'NC';
   map['part_type']        = searchData.part_type || '';
@@ -1097,7 +1101,7 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
     // (valueMap.sds_rev, from sds_parameter) so a new SDS rev starts unsigned and
     // old seals don't carry over. resolveSdsRev in sdsApprovalController uses the
     // identical source, so the sign endpoints and this renderer always agree.
-    valueMap._approvalSeals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    valueMap._approvalSeals = await getApprovalSeals(valueMap._cn_control || valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     grid = applyDataToGrid(grid, valueMap, mappings);
   }
 
@@ -1167,7 +1171,7 @@ router.get('/pdf-chrome', async (req, res) => {
 
     const p = valueMap.params || {};
     // Approval stamps from the sds_approval sign records (keyed per CN by cn+machine+process+sds_rev).
-    const seals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    const seals = await getApprovalSeals(valueMap._cn_control || valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     html = html.replace(/{{stamp_prepared}}/g,  seals.prepared?.svg || '');
     html = html.replace(/{{stamp_checked}}/g,   seals.checked?.svg || '');
     html = html.replace(/{{stamp_approved}}/g,  seals.approved?.svg || '');
