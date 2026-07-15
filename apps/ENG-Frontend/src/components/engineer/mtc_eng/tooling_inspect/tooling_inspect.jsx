@@ -101,7 +101,13 @@ function InspectionReport() {
       fetchToolingInspectData();
       fetchDashboardData(selectedMonth);
     } catch (e) {
-      message.error('Failed to update data');
+      // Surface the real backend failure (env/venv missing, network share
+      // unreachable, python error) instead of a generic message — the import
+      // runs a Python script whose real error only lives in the 500 body.
+      const d = e?.response?.data || {};
+      const detail = d.error || d.stderr || d.message || e.message || 'Unknown error';
+      message.error({ content: `Failed to update data: ${detail}`, duration: 8 });
+      console.error('Sync CSV failed:', d);
     } finally {
       setLoading(false);
     }
