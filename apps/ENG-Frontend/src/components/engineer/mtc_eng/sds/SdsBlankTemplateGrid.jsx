@@ -129,6 +129,8 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Bumped to force the "Template" live-preview iframe (real grid blank PDF) to reload.
+  const [pdfKey, setPdfKey] = useState(0);
   // Multi-template: the list + the currently-edited template. templateId === null means
   // the legacy single-layout fallback (no sds_grid_template rows on this DB yet).
   const [templates, setTemplates] = useState([]);
@@ -253,6 +255,7 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         await axios.put(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID, { grid });
       }
       message.success('Saved grid layout');
+      setPdfKey(k => k + 1);   // refresh the "Template" blank-PDF live preview
       return true;
     } catch (err) {
       message.error('Save failed: ' + (err.response?.data?.error || err.message));
@@ -260,15 +263,25 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
     } finally { setSaving(false); }
   };
 
+  // Blank grid PDF for THIS template (no CN data injected — the empty setup-data-sheet
+  // as it will actually print). `template_id` renders this specific template, not just
+  // the default. Used by the view-only button and the "Template" live-preview iframe.
+  const blankPdfUrl = useMemo(() => {
+    const token = localStorage.getItem('token') || '';
+    const tp = templateId ? `&template_id=${templateId}` : '';
+    return `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}${tp}`;
+  }, [templateId]);
+
   const openPdf = async () => {
     const win = window.open('', '_blank');
     const ok = await save();
-    const token = localStorage.getItem('token') || '';
     // Preview THIS template (not necessarily the default) by passing its id.
-    const tp = templateId ? `&template_id=${templateId}` : '';
-    if (ok && win) win.location.href = `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}${tp}`;
+    if (ok && win) win.location.href = blankPdfUrl;
     else if (win) win.close();
   };
+
+  // View the blank template PDF WITHOUT saving — opens the currently-saved layout.
+  const viewBlankPdf = () => { window.open(blankPdfUrl, '_blank'); };
 
   // ── Template management ──────────────────────────────────────────────────────
   const switchTemplate = async (id) => { setTemplateId(id); await loadTemplate(id); };
@@ -739,14 +752,14 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   const BorderBtn = ({ mode, icon, title }) => (
     <Tooltip title={title}><Button size="small" icon={icon} onClick={() => applyBorder(mode)} /></Tooltip>
   );
-  const refreshTemplate = () => { if (onRefreshPreview) onRefreshPreview(); };
+  const refreshTemplate = () => { setPdfKey(k => k + 1); if (onRefreshPreview) onRefreshPreview(); };
 
   const viewOptions = [
     { label: 'Grid', value: 'grid', icon: <TableOutlined /> },
-    ...(previewUrl ? [
-      { label: 'Template', value: 'template', icon: <EyeOutlined /> },
-      { label: 'Overlay', value: 'overlay', icon: <BlockOutlined /> },
-    ] : []),
+    // "Template" shows the real blank grid PDF (blankPdfUrl) — always available.
+    { label: 'Template', value: 'template', icon: <EyeOutlined /> },
+    // "Overlay" aligns the editable grid over the legacy HTML reference (previewUrl).
+    ...(previewUrl ? [{ label: 'Overlay', value: 'overlay', icon: <BlockOutlined /> }] : []),
   ];
 
   const gridSurface = (
@@ -948,8 +961,8 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
             <Switch size="small" checked={gridlines} onChange={setGridlines} checkedChildren="Grid" unCheckedChildren="Grid" />
           </Tooltip>
         )}
-        {view !== 'grid' && previewUrl && (
-          <Tooltip title="Refresh SDS template"><Button size="small" icon={<ReloadOutlined />} onClick={refreshTemplate} /></Tooltip>
+        {view !== 'grid' && (
+          <Tooltip title="Refresh preview"><Button size="small" icon={<ReloadOutlined />} onClick={refreshTemplate} /></Tooltip>
         )}
 
         <Divider type="vertical" style={{ margin: '0 2px' }} />
@@ -970,18 +983,23 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         </Tooltip>
         <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
         <Button size="small" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button>
-        <Button size="small" type="primary" icon={<FilePdfOutlined />} onClick={openPdf} loading={saving}>PDF</Button>
+        <Tooltip title="View the blank template PDF (opens the saved layout — no save)">
+          <Button size="small" icon={<EyeOutlined />} onClick={viewBlankPdf}>View PDF</Button>
+        </Tooltip>
+        <Tooltip title="Save the current edits, then open the blank template PDF">
+          <Button size="small" type="primary" icon={<FilePdfOutlined />} onClick={openPdf} loading={saving}>Save + PDF</Button>
+        </Tooltip>
       </Space>
 
       {/* Canvas */}
       {view === 'template' ? (
-        <iframe key={`tpl-${previewKey}`} src={previewUrl} title="SDS Blank Template Preview"
+        <iframe key={`tpl-${templateId}-${pdfKey}`} src={blankPdfUrl} title="SDS Blank Template PDF Preview"
           style={{ width: '100%', height: 600, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff' }} />
       ) : gridSurface}
 
       <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 6 }}>
         {view === 'template'
-          ? 'SDS template (HTML render) — reference view'
+          ? 'Blank template PDF (real print output, no CN data) — Save to refresh after edits'
           : overlay
             ? 'Overlay: template sits under the grid — adjust opacity to align • select a cell then draw border / Merge • Save / PDF'
             : 'A1:AV56 grid from sds_template.xlsx (merge + real fonts) • double-click/Enter to type text • drag header borders to resize • select cell → border / fill / Merge • Del to clear • Save / PDF'}

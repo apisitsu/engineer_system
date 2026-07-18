@@ -1234,6 +1234,9 @@ const HEADER_CELL_FIELDS = [
   // ct (CYCLE TIME, cell B4) is auto-filled from the factory process data by default.
   // A machine-default or per-CN value entered here overrides that factory value.
   { key: 'ct',           label: 'Cycle Time (CT)', cell: 'B4' },
+  // category (cell B5) auto-fills from the part class (class1_name) by default.
+  // A machine-default or per-CN value entered here overrides that factory value.
+  { key: 'category',     label: 'Category',        cell: 'B5' },
 ];
 
 const MachineConfigTab = ({ theme, visibleMachineNames }) => {
