@@ -85,6 +85,55 @@ Each `param_key` in `sds_parameter` must have a corresponding row in `sds_excel_
 - A:I section: `row_{N}_{COL}` (value), `row_{N}_is_header`, `row_{N}_{COL}_type` (e.g. `red`)
 - GW section (AN:AV): `gw_row_{N}_{COL}`, `gw_row_{N}_is_header`, `gw_row_{N}_{COL}_type`
 
+### `{{dim.*}}` tokens — part dimensions fill themselves per CN
+
+A cell holding a PART dimension must never store a literal number. `sds_parameter` rows with
+`cn IS NULL` are **machine defaults**: they apply to every part that machine grinds, so a
+number frozen there prints one part's dimensions on every other part's sheet — and the values
+look plausible (12.700, 19.050), so nothing appears wrong on paper.
+
+Store a token instead. It resolves from the part's own factory row at render time:
+
+| token | meaning | `\|N` |
+|---|---|---|
+| `{{dim.OD}}` | outer diameter | `{{dim.W\|3}}` → `35.000` |
+| `{{dim.ID}}` | bore / inner diameter | decimals, optional |
+| `{{dim.W}}` | width | |
+| `{{dim.SD}}` | derived `sqrt(OD² − W²)` | |
+
+Works in A:I, the GW section, and mapped (`sds_excel_mapping`) cells; composable with text
+(`Ø{{dim.OD}} mm`). Column resolution per part class lives in
+`api/engineer/mtc/utils/partDimAlias.js` (BALL `ball_dia/in_dia/width`, RACE `od/id/width`,
+SLEEVE `od/id/full_length`, BODY has **no** OD, SPHERICAL `sph_od/dall_id/sph_width` via the
+`eng_sph_design` join, MECHA none). A class without that column resolves to null — it never
+substitutes a different dimension.
+
+**An unresolved token renders BLANK**, never the literal token and never a stale value, and
+logs `[sds-pdf] dim.X unresolved for cn=…`. Blank reads as incomplete on a setup sheet; a
+leftover number reads as real.
+
+**Currently tokenised** (migration `db_migrations/20260719_sds_param_dim_tokens.js`):
+KN-312A `row_38_H`/`row_39_H` (W, OD) · KS-500RD `row_45_H`/`row_46_H` (W, OD) ·
+KS-B80 `row_24_H` (ID) · KS-H70 `row_56_H`/`row_57_H` (ID, W).
+
+**Two things that surprise people:**
+1. **Nothing is automatic.** A token fires only where someone put one in the config. New
+   machines and new rows need the token added by hand in the MachineConfigTab editor.
+2. **A per-CN override still beats the token** (precedence: CN+process > CN > machine
+   default). Typing a value for one CN silently disables the auto-fill for that CN.
+
+**Choosing OD vs ID for a vague label:** trust an explicit label (OUT DIA / BORE / WIDTH /
+SPHERICAL DIAMETER) over any inference. "The value entered is the value being ground" is a
+**tiebreaker for silent labels only** — KS-H70 grips the part by its bore and finishes the
+sphere, so its `WORK BORE` cell is the HOLDING reference and that rule would give the wrong
+answer. Before committing an inferred mapping, check it against the part population: does
+the old frozen default equal that dimension across the parts the machine actually runs?
+(KS-B80's 19.050 matched `in_dia` on 50 parts and `ball_dia` on 0 → ID.)
+
+Not tokenised on purpose: values that are ranges (OC-16A/18BR/20BR `"Ø50 - 54"`), cells whose
+default is already `"-"`, and **KN-312A `row_41_H` SHAFT DIA** — proven derivable from neither
+part nor tooling (four CNs sharing one arbor carry four different values), so it stays per-CN.
+
 ---
 
 ## SDS Routes (`/api/sds/*`)
