@@ -176,50 +176,48 @@ function SideBySideView({ pageResult, zoom, pageDiffs, selectedDiffId, dispatch 
 // ═══════════════════════════════════════════════════════
 
 function OverlayView({ pageResult, zoom, overlayOpacity, pageDiffs, selectedDiffId, dispatch }) {
-  const overlayCanvasRef = useRef(null);
+  const baseContainerRef = useRef(null);
+  const compareContainerRef = useRef(null);
+  const diffContainerRef = useRef(null);
 
   useEffect(() => {
-    if (!pageResult?.baseCanvas || !pageResult?.compareCanvas || !overlayCanvasRef.current) return;
+    if (!pageResult || !baseContainerRef.current) return;
+    if (pageResult.baseCanvas) {
+      baseContainerRef.current.innerHTML = '';
+      pageResult.baseCanvas.style.width = '100%';
+      pageResult.baseCanvas.style.height = '100%';
+      baseContainerRef.current.appendChild(pageResult.baseCanvas);
+    }
+  }, [pageResult]);
 
-    const baseCanvas = pageResult.baseCanvas;
-    const compareCanvas = pageResult.compareCanvas;
-    const width = Math.max(baseCanvas.width, compareCanvas.width);
-    const height = Math.max(baseCanvas.height, compareCanvas.height);
+  useEffect(() => {
+    if (!pageResult || !compareContainerRef.current) return;
+    if (pageResult.compareCanvas) {
+      compareContainerRef.current.innerHTML = '';
+      pageResult.compareCanvas.style.width = '100%';
+      pageResult.compareCanvas.style.height = '100%';
+      compareContainerRef.current.appendChild(pageResult.compareCanvas);
+    }
+  }, [pageResult]);
 
-    const canvas = overlayCanvasRef.current;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-
-    // Fill solid white background first
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw base at full opacity
-    ctx.globalAlpha = 1;
-    ctx.drawImage(baseCanvas, 0, 0);
-
-    // Draw compare with multiply blend
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.globalAlpha = overlayOpacity;
-    ctx.drawImage(compareCanvas, 0, 0);
-
-    // Reset
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-
-    // Draw diff highlights on top
-    if (pageResult.diffImageData) {
+  useEffect(() => {
+    if (!pageResult || !diffContainerRef.current) return;
+    if (pageResult.diffCanvas) {
+      diffContainerRef.current.innerHTML = '';
+      pageResult.diffCanvas.style.width = '100%';
+      pageResult.diffCanvas.style.height = '100%';
+      diffContainerRef.current.appendChild(pageResult.diffCanvas);
+    } else if (pageResult.diffImageData) {
       const diffCanvas = document.createElement('canvas');
       diffCanvas.width = pageResult.diffImageData.width;
       diffCanvas.height = pageResult.diffImageData.height;
       diffCanvas.getContext('2d').putImageData(pageResult.diffImageData, 0, 0);
-
-      ctx.globalAlpha = 0.8;
-      ctx.drawImage(diffCanvas, 0, 0, width, height);
-      ctx.globalAlpha = 1;
+      diffCanvas.style.width = '100%';
+      diffCanvas.style.height = '100%';
+      diffContainerRef.current.innerHTML = '';
+      diffContainerRef.current.appendChild(diffCanvas);
     }
-  }, [pageResult, overlayOpacity]);
+  }, [pageResult]);
 
   const renderScale = pageResult?.pixelDiffs?.renderScale || 2.0;
   const displayScale = zoom / renderScale;
@@ -251,14 +249,27 @@ function OverlayView({ pageResult, zoom, overlayOpacity, pageDiffs, selectedDiff
         style={{
           width: width * displayScale,
           height: height * displayScale,
+          position: 'relative',
+          backgroundColor: 'white',
         }}
       >
-        <canvas
-          ref={overlayCanvasRef}
-          style={{
-            width: width * displayScale,
-            height: height * displayScale,
-          }}
+        <div ref={baseContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }} />
+        <div 
+          ref={compareContainerRef} 
+          style={{ 
+            width: '100%', height: '100%', position: 'absolute', top: 0, left: 0,
+            opacity: overlayOpacity,
+            mixBlendMode: 'multiply',
+            pointerEvents: 'none'
+          }} 
+        />
+        <div 
+          ref={diffContainerRef} 
+          style={{ 
+            width: '100%', height: '100%', position: 'absolute', top: 0, left: 0,
+            opacity: 0.8,
+            pointerEvents: 'none'
+          }} 
         />
         <DiffOverlay
           diffs={pageDiffs}
