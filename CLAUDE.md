@@ -71,7 +71,8 @@ npm run cypress:run  # Cypress E2E headless
 - **Entry:** `App.jsx` — React Router v7 routes; `ProtectedRoute` wraps all auth-required paths
 - **Auth state:** Zustand store at `src/stores/authStore.js`
 - **UI:** Ant Design v5 + vanilla CSS. No TailwindCSS. Use `destroyOnHidden` (not `destroyOnClose`) on Modal/Drawer.
-- **API constants:** `src/constance/constance.js` + `src/constance/mtc_constance.js`. `apiUrl` hardcoded to `http://plbmp118:2005/` — change to `http://localhost:2005/` for local dev. **Add new API constants to both `constance.js` AND `constance_prod.js`.**
+- **API constants:** `src/constance/constance.js` + `src/constance/mtc_constance.js`. Add new API constants to `constance.js` only — **`constance_prod.js` is dead** (imported by nothing; do not update it).
+- **`apiUrl` is branch-specific (prod-safety invariant):** `constance.js` hardcodes `export const apiUrl`. Branch `mtc` → `http://plbmp118:2005/` (dev); branches `dev` and `main` → `http://plbmp130:2005/` (**PROD**). Use `http://localhost:2005/` for local dev. Every `mtc`→`dev` merge risks flipping this — **`main` must stay plbmp130**, or the production frontend calls the dev backend silently. `runner.js` auto-repairs a duplicated `apiUrl` on startup via `scripts/fix_constance_prod.ps1` (which edits `constance.js`, despite its name); `git_sync_mtc.ps1` gates the release flow on it.
 - **Navigation:** Adding a page → update `App.jsx` (route) + `menu_sidebar.jsx` (sidebar entry). MTC paths in `mtc_constance.js` → `MTC_PATHS`.
 
 ### Infrastructure
@@ -136,10 +137,11 @@ Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
 1. Create component under `src/components/engineer/<domain>/`
 2. Use existing Zustand store or add one in `src/stores/`
 3. Register route in `App.jsx` and add sidebar entry in `menu_sidebar.jsx`
-4. Add new API endpoint constants to **both** `constance.js` and `constance_prod.js`
+4. Add new API endpoint constants to `constance.js` (**not** `constance_prod.js` — it is dead)
 
 > Backend gotchas (body-parser double-registration, Gmail `cleanEnv`) → `.claude/rules/backend-gotchas.md`
 > Bulk DB patterns (bulk fetch/insert, chunk sizes, INSERT column-order pitfall), PDF/Excel generation rules → `.claude/rules/db-patterns.md`
-> V1 MTC tooling pipeline (`ToolingOrchestrator`, `CacheAgent`, `FormulaAgent`, etc.) — full reference: `.claude/rules/mtc-tooling.md`. V1 is retired and fully removed from disk.
+> V1 MTC tooling pipeline (`ToolingOrchestrator`, `FormulaAgent`, `toolingSelectController.js`) — retired, removed from disk. Historical reference: `.claude/rules/mtc-tooling.md`.
+> **But `services/agents/` still exists and is live** — `BaseAgent.js`, `CacheAgent.js`, `MonitorAgent.js`, `SdsAgent.js` survived V1 and now serve SDS: required by `services/SdsOrchestrator.js`, `controllers/specController.js`, `controllers/sdsV2AdminController.js`. Do not delete them as V1 leftovers.
 > SDS pipeline, Tooling↔SDS coupling, SDS Admin sub-routes, ECR/Tumble/System routes: `.claude/rules/sds-pipeline.md`
 > Tooling Select V2 (DB-driven): DB tables, routes, formula evaluation, search logic, adding a new machine, frontend components → `.claude/rules/tooling-select.md`
