@@ -40,7 +40,7 @@ export default function usePdfEditor() {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData']);
+                const json = fc.toJSON(['customData', 'textLines']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 currentAnnotations[pNum] = json;
@@ -73,7 +73,7 @@ export default function usePdfEditor() {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData']);
+                const json = fc.toJSON(['customData', 'textLines']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 currentAnnotations[pNum] = json;
@@ -87,7 +87,7 @@ export default function usePdfEditor() {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData']);
+                const json = fc.toJSON(['customData', 'textLines']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 currentAnnotations[pNum] = json;
