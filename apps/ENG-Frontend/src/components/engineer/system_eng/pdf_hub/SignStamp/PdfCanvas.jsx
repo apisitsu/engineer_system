@@ -106,8 +106,8 @@ const PdfCanvas = ({
             id: placementId,
             startX: e.clientX,
             startY: e.clientY,
-            origX: placement.screenX,
-            origY: placement.screenY,
+            origX: placement.normX * canvasSize.width,
+            origY: placement.normY * canvasSize.height,
         });
     };
 
@@ -134,7 +134,7 @@ const PdfCanvas = ({
         const newX = dragState.origX + dx;
         const newY = dragState.origY + dy;
 
-        onPlacementDragEnd(dragState.id, newX, newY);
+        onPlacementDragEnd(dragState.id, newX / canvasSize.width, newY / canvasSize.height);
         setDragState(null);
     }, [dragState, onPlacementDragEnd]);
 
@@ -192,6 +192,9 @@ const PdfCanvas = ({
                 const displaySize = getStampDisplaySize(placement.widthMm, placement.heightMm);
                 const isSelected = selectedPlacementId === placement.id;
 
+                const screenX = placement.normX * canvasSize.width;
+                const screenY = placement.normY * canvasSize.height;
+
                 return (
                     <div
                         key={placement.id}
@@ -199,8 +202,8 @@ const PdfCanvas = ({
                         onMouseDown={(e) => handleMouseDown(e, placement.id)}
                         style={{
                             position: 'absolute',
-                            left: placement.screenX,
-                            top: placement.screenY,
+                            left: screenX,
+                            top: screenY,
                             width: displaySize.w,
                             height: displaySize.h,
                             cursor: 'move',
