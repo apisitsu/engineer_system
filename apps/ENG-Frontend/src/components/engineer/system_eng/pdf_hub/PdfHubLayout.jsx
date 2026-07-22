@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useTheme } from '../../../../theme';
 import ScrollbarStyle from '../../../common/scrollbar';
+import PdfHubErrorBoundary from './ErrorBoundary';
 import './PdfHubLayout.css';
 
 const { Sider, Content } = Layout;
@@ -143,7 +144,9 @@ export default function PdfHubLayout() {
             <Layout style={{ backgroundColor: theme.colors.background }}>
                 <ScrollbarStyle primary={theme.colors.primary} />
                 <Content className="pdf-hub-content kb-vscroll">
-                    <Outlet />
+                    <PdfHubErrorBoundary>
+                        <Outlet />
+                    </PdfHubErrorBoundary>
                 </Content>
             </Layout>
         </Layout>

@@ -50,6 +50,27 @@ const PART_TYPE_COLOR = {
   other: '#6fa3c7',
 };
 
+// Canonical display order for part-type series/cards. Types in scope but not listed
+// here fall to the end (still shown). Keep in sync with the backend cnPartType taxonomy.
+const PART_TYPE_ORDER = ['ball', 'race', 'mecha', 'body', 'sleeve', 'spherical'];
+
+// 'body' and 'mecha' both surface as "Mecha" on the dashboard (mecha = C95/C99 mechanical
+// parts); every other type is Title-cased. Single source for card + chart labels.
+const partTypeLabel = (t) => {
+  const k = String(t || '').toLowerCase();
+  return (k === 'body' || k === 'mecha') ? 'Mecha' : (t.charAt(0).toUpperCase() + t.slice(1));
+};
+
+// Chart.js fills want rgba; PART_TYPE_COLOR is hex. Convert so dynamic series can share
+// one color source (avoids hardcoding a parallel rgba list per part type).
+const hexToRgba = (hex, a) => {
+  const h = String(hex || '').replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n)) return `rgba(111,163,199,${a})`; // C.cyan-ish fallback
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
 const LEVEL_CFG = {
   COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
@@ -58,30 +79,6 @@ const LEVEL_CFG = {
 const cardStyle = {
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 18px',
 };
-
-// Tooltip body for the orange gap tags: top 2 (machine / process) with the largest
-// gap (lowest coverage) — i.e. configure these first to gain the most completes.
-// `note` (optional) prints a clarifying footer, e.g. how the count maps to the table filter.
-const gapTooltip = (gaps, heading, note) => {
-  const list = (gaps || []).slice(0, 2);
-  if (!list.length && !note) return heading;
-  return (
-    <div style={{ fontSize: 11 }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{heading}</div>
-      {list.map((g, i) => (
-        <div key={i} style={{ whiteSpace: 'nowrap' }}>
-          {i + 1}. {g.machine} / {g.process} — <b>{g.count.toLocaleString()}</b>
-        </div>
-      ))}
-      {note && <div style={{ marginTop: 6, opacity: 0.85, whiteSpace: 'normal', maxWidth: 260 }}>{note}</div>}
-    </div>
-  );
-};
-
-// Shared clarifier for the "no tool match" badges — the count aggregates BOTH pending
-// reasons, so no single reason filter in the table reproduces it (filter by part-type
-// only, with no reason, to list exactly these rows).
-const NO_TOOL_MATCH_NOTE = 'Counts NO_TOOL + NO_TOOL_NO_EXCEL sheets (no tooling match, excludes “no fixture needed”). To see this exact list, filter the table by this Part Type only — not by a single Reason.';
 
 const sectionTitle = (label) => (
   <div style={{
@@ -100,11 +97,8 @@ const PartTypeCard = ({ pt }) => {
   const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
   const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
   
-  // Custom label mapping: 'body' or 'mecha' -> 'Mecha'
-  const typeKey = pt.part_type.toLowerCase();
-  const displayLabel = (typeKey === 'body' || typeKey === 'mecha') 
-    ? 'Mecha' 
-    : (pt.part_type.charAt(0).toUpperCase() + pt.part_type.slice(1));
+  // Custom label mapping: 'body' or 'mecha' -> 'Mecha' (shared with the chart series)
+  const displayLabel = partTypeLabel(pt.part_type);
 
   return (
     <div style={{ ...cardStyle, borderTop: `3px solid ${color}`, height: '100%', boxSizing: 'border-box' }}>
@@ -157,12 +151,6 @@ const PartTypeCard = ({ pt }) => {
             <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
           </Tooltip>
         )}
-        <Tooltip title={gapTooltip(pt.gaps?.noToolMatch, 'Config tooling here → +complete', NO_TOOL_MATCH_NOTE)}>
-          <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.tool_match ?? 0) - (pt.tooling_not_required ?? 0)).toLocaleString()} no tool match</Tag>
-        </Tooltip>
-        <Tooltip title={gapTooltip(pt.gaps?.noExcelConfig, 'Add Excel config here → +complete')}>
-          <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (pt.total ?? 0) - (pt.excel_config ?? 0)).toLocaleString()} no excel config</Tag>
-        </Tooltip>
       </div>
     </div>
   );
@@ -231,14 +219,27 @@ export default function SdsCoverageDashboard() {
     return stopPolling; // clear the poll timer on unmount
   }, [fetchData, stopPolling]);
 
-  const byPartType = useMemo(() => {
-    const raw = data?.byPartType || [];
-    const order = ['ball', 'race', 'mecha', 'body', 'sleeve', 'spherical'];
-    return [...raw].sort((a, b) => {
-      const ia = order.indexOf(a.part_type.toLowerCase());
-      const ib = order.indexOf(b.part_type.toLowerCase());
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
+  const sortByPartTypeOrder = (arr, keyOf) => [...arr].sort((a, b) => {
+    const ia = PART_TYPE_ORDER.indexOf(String(keyOf(a)).toLowerCase());
+    const ib = PART_TYPE_ORDER.indexOf(String(keyOf(b)).toLowerCase());
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  const byPartType = useMemo(
+    () => sortByPartTypeOrder(data?.byPartType || [], r => r.part_type),
+    [data]
+  );
+
+  // The part-type set that drives the New Parts chart series. Prefer the scope config
+  // (data.partTypes, from sds_report_config) so add/remove a type there flows through;
+  // fall back to whatever keys the monthly data actually contains for older payloads.
+  const activePartTypes = useMemo(() => {
+    const fromCfg = data?.partTypes;
+    const set = Array.isArray(fromCfg) && fromCfg.length
+      ? fromCfg
+      : [...new Set((data?.monthlyNewParts || [])
+          .flatMap(r => Object.keys(r).filter(k => k !== 'month')))];
+    return sortByPartTypeOrder(set, x => x);
   }, [data]);
 
 
@@ -257,7 +258,9 @@ export default function SdsCoverageDashboard() {
     let d = new Date('2026-04-01');
     while (d <= new Date('2027-03-01')) {
       const key = d.toISOString().slice(0, 7);
-      months.push(raw[key] || { month: key, ball: 0, race: 0, mecha: 0 });
+      // Missing part-type keys default to 0 at read time (r[t] || 0), so an empty
+      // { month } row is enough here — no need to pre-seed every scope type.
+      months.push(raw[key] || { month: key });
       d.setMonth(d.getMonth() + 1);
     }
     // Prepend a baseline bar = previous FYE monthly average (Apr 2025 – Mar 2026),
@@ -265,18 +268,26 @@ export default function SdsCoverageDashboard() {
     const prev = all.filter(r => r.month >= '2025-04' && r.month <= '2026-03');
     if (prev.length) {
       const avg = k => Math.round(prev.reduce((s, r) => s + (r[k] || 0), 0) / prev.length);
-      months.unshift({ label: 'FYE26 avg', isAvg: true, ball: avg('ball'), race: avg('race'), mecha: avg('mecha') });
+      const avgRow = { label: 'FYE26 avg', isAvg: true };
+      activePartTypes.forEach(t => { avgRow[t] = avg(t); });
+      months.unshift(avgRow);
     }
     return months;
-  }, [data]);
+  }, [data, activePartTypes]);
+  // One stacked dataset per configured part type — derived from activePartTypes so the
+  // chart tracks the scope config instead of a fixed Ball/Race/Mecha triple.
   const newPartsChartData = useMemo(() => ({
     labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
-    datasets: [
-      { label: 'Ball', data: monthlyNewParts.map(r => r.ball || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(24,144,255,0.35)' : 'rgba(24,144,255,0.75)'), borderColor: PART_TYPE_COLOR.ball, borderWidth: 1, stack: 'np' },
-      { label: 'Race', data: monthlyNewParts.map(r => r.race || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(82,196,26,0.35)' : 'rgba(82,196,26,0.75)'), borderColor: PART_TYPE_COLOR.race, borderWidth: 1, stack: 'np' },
-      { label: 'Mecha', data: monthlyNewParts.map(r => r.mecha || 0), backgroundColor: monthlyNewParts.map(r => r.isAvg ? 'rgba(235,47,150,0.30)' : 'rgba(235,47,150,0.65)'), borderColor: PART_TYPE_COLOR.mecha, borderWidth: 1, stack: 'np' },
-    ],
-  }), [monthlyNewParts]);
+    datasets: activePartTypes.map(t => {
+      const color = PART_TYPE_COLOR[t] || C.cyan;
+      return {
+        label: partTypeLabel(t),
+        data: monthlyNewParts.map(r => r[t] || 0),
+        backgroundColor: monthlyNewParts.map(r => hexToRgba(color, r.isAvg ? 0.35 : 0.75)),
+        borderColor: color, borderWidth: 1, stack: 'np',
+      };
+    }),
+  }), [monthlyNewParts, activePartTypes]);
   const newPartsChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
     plugins: {
@@ -647,17 +658,6 @@ export default function SdsCoverageDashboard() {
                           <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
-                      <Tooltip title={gapTooltip(data?.kpi?.gaps?.noToolMatch, 'Config tooling here → +complete', NO_TOOL_MATCH_NOTE)}>
-                        <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.toolMatch ?? 0) - (data?.kpi?.toolingNotRequired ?? 0)).toLocaleString()} no tool match</Tag>
-                      </Tooltip>
-                      {(data?.kpi?.toolingNotRequired ?? 0) > 0 && (
-                        <Tooltip title="Surface-grind (magnetic-chuck) parts that need no fixture — counted as tooling-satisfied, not a gap">
-                          <Tag color="blue" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{(data?.kpi?.toolingNotRequired ?? 0).toLocaleString()} no tooling needed</Tag>
-                        </Tooltip>
-                      )}
-                      <Tooltip title={gapTooltip(data?.kpi?.gaps?.noExcelConfig, 'Add Excel config here → +complete')}>
-                        <Tag color="orange" style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help' }}>{Math.max(0, (data?.kpi?.total ?? 0) - (data?.kpi?.excelConfig ?? 0)).toLocaleString()} no excel config</Tag>
-                      </Tooltip>
                     </div>
                   </div>
                 </Col>

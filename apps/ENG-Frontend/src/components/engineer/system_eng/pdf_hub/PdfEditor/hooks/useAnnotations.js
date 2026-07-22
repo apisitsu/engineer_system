@@ -18,8 +18,11 @@ export default function useAnnotations() {
         return fabricCount + hls.length;
     }, [pageAnnotations, pageHighlights]);
 
-    const totalAnnotations = Object.keys(pageAnnotations).reduce((sum, pageNum) => sum + getAnnotationCount(pageNum), 0) +
-                           Object.keys(pageHighlights).reduce((sum, pageNum) => sum + (pageHighlights[pageNum]?.length || 0), 0);
+    // Note: getAnnotationCount already includes highlights per page, so we do NOT add them again.
+    const totalAnnotations = Object.keys(
+        // Merge keys from both sources to cover all pages with any content
+        { ...pageAnnotations, ...Object.fromEntries(Object.keys(pageHighlights).map(k => [k, true])) }
+    ).reduce((sum, pageNum) => sum + getAnnotationCount(pageNum), 0);
 
     const clearAllAnnotations = useCallback(() => {
         setPageAnnotations({});

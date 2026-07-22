@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize } from './commitHelpers';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -20,6 +20,34 @@ import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
 export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = null, pageHighlights = null) {
     const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pages = doc.getPages();
+
+    // ══════════════════════════════════════════════════════════════════
+    // PRE-PASS: Normalize page rotation
+    //
+    // Landscape PDFs are often stored as portrait MediaBox + /Rotate 90.
+    // PDF.js viewport accounts for this → Fabric canvas is landscape.
+    // But pdf-lib draws on raw MediaBox which is still portrait.
+    //
+    // FIX: For any rotated page, adjust the MediaBox to match the visual
+    // dimensions and set rotation to 0.  This makes the raw coordinate
+    // space identical to the visual space, so all existing coordinate
+    // math (toPdf, toPdfY) works correctly without further changes.
+    // ══════════════════════════════════════════════════════════════════
+    for (const page of pages) {
+        const rotation = page.getRotation().angle || 0;
+        const normalizedRotation = ((rotation % 360) + 360) % 360;
+
+        if (normalizedRotation !== 0) {
+            const { width, height } = page.getSize(); // Raw MediaBox
+
+            if (normalizedRotation === 90 || normalizedRotation === 270) {
+                // Swap MediaBox dimensions to match the visual layout
+                page.setSize(height, width);
+            }
+            // Remove rotation — the MediaBox now represents the visual layout directly
+            page.setRotation(degrees(0));
+        }
+    }
 
     // ── Commit highlights per page (drawn first so text stays on top) ──
     if (pageHighlights) {
@@ -309,48 +337,59 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             break;
                         }
 
-                        case 'Q': { // Quadratic Bézier — approximate with 2 line segments
+                        case 'Q': { // Quadratic Bézier
                             const cpX = seg[1], cpY = seg[2];
                             const endQX = seg[3], endQY = seg[4];
 
-                            // Segment 1: current → control point
-                            page.drawLine({
-                                start: { x: toPdf(curX + offsetX, cW, pW), y: toPdfY(curY + offsetY, cH, pH) },
-                                end: { x: toPdf(cpX + offsetX, cW, pW), y: toPdfY(cpY + offsetY, cH, pH) },
-                                thickness, color, opacity: obj.opacity ?? 1,
-                            });
-                            // Segment 2: control point → end
-                            page.drawLine({
-                                start: { x: toPdf(cpX + offsetX, cW, pW), y: toPdfY(cpY + offsetY, cH, pH) },
-                                end: { x: toPdf(endQX + offsetX, cW, pW), y: toPdfY(endQY + offsetY, cH, pH) },
-                                thickness, color, opacity: obj.opacity ?? 1,
-                            });
+                            // Dynamically calculate steps based on distance (#21)
+                            const distQ = Math.hypot(endQX - curX, endQY - curY);
+                            const stepsQ = Math.max(4, Math.min(32, Math.ceil(distQ / 10)));
+
+                            let prevPxQ = curX, prevPyQ = curY;
+                            for (let t = 1; t <= stepsQ; t++) {
+                                const s = t / stepsQ;
+                                const inv = 1 - s;
+                                // Quadratic Bézier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+                                const px = inv*inv*curX + 2*inv*s*cpX + s*s*endQX;
+                                const py = inv*inv*curY + 2*inv*s*cpY + s*s*endQY;
+
+                                page.drawLine({
+                                    start: { x: toPdf(prevPxQ + offsetX, cW, pW), y: toPdfY(prevPyQ + offsetY, cH, pH) },
+                                    end: { x: toPdf(px + offsetX, cW, pW), y: toPdfY(py + offsetY, cH, pH) },
+                                    thickness, color, opacity: obj.opacity ?? 1,
+                                });
+                                prevPxQ = px;
+                                prevPyQ = py;
+                            }
                             curX = endQX;
                             curY = endQY;
                             break;
                         }
 
-                        case 'C': { // Cubic Bézier — approximate with 4 line segments
+                        case 'C': { // Cubic Bézier
                             const cp1X = seg[1], cp1Y = seg[2];
                             const cp2X = seg[3], cp2Y = seg[4];
                             const endCX = seg[5], endCY = seg[6];
-                            const steps = 4;
 
-                            let prevPx = curX, prevPy = curY;
-                            for (let t = 1; t <= steps; t++) {
-                                const s = t / steps;
+                            // Dynamically calculate steps based on distance (#21)
+                            const distC = Math.hypot(endCX - curX, endCY - curY);
+                            const stepsC = Math.max(6, Math.min(64, Math.ceil(distC / 10)));
+
+                            let prevPxC = curX, prevPyC = curY;
+                            for (let t = 1; t <= stepsC; t++) {
+                                const s = t / stepsC;
                                 const inv = 1 - s;
                                 // Cubic Bézier formula: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
                                 const px = inv*inv*inv*curX + 3*inv*inv*s*cp1X + 3*inv*s*s*cp2X + s*s*s*endCX;
                                 const py = inv*inv*inv*curY + 3*inv*inv*s*cp1Y + 3*inv*s*s*cp2Y + s*s*s*endCY;
 
                                 page.drawLine({
-                                    start: { x: toPdf(prevPx + offsetX, cW, pW), y: toPdfY(prevPy + offsetY, cH, pH) },
+                                    start: { x: toPdf(prevPxC + offsetX, cW, pW), y: toPdfY(prevPyC + offsetY, cH, pH) },
                                     end: { x: toPdf(px + offsetX, cW, pW), y: toPdfY(py + offsetY, cH, pH) },
                                     thickness, color, opacity: obj.opacity ?? 1,
                                 });
-                                prevPx = px;
-                                prevPy = py;
+                                prevPxC = px;
+                                prevPyC = py;
                             }
                             curX = endCX;
                             curY = endCY;

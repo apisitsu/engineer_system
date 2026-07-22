@@ -1,13 +1,9 @@
 import { useState, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib } from '../../pdfWorkerConfig';
 import { App } from 'antd';
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
-
-// ── PDF.js worker config ──
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 /**
  * usePdfDocument — Handles loading, repairing, unlocking, and parsing PDF files.

@@ -12,6 +12,7 @@ import {
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined,
   PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, StarFilled, StarOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -128,6 +129,8 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Bumped to force the "Template" live-preview iframe (real grid blank PDF) to reload.
+  const [pdfKey, setPdfKey] = useState(0);
   // Multi-template: the list + the currently-edited template. templateId === null means
   // the legacy single-layout fallback (no sds_grid_template rows on this DB yet).
   const [templates, setTemplates] = useState([]);
@@ -252,6 +255,7 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         await axios.put(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID, { grid });
       }
       message.success('Saved grid layout');
+      setPdfKey(k => k + 1);   // refresh the "Template" blank-PDF live preview
       return true;
     } catch (err) {
       message.error('Save failed: ' + (err.response?.data?.error || err.message));
@@ -259,15 +263,25 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
     } finally { setSaving(false); }
   };
 
+  // Blank grid PDF for THIS template (no CN data injected — the empty setup-data-sheet
+  // as it will actually print). `template_id` renders this specific template, not just
+  // the default. Used by the view-only button and the "Template" live-preview iframe.
+  const blankPdfUrl = useMemo(() => {
+    const token = localStorage.getItem('token') || '';
+    const tp = templateId ? `&template_id=${templateId}` : '';
+    return `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}${tp}`;
+  }, [templateId]);
+
   const openPdf = async () => {
     const win = window.open('', '_blank');
     const ok = await save();
-    const token = localStorage.getItem('token') || '';
     // Preview THIS template (not necessarily the default) by passing its id.
-    const tp = templateId ? `&template_id=${templateId}` : '';
-    if (ok && win) win.location.href = `${server.MTC_SDS_V2_PDF_CHROME_GRID}?token=${encodeURIComponent(token)}${tp}`;
+    if (ok && win) win.location.href = blankPdfUrl;
     else if (win) win.close();
   };
+
+  // View the blank template PDF WITHOUT saving — opens the currently-saved layout.
+  const viewBlankPdf = () => { window.open(blankPdfUrl, '_blank'); };
 
   // ── Template management ──────────────────────────────────────────────────────
   const switchTemplate = async (id) => { setTemplateId(id); await loadTemplate(id); };
@@ -461,6 +475,38 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const clearSelection = () => { pushUndo(); applyBorder('none', false); applyFill(true, false); };
 
+  // ── Cell image (insert / remove at the anchor cell) ───────────────────────────
+  // Stored as a data-URI on the cell (cells[k].img); persists in grid_json and renders
+  // in both the editor (cd.img) and the PDF (applyDataToGrid). Merge cells first to size it.
+  const imageInputRef = useRef(null);
+  const onImageFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';                       // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { message.warning('Please choose an image file'); return; }
+    if (file.size > 4 * 1024 * 1024) { message.warning('Image too large (max 4 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const k = ckey(anchor.r, anchor.c);
+      pushUndo();
+      setCells((prev) => ({ ...prev, [k]: { f: {}, a: {}, ...(prev[k] || {}), img: reader.result } }));
+      message.success(`Image inserted at ${colLabel(anchor.c)}${anchor.r + 1}`);
+    };
+    reader.readAsDataURL(file);
+  };
+  const removeImage = () => {
+    const k = ckey(anchor.r, anchor.c);
+    if (!cells[k] || !cells[k].img) { message.info('Selected cell has no image'); return; }
+    pushUndo();
+    setCells((prev) => {
+      const next = { ...prev };
+      const ex = { ...next[k] }; delete ex.img;
+      if (!ex.v && !ex.f && !ex.a) delete next[k]; else next[k] = ex;
+      return next;
+    });
+    message.success('Image removed');
+  };
+
   // ── Cell text editing ─────────────────────────────────────────────────────────
   const commitEdit = () => {
     if (!editing) return;
@@ -516,7 +562,13 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   };
 
   const onKeyDown = (e) => {
-    if (editing) return; // let the input handle keys while typing
+    if (editing) return; // let the in-cell editor handle keys while typing
+    // Ignore keys typed into any form field — AntD Modal/Select portals still bubble
+    // their synthetic events up the React tree, so without this the grid's
+    // Backspace/Delete/Enter/Ctrl+A shortcuts hijack the template-name input (and any
+    // other input), e.g. Backspace can't erase a mistyped template name.
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
     else if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); }
@@ -667,7 +719,19 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
               boxShadow: anchor.r === r && anchor.c === c ? `inset 0 0 0 1px ${SEL_EDGE}` : undefined,
             }}>
             {cd && cd.img
-              ? <img src={cd.img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+              ? (() => {
+                  // Constrain the image to the cell's fixed height (sum of spanned rows)
+                  // so it scales to fit instead of stretching the row taller. A bare
+                  // <img max-height:100%> has no definite height to resolve against in a
+                  // table cell, so it would grow the row — mirror the PDF's fixed wrapper.
+                  const rs = (span && span.rs) || 1;
+                  let h = 0; for (let i = 0; i < rs; i++) h += (rowH[r + i] ?? CELL_H);
+                  return (
+                    <div style={{ height: h, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={cd.img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                    </div>
+                  );
+                })()
               : (cd && cd.v)}
           </td>
         );
@@ -688,14 +752,14 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   const BorderBtn = ({ mode, icon, title }) => (
     <Tooltip title={title}><Button size="small" icon={icon} onClick={() => applyBorder(mode)} /></Tooltip>
   );
-  const refreshTemplate = () => { if (onRefreshPreview) onRefreshPreview(); };
+  const refreshTemplate = () => { setPdfKey(k => k + 1); if (onRefreshPreview) onRefreshPreview(); };
 
   const viewOptions = [
     { label: 'Grid', value: 'grid', icon: <TableOutlined /> },
-    ...(previewUrl ? [
-      { label: 'Template', value: 'template', icon: <EyeOutlined /> },
-      { label: 'Overlay', value: 'overlay', icon: <BlockOutlined /> },
-    ] : []),
+    // "Template" shows the real blank grid PDF (blankPdfUrl) — always available.
+    { label: 'Template', value: 'template', icon: <EyeOutlined /> },
+    // "Overlay" aligns the editable grid over the legacy HTML reference (previewUrl).
+    ...(previewUrl ? [{ label: 'Overlay', value: 'overlay', icon: <BlockOutlined /> }] : []),
   ];
 
   const gridSurface = (
@@ -869,6 +933,16 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
         <Tooltip title="Merge selected cells"><Button size="small" onClick={mergeSelection}>Merge</Button></Tooltip>
         <Tooltip title="Unmerge selected cells"><Button size="small" onClick={unmergeSelection}>Unmerge</Button></Tooltip>
+
+        <Divider type="vertical" style={{ margin: '0 2px' }} />
+
+        <Tooltip title="Insert an image into the selected cell (merge cells first to size the area)">
+          <Button size="small" icon={<PictureOutlined />} onClick={() => imageInputRef.current && imageInputRef.current.click()}>Image</Button>
+        </Tooltip>
+        <Tooltip title="Remove the image from the selected cell">
+          <Button size="small" icon={<DeleteOutlined />} onClick={removeImage} />
+        </Tooltip>
+        <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onImageFile} />
       </Space>
 
       {/* View / layout toolbar */}
@@ -887,8 +961,8 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
             <Switch size="small" checked={gridlines} onChange={setGridlines} checkedChildren="Grid" unCheckedChildren="Grid" />
           </Tooltip>
         )}
-        {view !== 'grid' && previewUrl && (
-          <Tooltip title="Refresh SDS template"><Button size="small" icon={<ReloadOutlined />} onClick={refreshTemplate} /></Tooltip>
+        {view !== 'grid' && (
+          <Tooltip title="Refresh preview"><Button size="small" icon={<ReloadOutlined />} onClick={refreshTemplate} /></Tooltip>
         )}
 
         <Divider type="vertical" style={{ margin: '0 2px' }} />
@@ -909,18 +983,23 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         </Tooltip>
         <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
         <Button size="small" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button>
-        <Button size="small" type="primary" icon={<FilePdfOutlined />} onClick={openPdf} loading={saving}>PDF</Button>
+        <Tooltip title="View the blank template PDF (opens the saved layout — no save)">
+          <Button size="small" icon={<EyeOutlined />} onClick={viewBlankPdf}>View PDF</Button>
+        </Tooltip>
+        <Tooltip title="Save the current edits, then open the blank template PDF">
+          <Button size="small" type="primary" icon={<FilePdfOutlined />} onClick={openPdf} loading={saving}>Save + PDF</Button>
+        </Tooltip>
       </Space>
 
       {/* Canvas */}
       {view === 'template' ? (
-        <iframe key={`tpl-${previewKey}`} src={previewUrl} title="SDS Blank Template Preview"
+        <iframe key={`tpl-${templateId}-${pdfKey}`} src={blankPdfUrl} title="SDS Blank Template PDF Preview"
           style={{ width: '100%', height: 600, border: '1px solid #d9d9d9', borderRadius: 4, background: '#fff' }} />
       ) : gridSurface}
 
       <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 6 }}>
         {view === 'template'
-          ? 'SDS template (HTML render) — reference view'
+          ? 'Blank template PDF (real print output, no CN data) — Save to refresh after edits'
           : overlay
             ? 'Overlay: template sits under the grid — adjust opacity to align • select a cell then draw border / Merge • Save / PDF'
             : 'A1:AV56 grid from sds_template.xlsx (merge + real fonts) • double-click/Enter to type text • drag header borders to resize • select cell → border / fill / Merge • Del to clear • Save / PDF'}

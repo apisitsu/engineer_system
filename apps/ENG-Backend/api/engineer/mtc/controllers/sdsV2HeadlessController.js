@@ -11,6 +11,7 @@ const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
 const cnFormat = require('../utils/cnFormat');
+const { resolvePartDims, SPHERICAL_DESIGN } = require('../utils/partDimAlias');
 const { getApprovalSeals } = require('./sdsApprovalController');
 
 // Approval-stamp param keys → role. The seal image comes from the sds_approval
@@ -192,7 +193,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     ? searchData.process_info.find(r => String(r.process_code) === String(process_code)) || searchData.process_info[0]
     : searchData.process_info[0];
 
-  map['cn']               = searchData.cn || '';
+  // Display the CN as the 6-digit item-no (e.g. 320641), not the control-no (C32-00641).
+  // `_cn_control` keeps the control-no form for internal lookups (approval seals are
+  // keyed by control-no in sds_approval) — it is `_`-prefixed so it never renders in a grid cell.
+  map['cn']               = cnFormat.toItemNo(searchData.cn) || searchData.cn || '';
+  map['_cn_control']      = searchData.cn || '';
   map['parts_no']         = searchData.parts_no || '';
   map['dwg_rev']          = searchData.dwg_rev || 'NC';
   map['part_type']        = searchData.part_type || '';
@@ -205,12 +210,39 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['current_date']     = moment().format('YYYY-MM-DD');
 
   if (searchData.dimension) {
-    const dim = searchData.dimension;
+    let dim = searchData.dimension;
+    // Spherical (A4x): sdsV2SearchService selects from lpb.eng_sph, which carries NO
+    // dimension columns — they live one table over in eng_sph_design. Merge that row in
+    // so `dim.*` resolves for A4x exactly like every other class. Best-effort: a failed
+    // lookup leaves the base row untouched and the dims simply resolve to null.
+    if (String(searchData.part_type).toUpperCase() === 'SPHERICAL' && dim[SPHERICAL_DESIGN.joinFrom]) {
+      try {
+        const dr = await maqPool.query(
+          `SELECT * FROM ${SPHERICAL_DESIGN.table} WHERE ${SPHERICAL_DESIGN.joinTo} = $1 LIMIT 1`,
+          [dim[SPHERICAL_DESIGN.joinFrom]]
+        );
+        if (dr.rows[0]) dim = { ...dim, ...dr.rows[0] };
+      } catch (err) {
+        console.warn(`[sds-pdf] spherical design lookup failed for ${searchData.cn}: ${err.message}`);
+      }
+    }
+
+    // Raw factory columns stay exposed under their own names (existing configs may use them).
     Object.keys(dim).forEach(k => { map[`dimension.${k}`] = dim[k] !== null ? String(dim[k]) : ''; });
-    const od = Number(dim.od_aft || 0), w = Number(dim.w_aft || 0), sdStored = Number(dim.sd || 0);
-    const sdCalc = (od > 0 && od > w) ? Math.sqrt(od * od - w * w) : 0;
-    const sd = sdStored > 0 ? sdStored : sdCalc;
-    if (sd > 0) map['dimension.sd'] = sd.toFixed(3);
+
+    // Canonical part dimensions — the ONLY names a grid cell should reference, since the
+    // underlying column differs per part class. Consumed via `{{dim.OD}}` tokens in
+    // sds_parameter values (see resolveDimTokens).
+    //
+    // NOTE: the previous SD calc read dim.od_aft / dim.w_aft / dim.sd — none of which are
+    // columns on ANY lpb dimension table — so it always computed 0 and never emitted a
+    // value. resolvePartDims derives SD from the real aliased OD/W instead.
+    const parts = resolvePartDims(searchData.part_type, dim);
+    map['dim.OD'] = parts.OD != null ? String(parts.OD) : '';
+    map['dim.ID'] = parts.ID != null ? String(parts.ID) : '';
+    map['dim.W']  = parts.W  != null ? String(parts.W)  : '';
+    map['dim.SD'] = parts.SD != null ? parts.SD.toFixed(3) : '';
+    if (parts.SD != null) map['dimension.sd'] = parts.SD.toFixed(3);
   }
 
   if (searchData.production) {
@@ -224,24 +256,27 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
   let mtRows = [];
   if (machine_type_name && process_code) {
-    // Machine Tool Config (sds_machine_tool) is SHARED across a machine_group — grouped
-    // machines (e.g. KS-400B1/B2/B7) use the same fixtures, so the curated T01–T20 list
-    // lives once on the representative (KS-400B1). Look it up group-wide so B2/B7 reuse it
-    // without duplicating rows. Per-machine differences live only in the Excel config below.
-    const toolMachineNames = machineGroup
-      ? (await engPool.query(
-          `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
-           WHERE machine_group = $1 AND is_active`,
-          [machineGroup]
-        )).rows.map(r => r.machine_type_name)
-      : [machine_type_name];
-    const mtResult = await engPool.query(
+    // Machine Tool Config (sds_machine_tool) is per-machine FIRST: each physical grinder
+    // owns its ordered T01–Tn fixture whitelist, so a SPLIT group member (e.g. KS-400B2)
+    // uses its own list. Only when a machine has NO rows of its own do we fall back to the
+    // group-wide list (COMBINED groups / not-yet-split members keep working — the curated
+    // list lives once on the representative and siblings reuse it).
+    const runToolQuery = (names) => engPool.query(
       `SELECT tool_number, tool_drawing_no FROM ${TABLES.SDS_V2_MACHINE_TOOL}
        WHERE machine_type = ANY($1) AND process_code = $2
        ORDER BY LPAD(SUBSTRING(tool_number FROM 2), 5, '0')`,
-      [toolMachineNames, String(process_code)]
+      [names, String(process_code)]
     );
-    // Dedupe by tool slot — group members share one curated list.
+    let mtResult = await runToolQuery([machine_type_name]);
+    if (mtResult.rows.length === 0 && machineGroup) {
+      const toolMachineNames = (await engPool.query(
+        `SELECT machine_type_name FROM ${TABLES.SDS_MACHINE_TYPE_CODE}
+         WHERE machine_group = $1 AND is_active`,
+        [machineGroup]
+      )).rows.map(r => r.machine_type_name);
+      mtResult = await runToolQuery(toolMachineNames);
+    }
+    // Dedupe by tool slot (belt-and-braces for the group-fallback path).
     const seenTool = new Set();
     mtRows = mtResult.rows.filter(r => !seenTool.has(r.tool_number) && seenTool.add(r.tool_number));
   }
@@ -902,11 +937,49 @@ function applyDataToGrid(grid, valueMap, mappings) {
   const HDR_BG = '#e0e0e0';                 // param/GW header-row highlight (matches CSS config default)
   const isTrue = (v) => v === '1' || v === 1 || String(v).toLowerCase() === 'true';
   const findCell = (param_key) => (mappings.find((mp) => mp.param_key === param_key) || {}).cell_address;
+
+  // ── {{dim.*}} token resolution ────────────────────────────────────────────
+  // A parameter-grid cell holding a part dimension must follow the PART, not the machine.
+  // Storing the number literally makes it a machine-wide constant that prints the same
+  // value on every CN's sheet (a wrong-but-plausible number — the worst failure mode for
+  // an operator-facing document). Instead the cell stores a token, e.g.
+  //     row_39_H = "{{dim.OD}}"      → the part's outer diameter
+  //     row_38_H = "{{dim.W|2}}"     → width, fixed to 2 decimals
+  // Supported keys: dim.OD, dim.ID, dim.W, dim.SD (resolved per part class in
+  // buildValueMap via partDimAlias). Optional `|N` = decimal places.
+  //
+  // An unresolvable token renders BLANK, never the literal token and never a stale
+  // number: on paper a blank is obviously incomplete, whereas a leftover value reads as
+  // real. The miss is logged so the config gap is visible server-side.
+  const DIM_TOKEN = /\{\{\s*(dim\.(?:OD|ID|W|SD))\s*(?:\|\s*(\d+)\s*)?\}\}/gi;
+  const hasDimToken = (v) => typeof v === 'string' && v.includes('{{');
+  const resolveDimTokens = (raw, ctxKey) => String(raw).replace(DIM_TOKEN, (_m, key, dp) => {
+    const canon = 'dim.' + key.slice(4).toUpperCase();
+    const val = valueMap[canon];
+    if (val == null || val === '') {
+      console.warn(`[sds-pdf] ${canon} unresolved for cn=${valueMap['_cn_control'] || '?'} `
+        + `part_type=${valueMap['part_type'] || '?'} cell=${ctxKey} — rendering blank`);
+      return '';
+    }
+    if (dp == null) return String(val);
+    const n = Number(val);
+    return Number.isFinite(n) ? n.toFixed(Number(dp)) : String(val);
+  });
   const setCell = (r, c, v, red) => {
     if (v == null || v === '' || r < 0 || c < 0) return;
     const k = `${r},${c}`;
     const ex = cells[k] || {};
     cells[k] = { ...ex, v: String(v), f: { ...(ex.f || {}), ...(red ? { color: '#ff0000' } : {}) }, a: ex.a || {} };
+  };
+  // Force a cell empty, keeping its designed formatting. Needed because setCell SKIPS
+  // blanks: a grid template imported from the old sds_template.xlsx can carry a leftover
+  // number in the cell, so simply not writing would leave that stale value on the sheet —
+  // precisely the wrong-but-plausible reading that {{dim.*}} exists to eliminate.
+  const clearCell = (r, c) => {
+    if (r < 0 || c < 0) return;
+    const k = `${r},${c}`;
+    if (!cells[k]) return;              // nothing designed there — already blank
+    cells[k] = { ...cells[k], v: '' };
   };
 
   // Images: place each tool/grinding image at its anchor cell, merging the range
@@ -953,6 +1026,7 @@ function applyDataToGrid(grid, valueMap, mappings) {
   }
 
   const scalarBuckets = new Map(); // "masterR,masterC" -> [{ c, v }]
+  const blankedMasters = new Set(); // masters whose only content was an unresolved token
   for (const { cell_address, param_key } of mappings) {
     if (STAMP_PARAM_KEYS[param_key]) continue; // handled as seal images above
     const m = String(cell_address).match(/^([A-Z]+)(\d+)$/);
@@ -965,6 +1039,19 @@ function applyDataToGrid(grid, valueMap, mappings) {
     if (val == null || val === '') val = valueMap[param_key];
     if (val == null || val === '') continue;
     if (typeof val === 'object') continue; // images handled elsewhere
+    // A mapped param may also carry a {{dim.*}} token — resolve before it reaches the cell.
+    // An unresolved token blanks the designed cell rather than leaving a stale template value.
+    if (hasDimToken(val)) {
+      val = resolveDimTokens(val, cell_address);
+      if (val === '') {
+        const mm = String(cell_address).match(/^([A-Z]+)(\d+)$/);
+        if (mm) {
+          const master = mergeMaster(+mm[2] - 1, colLettersToIndex(mm[1]));
+          blankedMasters.add(`${master.r},${master.c}`);
+        }
+        continue;
+      }
+    }
     const r = +m[2] - 1, c = colLettersToIndex(m[1]);
     const master = mergeMaster(r, c);
     const key = `${master.r},${master.c}`;
@@ -976,13 +1063,30 @@ function applyDataToGrid(grid, valueMap, mappings) {
     items.sort((a, b) => a.c - b.c);
     setCell(r, c, items.map((it) => it.v).join(' '));
   }
+  // Clear only masters that no other mapped field wrote into (several params can share a
+  // merged region — one unresolved token must not wipe a sibling's value).
+  for (const key of blankedMasters) {
+    if (scalarBuckets.has(key)) continue;
+    const [r, c] = key.split(',').map(Number);
+    clearCell(r, c);
+  }
 
-  // 2) Parameter table (A:I) + GW section (AN:AV) straight from row_N_COL keys
-  for (const [key, val] of Object.entries(params)) {
+  // 2) Parameter table (A:I) + GW section (AN:AV) straight from row_N_COL keys.
+  //    Values may embed {{dim.*}} tokens, which resolve to the PART's own dimensions —
+  //    this is what keeps a per-part cell from printing a machine-wide constant.
+  for (const [key, rawVal] of Object.entries(params)) {
+    const hadToken = hasDimToken(rawVal);
+    const val = hadToken ? resolveDimTokens(rawVal, key) : rawVal;
+    // A token that resolved to nothing must BLANK the cell, not fall through to whatever
+    // the template designed there.
+    const write = (r, c) => {
+      if (hadToken && val === '') clearCell(r, c);
+      else setCell(r, c, val, params[`${key}_type`] === 'value');
+    };
     let mm = key.match(/^row_(\d+)_([A-I])$/);
-    if (mm) { setCell(+mm[1] - 1, colLettersToIndex(mm[2]), val, params[`${key}_type`] === 'value'); continue; }
+    if (mm) { write(+mm[1] - 1, colLettersToIndex(mm[2])); continue; }
     mm = key.match(/^gw_row_(\d+)_(A[N-V])$/);
-    if (mm) { setCell(+mm[1] - 1, colLettersToIndex(mm[2]), val, params[`${key}_type`] === 'value'); continue; }
+    if (mm) { write(+mm[1] - 1, colLettersToIndex(mm[2])); continue; }
   }
 
   // 2b) Header rows (row_N_is_header / gw_row_N_is_header) → grey highlight + bold,
@@ -1094,7 +1198,7 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
     // (valueMap.sds_rev, from sds_parameter) so a new SDS rev starts unsigned and
     // old seals don't carry over. resolveSdsRev in sdsApprovalController uses the
     // identical source, so the sign endpoints and this renderer always agree.
-    valueMap._approvalSeals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    valueMap._approvalSeals = await getApprovalSeals(valueMap._cn_control || valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     grid = applyDataToGrid(grid, valueMap, mappings);
   }
 
@@ -1164,7 +1268,7 @@ router.get('/pdf-chrome', async (req, res) => {
 
     const p = valueMap.params || {};
     // Approval stamps from the sds_approval sign records (keyed per CN by cn+machine+process+sds_rev).
-    const seals = await getApprovalSeals(valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
+    const seals = await getApprovalSeals(valueMap._cn_control || valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     html = html.replace(/{{stamp_prepared}}/g,  seals.prepared?.svg || '');
     html = html.replace(/{{stamp_checked}}/g,   seals.checked?.svg || '');
     html = html.replace(/{{stamp_approved}}/g,  seals.approved?.svg || '');
@@ -1346,3 +1450,7 @@ module.exports.renderPdf = renderPdf;
 module.exports.canonFixtureName = canonFixtureName;
 module.exports.buildSlotByFixture = buildSlotByFixture;
 module.exports.makeConfigSlotResolver = makeConfigSlotResolver;
+// Exported to test {{dim.*}} token resolution — a token that silently fails would put a
+// blank (or worse, a stale) dimension on an operator's setup sheet.
+// See tests/mtc/sdsDimTokens.test.js.
+module.exports.applyDataToGrid = applyDataToGrid;
