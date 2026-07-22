@@ -276,6 +276,7 @@ output_filename = "ToolingInspection.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 try:
+    engine = sqlalchemy.create_engine(conn_string)
     path_csv.mkdir(parents=True, exist_ok=True)
 
     query_export = "SELECT * FROM ti_list ORDER BY id ASC"
