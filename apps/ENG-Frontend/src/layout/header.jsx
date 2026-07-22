@@ -1,17 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { key_constance, apiUrl } from "../constance/constance";
 import { Layout, Menu, Dropdown, Avatar, Tag } from 'antd'; // เพิ่ม Tag จาก antd
 import { useAuthStore } from "../stores/authStore";
 import { useTheme } from '../theme';
 import PastelThemeSelector from '../components/shared/PastelThemeSelector';
-import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons';
+import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
+import SystemVersionsModal from '../components/shared/SystemVersionsModal';
 
 const { Header } = Layout;
 
 const HeaderBar = () => {
     const { userDepartment, userName, empNo } = useAuthStore();
     const { theme } = useTheme();
+    const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false);
 
     // เช็คว่าเป็นเวอร์ชันทดสอบหรือไม่
     const isTestVersion = apiUrl !== "http://plbmp130:2005/";
@@ -146,6 +148,13 @@ const HeaderBar = () => {
 
             {/* จัดกลุ่มทางขวา: ThemeSelector และ Profile ให้อยู่ชิดกันทางขวา */}
             <div style={headerStyle.rightSection}>
+                {userDepartment === "AD" && (
+                    <InfoCircleOutlined 
+                        style={{ fontSize: '18px', color: theme.colors.textInverse, cursor: 'pointer', marginRight: '12px' }} 
+                        onClick={() => setIsVersionsModalOpen(true)}
+                        title="System Versions Info"
+                    />
+                )}
                 {userDepartment === "AD" && <PastelThemeSelector style={{ marginRight: '12px' }} />}
 
                 <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
@@ -170,6 +179,11 @@ const HeaderBar = () => {
                     </div>
                 </Dropdown>
             </div>
+            
+            <SystemVersionsModal 
+                open={isVersionsModalOpen} 
+                onClose={() => setIsVersionsModalOpen(false)} 
+            />
         </Header>
     );
 }

@@ -171,6 +171,8 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         };
     };
 
+
+
     switch (fabricType) {
         case 'rect': {
             const bl = rotatePoint(leftEdge, topEdge + objH);
@@ -224,9 +226,9 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             const p2 = rotatePoint(leftEdge, topEdge + objH);
             const p3 = rotatePoint(leftEdge + objW, topEdge + objH);
 
-            const path = `M ${toPdf(p1.x, cW, pW)},${toPdfY(p1.y, cH, pH)} ` +
-                         `L ${toPdf(p2.x, cW, pW)},${toPdfY(p2.y, cH, pH)} ` +
-                         `L ${toPdf(p3.x, cW, pW)},${toPdfY(p3.y, cH, pH)} Z`;
+            const path = `M ${toPdf(p1.x, cW, pW)},${-toPdfY(p1.y, cH, pH)} ` +
+                         `L ${toPdf(p2.x, cW, pW)},${-toPdfY(p2.y, cH, pH)} ` +
+                         `L ${toPdf(p3.x, cW, pW)},${-toPdfY(p3.y, cH, pH)} Z`;
 
             page.drawSvgPath(path, {
                 color: hexToRgb(obj.fill) || undefined,
