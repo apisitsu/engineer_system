@@ -20,7 +20,10 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '50mb', }));
 app.use(express.static(path.join(__dirname, "./files")));
 app.use(jsonParser);
 app.use(urlencodedParser);
-app.use(cors()); //ทำให้ FrontEnd ต่อ server ได้
+app.use(cors({
+  origin: true,
+  credentials: true
+})); //ทำให้ FrontEnd ต่อ server ได้
 app.use(cookieParser());
 app.use(express.static("files"));
 
