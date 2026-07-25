@@ -22,4 +22,4 @@ $env:HTTPS_PROXY_AGENT_HTTP_PROXY = $proxy_url
 git config --global http.proxy $proxy_url
 git config --global https.proxy $proxy_url
 
-claude
+#claude
