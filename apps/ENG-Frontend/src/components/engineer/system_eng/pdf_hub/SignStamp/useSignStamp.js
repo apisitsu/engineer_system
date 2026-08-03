@@ -1,13 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { message } from 'antd';
 import axios from 'axios';
-import { PDFDocument } from 'pdf-lib';
-import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument, degrees } from 'pdf-lib';
+import { pdfjsLib } from '../pdfWorkerConfig';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
-
-// Configure pdfjs worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 // ============================================================================
 // Constants — The Critical mm → PDF Point Math
@@ -77,14 +74,18 @@ export default function useSignStamp() {
 
     const canvasContainerRef = useRef(null);
 
+    const historyIndexRef = useRef(historyIndex);
+    historyIndexRef.current = historyIndex;
+
     // ── Push a new state to history ──
     const pushHistory = useCallback((newPlacements) => {
         setHistory(prev => {
-            const trimmed = prev.slice(0, historyIndex + 1);
+            // Read latest index via ref to avoid stale closure (#4)
+            const trimmed = prev.slice(0, historyIndexRef.current + 1);
             return [...trimmed, newPlacements];
         });
         setHistoryIndex(prev => prev + 1);
-    }, [historyIndex]);
+    }, []);
 
     // ── Undo ──
     const undo = useCallback(() => {
@@ -188,16 +189,15 @@ export default function useSignStamp() {
         const widthMm = isStamp ? stampData.stamp_width_mm : stampData.sig_width_mm;
         const heightMm = isStamp ? stampData.stamp_height_mm : stampData.sig_height_mm;
 
+        // Store normalized ratios so positions survive zoom changes (#24)
         const newPlacement = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
             type: activeStampType,
             pageNum: currentPage,
-            screenX,
-            screenY,
+            normX: screenX / canvasWidth,
+            normY: screenY / canvasHeight,
             widthMm,
             heightMm,
-            canvasWidth,
-            canvasHeight,
         };
 
         const newPlacements = [...placements, newPlacement];
@@ -207,9 +207,9 @@ export default function useSignStamp() {
     }, [activeStampType, stampData, currentPage, placements, pushHistory]);
 
     // ── Update placement position (after drag) ──
-    const updatePlacementPosition = useCallback((id, screenX, screenY) => {
+    const updatePlacementPosition = useCallback((id, normX, normY) => {
         const newPlacements = placements.map(p =>
-            p.id === id ? { ...p, screenX, screenY } : p
+            p.id === id ? { ...p, normX, normY } : p
         );
         setPlacements(newPlacements);
         pushHistory(newPlacements);
@@ -234,6 +234,21 @@ export default function useSignStamp() {
             // Create a fresh pdf-lib document from the original bytes
             const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             const pages = doc.getPages();
+
+            // ── Normalize page rotation (same fix as commitEngine) ──
+            // Landscape PDFs stored as portrait MediaBox + /Rotate 90 need
+            // their dimensions swapped so coordinate mapping is correct.
+            for (const page of pages) {
+                const rotation = page.getRotation().angle || 0;
+                const normalizedRotation = ((rotation % 360) + 360) % 360;
+                if (normalizedRotation !== 0) {
+                    const { width, height } = page.getSize();
+                    if (normalizedRotation === 90 || normalizedRotation === 270) {
+                        page.setSize(height, width);
+                    }
+                    page.setRotation(degrees(0));
+                }
+            }
 
             // Prepare stamp/signature images
             let stampImg = null;
@@ -273,15 +288,9 @@ export default function useSignStamp() {
                 const widthPt = mmToPoints(placement.widthMm);
                 const heightPt = mmToPoints(placement.heightMm);
 
-                // Convert screen position to PDF coordinates
-                const { pdfX, pdfY } = screenToPdfCoords(
-                    placement.screenX,
-                    placement.screenY,
-                    placement.canvasWidth,
-                    placement.canvasHeight,
-                    pageWidth,
-                    pageHeight
-                );
+                // Convert normalized position to PDF coordinates (#24)
+                const pdfX = placement.normX * pageWidth;
+                const pdfY = pageHeight - (placement.normY * pageHeight);
 
                 // drawImage uses bottom-left as anchor point
                 page.drawImage(img, {

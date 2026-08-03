@@ -87,6 +87,10 @@ export async function comparePagePixels(basePdf, comparePdf, pageNum, options = 
 
   // Create diff ImageData
   const diffImageData = new ImageData(diffPixels, width, height);
+  const diffCanvas = document.createElement('canvas');
+  diffCanvas.width = width;
+  diffCanvas.height = height;
+  diffCanvas.getContext('2d').putImageData(diffImageData, 0, 0);
 
   // Detect regions (bounding boxes) from the diff
   const regions = detectRegions(diffPixels, width, height, {
@@ -99,6 +103,7 @@ export async function comparePagePixels(basePdf, comparePdf, pageNum, options = 
 
   return {
     diffImageData,
+    diffCanvas,
     mismatchCount,
     mismatchPercentage,
     regions,

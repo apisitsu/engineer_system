@@ -37,7 +37,11 @@ apps/run.ps1
 
 # --- AI & Tool Configurations ---
 .thclaws/
-.claude/
+# .claude/* (not .claude/) — git will not descend into an excluded dir,
+# so the negations below only work if the contents are excluded, not the dir itself.
+.claude/*
+!.claude/rules/
+!.claude/rules/**
 .gemini/
 .clawsignore
 

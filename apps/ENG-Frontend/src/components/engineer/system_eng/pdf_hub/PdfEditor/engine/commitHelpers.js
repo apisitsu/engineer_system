@@ -90,3 +90,82 @@ export function screenToPdfCoords(sx, sy, canvasW, canvasH, pageW, pageH) {
     };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Rotation-Aware Helpers
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Get the effective (visual) page size, accounting for /Rotate.
+ *
+ * pdf-lib's `page.getSize()` returns the raw MediaBox dimensions WITHOUT
+ * considering the page's /Rotate attribute.  A landscape PDF that is stored
+ * as a portrait MediaBox + /Rotate 90 will report {width:595, height:842}
+ * even though it renders as 842×595.
+ *
+ * This helper swaps width/height when rotation is 90° or 270° so that
+ * the returned dimensions match what PDF.js viewport (and the Fabric canvas)
+ * actually display.
+ *
+ * @param {import('pdf-lib').PDFPage} page
+ * @returns {{ width: number, height: number, rotation: number }}
+ */
+export function getEffectivePageSize(page) {
+    const { width, height } = page.getSize();
+    const rotation = page.getRotation().angle || 0;
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+
+    if (normalizedRotation === 90 || normalizedRotation === 270) {
+        return { width: height, height: width, rotation: normalizedRotation };
+    }
+    return { width, height, rotation: normalizedRotation };
+}
+
+/**
+ * Transform Fabric.js canvas coordinates into the RAW pdf-lib coordinate space,
+ * accounting for page rotation.
+ *
+ * The Fabric canvas uses the EFFECTIVE (visual) coordinate system (same as PDF.js viewport).
+ * But pdf-lib draws onto the RAW MediaBox.  When there is a /Rotate, the raw coordinate
+ * system is rotated relative to the visual one.  We must "un-rotate" the visual coordinates
+ * back into the raw MediaBox space.
+ *
+ * Visual vs Raw coordinate mapping:
+ *   Rotation 0:   rawX = visX,          rawY = visY        (identity)
+ *   Rotation 90:  rawX = visY,          rawY = effW - visX  (CW 90)
+ *   Rotation 180: rawX = effW - visX,   rawY = effH - visY  (flip both)
+ *   Rotation 270: rawX = effH - visY,   rawY = visX          (CW 270)
+ *
+ * Where effW/effH are the EFFECTIVE (visual) page dimensions in PDF points,
+ * and visX/visY are already mapped from canvas → effective PDF coords.
+ *
+ * @param {number} visX - X in effective (visual) PDF space
+ * @param {number} visY - Y in effective (visual) PDF space (origin bottom-left, Y↑)
+ * @param {number} effW - Effective page width (visual)
+ * @param {number} effH - Effective page height (visual)
+ * @param {number} rotation - Page rotation in degrees (0, 90, 180, 270)
+ * @returns {{ rawX: number, rawY: number }}
+ */
+export function visualToRawPdfCoords(visX, visY, effW, effH, rotation) {
+    switch (rotation) {
+        case 90:
+            return { rawX: visY, rawY: effW - visX };
+        case 180:
+            return { rawX: effW - visX, rawY: effH - visY };
+        case 270:
+            return { rawX: effH - visY, rawY: visX };
+        default: // 0 or unrecognized
+            return { rawX: visX, rawY: visY };
+    }
+}
+
+/**
+ * Transform a width/height in effective PDF space into raw MediaBox space.
+ * Rotation 90/270 swaps width↔height.
+ */
+export function visualToRawSize(w, h, rotation) {
+    if (rotation === 90 || rotation === 270) {
+        return { rawW: h, rawH: w };
+    }
+    return { rawW: w, rawH: h };
+}
+

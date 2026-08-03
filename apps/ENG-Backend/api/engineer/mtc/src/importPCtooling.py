@@ -23,7 +23,15 @@ if len(all_files) > 0:
     df = pd.read_excel(first_file, header=1)
 #    print(df.head())
 else:
-    print("\nxxx Cannot find any excel files in the folder. Please check the path again. xxx")
+    # No source files: fail loudly with an actionable message instead of letting
+    # pd.concat([]) below raise an opaque "No objects to concatenate". This is the
+    # symptom when the \\sanlb01 share is unreachable from the host (e.g. the
+    # production service account has no network credentials for the share).
+    import sys
+    print(f"xxx Cannot find any excel files under: {base_dir}", file=sys.stderr)
+    print("xxx Check the network share is mounted and readable by the account "
+          "running this process. xxx", file=sys.stderr)
+    sys.exit(1)
 
 print("\n=== Starting to merge all Excel files =>=>=>")
 
@@ -268,6 +276,7 @@ output_filename = "ToolingInspection.csv"
 path_csv = pathlib.Path(r"G:\Shared drives\ROD-Engineer\ToolingInspection")
 
 try:
+    engine = sqlalchemy.create_engine(conn_string)
     path_csv.mkdir(parents=True, exist_ok=True)
 
     query_export = "SELECT * FROM ti_list ORDER BY id ASC"

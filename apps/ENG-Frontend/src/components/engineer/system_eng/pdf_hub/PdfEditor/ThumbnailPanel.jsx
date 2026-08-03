@@ -182,13 +182,12 @@ const ThumbnailPanel = ({
     // ══════════════════════════════════════════════════════════════════
     const handleMergeDragEnd = (event) => {
         const { active, over } = event;
-        if (active.id !== over.id) {
-            setMergeFiles((items) => {
-                const oldIdx = items.findIndex(i => i.uid === active.id);
-                const newIdx = items.findIndex(i => i.uid === over.id);
-                return arrayMove(items, oldIdx, newIdx);
-            });
-        }
+        if (!over || active.id === over.id) return;
+        setMergeFiles((items) => {
+            const oldIdx = items.findIndex(i => i.uid === active.id);
+            const newIdx = items.findIndex(i => i.uid === over.id);
+            return arrayMove(items, oldIdx, newIdx);
+        });
     };
 
     const handleMergeFileRemove = (uid) => {
