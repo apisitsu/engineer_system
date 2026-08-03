@@ -79,9 +79,14 @@ const PATHS = {
     ? path.resolve(__dirname, '../../../', process.env.PYTHON_EXE)
     : 'python',
   // Resolve the script path relative to the root of the backend
-  TOOLING_IMPORT_SCRIPT: process.env.TOOLING_IMPORT_SCRIPT 
+  TOOLING_IMPORT_SCRIPT: process.env.TOOLING_IMPORT_SCRIPT
     ? path.resolve(__dirname, '../../../', process.env.TOOLING_IMPORT_SCRIPT)
     : path.resolve(__dirname, 'src/importPCtooling.py'),
+  // Second script run by the same "Update data" button — exports the drawing-print
+  // record (2026 Record for drawing printed.xlsm) to CSV on Drive G.
+  DWG_PRINT_IMPORT_SCRIPT: process.env.DWG_PRINT_IMPORT_SCRIPT
+    ? path.resolve(__dirname, '../../../', process.env.DWG_PRINT_IMPORT_SCRIPT)
+    : path.resolve(__dirname, 'src/importDwgPrint.py'),
   EMAIL_RENDERER: path.join(__dirname, '../../../templates/email/emailRenderer'),
   SDS_TEMPLATE_DIR: process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'),
 };
