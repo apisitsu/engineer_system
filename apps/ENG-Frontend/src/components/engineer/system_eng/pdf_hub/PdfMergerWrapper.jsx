@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Card, Button, Typography, Row, Col, Upload, Space, message, Spin,
 } from 'antd';
@@ -93,8 +93,9 @@ const PdfMergerWrapper = () => {
                 .filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
                 .map(f => f.originFileObj || f);
             setFileList(prev => {
-                const existingNames = new Set(prev.map(p => p.name));
-                const newItems = pdfFiles.filter(f => !existingNames.has(f.name));
+                const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified}`;
+                const existingKeys = new Set(prev.map(getFileKey));
+                const newItems = pdfFiles.filter(f => !existingKeys.has(getFileKey(f)));
                 const withUid = newItems.map(f => {
                     f.uid = f.uid || Math.random().toString(36).substring(2, 9);
                     return f;
@@ -105,6 +106,11 @@ const PdfMergerWrapper = () => {
     };
 
     const removeFile = (uid) => setFileList(prev => prev.filter(file => file.uid !== uid));
+
+    // Cleanup merged PDF URL on unmount to prevent memory leaks (#1)
+    useEffect(() => {
+        return () => { if (mergedPdfUrl) URL.revokeObjectURL(mergedPdfUrl); };
+    }, [mergedPdfUrl]);
 
     const mergePdfs = async () => {
         if (fileList.length < 2) {
@@ -203,12 +209,6 @@ const PdfMergerWrapper = () => {
                     </Card>
                 </Spin>
             </div>
-            <style>{`
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
         </>
     );
 };

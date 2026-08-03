@@ -12,7 +12,7 @@
  * @param {number} scale - render scale (1.0, 1.5, 2.0)
  * @returns {Promise<Blob>}
  */
-export async function exportPageToImage(pdfDoc, pageNum, fabricData, format = 'jpg', scale = 2.0) {
+export async function exportPageToImage(pdfDoc, pageNum, fabricData, highlights = null, format = 'jpg', scale = 2.0) {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
 
@@ -23,6 +23,36 @@ export async function exportPageToImage(pdfDoc, pageNum, fabricData, format = 'j
 
     // Render PDF
     await page.render({ canvasContext: ctx, viewport }).promise;
+
+    // Render Highlights (#20)
+    if (highlights && highlights.length > 0) {
+        ctx.globalCompositeOperation = 'multiply';
+        for (const hl of highlights) {
+            ctx.fillStyle = hl.color || '#ffeb3b';
+            ctx.globalAlpha = 0.5;
+
+            let x, y, w, h;
+            if (hl.normX !== undefined) {
+                x = hl.normX * viewport.width;
+                y = hl.normY * viewport.height;
+                w = hl.normW * viewport.width;
+                h = hl.normH * viewport.height;
+            } else {
+                const cW = fabricData?._canvasWidth || viewport.width / scale;
+                const cH = fabricData?._canvasHeight || viewport.height / scale;
+                const sx = viewport.width / cW;
+                const sy = viewport.height / cH;
+                x = hl.x * sx;
+                y = hl.y * sy;
+                w = hl.width * sx;
+                h = hl.height * sy;
+            }
+
+            ctx.fillRect(x, y, w, h);
+        }
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+    }
 
     // Composite Fabric.js annotations on top
     if (fabricData && fabricData.objects && fabricData.objects.length > 0) {

@@ -4,6 +4,8 @@ const path = require("path");
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
 const fileupload = require("express-fileupload");
 
@@ -18,9 +20,11 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '50mb', }));
 app.use(express.static(path.join(__dirname, "./files")));
 app.use(jsonParser);
 app.use(urlencodedParser);
-app.use(cors()); //ทำให้ FrontEnd ต่อ server ได้
-app.use(express.static("files"));
-
+app.use(cors({
+  origin: true,
+  credentials: true
+})); //ทำให้ FrontEnd ต่อ server ได้
+app.use(cookieParser());
 app.use(express.static("files"));
 
 // Port & HTTP Server with WebSocket
@@ -116,7 +120,7 @@ const { verifyToken } = require('./middleware/auth');
 
 // Allow public access to login and refresh token, protect everything else under /api
 app.use('/api', (req, res, next) => {
-  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
+  if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
       || req.path === '/activity/session/end') {  // sendBeacon can't set Auth headers
     return next();
   }
@@ -176,12 +180,22 @@ app.post('/api/engineer/new_prod/calc/log', verifyToken, templateTool.logCalcUsa
 //--------------------User----------------------//
 const userController = require('./api/user/userModel');
 
-app.route('/api/login-user').post(userController.LoginUser)
+// Rate limiting for login to prevent brute force attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per window
+  message: { result: 'false', message: 'คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป โปรดลองใหม่ในอีก 15 นาที (Too many attempts)' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.route('/api/login-user').post(loginLimiter, userController.LoginUser)
 app.route('/api/get-all-users').get(userController.GetAllUsers)
 app.route('/api/update-user-theme').post(userController.UpdateUserTheme)
 app.route('/api/update-user-profile').post(userController.UpdateUserProfile)
 app.route('/api/get-user-info').post(userController.GetUserInfo)
 app.route('/api/refresh-token').post(userController.RefreshToken)
+app.route('/api/logout-user').post(userController.LogoutUser)
 
 
 //------------------Process Engineer------------------//

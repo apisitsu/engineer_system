@@ -38,6 +38,30 @@ import JSZip from 'jszip';
 import axios from 'axios';
 import './PdfEditorTool.css';
 
+// ── Virtualization Wrapper (#17) ──
+const LazyPageWrapper = ({ children, estimatedHeight }) => {
+    const [hasIntersected, setHasIntersected] = React.useState(false);
+    const ref = React.useRef(null);
+
+    React.useEffect(() => {
+        const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+                setHasIntersected(true);
+                observer.disconnect();
+            }
+        }, { rootMargin: '200% 0px' }); // Render when within 2 viewport heights
+
+        if (ref.current) observer.observe(ref.current);
+        return () => observer.disconnect();
+    }, []);
+
+    return (
+        <div ref={ref} style={{ minHeight: hasIntersected ? 'auto' : estimatedHeight, width: '100%', display: 'flex', justifyContent: 'center' }}>
+            {hasIntersected ? children : null}
+        </div>
+    );
+};
+
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
 
@@ -301,6 +325,27 @@ const PdfEditorTool = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc, pdfFile]);
 
+    // ── Warn user before closing with unsaved annotations (#11) ──
+    useEffect(() => {
+        const handler = (e) => {
+            if (totalAnnotations > 0) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [totalAnnotations]);
+
+    // ── Cleanup export image URLs on unmount (#2) ──
+    useEffect(() => {
+        return () => {
+            if (exportedImages?.length > 0) {
+                exportedImages.forEach(img => URL.revokeObjectURL(img.url));
+            }
+        };
+    }, [exportedImages]);
+
     // ══════════════════════════════════════════════════════════════════
     // Apply & Download (commit annotations to PDF)
     // ══════════════════════════════════════════════════════════════════
@@ -321,7 +366,7 @@ const PdfEditorTool = () => {
         const finalAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData']);
+                const json = fc.toJSON(['customData', 'textLines']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 finalAnnotations[pageNumStr] = json;
@@ -394,7 +439,7 @@ const PdfEditorTool = () => {
             // Include all active canvases
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData']);
+                    const json = fc.toJSON(['customData', 'textLines']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     finalAnnotations[pageNumStr] = json;
@@ -446,8 +491,9 @@ const PdfEditorTool = () => {
 
     const handleMergeFilesAdd = useCallback((files) => {
         setMergeFiles(prev => {
-            const existingNames = new Set(prev.map(f => f.name));
-            const newItems = files.filter(f => !existingNames.has(f.name));
+            const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified}`;
+            const existingKeys = new Set(prev.map(getFileKey));
+            const newItems = files.filter(f => !existingKeys.has(getFileKey(f)));
             return [...prev, ...newItems];
         });
     }, [setMergeFiles]);
@@ -469,7 +515,7 @@ const PdfEditorTool = () => {
             const allAnnotations = { ...pageAnnotations };
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData']);
+                    const json = fc.toJSON(['customData', 'textLines']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     allAnnotations[pageNumStr] = json;
@@ -496,6 +542,7 @@ const PdfEditorTool = () => {
                     const blob = await exportPageToImage(
                         pdfDoc, pageNum,
                         allAnnotations[pageNum] || null,
+                        pageHighlights ? pageHighlights[pageNum] : null,
                         format, scale
                     );
                     const url = URL.createObjectURL(blob);
@@ -820,18 +867,20 @@ const PdfEditorTool = () => {
                                             ref={el => pageRefs.current[i+1] = el}
                                             style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)', margin: '0 auto', width: 'fit-content' }}
                                         >
-                                            <EditorCanvas
-                                                pageNum={i+1}
-                                                pdfDoc={pdfDoc}
-                                                zoom={zoom}
-                                                pageAnnotations={pageAnnotations}
-                                                pageHighlights={pageHighlights}
-                                                setPageHighlights={setPageHighlights}
-                                                fabricCanvasRefs={fabricCanvasRefs}
-                                                pushHistory={pushHistory}
-                                                overlayPdfDoc={overlayPdfDoc}
-                                                stampData={stampData}
-                                            />
+                                            <LazyPageWrapper estimatedHeight={842 * zoom}>
+                                                <EditorCanvas
+                                                    pageNum={i+1}
+                                                    pdfDoc={pdfDoc}
+                                                    zoom={zoom}
+                                                    pageAnnotations={pageAnnotations}
+                                                    pageHighlights={pageHighlights}
+                                                    setPageHighlights={setPageHighlights}
+                                                    fabricCanvasRefs={fabricCanvasRefs}
+                                                    pushHistory={pushHistory}
+                                                    overlayPdfDoc={overlayPdfDoc}
+                                                    stampData={stampData}
+                                                />
+                                            </LazyPageWrapper>
                                         </div>
                                     ))}
                                 </div>

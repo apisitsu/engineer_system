@@ -1,4 +1,4 @@
-﻿export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
+export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
 export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please try again.";
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
@@ -9,8 +9,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://10.121.50.38:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
