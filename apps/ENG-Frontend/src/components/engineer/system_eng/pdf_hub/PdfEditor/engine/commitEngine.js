@@ -219,6 +219,24 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             break;
         }
 
+        case 'triangle': {
+            const p1 = rotatePoint(leftEdge + objW / 2, topEdge);
+            const p2 = rotatePoint(leftEdge, topEdge + objH);
+            const p3 = rotatePoint(leftEdge + objW, topEdge + objH);
+
+            const path = `M ${toPdf(p1.x, cW, pW)},${toPdfY(p1.y, cH, pH)} ` +
+                         `L ${toPdf(p2.x, cW, pW)},${toPdfY(p2.y, cH, pH)} ` +
+                         `L ${toPdf(p3.x, cW, pW)},${toPdfY(p3.y, cH, pH)} Z`;
+
+            page.drawSvgPath(path, {
+                color: hexToRgb(obj.fill) || undefined,
+                borderColor: hexToRgb(obj.stroke) || undefined,
+                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, pW) : undefined,
+                opacity: obj.opacity ?? 1,
+            });
+            break;
+        }
+
         case 'line': {
             const isReverseX = obj.x1 > obj.x2;
             const isReverseY = obj.y1 > obj.y2;
@@ -264,7 +282,7 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             
             const font = await getFont(doc, obj.fontFamily);
             const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
-            const lines = obj.text.split('\n');
+            const lines = obj.textLines || obj.text.split('\n');
             const lineHeight = size * 1.2;
 
             lines.forEach((line, i) => {

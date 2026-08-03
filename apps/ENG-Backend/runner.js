@@ -49,7 +49,7 @@ function checkAndFixApiUrl() {
 }
 
 // ── ตรวจสอบ apiUrl ก่อนเริ่มต้น ─────────────────────────────────────────────
-checkAndFixApiUrl();
+// checkAndFixApiUrl();
 
 // ── เริ่ม Nodemon ────────────────────────────────────────────────────────────
 nodemon({
@@ -62,7 +62,7 @@ nodemon.on('crash', () => {
     console.log('💥 [Nodemon] App crashed! รอ 30 วินาทีก่อนทำการรีสตาร์ทอัตโนมัติ...');
 
     // ตรวจสอบ apiUrl ก่อนรีสตาร์ท
-    checkAndFixApiUrl();
+    // checkAndFixApiUrl();
 
     setTimeout(() => {
         console.log('🔄 [Nodemon] กำลังรีสตาร์ท...');

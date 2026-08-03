@@ -75,6 +75,14 @@ const LoginUser = async (req, res) => {
 
             const tokenData = generateToken(tokenPayload);
 
+            // Set HttpOnly Cookie
+            res.cookie('token', tokenData.token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: tokenData.expiresInSeconds * 1000
+            });
+
             const successResponse = {
                 result: 'true',
                 name: tokenPayload.u_name,
@@ -285,6 +293,14 @@ const RefreshToken = async (req, res) => {
             perms: decoded.perms || []
         });
 
+        // Set new HttpOnly Cookie
+        res.cookie('token', newTokenData.token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: newTokenData.expiresInSeconds * 1000
+        });
+
         return res.json({
             result: 'true',
             message: 'Token refreshed',
@@ -297,11 +313,21 @@ const RefreshToken = async (req, res) => {
     }
 };
 
+const LogoutUser = async (req, res) => {
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    });
+    return res.json({ result: 'true', message: 'Logged out successfully' });
+};
+
 module.exports = {
     LoginUser,
     GetAllUsers,
     UpdateUserTheme,
     UpdateUserProfile,
     GetUserInfo,
-    RefreshToken
+    RefreshToken,
+    LogoutUser
 };

@@ -285,11 +285,17 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   const slotData = new Array(20).fill(null);
 
   // Place a tool honoring its Machine Tool Config slot (1-based T-number) when known
-  // AND free; otherwise drop into the first empty slot so no tool is lost on a
-  // collision or when no config slot applies.
+  // AND free. A configSlot that's already taken is a same-family COLLISION (e.g. two
+  // distinct factory fixtures, like a CARRIER and a PLATE, sharing one whitelisted DWG
+  // family) — the loser is DROPPED, not spilled into an unrelated free slot, or a
+  // curated 2-tool whitelist silently renders a 3rd, unconfigured tool on the PDF
+  // (found via TSG-300ZNC process 1021 / CN C35-00541, 2026-07-23). Only a genuinely
+  // absent configSlot (no whitelist applies to this tool at all) falls through to the
+  // first empty slot, which keeps the no-whitelist "legacy" fill unrestricted.
   const placeTool = (configSlot, payload) => {
-    if (configSlot && configSlot >= 1 && configSlot <= 20 && !slotData[configSlot - 1]) {
-      slotData[configSlot - 1] = payload; return true;
+    if (configSlot && configSlot >= 1 && configSlot <= 20) {
+      if (!slotData[configSlot - 1]) { slotData[configSlot - 1] = payload; return true; }
+      return false;
     }
     const idx = slotData.findIndex(s => s === null);
     if (idx === -1) return false;
@@ -325,8 +331,9 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
     configSlotOf = makeConfigSlotResolver({ orderMap, allowedKeys, slotByFixture });
     // Factory-plan tools that match the whitelist land in their configured T-slot
-    // (slot positions are honored, gaps preserved). Sorted by slot so a collision
-    // resolves deterministically (lower T keeps its slot, the other spills to first free).
+    // (slot positions are honored, gaps preserved). Sorted by slot so a same-family
+    // collision resolves deterministically: the first (lowest T) tool keeps the slot,
+    // any other tool matching the same family is dropped by placeTool (see its comment).
     const matched = tools
       .filter(t => configSlotOf(t.tool_dwg_no, t.tool_name) !== null)
       .sort((a, b) => configSlotOf(a.tool_dwg_no, a.tool_name) - configSlotOf(b.tool_dwg_no, b.tool_name));

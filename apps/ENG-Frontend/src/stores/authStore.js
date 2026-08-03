@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { key_constance } from "../constance/constance";
+import { key_constance, server } from "../constance/constance";
+import axios from 'axios';
 
 export const useAuthStore = create((set) => ({
   // 1. State เริ่มต้น (ดึงจาก localStorage ตอนโหลดหน้าเว็บ)
@@ -55,6 +56,9 @@ export const useAuthStore = create((set) => ({
 
   // 3. ฟังก์ชัน Logout (ล้างข้อมูลเก่าออกให้หมด)
   logout: () => {
+    // Fire-and-forget call to backend to clear HttpOnly cookie
+    axios.post(`${server.API_URL}api/logout-user`, {}, { withCredentials: true }).catch(err => console.warn('Logout API failed', err));
+
     // ลบข้อมูลออกจาก LocalStorage
     localStorage.removeItem(key_constance.LOGIN_PASSED);
     localStorage.removeItem(key_constance.ROLE);
@@ -64,6 +68,9 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem(key_constance.USER_NAME);
     localStorage.removeItem(key_constance.USER_EMPNO);
     localStorage.removeItem(key_constance.USER_INFO);
+    localStorage.removeItem("token");
+    localStorage.removeItem("tokenExpiresAt");
+    localStorage.removeItem("eng-system-theme");
     Object.values(key_constance).forEach(key => localStorage.removeItem(key));
 
     // *หมายเหตุ: ถ้าแอปคุณไม่ได้เก็บค่าอื่นๆ ใน LocalStorage เลย จะใช้ localStorage.clear() บรรทัดเดียวจบเลยก็ได้ครับ

@@ -42,6 +42,8 @@ apps/run.ps1
 .claude/*
 !.claude/rules/
 !.claude/rules/**
+!.claude/skills/
+!.claude/skills/**
 .gemini/
 .clawsignore
 
