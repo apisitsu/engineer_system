@@ -513,30 +513,54 @@ const ToolingStatusPreview = async (req, res) => {
     }
 };
 
+// Run one Python import script with the venv interpreter. Never rejects — the
+// caller needs every step's outcome so a later failure can't hide an earlier
+// success (and vice versa).
+const runImportScript = (name, scriptPath) => new Promise((resolve) => {
+    console.log(`Executing Python script: ${scriptPath} using venv`);
+    exec(
+        `"${PATHS.PYTHON_EXE}" "${scriptPath}"`,
+        { env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, maxBuffer: 10 * 1024 * 1024 },
+        (error, stdout, stderr) => {
+            if (stderr) console.warn(`[${name}] stderr: ${stderr}`);
+            if (error) {
+                console.error(`[${name}] script error: ${error.message}`);
+                return resolve({ name, script: scriptPath, ok: false, error: error.message, stderr, output: stdout });
+            }
+            console.log(`[${name}] stdout: ${stdout}`);
+            resolve({ name, script: scriptPath, ok: true, stderr, output: stdout });
+        }
+    );
+});
+
+// "Update data" on the Tooling Inspection page. Runs BOTH import scripts in
+// sequence (they touch different sources — the INSP REC share + ti_list, and the
+// drawing-print record on Drive G) and reports each step independently.
 const ToolingSyncCSV = async (req, res) => {
     try {
-        console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
+        const steps = [];
+        steps.push(await runImportScript('importPCtooling', PATHS.TOOLING_IMPORT_SCRIPT));
+        steps.push(await runImportScript('importDwgPrint', PATHS.DWG_PRINT_IMPORT_SCRIPT));
 
-        exec(`"${PATHS.PYTHON_EXE}" "${PATHS.TOOLING_IMPORT_SCRIPT}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Python script error: ${error.message}`);
-                return res.status(500).json({ 
-                    success: false, 
-                    message: "Execution failed", 
-                    error: error.message, 
-                    stderr 
-                });
-            }
-            if (stderr) {
-                console.warn(`Python script stderr: ${stderr}`);
-            }
-            
-            console.log(`Python script stdout: ${stdout}`);
-            return res.json({ 
-                success: true, 
-                message: "CSV Synced Successfully", 
-                output: stdout 
+        const failed = steps.filter(s => !s.ok);
+        const output = steps.map(s => `=== ${s.name} ===\n${s.output || ''}`).join('\n');
+
+        if (failed.length) {
+            return res.status(500).json({
+                success: false,
+                message: `Execution failed: ${failed.map(s => s.name).join(', ')}`,
+                error: failed.map(s => `${s.name}: ${s.error}`).join(' | '),
+                stderr: failed.map(s => s.stderr).filter(Boolean).join('\n'),
+                steps,
+                output,
             });
+        }
+
+        return res.json({
+            success: true,
+            message: "CSV Synced Successfully",
+            steps,
+            output,
         });
     } catch (error) {
         console.error("ToolingSyncCSV Error:", error);

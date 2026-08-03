@@ -1215,10 +1215,13 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 // ── Tab 4: Machine Config (A16:I58 + AN53:AV58) ──────────────────────────────
 
 const COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-const EXCLUDED_ROWS = new Set([17, 27, 37, 47]);
 // Param panel spans grid rows 16–58 (extended from 55 on 2026-06-19 when the grid
 // grew 56→59: rows 56–58 are blank param rows, row 59 is the company footer).
-const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
+// No rows are excluded here: 17/27/37/47 were once assumed to be blank separator
+// rows and hidden from this table, but KS-500RD (row 47) and KVD350S (row 37) both
+// store real, PDF-rendered param data there — hiding them made those rows invisible
+// AND un-editable in this admin table while still printing on the PDF (2026-07-23).
+const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16);
 
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
 // GW panel = grid rows 53–58 (2026-06-19): rows 50–52 dropped (unused/blank, no machine

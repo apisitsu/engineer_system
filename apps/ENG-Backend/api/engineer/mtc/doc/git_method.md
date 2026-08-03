@@ -50,3 +50,6 @@ git push github dev
 git push github dev:main --force
 
 // ============================== //
+
+//Aras token in console
+JSON.parse(sessionStorage.getItem('oidc.user:http://wk10.kz.minebea.local/InnovatorServer/OAuthServer/:InnovatorClient')).access_token
