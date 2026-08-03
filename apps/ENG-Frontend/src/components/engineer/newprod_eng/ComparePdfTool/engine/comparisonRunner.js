@@ -47,6 +47,7 @@ export async function runComparison(basePdf, comparePdf, options = {}) {
       pixelDiffs: null,
       textDiffs: null,
       diffImageData: null,
+      diffCanvas: null,
       baseCanvas: null,
       compareCanvas: null,
     };
@@ -64,6 +65,7 @@ export async function runComparison(basePdf, comparePdf, options = {}) {
 
         pageResult.pixelDiffs = pixelResult;
         pageResult.diffImageData = pixelResult.diffImageData;
+        pageResult.diffCanvas = pixelResult.diffCanvas;
         pageResult.baseCanvas = pixelResult.baseCanvas;
         pageResult.compareCanvas = pixelResult.compareCanvas;
 

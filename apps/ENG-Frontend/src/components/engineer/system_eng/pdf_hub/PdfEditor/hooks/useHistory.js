@@ -19,7 +19,7 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
 
     const saveCurrentPageState = useCallback((pageNum, canvas, highlightsState) => {
         if (!canvas) return;
-        const json = canvas.toJSON(['id', 'customData']);
+        const json = canvas.toJSON(['id', 'customData', 'textLines']);
         json._canvasWidth = canvas.width;
         json._canvasHeight = canvas.height;
 

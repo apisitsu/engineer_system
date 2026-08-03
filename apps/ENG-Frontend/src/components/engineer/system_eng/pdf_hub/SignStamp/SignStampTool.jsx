@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
     Upload, Button, Typography, Spin, Tooltip, Select, Tag, Space,
 } from 'antd';
@@ -40,6 +40,40 @@ const SignStampTool = () => {
         addPlacement, updatePlacementPosition, removePlacement,
         applyAndDownload, undo, redo, canUndo, canRedo,
     } = useSignStamp();
+
+    // Keyboard shortcuts (#15)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            const activeElement = document.activeElement;
+            const isInput = activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable;
+            if (isInput) return;
+
+            const ctrl = e.ctrlKey || e.metaKey;
+            const shift = e.shiftKey;
+            const key = e.key?.toLowerCase();
+
+            // Undo
+            if (ctrl && !shift && key === 'z') {
+                e.preventDefault();
+                if (canUndo) undo();
+            }
+            // Redo
+            else if (ctrl && (key === 'y' || (shift && key === 'z'))) {
+                e.preventDefault();
+                if (canRedo) redo();
+            }
+            // Delete selected placement
+            else if (key === 'delete' || key === 'backspace') {
+                if (selectedPlacementId) {
+                    e.preventDefault();
+                    removePlacement(selectedPlacementId);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [canUndo, canRedo, undo, redo, selectedPlacementId, removePlacement]);
 
     const handleFileUpload = (file) => {
         if (file.type !== 'application/pdf') {

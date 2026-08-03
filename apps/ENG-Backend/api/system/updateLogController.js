@@ -75,18 +75,15 @@ exports.triggerUpdate = async (req, res) => {
         }
 
         // Spawn the batch file in a fully detached window.
-        // Uses `cmd /c start` to create a new independent process that survives
-        // when the batch file kills port 2005 (this Node.js server) during update.
-        const child = spawn('cmd.exe', [
-            '/c', 'start',
-            '"EngineerSystem Update"',  // window title (required by start)
-            '/D', cwdPath,              // working directory
-            scriptPath                   // script to execute
+        // Uses PowerShell Start-Process to create a new independent window 
+        // that survives when the batch file kills port 2005 (this Node.js server).
+        const child = spawn('powershell.exe', [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+            `Start-Process -FilePath '${scriptPath}' -WorkingDirectory '${cwdPath}'`
         ], {
             detached: true,
             stdio: 'ignore',
-            cwd: cwdPath,
-            windowsHide: false  // show the CMD window so admin can see progress
+            cwd: cwdPath
         });
 
         child.on('error', (err) => {
@@ -117,7 +114,7 @@ exports.checkUpdates = async (req, res) => {
         const localHash = localHashRaw.trim();
         const remoteHash = remoteHashRaw.trim();
         
-        const hasUpdate = localHash !== remoteHash;
+        let hasUpdate = localHash !== remoteHash;
         
         let commitsBehind = 0;
         let latestCommitMessage = '';
@@ -136,6 +133,7 @@ exports.checkUpdates = async (req, res) => {
             }
             const { stdout: countOut } = await execPromise('git rev-list --count HEAD..origin/main', { cwd: cwdPath });
             commitsBehind = parseInt(countOut.trim(), 10) || 0;
+            hasUpdate = commitsBehind > 0;
         }
         
         res.json({

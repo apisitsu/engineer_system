@@ -164,13 +164,13 @@ const PdfUsageDashboard = ({ open, onClose }) => {
     const columns = [
         { title: 'Month', dataIndex: 'month', key: 'month' },
         {
-            title: 'View Pages (0.25 THB)',
+            title: 'View Pages', // (0.25 THB)
             dataIndex: 'view_pages',
             key: 'view_pages',
             render: (val) => <span style={{ color: theme.colors.primary }}>{parseInt(val || 0).toLocaleString()} Pages</span>
         },
         {
-            title: 'Action Pages (0.50 THB)',
+            title: 'Action Pages', // (0.50 THB)
             dataIndex: 'action_pages',
             key: 'action_pages',
             render: (val) => <span style={{ color: theme.colors.success }}>{parseInt(val || 0).toLocaleString()} Pages</span>
@@ -375,10 +375,10 @@ const PdfUsageDashboard = ({ open, onClose }) => {
                                                     Monitor and have info the action costs of action savings saved: <strong>฿{selectedMonthSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.
                                                 </p>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: theme.colors.textSecondary }}>
-                                                    <div style={{ display: 'flex', gap: 8 }}>
+                                                    {/* <div style={{ display: 'flex', gap: 8 }}>
                                                         <InfoCircleOutlined style={{ color: theme.colors.primary, marginTop: 2 }} />
                                                         <span>View Action: 0.25 THB / Page</span>
-                                                    </div>
+                                                    </div> */}
                                                     <div style={{ display: 'flex', gap: 8 }}>
                                                         <InfoCircleOutlined style={{ color: theme.colors.success, marginTop: 2 }} />
                                                         <span>Export/Merge Actions: 0.50 THB / Page</span>

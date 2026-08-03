@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Form, Input, Button, Typography, Layout, Card, Spin } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, SettingFilled, ToolOutlined, BuildOutlined, ExperimentOutlined } from '@ant-design/icons';
@@ -17,12 +17,13 @@ function Sign_in() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [focusedInput, setFocusedInput] = useState(null);
 
   const { login, logout } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const Toast = Swal.mixin({
+  const Toast = useMemo(() => Swal.mixin({
     toast: true,
     position: "center",
     iconColor: theme.colors.textInverse,
@@ -30,37 +31,20 @@ function Sign_in() {
     showConfirmButton: false,
     timer: 1500,
     timerProgressBar: true,
-  });
+  }), [theme.colors.textInverse]);
 
   useEffect(() => {
     // Force Red Pastel theme for login page only
     switchTheme('mintPeach');
 
-    // Clear session
+    // Clear session (logout will also clean up tokens in localStorage)
     logout();
-    // ถ้ามี Token ค้างอยู่ก็ลบทิ้งด้วย
-    localStorage.removeItem("token");
-    localStorage.removeItem("tokenExpiresAt");
-    localStorage.setItem(key_constance.LOGIN_PASSED, "no");
 
     // Trigger animation
     setTimeout(() => setIsVisible(true), 100);
   }, []);
 
   const saveSession = (data, empno) => {
-
-    // console.log(data.userInfo)
-    // const sessionData = {
-    //   [key_constance.LOGIN_PASSED]: "yes",
-    //   [key_constance.USER_EMPNO]: data.userInfo?.u_code ?? empno ?? data.empno,
-    //   [key_constance.USER_NAME]: data.userInfo?.u_name ?? data.name,
-    //   [key_constance.USER_DEPARTMENT]: data.userInfo?.u_department ?? 'USER',
-    //   [key_constance.ROLE]: data.userInfo?.u_role || data.userInfo?.role || 'USER',
-    //   [key_constance.USER_SECTION]: data.userInfo?.u_group || data.userInfo?.user_group || 'USER',
-    //   [key_constance.USER_AUTH]: data.userInfo?.u_authority || data.userInfo?.user_authority || 5,
-    //   [key_constance.USER_INFO]: JSON.stringify(data.userInfo) ?? null,
-    // };
-
     // 1. จัดเตรียมข้อมูลสำหรับ Zustand
     const userData = {
       role: data.userInfo?.u_role || data.userInfo?.role || 'USER',
@@ -95,11 +79,13 @@ function Sign_in() {
       const res = await axios.post(`${server.API_URL}api/login-user`, {
         ...values,
         eventId: "login",
-      }, { headers: { 'Content-Type': 'application/json' } });
+      }, { 
+        headers: { 'Content-Type': 'application/json' },
+        withCredentials: true 
+      });
 
       if (res.data.result === "true") {
         saveSession(res.data, values.empno);
-        await Toast.fire({ icon: "success", title: "เข้าสู่ระบบสำเร็จ" });
         
         // Get the page to redirect to (from state or default based on department)
         const from = location.state?.from?.pathname || null;
@@ -108,9 +94,8 @@ function Sign_in() {
         
         const destination = from || defaultPath;
         
-        setTimeout(() => {
-          navigate(destination, { replace: true });
-        }, 1000);
+        await Toast.fire({ icon: "success", title: "เข้าสู่ระบบสำเร็จ" });
+        navigate(destination, { replace: true });
       } else {
         Toast.fire({
           icon: "error",
@@ -119,10 +104,11 @@ function Sign_in() {
       }
     } catch (error) {
       console.error(error);
+      const errorMessage = error.response?.data?.message || "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้";
       Swal.fire({
         icon: "error",
         title: "เกิดข้อผิดพลาด",
-        text: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้",
+        text: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -161,28 +147,6 @@ function Sign_in() {
     border: `2px solid ${theme.colors.border}`,
     transition: 'all 0.3s ease',
   };
-
-  const inputFocusHandlers = (color) => ({
-    onFocus: (e) => {
-      e.target.style.borderColor = color;
-      e.target.style.boxShadow = `0 0 0 3px ${color}15`;
-    },
-    onBlur: (e) => {
-      e.target.style.borderColor = theme.colors.border;
-      e.target.style.boxShadow = 'none';
-    },
-  });
-
-  const passwordFocusHandlers = (color) => ({
-    onFocus: (e) => {
-      e.target.parentElement.style.borderColor = color;
-      e.target.parentElement.style.boxShadow = `0 0 0 3px ${color}15`;
-    },
-    onBlur: (e) => {
-      e.target.parentElement.style.borderColor = theme.colors.border;
-      e.target.parentElement.style.boxShadow = 'none';
-    },
-  });
 
   const DecorationIcon = ({ Icon, style }) => (
     <div style={style}>
@@ -367,8 +331,13 @@ function Sign_in() {
                   placeholder="Employee No."
                   maxLength={10}
                   autoFocus
-                  style={inputStyle}
-                  {...inputFocusHandlers(theme.colors.primary)}
+                  style={{
+                    ...inputStyle,
+                    borderColor: focusedInput === 'empno' ? theme.colors.primary : theme.colors.border,
+                    boxShadow: focusedInput === 'empno' ? `0 0 0 3px ${theme.colors.primary}15` : 'none',
+                  }}
+                  onFocus={() => setFocusedInput('empno')}
+                  onBlur={() => setFocusedInput(null)}
                 />
               </Form.Item>
 
@@ -379,8 +348,13 @@ function Sign_in() {
                 <Input.Password
                   prefix={<LockOutlined style={{ color: theme.colors.secondary }} />}
                   placeholder="Password"
-                  style={inputStyle}
-                  {...passwordFocusHandlers(theme.colors.secondary)}
+                  style={{
+                    ...inputStyle,
+                    borderColor: focusedInput === 'password' ? theme.colors.secondary : theme.colors.border,
+                    boxShadow: focusedInput === 'password' ? `0 0 0 3px ${theme.colors.secondary}15` : 'none',
+                  }}
+                  onFocus={() => setFocusedInput('password')}
+                  onBlur={() => setFocusedInput(null)}
                 />
               </Form.Item>
 

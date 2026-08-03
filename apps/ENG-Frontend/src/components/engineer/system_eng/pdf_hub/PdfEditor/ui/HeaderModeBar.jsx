@@ -234,7 +234,7 @@ export default function HeaderModeBar({
                 {/* Close PDF */}
                 <Tooltip title="Close PDF">
                     <Button size="small" danger onClick={onClosePdf} style={{ borderRadius: 7 }}>
-                        <DeleteOutlined />
+                        <CloseOutlined />
                     </Button>
                 </Tooltip>
             </Space>

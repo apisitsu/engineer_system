@@ -289,7 +289,7 @@ const UpdateLogView = () => {
                         </Card>
 
                         {/* UPDATE BANNER */}
-                        {updateStatus && updateStatus.hasUpdate && !isUpdating && (
+                        {updateStatus && updateStatus.hasUpdate && updateStatus.commitsBehind > 0 && !isUpdating && (
                             <Alert
                                 message={
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
