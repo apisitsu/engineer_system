@@ -103,6 +103,39 @@ cd apps/ENG-Backend
 npx jest --testPathPattern="formulaService"   # or mtcv2, etc.
 ```
 
+## Verifying a change that writes to the DB or a shared drive
+
+Some changes (data imports, sync jobs, the Tooling Inspection "Update data"
+button) cannot be judged from unit tests alone — the interesting failures are in
+the real schema and the real source files. Four steps, in this order, each safe:
+
+1. **Read-only dry run against live data.** Run the service directly and compare
+   its output to whatever the previous implementation produced (an exported CSV
+   on the share, the current table contents). Row counts and de-duplication keys
+   matching is a far stronger signal than any fixture.
+2. **Intercept the writes.** Monkey-patch the pool before calling the service, so
+   the read path is real and only the mutations are stubbed:
+   ```js
+   const realQuery = engPool.query.bind(engPool);
+   engPool.query = async (sql, params) => {
+     const text = typeof sql === 'string' ? sql : sql.text;
+     if (/^\s*(INSERT|UPDATE|DELETE)/i.test(text) || /setval/i.test(text)) {
+       console.log('BLOCKED:', text.slice(0, 60), params?.length); return { rows: [] };
+     }
+     return realQuery(sql, params);
+   };
+   ```
+3. **Exercise the write path in a rolled-back transaction.** A clean dry run
+   means the INSERT never ran, so it is still unverified. `BEGIN`, insert probe
+   rows, `SELECT` them back to confirm every value landed in the column it was
+   sent to (column-order bugs do not raise), then `ROLLBACK` and re-count.
+4. **Redirect file output.** Point the output dir at the scratchpad
+   (`TI_CSV_OUTPUT_DIR` for the TI import) and diff against the shared copy
+   rather than overwriting files the team is using.
+
+Call the controller with a mock `res` (`{ status(c){...}, json(b){...} }`) to
+cover the HTTP layer without booting Express or minting a token.
+
 ## Run (human path)
 
 `npm run dev` from the repo root starts both with `concurrently` and opens no
@@ -110,6 +143,22 @@ browser automatically; visit `http://localhost:3000`. Useless headless — no
 different from the agent path once running, except no screenshots.
 
 ## Gotchas
+
+- **`❌ PostgreSQL eng_system error: Connection terminated due to connection
+  timeout` at startup does NOT mean the DB is unreachable.** `instance/eng_db.js`
+  fires a one-shot `engPool.connect()` probe at module load with a 10s
+  `connectionTimeoutMillis`; when the process is busy at that moment (e.g. a
+  script that immediately reads workbooks off a UNC share) the probe loses the
+  race and prints ❌ while the pool itself works perfectly for every subsequent
+  query. **Never conclude "can't reach the DB" from that line** — issue a real
+  query (`SELECT current_database()`) and judge by that. Related: a script that
+  exits before its queries settle prints the same error for the same reason.
+
+- **Scripts outside `apps/ENG-Backend` can't resolve its deps.** Node resolves
+  from the *script's* location, not the cwd, and this is an npm-workspaces repo
+  where everything is hoisted to the root `node_modules`. From a scratchpad
+  script: `module.paths.push(String.raw`<repo>\node_modules`)`, and load env with
+  an explicit path — `require('dotenv').config({ path: '<repo>/apps/ENG-Backend/.env' })`.
 
 - **Corporate proxy black-holes `localhost` for `curl`.** This shell has
   `HTTP_PROXY`/`HTTPS_PROXY` set globally; plain `curl http://localhost:2005/...`
@@ -190,3 +239,5 @@ different from the agent path once running, except no screenshots.
 | `page.goto()` times out on `http://localhost:3000` (or hangs past 90s) | You removed/bypassed the `BLOCK_HOSTS` interception in `driver.mjs` — restore it |
 | Authenticated screenshot shows the sign-in page again a moment after loading `/home` | Either (a) empno doesn't exist in `eng_system.users` — the theme-sync 401 force-logs-out — or (b) you set `localStorage` via `page.evaluate()` after navigating to `/sign_in` instead of `evaluateOnNewDocument()` before navigating |
 | `GET /api/get-all-users` (or any `/api/*`) returns `{"result":"false","message":"Token is invalid or expired"}` | The minted token's 1h TTL expired — re-run `mint-token.mjs` |
+| `❌ PostgreSQL eng_system error: Connection terminated due to connection timeout` printed on startup | The module-load probe in `instance/eng_db.js` lost a race — not a real outage. Confirm with `SELECT current_database()` before reporting the DB as unreachable |
+| `MODULE_NOT_FOUND` for `dotenv`/`xlsx` in a scratchpad script | Deps are hoisted to the repo-root `node_modules`; `module.paths.push()` it (see Gotchas) |
