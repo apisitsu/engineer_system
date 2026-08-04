@@ -135,6 +135,32 @@ async function _insertCard(client, { boardId, listId, creatorUCode, name, descri
   return card;
 }
 
+/**
+ * Attach a deep link back to the source screen, so someone looking at the card can
+ * jump straight to the page where the work is actually done.
+ *
+ * A link attachment rather than a line in the description: the description renders
+ * as plain text (clicking it opens the editor), so a URL there is neither clickable
+ * nor safe from being edited away. Attachments render as real anchors.
+ *
+ * Idempotent on (card_id, file_path) — this also runs on every move so a card
+ * created before the link existed picks one up on its next stage change.
+ */
+async function _upsertLink(client, cardId, uCode, link) {
+  if (!link || !link.url) return;
+  const existing = await client.query(
+    `SELECT id FROM kb_attachment WHERE card_id = $1 AND file_path = $2 AND attachment_type = 'link'`,
+    [cardId, link.url]
+  );
+  if (existing.rows.length) return;
+  await client.query(
+    `INSERT INTO kb_attachment
+       (card_id, creator_u_code, file_name, file_path, file_size, is_image, attachment_type, link_data)
+     VALUES ($1,$2,$3,$4,0,false,'link',$5)`,
+    [cardId, uCode, link.name || link.url, link.url, JSON.stringify({ url: link.url, name: link.name || link.url })]
+  );
+}
+
 // Move an existing linked card to a new list (append to bottom) + log the move.
 // No-op (returns the row) when the card is already on the target list.
 async function _moveCard(client, cardId, targetListId, uCode) {
@@ -168,6 +194,13 @@ async function _moveCard(client, cardId, targetListId, uCode) {
  * @param {string|Date} [args.dueDate]
  * @param {string}  [args.priority]    'low'|'medium'|'high' (falls back to config default)
  * @param {string}  [args.stageKey]    key into config.stage_list_map (the workflow stage)
+ * @param {{url:string,name?:string}} [args.link]  deep link back to the source screen,
+ *                                     added as a link attachment (idempotent, also on move)
+ * @param {boolean} [args.createOnly]  seed a card if the job has none, but never move an
+ *                                     existing one. For backlog feeds (a report listing
+ *                                     outstanding work) whose "stage" is only the starting
+ *                                     point — without it, re-running the report would drag
+ *                                     already-progressed cards back to the first list.
  * @returns {Promise<{ok:boolean, action?:'created'|'moved'|'noop', cardId?:number, reason?:string}>}
  */
 async function syncCard(args) {
@@ -195,19 +228,28 @@ async function syncCard(args) {
       await client.query('BEGIN');
       let result;
       if (linkRes.rows.length) {
-        // Existing card → move to the stage's list (idempotent no-op if already there).
         const cardId = linkRes.rows[0].card_id;
+        // createOnly: the job already has a card, and where it sits now is the
+        // board's business, not the feed's. Still refresh the link attachment.
+        if (args.createOnly) {
+          await _upsertLink(client, cardId, uCode, args.link);
+          await client.query('COMMIT');
+          return { ok: true, action: 'noop', cardId };
+        }
+        // Existing card → move to the stage's list (idempotent no-op if already there).
         const mv = await _moveCard(client, cardId, listId, uCode);
         if (!mv.card) {
           // Link points at a deleted card → drop the stale link, fall through to recreate.
           await client.query(`DELETE FROM mtc_board_card_link WHERE source_type=$1 AND source_ref=$2`, [sourceType, ref]);
           const card = await _insertCard(client, { boardId, listId, creatorUCode: uCode, name: args.name, description: args.description, dueDate: args.dueDate, priority });
+          await _upsertLink(client, card.id, uCode, args.link);
           await client.query(
             `INSERT INTO mtc_board_card_link (source_type, source_ref, card_id, board_id) VALUES ($1,$2,$3,$4)`,
             [sourceType, ref, card.id, boardId]
           );
           result = { ok: true, action: 'created', cardId: card.id, _emit: { type: 'create', card, listId } };
         } else {
+          await _upsertLink(client, cardId, uCode, args.link);
           result = {
             ok: true, action: mv.moved ? 'moved' : 'noop', cardId,
             _emit: mv.moved ? { type: 'move', card: mv.card, listId, fromListId: mv.fromListId } : null,
@@ -216,6 +258,7 @@ async function syncCard(args) {
       } else {
         // No card yet → create and link.
         const card = await _insertCard(client, { boardId, listId, creatorUCode: uCode, name: args.name, description: args.description, dueDate: args.dueDate, priority });
+        await _upsertLink(client, card.id, uCode, args.link);
         await client.query(
           `INSERT INTO mtc_board_card_link (source_type, source_ref, card_id, board_id) VALUES ($1,$2,$3,$4)
              ON CONFLICT (source_type, source_ref) DO NOTHING`,

@@ -163,9 +163,11 @@ const SdsV2Page = () => {
     setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory, similar } : prev));
   };
 
-  const handleSearch = async () => {
-    if (!cn.trim()) return;
-    const cnVal = cn.trim();
+  // Split from handleSearch so a deep link can search a CN immediately without
+  // waiting a render for setCn to land. handleSearch stays bound to onClick /
+  // onPressEnter, which hand it a DOM event — it must take no argument.
+  const runSearch = async (cnVal) => {
+    if (!cnVal) return;
     setLoading(true);
     setData(null);
     setTsData(null);
@@ -196,6 +198,8 @@ const SdsV2Page = () => {
       setLoading(false);
     }
   };
+
+  const handleSearch = () => runSearch(cn.trim());
 
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
@@ -253,6 +257,40 @@ const SdsV2Page = () => {
     if (list.length === 1) setSelectedMachine(list[0].machine_type_name);
     setPdfModal(true);
   };
+
+  // ── Deep link (?cn=&machine=&process=&sign=1) ──────────────────────────────
+  // Entry point for the "Open SDS — sign" link on a Kanban card: land straight on
+  // the sheet's sign panel instead of retyping the CN and re-picking machine/process.
+  const [deepLink, setDeepLink] = useState(null);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const linkCn = (q.get('cn') || '').trim();
+    if (!linkCn) return;
+    setCn(linkCn);
+    setDeepLink({ machine: q.get('machine') || '', process: q.get('process') || '' });
+    runSearch(linkCn);
+    // Mount-only: the URL is read once so a later manual search is never overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // openPdfModal needs the machine/tool config the search fetches, so the target
+  // sheet can only be opened once those have landed — hence a second effect
+  // rather than doing this inline in runSearch.
+  useEffect(() => {
+    if (!deepLink || !data?.process_info?.length || !allMachineTypes.length) return;
+    const row = data.process_info.find(
+      (r) => String(r.process_code) === String(deepLink.process)
+    );
+    setDeepLink(null);                       // one shot, whether or not the row matched
+    if (!row) {
+      message.warning(`Process ${deepLink.process} not found on ${data.cn}`);
+      return;
+    }
+    openPdfModal(row);
+    if (deepLink.machine) setSelectedMachine(deepLink.machine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLink, data, allMachineTypes, machineToolsConfig]);
 
   // Label shown for a machine in the picker / on the PDF: a split group shows the specific
   // machine name (KS-400B2); a combined group (sole entry in the list) shows the group name

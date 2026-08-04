@@ -96,6 +96,7 @@ npm run cypress:run  # Cypress E2E headless
 | **TI import (retired)** | ~~`PYTHON_EXE`, `TOOLING_IMPORT_SCRIPT`, `DWG_PRINT_IMPORT_SCRIPT`, `TOOLING_IMPORT_ENGINE`~~ | **Retired 2026-08-04** — "Update data" no longer shells out to Python; the scripts, the `PATHS` entries and the fallback branch are all gone. Unused. |
 | **SDS PDF** | ~~`SOFFICE_PATH`, `SDS_TEMPLATE_DIR`~~ | **Retired 2026-06-14** — LibreOffice removed; SDS PDF renders via Chrome grid (`/api/sds/v2-headless/pdf-chrome/grid`). These env vars are unused. |
 | **Misc** | `EXTERNAL_JOB_CHECK_API_KEY`, `GAS_EMAIL_URL` | External integrations |
+| **Frontend URL** | `FRONTEND_BASE_URL` | Optional. Origin used to build deep links the backend puts on Kanban cards (SDS approval → sign page). Unset → relative URLs, which resolve correctly while board and app share an origin |
 
 Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.
 
