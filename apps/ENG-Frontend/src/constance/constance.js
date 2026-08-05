@@ -10,10 +10,7 @@ export const apiUrl = "http://plbmp130:2005/";
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
-<<<<<<< HEAD
-=======
 // export const apiUrl = "http://10.121.50.38:2005/";
->>>>>>> dev
 // export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
