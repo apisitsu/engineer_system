@@ -7,6 +7,8 @@ import Looks4Icon from '@mui/icons-material/Looks4';
 import Looks5Icon from '@mui/icons-material/Looks5';
 import Looks6Icon from '@mui/icons-material/Looks6';
 import Filter7Icon from '@mui/icons-material/Filter7';
+import Filter8Icon from '@mui/icons-material/Filter8';
+import Filter9Icon from '@mui/icons-material/Filter9';
 
 import { MTC_PATHS } from "../../constance/mtc_constance";
 
@@ -20,7 +22,12 @@ const numberIcons = [
     <Looks5Icon style={iconStyle} />,
     <Looks6Icon style={iconStyle} />,
     <Filter7Icon style={iconStyle} />,
+    <Filter8Icon style={iconStyle} />,
+    <Filter9Icon style={iconStyle} />,
 ];
+// The list must stay at least as long as the longest menu, or the `|| [0]`
+// fallback below silently numbers a late item "1" again — which is what adding
+// the MTC CAD/CAM entry did to "Report" (an 8th item against 7 icons).
 
 const createMenu = (items) => {
     return items.map((item, index) => {
@@ -85,6 +92,7 @@ export const mtc = createMenu([
     { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
     { label: "Setup Data Sheet", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
+    { label: "CAD/CAM", path: MTC_PATHS.CAM, key: "cam" },
     {
         label: "Master Data", key: "master-data",
         children: [

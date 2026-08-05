@@ -13,6 +13,7 @@ export const MTC_PATHS = {
   TOOLING_INVENTORY: '/eng/mtc_eng/inventory',
   PART_MANAGEMENT: '/eng/mtc_eng/part-management',
   CN_ENABLE: '/eng/mtc_eng/cn-enable',
+  CAM: '/eng/mtc_eng/cam',
   SDS_V2: '/eng/mtc_eng/sds-v2',
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
   SDS_TEMPLATE_CONFIG: '/eng/mtc_eng/sds-v2/template-config',
@@ -31,6 +32,7 @@ export const MTC_VERSIONS = {
   'sds-v2':                   { version: '2.1', updated: '2026-06-15' },
   'tooling-result-dashboard': { version: '1.0', updated: '2026-06-14' },
   'sds-coverage-report':      { version: '1.0', updated: '2026-06-14' },
+  'cam':                      { version: '1.0', updated: '2026-08-05' },
 };
 
 export const WORKFLOW_STATUS = {

@@ -64,6 +64,42 @@ const dwgPrefix = (no) => { const p = no?.split('-'); return p?.length >= 2 ? `$
 ```
 Applied in `SdsV2Page.jsx`: T-Select result assignment tries exact match first, then `dwgPrefix` fallback via `sdsPrefixToNo` map. Validation against `sds_machine_tool` uses `sdsPrefixSet`.
 
+**3b. A blank PDF is usually the WRONG MACHINE, not a missing-data bug**
+
+The PDF machine picker (`openPdfModal`) is built from `sds_machine_tool` config for the
+process **plus** machines whose `machine_type_code` matches the plan's tool-DWG prefix.
+Neither source knows whether the part actually *fits* the machine, so machines Tooling
+Select has excluded are offered anyway — and the resulting sheet renders with every
+T-Select tool slot blank while the Tooling table behind the modal shows a full list.
+
+This bites hardest on **range-split pairs**: two machines sharing one tooling family with
+the range divided between them. `tooling_machine_limit` records the split *and* names the
+partner in `description`:
+
+| machine | input_var | bound | description |
+|---|---|---|---|
+| KS-03A | ID | max 12 (exclusive) | `KS-03A: ID < 12 (use KS-B22RD for ID >= 12)` |
+| KS-B22RD | ID | min 12 | `KS-B22RD: ID >= 12 (same formulas as KS-03A)` |
+
+Diagnosed 2026-08-05 on **C31-00839** (BALL, bore 12.700), process 1061: the KS-B22RD
+sheet carried all 10 tools (2 factory + 8 from T-Select/similar-part, marked ` *`); the
+KS-03A sheet carried only the 2 factory tools. Correct behaviour — bore 12.7 belongs to
+KS-B22RD — but nothing said so. `SdsV2Page` now flags excluded machines in the picker
+with the T-Select reason (`ID=12.7 > max 12`) and names the machine that does own the
+part's tooling family.
+
+> The alternative-machine suggestion **must** be filtered by tooling family, not just by
+> T-Select eligibility. Every machine configured for the process is in the picker, so for
+> this part KS-B22G (4027-*) and KS-B80 (4021-*) were "eligible" yet irrelevant — offering
+> them just sends the user to another empty sheet. Match `sds_machine_tool.tool_drawing_no`
+> prefixes against the part's own `process_plan` tool prefixes.
+
+> **Production history is not proof the limit is wrong.** The `Machine History` chips are
+> real `lpb.pc_production` lots, and they showed 3 lots of this CN on KS-03A (floor machine
+> IDG-10, which has ground bores 6.35–16.0). Reality crosses the documented split; the
+> limit still encodes the intended routing. **Do not "fix" a limit from production data
+> alone** — the split is deliberate and shared by both machines' formulas.
+
 **4. Independent caches — invalidation does not cross systems**
 SDS admin mutations now auto-flush the `sds:` cache: `/machine-types` (inline) and `/parameters`, `/parameters/bulk`, `/machine-tools/bulk`, `/machine-tools/combo`, `/mappings` (via the `flushSds` `res.on('finish')` middleware in `sdsV2AdminController.js`). So edits reflect on the next search/PDF. (Fixed 2026-06-09 — previously only machine-types flushed, so parameter/tool/mapping edits served stale data until the 10-min TTL.) The T-Select config cache flushes independently (see `tsv2ConfigCache`).
 
