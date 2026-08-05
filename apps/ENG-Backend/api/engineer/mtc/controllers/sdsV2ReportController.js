@@ -6,11 +6,21 @@ const { TABLES } = require('../mtcConstants');
 const tselectFallback = require('../services/tselectFallback');
 const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
+const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 // SDS coverage-report config is part of the SDS admin surface.
 const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
+
+// The coverage build runs in the background with no request in hand, so the
+// socket.io instance is captured from request traffic instead. Only used to push
+// realtime board updates — everything still works before the first request.
+let _io = null;
+router.use((req, _res, next) => {
+  if (!_io) _io = req.app.get('io') || null;
+  next();
+});
 
 /**
  * Pure coverage-level classifier for one evaluated SDS sheet. Extracted so the
@@ -870,6 +880,12 @@ function kickCoverageBuild() {
       const at = Date.now();
       _coverageCache = { at, data: payload };
       persistCoverage(payload, at); // fire-and-forget → survives restarts
+      // Seed the board with the sheets that are printable but unsigned. Gated on
+      // the same total>0 check: a degraded build reports everything as pending,
+      // which would be a false backlog. Fire-and-forget and fail-open — the
+      // report must never fail because a board is misconfigured.
+      syncNoStampBacklog(payload.needsAttention, { io: _io })
+        .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message));
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
@@ -913,6 +929,36 @@ router.get('/coverage', async (req, res) => {
     return res.status(202).json({ building: true });
   } catch (err) {
     console.error('[SDS Report] coverage:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/sds/v2/report/backlog-to-board — push the report's unsigned-but-printable
+ * (NO_STAMP, non-anomaly) sheets onto the project board's first list.
+ *
+ * Runs automatically after every coverage build; this is the manual trigger, for
+ * seeding immediately after a config change instead of waiting out the 15-min TTL.
+ * `?dryRun=1` lists what would be created without writing anything.
+ *
+ * Reads the cached payload only — it will not kick an expensive cold build.
+ */
+router.post('/backlog-to-board', isAdmin, async (req, res) => {
+  try {
+    if (!_coverageCache) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+    if (!_coverageCache) {
+      return res.status(409).json({ error: 'No coverage build available yet — open the coverage report first' });
+    }
+    const result = await syncNoStampBacklog(_coverageCache.data.needsAttention, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
+  } catch (err) {
+    console.error('[SDS Report] backlog-to-board:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

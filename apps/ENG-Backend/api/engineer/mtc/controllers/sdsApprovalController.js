@@ -38,7 +38,18 @@ const { buildSealSvg, buildSealDataUri, toSealName } = require('../utils/stampSe
 // Auto-intake: mirror each SDS approval sheet onto the shared Kanban board, moving
 // the card as it advances prepared→checked→approved. Fail-open (never blocks sign).
 const kanbanIntake = require('../services/kanbanIntake');
+const { boardRef } = require('../utils/sdsBoardRef');
 const SDS_SOURCE = 'sds_approval';
+
+// Deep link to the Setup Data Sheet screen with the sheet already opened at the
+// sign panel. Absolute when FRONTEND_BASE_URL is set; otherwise relative, which
+// still resolves correctly because the board and the SDS page share an origin.
+const SDS_PAGE_PATH = '/eng/mtc_eng/sds-v2';
+const signPageUrl = (cn, machine_type_name, process_code) => {
+  const base = (process.env.FRONTEND_BASE_URL || '').replace(/\/+$/, '');
+  const qs = new URLSearchParams({ cn, machine: machine_type_name, process: process_code });
+  return `${base}${SDS_PAGE_PATH}?${qs}`;
+};
 
 const router = express.Router();
 
@@ -280,14 +291,19 @@ router.post('/', async (req, res) => {
     // --- Move/create the board card for this approval sheet (fail-open) ---
     // stageKey = the role just signed; admin maps prepared/checked/approved → lists.
     // Backfill (historical bulk import) is intentionally NOT hooked to avoid flooding.
-    kanbanIntake.syncCard({
+    // sourceRef via boardRef so a sheet signed under one group member lands on the
+    // same card the coverage report seeded under the group label.
+    boardRef(cn, machine_type_name, process_code).then((ref) => kanbanIntake.syncCard({
       io: req.app.get('io'),
       sourceType: SDS_SOURCE,
-      sourceRef: `${cn}||${machine_type_name}||${process_code}`,
+      sourceRef: ref,
       stageKey: role,
       name: `SDS ${cn} · ${machine_type_name} · ${process_code}`,
       description: `Signed ${role} by ${user.name || user.empno}`,
-    }).catch((e) => console.warn('[sdsApproval] kanban intake failed:', e.message));
+      // Lets the next signer open the exact sheet from the card instead of
+      // re-typing the CN and re-picking machine/process.
+      link: { url: signPageUrl(cn, machine_type_name, process_code), name: `Open SDS ${cn} — sign` },
+    })).catch((e) => console.warn('[sdsApproval] kanban intake failed:', e.message));
 
     res.json({ success: true, approval: row });
   } catch (e) {
@@ -491,3 +507,4 @@ module.exports.ensureApprovalTables = ensureApprovalTables;
 module.exports.userCanSign = userCanSign;
 module.exports.getApprovalSeals = getApprovalSeals;
 module.exports._ROLE_ORDER = ROLE_ORDER;
+module.exports.signPageUrl = signPageUrl;

@@ -1,0 +1,226 @@
+/**
+ * Phase 2 — planegcs bridge (WASM constraint solver).
+ *
+ * Translates the point-based sketch model (`model.js`) into planegcs primitives,
+ * runs FreeCAD's PlaneGCS solver (compiled to WASM by `@salusoft89/planegcs`),
+ * and writes the solved coordinates back onto the sketch. The model maps to
+ * planegcs almost 1:1 because both are point-based.
+ *
+ * Runs in Node (dev/tests) and, later, in the sketch-worker. `createSolver`
+ * loads the WASM once and is reused across solves via `clear_data()`.
+ */
+// Imported from their exact files rather than the package root. The root
+// (`index.js`) statically imports the emscripten glue, and the glue's dead
+// Node branch contains `new URL('./', import.meta.url)` — which webpack tries
+// to resolve at build time and cannot ("Can't resolve './'"), failing the whole
+// production build. Nothing here reaches that file; `createSolver` is handed
+// the module loader instead (see below).
+import { Algorithm, SolveStatus } from '@salusoft89/planegcs/dist/planegcs_dist/enums.js';
+import { GcsWrapper } from '@salusoft89/planegcs/dist/sketch/gcs_wrapper.js';
+
+const sid = (id) => String(id);
+
+/**
+ * Convert a sketch document to an ordered planegcs primitive list: all points
+ * first (geometry references them), then lines/circles, then constraints.
+ */
+export function toPlanegcs(sk) {
+  const prims = [];
+  for (const e of sk.entities.values()) {
+    if (e.type === 'point') {
+      prims.push({ id: sid(e.id), type: 'point', x: e.x, y: e.y, fixed: !!e.fixed });
+    }
+  }
+  for (const e of sk.entities.values()) {
+    if (e.type === 'line') {
+      prims.push({ id: sid(e.id), type: 'line', p1_id: sid(e.p1), p2_id: sid(e.p2) });
+    } else if (e.type === 'circle') {
+      prims.push({ id: sid(e.id), type: 'circle', c_id: sid(e.center), radius: e.r });
+    } else if (e.type === 'arc') {
+      // planegcs needs the sweep angles too; derive them from the current point
+      // positions (counter-clockwise start→end). `arc_rules` then pins the two
+      // endpoint points to the rim at those angles so the arc stays consistent.
+      const c = sk.entities.get(e.center);
+      const s = sk.entities.get(e.start);
+      const en = sk.entities.get(e.end);
+      prims.push({
+        id: sid(e.id), type: 'arc', c_id: sid(e.center), radius: e.r,
+        start_id: sid(e.start), end_id: sid(e.end),
+        start_angle: Math.atan2(s.y - c.y, s.x - c.x),
+        end_angle: Math.atan2(en.y - c.y, en.x - c.x),
+      });
+      prims.push({ id: `arc_rules_${e.id}`, type: 'arc_rules', a_id: sid(e.id) });
+    }
+  }
+  let n = 0;
+  const cid = () => `k${n++}`;
+  for (const c of sk.constraints) {
+    const [a, b] = c.refs.map(sid);
+    // A driven (reference) dimension is pushed with driving:false, so planegcs
+    // measures it but doesn't enforce it (removes no DOF). Non-dimensional and
+    // ordinary dimensions default to driving.
+    const driving = c.driven ? false : true;
+    switch (c.kind) {
+      case 'coincident':
+        prims.push({ id: cid(), type: 'p2p_coincident', p1_id: a, p2_id: b });
+        break;
+      case 'lockX':
+        prims.push({ id: cid(), type: 'coordinate_x', p_id: a, x: c.value });
+        break;
+      case 'lockY':
+        prims.push({ id: cid(), type: 'coordinate_y', p_id: a, y: c.value });
+        break;
+      case 'horizontal':
+        prims.push({ id: cid(), type: 'horizontal_pp', p1_id: a, p2_id: b });
+        break;
+      case 'vertical':
+        prims.push({ id: cid(), type: 'vertical_pp', p1_id: a, p2_id: b });
+        break;
+      case 'parallel':
+        prims.push({ id: cid(), type: 'parallel', l1_id: a, l2_id: b });
+        break;
+      case 'perpendicular':
+        prims.push({ id: cid(), type: 'perpendicular_ll', l1_id: a, l2_id: b });
+        break;
+      case 'pointOnLine':
+        prims.push({ id: cid(), type: 'point_on_line_pl', p_id: a, l_id: b });
+        break;
+      case 'pointOnCircle':
+        prims.push({ id: cid(), type: 'point_on_circle', p_id: a, c_id: b });
+        break;
+      case 'pointOnArc':
+        prims.push({ id: cid(), type: 'point_on_arc', p_id: a, a_id: b });
+        break;
+      case 'distance':
+        prims.push({ id: cid(), type: 'p2p_distance', p1_id: a, p2_id: b, distance: c.value, driving });
+        break;
+      case 'distanceX':
+      case 'distanceY': {
+        // planegcs has no dx/dy constraint; `difference` works on raw object
+        // params instead — difference = param2 − param1, so pointing both at the
+        // same property of two points gives the axis-aligned gap.
+        const prop = c.kind === 'distanceX' ? 'x' : 'y';
+        prims.push({
+          id: cid(), type: 'difference',
+          param1: { o_id: a, prop }, param2: { o_id: b, prop },
+          difference: c.value, driving,
+        });
+        break;
+      }
+      case 'pointLineDistance':
+        prims.push({ id: cid(), type: 'p2l_distance', p_id: a, l_id: b, distance: c.value, driving });
+        break;
+      case 'radius':
+        prims.push({ id: cid(), type: 'circle_radius', c_id: a, radius: c.value, driving });
+        break;
+      case 'arcRadius':
+        prims.push({ id: cid(), type: 'arc_radius', a_id: a, radius: c.value, driving });
+        break;
+      case 'diameter':
+        prims.push({ id: cid(), type: 'circle_diameter', c_id: a, diameter: c.value, driving });
+        break;
+      case 'equalRadius': {
+        // circle/circle, arc/arc, or circle/arc — pick the matching primitive.
+        const t1 = sk.entities.get(c.refs[0])?.type;
+        const t2 = sk.entities.get(c.refs[1])?.type;
+        if (t1 === 'circle' && t2 === 'circle') {
+          prims.push({ id: cid(), type: 'equal_radius_cc', c1_id: a, c2_id: b });
+        } else if (t1 === 'arc' && t2 === 'arc') {
+          prims.push({ id: cid(), type: 'equal_radius_aa', a1_id: a, a2_id: b });
+        } else {
+          // one circle + one arc, in either order → equal_radius_ca(c_id, a_id)
+          const cId = t1 === 'circle' ? a : b;
+          const aId = t1 === 'circle' ? b : a;
+          prims.push({ id: cid(), type: 'equal_radius_ca', c1_id: cId, a2_id: aId });
+        }
+        break;
+      }
+      case 'midpoint': {
+        // Point at the midpoint of a line = on the line AND equidistant from its
+        // endpoints (perpendicular bisector). Two primitives for one relation.
+        const l = sk.entities.get(c.refs[1]);
+        prims.push({ id: cid(), type: 'point_on_line_pl', p_id: a, l_id: b });
+        prims.push({ id: cid(), type: 'point_on_perp_bisector_ppp', p_id: a, lp1_id: sid(l.p1), lp2_id: sid(l.p2) });
+        break;
+      }
+      case 'equalLength':
+        prims.push({ id: cid(), type: 'equal_length', l1_id: a, l2_id: b });
+        break;
+      case 'angle':
+        // c.value is the angle between the two lines, in radians.
+        prims.push({ id: cid(), type: 'l2l_angle_ll', l1_id: a, l2_id: b, angle: c.value, driving });
+        break;
+      case 'symmetric':
+        // Two points symmetric about a line (the axis). refs = [p1, p2, line].
+        prims.push({ id: cid(), type: 'p2p_symmetric_ppl', p1_id: a, p2_id: b, l_id: sid(c.refs[2]) });
+        break;
+      case 'tangent':
+        prims.push({ id: cid(), type: 'tangent_lc', l_id: a, c_id: b });
+        break;
+      case 'tangentArc':
+        prims.push({ id: cid(), type: 'tangent_la', l_id: a, a_id: b });
+        break;
+      case 'tangentArcArc':
+        prims.push({ id: cid(), type: 'tangent_aa', a1_id: a, a2_id: b });
+        break;
+      default:
+        throw new Error(`no planegcs mapping for constraint ${c.kind}`);
+    }
+  }
+  return prims;
+}
+
+/**
+ * Load the solver once. Returns { solve, destroy }.
+ *
+ * `wasmPath` is the URL/path to `planegcs.wasm`; `initModule` is the emscripten
+ * factory that loads it. **Both are required arguments** — this module names no
+ * file and no bundler feature of its own, so it stays a pure module that works
+ * unchanged in Node and in a bundled worker, which resolve those two very
+ * differently:
+ *
+ *   - the sketch worker serves both out of `public/wasm/` and imports the glue
+ *     at runtime, keeping webpack away from a file it cannot statically parse;
+ *   - Node callers (`planegcs_check.mjs`) resolve both from node_modules.
+ *
+ * `solve(sk)` mutates `sk` in place with the solved coordinates/radii and
+ * returns { status, success, conflicting, redundant }. `conflicting` /
+ * `redundant` are arrays of the offending constraint ids (planegcs' own
+ * over-constraint detection — more accurate than the model's nominal DOF).
+ */
+export async function createSolver({ wasmPath, initModule } = {}) {
+  if (!wasmPath) throw new Error('createSolver requires a wasmPath to planegcs.wasm');
+  if (!initModule) throw new Error('createSolver requires an initModule loader for planegcs.js');
+  // What `make_gcs_wrapper` does, minus the package-root import: point the
+  // emscripten module at our wasm, then wrap its GcsSystem.
+  const mod = await initModule({ locateFile: () => wasmPath });
+  const gcs = new GcsWrapper(new mod.GcsSystem(), mod);
+  return {
+    solve(sk, { algorithm = Algorithm.DogLeg } = {}) {
+      gcs.clear_data();
+      for (const p of toPlanegcs(sk)) gcs.push_primitive(p);
+      const status = gcs.solve(algorithm);
+      gcs.apply_solution();
+      for (const e of sk.entities.values()) {
+        if (e.type === 'point') {
+          const pt = gcs.sketch_index.get_sketch_point(sid(e.id));
+          e.x = pt.x;
+          e.y = pt.y;
+        } else if (e.type === 'circle') {
+          e.r = gcs.sketch_index.get_sketch_circle(sid(e.id)).radius;
+        } else if (e.type === 'arc') {
+          e.r = gcs.sketch_index.get_sketch_arc(sid(e.id)).radius;
+        }
+      }
+      return {
+        status,
+        success: status === SolveStatus.Success,
+        conflicting: gcs.get_gcs_conflicting_constraints(),
+        redundant: gcs.get_gcs_redundant_constraints(),
+      };
+    },
+    destroy() {
+      gcs.destroy_gcs_module?.();
+    },
+  };
+}

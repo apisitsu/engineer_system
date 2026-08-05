@@ -4,13 +4,16 @@
   "private": true,
   "scripts": {
     "gen:versions": "node scripts/gen-system-versions.js",
-    "prestart": "node scripts/gen-system-versions.js",
-    "predev": "node scripts/gen-system-versions.js",
-    "prebuild": "node scripts/gen-system-versions.js",
+    "copy:cam-wasm": "node scripts/copy-cam-wasm.js",
+    "prestart": "node scripts/gen-system-versions.js && node scripts/copy-cam-wasm.js",
+    "predev": "node scripts/gen-system-versions.js && node scripts/copy-cam-wasm.js",
+    "prebuild": "node scripts/gen-system-versions.js && node scripts/copy-cam-wasm.js",
     "start": "react-scripts start",
     "dev": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:cam": "vitest run",
+    "test:cam:watch": "vitest",
     "eject": "react-scripts eject",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run"
@@ -33,6 +36,7 @@
     "@pdf-lib/fontkit": "^1.1.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
+    "@salusoft89/planegcs": "^1.2.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -47,6 +51,8 @@
     "browser-image-compression": "^2.0.2",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0",
+    "clipper-lib": "^6.4.2",
+    "comlink": "^4.4.2",
     "dayjs": "^1.11.19",
     "dnd-kit": "^0.0.2",
     "exceljs": "^4.4.0",
@@ -101,6 +107,13 @@
       "react-app/jest"
     ]
   },
+  "jest": {
+    "testMatch": [
+      "<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
+      "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}",
+      "!**/mtc_eng/cam/**"
+    ]
+  },
   "browserslist": {
     "production": [
       ">0.2%",
@@ -114,6 +127,10 @@
     ]
   },
   "devDependencies": {
-    "cypress": "^15.13.0"
+    "@react-three/test-renderer": "^9.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cypress": "^15.13.0",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.10"
   }
 }
