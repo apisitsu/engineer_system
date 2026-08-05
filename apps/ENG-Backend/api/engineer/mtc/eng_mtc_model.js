@@ -1,7 +1,6 @@
 const { engPool } = require('../../../instance/eng_db');
 const moment = require('moment');
-const { exec } = require('child_process');
-const { TABLES, PATHS } = require('./mtcConstants');
+const { TABLES } = require('./mtcConstants');
 
 const ToolingInspectGetlist = async (req, res) => {
     const pageNum = Math.max(1, parseInt(req.query.page) || 1);
@@ -490,36 +489,10 @@ const ToolingInspectUpdate = async (req, res) => {
     }
 }
 
-const ToolingSyncCSV = async (req, res) => {
-    try {
-        console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
-
-        exec(`"${PATHS.PYTHON_EXE}" "${PATHS.TOOLING_IMPORT_SCRIPT}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Python script error: ${error.message}`);
-                return res.status(500).json({
-                    success: false,
-                    message: "Execution failed",
-                    error: error.message,
-                    stderr
-                });
-            }
-            if (stderr) {
-                console.warn(`Python script stderr: ${stderr}`);
-            }
-
-            console.log(`Python script stdout: ${stdout}`);
-            return res.json({
-                success: true,
-                message: "CSV Synced Successfully",
-                output: stdout
-            });
-        });
-    } catch (error) {
-        console.error("ToolingSyncCSV Error:", error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
+// NOTE: this file's ToolingSyncCSV was an older single-script copy of the one in
+// controllers/legacyMtcController.js and was never routed. Removed 2026-08-04
+// along with the Python scripts it shelled out to; /api/tooling_inspect/sync_csv
+// has always pointed at the controller.
 
 module.exports = {
     ToolingInspectGetlist,
@@ -529,7 +502,6 @@ module.exports = {
     ToolingDashboadtGetlist,
     ToolingReturnAdd,
     ToolingInspectUpdate,
-    ToolDWGRequestUpdate,
-    ToolingSyncCSV
+    ToolDWGRequestUpdate
 };
 

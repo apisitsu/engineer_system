@@ -97,21 +97,21 @@ function InspectionReport() {
     setLoading(true);
     // The run takes minutes, so keep a persistent hint up instead of leaving the
     // user staring at a spinner with no explanation.
-    const closeHint = message.loading('Updating data (running import scripts)...', 0);
+    const closeHint = message.loading('Updating data (running imports)...', 0);
     try {
-      // HttpClient forces a 10s default timeout, but this endpoint runs two Python
-      // imports back to back (many .xlsx off a UNC share + a 16k-row .xlsm), which
-      // always takes longer. Without an explicit timeout axios aborts client-side
-      // while the backend keeps going — the scripts succeed but the UI reports a
-      // connection failure.
+      // HttpClient forces a 10s default timeout, but this endpoint runs two
+      // imports back to back (many .xlsx off a UNC share + a 16k-row .xlsm),
+      // which always takes longer. Without an explicit timeout axios aborts
+      // client-side while the backend keeps going — the imports succeed but the
+      // UI reports a connection failure.
       await axios.post(server.TOOLING_SYNC_CSV, null, { timeout: 15 * 60 * 1000 });
       message.success('Data updated successfully');
       fetchToolingInspectData();
       fetchDashboardData(selectedMonth);
     } catch (e) {
-      // Surface the real backend failure (env/venv missing, network share
-      // unreachable, python error) instead of a generic message — the import
-      // runs two Python scripts whose real error only lives in the 500 body.
+      // Surface the real backend failure (network share unreachable, CSV target
+      // not mapped, DB error) instead of a generic message — the real reason
+      // only lives in the 500 body.
       const d = e?.response?.data || {};
       const detail = d.error || d.stderr || d.message || e.message || 'Unknown error';
       // The endpoint runs importPCtooling + importDwgPrint; one can fail while the

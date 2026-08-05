@@ -270,6 +270,10 @@ app.post('/api/upload', (req, res) => {
 const mtcRoutes = require('./api/engineer/mtc/routes/mtcRoutes');
 app.use('/api/engineer/mtc', mtcRoutes);
 
+//------------------CAD/CAM (shared saved-work library)------------------//
+const camRoutes = require('./api/engineer/cam/camRoutes');
+app.use('/api/engineer/cam', verifyToken, camRoutes);
+
 const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
 app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 
