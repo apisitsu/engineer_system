@@ -1,15 +1,25 @@
 /**
- * libraryStore — the saved-work library: what is in it, and the four things you
- * can do to it (save, open, delete, clear).
+ * libraryStore — the saved-work library: what is in it, and what you can do to
+ * it (save, open, share, unshare, delete, clear).
  *
  * Thin, as the store layer is meant to be. The record shape, the naming rules
  * and the ordering are `engine/savedWork.js`; the storage is `lib/workApi.js`
- * (the shared server-side library — `lib/workDb.js` is the per-browser IndexedDB
- * store it replaced, kept only for the one-off migration described in
- * `.claude/rules/cam-library-migration.md`);
+ * (`lib/workDb.js` is the per-browser IndexedDB store it replaced, kept only for
+ * the one-off migration described in `.claude/rules/cam-library-migration.md`);
  * gathering the current session into a project document, and applying one back
  * to the app, is `lib/projectIO.js`. This sequences those three and holds what
  * came back — a list, a busy flag, and the last error.
+ *
+ * **Saving is private.** A save always lands on this operator's own shelf, and
+ * there is no argument anywhere in here for saving somewhere else — publishing
+ * to the shared library is `share(id)`, a separate act on an item that already
+ * exists. That asymmetry is deliberate: the previous design made every save a
+ * publish, so an operator typing a name their colleague had also used replaced
+ * that colleague's work without being asked anything.
+ *
+ * Who may share, unshare or delete which row is decided by the server and
+ * arrives on each row as `canShare` / `canUnshare` / `canDelete`. This store
+ * does not re-derive it; it calls, and reports what came back.
  *
  * `error` is a string, not a thrown exception, because every one of these
  * actions is a button press: the operator needs a sentence next to the button,
@@ -18,9 +28,10 @@
 import { create } from 'zustand';
 import {
   buildRecord, readPayload, sortLibrary, namesOfKind, uniqueName, suggestName,
+  myWork, sharedWork,
 } from '../engine/savedWork.js';
 import {
-  putRecord, listMeta, getData, deleteRecord, clearAll, dbAvailable, storageUse,
+  putRecord, listMeta, getData, deleteRecord, clearAll, shareRecord, unshareRecord,
 } from '../lib/workApi.js';
 import { currentProject, applyProject } from '../lib/projectIO.js';
 import { useCamStore } from './camStore.js';
@@ -32,22 +43,14 @@ export const useLibraryStore = create((set, get) => ({
   loaded: false,
   busy: false,
   error: null,
-  /** { usage, quota } when the browser will say, else null. */
-  storage: null,
-
-  /** Whether this browser can hold a library at all. */
-  available: dbAvailable(),
-
   setError: (error) => set({ error: error || null }),
 
-  /** Re-read the list from the database. */
+  /** Re-read the list from the server. */
   async refresh() {
-    if (!get().available) return [];
     set({ busy: true });
     try {
       const items = sortLibrary(await listMeta());
       set({ items, loaded: true, busy: false, error: null });
-      storageUse().then((storage) => set({ storage })).catch(() => {});
       return items;
     } catch (err) {
       set({ busy: false, error: err?.message || String(err) });
@@ -55,19 +58,27 @@ export const useLibraryStore = create((set, get) => ({
     }
   },
 
+  /** This operator's own shelf, and the shared library, out of the one list. */
+  mine: () => myWork(get().items),
+  shared: () => sharedWork(get().items),
+
   /**
    * The name to offer when the operator asks to save: whatever the work is
    * already called, made unique for that kind so a second save of an untitled
    * job does not silently replace the first.
    *
-   * Saving over a name *on purpose* is still one keystroke away — leave the
-   * offered name alone and it writes a copy; type the old name back and it
+   * Measured against **this operator's own shelf only**, because that is the
+   * only place a save can land. Avoiding a name a colleague had published would
+   * offer "OP10 (2)" while your own OP10 slot stood empty.
+   *
+   * Saving over your own name *on purpose* is still one keystroke away — leave
+   * the offered name alone and it writes a copy; type the old name back and it
    * replaces. The default leans to keeping work rather than to overwriting it.
    */
   suggestFor(kind) {
     const { fileName } = useCamStore.getState();
     const base = suggestName(fileName, kind === 'program' ? 'Program' : 'Project');
-    return uniqueName(base, namesOfKind(get().items, kind));
+    return uniqueName(base, namesOfKind(get().mine(), kind));
   },
 
   /**
@@ -123,10 +134,10 @@ export const useLibraryStore = create((set, get) => ({
    * `.camweb.json` does, so a restored session cannot drift from a restored
    * file — there is one path, and this is a second door onto it.
    */
-  async open(key) {
+  async open(id) {
     set({ busy: true, error: null });
     try {
-      const payload = readPayload(await getData(key));
+      const payload = readPayload(await getData(id));
       if (payload.kind === 'program') {
         await useCamStore.getState().parse(payload.gcode, payload.name);
       } else {
@@ -140,13 +151,42 @@ export const useLibraryStore = create((set, get) => ({
     }
   },
 
-  /** Remove one saved item. */
-  async remove(key) {
+  /**
+   * Publish one of my saved items to the shared library, or take it back.
+   *
+   * A move, not a copy — the item is in one place, and which place it is in is
+   * the whole state being changed. The server refuses to publish over somebody
+   * else's item of the same name and says so in a sentence; that sentence is
+   * what lands in `error`, so the operator finds out *why* rather than that
+   * "something went wrong".
+   */
+  async share(id) {
+    return get()._move(() => shareRecord(id));
+  },
+
+  async unshare(id) {
+    return get()._move(() => unshareRecord(id));
+  },
+
+  async _move(call) {
     set({ busy: true, error: null });
     try {
-      await deleteRecord(key);
+      const meta = await call();
       await get().refresh();
-      return key;
+      return meta;
+    } catch (err) {
+      set({ busy: false, error: err?.message || String(err) });
+      throw err;
+    }
+  },
+
+  /** Remove one saved item, by row id. */
+  async remove(id) {
+    set({ busy: true, error: null });
+    try {
+      await deleteRecord(id);
+      await get().refresh();
+      return id;
     } catch (err) {
       set({ busy: false, error: err?.message || String(err) });
       throw err;

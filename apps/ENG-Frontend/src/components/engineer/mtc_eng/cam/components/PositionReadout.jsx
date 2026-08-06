@@ -8,21 +8,26 @@
  * maps those rows onto JSX and styles them like a readout.
  */
 import { droRows, showDro, droXNote, droFooter } from '../engine/view/dro.js';
+import { CAD } from '../theme.js';
 
 /** Width of the distance-to-go column, wide enough for -1234.567. */
 const DTG_W = 74;
 
 const PANEL = {
   position: 'absolute', top: 12, right: 12, zIndex: 5,
-  background: 'rgba(15,23,42,0.82)', border: '1px solid #334155',
-  borderRadius: 8, padding: '8px 12px 6px',
+  background: CAD.glass, border: `1px solid ${CAD.border}`,
+  // A light panel over a light viewport needs the shadow to read as floating;
+  // over the old near-black one, contrast alone did that job.
+  borderRadius: 4, boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
+  backdropFilter: 'blur(2px)',
+  padding: '8px 12px 6px',
   minWidth: 262, pointerEvents: 'none',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
 };
 
 const HEADING = {
   display: 'flex', alignItems: 'baseline', gap: 8,
-  color: '#64748b', fontSize: 10, letterSpacing: 0.8,
+  color: CAD.muted, fontSize: 10, letterSpacing: 0.8,
   textTransform: 'uppercase', marginBottom: 6, whiteSpace: 'nowrap',
 };
 
@@ -31,10 +36,10 @@ const ROW = {
   lineHeight: 1.45,
 };
 
-const LABEL = { color: '#38bdf8', fontSize: 13, fontWeight: 700, width: 22 };
+const LABEL = { color: CAD.accent, fontSize: 13, fontWeight: 700, width: 22 };
 
 const VALUE = {
-  color: '#e2e8f0', fontSize: 16, flex: 1, textAlign: 'right',
+  color: CAD.text, fontSize: 16, flex: 1, textAlign: 'right',
   // A live readout whose digits are different widths visibly shimmers as it
   // counts; tabular figures keep the columns still.
   fontVariantNumeric: 'tabular-nums',
@@ -43,21 +48,21 @@ const VALUE = {
 // Dimmer and a size down: the absolute position is what the eye should land on
 // first, with the countdown beside it as support.
 const DTG = {
-  color: '#94a3b8', fontSize: 14, width: DTG_W, textAlign: 'right',
+  color: CAD.label, fontSize: 14, width: DTG_W, textAlign: 'right',
   fontVariantNumeric: 'tabular-nums',
 };
 
-const UNIT = { color: '#475569', fontSize: 10, width: 22 };
+const UNIT = { color: CAD.dim, fontSize: 10, width: 22 };
 
 const FOOTER = {
   display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, paddingTop: 5,
-  borderTop: '1px solid #1e293b', color: '#64748b', fontSize: 11,
+  borderTop: `1px solid ${CAD.borderSoft}`, color: CAD.muted, fontSize: 11,
 };
 
 // The tool's own name, one step brighter than the rest of the footer: it is the
 // only line on the panel that cannot be checked against the machine by eye.
 const TOOL_NAME = {
-  color: '#cbd5e1', flex: 1, overflow: 'hidden',
+  color: CAD.icon, flex: 1, overflow: 'hidden',
   textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 };
 
@@ -66,11 +71,11 @@ const TOOL_NAME = {
 // the unit — so F and S line up with each other and with the axes.
 const RATES = {
   display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 3,
-  color: '#64748b', fontSize: 11,
+  color: CAD.muted, fontSize: 11,
 };
 
 const RATE_VALUE = {
-  color: '#e2e8f0', fontSize: 13, fontVariantNumeric: 'tabular-nums',
+  color: CAD.text, fontSize: 13, fontVariantNumeric: 'tabular-nums',
 };
 
 /**
@@ -113,7 +118,7 @@ export default function PositionReadout({
           <span style={LABEL}>
             {r.label}
             {r.label === 'X' && xNote ? (
-              <span style={{ color: '#475569', fontWeight: 400 }}>{xNote}</span>
+              <span style={{ color: CAD.dim, fontWeight: 400 }}>{xNote}</span>
             ) : null}
           </span>
           <span style={VALUE}>{r.text}</span>

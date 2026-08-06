@@ -13,13 +13,14 @@ import { invalidate, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
+import { CAD } from '../theme.js';
 
 const noRaycast = () => null;
 const Z = 0.05; // lift a hair above the Z=0 pick plane to avoid z-fighting
-const PREVIEW = '#f59e0b'; // amber rubber-band while drawing
-const SNAP_COLOR = '#f0abfc'; // magenta snap indicator (vertex / rim)
-const TANGENT_COLOR = '#34d399'; // green — tangent snap indicator
-const AXIS_COLOR = '#22d3ee'; // cyan — angle-lock guide axis
+const PREVIEW = CAD.skPreview; // amber rubber-band while drawing
+const SNAP_COLOR = CAD.skSnap; // magenta snap indicator (vertex / rim)
+const TANGENT_COLOR = CAD.skTangent; // green — tangent snap indicator
+const AXIS_COLOR = CAD.skAxis; // cyan — angle-lock guide axis
 
 // Unit circle in the XY plane (local coords), for the screen-scaled snap ring.
 const UNIT_RING = (() => {
@@ -46,12 +47,12 @@ function ScreenRing({ x, y, color, pixels = 10 }) {
     </group>
   );
 }
-const CONSTRUCTION = '#94a3b8'; // slate — construction (reference) geometry, drawn dashed
-const HOVER = '#fbbf24'; // amber pre-select highlight (the entity a click will pick)
-const SELECTED = '#f43f5e'; // red selected highlight
-const GEOM = '#38bdf8'; // default geometry colour
-const ANGLE_BASE = '#22d3ee'; // cyan — the fixed reference line of an angle dimension
-const ANGLE_ROTATE = '#f59e0b'; // amber — the line the angle rotates
+const CONSTRUCTION = CAD.skConstruction; // slate — construction (reference) geometry, drawn dashed
+const HOVER = CAD.skHover; // amber pre-select highlight (the entity a click will pick)
+const SELECTED = CAD.skSelected; // green selected highlight (SolidWorks' own)
+const GEOM = CAD.skUnder; // default geometry colour
+const ANGLE_BASE = CAD.skAxis; // cyan — the fixed reference line of an angle dimension
+const ANGLE_ROTATE = CAD.skPreview; // amber — the line the angle rotates
 
 const TWO_PI = Math.PI * 2;
 const norm = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
@@ -67,9 +68,9 @@ function arcRing(cx, cy, r, a0, a1, segs = 48) {
   return pts;
 }
 
-const DIM_COLOR = '#facc15'; // yellow — placed dimensions (witness/dimension lines)
+const DIM_COLOR = CAD.skDim; // near-black — placed dimensions (witness/dimension lines)
 const dimLabelStyle = {
-  color: '#fde68a', background: 'rgba(15,23,42,0.85)', border: '1px solid #a16207',
+  color: CAD.skDim, background: CAD.glassSolid, border: `1px solid ${CAD.border}`,
   borderRadius: 4, font: '600 11px monospace', padding: '0 4px',
   whiteSpace: 'nowrap', userSelect: 'none',
   // Pointer events on so a dimension label is double-clickable to edit its value;
@@ -79,9 +80,9 @@ const dimLabelStyle = {
 
 /** Live angle/length readout shown at the line rubber-band's tip while drawing. */
 const angleReadoutStyle = (locked) => ({
-  color: locked ? '#0f172a' : '#e2e8f0',
-  background: locked ? AXIS_COLOR : 'rgba(15,23,42,0.9)',
-  border: `1px solid ${locked ? AXIS_COLOR : '#475569'}`,
+  color: locked ? CAD.surface : CAD.text,
+  background: locked ? AXIS_COLOR : CAD.glassSolid,
+  border: `1px solid ${locked ? AXIS_COLOR : CAD.border}`,
   borderRadius: 4, font: '600 11px monospace', padding: '1px 5px',
   whiteSpace: 'nowrap', userSelect: 'none', pointerEvents: 'none',
   transform: 'translate(12px, -18px)',
@@ -126,7 +127,7 @@ function DimensionAnnotations({ sk, version }) {
           <Html key={b.key} position={b.pos} center zIndexRange={[2, 0]}>
             <div
               style={driven
-                ? { ...dimLabelStyle, color: '#c4b5fd', borderColor: '#7c3aed', fontStyle: 'italic' }
+                ? { ...dimLabelStyle, color: CAD.skDriven, borderColor: CAD.skDriven, fontStyle: 'italic' }
                 : dimLabelStyle}
               title={driven ? 'Driven (reference) — double-click to edit' : 'Double-click to edit'}
               onDoubleClick={(e) => { e.stopPropagation(); beginEditConstraint(b.ci); }}
@@ -262,11 +263,12 @@ export default function SketchLayer() {
   // selection — not while trimming/chamfering (both act on lines).
   const selecting = tool === 'select' || tool === 'dimension';
   const selected = new Set(selection);
-  // SolidWorks-style solve-state colouring of the geometry: under-defined stays
-  // blue (still has freedom), fully defined goes light grey (SW's "black" — done),
-  // and an over-defined/conflicting sketch goes rose. Selection/hover still win.
+  // SolidWorks' solve-state colouring of the geometry, now literally its three
+  // colours on a light ground: under-defined stays blue (still has freedom),
+  // fully defined goes black (done), and an over-defined/conflicting sketch goes
+  // red. Selection/hover still win.
   const overDefined = dofState?.state === 'over' || (solveResult && !solveResult.success && solveResult.conflicting?.length > 0);
-  const baseGeom = overDefined ? '#fb7185' : dofState?.state === 'full' ? '#d1d5db' : GEOM;
+  const baseGeom = overDefined ? CAD.skOver : dofState?.state === 'full' ? CAD.skFull : GEOM;
   // While an angle dimension is being entered, colour its base (fixed reference)
   // and rotating line distinctly so it's clear which one moves to the set angle.
   const angleBase = dimensionPending?.angular ? dimensionPending.refs[0] : null;
@@ -397,7 +399,7 @@ export default function SketchLayer() {
           {snap.tangent && (
             <Html position={[snap.x, snap.y, Z]} zIndexRange={[3, 0]}>
               <div style={{
-                color: '#0f172a', background: TANGENT_COLOR, borderRadius: 4,
+                color: CAD.surface, background: TANGENT_COLOR, borderRadius: 4,
                 font: '600 10px monospace', padding: '0 4px', whiteSpace: 'nowrap',
                 userSelect: 'none', pointerEvents: 'none', transform: 'translate(10px, 6px)',
               }}>
@@ -534,7 +536,7 @@ export default function SketchLayer() {
         // Origin: fixed green reference point (a touch larger); still selectable
         // so you can dimension/constrain from it. Precedence: pending → selected →
         // hover (amber "lock") → origin → plain vertex.
-        const color = isPending ? '#f59e0b' : isSel ? SELECTED : isHover ? HOVER : p.origin ? '#22c55e' : '#e2e8f0';
+        const color = isPending ? CAD.skPreview : isSel ? SELECTED : isHover ? HOVER : p.origin ? CAD.feed : CAD.text;
         const radius = p.origin ? 1.3 : isSel || isPending || isHover ? 1.3 : 0.8;
         return (
           <mesh

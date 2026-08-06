@@ -13,14 +13,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
-vi.mock('../lib/workDb.js', () => ({
-  dbAvailable: () => true,
+// `lib/workApi.js` — the module the store actually imports. This used to mock
+// `lib/workDb.js`, which the store stopped importing when the library moved onto
+// the server, so the mock had quietly stopped standing in for anything.
+vi.mock('../lib/workApi.js', () => ({
   putRecord: async ({ meta }) => meta,
   listMeta: async () => [],
   getData: async () => undefined,
   deleteRecord: async (k) => k,
   clearAll: async () => {},
-  storageUse: async () => null,
 }));
 
 const { default: LibraryPanel } = await import('./LibraryPanel.jsx');
@@ -29,24 +30,51 @@ const { useLibraryStore } = await import('../stores/libraryStore.js');
 let container;
 let root;
 
-const ITEMS = [
+/**
+ * Two of mine and one a colleague published — the arrangement the panel exists
+ * to keep distinguishable. Rows carry the server's own permission answers
+ * (`canShare` / `canUnshare` / `canDelete`), because that is what the panel
+ * renders from; it does not work them out for itself.
+ */
+const MINE = [
   {
+    id: '1',
     key: 'project/OR35128 OP10',
     kind: 'project',
     name: 'OR35128 OP10',
     savedAt: '2026-08-05T09:00:00.000Z',
     bytes: 41200,
     note: '412 blocks · 3 ops · a part',
+    shared: false, mine: true,
+    canShare: true, canUnshare: false, canDelete: true,
   },
   {
+    id: '2',
     key: 'program/Facing test',
     kind: 'program',
     name: 'Facing test',
     savedAt: '2026-08-01T09:00:00.000Z',
     bytes: 812,
     note: '18 blocks',
+    shared: false, mine: true,
+    canShare: true, canUnshare: false, canDelete: true,
   },
 ];
+
+const THEIRS = {
+  id: '3',
+  key: 'program/Shop standard',
+  kind: 'program',
+  name: 'Shop standard',
+  savedAt: '2026-08-04T09:00:00.000Z',
+  bytes: 400,
+  note: '9 blocks',
+  shared: true, mine: false,
+  owner_empno: 'XX999', owner_name: 'Somchai',
+  canShare: false, canUnshare: false, canDelete: false,
+};
+
+const ITEMS = [...MINE, THEIRS];
 
 /** Open the panel and hand back the portal-rendered body. */
 async function openPanel(props = {}) {
@@ -67,7 +95,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   useLibraryStore.setState({
-    items: ITEMS, loaded: true, busy: false, error: null, available: true,
+    items: ITEMS, loaded: true, busy: false, error: null,
   });
 });
 
@@ -90,20 +118,54 @@ describe('LibraryPanel — what is on screen', () => {
   it('lists every saved item once opened', async () => {
     const body = await openPanel();
     expect(body.querySelector('[data-testid="library-panel"]')).not.toBeNull();
-    expect(body.querySelectorAll('[data-library-item]')).toHaveLength(2);
+    expect(body.querySelectorAll('[data-library-item]')).toHaveLength(3);
   });
 
-  it('gives every row a way to open it and a way to delete it', async () => {
+  it('separates my own work from the shared shelf, and names both', async () => {
+    const body = await openPanel();
+    expect(body.textContent).toContain('My work');
+    expect(body.textContent).toContain('Shared library');
+  });
+
+  it('gives every row a way to open it', async () => {
     const body = await openPanel();
     for (const item of ITEMS) {
-      expect(body.querySelector(`[data-library-open="${item.key}"]`)).not.toBeNull();
-      expect(body.querySelector(`[data-library-delete="${item.key}"]`)).not.toBeNull();
+      expect(body.querySelector(`[data-library-open="${item.id}"]`)).not.toBeNull();
     }
+  });
+
+  it('offers Share and Delete on my own work', async () => {
+    const body = await openPanel();
+    for (const item of MINE) {
+      expect(body.querySelector(`[data-library-share="${item.id}"]`)).not.toBeNull();
+      expect(body.querySelector(`[data-library-delete="${item.id}"]`)).not.toBeNull();
+    }
+  });
+
+  it('offers neither on what somebody else shared — a button that would fail is worse than none', async () => {
+    const body = await openPanel();
+    expect(body.querySelector(`[data-library-delete="${THEIRS.id}"]`)).toBeNull();
+    expect(body.querySelector(`[data-library-unshare="${THEIRS.id}"]`)).toBeNull();
+    expect(body.querySelector(`[data-library-share="${THEIRS.id}"]`)).toBeNull();
+  });
+
+  it('says whose a shared item is, so it is clear it is not yours', async () => {
+    const body = await openPanel();
+    const row = body.querySelector(`[data-library-item="${THEIRS.id}"]`);
+    expect(row.textContent).toContain('by Somchai');
+  });
+
+  it('offers Unshare on what I published myself', async () => {
+    useLibraryStore.setState({
+      items: [{ ...THEIRS, mine: true, owner_name: 'Me', canUnshare: true, canDelete: true }],
+    });
+    const body = await openPanel();
+    expect(body.querySelector(`[data-library-unshare="${THEIRS.id}"]`)).not.toBeNull();
   });
 
   it('says what each item is, so two saves of one job can be told apart', async () => {
     const body = await openPanel();
-    const row = body.querySelector('[data-library-item="project/OR35128 OP10"]');
+    const row = body.querySelector('[data-library-item="1"]');
     expect(row.textContent).toContain('OR35128 OP10');
     expect(row.textContent).toContain('412 blocks · 3 ops · a part');
     expect(row.textContent).toContain('41.2 kB');
@@ -133,11 +195,10 @@ describe('LibraryPanel — what is on screen', () => {
     expect(body.textContent).toContain('The disk is full.');
   });
 
-  it('says the browser has no library, instead of buttons that cannot work', async () => {
-    useLibraryStore.setState({ available: false });
+  it('says a save is private, because the previous design made every save a publish', async () => {
     const body = await openPanel();
-    expect(body.textContent).toContain('No library in this browser');
-    expect(body.querySelector('[data-library-save="project"]')).toBeNull();
+    expect(body.textContent).toContain('your own');
+    expect(body.textContent).toContain("nobody else's work is touched");
   });
 });
 

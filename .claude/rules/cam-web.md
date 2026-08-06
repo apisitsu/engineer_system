@@ -30,6 +30,34 @@ depend on it: engine-first (pure logic in `engine/`, tested, then store, then
 view), and toolbar buttons are glyphs from a command catalogue (`engine/view/commands.js`),
 never labelled buttons. Its `CLAUDE.md` is still the best statement of that.
 
+## Every colour comes from `cam/theme.js`
+
+As of 2026-08-06 the module is a **light mechanical-CAD** scheme — the SolidWorks
+/ CATIA tone: silver-gray chrome, white paper, one blue accent, and a viewport
+that fades from slate blue to near-white. It was cam-web's dark slate palette,
+hard-coded as ~130 hexes across a dozen files, and that is the state to keep it
+out of. Three things follow:
+
+- **Chrome imports `CAD`; the scene does not.** Panels, rails, text and the
+  overlays that float on the viewport name a token. The `meshStandardMaterial`
+  colours are *materials* — steel, brass, carbide — and stay literal.
+- **`metal()` exists because there is no environment map.** A PBR metal has no
+  diffuse colour, so at metalness 0.6–0.75 with nothing to reflect it renders
+  near-black. That was invisible on the old dark viewport and is a brown smudge
+  on the light one. All the machine's metal goes through `metal()`, which shades
+  rather than simulates. Do not raise metalness back up without adding an
+  environment — and drei's `<Environment>` fetches an HDR the hosts cannot reach.
+- **Component tokens leak in from the app's provider.** Nested antd
+  `ConfigProvider`s merge, and a `components.*` token from the outer one beats a
+  `token.*` override in the inner one. EngineerSystem's `theme/getAntdTheme.js`
+  sets `components.Button.colorPrimary` (platform green) and `controlHeight: 40`,
+  so `CamPage.jsx` restates those per component. Deleting one of those lines does
+  not fall back to the CAD palette — it falls back to the green platform theme.
+
+Tests read the palette rather than re-typing its hexes (`SketchLayer.test.jsx`,
+`PartMesh.test.jsx`): what they are for is that the right *state* gets the right
+colour, and a literal would break them on every retheme without a bug in sight.
+
 > If a future re-sync ever does happen, copy from `git archive <commit>`, never
 > from cam-web's working tree — that tree is usually mid-feature, and a `cp -r`
 > during the first import picked up a half-finished feature plus files that
@@ -93,26 +121,59 @@ The route is the **only** `React.lazy` import in `App.jsx` — the CAM engine is
 ~94 kB gzip chunk that nobody visiting Tooling Inspection should download. Keep
 it lazy; `main.js` grows only ~10 kB from this whole module.
 
-## The library is per-origin, and that surprises people
+## The library: a private shelf per operator, plus one shared shelf
 
-Saved work (`lib/workDb.js`) lives in IndexedDB, which the browser scopes to an
-**origin** — scheme + host + **port**. So `localhost:3100` (standalone cam-web),
-`localhost:3000` (CRA dev), `plbmp118` and `plbmp130` each hold a *separate*
-library, and work saved in one is invisible from the others. The first question
-after this import was "my files are gone" — they were not; they were still on
-`:3100`. There is no export/import in the UI, so moving them is a manual step:
-`.claude/rules/cam-library-migration.md` has the two verified console snippets.
+Saved work is the `cam_saved_work` table behind `/api/engineer/cam/library`,
+reached through `lib/workApi.js`. **Every row sits on exactly one shelf**: the
+operator's own empno, or `'~shared'` (`camConstants.SHARED_SHELF`), and
+`(shelf, key)` is what is unique.
 
-Two things to know before writing any code against that database:
+Two moves got here, and the second exists because the first overshot — both are
+worth knowing, because a change that forgets either one re-creates a real bug.
 
-- **Both stores use an inline key** (`createObjectStore(store, { keyPath: 'key' })`),
-  so records go in as `put(value)` with **no** second argument. Passing an explicit
-  key throws `DataError`.
-- **Never `indexedDB.open('cam-web', 1)` just to look.** Opening a database that
-  does not exist *creates* it — empty, at version 1 — and since the app also opens
-  at version 1, its `onupgradeneeded` would then never fire and it could never
-  create its stores. That bricks the library on that origin. Check
-  `(await indexedDB.databases()).map(d => d.name)` first.
+1. It began as per-origin **IndexedDB** (`lib/workDb.js`). IndexedDB is scoped to
+   scheme + host + **port**, so `localhost:3100` (standalone cam-web),
+   `localhost:3000`, `plbmp118` and `plbmp130` each held a *separate* library.
+   The first question after the import was "my files are gone" — they were on
+   `:3100`. A setup somebody saved is what the next shift needs to open.
+2. Moving it to a table made it **one library keyed by the client's own
+   `'project/<name>'`**. Two people who both saved "OP10" were writing the same
+   row, and the second silently replaced the first's work; anyone could delete
+   anyone's. "Saving over a name replaces it" is fine about your own work and a
+   trap when the namespace is the whole shop's.
+
+So: **saving is always private**, and publishing is a separate, explicit act.
+
+| rule | where it is enforced |
+|---|---|
+| a save lands on the caller's own shelf — there is no parameter for saving elsewhere | `camService.putRecord` (shelf comes from `req.user`, never the body) |
+| `share` **moves** a row to `'~shared'`, and refuses if that would replace somebody else's published item | `camService.share`, in one transaction with `FOR UPDATE` |
+| `unshare` returns a row to **its owner's** shelf, not the caller's | `camService.unshare` |
+| delete needs the row to be yours, or the caller to be an admin | `camService.deleteRecord` |
+
+- **Rows are addressed by `id`, not by `key`.** My "OP10" and the shared "OP10"
+  are two rows, so a key in a URL no longer names one of them. `libraryStore`'s
+  `open`/`remove`/`share`/`unshare` all take the id off the listed row.
+- **The panel does not decide what you may do.** `listMeta` returns
+  `canShare` / `canUnshare` / `canDelete` per row, computed next to the rules the
+  write paths enforce. `LibraryPanel` renders buttons from those booleans. Do not
+  re-derive them client-side — the two copies drift, and the direction it drifts
+  is a button that looks available and then fails.
+- **`isAdminUser`** (predicate, `middleware/mtcAuth.js`) exists for this: these
+  are single routes with per-row rules, which a route-level `isAdmin` guard
+  cannot express. Import it; do not re-derive "is an admin" in a handler.
+- **`lib/workDb.js` is still on disk, and nothing in the running app imports it.**
+  It is kept so the one-off export in `.claude/rules/cam-library-migration.md`
+  has something to read. `libraryStore` imports `workApi`.
+- **There is no availability gate.** IndexedDB had one (private browsing can
+  refuse to open a database). A server-backed library cannot know in advance, so
+  failures arrive as an error beside the button that caused them —
+  `workApi.explain()` unwraps `response.data.message` so the server's *sentence*
+  ("The shared library already has “OP10” from Somchai…") is what the operator
+  reads, not "Request failed with status code 409".
+
+Deployment — including the fact that **the migration and this code must land
+together** — is in `.claude/rules/cam-deploy.md`.
 
 ## Verifying a re-sync
 
@@ -122,8 +183,10 @@ own CLAUDE.md the render and interaction layers have no automated coverage. Load
 
 - sample program parses (Cycle time 1:04 · 355 segments) — exercises `gcode.worker`
 - Simulate carves the part, round holes included — exercises `sim.worker`
-- the library saves and **survives a full page reload** — exercises `lib/workDb.js`
-  (IndexedDB); the panel's `[data-library-item]` / `[data-library-save]` hooks make
-  this scriptable
+- the library saves and **survives a full page reload** — exercises `lib/workApi.js`
+  and the backend route behind it; the panel's `[data-library-item]` /
+  `[data-library-save]` hooks make this scriptable. Delete the test item when
+  done: the library is shared, and plbmp118 writes to the same table plbmp130
+  reads
 - the readout names the running tool (`T— Endmill Ø6 · N26 · F 100 mm/min`)
 - the sketcher draws and the planegcs solver boots (see the wasm notes above)

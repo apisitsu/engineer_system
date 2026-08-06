@@ -58,6 +58,7 @@ import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
 import { invalidate } from '@react-three/fiber';
 import { getBuf } from './engine/bufferCache.js';
+import { CAD } from './theme.js';
 
 const { Sider, Content, Header } = Layout;
 const { Title, Text } = Typography;
@@ -136,10 +137,14 @@ function formatDuration(seconds) {
 
 // Metallic palette for the realistic tool glyphs (fixed colours, like the real
 // tool — the active state is shown by the button's highlighted background).
+// Deliberately NOT theme tokens: these are steel and carbide, and the picture is
+// only readable if it stays the colour of the thing. They are a shade deeper
+// than a photograph would be because they are now drawn on a light button, where
+// true bright steel would disappear into it.
 const TG = {
-  steel: '#c3ccd8', steelEdge: '#7b8798', steelHi: '#eef2f7',
-  gold: '#f4c53d', goldEdge: '#9a6b0f', goldHi: '#fbe7a0',
-  screw: '#6b5212',
+  steel: '#b3bdcb', steelEdge: '#5d6a7c', steelHi: '#e7ecf3',
+  gold: '#f0bc2c', goldEdge: '#8a5f0d', goldHi: '#fae09a',
+  screw: '#5c4610',
 };
 
 /**
@@ -216,7 +221,7 @@ function TurnInsertPicker({ value, onChange }) {
             type={value === x.id ? 'primary' : 'text'}
             icon={<TurnToolGlyph tool={x} />}
             onClick={() => onChange(x.id)}
-            style={{ width: 32, height: 32, padding: 0, color: value === x.id ? undefined : '#cbd5e1' }}
+            style={{ width: 32, height: 32, padding: 0, color: value === x.id ? undefined : CAD.icon }}
           />
         </Tooltip>
       ))}
@@ -264,7 +269,7 @@ function CutterPicker({ value, onChange, box = 32, scope = 'fallback' }) {
               onClick={() => onChange(c.id)}
               style={{
                 width: box, height: box, padding: 0,
-                color: value === c.id ? undefined : '#cbd5e1',
+                color: value === c.id ? undefined : CAD.icon,
               }}
             />
           </Tooltip>
@@ -292,7 +297,7 @@ function ToolFallback({
     return (
       <Space size={6} align="center">
         <CommandButton id="toolFallback" size="small" icon={<PlusOutlined />} onClick={onOpen} />
-        <Text style={{ color: '#475569', fontSize: 11 }}>
+        <Text style={{ color: CAD.dim, fontSize: 11 }}>
           {detected > 0
             ? `Cutter from the program (${detected} ${detected === 1 ? 'tool' : 'tools'})`
             : `Cutter — the program names none, using ⌀${diameter} ${spec.label.toLowerCase()}`}
@@ -442,10 +447,10 @@ function BilletBox({
           onClick={onToggle}
         />
         <Tooltip title="The blank in the vice, in mm. Leave an axis blank to wrap the toolpath instead.">
-          <span style={{ color: enabled ? '#94a3b8' : '#475569' }}>Stock</span>
+          <span style={{ color: enabled ? CAD.label : CAD.dim }}>Stock</span>
         </Tooltip>
         {['x', 'y', 'z'].map((k) => field(k, size, onSize, 'auto', false))}
-        <span style={{ color: '#475569', fontSize: 12 }}>mm</span>
+        <span style={{ color: CAD.dim, fontSize: 12 }}>mm</span>
         {suggestion && enabled && (
           <CommandButton
             id="fitStock"
@@ -459,18 +464,18 @@ function BilletBox({
       <Space align="center" wrap size="small">
         <span style={{ width: 24, display: 'inline-block' }} />
         <Tooltip title="Where the blank's X−/Y−/Z− corner sits in work coordinates. Blank centres it on the cutting in X and Y, and puts the top face on Z0 — which is now only a default, not a rule.">
-          <span style={{ color: enabled ? '#94a3b8' : '#475569' }}>Origin</span>
+          <span style={{ color: enabled ? CAD.label : CAD.dim }}>Origin</span>
         </Tooltip>
         {['x', 'y', 'z'].map((k) => field(k, origin, onOrigin, 'auto', true))}
-        <span style={{ color: '#475569', fontSize: 12 }}>mm</span>
+        <span style={{ color: CAD.dim, fontSize: 12 }}>mm</span>
       </Space>
       {enabled && extents && (
-        <Text style={{ color: '#475569', fontSize: 11, fontFamily: 'monospace' }}>
+        <Text style={{ color: CAD.dim, fontSize: 11, fontFamily: 'monospace' }}>
           X {range(extents.x)} · Y {range(extents.y)} · Z {range(extents.z)}
         </Text>
       )}
       {!enabled && (
-        <Text style={{ color: '#475569', fontSize: 11 }}>
+        <Text style={{ color: CAD.dim, fontSize: 11 }}>
           Stock off — the sim fits a blank around the toolpath.
         </Text>
       )}
@@ -940,10 +945,10 @@ export default function App() {
   }, [path, playhead, count, bufVer]);
 
   const addonStyle = (side) => ({
-    padding: '0 8px', background: '#1e293b', border: '1px solid #334155',
+    padding: '0 8px', background: CAD.raised, border: `1px solid ${CAD.border}`,
     [side === 'left' ? 'borderRight' : 'borderLeft']: 0,
-    display: 'inline-flex', alignItems: 'center', color: '#94a3b8',
-    fontSize: 12, borderRadius: side === 'left' ? '6px 0 0 6px' : '0 6px 6px 0',
+    display: 'inline-flex', alignItems: 'center', color: CAD.label,
+    fontSize: 12, borderRadius: side === 'left' ? '4px 0 0 4px' : '0 4px 4px 0',
   });
 
   return (
@@ -957,9 +962,15 @@ export default function App() {
       style={{ height: '100%' }}
     >
       <Layout style={{ height: '100%' }}>
-        <Header style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0b1220' }}>
+        {/* The command bar. A flat fill and a hairline under it, the way a CAD
+            application separates its chrome from its workspace — without the
+            rule the bar and the sidebar below it are one undifferentiated gray. */}
+        <Header style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: CAD.headerBg, borderBottom: `1px solid ${CAD.border}`,
+        }}>
           <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 22 }} />
-          <Title level={4} style={{ color: '#e2e8f0', margin: 0 }}>
+          <Title level={4} style={{ color: CAD.text, margin: 0 }}>
             Engineer CAD/CAM
           </Title>
           <Segmented
@@ -969,20 +980,40 @@ export default function App() {
             disabled={status === 'parsing'}
           />
           {fileName && <Tag color="blue">{fileName}</Tag>}
-          <Text style={{ color: '#64748b', marginLeft: 'auto' }}>
-            Rapid <span style={{ color: '#ef4444' }}>-----</span>   Feed {' '}
-            <span style={{ color: '#22c55e' }}>-----</span>
+          <Text style={{ color: CAD.muted, marginLeft: 'auto' }}>
+            Rapid <span style={{ color: CAD.rapid }}>-----</span>   Feed {' '}
+            <span style={{ color: CAD.feed }}>-----</span>
           </Text>
         </Header>
         <Layout>
           {!sketching && (
-          <Sider width={430} style={{ background: '#111827', padding: 16, overflow: 'auto' }}>
+          <Sider width={430} style={{
+            background: CAD.panelBg, padding: 16, overflow: 'auto',
+            borderRight: `1px solid ${CAD.border}`,
+          }}>
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              {/* Icon-only, like every other rail in the app: the names and the
-                  descriptions come from the command catalogue and appear on
-                  hover. See `engine/view/commands.js`. */}
-              {show.files && (
-              <Space wrap>
+              {/* One rail, two groups, the way a CAD command bar is built:
+                  what brings a program IN (parse, open, sample), a separator,
+                  then what keeps one or hands it on (the library, export).
+                  Icon-only, like every other rail in the app — the names and
+                  the descriptions come from the command catalogue and appear on
+                  hover. See `engine/view/commands.js`.
+
+                  These were two stacked `Space`s, and five glyphs across a
+                  430 px sidebar had no reason to be on two lines: the wrap was
+                  buying nothing and the second row read as a second, unrelated
+                  toolbar. Grouped by a rule instead, which says the same thing
+                  in one line.
+
+                  Saving to a **file** — the project as .camweb.json, and opening
+                  one back — is deliberately not here: the library keeps the same
+                  thing under a name, with no dialog and no folder to find again,
+                  and two ways to do one job on one rail is two ways to be unsure
+                  which one you used. A file still opens by dropping it on the
+                  window. */}
+              {(show.files || show.project) && (
+              <Space wrap size={6} align="center">
+                {show.files && (
                 <CommandButton
                   id="parse"
                   type="primary"
@@ -990,6 +1021,8 @@ export default function App() {
                   loading={status === 'parsing'}
                   onClick={() => parse()}
                 />
+                )}
+                {show.files && (
                 <Upload
                   accept=".nc,.gcode,.gc,.tap,.cnc,.ngc,.txt,.mpf"
                   showUploadList={false}
@@ -997,23 +1030,18 @@ export default function App() {
                 >
                   <CommandButton id="openProgram" icon={<UploadOutlined />} />
                 </Upload>
+                )}
+                {show.files && (
                 <CommandButton
                   id="sample"
                   icon={<BulbOutlined />}
                   onClick={() => parse(turning ? SAMPLE_TURNING : SAMPLE_GCODE)}
                 />
-              </Space>
-              )}
-
-              {/* Keeping and handing on work. Saving to a **file** — the
-                  project as .camweb.json, and opening one back — has moved out
-                  of here: the library keeps the same thing in the browser under
-                  a name, with no dialog and no folder to find again, and two
-                  ways to do one job on one rail is two ways to be unsure which
-                  one you used. A file still opens by dropping it on the window.
-                  What is left is one row: keep it, or hand the program on. */}
-              {show.project && <>
-              <Space wrap>
+                )}
+                {show.files && show.project && (
+                  <div style={{ width: 1, height: 22, background: CAD.border, margin: '0 2px' }} />
+                )}
+                {show.project && (
                 <CommandButton
                   id="openLibrary"
                   icon={<DatabaseOutlined />}
@@ -1021,21 +1049,26 @@ export default function App() {
                   ghost={libraryOpen}
                   onClick={() => setLibraryOpen((v) => !v)}
                 />
+                )}
+                {show.project && (
                 <CommandButton
                   id="exportGcode"
                   icon={<DownloadOutlined />}
                   disabled={!gcode}
                   onClick={onExportGcode}
                 />
+                )}
               </Space>
+              )}
 
+              {show.project && <>
               {/* The library works *in* the sidebar rather than in a popover:
                   saving, looking through what is there, opening one and deleting
                   two is a session, and a layer that shuts when you click near
                   its edge is the wrong container for one. */}
               <LibraryPanel inline open={libraryOpen} onDone={setSaveMsg} />
 
-              <Text style={{ color: '#475569', fontSize: 12 }}>
+              <Text style={{ color: CAD.dim, fontSize: 12 }}>
                 …or drag &amp; drop a .nc / .gcode / .tap program, a .camweb.json project,
                 or an .stl / .obj / .ply to machine
               </Text>
@@ -1049,7 +1082,7 @@ export default function App() {
 
               <Divider style={{ margin: '4px 0' }} />
               <Space align="center" size="small" style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Title level={5} style={{ color: '#e2e8f0', margin: 0 }}>Program</Title>
+                <Title level={5} style={{ color: CAD.text, margin: 0 }}>Program</Title>
                 {/* Say why the rest of the panel went away — a sidebar that loses
                     most of its contents on its own reads as a bug. */}
                 {playing && (
@@ -1067,7 +1100,7 @@ export default function App() {
               {show.machine && (
               <Space align="center" wrap size="small">
                 <Tooltip title="Traverse speed used to time G0 moves">
-                  <span style={{ color: '#94a3b8' }}>Rapid</span>
+                  <span style={{ color: CAD.label }}>Rapid</span>
                 </Tooltip>
                 <Space.Compact>
                   <InputNumber controls={false}
@@ -1084,7 +1117,7 @@ export default function App() {
                 {turning && (
                   <Tooltip title="Lathe convention: the X word is a diameter, not a radius">
                     <Space>
-                      <span style={{ color: '#94a3b8' }}>X = ⌀</span>
+                      <span style={{ color: CAD.label }}>X = ⌀</span>
                       <Switch checked={diameterMode} onChange={setDiameterMode} size="small" />
                     </Space>
                   </Tooltip>
@@ -1125,12 +1158,12 @@ export default function App() {
 
               {show.tools && detectedTools.length > 0 && (
                 <>
-                  <Divider style={{ margin: '4px 0', borderColor: '#334155' }}>
-                    <Text style={{ color: '#64748b' }}>
+                  <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
+                    <Text style={{ color: CAD.muted }}>
                       Tool table{currentTool ? ` — cutting: T${currentTool.n}` : ''}
                     </Text>
                   </Divider>
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Auto-detected from comments — edit any value to match the program;
                     the simulation uses these. Re-run Simulate after editing.
                   </Text>
@@ -1166,14 +1199,14 @@ export default function App() {
                           style={{
                             display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
                             padding: '3px 6px', borderRadius: 4, fontSize: 12,
-                            background: active ? '#1e293b' : 'transparent',
-                            border: `1px solid ${active ? token.colorPrimary : '#1e293b'}`,
+                            background: active ? CAD.selected : 'transparent',
+                            border: `1px solid ${active ? token.colorPrimary : CAD.borderSoft}`,
                           }}
                         >
-                          <b style={{ color: active ? token.colorPrimary : '#cbd5e1', minWidth: 26 }}>
+                          <b style={{ color: active ? token.colorPrimary : CAD.icon, minWidth: 26 }}>
                             T{t.n}
                           </b>
-                          <span style={{ minWidth: 58, color: '#64748b' }}>{t.type}</span>
+                          <span style={{ minWidth: 58, color: CAD.muted }}>{t.type}</span>
                           {turning ? (() => {
                             const holderId = ov.insert ?? turnTool;
                             const holder = STANDARD_TURN_TOOLS.find((x) => x.id === holderId);
@@ -1185,7 +1218,7 @@ export default function App() {
                                 />
                                 {holder?.adjustable && (
                                   <>
-                                    <span style={{ color: '#94a3b8' }}>insert°</span>
+                                    <span style={{ color: CAD.label }}>insert°</span>
                                     <InputNumber controls={false}
                                       size="small"
                                       min={20}
@@ -1201,7 +1234,7 @@ export default function App() {
                             );
                           })() : (
                             <>
-                              <span style={{ color: '#94a3b8' }}>⌀</span>
+                              <span style={{ color: CAD.label }}>⌀</span>
                               <InputNumber controls={false}
                                 size="small"
                                 min={0.1}
@@ -1276,7 +1309,7 @@ export default function App() {
                                 </Tooltip>
                               )}
                               <Tooltip title="Gauge length — tip to the collet face (stick-out)">
-                                <span style={{ color: '#94a3b8' }}>L</span>
+                                <span style={{ color: CAD.label }}>L</span>
                               </Tooltip>
                               <InputNumber controls={false}
                                 size="small"
@@ -1289,7 +1322,7 @@ export default function App() {
                               />
                             </>
                           )}
-                          <span style={{ marginLeft: 'auto', color: '#475569' }}>
+                          <span style={{ marginLeft: 'auto', color: CAD.dim }}>
                             {t.cutLength > 0 ? `${t.cutLength.toFixed(0)} mm` : 'unused'}
                           </span>
                           {edited && (
@@ -1299,7 +1332,7 @@ export default function App() {
                               type="text"
                               icon={<RollbackOutlined />}
                               onClick={() => clearToolOverride(t.n)}
-                              style={{ color: '#64748b', padding: '0 4px' }}
+                              style={{ color: CAD.muted, padding: '0 4px' }}
                             />
                           )}
                         </div>
@@ -1314,18 +1347,18 @@ export default function App() {
 
               {/* ---- Phase 1: material removal ---- */}
               {show.removal && <>
-              <Divider style={{ margin: '4px 0', borderColor: '#334155' }}>
-                <Text style={{ color: '#64748b' }}>Material removal</Text>
+              <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
+                <Text style={{ color: CAD.muted }}>Material removal</Text>
               </Divider>
 
               {turning ? (
                 <>
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Pick each tool's insert in the Tool table above.
                   </Text>
                   <Space align="center" wrap>
                     <Tooltip title="Raw bar diameter over the largest turned diameter in the program">
-                      <span style={{ color: '#94a3b8' }}>Stock ⌀ oversize</span>
+                      <span style={{ color: CAD.label }}>Stock ⌀ oversize</span>
                     </Tooltip>
                     <Space.Compact>
                       <InputNumber controls={false}
@@ -1354,12 +1387,12 @@ export default function App() {
                   {sim && (
                     <Space size="large" wrap>
                       <Space>
-                        <span style={{ color: '#94a3b8' }}>Show stock</span>
+                        <span style={{ color: CAD.label }}>Show stock</span>
                         <Switch checked={showStock} onChange={toggleStock} size="small" />
                       </Space>
                       <Space>
                         <Tooltip title="Turn the bar down progressively as the playhead moves">
-                          <span style={{ color: '#94a3b8' }}>Cut with playback</span>
+                          <span style={{ color: CAD.label }}>Cut with playback</span>
                         </Tooltip>
                         <Switch
                           checked={cutFollowsPlayback}
@@ -1533,14 +1566,14 @@ export default function App() {
                       description={removalNote}
                     />
                   )}
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Left carves a <b>height field</b> — one Z per cell, so it is fast and
                     scrubs with playback, but cannot show an undercut. Right carves a{' '}
                     <b>voxel block</b> — every rotary face and every undercut, one shot,
                     no scrubbing.
                   </Text>
                   {simMethod === 'voxel' && sim && (
-                    <Text style={{ color: '#475569', fontSize: 12 }}>
+                    <Text style={{ color: CAD.dim, fontSize: 12 }}>
                       Voxel model — all faces &amp; undercuts, {(sim.cells / 1e6).toFixed(2)}M cells removed {sim.removedVolume?.toFixed(0)} mm³
                     </Text>
                   )}
@@ -1550,12 +1583,12 @@ export default function App() {
                       <Statistic title="Removed (mm³)" value={sim.removedVolume} precision={0} />
                       <Space direction="vertical" size={2}>
                         <Space>
-                          <span style={{ color: '#94a3b8' }}>Show stock</span>
+                          <span style={{ color: CAD.label }}>Show stock</span>
                           <Switch checked={showStock} onChange={toggleStock} size="small" />
                         </Space>
                         <Space>
                           <Tooltip title="Carve the stock progressively as the playhead moves">
-                            <span style={{ color: '#94a3b8' }}>Cut with playback</span>
+                            <span style={{ color: CAD.label }}>Cut with playback</span>
                           </Tooltip>
                           <Switch
                             checked={cutFollowsPlayback}
@@ -1581,9 +1614,12 @@ export default function App() {
             {dragActive && (
               <div style={{
                 position: 'absolute', inset: 0, zIndex: 10,
-                background: 'rgba(56,189,248,0.12)', border: '2px dashed #38bdf8',
+                // A tint, not a cover — the model has to stay visible under the
+                // drop target, so this one colour is spelled out rather than
+                // taken from `accentSoft`, which is opaque by design.
+                background: 'rgba(22,104,196,0.10)', border: `2px dashed ${CAD.accent}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#e2e8f0', fontSize: 20, pointerEvents: 'none',
+                color: CAD.text, fontSize: 20, pointerEvents: 'none',
               }}>
                 Drop a G-code program or an .stl / .obj / .ply model
               </div>
@@ -1612,8 +1648,13 @@ export default function App() {
             <div style={{
               position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
               display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-              background: 'rgba(15,23,42,0.82)', border: '1px solid #334155',
-              padding: '6px 12px', borderRadius: 8,
+              background: CAD.glass, border: `1px solid ${CAD.border}`,
+              padding: '6px 12px', borderRadius: 4,
+              // On the old near-black viewport a pale panel lifted off the
+              // background by contrast alone. On a light one it does not, so the
+              // rails that float over the model carry a shadow instead.
+              boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
+              backdropFilter: 'blur(2px)',
             }}>
               <Segmented size="small" value={view} onChange={setViewPreset} options={VIEWS} />
               <CommandButton
@@ -1662,7 +1703,7 @@ export default function App() {
                 />
               )}
               {!sketching && <>
-              <div style={{ width: 1, alignSelf: 'stretch', background: '#334155' }} />
+              <div style={{ width: 1, alignSelf: 'stretch', background: CAD.border }} />
               <CommandButton
                 id="restart"
                 size="small" shape="circle"
@@ -1705,7 +1746,7 @@ export default function App() {
                 disabled={count === 0}
               />
               <Text style={{
-                color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap',
+                color: CAD.label, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap',
               }}>
                 {formatDuration(elapsed)} / {formatDuration(stats?.cycleTime ?? 0)}
               </Text>

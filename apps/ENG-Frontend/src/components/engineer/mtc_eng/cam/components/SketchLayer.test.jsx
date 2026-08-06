@@ -14,12 +14,17 @@ import { useSketchStore } from '../stores/sketchStore.js';
 import {
   createSketch, addPoint, addLine, addCircle, addConstraint,
 } from '../engine/sketch/model.js';
+import { CAD } from '../theme.js';
 
-// Colours the layer draws with, from SketchLayer's palette.
-const DIM = 'facc15';        // placed dimensions
-const UNDER = '38bdf8';      // under-defined geometry (SolidWorks blue)
-const FULL = 'd1d5db';       // fully defined
-const OVER = 'fb7185';       // over-defined / conflicting
+// Colours the layer draws with, read from the palette rather than frozen as
+// hexes here. What these tests are for is that the right STATE gets the right
+// colour — re-typing the values would only assert that two files agree on a
+// literal, and would break the suite on every retheme without a bug in sight.
+const hex = (token) => token.replace('#', '').toLowerCase();
+const DIM = hex(CAD.skDim);      // placed dimensions
+const UNDER = hex(CAD.skUnder);  // under-defined geometry (SolidWorks blue)
+const FULL = hex(CAD.skFull);    // fully defined (SolidWorks black)
+const OVER = hex(CAD.skOver);    // over-defined / conflicting
 
 /** Put a sketch into the store the way the app would, without a worker. */
 function setSketch(sk, patch = {}) {
@@ -149,13 +154,13 @@ describe('SketchLayer — solve-state colouring (SolidWorks blue → black)', ()
     expect(countOf(r.scene, FULL)).toBe(0);
   });
 
-  it('goes light grey once fully defined', async () => {
+  it('goes black once fully defined', async () => {
     const r = await withState({ dofState: { state: 'full' } });
     expect(countOf(r.scene, FULL)).toBeGreaterThan(0);
     expect(countOf(r.scene, UNDER)).toBe(0);
   });
 
-  it('turns rose when the solver reports a conflict', async () => {
+  it('turns red when the solver reports a conflict', async () => {
     const r = await withState({
       dofState: { state: 'over' },
       solveResult: { success: false, conflicting: [0] },

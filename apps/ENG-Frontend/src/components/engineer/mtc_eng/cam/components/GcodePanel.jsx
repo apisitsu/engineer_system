@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input, Space } from 'antd';
 import { EditOutlined, EyeOutlined } from '@ant-design/icons';
 import CommandButton from './CommandButton.jsx';
+import { CAD } from '../theme.js';
 
 export default function GcodePanel({ gcode, activeLine, onChange }) {
   const [editing, setEditing] = useState(false);
@@ -35,7 +36,7 @@ export default function GcodePanel({ gcode, activeLine, onChange }) {
           onClick={() => setEditing((e) => !e)}
         />
         {!editing && activeLine > 0 && (
-          <span style={{ color: '#64748b', fontSize: 12 }}>line {activeLine}</span>
+          <span style={{ color: CAD.muted, fontSize: 12 }}>line {activeLine}</span>
         )}
       </Space>
 
@@ -52,8 +53,8 @@ export default function GcodePanel({ gcode, activeLine, onChange }) {
           style={{
             maxHeight: 320,
             overflow: 'auto',
-            background: '#0b1220',
-            border: '1px solid #334155',
+            background: CAD.surface,
+            border: `1px solid ${CAD.border}`,
             borderRadius: 6,
             fontFamily: 'monospace',
             fontSize: 12,
@@ -69,8 +70,8 @@ export default function GcodePanel({ gcode, activeLine, onChange }) {
                 ref={active ? activeRef : null}
                 style={{
                   display: 'flex',
-                  background: active ? 'rgba(56,189,248,0.22)' : 'transparent',
-                  borderLeft: active ? '3px solid #38bdf8' : '3px solid transparent',
+                  background: active ? CAD.accentSoft : 'transparent',
+                  borderLeft: active ? `3px solid ${CAD.accent}` : '3px solid transparent',
                 }}
               >
                 <span
@@ -78,14 +79,14 @@ export default function GcodePanel({ gcode, activeLine, onChange }) {
                     width: 34,
                     textAlign: 'right',
                     paddingRight: 8,
-                    color: '#475569',
+                    color: CAD.dim,
                     userSelect: 'none',
                     flex: '0 0 auto',
                   }}
                 >
                   {lineNo}
                 </span>
-                <span style={{ color: active ? '#e2e8f0' : '#94a3b8', whiteSpace: 'pre' }}>
+                <span style={{ color: active ? CAD.text : CAD.label, whiteSpace: 'pre' }}>
                   {text || ' '}
                 </span>
               </div>

@@ -14,6 +14,7 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { getView } from '../engine/bufferCache.js';
+import { CAD } from '../theme.js';
 
 function LineSet({ bufKey, drawVer, color, dashed }) {
   const object = useMemo(() => {
@@ -57,8 +58,8 @@ function LineSet({ bufKey, drawVer, color, dashed }) {
 export default function Backplot({ drawVer }) {
   return (
     <group>
-      <LineSet bufKey="feeds" drawVer={drawVer} color="#22c55e" />
-      <LineSet bufKey="rapids" drawVer={drawVer} color="#ef4444" dashed />
+      <LineSet bufKey="feeds" drawVer={drawVer} color={CAD.feed} />
+      <LineSet bufKey="rapids" drawVer={drawVer} color={CAD.rapid} dashed />
     </group>
   );
 }

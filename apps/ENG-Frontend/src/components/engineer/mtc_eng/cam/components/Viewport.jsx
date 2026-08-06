@@ -21,6 +21,7 @@ import { useSketchStore } from '../stores/sketchStore.js';
 import { framing, unionBounds } from '../engine/view/camera.js';
 import { endMillGeometry } from '../engine/view/millTool.js';
 import { workTransform, toolTilt } from '../engine/view/rotaryFrame.js';
+import { CAD, metal } from '../theme.js';
 
 /**
  * Eye directions for each preset, in machine coordinates (X right, Y away,
@@ -117,7 +118,7 @@ function EndMill({
       {nose && nose.kind === 'ball' && (
         <mesh name="tool-nose" position={[0, 0, nose.z]}>
           <sphereGeometry args={[nose.radius, 24, 16]} />
-          <meshStandardMaterial color="#e2e8f0" metalness={0.6} roughness={0.3} />
+          <meshStandardMaterial {...metal('#e2e8f0', 0.3)} />
         </mesh>
       )}
       {nose && nose.kind === 'cone' && (
@@ -125,24 +126,24 @@ function EndMill({
         // local Y like the rest, so it stands up with the same +90° about X.
         <mesh name="tool-nose" position={[0, 0, nose.z]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[nose.radius, 0, nose.height, 32]} />
-          <meshStandardMaterial color="#e2e8f0" metalness={0.6} roughness={0.3} />
+          <meshStandardMaterial {...metal('#e2e8f0', 0.3)} />
         </mesh>
       )}
       {/* Cutter / flutes. */}
       <mesh name="tool-flutes" position={[0, 0, flutes.z]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[flutes.radius, flutes.radius, flutes.length, 32]} />
-        <meshStandardMaterial color="#cbd5e1" metalness={0.7} roughness={0.3} />
+        <meshStandardMaterial {...metal('#cbd5e1', 0.3)} />
       </mesh>
       {/* Shank up to the collet face. */}
       <mesh name="tool-shank" position={[0, 0, shank.z]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[shank.radius, shank.radius, shank.length, 24]} />
-        <meshStandardMaterial color="#94a3b8" metalness={0.6} roughness={0.35} />
+        <meshStandardMaterial {...metal('#94a3b8', 0.35)} />
       </mesh>
       {/* Collet / arbor above the gauge line — hidden when it is in the way. */}
       {holder && (
         <mesh name="tool-arbor" position={[0, 0, holder.z]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[holder.rBottom, holder.rTop, holder.length, 32]} />
-          <meshStandardMaterial color="#eab308" metalness={0.75} roughness={0.25} />
+          <meshStandardMaterial {...metal('#eab308', 0.25)} />
         </mesh>
       )}
     </>
@@ -229,18 +230,18 @@ function ODHolder({ radius = 0.8, shape }) {
   return (
     <>
       <mesh geometry={holderGeo}>
-        <meshStandardMaterial color="#a7afbd" metalness={0.6} roughness={0.42} side={THREE.DoubleSide} />
+        <meshStandardMaterial {...metal('#a7afbd')} side={THREE.DoubleSide} />
       </mesh>
       {/* Gold insert at the lead angle, acute corner at the tip. Its rake face
           sits on Y=0, so the cutting corner is exactly at spindle centre. */}
       <mesh position={[iX, -thickY / 2, iZ]} rotation={[0, t + baseRot, 0]} scale={[1, 1, zScale]}>
         <cylinderGeometry args={[r, r, thickY, sides]} />
-        <meshStandardMaterial color="#e0a92a" metalness={0.72} roughness={0.3} />
+        <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
       {/* Centre clamp screw, head proud of the rake face. */}
       <mesh position={[iX, 0, iZ]}>
         <cylinderGeometry args={[s * 0.16, s * 0.16, thickY * 0.4, 14]} />
-        <meshStandardMaterial color="#3f4653" metalness={0.6} roughness={0.45} />
+        <meshStandardMaterial {...metal('#3f4653', 0.45)} />
       </mesh>
     </>
   );
@@ -265,13 +266,13 @@ function BoringBar({ radius = 0.8, shape }) {
       {/* Round bar along +Z, hanging below the cutting plane (its top is Y=0). */}
       <mesh position={[-rBar, -rBar, rBar + barLen / 2]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[rBar, rBar, barLen, 20]} />
-        <meshStandardMaterial color="#a7afbd" metalness={0.6} roughness={0.42} />
+        <meshStandardMaterial {...metal('#a7afbd')} />
       </mesh>
       {/* Gold insert at the tip, acute corner down toward the axis, cutting the
           ID. Rake face on Y=0 so the cutting corner is at spindle centre. */}
       <mesh position={[-r * 0.4, -thickY / 2, r * 0.6]} rotation={[0, Math.PI / 4, 0]} scale={[1, 1, zScale]}>
         <cylinderGeometry args={[r, r, thickY, sides]} />
-        <meshStandardMaterial color="#e0a92a" metalness={0.72} roughness={0.3} />
+        <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
     </>
   );
@@ -291,13 +292,13 @@ function PartingBlade({ radius = 0.8, shape }) {
       {/* Thin blade rising from the tip, hanging below the cutting plane. */}
       <mesh position={[bladeH / 2, -depth / 2, 0]}>
         <boxGeometry args={[bladeH, depth, w]} />
-        <meshStandardMaterial color="#a7afbd" metalness={0.6} roughness={0.42} />
+        <meshStandardMaterial {...metal('#a7afbd')} />
       </mesh>
       {/* Cutting tip — a small block flush with the blade's leading (−Z) face,
           its top edge on Y=0 so the cut is at spindle centre. */}
       <mesh position={[s * 0.28, -depth * 1.02 / 2, 0]}>
         <boxGeometry args={[s * 0.55, depth * 1.02, w * 1.15]} />
-        <meshStandardMaterial color="#e0a92a" metalness={0.72} roughness={0.3} />
+        <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
     </>
   );
@@ -324,7 +325,7 @@ function Chuck({ zEnd, od }) {
   const jawOuter = bodyR * 0.95;     // jaws reach out nearly to the body rim
   const rMid = (od + jawOuter) / 2;
   const angles = [0, 120, 240].map((d) => (d * Math.PI) / 180);
-  const steel = (c, r = 0.45) => <meshStandardMaterial color={c} metalness={0.55} roughness={r} />;
+  const steel = (c, r = 0.45) => <meshStandardMaterial {...metal(c, r)} />;
 
   return (
     <group>
@@ -419,15 +420,17 @@ function AxisLabels({ len = 22 }) {
     fontWeight: 700,
     fontFamily: 'monospace',
     fontSize: 14,
-    textShadow: '0 0 3px #000',
+    // A white halo, because the label now sits on a light viewport — the black
+    // one it used to carry made the letters look bruised rather than legible.
+    textShadow: '0 0 3px #fff, 0 0 6px #fff',
     userSelect: 'none',
     pointerEvents: 'none', // don't intercept orbit drags
   });
   return (
     <group>
-      <Html position={[len, 0, 0]} center><div style={style('#ef4444')}>X</div></Html>
-      <Html position={[0, len, 0]} center><div style={style('#22c55e')}>Y</div></Html>
-      <Html position={[0, 0, len]} center><div style={style('#3b82f6')}>Z</div></Html>
+      <Html position={[len, 0, 0]} center><div style={style(CAD.rapid)}>X</div></Html>
+      <Html position={[0, len, 0]} center><div style={style(CAD.feed)}>Y</div></Html>
+      <Html position={[0, 0, len]} center><div style={style(CAD.accent)}>Z</div></Html>
     </group>
   );
 }
@@ -447,7 +450,7 @@ function SpindleAxis({ bounds }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[points, 3]} />
       </bufferGeometry>
-      <lineBasicMaterial color="#475569" />
+      <lineBasicMaterial color={CAD.sceneLine} />
     </lineSegments>
   );
 }
@@ -476,8 +479,14 @@ export function SceneContents({
   const stockT = workTransform(rotaryFrame, { a, baseA: simFrameA, center: rotaryCenter });
   return (
     <>
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[100, 100, 200]} intensity={0.6} />
+      {/* Key light over the operator's shoulder, plus a weak fill from the
+          opposite side so a face turned away from the key still has a value
+          rather than going flat to the ambient. Two lights is the whole rig —
+          the materials are shaded, not simulated (see `metal()` in theme.js),
+          and shading is all they need. */}
+      <ambientLight intensity={0.72} />
+      <directionalLight position={[100, 100, 200]} intensity={0.75} />
+      <directionalLight position={[-140, -80, 60]} intensity={0.28} />
 
       <axesHelper args={[20]} />
       <AxisLabels len={22} />
@@ -576,12 +585,18 @@ export default function Viewport({
   // screen until some other input happened to change.
   }, [drawVer, showStock, toolPos, toolRotary, toolRadius, toolType, toolLength, turnInsert, mode, partVer, showPart, showArbor, rotaryFrame, simFrameA, stockSolid, toolCutter, toolAngle, toolThickness, toolShank]);
 
+  // The gradient goes on the canvas ELEMENT, not on a three.js scene background:
+  // CSS paints it for free behind the renderer's transparent clear colour, where
+  // a scene background would be a texture to build, upload and keep in step with
+  // the canvas size. This is the SolidWorks/CATIA viewport — slate blue at the
+  // horizon fading to near-white at the floor, which is what gives an unlit face
+  // something to be seen against.
   return (
     <Canvas
       frameloop="demand"
       orthographic
       camera={{ position: [80, -80, 80], up: [0, 0, 1], zoom: 6, near: 0.1, far: 100000 }}
-      style={{ background: '#0f172a' }}
+      style={{ background: CAD.viewport }}
     >
       <SceneContents
         bounds={bounds}

@@ -22,11 +22,12 @@ import * as THREE from 'three';
 import { getMesh, useCamPlanStore } from '../stores/camPlanStore.js';
 import { faceOfTriangle } from '../engine/mesh/features.js';
 import { originMarkerSize, rotaryAxisLength } from '../engine/view/originMarker.js';
+import { CAD } from '../theme.js';
 
 const ORIGIN_AXES = [
-  { dir: [1, 0, 0], color: '#f87171' },
-  { dir: [0, 1, 0], color: '#4ade80' },
-  { dir: [0, 0, 1], color: '#60a5fa' },
+  { dir: [1, 0, 0], color: CAD.rapid },
+  { dir: [0, 1, 0], color: CAD.feed },
+  { dir: [0, 0, 1], color: CAD.accent },
 ];
 
 /**
@@ -133,7 +134,7 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
           inside-out STL is common enough that back faces must still draw —
           `analyzeMesh` warns about the winding rather than leaving a hole. */}
       <meshStandardMaterial
-        color="#38bdf8"
+        color="#93a7bd"
         metalness={0.1}
         roughness={0.65}
         transparent
@@ -172,7 +173,7 @@ export function FeatureHighlight({ meshVer }) {
   if (highlight.kind === 'line') {
     return (
       <line name="feature-highlight" geometry={highlight.geometry}>
-        <lineBasicMaterial color="#fbbf24" linewidth={2} depthTest={false} />
+        <lineBasicMaterial color={CAD.skHover} linewidth={2} depthTest={false} />
       </line>
     );
   }
@@ -181,7 +182,7 @@ export function FeatureHighlight({ meshVer }) {
       {/* polygonOffset lifts it off the face it covers, or the two planes fight
           for the same depth and the highlight flickers. */}
       <meshBasicMaterial
-        color="#fbbf24"
+        color={CAD.skHover}
         transparent
         opacity={0.55}
         side={THREE.DoubleSide}
@@ -276,7 +277,7 @@ export function RotaryAxisLine({ meshVer }) {
       {/* Solid, not dashed — a dashed THREE.Line needs `computeLineDistances()`
           called imperatively on the object, which a declarative <line> here
           cannot do; amber keeps it visually distinct from the origin triad. */}
-      <lineBasicMaterial color="#fbbf24" depthTest={false} />
+      <lineBasicMaterial color={CAD.skHover} depthTest={false} />
     </line>
   );
 }

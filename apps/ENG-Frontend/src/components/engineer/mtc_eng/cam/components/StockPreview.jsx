@@ -20,6 +20,7 @@
  */
 import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { CAD } from '../theme.js';
 
 export default function StockPreview({ solid, visible = true }) {
   const geometry = useMemo(
@@ -57,7 +58,7 @@ export default function StockPreview({ solid, visible = true }) {
         />
       </mesh>
       <lineSegments name="stock-preview-edges" geometry={edges}>
-        <lineBasicMaterial color="#7dd3fc" transparent opacity={0.75} />
+        <lineBasicMaterial color="#2b7fd4" transparent opacity={0.75} />
       </lineSegments>
     </group>
   );

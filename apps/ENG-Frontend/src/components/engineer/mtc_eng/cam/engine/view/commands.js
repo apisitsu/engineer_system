@@ -61,14 +61,14 @@ export const COMMANDS = [
 
   // ---- Keeping and handing on work ---------------------------------------
   //
-  // Saving to a FILE is not on this rail. The library keeps the same session in
-  // the browser under a name, with no dialog and no folder to find again, and a
+  // Saving to a FILE is not on this rail. The library keeps the same session on
+  // the server under a name, with no dialog and no folder to find again, and a
   // rail carrying both ways to do one job is a rail on which nobody is sure
   // which one they used. A .camweb.json still opens by dropping it on the
   // window, which is how every other file gets in.
   {
     id: 'openLibrary', group: 'project', label: 'Library',
-    hint: 'Everything saved in this browser — save, open, re-save or delete it',
+    hint: 'Your own saved work, and the shelf everyone shares. Save, open, share or delete it',
   },
   {
     id: 'exportGcode', group: 'project', label: 'Export G-code',

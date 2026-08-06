@@ -20,9 +20,16 @@ import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.
 import LibraryPanel from './LibraryPanel.jsx';
 // The helper this rail introduced now serves the whole app — see `glyph.jsx`.
 import { glyph } from './glyph.jsx';
+import { CAD } from '../theme.js';
 
 const { Text } = Typography;
 const DEG = Math.PI / 180;
+
+// Every rail and prompt on this page floats over the viewport. On the old
+// near-black background a pale panel separated itself by contrast; on the light
+// CAD one it does not, so they all carry the same drop shadow instead. One
+// constant, so the sketcher's six floating surfaces cannot drift apart.
+const FLOAT_SHADOW = '0 2px 10px rgba(23,42,66,0.18)';
 
 // Symbolic glyphs for each drawing tool.
 const SelectIcon = glyph(<path d="M5 3l6 15 2.2-6.2L19.5 9.6z" fill="currentColor" stroke="none" />);
@@ -219,7 +226,7 @@ function ConstraintsPanel() {
       <div style={{ maxHeight: 160, overflow: 'auto', marginTop: 4 }}>
         {sk.constraints.map((c, i) => (
           <Space key={i} size={4} style={{ width: '100%', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 11, color: c.driven ? '#c4b5fd' : '#9ca3af' }}>
+            <Text style={{ fontSize: 11, color: c.driven ? CAD.skDriven : CAD.muted }}>
               {c.kind} [{c.refs.join(', ')}]
               {c.value != null ? ` = ${c.kind === 'angle' ? `${(c.value / DEG).toFixed(1)}°` : Math.round(c.value * 100) / 100}` : ''}
               {c.driven ? ' (ref)' : ''}
@@ -230,7 +237,7 @@ function ConstraintsPanel() {
                   <Button
                     size="small"
                     type="text"
-                    style={{ fontSize: 11, lineHeight: 1, padding: '0 4px', color: c.driven ? '#a78bfa' : '#64748b' }}
+                    style={{ fontSize: 11, lineHeight: 1, padding: '0 4px', color: c.driven ? CAD.skDriven : CAD.muted }}
                     onClick={() => toggleDriven(i)}
                   >
                     D
@@ -288,16 +295,16 @@ function DimensionInput() {
       style={{
         position: 'absolute', top: 60, left: 12, zIndex: 6,
         display: 'flex', gap: 6, alignItems: 'center',
-        background: 'rgba(15,23,42,0.95)', border: '1px solid #38bdf8',
-        padding: '6px 10px', borderRadius: 8,
+        background: CAD.glassSolid, border: `1px solid ${CAD.accent}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
       }}
     >
-      <Text style={{ color: '#cbd5e1', fontSize: 12 }}>{dimensionPending.label}</Text>
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>{dimensionPending.label}</Text>
       {angular && (
         <>
-          <Text style={{ color: '#22d3ee', fontSize: 11 }}>base L{dimensionPending.refs[0]}</Text>
-          <Text style={{ color: '#64748b', fontSize: 11 }}>→</Text>
-          <Text style={{ color: '#f59e0b', fontSize: 11 }}>rotate L{dimensionPending.refs[1]}</Text>
+          <Text style={{ color: CAD.skAxis, fontSize: 11 }}>base L{dimensionPending.refs[0]}</Text>
+          <Text style={{ color: CAD.muted, fontSize: 11 }}>→</Text>
+          <Text style={{ color: CAD.skPreview, fontSize: 11 }}>rotate L{dimensionPending.refs[1]}</Text>
           <Tooltip title="Swap base / rotating line">
             <Button size="small" onClick={swapDimensionRefs} style={{ padding: '0 6px' }}>⇄</Button>
           </Tooltip>
@@ -327,7 +334,7 @@ function DimensionInput() {
         addonAfter={dimensionPending.unit ?? 'mm'}
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
-      <Button size="small" type="text" style={{ color: '#94a3b8' }} onClick={cancelDimension}>✕</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelDimension}>✕</Button>
     </div>
   );
 }
@@ -361,11 +368,11 @@ function EditDimensionInput() {
       style={{
         position: 'absolute', top: 104, left: 12, zIndex: 6,
         display: 'flex', gap: 6, alignItems: 'center',
-        background: 'rgba(15,23,42,0.95)', border: '1px solid #22c55e',
-        padding: '6px 10px', borderRadius: 8,
+        background: CAD.glassSolid, border: `1px solid ${CAD.feed}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
       }}
     >
-      <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Edit {editingConstraint.label}</Text>
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>Edit {editingConstraint.label}</Text>
       <InputNumber controls={false}
         autoFocus
         size="small"
@@ -376,7 +383,7 @@ function EditDimensionInput() {
         addonAfter={editingConstraint.angular ? '°' : 'mm'}
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
-      <Button size="small" type="text" style={{ color: '#94a3b8' }} onClick={cancelEditConstraint}>✕</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelEditConstraint}>✕</Button>
     </div>
   );
 }
@@ -419,12 +426,12 @@ function ChamferInput() {
         style={{
           position: 'absolute', top: 60, left: 12, zIndex: 6,
           display: 'flex', gap: 8, alignItems: 'center', maxWidth: 420,
-          background: 'rgba(15,23,42,0.95)', border: '1px solid #f59e0b',
-          padding: '6px 10px', borderRadius: 8,
+          background: CAD.glassSolid, border: `1px solid ${CAD.skPreview}`,
+          padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
         }}
       >
-        <Text style={{ color: '#fbbf24', fontSize: 12 }}>Fillet</Text>
-        <Text style={{ color: '#cbd5e1', fontSize: 12 }}>
+        <Text style={{ color: CAD.skHover, fontSize: 12 }}>Fillet</Text>
+        <Text style={{ color: CAD.icon, fontSize: 12 }}>
           A whole circle has no corner to round against a line or arc — Trim it to an arc first, then apply R.
         </Text>
       </div>
@@ -442,11 +449,11 @@ function ChamferInput() {
       style={{
         position: 'absolute', top: 60, left: 12, zIndex: 6,
         display: 'flex', gap: 6, alignItems: 'center',
-        background: 'rgba(15,23,42,0.95)', border: '1px solid #f59e0b',
-        padding: '6px 10px', borderRadius: 8,
+        background: CAD.glassSolid, border: `1px solid ${CAD.skPreview}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
       }}
     >
-      <Text style={{ color: '#cbd5e1', fontSize: 12 }}>{rounded ? 'Fillet' : 'Chamfer'}</Text>
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>{rounded ? 'Fillet' : 'Chamfer'}</Text>
       {twoLines ? (
         <Tooltip title="C = straight chamfer · R = rounded fillet (tangent arc)">
           <Segmented
@@ -495,11 +502,11 @@ function OffsetInput() {
       style={{
         position: 'absolute', top: 60, left: 12, zIndex: 6,
         display: 'flex', gap: 6, alignItems: 'center',
-        background: 'rgba(15,23,42,0.95)', border: '1px solid #34d399',
-        padding: '6px 10px', borderRadius: 8,
+        background: CAD.glassSolid, border: `1px solid ${CAD.skTangent}`,
+        padding: '6px 10px', borderRadius: 4, boxShadow: FLOAT_SHADOW,
       }}
     >
-      <Text style={{ color: '#cbd5e1', fontSize: 12 }}>Offset</Text>
+      <Text style={{ color: CAD.icon, fontSize: 12 }}>Offset</Text>
       <InputNumber controls={false}
         autoFocus
         size="small"
@@ -510,7 +517,7 @@ function OffsetInput() {
         addonAfter="mm"
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
-      <Button size="small" type="text" style={{ color: '#94a3b8' }} onClick={cancelOffset}>✕</Button>
+      <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelOffset}>✕</Button>
     </div>
   );
 }
@@ -555,15 +562,15 @@ export default function SketchToolbar() {
 
   const railBtn = () => ({ width: 34, height: 34 });
   // Vertical hairline separating groups in the horizontal rail.
-  const sep = <div style={{ width: 1, height: 24, background: '#334155', margin: '0 2px' }} />;
+  const sep = <div style={{ width: 1, height: 24, background: CAD.border, margin: '0 2px' }} />;
 
   return (
     <>
     <div style={{
       position: 'absolute', top: 12, left: 12, zIndex: 5,
       display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap',
-      background: 'rgba(15,23,42,0.82)', border: '1px solid #334155',
-      padding: 6, borderRadius: 8, maxWidth: 'calc(100% - 24px)',
+      background: CAD.glass, border: `1px solid ${CAD.border}`,
+      padding: 6, borderRadius: 4, boxShadow: FLOAT_SHADOW, maxWidth: 'calc(100% - 24px)',
     }}>
       {TOOLS.map((t) => (
         <Tooltip key={t.value} title={`${t.label} — ${t.hint}`} placement="bottom">
@@ -571,7 +578,7 @@ export default function SketchToolbar() {
             type={tool === t.value ? 'primary' : 'text'}
             icon={<t.Icon />}
             onClick={() => setTool(t.value)}
-            style={{ ...railBtn(), color: tool === t.value ? undefined : '#cbd5e1' }}
+            style={{ ...railBtn(), color: tool === t.value ? undefined : CAD.icon }}
           />
         </Tooltip>
       ))}
@@ -587,7 +594,7 @@ export default function SketchToolbar() {
           icon={<ConstructionIcon />}
           disabled={!geomSelected}
           onClick={() => toggleConstruction()}
-          style={{ ...railBtn(), color: geomSelected ? '#cbd5e1' : undefined }}
+          style={{ ...railBtn(), color: geomSelected ? CAD.icon : undefined }}
         />
       </Tooltip>
       <Tooltip title="Mirror — reflect the selection about an axis line (make the axis a construction line first)" placement="bottom">
@@ -596,7 +603,7 @@ export default function SketchToolbar() {
           icon={<MirrorIcon />}
           disabled={!canMirror}
           onClick={() => mirror()}
-          style={{ ...railBtn(), color: canMirror ? '#cbd5e1' : undefined }}
+          style={{ ...railBtn(), color: canMirror ? CAD.icon : undefined }}
         />
       </Tooltip>
       <Tooltip title="Offset — copy the selected lines/circles/arcs a set distance away (negative flips the side)" placement="bottom">
@@ -605,7 +612,7 @@ export default function SketchToolbar() {
           icon={<OffsetIcon />}
           disabled={!geomSelected}
           onClick={() => beginOffset()}
-          style={{ ...railBtn(), color: geomSelected ? '#cbd5e1' : undefined }}
+          style={{ ...railBtn(), color: geomSelected ? CAD.icon : undefined }}
         />
       </Tooltip>
 
@@ -618,18 +625,18 @@ export default function SketchToolbar() {
         content={<ConstraintsPanel />}
       >
         <Tooltip title="Relations & dimensions" placement="bottom">
-          <Button type="text" icon={<NodeIndexOutlined />} style={{ ...railBtn(), color: '#cbd5e1' }} />
+          <Button type="text" icon={<NodeIndexOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
         </Tooltip>
       </Popover>
 
       <Tooltip title="Solve (apply constraints)" placement="bottom">
-        <Button type="text" icon={<ThunderboltOutlined />} onClick={() => solve()} style={{ ...railBtn(), color: '#38bdf8' }} />
+        <Button type="text" icon={<ThunderboltOutlined />} onClick={() => solve()} style={{ ...railBtn(), color: CAD.accent }} />
       </Tooltip>
       <Tooltip title="Undo (Ctrl+Z)" placement="bottom">
-        <Button type="text" icon={<UndoOutlined />} disabled={!past.length} onClick={() => undo()} style={{ ...railBtn(), color: '#cbd5e1' }} />
+        <Button type="text" icon={<UndoOutlined />} disabled={!past.length} onClick={() => undo()} style={{ ...railBtn(), color: CAD.icon }} />
       </Tooltip>
       <Tooltip title="Redo (Ctrl+Y)" placement="bottom">
-        <Button type="text" icon={<RedoOutlined />} disabled={!future.length} onClick={() => redo()} style={{ ...railBtn(), color: '#cbd5e1' }} />
+        <Button type="text" icon={<RedoOutlined />} disabled={!future.length} onClick={() => redo()} style={{ ...railBtn(), color: CAD.icon }} />
       </Tooltip>
       <Tooltip title="Delete selection (Del)" placement="bottom">
         <Button type="text" danger icon={<DeleteOutlined />} disabled={!selection.length} onClick={() => deleteSelected()} style={railBtn()} />
@@ -641,8 +648,8 @@ export default function SketchToolbar() {
           saved to a file and never to the library that keeps it. */}
       <LibraryPanel
         trigger={(
-          <Tooltip title="Library — everything saved in this browser" placement="bottom">
-            <Button type="text" icon={<DatabaseOutlined />} style={{ ...railBtn(), color: '#cbd5e1' }} />
+          <Tooltip title="Library — your own saved work, and the shelf everyone shares" placement="bottom">
+            <Button type="text" icon={<DatabaseOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
           </Tooltip>
         )}
       />
@@ -677,7 +684,7 @@ export default function SketchToolbar() {
         )}
       >
         <Tooltip title="More" placement="bottom">
-          <Button type="text" icon={<EllipsisOutlined />} style={{ ...railBtn(), color: '#cbd5e1' }} />
+          <Button type="text" icon={<EllipsisOutlined />} style={{ ...railBtn(), color: CAD.icon }} />
         </Tooltip>
       </Popover>
 
