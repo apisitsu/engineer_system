@@ -557,7 +557,11 @@ export const useSketchStore = create((set, get) => ({
         set({ pending: getOrCreatePoint(sk, x, y, tol) });
       } else if (pending2 == null) {
         const s = getOrCreatePoint(sk, x, y, tol);
-        if (s !== pending) set({ pending2: s });
+        if (s === pending) {
+          set({ error: 'The start point landed on the centre — zoom in, or click further out.' });
+        } else {
+          set({ pending2: s, error: null });
+        }
       } else {
         const center = sk.entities.get(pending);
         const start = sk.entities.get(pending2);
@@ -588,7 +592,14 @@ export const useSketchStore = create((set, get) => ({
         set({ pending: getOrCreatePoint(sk, x, y, tol) });
       } else if (pending2 == null) {
         const s = getOrCreatePoint(sk, x, y, tol);
-        if (s !== pending) set({ pending2: s });
+        // Zoomed far enough out, two clicks a few pixels apart are the same
+        // point as far as the pick tolerance is concerned — which is right, but
+        // absorbing the click without a word makes the tool look dead.
+        if (s === pending) {
+          set({ error: 'Both ends of the axis landed on one point — zoom in, or click further apart.' });
+        } else {
+          set({ pending2: s, error: null });
+        }
       } else {
         const a = sk.entities.get(pending);
         const b = sk.entities.get(pending2);
@@ -596,7 +607,16 @@ export const useSketchStore = create((set, get) => ({
         get()._snapshot();
         const built = buildSlot(sk, a.x, a.y, b.x, b.y, r, tol);
         set({ pending: null, pending2: null });
-        if (!built) { get()._undoSnapshot(); get()._bump(); return; }
+        if (!built) {
+          // Saying nothing is what this used to do, and three clicks that
+          // produce silence read as a broken tool.
+          get()._undoSnapshot();
+          set({ error: r > 1e-6
+            ? 'That slot is too small to build — click further from the axis.'
+            : 'The third click sets the radius — click to one side of the axis, not on it.' });
+          get()._bump();
+          return;
+        }
         get()._bump();
         get().solve();
         return;
@@ -612,7 +632,12 @@ export const useSketchStore = create((set, get) => ({
         get()._snapshot();
         const built = buildPolygon(sk, c.x, c.y, x, y, get().polygonSides, tol);
         set({ pending: null });
-        if (!built) { get()._undoSnapshot(); get()._bump(); return; }
+        if (!built) {
+          get()._undoSnapshot();
+          set({ error: 'That polygon is too small to build — click further from the centre.' });
+          get()._bump();
+          return;
+        }
         get()._bump();
         get().solve();
         return;

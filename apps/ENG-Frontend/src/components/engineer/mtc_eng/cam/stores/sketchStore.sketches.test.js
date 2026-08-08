@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useSketchStore } from './sketchStore.js';
 import { addPoint, addLine } from '../engine/sketch/model.js';
 import { useCamPlanStore } from './camPlanStore.js';
+import { sketchLoops } from '../engine/sketch/loops.js';
 
 const store = () => useSketchStore.getState();
+/** Closed loops of the active sketch. */
+const sketchRegionsOf = () => sketchLoops(store().sk);
 
 /**
  * Put the store back to one empty sketch on the table. Written as a direct
@@ -312,5 +315,59 @@ describe('importDxf', () => {
     expect(store().importDxf('not a dxf')).toBeNull();
     expect(store().error).toMatch(/not a DXF|no ENTITIES/i);
     expect(store().sketches).toHaveLength(count);
+  });
+});
+
+describe('slot and polygon survive the pick tolerance the zoom hands them', () => {
+  /** Drive the three slot clicks the way the toolbar does. */
+  const drawSlot = (pickTol, r) => {
+    store().clear();
+    store().setError(null);
+    store().setTool('slot');
+    useSketchStore.setState({ pickTol });
+    store().clickAt(0, 0);
+    store().clickAt(30, 0);
+    store().clickAt(15, r);
+  };
+
+  it('builds at a working zoom, and at one where the tolerance is 6× the radius', () => {
+    // `pickTol` is `9 / zoom`, so it grows without limit as the view zooms out.
+    // It used to be handed to the slot builder to weld the slot's *own* tangent
+    // points, so at pickTol 9 every slot narrower than ~18 mm collapsed and
+    // three clicks produced nothing at all — no shape, no message.
+    for (const pickTol of [1.5, 9]) {
+      drawSlot(pickTol, 5);
+      const { loops } = sketchRegionsOf();
+      expect(loops, `pickTol=${pickTol}`).toHaveLength(1);
+      expect(Math.round(loops[0].area)).toBe(378); // 30×10 plus a circle of r=5
+    }
+  });
+
+  it('says so when the zoom is so far out that both axis ends are one point', () => {
+    // Two clicks 30 mm apart are ~9 px apart at that zoom, so merging them is
+    // right — staying silent about it was not.
+    drawSlot(30, 5);
+    expect(store().error).toMatch(/landed on one point/i);
+  });
+
+  it('says so when the third click sets no radius', () => {
+    store().clear();
+    store().setError(null);
+    store().setTool('slot');
+    useSketchStore.setState({ pickTol: 1.5 });
+    store().clickAt(0, 0);
+    store().clickAt(30, 0);
+    store().clickAt(15, 0); // on the axis
+    expect(store().error).toMatch(/click to one side of the axis/i);
+  });
+
+  it('builds a polygon at a coarse tolerance too', () => {
+    store().clear();
+    store().setTool('polygon');
+    useSketchStore.setState({ pickTol: 9 });
+    store().setPolygonSides(6);
+    store().clickAt(0, 0);
+    store().clickAt(6, 0);
+    expect(sketchRegionsOf().loops).toHaveLength(1);
   });
 });

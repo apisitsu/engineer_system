@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createSketch } from './model.js';
+import { createSketch, addPoint } from './model.js';
 import {
   buildSlot, buildPolygon, polygonPreview, slotPreview, axisDistance,
 } from './shapes.js';
@@ -161,5 +161,45 @@ describe('axisDistance', () => {
 
   it('falls back to the distance from the point when the axis has no length', () => {
     expect(axisDistance(3, 4, { x: 0, y: 0 }, { x: 0, y: 0 })).toBeCloseTo(5);
+  });
+});
+
+describe('the pick tolerance must not decide whether a shape is degenerate', () => {
+  it('builds a small slot even when the view is zoomed far out', () => {
+    // The regression: `pickTol` is `9 / zoom`, so zooming out grew it without
+    // limit, and it was being used to weld the slot's *own* tangent points. Any
+    // slot narrower than the tolerance collapsed onto its centreline and the
+    // build returned nothing — three clicks, no shape, no message.
+    for (const tol of [1.5, 4, 9, 30]) {
+      for (const r of [1, 2, 5]) {
+        const sk = createSketch();
+        expect(buildSlot(sk, 0, 0, 30, 0, r, tol), `r=${r} at pickTol=${tol}`).not.toBeNull();
+        expect(sketchLoops(sk).loops, `r=${r} at pickTol=${tol}`).toHaveLength(1);
+      }
+    }
+  });
+
+  it('builds a small polygon at a coarse pick tolerance too', () => {
+    for (const tol of [4, 9, 30]) {
+      const sk = createSketch();
+      expect(buildPolygon(sk, 0, 0, 3, 0, 6, tol), `pickTol=${tol}`).not.toBeNull();
+      expect(sketchLoops(sk).loops).toHaveLength(1);
+    }
+  });
+
+  it('still refuses what is genuinely degenerate', () => {
+    const sk = createSketch();
+    expect(buildSlot(sk, 0, 0, 30, 0, 0, 9)).toBeNull();       // no radius
+    expect(buildSlot(sk, 5, 5, 5, 5, 5, 9)).toBeNull();        // no axis
+    expect(buildPolygon(sk, 0, 0, 0, 0, 6, 9)).toBeNull();     // no radius
+  });
+
+  it('still snaps the points the user actually clicked to existing geometry', () => {
+    // The centres keep the pick tolerance — that is what "click near a point to
+    // reuse it" means, and it is a different question from the one above.
+    const sk = createSketch();
+    const existing = addPoint(sk, 0, 0);
+    const built = buildSlot(sk, 0.5, 0.4, 30, 0, 5, 1.5);
+    expect(built.centers[0]).toBe(existing);
   });
 });

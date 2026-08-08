@@ -26,6 +26,19 @@ import { getOrCreatePoint } from './edit.js';
 const MIN_SIZE = 1e-6;
 
 /**
+ * Weld tolerance for the points these shapes **generate themselves**.
+ *
+ * Deliberately not the caller's pick tolerance. That one answers "which existing
+ * point did the user mean to click", is measured in pixels and so grows without
+ * limit as the view zooms out — and it was being used to decide whether a slot's
+ * own tangent points were distinct. At a zoomed-out `pickTol` of 9 mm every slot
+ * narrower than about 18 mm collapsed onto its own centreline and the build
+ * returned nothing, so three clicks produced silence. What the user picks and
+ * what the shape derives are different questions and now use different numbers.
+ */
+const GEN_TOL = 1e-6;
+
+/**
  * Perpendicular distance from (px, py) to the infinite line through `a` and `b`
  * — the slot's radius, taken from where the third click landed off the axis.
  *
@@ -63,12 +76,16 @@ export function buildSlot(sk, x1, y1, x2, y2, r, tol = 1e-6) {
   const px = -uy;
   const py = ux;
 
-  const c1 = getOrCreatePoint(sk, x1, y1, tol);
-  const c2 = getOrCreatePoint(sk, x2, y2, tol);
-  const a1 = getOrCreatePoint(sk, x1 + px * r, y1 + py * r, tol);
-  const a2 = getOrCreatePoint(sk, x2 + px * r, y2 + py * r, tol);
-  const b1 = getOrCreatePoint(sk, x1 - px * r, y1 - py * r, tol);
-  const b2 = getOrCreatePoint(sk, x2 - px * r, y2 - py * r, tol);
+  // The two axis ends are two separate clicks, so the snap that finds an
+  // existing point near them must never be wide enough to merge them with each
+  // other. Zoomed far out the raw pick tolerance easily exceeds the whole slot.
+  const snap = Math.min(tol, len * 0.49);
+  const c1 = getOrCreatePoint(sk, x1, y1, snap);
+  const c2 = getOrCreatePoint(sk, x2, y2, snap);
+  const a1 = getOrCreatePoint(sk, x1 + px * r, y1 + py * r, GEN_TOL);
+  const a2 = getOrCreatePoint(sk, x2 + px * r, y2 + py * r, GEN_TOL);
+  const b1 = getOrCreatePoint(sk, x1 - px * r, y1 - py * r, GEN_TOL);
+  const b2 = getOrCreatePoint(sk, x2 - px * r, y2 - py * r, GEN_TOL);
   // A degenerate click can weld two of these onto each other; bail rather than
   // build a shape with a zero-length side in it.
   if (new Set([c1, c2, a1, a2, b1, b2]).size !== 6) return null;
@@ -111,11 +128,13 @@ export function buildPolygon(sk, cx, cy, vx, vy, sides = 6, tol = 1e-6) {
   if (!(r > MIN_SIZE)) return null;
   const a0 = Math.atan2(vy - cy, vx - cx);
 
-  const center = getOrCreatePoint(sk, cx, cy, tol);
+  // Same clamp as the slot: the snap must not reach the corners it is about to
+  // create, or the polygon swallows its own centre.
+  const center = getOrCreatePoint(sk, cx, cy, Math.min(tol, r * 0.49));
   const vertices = [];
   for (let i = 0; i < n; i++) {
     const a = a0 + (i * Math.PI * 2) / n;
-    vertices.push(getOrCreatePoint(sk, cx + r * Math.cos(a), cy + r * Math.sin(a), tol));
+    vertices.push(getOrCreatePoint(sk, cx + r * Math.cos(a), cy + r * Math.sin(a), GEN_TOL));
   }
   // Welding two corners together means the polygon is smaller than the pick
   // tolerance — nothing worth building.
