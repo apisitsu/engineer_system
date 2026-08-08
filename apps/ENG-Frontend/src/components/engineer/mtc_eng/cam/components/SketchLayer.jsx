@@ -18,6 +18,17 @@ import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
 import { planeMatrix } from '../engine/sketch/plane.js';
 import { CAD } from '../theme.js';
 
+/**
+ * A preview only when there is something to draw.
+ *
+ * A drei `<Line>` with fewer than two points throws: `LineGeometry.setPositions`
+ * sizes a `Float32Array` at `count - 6` and asks for a negative length. An empty
+ * array is *truthy*, so `{preview && <Line …/>}` does not catch it — and the
+ * slot preview is legitimately empty whenever the cursor sits on the slot's own
+ * axis, which is most of the time while the third click is being aimed.
+ */
+const drawable = (pts) => (Array.isArray(pts) && pts.length >= 2 ? pts : null);
+
 const noRaycast = () => null;
 const Z = 0.05; // lift a hair above the Z=0 pick plane to avoid z-fighting
 const PREVIEW = CAD.skPreview; // amber rubber-band while drawing
@@ -326,16 +337,16 @@ export default function SketchLayer() {
       return arcRing(anchor.x, anchor.y, r, 0, TWO_PI);
     }
     if (tool === 'polygon') {
-      return polygonPreview(anchor.x, anchor.y, tip.x, tip.y, polygonSides)
-        .map(([px, py]) => [px, py, Z]);
+      return drawable(polygonPreview(anchor.x, anchor.y, tip.x, tip.y, polygonSides)
+        .map(([px, py]) => [px, py, Z]));
     }
     if (tool === 'slot') {
       // Click 1 done (one end of the axis): show the axis to the cursor. Click 2
       // done: show the whole slot, its radius following the cursor off the axis.
       if (!arcStart) return [[anchor.x, anchor.y, Z], [tip.x, tip.y, Z]];
       const r = axisDistance(tip.x, tip.y, anchor, arcStart);
-      return slotPreview(anchor.x, anchor.y, arcStart.x, arcStart.y, r)
-        .map(([px, py]) => [px, py, Z]);
+      return drawable(slotPreview(anchor.x, anchor.y, arcStart.x, arcStart.y, r)
+        .map(([px, py]) => [px, py, Z]));
     }
     if (tool === 'arc') {
       // Click 1 done (centre = anchor): show the radius as a spoke to the cursor.

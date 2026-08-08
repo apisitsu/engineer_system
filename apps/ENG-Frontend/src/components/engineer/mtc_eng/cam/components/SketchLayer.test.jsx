@@ -218,3 +218,42 @@ describe('what is drawn is what is built', () => {
     expect(segs(50)).toBeGreaterThan(segs(10));
   });
 });
+
+describe('a preview with nothing in it must not be drawn', () => {
+  /** Mid-slot: two axis ends placed, the cursor aiming the third click. */
+  function midSlot(cursor) {
+    const sk = createSketch();
+    const a = addPoint(sk, 0, 0);
+    const b = addPoint(sk, 30, 0);
+    setSketch(sk, { tool: 'slot', pending: a, pending2: b, cursor });
+  }
+
+  it('survives the cursor sitting on the slot\'s own axis', async () => {
+    // The crash this exists for: with the cursor on the axis the radius is zero,
+    // `slotPreview` returns an empty array, and an empty array is *truthy* — so
+    // `{preview && <Line …/>}` handed drei a Line with no points.
+    // `LineGeometry.setPositions` then asks for a Float32Array of length −6:
+    // "RangeError: Invalid typed array length: -6", thrown on every mouse move
+    // along the axis.
+    midSlot({ x: 15, y: 0 });
+    const r = await ReactThreeTestRenderer.create(<SketchLayer />);
+    expect(r.scene).toBeTruthy();
+    await r.unmount();
+  });
+
+  it('still draws the slot preview once the cursor is off the axis', async () => {
+    midSlot({ x: 15, y: 5 });
+    const r = await ReactThreeTestRenderer.create(<SketchLayer />);
+    expect(r.scene).toBeTruthy();
+    await r.unmount();
+  });
+
+  it('survives a degenerate polygon preview', async () => {
+    const sk = createSketch();
+    const c = addPoint(sk, 0, 0);
+    setSketch(sk, { tool: 'polygon', pending: c, cursor: { x: 0, y: 0 } });
+    const r = await ReactThreeTestRenderer.create(<SketchLayer />);
+    expect(r.scene).toBeTruthy();
+    await r.unmount();
+  });
+});
