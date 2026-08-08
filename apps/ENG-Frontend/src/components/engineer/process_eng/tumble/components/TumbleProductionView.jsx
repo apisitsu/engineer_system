@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Row, Col, Input, Button, Card, Descriptions, Spin, Tag, Typography, App, Collapse, Checkbox } from 'antd';
 import { FilePdfOutlined } from '@ant-design/icons';
 import { useTumbleStore } from '../store/useTumbleStore';

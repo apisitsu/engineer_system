@@ -11,10 +11,8 @@ import dayjs from 'dayjs';
 import {
     formatDuration, filterCardsDoneInMonth, calculateKPIs,
     getBlockedCards, getIssueSummary, generate3W1H, isDoneList,
-    isInProgressList, calculateCycleTime, calculateLeadTime,
-    calculateDueDateCompliance, getMemberWorkload, getLabelDistribution,
-    getCardStatusDistribution, getTaskCompletionSummary,
-} from './reportHelpers';
+    isInProgressList, calculateCycleTime, calculateDueDateCompliance, getMemberWorkload, getLabelDistribution,
+    } from './reportHelpers';
 
 // ─── Design Tokens (compact for export) ───────────────────────────
 const C = {

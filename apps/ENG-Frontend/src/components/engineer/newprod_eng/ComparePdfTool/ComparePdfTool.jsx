@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CompareProvider, useCompare } from './context/CompareContext';
 import TopBar from './components/TopBar';
 import NavBar from './components/NavBar';

@@ -106,7 +106,9 @@ describe('sketch → solid — combining the profiles first', () => {
   it('unions two overlapping profiles into one body', async () => {
     rect(0, 0, 20, 20);
     rect(10, 10, 30, 30);
-    expect(sketch().regions().regions).toHaveLength(2);
+    // Arranged first, so the overlap is its own region: two squares crossing
+    // give three regions, not two, and the overlap is never counted twice.
+    expect(sketch().regions().regions).toHaveLength(3);
     expect(sketch().regions('union').regions).toHaveLength(1);
     const analysis = await build({ op: 'extrude', depth: 5, combine: 'union' });
     expect(analysis).toBeTruthy();

@@ -196,24 +196,28 @@ describe('rebuildFeatures — the fold', () => {
   });
 
   it('applies the profile boolean before it builds anything', () => {
-    // Two overlapping profiles on one sketch. Left alone they extrude as two
-    // bodies and the overlap is counted twice; unioned first, it is counted once
-    // — so the volume is what says the boolean ran, and ran at the right point.
+    // Two overlapping profiles on one sketch. `sketchLoops` arranges them, so
+    // the overlap is already its own region and is **not** counted twice either
+    // way — the boolean's job here is to merge three arranged regions into one
+    // outline, which is what the region count says and the volume confirms.
     const doc = rectSketch(0, 0, 20, 20);
     addRect(doc, 10, 10, 30, 30);
     const sketches = { 1: { doc, plane: XY } };
+    const solid = 400 + 400 - 100;
 
     const apart = rebuildFeatures(
       [createFeature('extrude', { sketchId: 1, depth: 2 })], ctx(sketches),
     );
     expect(apart.errors).toEqual([]);
-    expect(volume(apart.soup)).toBeCloseTo((400 + 400) * 2, 2);
+    expect(volume(apart.soup)).toBeCloseTo(solid * 2, 2);
 
     const merged = rebuildFeatures(
       [createFeature('extrude', { sketchId: 1, depth: 2, combine: 'union' })], ctx(sketches),
     );
     expect(merged.errors).toEqual([]);
-    expect(volume(merged.soup)).toBeCloseTo((400 + 400 - 100) * 2, 2);
+    expect(volume(merged.soup)).toBeCloseTo(solid * 2, 2);
+    // One outline instead of three abutting ones: fewer walls, same solid.
+    expect(merged.soup.triangleCount).toBeLessThan(apart.soup.triangleCount);
   });
 });
 

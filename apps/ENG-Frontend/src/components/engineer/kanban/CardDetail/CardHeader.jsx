@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { Typography, Row, Col, Space, Tag, Button, Input, Avatar, Tooltip } from 'antd';
+import { Typography, Row, Col, Space, Tag, Input, Avatar, Tooltip } from 'antd';
 import { useCardDetailState } from './useCardDetailState';
 
 import { MdOutlineSubtitles, MdAccessTime, MdOutlineTimer, MdLockOutline } from 'react-icons/md';

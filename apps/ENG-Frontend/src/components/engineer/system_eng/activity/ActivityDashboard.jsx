@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Layout, Card, Row, Col, Statistic, Table, DatePicker, Select, Spin,
+    Layout, Card, Row, Col, Table, DatePicker, Select, Spin,
     Typography, Tag, Space, Tooltip, Tabs, Badge, Empty, Progress, Button
 } from 'antd';
 import {
-    EyeOutlined, UserOutlined, TeamOutlined, ClockCircleOutlined,
-    BarChartOutlined, AppstoreOutlined, FileSearchOutlined,
+    EyeOutlined, TeamOutlined, ClockCircleOutlined,
+    BarChartOutlined, FileSearchOutlined,
     ReloadOutlined, DesktopOutlined, GlobalOutlined
 } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';

@@ -132,30 +132,160 @@ function weldPoints(sk, weldTol) {
 }
 
 /**
- * The sketch as a graph: `edges` are the drawable entities with their two end
- * vertices and a polyline running from `a` to `b`, `rings` are the entities that
- * close on themselves (a circle, or an arc whose ends land on one vertex).
+ * Where two segments cross, as the fraction along each. Null when they miss, or
+ * are parallel — a collinear overlap has no single crossing point and splitting
+ * at an arbitrary one of them would not help.
+ */
+function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rx = bx - ax;
+  const ry = by - ay;
+  const sx = dx - cx;
+  const sy = dy - cy;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 1e-12) return null;
+  const t = ((cx - ax) * sy - (cy - ay) * sx) / denom;
+  const u = ((cx - ax) * ry - (cy - ay) * rx) / denom;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return [t, u];
+}
+
+/**
+ * Cut every curve where it meets another — the **arrangement**.
+ *
+ * Without this the graph is joined by topology alone: two entities are connected
+ * exactly when they name the same point. That is right for a profile drawn by
+ * snapping corner to corner, and wrong for the two things people actually do —
+ * dropping a divider whose ends land *on* an edge rather than on its endpoints,
+ * and overlapping two shapes that share no vertex at all. Both used to come back
+ * as geometry that visibly crosses and is treated as though it does not: the
+ * divider pruned away as dangling, the overlap counted twice.
+ *
+ * Splitting is done on the **tessellated** polylines, so an arc is cut as
+ * accurately as it is drawn and no curve-curve intersection maths is needed. The
+ * pieces keep the id of the entity they came from, so a caller can still say
+ * which geometry formed a loop.
+ *
+ * O(curves²) on segment pairs. A hand-drawn profile is tens of curves and a few
+ * hundred segments; the cost that matters is bounded by the chord tolerance,
+ * which is the same thing that bounds the drawing's accuracy.
+ */
+function arrangeCurves(curves, tol) {
+  // splits[i] = list of { seg, t } cut points along curve i
+  const splits = curves.map(() => []);
+  for (let i = 0; i < curves.length; i++) {
+    for (let j = i + 1; j < curves.length; j++) {
+      const A = curves[i].points;
+      const B = curves[j].points;
+      for (let a = 0; a + 3 < A.length; a += 2) {
+        for (let b = 0; b + 3 < B.length; b += 2) {
+          const hit = segCross(
+            A[a], A[a + 1], A[a + 2], A[a + 3],
+            B[b], B[b + 1], B[b + 2], B[b + 3],
+          );
+          if (!hit) continue;
+          splits[i].push({ seg: a / 2, t: hit[0] });
+          splits[j].push({ seg: b / 2, t: hit[1] });
+        }
+      }
+    }
+  }
+
+  const out = [];
+  for (let i = 0; i < curves.length; i++) {
+    const { id, points, closed } = curves[i];
+    const lastSeg = points.length / 2 - 2;
+    const raw = splits[i];
+    // A crossing that lands on the curve's own **seam** — where a closed curve's
+    // polyline begins and ends — is a real junction even though it is at t = 0
+    // or t = 1 of a segment. It is what decides whether the two ends of a cut
+    // ring join back up or stay two separate arcs.
+    const seamCut = closed && raw.some((c) => (c.seg === 0 && c.t <= 1e-9)
+      || (c.seg === lastSeg && c.t >= 1 - 1e-9));
+    const cuts = raw
+      .filter((c) => c.t > 1e-9 && c.t < 1 - 1e-9) // a cut on a joint is no cut
+      .sort((p, q) => (p.seg - q.seg) || (p.t - q.t));
+    if (!cuts.length && !seamCut) { out.push(curves[i]); continue; }
+
+    // Walk the polyline, starting a new piece at every cut.
+    const firstIndex = out.length;
+    let piece = [points[0], points[1]];
+    let at = 0;
+    const emit = () => {
+      if (piece.length >= 4) out.push({ id, points: piece });
+    };
+    for (let s = 0; s + 3 < points.length; s += 2) {
+      const seg = s / 2;
+      const [x0, y0, x1, y1] = [points[s], points[s + 1], points[s + 2], points[s + 3]];
+      while (at < cuts.length && cuts[at].seg === seg) {
+        const { t } = cuts[at];
+        const px = x0 + (x1 - x0) * t;
+        const py = y0 + (y1 - y0) * t;
+        // Two crossings within tolerance of each other are one vertex.
+        const lastX = piece[piece.length - 2];
+        const lastY = piece[piece.length - 1];
+        if (Math.abs(px - lastX) > tol || Math.abs(py - lastY) > tol) {
+          piece.push(px, py);
+          emit();
+          piece = [px, py];
+        }
+        at += 1;
+      }
+      piece.push(x1, y1);
+    }
+    emit();
+
+    // A closed curve's seam is an artefact of where its polyline happened to
+    // start, not a vertex — unless something was actually cut there. Where it is
+    // not, the last piece is joined back onto the first so the arc that spans
+    // the seam is one arc and not two meeting at a point nothing created.
+    const made = out.length - firstIndex;
+    if (closed && !seamCut && made >= 2) {
+      const head = out[firstIndex];
+      const tail = out[out.length - 1];
+      head.points = [...tail.points, ...head.points.slice(2)];
+      out.pop();
+    }
+  }
+  return out;
+}
+
+/**
+ * The sketch as a graph: `edges` are curves with their two end vertices and a
+ * polyline running from `a` to `b`, `rings` are the ones that close on
+ * themselves and meet nothing (a circle on its own).
+ *
+ * Vertices are assigned **after** the arrangement, by welding the endpoints of
+ * the pieces — which is what makes a crossing a real junction rather than two
+ * curves passing through the same coordinates unaware of each other. Coincident
+ * constraints are folded in first by snapping each point to its group's
+ * representative, so positional welding alone is then enough.
  */
 function buildGraph(sk, { chordTol, weldTol }) {
   const vertexOf = weldPoints(sk, weldTol);
   const P = (id) => sk.entities.get(id);
-  const edges = [];
-  const rings = [];
+  // Every point speaks for its welded group, so two points a constraint made one
+  // produce identical coordinates and weld again after the arrangement.
+  const rep = new Map();
+  for (const e of sk.entities.values()) {
+    if (e.type !== 'point') continue;
+    const r = vertexOf(e.id);
+    if (!rep.has(r)) rep.set(r, e);
+  }
+  const at2 = (id) => rep.get(vertexOf(id)) || P(id);
 
+  const curves = [];
   for (const e of sk.entities.values()) {
     if (e.construction) continue;
     if (e.type === 'line') {
-      const p1 = P(e.p1);
-      const p2 = P(e.p2);
+      const p1 = at2(e.p1);
+      const p2 = at2(e.p2);
       if (!p1 || !p2) continue;
-      const a = vertexOf(e.p1);
-      const b = vertexOf(e.p2);
-      if (a === b) continue; // zero-length after welding — carries no boundary
-      edges.push({ id: e.id, a, b, points: [p1.x, p1.y, p2.x, p2.y] });
+      if (Math.abs(p1.x - p2.x) <= weldTol && Math.abs(p1.y - p2.y) <= weldTol) continue;
+      curves.push({ id: e.id, points: [p1.x, p1.y, p2.x, p2.y] });
     } else if (e.type === 'arc') {
       const c = P(e.center);
-      const s = P(e.start);
-      const en = P(e.end);
+      const s = at2(e.start);
+      const en = at2(e.end);
       if (!c || !s || !en) continue;
       const a0 = Math.atan2(s.y - c.y, s.x - c.x);
       const a1 = Math.atan2(en.y - c.y, en.x - c.x);
@@ -165,17 +295,46 @@ function buildGraph(sk, { chordTol, weldTol }) {
       // showing a hairline step where an arc meets the line it is tangent to.
       points[0] = s.x; points[1] = s.y;
       points[points.length - 2] = en.x; points[points.length - 1] = en.y;
-      const a = vertexOf(e.start);
-      const b = vertexOf(e.end);
-      if (a === b) rings.push({ id: e.id, points });
-      else edges.push({ id: e.id, a, b, points });
+      const closed = Math.abs(s.x - en.x) <= weldTol && Math.abs(s.y - en.y) <= weldTol;
+      curves.push({ id: e.id, points, closed });
     } else if (e.type === 'circle') {
       const c = P(e.center);
       if (!c || !(e.r > 0)) continue;
       const points = tessellateArc(c.x, c.y, e.r, 0, TAU, chordTol);
-      points.length -= 2; // a ring repeats its first point; loops never do
-      rings.push({ id: e.id, points });
+      curves.push({ id: e.id, points, closed: true });
     }
+  }
+
+  const pieces = arrangeCurves(curves, weldTol);
+
+  // Weld the pieces' endpoints into vertices. Anything still closing on itself
+  // met nothing and stays a ring; everything else becomes an edge.
+  const nodes = [];
+  const nodeAt = (x, y) => {
+    for (let i = 0; i < nodes.length; i++) {
+      if (Math.abs(nodes[i][0] - x) <= weldTol && Math.abs(nodes[i][1] - y) <= weldTol) return i;
+    }
+    nodes.push([x, y]);
+    return nodes.length - 1;
+  };
+
+  const edges = [];
+  const rings = [];
+  for (const piece of pieces) {
+    const pts = piece.points;
+    const n = pts.length / 2;
+    if (n < 2) continue;
+    const sameEnds = Math.abs(pts[0] - pts[n * 2 - 2]) <= weldTol
+      && Math.abs(pts[1] - pts[n * 2 - 1]) <= weldTol;
+    if (sameEnds) {
+      if (n < 4) continue; // a hairline that closed on itself carries no area
+      rings.push({ id: piece.id, points: pts.slice(0, -2) });
+      continue;
+    }
+    const a = nodeAt(pts[0], pts[1]);
+    const b = nodeAt(pts[n * 2 - 2], pts[n * 2 - 1]);
+    if (a === b) continue;
+    edges.push({ id: piece.id, a, b, points: pts });
   }
 
   const at = new Map(); // vertex -> edge indices touching it
@@ -186,7 +345,7 @@ function buildGraph(sk, { chordTol, weldTol }) {
       else at.set(v, [i]);
     }
   });
-  return { edges, rings, at };
+  return { edges, rings, at, nodes };
 }
 
 /** A polyline reversed, as a flat point list. */
@@ -310,7 +469,7 @@ function traceFaces(edges, alive) {
  * already loops. Everything else is pruned, traced, and the unbounded face
  * dropped by the sign of its area.
  */
-function chainGraph({ edges, rings, at }) {
+function chainGraph({ edges, rings, at, nodes }) {
   const closed = [];
   for (const ring of rings) closed.push({ points: ring.points, entities: [ring.id] });
 
@@ -362,8 +521,13 @@ function chainGraph({ edges, rings, at }) {
   }
 
   // Reported for information now rather than as a failure: face traversal
-  // resolves a junction rather than giving up at it.
-  const branches = [...degree.entries()].filter(([, d]) => d > 2).map(([v]) => v);
+  // resolves a junction rather than giving up at it. Given as **coordinates**
+  // rather than ids — a junction can now be a crossing the arrangement created,
+  // which is not any point the user drew and has no id to name it by.
+  const branches = [...degree.entries()]
+    .filter(([, d]) => d > 2)
+    .map(([v]) => nodes[v])
+    .filter(Boolean);
   return { closed, open, branches };
 }
 

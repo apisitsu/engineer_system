@@ -20,7 +20,6 @@
  */
 import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
-import { CAD } from '../theme.js';
 
 export default function StockPreview({ solid, visible = true }) {
   const geometry = useMemo(

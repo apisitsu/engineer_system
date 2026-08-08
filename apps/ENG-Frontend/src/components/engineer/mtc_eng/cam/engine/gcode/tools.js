@@ -79,7 +79,7 @@ function diameterOf(head) {
   const d = /(?:\bD|[ØøΦφ⌀])\s*(\d+(?:\.\d+)?)/i.exec(head);
   if (d) return Number(d[1]);
   // Strip any L-length token so its digits can't be mistaken for a diameter.
-  const bare = /(?:^|\s)(\d+(?:\.\d+)?)(?=\s|$)/.exec(head.replace(/\bL\s*\d[\d.\-]*/gi, ' '));
+  const bare = /(?:^|\s)(\d+(?:\.\d+)?)(?=\s|$)/.exec(head.replace(/\bL\s*\d[\d.-]*/gi, ' '));
   return bare ? Number(bare[1]) : null;
 }
 
@@ -109,7 +109,7 @@ export function parseToolTable(text) {
   // A comment line that names the tool instead: `(TOOL: T1 FACEMILL Ø50)`. The
   // tool number is inside the comment here, which is why the rule above cannot
   // see it — its `T` is the machine's, this one is prose.
-  const RE_DECL = /^\s*\(\s*TOOL\s*[:\-]?\s*T0*(\d+)\s*[:\-]?\s*([^)]*)\)/i;
+  const RE_DECL = /^\s*\(\s*TOOL\s*[:-]?\s*T0*(\d+)\s*[:-]?\s*([^)]*)\)/i;
   for (const raw of lines) {
     const m = RE.exec(raw) || RE_DECL.exec(raw);
     if (!m) continue;

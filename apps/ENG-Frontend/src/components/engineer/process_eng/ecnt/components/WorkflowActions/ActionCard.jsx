@@ -53,12 +53,12 @@ export default function ActionCard({ currentStep, onNextStep, ecrData, actionLog
 
         switch (currentStep) {
             case 3.1:
-                const isRequesterDeptManager = (userDept === "ENG") && (userRole?.includes('MGR')) || userSec?.includes('MGR');
+                const isRequesterDeptManager = ((userDept === "ENG") && (userRole?.includes('MGR'))) || userSec?.includes('MGR');
                 return { allowed: isRequesterDeptManager, required: `${ecrData?.department} Manager` };
             case 3.2:
                 return { allowed: userRole === 'ENG', required: "Engineer (ENG)" };
             case 3.3:
-                const isEngManager = (userDept === "ENG") && (userRole?.includes('MGR')) || userSec?.includes('MGR');
+                const isEngManager = ((userDept === "ENG") && (userRole?.includes('MGR'))) || userSec?.includes('MGR');
                 return { allowed: isEngManager, required: "Engineer Manager" };
             case 3.4:
                 const isTopMgmt = userRole === 'Thai Manager/Div. Head' || userRole === 'Japanese Manager';

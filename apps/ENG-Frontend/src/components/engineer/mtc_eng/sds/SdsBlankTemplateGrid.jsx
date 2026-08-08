@@ -8,7 +8,7 @@ import {
   BorderRightOutlined, BorderOuterOutlined, BorderInnerOutlined, BorderVerticleOutlined,
   SaveOutlined, ReloadOutlined, ClearOutlined, BgColorsOutlined, FilePdfOutlined,
   TableOutlined, EyeOutlined, BlockOutlined, ColumnWidthOutlined, FileExcelOutlined,
-  BoldOutlined, ItalicOutlined, FontColorsOutlined, UndoOutlined, RedoOutlined,
+  BoldOutlined, ItalicOutlined, UndoOutlined, RedoOutlined,
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined,
   PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, StarFilled, StarOutlined,

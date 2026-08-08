@@ -6,15 +6,15 @@
  */
 
 import React, { useState } from 'react';
-import { Typography, Button, Input, Avatar, Tooltip, Badge, Tag, Switch, Space } from 'antd';
+import { Typography, Button, Input, Avatar, Tooltip, Badge, Tag, Space } from 'antd';
 import { IoSearchOutline, IoGridOutline, IoListOutline, IoNotificationsOutline, IoHelpCircleOutline, IoSettingsOutline, IoAddOutline } from 'react-icons/io5';
-import { MdOutlinePeople, MdOutlineLabel, MdOutlineAssessment, MdAccessTime } from 'react-icons/md';
-import { AiOutlineCheck, AiOutlineClose } from 'react-icons/ai';
+import { MdOutlinePeople, MdOutlineLabel, MdOutlineAssessment } from 'react-icons/md';
+import { AiOutlineCheck } from 'react-icons/ai';
 import {
     getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle,
-    StepRow, Callout, LabeledDivider, MockToolbarButton,
+    StepRow, Callout, MockToolbarButton,
 } from './guideStyles';
-import { MOCK_USERS, MOCK_LABELS, MOCK_NOTIFICATIONS, MOCK_BOARD_MEMBERS, PRIORITY_CONFIG } from './mockData';
+import { MOCK_USERS, MOCK_LABELS, MOCK_NOTIFICATIONS, MOCK_BOARD_MEMBERS } from './mockData';
 
 const { Text } = Typography;
 

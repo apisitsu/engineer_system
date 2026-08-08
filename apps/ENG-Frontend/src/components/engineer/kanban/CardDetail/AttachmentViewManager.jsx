@@ -53,7 +53,7 @@ export const getFileType = (url, name) => {
     }
 
     // Folders (Local path without extension OR Google Drive folder)
-    const isLocalPath = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(url);
+    const isLocalPath = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/.test(url);
     const hasExtension = /\.[a-zA-Z0-9]{2,5}$/.test(cleanName) || /\.[a-zA-Z0-9]{2,5}$/.test(cleanUrl);
     
     if ((isLocalPath && !hasExtension) || url?.includes('drive.google.com/drive/folders/')) {
@@ -85,7 +85,7 @@ export const getFileUrl = (att) => {
 
     if (!rawUrl && att.file_path) {
         // Fix relative paths for files stored on server
-        const cleanPath = att.file_path.replace(/^public[\/\\]/, '').replace(/\\/g, '/');
+        const cleanPath = att.file_path.replace(/^public[/\\]/, '').replace(/\\/g, '/');
         rawUrl = `${server.API_URL}${cleanPath}`;
     }
 
@@ -94,7 +94,7 @@ export const getFileUrl = (att) => {
     // Transform Google Drive links for better previewing
     if (rawUrl.includes('drive.google.com')) {
         // Extract File ID from typical Drive URL patterns
-        const fileIdMatch = rawUrl.match(/\/d\/([^\/?#]+)/) || rawUrl.match(/[?&]id=([^\/&?#]+)/);
+        const fileIdMatch = rawUrl.match(/\/d\/([^/?#]+)/) || rawUrl.match(/[?&]id=([^/&?#]+)/);
         if (fileIdMatch && fileIdMatch[1]) {
             const fileId = fileIdMatch[1];
             const type = getFileType(rawUrl, att.file_name || att.name);
@@ -110,7 +110,7 @@ export const getFileUrl = (att) => {
 
     // Transform Google Docs "Office Mode" links to direct exports
     if (rawUrl.includes('docs.google.com') && rawUrl.includes('rtpof=true')) {
-        const fileIdMatch = rawUrl.match(/\/d\/([^\/?#]+)/);
+        const fileIdMatch = rawUrl.match(/\/d\/([^/?#]+)/);
         if (fileIdMatch && fileIdMatch[1]) {
             const fileId = fileIdMatch[1];
             if (rawUrl.includes('/document/')) return `https://docs.google.com/document/d/${fileId}/export?format=docx`;
@@ -120,7 +120,7 @@ export const getFileUrl = (att) => {
     }
 
     // Detect local/UNC paths (e.g., H:\... or \\server\...)
-    const isLocalPath = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(rawUrl);
+    const isLocalPath = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/.test(rawUrl);
     if (isLocalPath) return rawUrl;
 
     return rawUrl;
@@ -131,7 +131,7 @@ export const getFileUrl = (att) => {
  */
 const getOfficeScheme = (url) => {
     const lowerUrl = url.toLowerCase();
-    const isLocal = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(url);
+    const isLocal = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/.test(url);
 
     // For local paths (mapped by Google Drive for Desktop), we use a custom protocol
     // that we will register on the local machine to open files immediately.
@@ -167,7 +167,7 @@ export const AttachmentLink = ({ attachment, theme, onClick }) => {
             onClick(attachment);
         } else if (type === 'microsoft' || type === 'folder') {
             // Check if it's a local/mapped drive path (e.g., H:\) or a UNC path
-            const isLocalPath = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/.test(url);
+            const isLocalPath = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/.test(url);
 
             if (isLocalPath) {
                 const scheme = getOfficeScheme(url);
@@ -304,7 +304,7 @@ export const AttachmentPreviewModal = ({ visible, onClose, attachment, theme }) 
                                     
                                     // If it's a Google Drive file, use the direct download URL
                                     if (fileUrl.includes('drive.google.com') && !fileUrl.includes('export=download')) {
-                                        const fileIdMatch = fileUrl.match(/\/d\/([^\/?#]+)/) || fileUrl.match(/[?&]id=([^\/&?#]+)/);
+                                        const fileIdMatch = fileUrl.match(/\/d\/([^/?#]+)/) || fileUrl.match(/[?&]id=([^/&?#]+)/);
                                         if (fileIdMatch && fileIdMatch[1]) {
                                             downloadUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
                                         }

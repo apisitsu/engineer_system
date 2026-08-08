@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Typography, Space, Divider, Button, Input, Select, DatePicker, Avatar, Popconfirm, Tooltip, Switch, message } from 'antd';
+import { Typography, Divider, Button, Input, Select, DatePicker, Avatar, Popconfirm, Switch, message } from 'antd';
 import { useCardDetailState } from './useCardDetailState';
 import { useKanbanStore } from '../store/kanbanStore';
 import Swal from 'sweetalert2';
@@ -312,7 +312,7 @@ const CardSidebar = () => {
                                         if ((url.startsWith('"') && url.endsWith('"')) || (url.startsWith("'") && url.endsWith("'")))
                                             url = url.substring(1, url.length - 1).trim();
                                         const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
-                                        const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
+                                        const localPathPattern = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/;
                                         if (!urlPattern.test(url) && !localPathPattern.test(url)) {
                                             Swal.fire('Error', 'Invalid link format. Must be a URL or a direct file path (e.g. H:\\...)', 'error'); return;
                                         }

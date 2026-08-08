@@ -321,9 +321,13 @@ describe('sketchLoops — geometry that splits into several regions', () => {
     expect(loops.every((l) => !l.isHole)).toBe(true);
     expect(loops[0].area + loops[1].area).toBeCloseTo(800);
     expect(loops[0].area).toBeCloseTo(400);
-    // The junctions are still reported — as information, not as a refusal.
-    expect(branches.sort()).toEqual([p1, p3].sort());
-    expect(p2 && p4).toBeTruthy();
+    // The junctions are still reported — as information, not as a refusal, and
+    // as coordinates: a junction can be a crossing the arrangement created,
+    // which is no point the user ever drew.
+    expect(branches).toHaveLength(2);
+    const xs = branches.map((b) => Math.round(b[0])).sort((a, b) => a - b);
+    expect(xs).toEqual([0, 40]);
+    expect(p1 && p2 && p3 && p4).toBeTruthy();
   });
 
   it('makes three regions from two lines across one rectangle', () => {
@@ -404,5 +408,68 @@ describe('sketchLoops — geometry that splits into several regions', () => {
     expect(loops).toHaveLength(2);
     expect(loops.every((l) => !l.isHole)).toBe(true);
     expect(loops.reduce((s, l) => s + l.area, 0)).toBeCloseTo(200);
+  });
+});
+
+describe('sketchLoops — geometry that crosses without sharing a vertex', () => {
+  it('splits a rectangle with a divider whose ends land ON the edges', () => {
+    // The T-junction. Nothing here shares a point id: the divider's ends sit on
+    // the interior of the top and bottom edges. Before the arrangement this came
+    // back as one 800 mm² rectangle with the divider pruned away as dangling.
+    const sk = createSketch();
+    rect(sk, 0, 0, 40, 20);
+    addLine(sk, addPoint(sk, 20, 0), addPoint(sk, 20, 20));
+    const { loops, open } = sketchLoops(sk);
+    expect(open).toHaveLength(0);
+    expect(loops).toHaveLength(2);
+    expect(loops.map((l) => Math.round(l.area))).toEqual([400, 400]);
+  });
+
+  it('splits at a divider that is off centre', () => {
+    const sk = createSketch();
+    rect(sk, 0, 0, 40, 20);
+    addLine(sk, addPoint(sk, 10, 0), addPoint(sk, 10, 20));
+    const { loops } = sketchLoops(sk);
+    expect(loops.map((l) => Math.round(l.area)).sort((a, b) => b - a)).toEqual([600, 200]);
+  });
+
+  it('arranges two overlapping rectangles that share no vertex into three regions', () => {
+    // Two 20×20 squares overlapping by 10×10: two L-shapes and the overlap.
+    // Extruding these unarranged counted the overlap twice.
+    const sk = createSketch();
+    rect(sk, 0, 0, 20, 20);
+    rect(sk, 10, 10, 30, 30);
+    const { loops } = sketchLoops(sk);
+    expect(loops).toHaveLength(3);
+    expect(loops.reduce((s, l) => s + l.area, 0)).toBeCloseTo(400 + 400 - 100, 6);
+    expect(loops.map((l) => Math.round(l.area)).sort((a, b) => b - a)).toEqual([300, 300, 100]);
+  });
+
+  it('cuts a circle where a line crosses it', () => {
+    const sk = createSketch();
+    const c = addPoint(sk, 0, 0);
+    addCircle(sk, c, 10);
+    // A chord straight through the middle: two half-discs.
+    addLine(sk, addPoint(sk, -20, 0), addPoint(sk, 20, 0));
+    const { loops } = sketchLoops(sk);
+    expect(loops).toHaveLength(2);
+    for (const l of loops) expect(l.area).toBeCloseTo((Math.PI * 100) / 2, 0);
+  });
+
+  it('leaves a circle whole when nothing touches it', () => {
+    const sk = createSketch();
+    rect(sk, 0, 0, 40, 40);
+    addCircle(sk, addPoint(sk, 20, 20), 5);
+    const { loops } = sketchLoops(sk);
+    expect(loops.map((l) => l.isHole)).toEqual([false, true]);
+  });
+
+  it('does not split where two lines merely touch at a shared corner', () => {
+    // A plain rectangle must stay one region — a cut at a joint is no cut.
+    const sk = createSketch();
+    rect(sk, 0, 0, 40, 20);
+    const { loops, branches } = sketchLoops(sk);
+    expect(loops).toHaveLength(1);
+    expect(branches).toHaveLength(0);
   });
 });

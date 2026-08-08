@@ -3,7 +3,7 @@ import { Typography, Row, Col, Card, Avatar, Progress, Tag, Input, Empty, Tabs, 
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
-import { useTheme } from '../../../../theme';
+import '../../../../theme';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import {
     MdOutlinePerson,

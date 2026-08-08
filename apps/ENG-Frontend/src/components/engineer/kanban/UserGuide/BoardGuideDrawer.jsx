@@ -7,7 +7,7 @@
  *   2. Inline content    — rendered inside UserGuideDrawer/UserGuideFullPage (no open/onClose)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Drawer, Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Space, Modal } from 'antd';
 import { BsThreeDots, BsGripVertical, BsCardChecklist } from 'react-icons/bs';
 import { FiPlus } from 'react-icons/fi';
@@ -16,10 +16,8 @@ import { CiMemoPad } from 'react-icons/ci';
 import { IoCloseOutline, IoArchiveOutline, IoHelpCircleOutline } from 'react-icons/io5';
 import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';
 import {
-    getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel,
-    StepRow, Callout, LabeledDivider,
-} from './guideStyles';
-import { MOCK_CARDS, MOCK_LISTS, MOCK_USERS, MOCK_LABELS, MOCK_SUSPENDED_CARD, PRIORITY_CONFIG } from './mockData';
+    getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, StepRow, Callout, } from './guideStyles';
+import { MOCK_CARDS, MOCK_LISTS, MOCK_USERS, MOCK_LABELS, MOCK_SUSPENDED_CARD } from './mockData';
 
 const { Text } = Typography;
 

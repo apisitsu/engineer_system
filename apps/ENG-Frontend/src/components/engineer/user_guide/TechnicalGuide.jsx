@@ -1,31 +1,21 @@
 import { 
     Typography, Card, Row, Col, Tag, Divider, 
     Timeline, Steps, Table, Statistic, Alert, Progress, List, Button,
-    Collapse, Badge, Space, Descriptions, Tabs
+    Collapse, Badge, Space
 } from 'antd';
 import {
-    NodeIndexOutlined, HistoryOutlined, DatabaseOutlined,
-    RocketOutlined, CloudSyncOutlined, ContainerOutlined,
-    SaveOutlined, SafetyCertificateOutlined, InfoCircleOutlined,
-    ClockCircleOutlined, GlobalOutlined, ThunderboltOutlined,
-    BarChartOutlined, LineChartOutlined, ArrowRightOutlined,
-    CodeOutlined, ApiOutlined, InteractionOutlined,
-    SecurityScanOutlined, DeploymentUnitOutlined,
+    HistoryOutlined, DatabaseOutlined,
+    RocketOutlined, SafetyCertificateOutlined, InfoCircleOutlined,
+    GlobalOutlined, ArrowRightOutlined,
+    ApiOutlined, InteractionOutlined,
     FilePdfOutlined, DesktopOutlined, CloudServerOutlined,
-    SyncOutlined, AuditOutlined, CheckCircleOutlined,
-    SafetyOutlined, KeyOutlined, TranslationOutlined,
-    CloudUploadOutlined, DeploymentUnitOutlined as ClusterIcon,
-    AppstoreOutlined, DashboardOutlined, ToolOutlined,
-    BugOutlined, AimOutlined, ControlOutlined,
-    SolutionOutlined, ProjectOutlined
+    SyncOutlined, AuditOutlined, SafetyOutlined, KeyOutlined, DeploymentUnitOutlined as ClusterIcon
 } from '@ant-design/icons';
 import { 
-    IoCloudDoneOutline, IoPulseOutline, IoShieldCheckmarkOutline, 
-    IoServerOutline, IoLayersOutline, IoFlaskOutline,
-    IoInfiniteOutline, IoGitBranchOutline, IoGitNetworkOutline
+    IoPulseOutline, IoServerOutline, IoLayersOutline
 } from 'react-icons/io5';
-import { MdOutlineSecurity, MdOutlineAnalytics, MdDns } from 'react-icons/md';
-import { BiNetworkChart, BiCodeBlock } from 'react-icons/bi';
+import { MdOutlineSecurity, MdDns } from 'react-icons/md';
+import 'react-icons/bi';
 import { SiPostgresql, SiRedis, SiNodedotjs, SiReact, SiSocketdotio } from 'react-icons/si';
 import { FaAws } from 'react-icons/fa';
 

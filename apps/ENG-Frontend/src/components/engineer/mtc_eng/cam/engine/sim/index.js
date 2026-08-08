@@ -13,7 +13,7 @@ import { voxelSizeFor, thinnestCut, cellSizeFor, cutterSpan } from './method.js'
 import { createVoxelStock, carveVoxels, voxelSurfaceMesh } from './voxel.js';
 import {
   createTurningStock, carveTurning, carveTurningMove, resetTurningStock,
-  turningMesh, turningNoseResolver, detectFaceZ,
+  turningMesh, detectFaceZ,
 } from './turning.js';
 
 export { createStock, stockFromBounds, resetStock, stamp, cutSegment, simulate } from './dexel.js';

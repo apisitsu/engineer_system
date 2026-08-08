@@ -34,11 +34,10 @@ import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
 import { exportGcode, openProjectFile } from './lib/projectIO.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
-import { useLibraryStore } from './stores/libraryStore.js';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
-import { SPEEDS, PLAY_BASE_SECONDS, perTick } from './engine/view/playback.js';
+import { SPEEDS, perTick } from './engine/view/playback.js';
 import { sidebarSections } from './engine/view/sidebar.js';
 import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
@@ -550,7 +549,6 @@ export default function App() {
   const stepBlock   = useCamStore((s) => s.stepBlock);
   const simulate    = useCamStore((s) => s.simulate);
   const simulateVoxel = useCamStore((s) => s.simulateVoxel);
-  const setTurnTool = useCamStore((s) => s.setTurnTool);
   const setToolOverride = useCamStore((s) => s.setToolOverride);
   const setToolCutter = useCamStore((s) => s.setToolCutter);
   const setToolThickness = useCamStore((s) => s.setToolThickness);
@@ -568,12 +566,10 @@ export default function App() {
   const toggleStockEnabled = useCamStore((s) => s.toggleStockEnabled);
   const toggleArbor = useCamStore((s) => s.toggleArbor);
   const setCutFollows = useCamStore((s) => s.setCutFollows);
-  const setMode     = useCamStore((s) => s.setMode);
   const setPage     = useCamStore((s) => s.setPage);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
   const setRapidRate = useCamStore((s) => s.setRapidRate);
   const setDiameterMode = useCamStore((s) => s.setDiameterMode);
-  const setAIndex   = useCamStore((s) => s.setAIndex);
   const setRotaryFrame = useCamStore((s) => s.setRotaryFrame);
   // Through the feature tree, so a dropped file becomes the base of a history
   // rather than a part with no record of where it came from.
@@ -719,7 +715,9 @@ export default function App() {
   const { bounds, stats, path, sim } = getBuf();
 
   const warnings = stats?.warnings ?? [];
-  const rotaryIndices = stats?.aIndices ?? [0];
+  // Memoised because `?? [0]` mints a new array on every render otherwise,
+  // which defeats the memo further down that lists it as a dependency.
+  const rotaryIndices = useMemo(() => stats?.aIndices ?? [0], [stats]);
   // Live sketch bounds, so "Fit" frames what's drawn on the plane even with no
   // program loaded. Merged into the fit inside CameraRig (kept out of the fit
   // *key* there so drawing doesn't snap the camera — only an explicit Fit does).
@@ -819,6 +817,11 @@ export default function App() {
   );
   // Tools auto-detected from the program's comments, and the one cutting now.
   const detectedTools = stats?.tools ?? [];
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const currentToolNum = useMemo(() => toolAt(path, playhead), [path, playhead, bufVer]);
   const currentTool = detectedTools.find((t) => t.n === currentToolNum) || null;
   // The tool marker follows the active cutter's real size AND shape, so it
@@ -851,17 +854,24 @@ export default function App() {
   // MVJNR's insert nose angle is adjustable; MVVNN's is fixed.
   const baseTurnTool = STANDARD_TURN_TOOLS.find((t) => t.id === (currentOverride.insert ?? turnTool))
     ?? STANDARD_TURN_TOOLS[0];
-  const turnInsert = turning
+  // Memoised for the same reason as `rotaryIndices`: a fresh object each render
+  // makes every memo listing it re-run every render.
+  const turnInsert = useMemo(() => (turning
     ? {
-        ...baseTurnTool,
-        angle: baseTurnTool.adjustable ? (currentOverride.insertAngle ?? baseTurnTool.angle) : baseTurnTool.angle,
-      }
-    : null;
+      ...baseTurnTool,
+      angle: baseTurnTool.adjustable ? (currentOverride.insertAngle ?? baseTurnTool.angle) : baseTurnTool.angle,
+    }
+    : null), [turning, baseTurnTool, currentOverride.insertAngle]);
   // Feed and spindle speed at the playhead, and what the tool in the spindle
   // is, for the position page's footer. The tool description is the one the
   // marker draws and the carvers cut with (`effectiveTool` above), not the
   // program's comment on its own — the readout must name the tool that is
   // actually making the cut on screen.
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const running = useMemo(() => runningAt(path, playhead), [path, playhead, bufVer]);
   const droToolDesc = useMemo(() => ({
     cutter: turning ? null : marker.cutter ?? null,
@@ -884,6 +894,11 @@ export default function App() {
       }
     }
     return m;
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, bufVer]);
   const toolsAtIndexLabel = (a) => {
     const set = toolsByIndex.get(a);
@@ -891,8 +906,18 @@ export default function App() {
     return [...set].sort((x, y) => x - y).map((n) => `T${n}`).join(', ');
   };
   const count = path?.count ?? 0;
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const activeLine = useMemo(() => lineAt(path, playhead), [path, playhead, bufVer]);
   // Machine time consumed by the segments executed so far.
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const elapsed = useMemo(() => timeAt(path, playhead), [path, playhead, bufVer]);
 
   // Park the tool at the current tip (end of the last executed segment). Just a
