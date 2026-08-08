@@ -53,10 +53,10 @@ import {
 } from './engine/sim/billet.js';
 import { SAMPLE_GCODE, SAMPLE_TURNING } from './SAMPLE_GCODE.js';
 import Viewport from './components/Viewport.jsx';
-import GcodePanel from './components/GcodePanel.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
-import FeatureTree, { TREE_SIZE } from './components/FeatureTree.jsx';
+import LeftColumn from './components/LeftColumn.jsx';
+import { TREE_SIZE } from './components/FeatureTree.jsx';
 import { invalidate } from '@react-three/fiber';
 import { getBuf } from './engine/bufferCache.js';
 import { CAD } from './theme.js';
@@ -500,7 +500,6 @@ export default function App() {
   const gcode = useCamStore((s) => s.gcode);
   const fileName = useCamStore((s) => s.fileName);
   const status   = useCamStore((s) => s.status);
-  const error    = useCamStore((s) => s.error);
   const bufVer   = useCamStore((s) => s.bufVer);  // version counter — triggers re-render
   const playhead = useCamStore((s) => s.playhead);
   const playT    = useCamStore((s) => s.playT);
@@ -542,7 +541,6 @@ export default function App() {
   const rotaryFrame = useCamStore((s) => s.rotaryFrame);
   const simFrameA   = useCamStore((s) => s.simFrameA);
   // Actions are stable references defined once in the store.
-  const setGcode = useCamStore((s) => s.setGcode);
   const parse    = useCamStore((s) => s.parse);
   const loadFile = useCamStore((s) => s.loadFile);
   const setPlayhead = useCamStore((s) => s.setPlayhead);
@@ -1036,7 +1034,7 @@ export default function App() {
               transition: 'width 120ms ease',
             }}
           >
-            <FeatureTree />
+            <LeftColumn activeLine={activeLine} />
           </Sider>
 
           <Drawer
@@ -1148,10 +1146,6 @@ export default function App() {
                   </Tag>
                 )}
               </Space>
-
-              <GcodePanel gcode={gcode} activeLine={activeLine} onChange={setGcode} />
-
-              {error && <Alert type="error" showIcon message="Parse failed" description={error} />}
 
               {/* ---- Machine ---- */}
               {show.machine && (

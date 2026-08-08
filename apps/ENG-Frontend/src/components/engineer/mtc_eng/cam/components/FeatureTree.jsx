@@ -125,7 +125,7 @@ function FeatureEditor({ feature }) {
   );
 }
 
-export default function FeatureTree() {
+export default function FeatureTree({ embedded = false }) {
   const features = useFeatureStore((s) => s.features);
   const selectedId = useFeatureStore((s) => s.selectedId);
   const dirty = useFeatureStore((s) => s.dirty);
@@ -151,7 +151,10 @@ export default function FeatureTree() {
   const usedSketchIds = new Set(features.map((f) => f.sketchId).filter(Boolean));
   const spare = sketches.filter((s) => !usedSketchIds.has(s.id));
 
-  if (!open) {
+  // Standalone, it still collapses itself; embedded in `LeftColumn` the column
+  // owns that, and a second toggle in the same corner would be two controls for
+  // one job.
+  if (!embedded && !open) {
     return (
       <div style={{ ...PANEL, alignItems: 'center', paddingTop: 6 }}>
         <Tooltip title="Show the feature tree" placement="right">
@@ -198,7 +201,7 @@ export default function FeatureTree() {
         padding: '6px 6px 6px 10px', borderBottom: `1px solid ${CAD.border}`,
       }}>
         <Text style={{ flex: 1, color: CAD.text, fontSize: 12, fontWeight: 600 }}>
-          Feature tree
+          {embedded ? 'Features' : 'Feature tree'}
         </Text>
         <Tooltip title={dirty ? 'The tree or a sketch under it has changed — replay it' : 'Up to date'}>
           <Badge dot={dirty && features.length > 0} offset={[-2, 2]}>
@@ -213,9 +216,11 @@ export default function FeatureTree() {
             />
           </Badge>
         </Tooltip>
-        <Tooltip title="Collapse">
-          <Button size="small" type="text" icon={<MenuOutlined />} onClick={() => setOpen(false)} data-tree-toggle />
-        </Tooltip>
+        {!embedded && (
+          <Tooltip title="Collapse">
+            <Button size="small" type="text" icon={<MenuOutlined />} onClick={() => setOpen(false)} data-tree-toggle />
+          </Tooltip>
+        )}
       </div>
 
       {/* Said in words as well as by the dot. This is the one state that has to

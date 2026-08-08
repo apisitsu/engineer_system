@@ -192,10 +192,25 @@ describe('pressing Play collapses the sidebar to the program', () => {
     expect(sider().textContent).toMatch(/pause to edit/i);
   });
 
-  it('never hides a parse failure', async () => {
-    await mount();
+  it('never hides a parse failure — and needs nothing opened to show it', async () => {
+    // The oldest rule in `engine/view/sidebar.js`: a failure must not be
+    // suppressed by a mode change. It is stronger now than when the listing
+    // lived in the sidebar — the error is in the **left column**, which is
+    // always on screen, so it does not depend on Setup being open at all.
+    await mount({ setup: false });
     await setStore({ playing: true, error: 'Unbalanced bracket on line 4' });
-    expect(sider().textContent).toContain('Parse failed');
+    expect(container.textContent).toContain('Parse failed');
+    expect(container.textContent).toContain('Unbalanced bracket on line 4');
+  });
+
+  it('shows the program while it runs, without Setup being open', async () => {
+    // What broke when setup became a drawer: pressing Play left nothing to
+    // watch, because the listing had gone into the drawer with everything else.
+    await mount({ setup: false });
+    const src = ['G0 X0 Y0 Z5', 'G1 Z-2 F200', 'G1 X40 F400'].join(String.fromCharCode(10));
+    await setStore({ gcode: src, playing: true });
+    // The column switched itself to Program, and the text is on screen.
+    expect(container.textContent).toContain('G1 X40 F400');
   });
 
   it('brings the setup back on pause', async () => {
