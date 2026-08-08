@@ -47,7 +47,6 @@ const norm = (sel) => sel && ({
   r1: Math.min(sel.r1, sel.r2), r2: Math.max(sel.r1, sel.r2),
   c1: Math.min(sel.c1, sel.c2), c2: Math.max(sel.c1, sel.c2),
 });
-const cssEdge = (e) => (e ? `${e.w}px ${e.s} ${e.c}` : null);
 const fitArr = (arr, n, fill) => Array.from({ length: n }, (_, i) => (Array.isArray(arr) && arr[i] != null ? arr[i] : fill));
 
 const LINE_STYLES = [
@@ -233,7 +232,10 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   // Reload the currently-selected template (Reload button).
   const load = useCallback(() => loadTemplate(templateId), [loadTemplate, templateId]);
 
-  useEffect(() => { loadTemplates(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // Once, on mount: this fills the template *list*, and re-running it whenever
+  // `loadTemplates` changed identity would refetch it continuously.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadTemplates(); }, []);
 
   const importXlsx = async () => {
     setLoading(true);
@@ -746,7 +748,7 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         <tbody>{bodyRows}</tbody>
       </table>
     );
-  }, [rows, cols, colW, rowH, borders, fills, cells, mergeInfo, anchor, overlay, gridlines, totalW,
+  }, [rows, cols, colW, rowH, borders, fills, cells, mergeInfo, anchor, gridlines, totalW,
     onDown, onEnter, onEditStart, onSelectCol, onSelectRow, onSelectAll, startColResize, startRowResize]);
 
   const BorderBtn = ({ mode, icon, title }) => (

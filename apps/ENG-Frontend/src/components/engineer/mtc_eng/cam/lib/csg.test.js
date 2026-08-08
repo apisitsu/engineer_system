@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { meshBoolean, MESH_OPS } from './csg.js';
 import { extrudeRegion } from '../engine/solid/extrude.js';
+import { volume } from '../engine/solid/solidAssert.js';
 
 const square = (x0, y0, x1, y1) => [x0, y0, x1, y0, x1, y1, x0, y1];
 
@@ -10,20 +11,6 @@ const box = (x0, y0, x1, y1, z0, z1) => extrudeRegion(
   { depth: z1 - z0, base: z0 },
 );
 
-/** Signed volume — positive only for a closed, outward-facing surface. */
-function volume({ positions, triangleCount }) {
-  let v = 0;
-  for (let t = 0; t < triangleCount; t++) {
-    const o = t * 9;
-    const a = [positions[o], positions[o + 1], positions[o + 2]];
-    const b = [positions[o + 3], positions[o + 4], positions[o + 5]];
-    const c = [positions[o + 6], positions[o + 7], positions[o + 8]];
-    v += (a[0] * (b[1] * c[2] - b[2] * c[1])
-      - a[1] * (b[0] * c[2] - b[2] * c[0])
-      + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
-  }
-  return v;
-}
 
 describe('meshBoolean', () => {
   it('cuts one box out of another, leaving the right volume', () => {

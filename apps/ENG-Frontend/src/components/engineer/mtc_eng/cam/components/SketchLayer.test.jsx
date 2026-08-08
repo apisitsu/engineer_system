@@ -15,6 +15,7 @@ import {
   createSketch, addPoint, addLine, addCircle, addConstraint,
 } from '../engine/sketch/model.js';
 import { CAD } from '../theme.js';
+import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
 
 // Colours the layer draws with, read from the palette rather than frozen as
 // hexes here. What these tests are for is that the right STATE gets the right
@@ -193,5 +194,27 @@ describe('SketchLayer — tool modes', () => {
       await renderer.unmount();
       renderer = undefined;
     }
+  });
+});
+
+describe('what is drawn is what is built', () => {
+  it('renders arcs at the same fidelity the geometry is built to', () => {
+    // The screen used to tessellate at a fixed segment count while the solid was
+    // built to a chord tolerance. They agreed at small radii and diverged badly
+    // at large ones — at R200 the picture was 0.24 mm off a circle the geometry
+    // held to 0.01 mm, so the operator was deciding from a shape that was not
+    // the one being cut. Both go through `tessellateArc` now.
+    for (const r of [2, 10, 50, 200]) {
+      const pts = tessellateArc(0, 0, r, 0, Math.PI * 2);
+      const n = pts.length / 2 - 1;
+      const sagitta = r * (1 - Math.cos(Math.PI / n));
+      expect(sagitta, `R${r} strays past the chord tolerance`).toBeLessThanOrEqual(CHORD_TOL * 1.001);
+    }
+  });
+
+  it('scales the segment count with radius, which a fixed count cannot', () => {
+    const segs = (r) => tessellateArc(0, 0, r, 0, Math.PI * 2).length / 2 - 1;
+    expect(segs(200)).toBeGreaterThan(segs(50));
+    expect(segs(50)).toBeGreaterThan(segs(10));
   });
 });

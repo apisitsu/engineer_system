@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
 import { polygonPreview, slotPreview, axisDistance } from '../engine/sketch/shapes.js';
+import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
 import { planeMatrix } from '../engine/sketch/plane.js';
 import { CAD } from '../theme.js';
 
@@ -57,16 +58,22 @@ const ANGLE_BASE = CAD.skAxis; // cyan — the fixed reference line of an angle 
 const ANGLE_ROTATE = CAD.skPreview; // amber — the line the angle rotates
 
 const TWO_PI = Math.PI * 2;
-const norm = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
-
-/** Polyline sweeping counter-clockwise from angle a0 to a1 (planegcs arc order). */
-function arcRing(cx, cy, r, a0, a1, segs = 48) {
-  const span = norm(a1 - a0) || TWO_PI;
+/**
+ * Polyline sweeping counter-clockwise from a0 to a1 (planegcs arc order), lifted
+ * to the sketch layer's Z.
+ *
+ * Delegates to the **same** `tessellateArc` the geometry uses, rather than
+ * splitting the sweep into a fixed number of segments as this did before. Two
+ * copies at different fidelities meant the screen and the solid disagreed, and
+ * they disagreed most where it matters: at R200 a fixed 64 segments strays
+ * 0.24 mm from the true arc while the geometry stays within 0.01 mm. The
+ * operator decides from the picture, so the picture has to be the thing that
+ * gets cut.
+ */
+function arcRing(cx, cy, r, a0, a1, chordTol = CHORD_TOL) {
+  const flat = tessellateArc(cx, cy, r, a0, a1, chordTol);
   const pts = [];
-  for (let i = 0; i <= segs; i++) {
-    const a = a0 + (span * i) / segs;
-    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a), Z]);
-  }
+  for (let i = 0; i < flat.length; i += 2) pts.push([flat[i], flat[i + 1], Z]);
   return pts;
 }
 
@@ -316,7 +323,7 @@ export default function SketchLayer() {
     }
     if (tool === 'circle') {
       const r = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
-      return arcRing(anchor.x, anchor.y, r, 0, TWO_PI, 64);
+      return arcRing(anchor.x, anchor.y, r, 0, TWO_PI);
     }
     if (tool === 'polygon') {
       return polygonPreview(anchor.x, anchor.y, tip.x, tip.y, polygonSides)
@@ -337,7 +344,7 @@ export default function SketchLayer() {
       const r = Math.hypot(arcStart.x - anchor.x, arcStart.y - anchor.y);
       const a0 = Math.atan2(arcStart.y - anchor.y, arcStart.x - anchor.x);
       const a1 = Math.atan2(tip.y - anchor.y, tip.x - anchor.x);
-      return arcRing(anchor.x, anchor.y, r, a0, a1, 48);
+      return arcRing(anchor.x, anchor.y, r, a0, a1);
     }
     return null;
   }, [anchor, arcStart, tip, tool, polygonSides]);
@@ -493,12 +500,7 @@ export default function SketchLayer() {
         // Outline only — the centre point already renders via the points loop.
         const isSel = selected.has(c.id);
         const isHover = picking && !isSel && hoverId === c.id;
-        const segs = 64;
-        const ring = [];
-        for (let i = 0; i <= segs; i++) {
-          const a = (i / segs) * Math.PI * 2;
-          ring.push([c.cx + c.r * Math.cos(a), c.cy + c.r * Math.sin(a), Z]);
-        }
+        const ring = arcRing(c.cx, c.cy, c.r, 0, TWO_PI);
         return (
           <Line
             key={c.id}
@@ -528,7 +530,7 @@ export default function SketchLayer() {
         return (
           <Line
             key={a.id}
-            points={arcRing(a.cx, a.cy, a.r, a.a0, a.a1, 64)}
+            points={arcRing(a.cx, a.cy, a.r, a.a0, a.a1)}
             color={isSel ? SELECTED : isHover ? HOVER : a.construction ? CONSTRUCTION : baseGeom}
             lineWidth={isSel ? 4 : isHover ? 3 : a.construction ? 1.5 : 2}
             dashed={a.construction}

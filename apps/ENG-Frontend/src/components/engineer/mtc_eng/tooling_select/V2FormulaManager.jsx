@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Select,
   Space, Popconfirm, message, Typography, Tag, Alert
@@ -266,7 +266,11 @@ export default function V2FormulaManager({ machine, token }) {
   const [toolingFilter, setToolingFilter] = useState('');
   const [form] = Form.useForm();
 
-  const headers = { Authorization: `Bearer ${token}` };
+  // Memoised so it can be a real dependency below. Listing a fresh object in
+  // a dependency array makes the callback new on every render, and the
+  // `useEffect(() => load(), [load])` under it would then loop forever —
+  // which is why the deps used to name `token` instead and eslint objected.
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
   const baseUrl = `${server.TSV2_FORMULAS}/${machine.id}/formulas`;
 
   const load = useCallback(async () => {
@@ -279,7 +283,7 @@ export default function V2FormulaManager({ machine, token }) {
     } finally {
       setLoading(false);
     }
-  }, [machine.id, token]);
+  }, [baseUrl, headers]);
 
   useEffect(() => { load(); }, [load]);
 

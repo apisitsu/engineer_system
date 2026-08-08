@@ -9,34 +9,28 @@
  * convention `sliceLoops` produces, so everything already written against slice
  * output — Clipper offsetting, the CAM planner — reads these unchanged.
  *
- * ## Chaining is topological, not by tolerance
+ * Three steps, in this order, and the order is the design:
  *
- * `mesh/slice.js` chains segments by welding endpoints within a tolerance,
- * because a triangle soup has no idea which points are the same one. A sketch
- * does: it is point-based (`model.js`), so a shared corner **is** one point id,
- * and two entities are connected exactly when they name the same point. Walking
- * ids is exact — no tolerance to tune, no near-miss that silently splits a
- * profile in half. Two things widen "the same point" beyond raw id equality:
- *
- * - a `coincident` constraint, which is how the solver joins two points the user
- *   drew separately, and
- * - points sitting on top of each other within `weldTol`, which is what a solve
- *   leaves behind when some other constraint drove them together.
- *
- * Both are folded in with a union-find before any walking happens.
- *
- * ## Branching is reported, not guessed
- *
- * A vertex with three or more edges on it (a line drawn across a rectangle) has
- * no single answer for "which way does the profile go" — SolidWorks asks. Rather
- * than pick one and quietly build the wrong solid, the walk stops and names the
- * vertex in `branches`. Splitting those into regions properly needs planar-face
- * traversal, which is the upgrade if branching profiles are ever wanted; until
- * then a caller has an honest thing to show the user.
+ * 1. **Weld the points.** A sketch is point-based (`model.js`), so a shared
+ *    corner *is* one point id and two entities are connected exactly when they
+ *    name the same point. `coincident` constraints and points sitting within
+ *    `weldTol` of each other are folded in with a union-find, so a corner the
+ *    user drew twice still counts once.
+ * 2. **Arrange.** Topology alone is not enough, because two things people
+ *    actually do share no point at all: a divider whose ends land *on* an edge,
+ *    and two shapes overlapping without a common vertex. `arrangeCurves` cuts
+ *    every curve where it crosses another, and vertices are assigned *after*
+ *    that — which is what turns a crossing into a junction instead of two curves
+ *    passing through one another unaware.
+ * 3. **Trace faces.** Dangling geometry is pruned, then the planar graph's faces
+ *    are traced; a line across a rectangle gives two regions, as it does in any
+ *    CAD. `branches` still reports the junctions, but as information rather than
+ *    a refusal.
  *
  * Construction geometry is reference only and never contributes.
  */
-import { normalizeLoops, loopArea } from '../mesh/slice.js';
+// `reversed` is the same flat-polyline reverse `sliceLoops` needs; one copy.
+import { normalizeLoops, loopArea, reversed as reversePoints } from '../mesh/slice.js';
 
 const TAU = Math.PI * 2;
 
@@ -346,17 +340,6 @@ function buildGraph(sk, { chordTol, weldTol }) {
     }
   });
   return { edges, rings, at, nodes };
-}
-
-/** A polyline reversed, as a flat point list. */
-function reversePoints(pts) {
-  const out = new Array(pts.length);
-  const n = pts.length / 2;
-  for (let i = 0; i < n; i++) {
-    out[i * 2] = pts[(n - 1 - i) * 2];
-    out[i * 2 + 1] = pts[(n - 1 - i) * 2 + 1];
-  }
-  return out;
 }
 
 /**

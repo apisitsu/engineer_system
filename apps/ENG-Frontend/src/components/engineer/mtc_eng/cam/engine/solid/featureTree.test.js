@@ -5,6 +5,7 @@ import {
 } from './featureTree.js';
 import { meshBoolean } from '../../lib/csg.js';
 import { createSketch, addPoint, addLine } from '../sketch/model.js';
+import { volume } from './solidAssert.js';
 
 /** Add a closed rectangle to an existing sketch. */
 function addRect(sk, x0, y0, x1, y1) {
@@ -26,20 +27,6 @@ function rectSketch(x0, y0, x1, y1) {
   return sk;
 }
 
-/** Signed volume — positive only for a closed, outward-facing surface. */
-function volume({ positions, triangleCount }) {
-  let v = 0;
-  for (let t = 0; t < triangleCount; t++) {
-    const o = t * 9;
-    const a = [positions[o], positions[o + 1], positions[o + 2]];
-    const b = [positions[o + 3], positions[o + 4], positions[o + 5]];
-    const c = [positions[o + 6], positions[o + 7], positions[o + 8]];
-    v += (a[0] * (b[1] * c[2] - b[2] * c[1])
-      - a[1] * (b[0] * c[2] - b[2] * c[0])
-      + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
-  }
-  return v;
-}
 
 /** A context over a plain map of sketches. */
 function ctx(sketches, imports = {}) {
