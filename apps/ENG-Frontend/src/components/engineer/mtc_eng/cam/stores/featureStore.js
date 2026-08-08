@@ -227,7 +227,20 @@ export const useFeatureStore = create((set, get) => ({
       const sketch = useSketchStore.getState();
       let meshBoolean;
       if (needsMeshBoolean(features)) {
-        ({ meshBoolean } = await import('../lib/csg.js'));
+        try {
+          ({ meshBoolean } = await import('../lib/csg.js'));
+        } catch (e) {
+          // The solid boolean is a lazily-loaded chunk, so this is the one part
+          // of a rebuild that can fail for a reason nothing on this page did —
+          // the file not reaching the host, or the network dropping mid-fetch.
+          // `cam-deploy.md` describes the same shape of failure for the wasm.
+          // Left to reject it would surface as an unhandled promise and no
+          // message at all.
+          const message = `Could not load the solid boolean (${e?.message || e}). Reload the page; if it persists the deploy is missing a file.`;
+          set({ errors: [{ id: null, name: 'Rebuild', message }], dirty: true });
+          useSketchStore.getState().setError(message);
+          return null;
+        }
       }
       const { soup, steps, errors } = rebuildFeatures(features, {
         sketchOf: (id) => {
@@ -246,6 +259,14 @@ export const useFeatureStore = create((set, get) => ({
         keepDatum: true,
         keepPage: true,
       });
+    } catch (e) {
+      // A rebuild replays arbitrary geometry; anything it throws that the
+      // per-feature handling did not already catch becomes a message rather
+      // than a rejection nobody is waiting for.
+      const message = e?.message || String(e);
+      set({ errors: [{ id: null, name: 'Rebuild', message }], dirty: true });
+      useSketchStore.getState().setError(`Rebuild failed: ${message}`);
+      return null;
     } finally {
       set({ building: false });
     }

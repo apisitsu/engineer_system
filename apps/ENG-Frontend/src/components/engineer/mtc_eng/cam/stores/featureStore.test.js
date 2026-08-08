@@ -1,5 +1,5 @@
 import {
-  describe, it, expect, beforeEach,
+  describe, it, expect, beforeEach, vi,
 } from 'vitest';
 import { useFeatureStore } from './featureStore.js';
 import { useSketchStore } from './sketchStore.js';
@@ -285,5 +285,48 @@ describe('serialize / load', () => {
   it('hands the next new feature an id that cannot collide with a loaded one', () => {
     features().load([{ kind: 'extrude', id: 900, sketchId: 1 }]);
     expect(features().addFeature('extrude', { sketchId: 1 }).id).toBeGreaterThan(900);
+  });
+});
+
+describe('a rebuild that goes wrong reports rather than rejects', () => {
+  it('says so when the solid boolean chunk cannot be loaded', async () => {
+    // The boolean is a lazily-loaded chunk, so it can fail for a reason nothing
+    // on the page did: the file not reaching the host, or the network dropping.
+    // Unhandled, that surfaced as a rejected promise and no message at all.
+    vi.resetModules();
+    vi.doMock('../lib/csg.js', () => { throw new Error('Loading chunk 799 failed'); });
+    const { useFeatureStore: fresh } = await import('./featureStore.js');
+    const { useSketchStore: freshSketch } = await import('./sketchStore.js');
+
+    const doc = createSketch();
+    addRect(doc, 0, 0, 40, 40);
+    const doc2 = createSketch();
+    addRect(doc2, 10, 10, 20, 20);
+    freshSketch.setState({
+      sk: doc,
+      sketches: [
+        { id: 1, name: 'A', plane: { preset: 'XY', offset: 0 }, doc, past: [], future: [] },
+        { id: 2, name: 'B', plane: { preset: 'XY', offset: 0 }, doc: doc2, past: [], future: [] },
+      ],
+      activeId: 1,
+    });
+    fresh.getState().clear();
+    fresh.getState().addFeature('extrude', { sketchId: 1, depth: 10 });
+    fresh.getState().addFeature('extrude', { sketchId: 2, depth: 30, base: -10, merge: 'cut' });
+
+    // The point: this resolves rather than rejecting.
+    await expect(fresh.getState().rebuild()).resolves.toBeNull();
+    expect(fresh.getState().errors[0].message).toMatch(/Could not load the solid boolean/i);
+    expect(fresh.getState().building).toBe(false);
+    expect(fresh.getState().dirty).toBe(true); // still needs replaying
+    vi.doUnmock('../lib/csg.js');
+    vi.resetModules();
+  });
+
+  it('leaves `building` false after a failure, so the button is not stuck', async () => {
+    features().clear();
+    features().addFeature('extrude', { sketchId: 404, depth: 5 });
+    await features().rebuild();
+    expect(features().building).toBe(false);
   });
 });

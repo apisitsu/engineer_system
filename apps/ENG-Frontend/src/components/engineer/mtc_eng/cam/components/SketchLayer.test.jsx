@@ -257,3 +257,46 @@ describe('a preview with nothing in it must not be drawn', () => {
     await r.unmount();
   });
 });
+
+describe('every half-finished draw the mouse can produce', () => {
+  /**
+   * A sweep rather than a list of cases.
+   *
+   * Both slot bugs reached the shop floor because they only appear mid-gesture,
+   * in the browser, in states no geometry test constructs: the cursor exactly on
+   * an axis, exactly on a centre, before the second click. This walks every tool
+   * through every stage with degenerate cursors, and asserts only that the scene
+   * builds — which is all the crash needed to be caught.
+   */
+  const TOOLS = ['point', 'line', 'rectangle', 'slot', 'polygon', 'circle', 'arc', 'dimension', 'trim', 'chamfer'];
+  const CURSORS = [
+    { x: 0, y: 0 },     // on the first click
+    { x: 30, y: 0 },    // on the second click
+    { x: 15, y: 0 },    // on the axis between them
+    { x: 15, y: 5 },    // properly off it
+    { x: -1e9, y: 1e9 }, // absurdly far away
+  ];
+
+  for (const tool of TOOLS) {
+    for (const stage of ['none', 'one', 'two']) {
+      it(`${tool}, ${stage} click(s) placed`, async () => {
+        for (const cursor of CURSORS) {
+          const sk = createSketch();
+          const a = addPoint(sk, 0, 0);
+          const b = addPoint(sk, 30, 0);
+          setSketch(sk, {
+            tool,
+            pending: stage === 'none' ? null : a,
+            pending2: stage === 'two' ? b : null,
+            cursor,
+          });
+          // eslint-disable-next-line no-await-in-loop
+          const r = await ReactThreeTestRenderer.create(<SketchLayer />);
+          expect(r.scene, `${tool}/${stage} at ${cursor.x},${cursor.y}`).toBeTruthy();
+          // eslint-disable-next-line no-await-in-loop
+          await r.unmount();
+        }
+      });
+    }
+  }
+});
