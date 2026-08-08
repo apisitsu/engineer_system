@@ -1673,7 +1673,7 @@ export default function App() {
             />
 
             {/* Bottom toolbar: view/plan selector and playback controls in one row. */}
-            <div style={{
+            <div data-cam-overlay="bottom" style={{
               position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
               display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
               background: CAD.glass, border: `1px solid ${CAD.border}`,

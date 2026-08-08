@@ -119,7 +119,7 @@ export default function PositionReadout({
   const foot = droFooter({ toolNumber, tool, running, line });
 
   return (
-    <div style={PANEL} data-testid="position-readout">
+    <div style={PANEL} data-cam-overlay="right" data-testid="position-readout">
       {/* Column captions live in the heading rather than a row of their own, so
           the panel still reads as one page and not two stacked tables. */}
       <div style={HEADING}>

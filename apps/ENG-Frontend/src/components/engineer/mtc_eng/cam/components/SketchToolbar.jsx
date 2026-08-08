@@ -594,7 +594,7 @@ export default function SketchToolbar() {
 
   return (
     <>
-    <div style={{
+    <div data-cam-overlay="top" style={{
       position: 'absolute', top: 12, left: 12, zIndex: 5,
       display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap',
       background: CAD.glass, border: `1px solid ${CAD.border}`,

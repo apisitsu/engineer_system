@@ -49,8 +49,41 @@ export { VIEW_DIRS, TURN_VIEW_DIRS } from '../engine/view/camera.js';
  * fill — where the old 3D-diagonal fit zoomed out for an out-of-plane dimension
  * (a 4-axis part's rotated rapid retracts) and shrank the part to a sliver.
  */
+/**
+ * How many pixels of the canvas each edge's floating chrome covers.
+ *
+ * Measured from the DOM rather than hard-coded, because the rail wraps to a
+ * second row on a narrow viewport and the readout comes and goes — a constant
+ * would be wrong exactly when it mattered. Elements opt in with
+ * `data-cam-overlay="top|right|bottom|left"`; anything transient (a popover, a
+ * prompt) deliberately does not, so aiming the camera never depends on what was
+ * open at the time.
+ */
+function overlayInsets(canvasEl) {
+  const out = {
+    left: 0, right: 0, top: 0, bottom: 0,
+  };
+  if (!canvasEl || typeof document === 'undefined') return out;
+  const c = canvasEl.getBoundingClientRect();
+  if (!c.width || !c.height) return out;
+  for (const el of document.querySelectorAll('[data-cam-overlay]')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    // Ignore anything not actually over this canvas.
+    if (r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom) continue;
+    const side = el.getAttribute('data-cam-overlay');
+    if (side === 'top') out.top = Math.max(out.top, r.bottom - c.top);
+    else if (side === 'bottom') out.bottom = Math.max(out.bottom, c.bottom - r.top);
+    else if (side === 'left') out.left = Math.max(out.left, r.right - c.left);
+    else if (side === 'right') out.right = Math.max(out.right, c.right - r.left);
+  }
+  // A little air between the geometry and the panel it sits beside.
+  for (const k of ['left', 'right', 'top', 'bottom']) if (out[k] > 0) out[k] += 8;
+  return out;
+}
+
 function CameraRig({ bounds, sketchFit, view, viewNonce, controlsRef, mode }) {
-  const { camera, size: canvasSize } = useThree();
+  const { camera, size: canvasSize, gl } = useThree();
   // Refit ONLY when the view, the fit request, or the bounds *values* change —
   // never on an incidental re-render. Keying the effect on this string means
   // playback (which re-renders every tick but changes none of these) can't snap
@@ -68,7 +101,11 @@ function CameraRig({ bounds, sketchFit, view, viewNonce, controlsRef, mode }) {
     const box = unionBounds(bounds ?? null, sketchFit ?? null);
     // All the arithmetic — view direction, screen axes, zoom, standoff — lives in
     // `engine/view/camera.js` so it can be tested without a canvas.
-    const f = framing(mode, view, box, canvasSize);
+    // Measured now rather than tracked as state: the rail may have wrapped or
+    // the readout appeared since the last fit, and this is the moment it matters.
+    const f = framing(mode, view, box, canvasSize, {
+      inset: overlayInsets(gl?.domElement),
+    });
     camera.zoom = f.zoom;
     // Orient the camera with the same screen-up the fit was measured against.
     // Using world-up here instead rolls the view whenever the two disagree, and
@@ -78,7 +115,7 @@ function CameraRig({ bounds, sketchFit, view, viewNonce, controlsRef, mode }) {
     camera.near = f.near;
     camera.far = f.far;
     camera.updateProjectionMatrix();
-    const target = new THREE.Vector3(...f.center);
+    const target = new THREE.Vector3(...f.target);
     camera.lookAt(target);
     if (controlsRef.current) {
       controlsRef.current.target.copy(target);
