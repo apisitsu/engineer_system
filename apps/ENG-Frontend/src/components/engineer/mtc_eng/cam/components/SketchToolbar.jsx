@@ -8,7 +8,7 @@
  * Drawing itself still happens in the viewport (SketchLayer); this is the toolbar
  * and status readout, wired to the same sketchStore.
  */
-import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider, Segmented, Upload } from 'antd';
+import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider, Segmented, Upload, Badge } from 'antd';
 import {
   UndoOutlined, RedoOutlined, DeleteOutlined, ThunderboltOutlined,
   NodeIndexOutlined, EllipsisOutlined, BulbOutlined, ClearOutlined,
@@ -20,6 +20,8 @@ import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.
 import LibraryPanel from './LibraryPanel.jsx';
 import SketchesPanel from './SketchesPanel.jsx';
 import BuildPanel from './BuildPanel.jsx';
+import FeatureTreePanel from './FeatureTreePanel.jsx';
+import { useFeatureStore } from '../stores/featureStore.js';
 // The helper this rail introduced now serves the whole app — see `glyph.jsx`.
 import { glyph } from './glyph.jsx';
 import { CAD } from '../theme.js';
@@ -53,6 +55,8 @@ const OffsetIcon = glyph(<><path d="M4 16c4-8 12-8 16 0" /><path d="M4 20c4-8 12
 // planes. Extrude: a profile with the solid pushed off it.
 const PlanesIcon = glyph(<><path d="M3 8.5l8-3.5 10 3-8 3.5z" /><path d="M3 8.5v7l8 3.5v-7" /><path d="M21 8v7l-10 4" opacity="0.55" /></>);
 const ExtrudeIcon = glyph(<><rect x="3.5" y="9.5" width="10" height="8" /><path d="M3.5 9.5l6-5h10l-6 5" /><path d="M19.5 4.5v8l-6 5" /></>);
+// The tree: a root with operations hanging off it, as a CAD's history reads.
+const TreeIcon = glyph(<><path d="M5 4v15" /><path d="M5 8h6M5 13h6M5 18h6" /><rect x="12" y="6" width="7" height="4" /><rect x="12" y="11" width="7" height="4" /><rect x="12" y="16" width="7" height="4" /></>);
 
 const TOOLS = [
   { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select points, lines, circles or arcs · drag a point to move it (the sketch re-solves) · double-click a dimension to edit it' },
@@ -552,6 +556,8 @@ export default function SketchToolbar() {
   const mirror = useSketchStore((s) => s.mirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
   const polygonSides = useSketchStore((s) => s.polygonSides);
+  // Whether the feature tree needs replaying — shown as a dot on its rail button.
+  const treeDirty = useFeatureStore((s) => s.dirty && s.features.length > 0);
   const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
 
   const setError = useSketchStore((s) => s.setError);
@@ -711,6 +717,18 @@ export default function SketchToolbar() {
         trigger={(
           <Tooltip title="Build — extrude or revolve this sketch into a solid and send it to CAM" placement="bottom">
             <Button type="text" icon={<ExtrudeIcon />} style={{ ...railBtn(), color: CAD.accent }} />
+          </Tooltip>
+        )}
+      />
+      {/* The tree carries a dot while it is out of date, so the one control that
+          has to be noticed from across the shop floor is noticeable without the
+          popover being open. */}
+      <FeatureTreePanel
+        trigger={(
+          <Tooltip title="Feature tree — every operation that made the part, and the numbers behind them" placement="bottom">
+            <Badge dot={treeDirty} offset={[-4, 4]}>
+              <Button type="text" icon={<TreeIcon />} style={{ ...railBtn(), color: CAD.icon }} />
+            </Badge>
           </Tooltip>
         )}
       />

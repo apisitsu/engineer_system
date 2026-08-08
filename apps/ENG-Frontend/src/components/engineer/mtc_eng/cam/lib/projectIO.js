@@ -5,8 +5,9 @@
  * engine so the format layer stays DOM-free.
  */
 import { useCamStore } from '../stores/camStore.js';
-import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useCamPlanStore, getMesh } from '../stores/camPlanStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
+import { useFeatureStore } from '../stores/featureStore.js';
 import { serialize as serializeSketch } from '../engine/sketch/model.js';
 import { sketchToDxf, sketchHasGeometry } from '../engine/sketch/dxf.js';
 import {
@@ -81,6 +82,9 @@ export function currentProject() {
     // Null when nothing is imported, so a bare sketch/program stays a v1-shaped
     // project with no `cam` block.
     cam: useCamPlanStore.getState().serializeSetup(),
+    // The feature tree (v4) — the operations that built the part, so reopening
+    // the project can change it and not only look at it.
+    features: useFeatureStore.getState().serialize(),
   });
 }
 
@@ -161,6 +165,12 @@ export async function applyProject(doc) {
   if (!sketchStore.loadSketches(project.sketches) && project.sketch) {
     sketchStore.loadSerialized(project.sketch);
   }
+  // The tree last, so it restores against the sketches and the part it names.
+  // `getMesh().soup` is whatever `restoreSetup` just put back, which is the mesh
+  // an `import` feature described.
+  const featureStore = useFeatureStore.getState();
+  featureStore.clear();
+  if (project.features) featureStore.load(project.features, getMesh().soup);
   await cam.parse(project.gcode, project.fileName ?? 'project');
   // Land on the machine page that actually shows the restored part.
   if (camMode) await useCamStore.getState().setPage(camMode);

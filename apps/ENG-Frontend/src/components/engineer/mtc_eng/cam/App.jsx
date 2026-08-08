@@ -27,6 +27,7 @@ import {
 } from './engine/cam/cutters.js';
 import { effectiveTool } from './engine/cam/effectiveTool.js';
 import { useCamStore } from './stores/camStore.js';
+import { useFeatureStore } from './stores/featureStore.js';
 import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
@@ -574,7 +575,9 @@ export default function App() {
   const setDiameterMode = useCamStore((s) => s.setDiameterMode);
   const setAIndex   = useCamStore((s) => s.setAIndex);
   const setRotaryFrame = useCamStore((s) => s.setRotaryFrame);
-  const loadPart      = useCamPlanStore((s) => s.loadPart);
+  // Through the feature tree, so a dropped file becomes the base of a history
+  // rather than a part with no record of where it came from.
+  const loadPart      = useFeatureStore((s) => s.importPart);
   const partAnalysis  = useCamPlanStore((s) => s.analysis);
   const partVer       = useCamPlanStore((s) => s.meshVer);
   // Where the physical A axis runs, so the work turns about the line it was

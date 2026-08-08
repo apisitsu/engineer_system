@@ -41,6 +41,7 @@ import CommandButton from './CommandButton.jsx';
 import {
   PartIcon, AutoPlanIcon, ClearFaceIcon, ContourIcon, A0FaceIcon, RotaryCentreIcon,
 } from './glyph.jsx';
+import { useFeatureStore } from '../stores/featureStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
 import { MATERIALS } from '../engine/cam/library.js';
 import {
@@ -275,7 +276,9 @@ export default function CamPanel() {
   const diameterMode = useCamPlanStore((s) => s.diameterMode);
   const programNumber = useCamPlanStore((s) => s.programNumber);
 
-  const loadPart = useCamPlanStore((s) => s.loadPart);
+  // Imports go through the feature tree so the part always has a history —
+  // `featureStore.importPart` calls `loadPart` and records it as the base.
+  const loadPart = useFeatureStore((s) => s.importPart);
   const makePlan = useCamPlanStore((s) => s.makePlan);
   const sendToViewport = useCamPlanStore((s) => s.sendToViewport);
   const setOption = useCamPlanStore((s) => s.setOption);

@@ -33,9 +33,8 @@ import {
 import { sketchRegions } from '../engine/sketch/loops.js';
 import { dxfToSketch } from '../engine/sketch/dxfImport.js';
 import { buildSlot, buildPolygon, axisDistance } from '../engine/sketch/shapes.js';
-import { buildSolid } from '../engine/solid/extrude.js';
 import { combineRegions } from '../engine/solid/regionBoolean.js';
-import { useCamPlanStore, getMesh } from './camPlanStore.js';
+import { useCamPlanStore } from './camPlanStore.js';
 
 const DEG = Math.PI / 180;
 
@@ -1417,75 +1416,6 @@ export const useSketchStore = create((set, get) => ({
       // for; report it where every other sketch failure is reported.
       set({ error: e?.message || String(e) });
       return found;
-    }
-  },
-
-  /**
-   * Build a solid from the active sketch and hand it to the CAM pipeline.
-   *
-   * The solid enters through `camPlanStore.loadSoup`, which is the same path an
-   * imported STL takes from the moment it becomes triangles — so a part drawn
-   * here is measured, planned, simulated and posted by exactly the code that
-   * handles an imported one, and there is no second pipeline to keep in step.
-   *
-   * @param {{op?:'extrude'|'revolve', depth?:number, base?:number,
-   *          axis?:'x'|'y', angle?:number}} opts
-   */
-  async build({ combine = null, merge = null, ...opts } = {}) {
-    const { regions: found, open, branches } = sketchRegions(get().sk);
-    // The boolean runs on the **profiles**, before anything is extruded — see
-    // `engine/solid/regionBoolean.js` for why that is the right place for it.
-    let regions = found;
-    if (combine && found.length > 1) {
-      try {
-        regions = combineRegions(found, combine);
-      } catch (e) {
-        set({ error: e?.message || String(e) });
-        return null;
-      }
-      if (!regions.length) {
-        set({ error: `Nothing left after ${combine} — the profiles do not overlap the way that needs.` });
-        return null;
-      }
-    }
-    if (!regions.length) {
-      // Say which of the two reasons it is — "nothing closed" and "nothing
-      // drawn" need different things done about them.
-      const why = open.length
-        ? (branches.length
-          ? 'Some geometry hangs by one end and some meets at a junction — check that the ends of the profile actually join.'
-          : 'The profile is not closed — the ends of some lines do not meet.')
-        : 'Draw a closed profile first.';
-      set({ error: `Nothing to build. ${why}` });
-      return null;
-    }
-    const entry = get().activeSketch();
-    try {
-      let soup = buildSolid(regions, { plane: entry?.plane, ...opts });
-      let name = `${entry?.name || 'Sketch'}.${opts.op === 'revolve' ? 'revolve' : 'extrude'}`;
-      if (merge) {
-        const part = getMesh().soup;
-        if (!part?.triangleCount) {
-          set({ error: 'There is no part loaded to combine with — build the first solid on its own.' });
-          return null;
-        }
-        // Loaded on demand: the CSG library is the heaviest thing this module can
-        // reach, and a session that only draws and extrudes never needs it. The
-        // route is already the app's one lazy chunk; this keeps it that size.
-        const { meshBoolean } = await import('../lib/csg.js');
-        soup = meshBoolean(part, soup, merge, `${soup.format}.${merge}`);
-        name = `${useCamPlanStore.getState().stlName || 'Part'} ${merge} ${name}`;
-      }
-      const analysis = await useCamPlanStore.getState().loadSoup(soup, name);
-      if (!analysis) {
-        set({ error: useCamPlanStore.getState().error || 'The solid could not be measured.' });
-        return null;
-      }
-      set({ error: null });
-      return analysis;
-    } catch (e) {
-      set({ error: e?.message || String(e) });
-      return null;
     }
   },
 

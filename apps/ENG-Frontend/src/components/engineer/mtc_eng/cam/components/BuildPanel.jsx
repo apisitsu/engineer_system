@@ -19,6 +19,7 @@ import {
 } from 'antd';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { useCamPlanStore } from '../stores/camPlanStore.js';
+import { useFeatureStore } from '../stores/featureStore.js';
 import { planeLabel } from '../engine/sketch/plane.js';
 import { BOOLEAN_OPS } from '../engine/solid/regionBoolean.js';
 import { CAD } from '../theme.js';
@@ -39,7 +40,7 @@ const COMBINE_OPTIONS = [
  * before there was a choice.
  */
 const MERGE_OPTIONS = [
-  { value: 'none', label: 'Replace' },
+  { value: 'new', label: 'New' },
   { value: 'cut', label: 'Cut' },
   { value: 'add', label: 'Add' },
   { value: 'common', label: 'Common' },
@@ -80,7 +81,8 @@ export default function BuildPanel({ trigger }) {
   // recomputes as the sketch is drawn rather than only when it is opened.
   const version = useSketchStore((s) => s.version);
   const regionsOf = useSketchStore((s) => s.regions);
-  const build = useSketchStore((s) => s.build);
+  const build = useFeatureStore((s) => s.buildFromSketch);
+  const featureCount = useFeatureStore((s) => s.features.length);
   const sketches = useSketchStore((s) => s.sketches);
   const activeId = useSketchStore((s) => s.activeId);
 
@@ -89,10 +91,12 @@ export default function BuildPanel({ trigger }) {
   const [axis, setAxis] = useState('x');
   const [angle, setAngle] = useState(360);
   const [combine, setCombine] = useState('none');
-  const [merge, setMerge] = useState('none');
+  const [merge, setMerge] = useState('new');
   const [busy, setBusy] = useState(false);
-  // A part on the machine is what makes "cut this out of it" mean anything.
-  const hasPart = useCamPlanStore((s) => s.status === 'ready' && Boolean(s.stlName));
+  // A feature already in the tree is what makes "cut this out of it" mean
+  // anything — the part on the machine is whatever the tree last built.
+  const hasPart = useCamPlanStore((s) => s.status === 'ready' && Boolean(s.stlName))
+    && featureCount > 0;
 
   const active = sketches.find((s) => s.id === activeId) || sketches[0];
   // eslint-disable-next-line no-unused-vars
@@ -105,7 +109,7 @@ export default function BuildPanel({ trigger }) {
   const summary = describe(state, combineOp);
   const multi = regionsOf(null).regions.length > 1;
 
-  const mergeOp = hasPart && merge !== 'none' ? merge : null;
+  const mergeOp = hasPart ? merge : 'new';
 
   const onBuild = async () => {
     setBusy(true);
@@ -191,9 +195,9 @@ export default function BuildPanel({ trigger }) {
       {/* Only when there is something on the machine to combine with. */}
       {hasPart && (
         <Space direction="vertical" size={2} style={{ width: '100%' }}>
-          <Text style={{ color: CAD.dim, fontSize: 11 }}>Against the loaded part</Text>
+          <Text style={{ color: CAD.dim, fontSize: 11 }}>Against what the tree has built</Text>
           <Segmented size="small" block value={merge} onChange={setMerge} options={MERGE_OPTIONS} />
-          {mergeOp && (
+          {mergeOp !== 'new' && (
             <Text style={{ color: CAD.dim, fontSize: 10 }}>
               A boolean between solids is approximate — where both shapes share a plane,
               combining the profiles above is exact.
@@ -221,9 +225,9 @@ export default function BuildPanel({ trigger }) {
         Build solid
       </Button>
       <Text style={{ color: CAD.dim, fontSize: 10 }}>
-        {mergeOp
-          ? `The result ${mergeOp === 'cut' ? 'cuts' : mergeOp === 'add' ? 'joins' : 'intersects'} the loaded part and opens on the machine page that suits it.`
-          : 'The solid replaces the loaded part and opens on the machine page that suits it.'}
+        {mergeOp !== 'new'
+          ? `Added to the feature tree, ${mergeOp === 'cut' ? 'cutting' : mergeOp === 'add' ? 'joining' : 'intersecting'} what is already there. Editable afterwards.`
+          : 'Added to the feature tree as a new body. Editable afterwards.'}
       </Text>
     </Space>
   );

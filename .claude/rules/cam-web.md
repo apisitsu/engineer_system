@@ -164,6 +164,7 @@ usual:
 | `engine/solid/triangulate.js` | ear clipping with hole bridging — the flat caps |
 | `engine/solid/extrude.js` | extrude / revolve → triangle soup |
 | `engine/solid/regionBoolean.js` | union / subtract / intersect on **profiles** |
+| `engine/solid/featureTree.js` | the ordered operations, and the fold that replays them |
 | `lib/csg.js` | boolean between **solids**, the one part that needs three.js |
 
 **`camPlanStore.loadSoup` is why this was cheap.** `loadPart` always converted a
@@ -248,8 +249,40 @@ would produce a profile that looks closed, cannot chain, and refuses to extrude
 for no visible reason. `$INSUNITS` is honoured too — a drawing that arrives 25.4×
 too small is the kind of mistake that reaches the floor.
 
-Project files are **v3** (`sketches: { active, items }`). v1/v2 still open — they
-carry one `sketch` and no plane, which lands on the table as before.
+## The feature tree (2026-08-08)
+
+The part is no longer the output of one build — it is **what replaying the tree
+produces**. `featureStore.buildFromSketch` is the only way a solid gets made;
+there is deliberately no one-shot path, because a build that left no feature
+behind would mean the tree and the part disagreed the moment it was used.
+
+- **`featureStore` is its own store** because a feature reads a *sketch* and
+  produces the *part*: `featureStore → sketchStore` and `featureStore →
+  camPlanStore`, neither of which learns about features. Putting the tree in
+  either would have made the import cycle real — `sketchStore` already imports
+  `camPlanStore`.
+- **Topological naming is sidestepped, not solved.** Nothing names a face: a
+  sketch placed on one stores the *resolved plane* (`planeFromFace`), which is
+  numbers and cannot go stale. The price, stated rather than hidden: changing an
+  early feature does **not** move a sketch placed on its face.
+- **`loadSoup` takes `keepDatum` / `keepPage`.** Clearing the datum is right for
+  an imported file and wrong for a rebuild — without it the operator loses
+  X0/Y0/Z0 every time they change a dimension. Same for being thrown to the
+  machine page while standing at the sketch they are editing.
+- **Rebuild is a button.** A sketch drag emits a solve per frame; auto-rebuild
+  would fire a CSG evaluation per frame with it. `dirty` is set by a subscription
+  to `sketchStore.version` — subscribed inside `featureStore` so the sketcher
+  still has no idea features exist.
+- **A broken feature is skipped, not fatal.** Its message is recorded against it
+  and the fold carries on, so one bad operation costs that operation and not the
+  part. `buildFromSketch` removes a feature whose *own* first build failed rather
+  than leaving a permanently broken entry.
+- Imports go through **`featureStore.importPart`**, never `camPlanStore.loadPart`
+  directly, or a file arrives with no history behind it.
+
+Project files are **v4** (`features`), on top of v3's `sketches: { active,
+items }`. v1/v2/v3 all still open — an older file simply has no tree, which is
+exactly what it had.
 
 ## The library: a private shelf per operator, plus one shared shelf
 

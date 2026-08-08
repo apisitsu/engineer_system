@@ -187,8 +187,15 @@ export const useCamPlanStore = create((set, get) => ({
    *
    * @param {{positions:Float32Array, triangleCount:number, format:string}} soup
    * @param {string} name  what to call it in the UI
+   * @param {{keepDatum?:boolean, keepPage?:boolean}} [opts]
+   *   Both exist for **rebuilding a feature tree**, which is not a new part but
+   *   the same one recomputed. Clearing the datum is right for an imported file
+   *   and wrong here — it would throw away the X0/Y0/Z0 the operator set every
+   *   time they changed a dimension. Moving them to the machine page is right
+   *   when a part appears out of nowhere and wrong when they are stood at the
+   *   sketch they are editing.
    */
-  async loadSoup(soup, name) {
+  async loadSoup(soup, name, { keepDatum = false, keepPage = false } = {}) {
     set({ status: 'loading', error: null, plan: null, nc: null });
     try {
       const welded = weld(soup);
@@ -212,8 +219,9 @@ export const useCamPlanStore = create((set, get) => ({
         status: 'ready',
         forceMode: 'auto',
         // A new part has no relationship to wherever the last one's origin
-        // was picked — that point may not even exist on this geometry.
-        datum: NO_DATUM,
+        // was picked — that point may not even exist on this geometry. A
+        // *rebuilt* part is the same part, so `keepDatum` holds onto it.
+        ...(keepDatum ? {} : { datum: NO_DATUM }),
       });
 
       // Measure it straight away, so the operator can pick a face the moment
@@ -235,7 +243,7 @@ export const useCamPlanStore = create((set, get) => ({
       // Someone already on Milling or Turning has made a choice, so it is left
       // alone; the panel's mode selector is there to override the analysis.
       const cam = useCamStore.getState();
-      if (cam.page === 'sketch') await cam.setPage(analysis.recommend);
+      if (!keepPage && cam.page === 'sketch') await cam.setPage(analysis.recommend);
 
       return analysis;
     } catch (err) {
