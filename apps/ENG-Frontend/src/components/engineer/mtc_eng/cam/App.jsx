@@ -8,14 +8,14 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
-  InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip,
+  InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip, Drawer,
 } from 'antd';
 import {
   ThunderboltOutlined, BulbOutlined,
   PlayCircleFilled, PauseCircleFilled, UploadOutlined, StepBackwardOutlined,
   StepForwardOutlined, FastBackwardOutlined, RollbackOutlined,
   ExpandOutlined, DownloadOutlined,
-  PlusOutlined, ColumnWidthOutlined, DatabaseOutlined,
+  PlusOutlined, ColumnWidthOutlined, DatabaseOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
@@ -56,7 +56,7 @@ import Viewport from './components/Viewport.jsx';
 import GcodePanel from './components/GcodePanel.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
-import FeatureTree from './components/FeatureTree.jsx';
+import FeatureTree, { TREE_SIZE } from './components/FeatureTree.jsx';
 import { invalidate } from '@react-three/fiber';
 import { getBuf } from './engine/bufferCache.js';
 import { CAD } from './theme.js';
@@ -588,6 +588,11 @@ export default function App() {
 
   const [speed, setSpeed] = useState(1);
   const [dragActive, setDragActive] = useState(false);
+  // The setup drawer, opened from the toolbar. Closed by default: it is a job
+  // you do once per part, not something to keep on screen while cutting.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Drives the feature-tree column's width; the tree itself owns the toggle.
+  const treeOpen = useFeatureStore((s) => s.treeOpen);
   const sketching = page === 'sketch';
   const turning = page === 'turn';
 
@@ -1015,11 +1020,34 @@ export default function App() {
           </Text>
         </Header>
         <Layout>
-          {!sketching && (
-          <Sider width={430} style={{
-            background: CAD.panelBg, padding: 16, overflow: 'auto',
-            borderRight: `1px solid ${CAD.border}`,
-          }}>
+          {/* The left column is the **feature tree**, the way a CAD lays a part
+              window out: the model's structure is the thing that stays on
+              screen. It is a real `Sider`, not an overlay, so the viewport is
+              genuinely narrower and the camera fit needs no knowledge of it.
+
+              What used to live here — files, machine, tooling, stock, removal —
+              is a *setup* job, not something you watch while you work, so it
+              moved into the drawer below and opens from the toolbar. */}
+          <Sider
+            width={treeOpen ? TREE_SIZE.TREE_W : TREE_SIZE.TREE_STRIP + 8}
+            style={{
+              background: CAD.panelBg,
+              borderRight: `1px solid ${CAD.border}`,
+              transition: 'width 120ms ease',
+            }}
+          >
+            <FeatureTree />
+          </Sider>
+
+          <Drawer
+            title="Setup"
+            placement="left"
+            width={470}
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            destroyOnHidden={false}
+            styles={{ body: { background: CAD.panelBg, padding: 16 } }}
+          >
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               {/* One rail, two groups, the way a CAD command bar is built:
                   what brings a program IN (parse, open, sample), a separator,
@@ -1633,19 +1661,12 @@ export default function App() {
               )}
               </>}
             </Space>
-          </Sider>
-          )}
+          </Drawer>
+
           <Content style={{ position: 'relative' }}>
             {/* Sketcher controls float over the viewport — only on the Sketch page,
                 so the design workspace is separate from Milling / Turning. */}
             {sketching && <SketchToolbar />}
-
-            {/* The model's structure, docked down the left the way a CAD does it.
-                Present on every page because it describes the *part*, not the
-                sketcher — suppressing a feature and rebuilding is as much a
-                milling-page action as a sketch-page one. It collapses to a strip,
-                and Fit frames the part beside it rather than under it. */}
-            <FeatureTree />
 
             {dragActive && (
               <div style={{
@@ -1692,6 +1713,16 @@ export default function App() {
               boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
               backdropFilter: 'blur(2px)',
             }}>
+              <Tooltip title="Setup — files, machine, tooling, stock and the removal simulation">
+                <Button
+                  size="small"
+                  icon={<SettingOutlined />}
+                  onClick={() => setSettingsOpen(true)}
+                  data-open-setup
+                >
+                  Setup
+                </Button>
+              </Tooltip>
               <Segmented size="small" value={view} onChange={setViewPreset} options={VIEWS} />
               <CommandButton
                 id="fitView" size="small"

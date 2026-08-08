@@ -216,16 +216,14 @@ describe('the tree shows the model the way a CAD does', () => {
     expect(document.body.textContent).toMatch(/Feature tree/);
   });
 
-  it('declares itself to the camera so Fit frames the part beside it', async () => {
-    // `engine/view/camera.js` reads this attribute; without it the fit centres
-    // the part on the canvas and the panel covers it.
+  it('is a column, not something floating over the model', async () => {
+    // It began as an overlay and needed `data-cam-overlay="left"` so the camera
+    // fit would dodge it. It is a real `Sider` now: the canvas is genuinely
+    // narrower, so declaring itself to the camera would make the fit reserve
+    // that width **twice**.
     withSketches();
     await open();
-    const el = document.querySelector('[data-cam-overlay="left"]');
-    expect(el).toBeTruthy();
-    // Still declared while collapsed — the strip covers pixels too.
-    await click(document.querySelector('[data-tree-toggle]'));
-    expect(document.querySelector('[data-cam-overlay="left"]')).toBeTruthy();
+    expect(document.querySelector('[data-cam-overlay="left"]')).toBeNull();
   });
 });
 

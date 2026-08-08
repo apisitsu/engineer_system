@@ -16,8 +16,6 @@ import {
 } from '@ant-design/icons';
 import { useState, useEffect, useCallback } from 'react';
 import { useSketchStore } from '../stores/sketchStore.js';
-import { useFeatureStore } from '../stores/featureStore.js';
-import { TREE_SIZE } from './FeatureTree.jsx';
 import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
 import LibraryPanel from './LibraryPanel.jsx';
 import SketchesPanel from './SketchesPanel.jsx';
@@ -34,10 +32,6 @@ const DEG = Math.PI / 180;
 // CAD one it does not, so they all carry the same drop shadow instead. One
 // constant, so the sketcher's six floating surfaces cannot drift apart.
 const FLOAT_SHADOW = '0 2px 10px rgba(23,42,66,0.18)';
-
-// Kept in step with `FeatureTree`'s own panel width by these two constants —
-// both files import them rather than repeating a number that would drift.
-const { TREE_W, TREE_STRIP } = TREE_SIZE;
 
 // Symbolic glyphs for each drawing tool.
 const SelectIcon = glyph(<path d="M5 3l6 15 2.2-6.2L19.5 9.6z" fill="currentColor" stroke="none" />);
@@ -558,9 +552,6 @@ export default function SketchToolbar() {
   const mirror = useSketchStore((s) => s.mirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
   const polygonSides = useSketchStore((s) => s.polygonSides);
-  // The feature tree is docked at the same corner; step aside for it.
-  const treeOpen = useFeatureStore((s) => s.treeOpen);
-  const railLeft = treeOpen ? TREE_W + 24 : TREE_STRIP + 24;
   const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
 
   const setError = useSketchStore((s) => s.setError);
@@ -598,13 +589,11 @@ export default function SketchToolbar() {
   return (
     <>
     <div data-cam-overlay="top" style={{
-      // Clear of the docked feature tree, which shares this corner. `railLeft`
-      // follows the tree between its open width and its collapsed strip.
-      position: 'absolute', top: 12, left: railLeft, zIndex: 5,
+      position: 'absolute', top: 12, left: 12, zIndex: 5,
       display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap',
       background: CAD.glass, border: `1px solid ${CAD.border}`,
       padding: 6, borderRadius: 4, boxShadow: FLOAT_SHADOW,
-      maxWidth: `calc(100% - ${railLeft + 12}px)`,
+      maxWidth: 'calc(100% - 24px)',
     }}>
       {TOOLS.map((t) => (
         <Tooltip key={t.value} title={`${t.label} — ${t.hint}`} placement="bottom">

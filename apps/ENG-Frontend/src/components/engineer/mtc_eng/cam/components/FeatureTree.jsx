@@ -49,12 +49,17 @@ const MERGE_OPTIONS = [
  */
 export const TREE_SIZE = { TREE_W: 268, TREE_STRIP: 36 };
 
+/**
+ * The tree fills the column it is given rather than floating over the viewport.
+ *
+ * That is the whole difference between this and an overlay: a `Sider` takes
+ * layout space, so the canvas is genuinely narrower and the camera fit needs to
+ * know nothing about the panel — which is why there is no `data-cam-overlay`
+ * here, unlike the rails that really do sit on top of the model.
+ */
 const PANEL = {
-  position: 'absolute', top: 12, left: 12, bottom: 12, zIndex: 5,
-  width: TREE_SIZE.TREE_W, display: 'flex', flexDirection: 'column',
-  background: CAD.glass, border: `1px solid ${CAD.border}`,
-  borderRadius: 4, boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
-  backdropFilter: 'blur(2px)',
+  height: '100%', display: 'flex', flexDirection: 'column',
+  background: CAD.panelBg,
 };
 
 /** The parameters of the selected feature. */
@@ -148,7 +153,7 @@ export default function FeatureTree() {
 
   if (!open) {
     return (
-      <div data-cam-overlay="left" style={{ ...PANEL, width: TREE_SIZE.TREE_STRIP, bottom: 'auto' }}>
+      <div style={{ ...PANEL, alignItems: 'center', paddingTop: 6 }}>
         <Tooltip title="Show the feature tree" placement="right">
           <Badge dot={dirty && features.length > 0} offset={[-6, 4]}>
             <Button
@@ -187,7 +192,7 @@ export default function FeatureTree() {
   );
 
   return (
-    <div data-cam-overlay="left" style={PANEL}>
+    <div style={PANEL}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '6px 6px 6px 10px', borderBottom: `1px solid ${CAD.border}`,
