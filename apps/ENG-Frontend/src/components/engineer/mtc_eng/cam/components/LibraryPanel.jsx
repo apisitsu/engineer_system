@@ -4,24 +4,32 @@
  * Thin by the usual rule: every decision it shows — what a row says, how the
  * list is ordered, what name to offer, whether a name is allowed — comes from
  * `engine/savedWork.js`, and every action is one call into `libraryStore`. What
- * is here is the arrangement: a name box with the two things worth saving, and
- * under it the list of what is already kept.
+ * is here is the arrangement: the list of what is already kept, and above it the
+ * two things worth saving.
+ *
+ * **Opening the library only shows the library.** It used to greet the operator
+ * with a name box already filled in with a suggestion, and a press of *Project*
+ * then saved under that suggestion — so a panel opened to *look something up*
+ * was one click away from writing a new record nobody asked for, under a name
+ * nobody chose. Naming now happens where the naming decision is made: pressing
+ * Save opens a dialog with the suggested name selected, and nothing is written
+ * until that dialog is confirmed.
  *
  * The rows carry words, and that is not a breach of the icon-only toolbar rule:
  * this is a menu that drops open, and SolidWorks labels those too. A saved item
  * has a name the operator typed — a list of glyphs would be unreadable.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button, Popconfirm, Popover, Space, Tag, Typography, Input, Empty, Alert, Spin,
-  Tooltip,
+  Tooltip, Modal,
 } from 'antd';
 import {
   DeleteOutlined, FolderOpenOutlined, SaveOutlined, DownloadOutlined,
   ShareAltOutlined, RollbackOutlined, LockOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { useLibraryStore } from '../stores/libraryStore.js';
-import { formatBytes, formatSavedAt } from '../engine/savedWork.js';
+import { formatBytes, formatSavedAt, namesOfKind, cleanName } from '../engine/savedWork.js';
 import { CAD } from '../theme.js';
 
 const { Text } = Typography;
@@ -163,28 +171,30 @@ export default function LibraryPanel({
   const [openState, setOpenState] = useState(false);
   const open = inline ? openProp !== false : openState;
   const setOpen = inline ? () => {} : setOpenState;
+  // Which kind of save is being named right now — 'project', 'program', or null
+  // for "nothing is being saved", which is what opening the library means.
+  const [saveKind, setSaveKind] = useState(null);
   const [name, setName] = useState('');
   // Has the operator typed a name of their own? Once they have, nothing may
-  // overwrite it — least of all the list finishing loading a moment later.
-  const [typed, setTyped] = useState(false);
+  // overwrite it — least of all the suggestion arriving a moment later. A ref,
+  // not state: the suggestion's `.then` closes over it and must read the value
+  // as it is when it lands, not as it was when the dialog opened.
+  const typed = useRef(false);
   const {
     items, loaded, busy, error, saveProject, saveProgram,
-    open: openItem, remove, nameFor, mine, shared, share, unshare,
+    open: openItem, remove, nameFor, mine, shared, share, unshare, refresh, setError,
   } = useLibraryStore();
   const myItems = mine();
   const sharedItems = shared();
 
   // Read the list when the panel is first opened, not on mount: a request on
-  // every page load costs a round trip for a panel nobody may open. The name
-  // follows the list rather than racing it — offered before the names in the
-  // library are known, it could look free and replace something on save.
+  // every page load costs a round trip for a panel nobody may open. `loaded`
+  // only goes true on success, so a failed read leaves the deps unchanged and
+  // this does not spin.
   useEffect(() => {
-    if (!open || typed) return undefined;
-    let live = true;
-    nameFor('project').then((n) => { if (live) setName(n); });
-    return () => { live = false; };
+    if (open && !loaded && !busy) refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, typed, loaded, items]);
+  }, [open, loaded]);
 
   const run = async (fn, message) => {
     try {
@@ -198,6 +208,83 @@ export default function LibraryPanel({
     }
   };
 
+  /**
+   * Ask for a name. Nothing is written here — this only opens the dialog.
+   *
+   * The suggestion is fetched rather than held, because it depends on what is
+   * already on this operator's shelf and the list is read lazily; offered before
+   * the shelf is known it could look free and replace last week's work. Until it
+   * lands the box is empty and Save is disabled, which is the honest state — a
+   * box that fills in under the operator's fingers is how the old panel came to
+   * save things nobody named.
+   */
+  const beginSave = (kind) => {
+    typed.current = false;
+    setName('');
+    setError(null);
+    setSaveKind(kind);
+    nameFor(kind).then((n) => { if (!typed.current) setName(n); });
+  };
+
+  const clean = cleanName(name);
+  // Saving over one of your own names is allowed and sometimes meant — but it
+  // must be a decision, not a surprise, so the dialog says which it will be.
+  const replaces = Boolean(saveKind) && namesOfKind(myItems, saveKind).has(clean);
+
+  const confirmSave = async () => {
+    const kind = saveKind;
+    const save = kind === 'program' ? saveProgram : saveProject;
+    const ok = await run(
+      () => save(name),
+      (m) => `Saved ${kind} “${m.name}”`,
+    );
+    // Left open on failure: the sentence explaining why is in the dialog, next
+    // to the name that has to change.
+    if (ok) setSaveKind(null);
+  };
+
+  const dialog = (
+    <Modal
+      open={Boolean(saveKind)}
+      title={saveKind === 'program' ? 'Save program to your library' : 'Save project to your library'}
+      okText="Save"
+      okButtonProps={{ disabled: !clean || busy, loading: busy, 'data-library-confirm': true }}
+      cancelButtonProps={{ 'data-library-cancel': true }}
+      onOk={confirmSave}
+      onCancel={() => setSaveKind(null)}
+      destroyOnHidden
+      zIndex={2000}
+      width={420}
+    >
+      <Text style={{ color: CAD.muted, fontSize: 12, display: 'block', marginBottom: 6 }}>
+        {saveKind === 'program'
+          ? 'Just the G-code, as it stands in the editor.'
+          : 'The part, setup, operations and sketch, as they stand now.'}
+      </Text>
+      <Input
+        value={name}
+        autoFocus
+        onChange={(e) => { typed.current = true; setName(e.target.value); }}
+        placeholder="Name this work"
+        aria-label="Name for the saved item"
+        data-library-name
+        onPressEnter={() => { if (clean && !busy) confirmSave(); }}
+      />
+      <Text style={{ color: CAD.dim, fontSize: 12, display: 'block', marginTop: 6 }}>
+        It goes on <b>your own</b> shelf. Share it afterwards if the shop needs it.
+      </Text>
+      {replaces && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 8 }}
+          message={`You already have a ${saveKind} called “${clean}” — saving replaces it.`}
+        />
+      )}
+      {error && <Alert type="error" showIcon style={{ marginTop: 8 }} message={error} />}
+    </Modal>
+  );
+
   const body = (
     <div
       style={inline ? { width: '100%' } : { width: 360 }}
@@ -209,38 +296,34 @@ export default function LibraryPanel({
           now — it is either reachable or it is not, which is not knowable up
           front, so a failure lands in `error` beside the button that caused it. */}
       <Space.Compact style={{ width: '100%' }}>
-        <Input
-          value={name}
-          onChange={(e) => { setTyped(true); setName(e.target.value); }}
-          placeholder="Name this work"
-          aria-label="Name for the saved item"
-          data-library-name
-          onPressEnter={() => run(() => saveProject(name), (m) => `Saved project “${m.name}”`)}
-        />
         <Button
+          style={{ flex: 1 }}
           icon={<SaveOutlined />}
           data-library-save="project"
           disabled={busy}
-          onClick={() => run(() => saveProject(name), (m) => `Saved project “${m.name}”`)}
+          onClick={() => beginSave('project')}
         >
-          Project
+          Save project
         </Button>
         <Button
+          style={{ flex: 1 }}
           icon={<DownloadOutlined />}
           data-library-save="program"
           disabled={busy}
-          onClick={() => run(() => saveProgram(name), (m) => `Saved program “${m.name}”`)}
+          onClick={() => beginSave('program')}
         >
-          Program
+          Save program
         </Button>
       </Space.Compact>
       <Text style={{ color: CAD.muted, fontSize: 12, display: 'block', marginTop: 4 }}>
         A project keeps the part, setup, operations and sketch. A program is
-        just the G-code. This saves to <b>your own</b> list — saving over one of
-        your own names replaces it, and nobody else's work is touched.
+        just the G-code. Either one asks for a name first, and saves to
+        <b> your own</b> list — nobody else's work is touched.
       </Text>
 
-      {error && (
+      {/* Not while the dialog is up: the same sentence is in there, beside the
+          field the operator has to change. */}
+      {error && !saveKind && (
         <Alert type="error" showIcon style={{ marginTop: 8 }} message={error} />
       )}
 
@@ -309,31 +392,40 @@ export default function LibraryPanel({
     </div>
   );
 
+  // The dialog is rendered outside the panel in both arrangements, so that
+  // shutting the popover behind it (which clicking into a portal does) cannot
+  // take the half-typed name down with it.
   if (inline) {
-    if (!open) return null;
+    if (!open) return dialog;
     return (
-      <div style={{
-        border: `1px solid ${CAD.borderSoft}`, borderRadius: 8, padding: 10,
-        background: CAD.surface,
-      }}>
-        <Text style={{ color: CAD.muted, fontSize: 11, letterSpacing: 0.6 }}>
-          LIBRARY — YOUR WORK, AND THE SHARED SHELF
-        </Text>
-        <div style={{ marginTop: 6 }}>{body}</div>
-      </div>
+      <>
+        <div style={{
+          border: `1px solid ${CAD.borderSoft}`, borderRadius: 8, padding: 10,
+          background: CAD.surface,
+        }}>
+          <Text style={{ color: CAD.muted, fontSize: 11, letterSpacing: 0.6 }}>
+            LIBRARY — YOUR WORK, AND THE SHARED SHELF
+          </Text>
+          <div style={{ marginTop: 6 }}>{body}</div>
+        </div>
+        {dialog}
+      </>
     );
   }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      trigger="click"
-      placement="bottomLeft"
-      title={<span style={{ color: CAD.text }}>Library — your work, and the shared shelf</span>}
-      content={body}
-    >
-      {trigger}
-    </Popover>
+    <>
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        trigger="click"
+        placement="bottomLeft"
+        title={<span style={{ color: CAD.text }}>Library — your work, and the shared shelf</span>}
+        content={body}
+      >
+        {trigger}
+      </Popover>
+      {dialog}
+    </>
   );
 }

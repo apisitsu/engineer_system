@@ -171,16 +171,15 @@ describe('LibraryPanel — what is on screen', () => {
     expect(row.textContent).toContain('41.2 kB');
   });
 
-  it('offers both things worth saving, under one name', async () => {
+  it('offers both things worth saving', async () => {
     const body = await openPanel();
     expect(body.querySelector('[data-library-save="project"]')).not.toBeNull();
     expect(body.querySelector('[data-library-save="program"]')).not.toBeNull();
-    expect(body.querySelector('[data-library-name]')).not.toBeNull();
   });
 
-  it('offers a name to save under without one being typed', async () => {
+  it('asks for no name until a save is asked for — opening the library only shows the library', async () => {
     const body = await openPanel();
-    expect(body.querySelector('[data-library-name]').value.length).toBeGreaterThan(0);
+    expect(body.querySelector('[data-library-name]')).toBeNull();
   });
 
   it('says so when the library is empty rather than showing a blank panel', async () => {
@@ -202,18 +201,53 @@ describe('LibraryPanel — what is on screen', () => {
   });
 });
 
+/** Press one of the save buttons and wait for the naming dialog to settle. */
+async function beginSave(body, kind) {
+  await act(async () => {
+    body.querySelector(`[data-library-save="${kind}"]`).click();
+  });
+  // The suggested name is fetched, so it arrives a microtask after the click.
+  await act(async () => {});
+  return body;
+}
+
 describe('LibraryPanel — saving', () => {
-  it('saves under the name in the box, and reports it back', async () => {
+  it('asks for a name before writing anything', async () => {
+    const saveProject = vi.fn(async () => ({ name: 'x' }));
+    useLibraryStore.setState({ saveProject });
+    const body = await beginSave(await openPanel(), 'project');
+
+    expect(body.querySelector('[data-library-name]')).not.toBeNull();
+    expect(saveProject).not.toHaveBeenCalled();
+  });
+
+  it('fills the box with a suggestion, so the common case is one keystroke', async () => {
+    const body = await beginSave(await openPanel(), 'project');
+    expect(body.querySelector('[data-library-name]').value.length).toBeGreaterThan(0);
+  });
+
+  it('saves under the name in the box once the dialog is confirmed, and reports it back', async () => {
     const saveProject = vi.fn(async () => ({ name: 'OP10 setup' }));
     useLibraryStore.setState({ saveProject });
     const onDone = vi.fn();
-    const body = await openPanel({ onDone });
+    const body = await beginSave(await openPanel({ onDone }), 'project');
 
     await act(async () => {
-      body.querySelector('[data-library-save="project"]').click();
+      body.querySelector('[data-library-confirm="true"]').click();
     });
     expect(saveProject).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledWith(expect.stringContaining('OP10 setup'));
+  });
+
+  it('writes nothing when the dialog is cancelled', async () => {
+    const saveProgram = vi.fn(async () => ({ name: 'x' }));
+    useLibraryStore.setState({ saveProgram });
+    const body = await beginSave(await openPanel(), 'program');
+
+    await act(async () => {
+      body.querySelector('[data-library-cancel="true"]').click();
+    });
+    expect(saveProgram).not.toHaveBeenCalled();
   });
 
   it('does not report a save that failed', async () => {
@@ -221,10 +255,23 @@ describe('LibraryPanel — saving', () => {
       saveProgram: vi.fn(async () => { throw new Error('no'); }),
     });
     const onDone = vi.fn();
-    const body = await openPanel({ onDone });
+    const body = await beginSave(await openPanel({ onDone }), 'program');
     await act(async () => {
-      body.querySelector('[data-library-save="program"]').click();
+      body.querySelector('[data-library-confirm="true"]').click();
     });
     expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('warns that a name already on my shelf will be replaced', async () => {
+    const body = await beginSave(await openPanel(), 'project');
+    const input = body.querySelector('[data-library-name]');
+    await act(async () => {
+      // React tracks the value on the node; set it through the prototype setter
+      // so the change event is not swallowed as a no-op.
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'OR35128 OP10');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(body.textContent).toContain('saving replaces it');
   });
 });

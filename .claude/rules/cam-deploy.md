@@ -18,15 +18,22 @@ things that behave differently once it is on a real host.
 | `apps/ENG-Frontend/public/wasm/planegcs.{js,wasm}` | the sketch solver loads both at runtime; they are **committed on purpose** — see `cam-web.md` |
 | `apps/ENG-Frontend/src/components/engineer/mtc_eng/cam/**` | the module (169 files) |
 | `apps/ENG-Frontend/scripts/copy-cam-wasm.js` | `prebuild` keeps the two assets in step with the installed package |
-| `package.json` + `package-lock.json` | three new runtime deps: `@salusoft89/planegcs`, `clipper-lib`, `comlink` |
+| `package.json` + `package-lock.json` | five runtime deps: `@salusoft89/planegcs`, `clipper-lib`, `comlink`, and (2026-08-08) `three-bvh-csg`, `three-mesh-bvh` |
 
 `git_sync_mtc.ps1` stages with `git add .`, so all of it goes provided nothing is
 ignored — verified with `git check-ignore`; `public/wasm/` is **not** ignored.
 
-**`npm install` must run on each host before `npm run build`.** The three new
+**`npm install` must run on each host before `npm run build`.** The runtime
 dependencies are imported by the bundle; without them the build fails outright
 (it does not degrade). The vitest/jsdom devDependencies are not needed to build
 and can be skipped by a production install.
+
+> **`three-bvh-csg` / `three-mesh-bvh` were added 2026-08-08** for the solid
+> boolean the sketcher's Build panel offers, so a host that has built this module
+> before still needs a fresh `npm install`. Both are peer-dependent on `three`,
+> which is already here at 0.184 and satisfies them. They land in their own lazy
+> chunk (~31 kB gzip) because `lib/csg.js` is `import()`ed on demand — a session
+> that never presses Cut never downloads it.
 
 ## The apiUrl gate
 

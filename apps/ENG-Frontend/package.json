@@ -95,6 +95,8 @@
     "sweetalert2": "^11.26.3",
     "tableau-api": "^2.2.3",
     "three": "^0.184.0",
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.14",
     "url-join": "^5.0.0",
     "uuid": "^13.0.0",
     "web-vitals": "^2.1.4",

@@ -164,7 +164,33 @@ export const useCamPlanStore = create((set, get) => ({
     set({ status: 'loading', error: null, plan: null, nc: null });
     try {
       const buffer = await file.arrayBuffer();
-      const soup = parsePart(buffer, file.name);
+      return await get().loadSoup(parsePart(buffer, file.name), file.name);
+    } catch (err) {
+      _raw.soup = _raw.welded = null;
+      _mesh.soup = _mesh.welded = null;
+      _ctx = null;
+      set({ status: 'error', error: err.message || String(err) });
+      return null;
+    }
+  },
+
+  /**
+   * Take a part that is already a triangle soup.
+   *
+   * Split out of `loadPart` because a file is no longer the only way a part
+   * arrives: the sketcher builds one directly (`engine/solid/extrude.js`). Every
+   * line below this point was always soup-only — nothing downstream of here has
+   * ever known or cared which file the triangles came out of — so a built solid
+   * enters the CAM pipeline through exactly the path an STL does, and gets the
+   * same measurement, feature detection, planning and simulation with no second
+   * code path to keep in step.
+   *
+   * @param {{positions:Float32Array, triangleCount:number, format:string}} soup
+   * @param {string} name  what to call it in the UI
+   */
+  async loadSoup(soup, name) {
+    set({ status: 'loading', error: null, plan: null, nc: null });
+    try {
       const welded = weld(soup);
       _raw.soup = soup;
       _raw.welded = welded;
@@ -179,7 +205,7 @@ export const useCamPlanStore = create((set, get) => ({
       // planning is the whole point of splitting the two steps.
       const analysis = analyzeMesh(soup, welded);
       set({
-        stlName: file.name,
+        stlName: name,
         partFormat: soup.format,
         analysis,
         meshVer: get().meshVer + 1,

@@ -121,6 +121,136 @@ The route is the **only** `React.lazy` import in `App.jsx` — the CAM engine is
 ~94 kB gzip chunk that nobody visiting Tooling Inspection should download. Keep
 it lazy; `main.js` grows only ~10 kB from this whole module.
 
+## Four invariants a plausible-looking change undoes (2026-08-07)
+
+Each of these was a real complaint from the shop floor, and each has a tested
+invariant behind it now. They read as arbitrary until you know what they fixed.
+
+- **Only the insert may reach the cutting plane.** Lathe markers used to seat the
+  insert exactly flush: rake face on Y=0, holder top face on Y=0, and the head's
+  bevels lying *along* the insert's own edges. Three pairs of coplanar faces —
+  the depth buffer cannot order them, so the tool flickered gold/grey as the view
+  moved. `toolScale().standout` now drops each body below the plane and sets it
+  back from the corner. Do not "tidy" the holder back onto Y=0, and do not put
+  the marker trigonometry back into `Viewport.jsx`: it lived in both files, which
+  is how a fix to `engine/view/latheTool.js` could leave the bug on screen.
+- **Feed is posted in mm/min everywhere**, milling and turning alike — a lathe's
+  programmed `F0.15` and a mill's `F850` in one field are not comparable
+  quantities and the field never said which it held. The programmed per-rev
+  figure survives as `droFeed().note` (and `turningSpeeds().feedPerMin` is the
+  CAM panel's equivalent), because that is the only number checkable against the
+  program text. **The posted G-code is unchanged — turning still posts G99 `fn`.**
+- **`sim/stockColors.js` CUT and RAW must differ in hue, not brightness.** CUT was
+  a near-white "bright steel", which is exactly what a strong light does to
+  amber — so a machined face read as a lit face of raw stock and the pair stopped
+  meaning anything. Cool blue-steel against amber cannot be confused by lighting.
+- **Opening the library only lists the library.** It used to open with a name box
+  pre-filled from a suggestion and a *Project* button beside it, so looking
+  something up was one click from writing a record nobody named. Naming now
+  happens in the save dialog, and nothing is written until it is confirmed.
+
+## 2D → 3D: the sketch builds the part now (2026-08-08)
+
+The sketcher used to end at DXF. It now makes solids, and they enter the CAM
+pipeline through the door an imported STL uses. Five pieces, engine-first as
+usual:
+
+| file | what it is |
+|---|---|
+| `engine/sketch/loops.js` | closed regions of a sketch — outer boundary and its holes |
+| `engine/sketch/plane.js` | the plane a sketch is drawn on (serializable data, not a matrix) |
+| `engine/sketch/shapes.js` | slot and polygon — compound, not new entity kinds |
+| `engine/sketch/dxfImport.js` | DXF → sketch, the other half of `dxf.js` |
+| `engine/solid/triangulate.js` | ear clipping with hole bridging — the flat caps |
+| `engine/solid/extrude.js` | extrude / revolve → triangle soup |
+| `engine/solid/regionBoolean.js` | union / subtract / intersect on **profiles** |
+| `lib/csg.js` | boolean between **solids**, the one part that needs three.js |
+
+**`camPlanStore.loadSoup` is why this was cheap.** `loadPart` always converted a
+file to a triangle soup and everything after that point — measure, features,
+slice, plan, simulate, post — worked on the soup alone. Splitting the soup half
+out gave the sketcher a way in that needs no second pipeline. Anything else that
+ever generates geometry should enter the same way; do not add a parallel path.
+
+Four things here are load-bearing and read as arbitrary:
+
+- **Chaining is topological, not by tolerance.** A sketch is point-based, so a
+  shared corner *is* one point id — `sliceLoops` welds by distance only because a
+  triangle soup has no ids to use. Coincident constraints and points sitting on
+  top of each other are folded in with a union-find first.
+- **Regions come from planar-face traversal**, not from following edges until
+  one runs out. Arriving along a half-edge, take its reverse and step to the next
+  half-edge **clockwise** around the vertex: that turns as sharply left as
+  possible, so a bounded face comes out counter-clockwise and the single
+  unbounded face comes out clockwise, which is how it is told apart and dropped
+  (by the sign of its area). A line across a rectangle therefore gives two
+  regions, as it does in any CAD. Departure angles are taken from the tessellated
+  polyline's **first step**, not the chord between a curve's endpoints — where an
+  arc meets a line the ordering has to follow the tangent, and the chord can
+  point the other side of the line entirely. Dangling geometry is pruned first
+  (iteratively — removing an edge can leave its neighbour hanging) and reported
+  as `open`; `branches` is now information, not a refusal.
+- **The hole seam is found by ray cast** (leftmost vertex, −x), not by searching
+  vertex pairs for one that looks clear. Nothing of a hole lies left of its own
+  leftmost point, so the seam cannot re-enter the hole — which a pair search
+  does, producing a self-intersecting ring that ear clipping cannot detect and
+  that quietly fills the bore back in.
+- **The ear test is strictly-inside.** A bridged ring deliberately repeats the
+  seam's endpoints; an "inside or on" test sees the duplicate on its own corner,
+  blocks every ear, and the clipper falls back to dropping vertices.
+- **`normalizeLoops` probes an `interiorPoint`, not a vertex.** Nesting decides
+  solid from hole, and a vertex sits on its own boundary — so two loops touching
+  at a corner had one become a pocket in the other. This fixed a latent bug in
+  `sliceLoops` as well.
+
+Winding is the contract throughout: **outer CCW, hole CW**, enforced by
+`normalizeLoops` (shared with `sliceLoops`, deliberately one copy). Extrude wall
+winding, Clipper's non-zero fill and the CAM planner all read it. `analyzeMesh`
+warns about an inside-out solid, and the build tests assert it never fires.
+
+**Prefer the profile boolean over the mesh one.** Clipper is exact and returns a
+real boundary; a mesh boolean returns triangles that approximate one and every
+later operation inherits that. `lib/csg.js` exists for what profiles cannot
+express — cutting a pocket drawn on the front plane out of a part standing on the
+table — and is `import()`ed on demand so the 31 kB library never loads for a
+session that only draws and extrudes.
+
+**Multi-sketch:** `sk` is the active document and is the *same object* as
+`sketches[active].doc`, never a copy — edits mutate in place. Anything swapping
+`sk` for a different document (undo, redo, clear, open) must go through
+`_docs()`. Undo history is **per sketch** but only the active one's lives in
+store state, because `past`/`future` are read all over the sketcher: the stacks
+are stashed onto the entry being left and restored from the one being opened
+(`_stash()`). They are deliberately **not** written to a project file — a stack
+of whole documents, meaningless in a session that has not happened yet.
+
+**Sketch on a face:** `planeFromFace` turns a picked face
+(`camPlanStore.selectedFeature`) into a plane, and an *axis-aligned* face comes
+back as the matching **preset with an offset** rather than a custom frame — so a
+pocket floor 12 mm up reads "Top (XY) +12", keeps the machine's axes, and a
+dimension typed on it means what it meant on the table. Only a genuinely angled
+face becomes a custom frame, whose `u` is derived from the world axis *least*
+aligned with the normal (crossing with a nearly-parallel one gives a vector of
+almost no length, whose direction is noise).
+
+**Slot and polygon are compound**, built from existing primitives plus the
+constraints that keep them what they are (tangent flanks + equal caps; vertices
+pinned to a construction circle + equal sides). That is the point: a new entity
+kind would have to be taught to the solver bridge, the loop chainer, the DXF
+writer *and* reader, the hit tests and the renderer before it could be drawn at
+all. **This is why ellipse and spline are not here** — they are genuinely new
+solver primitives, not compositions.
+
+**DXF import welds endpoints, and that is the point.** A DXF carries no topology:
+four lines round a rectangle are four independent coordinate pairs. `sketchLoops`
+chains through shared point *ids*, so an import that made eight separate points
+would produce a profile that looks closed, cannot chain, and refuses to extrude
+for no visible reason. `$INSUNITS` is honoured too — a drawing that arrives 25.4×
+too small is the kind of mistake that reaches the floor.
+
+Project files are **v3** (`sketches: { active, items }`). v1/v2 still open — they
+carry one `sketch` and no plane, which lands on the table as before.
+
 ## The library: a private shelf per operator, plus one shared shelf
 
 Saved work is the `cam_saved_work` table behind `/api/engineer/cam/library`,

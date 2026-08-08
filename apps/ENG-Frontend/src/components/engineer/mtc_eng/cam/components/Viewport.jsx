@@ -20,6 +20,9 @@ import { sliceUpTo } from '../engine/gcode/path.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { framing, unionBounds } from '../engine/view/camera.js';
 import { endMillGeometry } from '../engine/view/millTool.js';
+import {
+  odHolderGeometry, boringBarGeometry, partingBladeGeometry,
+} from '../engine/view/latheTool.js';
 import { workTransform, toolTilt } from '../engine/view/rotaryFrame.js';
 import { CAD, metal } from '../theme.js';
 
@@ -159,88 +162,53 @@ function EndMill({
  * at the tip. Turn geometry runs along world Z (spindle) with X radial.
  */
 function ODHolder({ radius = 0.8, shape }) {
-  const sides = shape?.sides ?? 4;
-  const angle = shape?.angle ?? 35;
-  const lead = shape?.lead ?? 93;
-  const s = Math.max(radius * 7, 6);
-  const thickY = Math.max(radius * 2.4, 1.8);
-  const r = s * 0.62;
-  const zScale = sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1;
-  const baseRot = sides === 3 ? Math.PI : 0;
-  // Holder depth runs **down** from the cutting plane: a lathe cuts in the plane
-  // through the spindle axis (Y=0), so the insert's rake face is at Y=0 and the
-  // whole tool hangs below it. Looking down from Top you see the rake face lying
-  // exactly on the toolpath.
-  const depth = thickY * 1.5;                         // holder depth (down −Y)
+  // Every number comes from `engine/view/latheTool.js`, which is tested — the
+  // silhouette, where the insert sits on it, and how far the body is set back
+  // from the cutting corner so the two never share a surface. This file used to
+  // carry its own copy of that trigonometry, which is how the seated-flush
+  // flicker survived a fix to the module: there were two of it.
+  const g = odHolderGeometry(radius, shape ?? {});
+  const { insert } = g;
+  const baseRot = insert.sides === 3 ? Math.PI : 0;
+  // A key over the numbers the silhouette is built from: `g` is a fresh object
+  // every render, so it cannot be a dependency itself.
+  const shapeKey = `${g.outline.flat().join(',')}|${g.depth}`;
 
-  // The insert sits at the lead angle: its long diagonal is rotated `t` from
-  // vertical (`t` = lead + angle/2 − 90, mirrored by `flip`; MVVNN 72.5°+35° → 0
-  // upright, MVJNR 93° tips it back). Its acute corner is the cutting tip at the
-  // origin. The SHANK stays vertical; only its HEAD (the bevelled front-bottom)
-  // is cut to the insert angle — the bevel runs along the insert's trailing (+Z)
-  // edge, so the tip juts past the shank's front face on its own.
-  const flip = !!shape?.flip;
-  const sgn = flip ? -1 : 1;
-  const bis = (lead + angle / 2) * DEG;
-  const t = sgn * (bis - Math.PI / 2);
-  const ct = Math.cos(t);
-  const st = Math.sin(t);
-  const iX = r * ct;                                  // insert centre (world X, Z)
-  const iZ = -r * st;
-  // The two insert edges from the tip. Trailing (+Z, toward the shank) and
-  // leading (−Z). Each `ratio` is the Z gained per unit up the shank along that
-  // edge; the head bevels follow them so its walls lie on the insert's edges.
-  const eX = ct + zScale * st, eZ = zScale * ct - st;      // trailing
-  const fX = ct - zScale * st, fZ = -zScale * ct - st;     // leading
-  const ratioBack = Math.abs(eX) > 1e-4 ? eZ / eX : 0;
-  const ratioFront = Math.abs(fX) > 1e-4 ? fZ / fX : 0;
-  const span = Math.max(ratioBack - ratioFront, 0.2);     // guard degenerate wedge
-
-  // Vertical shank (front/back sides at constant Z) over a wedge head whose two
-  // walls follow the insert's two edges. The head height gives a FIXED shank
-  // width W for every insert angle, and the top sits at a FIXED height so all
-  // four holders read the same width and height. `shift` nudges the shank +Z only
-  // when a laid-over insert (MVJNR 80°) would otherwise poke its cutting edge past
-  // the shank's front face; for MVVNN and the tighter MVJNR angles it is 0.
   const holderGeo = useMemo(() => {
-    const W = s * 1.1;
-    const topX = s * 5.0;            // fixed holder height (radial), same for every insert
-    const Xbot = W / span;           // head height → shank width stays W across angles
-    const shift = flip ? Math.max(0, r * fZ - Xbot * ratioFront) : 0;
-    const Zf = Xbot * ratioFront + shift;    // front-bottom on the leading-edge line
-    const Zb = Xbot * ratioBack + shift;     // back-bottom on the trailing-edge line
     const sh = new THREE.Shape();    // shape (x = world X, y = world Z)
-    sh.moveTo(0, 0);                          // A tip
-    sh.lineTo(Xbot, Zf);                      // B shank front-bottom (bevel = leading edge)
-    sh.lineTo(topX, Zf);                      // C shank front-top (straight up +X)
-    sh.lineTo(topX, Zb);                      // D shank back-top
-    sh.lineTo(Xbot, Zb);                     // E shank back-bottom (bevel = trailing edge)
-    sh.closePath();                           // E → A (head bottom-back edge)
-    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false });
-    // rotateX maps the extrusion (shape +z) onto world −Y, so leaving it
-    // untranslated hangs the solid from Y=0 down to −depth: the top face is the
-    // cutting plane. (It used to be centred, which floated the tip off Y=0.)
-    g.rotateX(Math.PI / 2);                   // shape (X,Z) → world XZ, depth → −Y
-    g.computeVertexNormals();
-    return g;
-  }, [s, r, fZ, ratioFront, ratioBack, span, flip, depth]);
+    g.outline.forEach(([x, z], i) => (i === 0 ? sh.moveTo(x, z) : sh.lineTo(x, z)));
+    sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: g.depth, bevelEnabled: false });
+    // rotateX maps the extrusion (shape +z) onto world −Y, so the solid hangs
+    // from the shape plane downward; the mesh is then placed at `bodyY`, a hair
+    // under the cutting plane, and the insert alone reaches Y=0.
+    geo.rotateX(Math.PI / 2);                 // shape (X,Z) → world XZ, depth → −Y
+    geo.computeVertexNormals();
+    return geo;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapeKey]);
 
   useEffect(() => () => holderGeo.dispose(), [holderGeo]);
 
   return (
     <>
-      <mesh geometry={holderGeo}>
+      <mesh geometry={holderGeo} position={[0, g.bodyY, 0]}>
         <meshStandardMaterial {...metal('#a7afbd')} side={THREE.DoubleSide} />
       </mesh>
       {/* Gold insert at the lead angle, acute corner at the tip. Its rake face
-          sits on Y=0, so the cutting corner is exactly at spindle centre. */}
-      <mesh position={[iX, -thickY / 2, iZ]} rotation={[0, t + baseRot, 0]} scale={[1, 1, zScale]}>
-        <cylinderGeometry args={[r, r, thickY, sides]} />
+          sits on Y=0, so the cutting corner is exactly at spindle centre — and
+          it stands proud of the seat below it, as a real insert does. */}
+      <mesh
+        position={[insert.x, g.insertY, insert.z]}
+        rotation={[0, insert.rot + baseRot, 0]}
+        scale={[1, 1, insert.zScale]}
+      >
+        <cylinderGeometry args={[insert.r, insert.r, insert.thickY, insert.sides]} />
         <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
       {/* Centre clamp screw, head proud of the rake face. */}
-      <mesh position={[iX, 0, iZ]}>
-        <cylinderGeometry args={[s * 0.16, s * 0.16, thickY * 0.4, 14]} />
+      <mesh position={[insert.x, g.screwY, insert.z]}>
+        <cylinderGeometry args={[g.screwR, g.screwR, g.screwH, 14]} />
         <meshStandardMaterial {...metal('#3f4653', 0.45)} />
       </mesh>
     </>
@@ -253,25 +221,27 @@ function ODHolder({ radius = 0.8, shape }) {
  * Marker only — the sim still carves the outer profile.
  */
 function BoringBar({ radius = 0.8, shape }) {
-  const sides = shape?.sides ?? 4;
-  const angle = shape?.angle ?? 35;
-  const s = Math.max(radius * 7, 6);
-  const thickY = Math.max(radius * 2.4, 1.8);
-  const r = s * 0.42;                                 // small insert
-  const zScale = sides === 4 ? Math.max(Math.tan((angle / 2) * DEG), 0.2) : 1;
-  const rBar = s * 0.55;                              // bar radius
-  const barLen = s * 6;
+  const g = boringBarGeometry(radius, shape ?? {});
+  const { insert } = g;
   return (
     <>
-      {/* Round bar along +Z, hanging below the cutting plane (its top is Y=0). */}
-      <mesh position={[-rBar, -rBar, rBar + barLen / 2]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[rBar, rBar, barLen, 20]} />
+      {/* Round bar along +Z, hanging below the cutting plane — its crown clears
+          that plane by `standout` rather than touching it. */}
+      <mesh
+        position={[-g.barRadius, g.barY, g.barRadius + g.barLength / 2]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
+        <cylinderGeometry args={[g.barRadius, g.barRadius, g.barLength, 20]} />
         <meshStandardMaterial {...metal('#a7afbd')} />
       </mesh>
       {/* Gold insert at the tip, acute corner down toward the axis, cutting the
           ID. Rake face on Y=0 so the cutting corner is at spindle centre. */}
-      <mesh position={[-r * 0.4, -thickY / 2, r * 0.6]} rotation={[0, Math.PI / 4, 0]} scale={[1, 1, zScale]}>
-        <cylinderGeometry args={[r, r, thickY, sides]} />
+      <mesh
+        position={[-insert.r * 0.4, g.insertY, insert.r * 0.6]}
+        rotation={[0, Math.PI / 4, 0]}
+        scale={[1, 1, insert.zScale]}
+      >
+        <cylinderGeometry args={[insert.r, insert.r, insert.thickY, insert.sides]} />
         <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
     </>
@@ -283,21 +253,20 @@ function BoringBar({ radius = 0.8, shape }) {
  * edge at the tip. `grooveW` sets the cut width. Marker only.
  */
 function PartingBlade({ radius = 0.8, shape }) {
-  const s = Math.max(radius * 7, 6);
-  const w = Math.max((shape?.grooveW ?? 3) * 0.35, s * 0.18);  // blade thickness (Z)
-  const bladeH = s * 5;
-  const depth = Math.max(radius * 2.4, 1.8) * 1.4;
+  const g = partingBladeGeometry(radius, shape ?? {});
   return (
     <>
-      {/* Thin blade rising from the tip, hanging below the cutting plane. */}
-      <mesh position={[bladeH / 2, -depth / 2, 0]}>
-        <boxGeometry args={[bladeH, depth, w]} />
+      {/* Thin blade rising from the tip, hanging below the cutting plane and set
+          back from it by `standout` in both directions — so neither its top face
+          nor its leading face shares a plane with the cutting tip's. */}
+      <mesh position={[g.height / 2 + g.standout, g.bladeY, 0]}>
+        <boxGeometry args={[g.height, g.depth, g.width]} />
         <meshStandardMaterial {...metal('#a7afbd')} />
       </mesh>
-      {/* Cutting tip — a small block flush with the blade's leading (−Z) face,
-          its top edge on Y=0 so the cut is at spindle centre. */}
-      <mesh position={[s * 0.28, -depth * 1.02 / 2, 0]}>
-        <boxGeometry args={[s * 0.55, depth * 1.02, w * 1.15]} />
+      {/* Cutting tip — a small block proud of the blade on every side, its top
+          edge on Y=0 so the cut is at spindle centre. */}
+      <mesh position={[g.tipHeight / 2, g.tipY, 0]}>
+        <boxGeometry args={[g.tipHeight, g.depth * 1.02, g.width * 1.15]} />
         <meshStandardMaterial {...metal('#e0a92a', 0.3)} />
       </mesh>
     </>
@@ -352,8 +321,6 @@ function Chuck({ zEnd, od }) {
     </group>
   );
 }
-
-const DEG = Math.PI / 180;
 
 /**
  * Cutting tool at the current tip.

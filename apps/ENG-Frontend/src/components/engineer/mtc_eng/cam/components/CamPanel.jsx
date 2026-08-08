@@ -395,11 +395,18 @@ export default function CamPanel() {
       render: (_, row) => (row.step ? (
         <div style={{ fontSize: 11, lineHeight: 1.5 }}>
           <div>{row.step.speeds.rpm} rpm</div>
+          {/* Turning is quoted in mm/min like everything else, with the mm/rev
+              that will actually be posted under G99 beneath it — the two are the
+              same feed, and only one of them can be compared with a milling
+              operation two rows up. */}
           <div>
             {plan?.mode === 'turn'
-              ? `${row.step.speeds.fn} mm/rev`
+              ? `${row.step.speeds.feedPerMin} mm/min`
               : `${row.step.speeds.feed} mm/min`}
           </div>
+          {plan?.mode === 'turn' && (
+            <div style={{ color: CAD.dim }}>{row.step.speeds.fn} mm/rev</div>
+          )}
           {row.step.speeds.limitedBy && (
             <Tooltip title={`Clamped by ${machine.label}'s ${row.step.speeds.limitedBy}`}>
               <Tag color="orange" style={{ marginTop: 2 }}>clamped</Tag>

@@ -12,12 +12,14 @@ import { Button, Tooltip, Popover, InputNumber, Space, Tag, Typography, Divider,
 import {
   UndoOutlined, RedoOutlined, DeleteOutlined, ThunderboltOutlined,
   NodeIndexOutlined, EllipsisOutlined, BulbOutlined, ClearOutlined,
-  SaveOutlined, FolderOpenOutlined, ExportOutlined, DatabaseOutlined,
+  SaveOutlined, FolderOpenOutlined, ExportOutlined, ImportOutlined, DatabaseOutlined,
 } from '@ant-design/icons';
 import { useState, useEffect, useCallback } from 'react';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { saveProject, openProjectFile, exportSketchDxf } from '../lib/projectIO.js';
 import LibraryPanel from './LibraryPanel.jsx';
+import SketchesPanel from './SketchesPanel.jsx';
+import BuildPanel from './BuildPanel.jsx';
 // The helper this rail introduced now serves the whole app — see `glyph.jsx`.
 import { glyph } from './glyph.jsx';
 import { CAD } from '../theme.js';
@@ -36,6 +38,8 @@ const SelectIcon = glyph(<path d="M5 3l6 15 2.2-6.2L19.5 9.6z" fill="currentColo
 const PointIcon = glyph(<><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /></>);
 const LineIcon = glyph(<><line x1="5" y1="19" x2="19" y2="5" /><circle cx="5" cy="19" r="1.8" fill="currentColor" /><circle cx="19" cy="5" r="1.8" fill="currentColor" /></>);
 const RectIcon = glyph(<rect x="4.5" y="6.5" width="15" height="11" />);
+const SlotIcon = glyph(<path d="M8.5 7.5h7a4.5 4.5 0 0 1 0 9h-7a4.5 4.5 0 0 1 0-9z" />);
+const PolygonIcon = glyph(<path d="M12 4l7 4.2v7.6L12 20l-7-4.2V8.2z" />);
 const CircleIcon = glyph(<circle cx="12" cy="12" r="7.5" />);
 const ArcIcon = glyph(<><path d="M4 18A14 14 0 0 1 18 4" /><circle cx="4" cy="18" r="1.8" fill="currentColor" /><circle cx="18" cy="4" r="1.8" fill="currentColor" /></>);
 const DimIcon = glyph(<><path d="M4 7v10M20 7v10M4 12h16" /><path d="M7 9l-3 3 3 3M17 9l3 3-3 3" /></>);
@@ -45,12 +49,18 @@ const ChamferIcon = glyph(<path d="M5 20V10L11 4H20" />);
 const ConstructionIcon = glyph(<path d="M4 18L20 6" strokeDasharray="3 2.5" />);
 const MirrorIcon = glyph(<><path d="M12 3v18" strokeDasharray="3 2" /><path d="M9 7L4 12l5 5z" /><path d="M15 7l5 5-5 5z" /></>);
 const OffsetIcon = glyph(<><path d="M4 16c4-8 12-8 16 0" /><path d="M4 20c4-8 12-8 16 0" opacity="0.55" /></>);
+// 2D→3D. Planes: two sheets at an angle, the way a CAD tree draws its reference
+// planes. Extrude: a profile with the solid pushed off it.
+const PlanesIcon = glyph(<><path d="M3 8.5l8-3.5 10 3-8 3.5z" /><path d="M3 8.5v7l8 3.5v-7" /><path d="M21 8v7l-10 4" opacity="0.55" /></>);
+const ExtrudeIcon = glyph(<><rect x="3.5" y="9.5" width="10" height="8" /><path d="M3.5 9.5l6-5h10l-6 5" /><path d="M19.5 4.5v8l-6 5" /></>);
 
 const TOOLS = [
   { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select points, lines, circles or arcs · drag a point to move it (the sketch re-solves) · double-click a dimension to edit it' },
   { value: 'point', label: 'Point', Icon: PointIcon, hint: 'Click on the plane to add points' },
   { value: 'line', label: 'Line', Icon: LineIcon, hint: 'Click to start, click to finish · locks to 0/45/90…° and snaps tangent to circles/arcs · Esc cancels' },
   { value: 'rectangle', label: 'Rectangle', Icon: RectIcon, hint: 'Click two opposite corners' },
+  { value: 'slot', label: 'Slot', Icon: SlotIcon, hint: 'Click the two ends of the slot axis, then a point setting the radius · the flanks stay tangent to the caps' },
+  { value: 'polygon', label: 'Polygon', Icon: PolygonIcon, hint: 'Click the centre, then a corner (sets size and rotation) · pick the number of sides on the rail' },
   { value: 'circle', label: 'Circle', Icon: CircleIcon, hint: 'Click centre, then a point on the rim' },
   { value: 'arc', label: 'Arc', Icon: ArcIcon, hint: 'Click centre, start, then end (sweeps CCW) · Esc cancels' },
   { value: 'dimension', label: 'Dimension', Icon: DimIcon, hint: 'Pick 1 pt (to origin) / 2 pts / 1 line / 1 circle / 1 arc / pt+line / 2 lines (gap or angle) / line+circle / 2 circles — set value, or click empty space to apply' },
@@ -541,6 +551,8 @@ export default function SketchToolbar() {
   const toggleConstruction = useSketchStore((s) => s.toggleConstruction);
   const mirror = useSketchStore((s) => s.mirror);
   const beginOffset = useSketchStore((s) => s.beginOffset);
+  const polygonSides = useSketchStore((s) => s.polygonSides);
+  const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
 
   const setError = useSketchStore((s) => s.setError);
   // Save/open failures land on the sketcher's own error line.
@@ -553,6 +565,16 @@ export default function SketchToolbar() {
   const onExportDxf = useCallback(async () => {
     try { await exportSketchDxf(); } catch (e) { setError?.(e?.message || String(e)); }
   }, [setError]);
+  const importDxf = useSketchStore((s) => s.importDxf);
+  const onImportDxf = useCallback(async (file) => {
+    try {
+      // The file's own name becomes the sketch's, so a drawing imported next to
+      // two others is identifiable in the list.
+      importDxf(await file.text(), { name: file.name.replace(/\.[^.]*$/, '') || 'DXF' });
+    } catch (e) {
+      setError?.(e?.message || String(e));
+    }
+  }, [importDxf, setError]);
 
   const activeHint = TOOLS.find((t) => t.value === tool)?.hint;
   // Enablement for the sketch-modify tools, from the current selection.
@@ -582,6 +604,23 @@ export default function SketchToolbar() {
           />
         </Tooltip>
       ))}
+
+      {/* The polygon's side count, beside the tool rather than in a popover: it
+          is picked before the two clicks, not after, so it has to be reachable
+          without covering the viewport being clicked on. */}
+      {tool === 'polygon' && (
+        <Tooltip title="Sides — set before drawing; the polygon is inscribed in the circle through the corner you click" placement="bottom">
+          <InputNumber
+            size="small"
+            min={3}
+            max={64}
+            value={polygonSides}
+            onChange={(v) => setPolygonSides(v)}
+            style={{ width: 62 }}
+            data-polygon-sides
+          />
+        </Tooltip>
+      )}
 
       {sep}
 
@@ -654,6 +693,28 @@ export default function SketchToolbar() {
         )}
       />
 
+      {sep}
+
+      {/* The 2D→3D pair. Which sketch and which plane comes first because it is
+          what the drawing lands on; Build is next to it because it is what the
+          drawing is for. Both are their own triggers for the same reason the
+          library is — a popover nested inside the "More" popover closes the
+          outer one as you reach for it. */}
+      <SketchesPanel
+        trigger={(
+          <Tooltip title="Sketches — which one you are drawing, and the plane it sits on" placement="bottom">
+            <Button type="text" icon={<PlanesIcon />} style={{ ...railBtn(), color: CAD.icon }} />
+          </Tooltip>
+        )}
+      />
+      <BuildPanel
+        trigger={(
+          <Tooltip title="Build — extrude or revolve this sketch into a solid and send it to CAM" placement="bottom">
+            <Button type="text" icon={<ExtrudeIcon />} style={{ ...railBtn(), color: CAD.accent }} />
+          </Tooltip>
+        )}
+      />
+
       <Popover
         trigger="click"
         placement="bottomLeft"
@@ -676,6 +737,15 @@ export default function SketchToolbar() {
               <Button size="small" icon={<ExportOutlined />} onClick={onExportDxf} block>
                 Export DXF
               </Button>
+            </Tooltip>
+            <Tooltip title="Read a DXF drawing in as a new sketch — lines, circles, arcs and polylines, with the ends that meet welded so the profile closes">
+              <Upload
+                accept=".dxf"
+                showUploadList={false}
+                beforeUpload={(file) => { onImportDxf(file); return false; }}
+              >
+                <Button size="small" icon={<ImportOutlined />} block>Import DXF</Button>
+              </Upload>
             </Tooltip>
             <Divider style={{ margin: '4px 0' }} />
             <Button size="small" icon={<BulbOutlined />} onClick={() => loadDemo()} block>Demo sketch</Button>

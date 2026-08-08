@@ -65,13 +65,17 @@ export async function saveTextFile(suggestedName, text, { description = 'File', 
 /** Everything the app currently holds, as a project document. */
 export function currentProject() {
   const cam = useCamStore.getState();
-  const sk = useSketchStore.getState().sk;
+  const sketch = useSketchStore.getState();
+  const sk = sketch.sk;
   return buildProject({
     gcode: cam.gcode || '',
     fileName: cam.fileName || null,
     // An untouched sketch (origin only) is not worth saving as content, but it
     // costs nothing and keeps "open" symmetric, so it goes in as-is.
     sketch: sk ? serializeSketch(sk) : null,
+    // Every sketch and the plane each sits on (v3). The singular field above is
+    // the active one, kept for the reasons in `projectFile.js`.
+    sketches: sketch.serializeSketches(),
     settings: cam,
     // The whole STL→plan setup: part, machine, material, origin, operations.
     // Null when nothing is imported, so a bare sketch/program stays a v1-shaped
@@ -149,7 +153,14 @@ export async function applyProject(doc) {
   // The CAM setup — part, machine, material, origin, operations. Returns the
   // restored process mode when the project carried a part, or null otherwise.
   const camMode = useCamPlanStore.getState().restoreSetup(project.cam);
-  if (project.sketch) useSketchStore.getState().loadSerialized(project.sketch);
+  // v3 carries every sketch and its plane; a v1/v2 project carries one document
+  // and no plane, which `loadSerialized` puts on the table exactly as before.
+  // Try the list first and fall back — never both, or the fallback would
+  // overwrite the list with just its active member.
+  const sketchStore = useSketchStore.getState();
+  if (!sketchStore.loadSketches(project.sketches) && project.sketch) {
+    sketchStore.loadSerialized(project.sketch);
+  }
   await cam.parse(project.gcode, project.fileName ?? 'project');
   // Land on the machine page that actually shows the restored part.
   if (camMode) await useCamStore.getState().setPage(camMode);

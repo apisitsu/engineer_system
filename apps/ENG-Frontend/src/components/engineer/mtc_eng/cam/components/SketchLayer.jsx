@@ -13,6 +13,8 @@ import { invalidate, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
+import { polygonPreview, slotPreview, axisDistance } from '../engine/sketch/shapes.js';
+import { planeMatrix } from '../engine/sketch/plane.js';
 import { CAD } from '../theme.js';
 
 const noRaycast = () => null;
@@ -141,9 +143,26 @@ function DimensionAnnotations({ sk, version }) {
   );
 }
 
+/**
+ * Sketch coordinates from a pointer event.
+ *
+ * `event.point` is in **world** space. That used to be the same thing as sketch
+ * space, because the sketch was always the Z=0 plane; now the layer sits under
+ * the active sketch's plane matrix, so a click on the front plane arrives as
+ * (x, 0, z) and reading `.x` / `.y` off it would drop the sketch's whole second
+ * axis. Asking the picked object to convert undoes exactly the transform that
+ * was applied to draw it, whatever plane that is.
+ */
+const localPoint = (e) => {
+  const p = e.point.clone();
+  return e.object?.parent ? e.object.worldToLocal(p) : p;
+};
+
 export default function SketchLayer() {
   const version = useSketchStore((s) => s.version);
   const sk = useSketchStore((s) => s.sk);
+  const sketches = useSketchStore((s) => s.sketches);
+  const activeId = useSketchStore((s) => s.activeId);
   const tool = useSketchStore((s) => s.tool);
   const selection = useSketchStore((s) => s.selection);
   const pending = useSketchStore((s) => s.pending);
@@ -156,6 +175,7 @@ export default function SketchLayer() {
   const dofState = useSketchStore((s) => s.dofState);
   const solveResult = useSketchStore((s) => s.solveResult);
   const dimensionPending = useSketchStore((s) => s.dimensionPending);
+  const polygonSides = useSketchStore((s) => s.polygonSides);
   const clickAt = useSketchStore((s) => s.clickAt);
   const hover = useSketchStore((s) => s.hover);
   const clearHover = useSketchStore((s) => s.clearHover);
@@ -255,7 +275,7 @@ export default function SketchLayer() {
   }, [cancelPending, deleteSelected, undo, redo]);
 
   const drawing = tool === 'point' || tool === 'line' || tool === 'rectangle'
-    || tool === 'circle' || tool === 'arc';
+    || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
   // Geometry is clickable in select/dimension (pick), trim (cut) and chamfer
   // (pick two lines) modes.
   const picking = tool === 'select' || tool === 'dimension' || tool === 'trim' || tool === 'chamfer';
@@ -298,6 +318,18 @@ export default function SketchLayer() {
       const r = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
       return arcRing(anchor.x, anchor.y, r, 0, TWO_PI, 64);
     }
+    if (tool === 'polygon') {
+      return polygonPreview(anchor.x, anchor.y, tip.x, tip.y, polygonSides)
+        .map(([px, py]) => [px, py, Z]);
+    }
+    if (tool === 'slot') {
+      // Click 1 done (one end of the axis): show the axis to the cursor. Click 2
+      // done: show the whole slot, its radius following the cursor off the axis.
+      if (!arcStart) return [[anchor.x, anchor.y, Z], [tip.x, tip.y, Z]];
+      const r = axisDistance(tip.x, tip.y, anchor, arcStart);
+      return slotPreview(anchor.x, anchor.y, arcStart.x, arcStart.y, r)
+        .map(([px, py]) => [px, py, Z]);
+    }
     if (tool === 'arc') {
       // Click 1 done (centre = anchor): show the radius as a spoke to the cursor.
       // Click 2 done (start = arcStart): show the arc swept CCW to the cursor.
@@ -308,10 +340,20 @@ export default function SketchLayer() {
       return arcRing(anchor.x, anchor.y, r, a0, a1, 48);
     }
     return null;
-  }, [anchor, arcStart, tip, tool]);
+  }, [anchor, arcStart, tip, tool, polygonSides]);
+
+  // The whole layer is drawn in sketch coordinates and then placed by the active
+  // sketch's plane, so nothing below this line had to learn about planes: local
+  // (x, y, 0) lands wherever the plane puts it. `matrixAutoUpdate={false}` is
+  // required — three.js would otherwise recompose the matrix from the group's
+  // (untouched) position/rotation/scale on the next frame and wipe it out.
+  const planeMat = useMemo(() => {
+    const entry = sketches.find((s) => s.id === activeId) || sketches[0];
+    return new THREE.Matrix4().fromArray(planeMatrix(entry?.plane));
+  }, [sketches, activeId]);
 
   return (
-    <group>
+    <group matrix={planeMat} matrixAutoUpdate={false}>
       <DimensionAnnotations sk={sk} version={version} />
 
       {/* Pick plane. In draw mode it takes pointer-downs immediately and tracks
@@ -324,20 +366,22 @@ export default function SketchLayer() {
           onPointerDown={(e) => {
             if (!drawing) return;
             e.stopPropagation();
-            clickAt(e.point.x, e.point.y);
+            const p = localPoint(e);
+            clickAt(p.x, p.y);
           }}
           onPointerMove={(e) => {
+            const p = localPoint(e);
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
-            if (useSketchStore.getState().dragging) { dragTo(e.point.x, e.point.y); return; }
+            if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
             // Track the cursor for the rubber-band (draw) and the snap indicator
             // (both). In pick modes don't stopPropagation, so OrbitControls still
             // rotates the view while snapping shows which point a click will grab.
             if (drawing) {
               e.stopPropagation();
-              hover(e.point.x, e.point.y);
+              hover(p.x, p.y);
             } else if (picking) {
-              hover(e.point.x, e.point.y);
+              hover(p.x, p.y);
             }
           }}
           onPointerLeave={() => clearHover()}
@@ -345,7 +389,8 @@ export default function SketchLayer() {
             if (!picking) return;
             e.stopPropagation();
             if (swallowClick.current) { swallowClick.current = false; return; }
-            clickAt(e.point.x, e.point.y);
+            const p = localPoint(e);
+            clickAt(p.x, p.y);
           }}
         >
           {/* Large enough that clicks still land on the plane when zoomed far out. */}
@@ -437,7 +482,7 @@ export default function SketchLayer() {
               if (!picking) return;
               e.stopPropagation();
               // Trim cuts the segment at the click point; select toggles the line.
-              if (tool === 'trim') clickAt(e.point.x, e.point.y);
+              if (tool === 'trim') { const p = localPoint(e); clickAt(p.x, p.y); }
               else toggleSelect(l.id);
             }}
           />
