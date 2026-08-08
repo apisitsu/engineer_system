@@ -56,6 +56,7 @@ import Viewport from './components/Viewport.jsx';
 import GcodePanel from './components/GcodePanel.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
+import FeatureTree from './components/FeatureTree.jsx';
 import { invalidate } from '@react-three/fiber';
 import { getBuf } from './engine/bufferCache.js';
 import { CAD } from './theme.js';
@@ -1638,6 +1639,13 @@ export default function App() {
             {/* Sketcher controls float over the viewport — only on the Sketch page,
                 so the design workspace is separate from Milling / Turning. */}
             {sketching && <SketchToolbar />}
+
+            {/* The model's structure, docked down the left the way a CAD does it.
+                Present on every page because it describes the *part*, not the
+                sketcher — suppressing a feature and rebuilding is as much a
+                milling-page action as a sketch-page one. It collapses to a strip,
+                and Fit frames the part beside it rather than under it. */}
+            <FeatureTree />
 
             {dragActive && (
               <div style={{

@@ -1,7 +1,8 @@
 /**
  * @vitest-environment jsdom
  *
- * The feature tree in the DOM.
+ * The feature tree in the DOM — now a docked panel rather than a popover, so
+ * these render it directly instead of opening a trigger.
  *
  * The geometry and the replay are proved in `engine/solid/featureTree.test.js`
  * and `stores/featureStore.test.js`. What cannot be seen from there is the panel
@@ -13,7 +14,7 @@ import {
 } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import FeatureTreePanel from './FeatureTreePanel.jsx';
+import FeatureTree from './FeatureTree.jsx';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { createSketch, addPoint, addLine } from '../engine/sketch/model.js';
@@ -34,16 +35,9 @@ function rectSketch(x0, y0, x1, y1) {
   return sk;
 }
 
-/** Render and open the popover; returns the portalled text. */
+/** Render the docked tree; returns its text. */
 async function open() {
-  await act(async () => {
-    root.render(React.createElement(FeatureTreePanel, {
-      trigger: React.createElement('button', null, 'tree'),
-    }));
-  });
-  await act(async () => {
-    container.querySelector('button').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
+  await act(async () => { root.render(React.createElement(FeatureTree)); });
   return document.body.textContent;
 }
 
@@ -150,5 +144,87 @@ describe('FeatureTreePanel', () => {
     await open();
     await click(document.querySelector(`[data-feature-item="${base.id}"]`));
     expect(document.body.textContent).toMatch(/cannot be edited here/i);
+  });
+});
+
+describe('the tree shows the model the way a CAD does', () => {
+  /** Two sketches in the store, only the first used by a feature. */
+  function withSketches() {
+    const a = rectSketch(0, 0, 40, 40);
+    const b = rectSketch(0, 0, 10, 10);
+    useSketchStore.setState({
+      sk: a,
+      sketches: [
+        { id: 1, name: 'Base sketch', plane: { preset: 'XY', offset: 0 }, doc: a, past: [], future: [] },
+        { id: 2, name: 'Spare', plane: { preset: 'XZ', offset: 12 }, doc: b, past: [], future: [] },
+      ],
+      activeId: 1,
+      nextSketchId: 3,
+    });
+  }
+
+  it('hangs the sketch under the feature that was built from it', async () => {
+    withSketches();
+    useFeatureStore.getState().addFeature('extrude', { sketchId: 1, depth: 6, name: 'Plate' });
+    const text = await open();
+    expect(text).toMatch(/Plate/);
+    expect(text).toMatch(/Base sketch/);
+    // And it names the plane, so you can tell two sketches apart at a glance.
+    expect(text).toMatch(/Top \(XY\)/);
+    expect(document.querySelector('[data-tree-sketch="1"]')).toBeTruthy();
+  });
+
+  it('opens a sketch for editing when its node is clicked', async () => {
+    // The reason sketches are in this tree at all: it is how you get back to
+    // the geometry behind an operation.
+    withSketches();
+    useFeatureStore.getState().addFeature('extrude', { sketchId: 2, depth: 6 });
+    await open();
+    expect(useSketchStore.getState().activeId).toBe(1);
+    await click(document.querySelector('[data-tree-sketch="2"]'));
+    expect(useSketchStore.getState().activeId).toBe(2);
+  });
+
+  it('lists a sketch no feature uses, rather than hiding it', async () => {
+    withSketches();
+    useFeatureStore.getState().addFeature('extrude', { sketchId: 1, depth: 6 });
+    const text = await open();
+    expect(text).toMatch(/Not used by a feature/i);
+    expect(text).toMatch(/Spare/);
+  });
+
+  it('folds a feature\'s sketch away and back', async () => {
+    withSketches();
+    const f = useFeatureStore.getState().addFeature('extrude', { sketchId: 1, depth: 6 });
+    await open();
+    expect(document.querySelector('[data-tree-sketch="1"]')).toBeTruthy();
+    await click(document.querySelector(`[data-tree-expand="${f.id}"]`));
+    expect(document.querySelector('[data-tree-sketch="1"]')).toBeNull();
+    await click(document.querySelector(`[data-tree-expand="${f.id}"]`));
+    expect(document.querySelector('[data-tree-sketch="1"]')).toBeTruthy();
+  });
+
+  it('collapses to a strip and comes back', async () => {
+    // A viewport is small on a tablet; a permanent panel has to be surrenderable.
+    withSketches();
+    useFeatureStore.getState().addFeature('extrude', { sketchId: 1, depth: 6 });
+    await open();
+    expect(document.body.textContent).toMatch(/Feature tree/);
+    await click(document.querySelector('[data-tree-toggle]'));
+    expect(document.body.textContent).not.toMatch(/Feature tree/);
+    await click(document.querySelector('[data-tree-toggle]'));
+    expect(document.body.textContent).toMatch(/Feature tree/);
+  });
+
+  it('declares itself to the camera so Fit frames the part beside it', async () => {
+    // `engine/view/camera.js` reads this attribute; without it the fit centres
+    // the part on the canvas and the panel covers it.
+    withSketches();
+    await open();
+    const el = document.querySelector('[data-cam-overlay="left"]');
+    expect(el).toBeTruthy();
+    // Still declared while collapsed — the strip covers pixels too.
+    await click(document.querySelector('[data-tree-toggle]'));
+    expect(document.querySelector('[data-cam-overlay="left"]')).toBeTruthy();
   });
 });
