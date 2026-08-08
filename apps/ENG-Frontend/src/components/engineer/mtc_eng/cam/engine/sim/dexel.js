@@ -100,7 +100,19 @@ export function stamp(stock, x, y, z, tool) {
       // the cutter altogether.
       const rise = cutFootprint(tool, dx, dy);
       if (rise === null) continue;
-      const surfZ = z + rise;
+      // **Clamped to the bottom of the billet.** A drill that goes deeper than
+      // the plate is thick removes the plate, not more than the plate: without
+      // this the column recorded a height below `base`, and two things followed.
+      // The volume readout counted material that was never there, and — because
+      // the mesh takes its floor from the *lowest* column — the underside of the
+      // whole block dropped to the depth of the deepest hole, which reads on
+      // screen as the stock growing a thicker bottom out of nowhere.
+      //
+      // A height field cannot express "no material at all here", so a through
+      // hole leaves the 0.001 mm skin `base` is offset by. That is the model's
+      // limit, not a fudge: representing a real void needs the multi-dexel
+      // upgrade this file's header describes.
+      const surfZ = Math.max(z + rise, stock.base);
 
       const idx = j * stock.nx + i;
       const h = stock.heights[idx];

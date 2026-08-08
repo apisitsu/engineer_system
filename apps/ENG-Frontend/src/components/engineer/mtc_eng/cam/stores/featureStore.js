@@ -52,6 +52,16 @@ export const useFeatureStore = create((set, get) => ({
   steps: [],
   errors: [],
   selectedId: null,
+  /**
+   * Whether the docked tree is showing.
+   *
+   * In the store rather than the component because the sketch rail has to move
+   * out of its way — the two both live at the top-left of the viewport and
+   * overlapped otherwise. One piece of shared state is cheaper than either
+   * measuring the other's box or nesting them.
+   */
+  treeOpen: true,
+  setTreeOpen(treeOpen) { set({ treeOpen }); },
 
   markDirty() {
     if (!get().dirty) set({ dirty: true });

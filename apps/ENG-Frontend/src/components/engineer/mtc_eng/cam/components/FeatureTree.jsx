@@ -42,9 +42,16 @@ const MERGE_OPTIONS = [
   { value: 'common', label: 'Common' },
 ];
 
+/**
+ * The panel's two widths, exported because the sketch rail sits beside it and
+ * has to know where it ends. A repeated literal in the other file is exactly the
+ * kind of thing that drifts the first time this one is resized.
+ */
+export const TREE_SIZE = { TREE_W: 268, TREE_STRIP: 36 };
+
 const PANEL = {
   position: 'absolute', top: 12, left: 12, bottom: 12, zIndex: 5,
-  width: 268, display: 'flex', flexDirection: 'column',
+  width: TREE_SIZE.TREE_W, display: 'flex', flexDirection: 'column',
   background: CAD.glass, border: `1px solid ${CAD.border}`,
   borderRadius: 4, boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
   backdropFilter: 'blur(2px)',
@@ -129,7 +136,8 @@ export default function FeatureTree() {
   const activeSketchId = useSketchStore((s) => s.activeId);
   const setActiveSketch = useSketchStore((s) => s.setActiveSketch);
 
-  const [open, setOpen] = useState(true);
+  const open = useFeatureStore((s) => s.treeOpen);
+  const setOpen = useFeatureStore((s) => s.setTreeOpen);
   // Which features have their sketch shown. Expanded by default: the sketch is
   // the thing you come to the tree to get back to.
   const [collapsed, setCollapsed] = useState({});
@@ -140,7 +148,7 @@ export default function FeatureTree() {
 
   if (!open) {
     return (
-      <div data-cam-overlay="left" style={{ ...PANEL, width: 36, bottom: 'auto' }}>
+      <div data-cam-overlay="left" style={{ ...PANEL, width: TREE_SIZE.TREE_STRIP, bottom: 'auto' }}>
         <Tooltip title="Show the feature tree" placement="right">
           <Badge dot={dirty && features.length > 0} offset={[-6, 4]}>
             <Button

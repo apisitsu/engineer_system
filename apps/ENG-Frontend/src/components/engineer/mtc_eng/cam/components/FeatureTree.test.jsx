@@ -14,7 +14,7 @@ import {
 } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import FeatureTree from './FeatureTree.jsx';
+import FeatureTree, { TREE_SIZE } from './FeatureTree.jsx';
 import { useFeatureStore } from '../stores/featureStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { createSketch, addPoint, addLine } from '../engine/sketch/model.js';
@@ -226,5 +226,28 @@ describe('the tree shows the model the way a CAD does', () => {
     // Still declared while collapsed — the strip covers pixels too.
     await click(document.querySelector('[data-tree-toggle]'));
     expect(document.querySelector('[data-cam-overlay="left"]')).toBeTruthy();
+  });
+});
+
+describe('the tree and the sketch rail share a corner without overlapping', () => {
+  it('publishes its open state so the rail can step aside', () => {
+    // Both are absolutely positioned at the top-left of the viewport. They
+    // overlapped until the rail learned where the tree ends.
+    useFeatureStore.setState({ treeOpen: true });
+    expect(useFeatureStore.getState().treeOpen).toBe(true);
+    useFeatureStore.getState().setTreeOpen(false);
+    expect(useFeatureStore.getState().treeOpen).toBe(false);
+  });
+
+  it('collapsing through the panel sets it, so the rail follows', async () => {
+    useFeatureStore.setState({ treeOpen: true });
+    await open();
+    await click(document.querySelector('[data-tree-toggle]'));
+    expect(useFeatureStore.getState().treeOpen).toBe(false);
+  });
+
+  it('names both widths once, for the rail to offset by', () => {
+    expect(TREE_SIZE.TREE_W).toBeGreaterThan(TREE_SIZE.TREE_STRIP);
+    expect(TREE_SIZE.TREE_STRIP).toBeGreaterThan(0);
   });
 });
