@@ -40,6 +40,11 @@ const FUNCS = {
   FIX: Math.trunc,
   FUP: (x) => Math.sign(x) * Math.ceil(Math.abs(x)),
   ROUND: (x) => Math.sign(x) * Math.round(Math.abs(x)),
+  // BCD/BIN convert between packed decimal and binary. Rare on a machining
+  // program and trivial to support, and a program that uses one failed to open
+  // at all rather than failing to use it.
+  BCD: (x) => Number(String(Math.trunc(Math.abs(x))).split('').reduce((a, d) => a * 16 + Number(d), 0)),
+  BIN: (x) => Number(Math.trunc(Math.abs(x)).toString(16)),
 };
 const FUNC_RE = new RegExp(`^(${Object.keys(FUNCS).join('|')})\\s*\\[`, 'i');
 
@@ -135,7 +140,14 @@ function makeParser(text, vars, warn) {
       const c = text[i];
       if (c === '*') { i++; v *= factor(); }
       else if (c === '/') { i++; const d = factor(); v = d === 0 ? 0 : v / d; }
-      else { i = save; return v; }
+      else if (/^MOD\b/i.test(text.slice(i))) {
+        // Fanuc spells the remainder `MOD`, at the same precedence as `*` and
+        // `/`. Without it `[27 MOD 4]` stopped at the M and read as a missing
+        // bracket, which said nothing about the real problem.
+        i += 3;
+        const d = factor();
+        v = d === 0 ? 0 : v % d;
+      } else { i = save; return v; }
     }
   };
 
@@ -153,15 +165,40 @@ function makeParser(text, vars, warn) {
     }
   };
 
-  /** `expr OP expr`, e.g. `#6GE[#3-0.001]`. */
-  const condition = () => {
+  /** One `expr OP expr`, e.g. `#6GE[#3-0.001]`. */
+  const comparison = () => {
     const left = expr();
     skip();
     const m = /^(EQ|NE|GT|GE|LT|LE)/i.exec(text.slice(i));
     if (!m) throw new Error(`expected a comparison operator at column ${i + 1}`);
-    i += 2;
+    i += m[1].length;
     const right = expr();
     return COMPARISONS[m[1].toUpperCase()](left, right);
+  };
+
+  /**
+   * A whole condition: comparisons joined by `AND` / `OR` / `XOR`.
+   *
+   * Fanuc allows them and programs use them; the parser stopped at the first
+   * one and reported a missing comparison operator, so `IF [#1 EQ 1 AND #2 EQ
+   * 2]` could not be opened at all. Left-associative and un-precedenced, which
+   * is what the control does — brackets are how you say otherwise, and every
+   * real program brackets them anyway.
+   */
+  const condition = () => {
+    let v = comparison();
+    for (;;) {
+      const save = i;
+      skip();
+      const m = /^(AND|OR|XOR)\b/i.exec(text.slice(i));
+      if (!m) { i = save; return v; }
+      i += m[1].length;
+      const right = comparison();
+      const op = m[1].toUpperCase();
+      if (op === 'AND') v = Boolean(v) && Boolean(right);
+      else if (op === 'OR') v = Boolean(v) || Boolean(right);
+      else v = Boolean(v) !== Boolean(right);
+    }
   };
 
   return {
@@ -195,6 +232,23 @@ function substitute(clean, vars, warn) {
     i = p.pos;
   }
   return out;
+}
+
+/**
+ * The block number a `GOTO` names.
+ *
+ * Fanuc allows an expression, and `GOTO #100` is how a program picks a branch
+ * at run time. Only a literal was read, so those failed to open — the parser
+ * fell through to treating `GOTO` as address words and asked for a value after
+ * the `G`.
+ */
+function gotoTarget(tail, vars, warn) {
+  const literal = /^(\d+)\s*$/.exec(tail);
+  if (literal) return Number(literal[1]);
+  const p = makeParser(tail, vars, warn);
+  const n = p.expr();
+  if (!Number.isFinite(n)) throw new Error('GOTO needs a block number');
+  return Math.round(n);
 }
 
 /**
@@ -260,7 +314,20 @@ export function expandProgram(text, warn = () => {}) {
     const { raw: rawText, clean, line } = lines[pc];
     if (!clean) { pc++; continue; }
 
-    const fail = (err) => new Error(`Line ${line}: ${err.message}`);
+    /**
+     * Wrap a parse failure with **the block it happened in**, and point at it.
+     *
+     * "Line 338: expected a value at column 3" is unactionable on its own — the
+     * operator cannot see column 3 of a line they are not looking at, and
+     * neither can anyone they report it to. The text and a caret cost nothing
+     * and turn the message into the answer.
+     */
+    const fail = (err) => {
+      const col = /column (\d+)/.exec(err.message);
+      const parts = [`Line ${line}: ${err.message}`, `  ${clean}`];
+      if (col) parts.push(`  ${' '.repeat(Math.max(0, Number(col[1]) - 1))}^`);
+      return new Error(parts.join('\n'));
+    };
 
     // ---- WHILE [cond] DOn ----
     if (WHILE_RE.test(clean)) {
@@ -287,9 +354,9 @@ export function expandProgram(text, warn = () => {}) {
         const hold = p.condition();
         const tail = p.rest().replace(/^\s*\]/, '').trim();
         if (hold) {
-          const goto = /^GOTO\s*(\d+)/i.exec(tail);
+          const goto = /^GOTO\s*(.+)$/i.exec(tail);
           const then = /^THEN\s*(#.*)$/i.exec(tail);
-          if (goto) { pc = jump(labels, Number(goto[1]), line); continue; }
+          if (goto) { pc = jump(labels, gotoTarget(goto[1], vars, warnOnce), line); continue; }
           if (then) { assign(then[1], vars, warnOnce); pc++; continue; }
           throw new Error('IF must be followed by GOTO or THEN');
         }
@@ -299,8 +366,11 @@ export function expandProgram(text, warn = () => {}) {
     }
 
     // ---- GOTOn ----
-    const gotom = /^GOTO\s*(\d+)/i.exec(clean);
-    if (gotom) { pc = jump(labels, Number(gotom[1]), line); continue; }
+    const gotom = /^GOTO\s*(.+)$/i.exec(clean);
+    if (gotom) {
+      try { pc = jump(labels, gotoTarget(gotom[1], vars, warnOnce), line); } catch (err) { throw fail(err); }
+      continue;
+    }
 
     // ---- #var = expr ----
     if (clean.startsWith('#')) {
