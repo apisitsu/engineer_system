@@ -36,6 +36,7 @@ const TABLES = {
   LPB_ENG_ITEM:           'lpb.eng_item',
   LPB_ENG_CAD_REV_DATA:   'lpb.eng_cad_rev_data',
   LPB_ENG_PROCESS_INFO:   'lpb.eng_process_info',
+  LPB_ENG_PROCESS:        'lpb.eng_process',          // process_code → process_eng / process_name
 
   // SDS v2 — Local tables (engPool / eng_system)
   SDS_MACHINE_TYPE_CODE:  'sds_machine_type_code',  // machine lookup + grinding_area_label
