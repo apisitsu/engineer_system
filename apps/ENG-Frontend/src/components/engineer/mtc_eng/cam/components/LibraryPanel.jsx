@@ -26,7 +26,7 @@ import {
 } from 'antd';
 import {
   DeleteOutlined, FolderOpenOutlined, SaveOutlined, DownloadOutlined,
-  ShareAltOutlined, RollbackOutlined, LockOutlined, TeamOutlined,
+  ShareAltOutlined, RollbackOutlined, LockOutlined, TeamOutlined, FileAddOutlined,
 } from '@ant-design/icons';
 import { useLibraryStore } from '../stores/libraryStore.js';
 import { formatBytes, formatSavedAt, namesOfKind, cleanName } from '../engine/savedWork.js';
@@ -183,6 +183,7 @@ export default function LibraryPanel({
   const {
     items, loaded, busy, error, saveProject, saveProgram,
     open: openItem, remove, nameFor, mine, shared, share, unshare, refresh, setError,
+    openItem: current, saveOpen, canSaveOpen, newProject,
   } = useLibraryStore();
   const myItems = mine();
   const sharedItems = shared();
@@ -295,16 +296,39 @@ export default function LibraryPanel({
           database before anything was attempted. The library is on the server
           now — it is either reachable or it is not, which is not knowable up
           front, so a failure lands in `error` beside the button that caused it. */}
+      {/* What is open, and therefore what "Save" means right now. Saving used to
+          have one shape — type a name — even when the job already had one, and
+          re-typing a name you are trying *not* to change is where a typo
+          becomes a second copy. */}
+      {current && (
+        <Text style={{ color: CAD.muted, fontSize: 12, display: 'block', marginBottom: 4 }} data-library-current>
+          Open: <b>{current.name}</b>
+          {current.shared && ' — shared, so saving makes your own copy'}
+        </Text>
+      )}
+
       <Space.Compact style={{ width: '100%' }}>
         <Button
+          type="primary"
           style={{ flex: 1 }}
           icon={<SaveOutlined />}
+          data-library-save-open
+          disabled={busy || !canSaveOpen()}
+          onClick={() => run(saveOpen, (m) => `Saved “${m.name}”`)}
+        >
+          Save
+        </Button>
+        <Button
+          style={{ flex: 1 }}
           data-library-save="project"
           disabled={busy}
           onClick={() => beginSave('project')}
         >
-          Save project
+          Save as…
         </Button>
+      </Space.Compact>
+
+      <Space.Compact style={{ width: '100%', marginTop: 4 }}>
         <Button
           style={{ flex: 1 }}
           icon={<DownloadOutlined />}
@@ -314,11 +338,23 @@ export default function LibraryPanel({
         >
           Save program
         </Button>
+        <Popconfirm
+          title="Start a new project?"
+          description="The part, the sketches, the feature tree and the program are all cleared. Save first if you want to keep them."
+          okText="New project"
+          cancelText="Cancel"
+          onConfirm={() => run(newProject, () => 'Started a new project')}
+        >
+          <Button style={{ flex: 1 }} icon={<FileAddOutlined />} disabled={busy} data-library-new>
+            New project
+          </Button>
+        </Popconfirm>
       </Space.Compact>
       <Text style={{ color: CAD.muted, fontSize: 12, display: 'block', marginTop: 4 }}>
-        A project keeps the part, setup, operations and sketch. A program is
-        just the G-code. Either one asks for a name first, and saves to
-        <b> your own</b> list — nobody else's work is touched.
+        <b>Save</b> writes back over the project you have open; <b>Save as…</b>
+        asks for a name. A project keeps the part, setup, operations and sketch;
+        a program is just the G-code. Both go to <b>your own</b> list — nobody
+        else's work is touched.
       </Text>
 
       {/* Not while the dialog is up: the same sentence is in there, beside the

@@ -27,6 +27,18 @@ vi.mock('../lib/workApi.js', () => ({
 const { default: LibraryPanel } = await import('./LibraryPanel.jsx');
 const { useLibraryStore } = await import('../stores/libraryStore.js');
 
+/**
+ * The store's real write actions, captured before any test swaps them for a spy.
+ *
+ * Several tests below replace `saveProject` / `saveProgram` on the store to
+ * watch what the panel calls — which leaves the stub in place for whatever runs
+ * next. Anything exercising the real thing restores these first.
+ */
+const REAL_ACTIONS = {
+  saveProject: useLibraryStore.getState().saveProject,
+  saveProgram: useLibraryStore.getState().saveProgram,
+};
+
 let container;
 let root;
 
@@ -273,5 +285,84 @@ describe('LibraryPanel — saving', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(body.textContent).toContain('saving replaces it');
+  });
+});
+
+describe('saving the project you already have open', () => {
+  /** Pretend a project was opened from the library. */
+  const opened = (patch = {}) => useLibraryStore.setState({
+    openItem: {
+      id: '1', name: 'OR35128 OP10', kind: 'project', shared: false, ...patch,
+    },
+  });
+
+  it('says which project is open, so Save has a visible meaning', async () => {
+    opened();
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-current]').textContent).toContain('OR35128 OP10');
+  });
+
+  it('offers Save over the open project, and Save as… beside it', async () => {
+    opened();
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-save-open]').disabled).toBe(false);
+    expect(body.querySelector('[data-library-save="project"]').textContent).toContain('Save as');
+  });
+
+  it('has nothing to save over before anything has been opened or saved', async () => {
+    // The old panel had one shape — type a name — and this is the state where
+    // that is still the only honest option.
+    useLibraryStore.setState({ openItem: null });
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-current]')).toBeNull();
+    expect(body.querySelector('[data-library-save-open]').disabled).toBe(true);
+  });
+
+  it('will not write back over a colleague\'s shared item', async () => {
+    // A save always lands on your own shelf, so "save over" cannot mean what it
+    // says here — the panel says it will copy instead of pretending otherwise.
+    opened({ shared: true });
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-save-open]').disabled).toBe(true);
+    expect(body.querySelector('[data-library-current]').textContent).toContain('your own copy');
+  });
+
+  it('will not offer to save a program back as a project', async () => {
+    opened({ kind: 'program' });
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-save-open]').disabled).toBe(true);
+  });
+
+  it('offers a New project button', async () => {
+    const body = await openPanel();
+    expect(body.querySelector('[data-library-new]')).not.toBeNull();
+  });
+});
+
+describe('the store behind it', () => {
+  beforeEach(() => useLibraryStore.setState({ ...REAL_ACTIONS }));
+
+  it('remembers what was saved, so the next Save needs no name', async () => {
+    useLibraryStore.setState({ openItem: null, items: [], loaded: true });
+    await useLibraryStore.getState().saveProject('OP20');
+    const open = useLibraryStore.getState().openItem;
+    expect(open).toMatchObject({ name: 'OP20', kind: 'project', shared: false });
+    expect(useLibraryStore.getState().canSaveOpen()).toBe(true);
+  });
+
+  it('refuses saveOpen when there is nothing of yours open', async () => {
+    useLibraryStore.setState({ openItem: null });
+    await expect(useLibraryStore.getState().saveOpen()).rejects.toThrow(/no project of your own open/i);
+    useLibraryStore.setState({ openItem: { id: 'x', name: 'A', kind: 'project', shared: true } });
+    await expect(useLibraryStore.getState().saveOpen()).rejects.toThrow();
+  });
+
+  it('forgets what was open when a new project is started', async () => {
+    useLibraryStore.setState({
+      openItem: { id: '1', name: 'OP10', kind: 'project', shared: false },
+    });
+    await useLibraryStore.getState().newProject();
+    expect(useLibraryStore.getState().openItem).toBeNull();
+    expect(useLibraryStore.getState().canSaveOpen()).toBe(false);
   });
 });

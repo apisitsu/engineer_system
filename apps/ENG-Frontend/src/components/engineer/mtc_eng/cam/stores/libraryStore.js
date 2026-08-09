@@ -33,7 +33,7 @@ import {
 import {
   putRecord, listMeta, getData, deleteRecord, clearAll, shareRecord, unshareRecord,
 } from '../lib/workApi.js';
-import { currentProject, applyProject } from '../lib/projectIO.js';
+import { currentProject, applyProject, newProject as startNewProject } from '../lib/projectIO.js';
 import { useCamStore } from './camStore.js';
 
 export const useLibraryStore = create((set, get) => ({
@@ -43,6 +43,21 @@ export const useLibraryStore = create((set, get) => ({
   loaded: false,
   busy: false,
   error: null,
+  /**
+   * What was last opened from the library, or saved into it: `{ id, name, kind,
+   * shared }`, or null for work that has never been filed.
+   *
+   * Kept because saving used to have exactly one shape — type a name — even
+   * when the job already had one. Re-typing a name you are trying not to change
+   * is where a typo becomes a second copy, and there was no way to say "this
+   * one, again". `saveOpen` uses this; `saveAs` ignores it.
+   *
+   * `shared` matters: a shared item belongs to whoever published it, and a save
+   * always lands on your own shelf, so re-saving one is a *copy* — the panel
+   * says so rather than pretending it can write back.
+   */
+  openItem: null,
+  setOpenItem: (openItem) => set({ openItem: openItem || null }),
   setError: (error) => set({ error: error || null }),
 
   /** Re-read the list from the server. */
@@ -105,6 +120,49 @@ export const useLibraryStore = create((set, get) => ({
     }));
   },
 
+  /**
+   * Save over what is open, without asking again.
+   *
+   * Only when the open item is **yours** and is a project — a shared item is
+   * somebody else's and a save lands on your own shelf, so writing it back is
+   * not a thing that can happen. Callers check `canSaveOpen` first; this
+   * repeats the check because a store action that trusts its caller is one
+   * refactor away from not being checked at all.
+   */
+  async saveOpen() {
+    const open = get().openItem;
+    if (!open || open.shared || open.kind !== 'project') {
+      throw new Error('There is no project of your own open to save over.');
+    }
+    return get().saveProject(open.name);
+  },
+
+  /** Whether `saveOpen` has something to write to. */
+  canSaveOpen() {
+    const open = get().openItem;
+    return Boolean(open && !open.shared && open.kind === 'project');
+  },
+
+  /**
+   * Empty the app and forget what was open.
+   *
+   * The emptying itself is `projectIO.newProject`, which knows every store a
+   * project spans; this adds the one thing it deliberately does not know about
+   * — that the next save should ask for a name again rather than write over
+   * whatever was open before.
+   */
+  async newProject() {
+    set({ busy: true, error: null });
+    try {
+      await startNewProject();
+      set({ busy: false, openItem: null });
+      return true;
+    } catch (err) {
+      set({ busy: false, error: err?.message || String(err) });
+      return false;
+    }
+  },
+
   /** Save just the program text under `name`. */
   async saveProgram(name) {
     const { gcode, mode } = useCamStore.getState();
@@ -117,8 +175,19 @@ export const useLibraryStore = create((set, get) => ({
     set({ busy: true, error: null });
     try {
       const record = build();
-      await putRecord(record);
+      const saved = await putRecord(record);
       await get().refresh();
+      // Saving files the work under a name, which is exactly what "open" means
+      // for everything after it — so the next save can go straight back here.
+      const row = get().items.find((m) => m.key === record.meta.key && !m.shared);
+      set({
+        openItem: {
+          id: saved?.id ?? row?.id ?? null,
+          name: record.meta.name,
+          kind: record.meta.kind,
+          shared: false,
+        },
+      });
       return record.meta;
     } catch (err) {
       set({ busy: false, error: err?.message || String(err) });
@@ -143,7 +212,16 @@ export const useLibraryStore = create((set, get) => ({
       } else {
         await applyProject(payload.project);
       }
-      set({ busy: false });
+      const row = get().items.find((m) => m.id === id) || null;
+      set({
+        busy: false,
+        openItem: {
+          id,
+          name: payload.name ?? row?.name ?? '',
+          kind: payload.kind,
+          shared: Boolean(row?.shared),
+        },
+      });
       return payload;
     } catch (err) {
       set({ busy: false, error: err?.message || String(err) });

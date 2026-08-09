@@ -136,6 +136,35 @@ export async function exportSketchDxf() {
 }
 
 /**
+ * Start again with nothing loaded.
+ *
+ * Lives here for the reason `applyProject` does: this is the one place that
+ * already knows every store a project spans, so "empty them all" belongs beside
+ * "fill them all" rather than being reassembled by whichever panel needs it.
+ * A partial new-project — the sketch cleared but the feature tree still holding
+ * operations that reference it — is worse than none.
+ *
+ * The library's record of what is open is **not** cleared here; the caller does
+ * that, because `projectIO` is deliberately unaware of the library.
+ */
+export async function newProject() {
+  useCamPlanStore.getState().clear();
+  useFeatureStore.getState().clear();
+
+  const sketch = useSketchStore.getState();
+  sketch.clear();
+  // `clear()` blanks the active sketch; the rest have to go too, or a new job
+  // starts with the last one's geometry on planes nobody chose.
+  for (const entry of [...sketch.sketches]) {
+    useSketchStore.getState().removeSketch(entry.id);
+  }
+  useSketchStore.setState({ nextSketchId: 2, past: [], future: [], error: null });
+
+  // The program last: parsing empties the buffers the viewport reads.
+  await useCamStore.getState().parse('', null);
+}
+
+/**
  * Apply a project document to the app: settings, setup, sketch, then program.
  *
  * Split out of `openProjectFile` so the library (`stores/libraryStore.js`) opens
