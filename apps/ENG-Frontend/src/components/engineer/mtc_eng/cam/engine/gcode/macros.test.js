@@ -236,3 +236,43 @@ describe('Fanuc macro syntax that real programs use', () => {
     expect(msg).toContain('^');
   });
 });
+
+describe('block delete — the `/` prefix a real program puts on optional blocks', () => {
+  const run = (src) => expandProgram(src, () => {}).map((b) => b.text);
+
+  it('reads a conditional hidden behind a slash', () => {
+    // UNCKZ87V4034.NC line 338, which would not open: the prefix meant `^IF`
+    // did not match, the block fell through to being read as address words, and
+    // the parser asked for a value after the `I` — "expected a value at
+    // column 3", exactly as reported from the floor.
+    expect(() => run(['#532=0', '/IF[#532EQ1]GOTO9999', 'G0X1', 'N9999 M30'].join('\n')))
+      .not.toThrow();
+  });
+
+  it('takes the branch when the condition holds', () => {
+    const out = run(['#532=1', '/IF[#532EQ1]GOTO9999', 'G0X1', 'N9999 M30'].join('\n'));
+    expect(out.join(' ')).not.toContain('G0X1');
+  });
+
+  it('runs the block, because block delete is off unless it is switched on', () => {
+    // The motion interpreter already executes these; the macro layer has to
+    // agree with it or the two disagree about what the program does.
+    const out = run(['#532=0', '/IF[#532EQ1]GOTO9999', 'G0X1', 'N9999 M30'].join('\n'));
+    expect(out.join(' ')).toContain('G0X1');
+  });
+
+  it('understands the numbered form, /1 … /9', () => {
+    expect(() => run(['#1=0', '/1IF[#1EQ1]GOTO100', 'N100 M30'].join('\n'))).not.toThrow();
+  });
+
+  it('handles a slashed WHILE, GOTO and assignment', () => {
+    expect(() => run(['/#1=0', '/WHILE[#1LT2]DO1', '#1=#1+1', '/END1', 'M30'].join('\n')))
+      .not.toThrow();
+    expect(() => run(['#1=0', '/GOTO100', 'G0X1', 'N100 M30'].join('\n'))).not.toThrow();
+  });
+
+  it('leaves the slash on a motion block, which the interpreter reads itself', () => {
+    const out = run(['#1=5', '/G0X#1', 'M30'].join('\n'));
+    expect(out.join(' ')).toContain('/G0X5');
+  });
+});

@@ -258,7 +258,26 @@ function gotoTarget(tail, vars, warn) {
  */
 export function expandProgram(text, warn = () => {}) {
   const raw = text.split(/\r?\n/);
-  const lines = raw.map((s, idx) => ({ raw: s, clean: stripComments(s).trim(), line: idx + 1 }));
+  /**
+   * Fanuc's **block delete**: a leading `/`, or `/1`…`/9`, means "skip this
+   * block when the matching switch is on". The switch is off unless the
+   * operator turns it on, so the block runs — which is what the motion
+   * interpreter already does with these, and this has to agree with it.
+   *
+   * It matters here because the prefix hid the *control* words behind it.
+   * `/IF[#532EQ1]GOTO9999` did not match `^IF`, fell through to being read as
+   * address words, and asked for a value after the `I` — the reported
+   * "expected a value at column 3", exactly. A motion block was unaffected:
+   * `/G59` copies the slash through and reads `G59` as normal, which is why
+   * only files with a *conditional* behind a slash ever failed.
+   */
+  const BLOCK_DELETE = /^\/[1-9]?\s*/;
+  const lines = raw.map((s, idx) => {
+    const clean = stripComments(s).trim();
+    return {
+      raw: s, clean, code: clean.replace(BLOCK_DELETE, ''), line: idx + 1,
+    };
+  });
 
   // Nothing to do for a plain coordinate program — and no risk of mangling it.
   if (!lines.some((l) => /#|\bWHILE\b|\bGOTO\b|\bIF\b|^END\s*\d/i.test(l.clean))) {
@@ -279,16 +298,16 @@ export function expandProgram(text, warn = () => {}) {
   const labels = new Map();
   const open = [];
   for (let i = 0; i < lines.length; i++) {
-    const { clean } = lines[i];
-    if (!clean) continue;
-    const label = /^N\s*(\d+)/i.exec(clean);
+    const { code } = lines[i];
+    if (!code) continue;
+    const label = /^N\s*(\d+)/i.exec(code);
     if (label && !labels.has(Number(label[1]))) labels.set(Number(label[1]), i);
-    if (WHILE_RE.test(clean)) {
-      const d = DO_RE.exec(clean);
+    if (WHILE_RE.test(code)) {
+      const d = DO_RE.exec(code);
       if (!d) throw new Error(`Line ${lines[i].line}: WHILE without a DO number`);
       open.push({ n: Number(d[1]), i });
     } else {
-      const e = END_RE.exec(clean);
+      const e = END_RE.exec(code);
       if (!e) continue;
       const top = open.pop();
       if (!top || top.n !== Number(e[1])) {
@@ -311,8 +330,10 @@ export function expandProgram(text, warn = () => {}) {
     if (++executed > MAX_BLOCKS_EXECUTED) {
       throw new Error('Macro expansion ran away — check the WHILE conditions for a loop that never ends');
     }
-    const { raw: rawText, clean, line } = lines[pc];
-    if (!clean) { pc++; continue; }
+    const {
+      raw: rawText, clean, code, line,
+    } = lines[pc];
+    if (!code) { pc++; continue; }
 
     /**
      * Wrap a parse failure with **the block it happened in**, and point at it.
@@ -330,11 +351,11 @@ export function expandProgram(text, warn = () => {}) {
     };
 
     // ---- WHILE [cond] DOn ----
-    if (WHILE_RE.test(clean)) {
+    if (WHILE_RE.test(code)) {
       let hold;
       try {
-        const p = makeParser(clean, vars, warnOnce);
-        p.pos = clean.search(/\[/);
+        const p = makeParser(code, vars, warnOnce);
+        p.pos = code.search(/\[/);
         p.pos += 1;              // step inside WHILE's own bracket
         hold = p.condition();
       } catch (err) { throw fail(err); }
@@ -343,14 +364,14 @@ export function expandProgram(text, warn = () => {}) {
     }
 
     // ---- ENDn: jump back and re-test ----
-    if (END_RE.test(clean)) { pc = whileOf.get(pc); continue; }
+    if (END_RE.test(code)) { pc = whileOf.get(pc); continue; }
 
     // ---- IF [cond] GOTOn | IF [cond] THEN #x=expr ----
-    const ifm = /^IF\s*\[/i.exec(clean);
+    const ifm = /^IF\s*\[/i.exec(code);
     if (ifm) {
       try {
-        const p = makeParser(clean, vars, warnOnce);
-        p.pos = clean.search(/\[/) + 1;
+        const p = makeParser(code, vars, warnOnce);
+        p.pos = code.search(/\[/) + 1;
         const hold = p.condition();
         const tail = p.rest().replace(/^\s*\]/, '').trim();
         if (hold) {
@@ -366,15 +387,15 @@ export function expandProgram(text, warn = () => {}) {
     }
 
     // ---- GOTOn ----
-    const gotom = /^GOTO\s*(.+)$/i.exec(clean);
+    const gotom = /^GOTO\s*(.+)$/i.exec(code);
     if (gotom) {
       try { pc = jump(labels, gotoTarget(gotom[1], vars, warnOnce), line); } catch (err) { throw fail(err); }
       continue;
     }
 
     // ---- #var = expr ----
-    if (clean.startsWith('#')) {
-      try { assign(clean, vars, warnOnce); } catch (err) { throw fail(err); }
+    if (code.startsWith('#')) {
+      try { assign(code, vars, warnOnce); } catch (err) { throw fail(err); }
       pc++;
       continue;
     }
