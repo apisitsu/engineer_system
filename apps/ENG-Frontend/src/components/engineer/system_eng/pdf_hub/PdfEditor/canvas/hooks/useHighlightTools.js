@@ -166,6 +166,15 @@ export default function useHighlightTools({
                 const h = rect.height;
 
                 if (w < 2 || h < 2) continue;
+                
+                const { startX, startY } = hlDrawRef.current;
+                const minX = Math.min(startX, e.clientX - containerRect.left) - 30;
+                const maxX = Math.max(startX, e.clientX - containerRect.left) + 30;
+                const minY = Math.min(startY, e.clientY - containerRect.top) - 30;
+                const maxY = Math.max(startY, e.clientY - containerRect.top) + 30;
+                
+                const intersects = (x < maxX && x + w > minX && y < maxY && y + h > minY);
+                if (!intersects) continue;
 
                 if (activeTool === 'highlight') {
                     // Map directly to the selection rect bounds without artificial shifting

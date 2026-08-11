@@ -49,13 +49,12 @@ const PropertiesPanel = ({
         const customType = store.selectedObjectProps.customData?.type;
         
         const annotateTools = ['highlight', 'underline', 'strikethrough', 'sticky', 'maskReplace'];
-        const isText = type === 'i-text' || type === 'textbox' || type === 'text';
         
-        if (annotateTools.includes(customType) || isText) {
+        if (annotateTools.includes(customType)) {
             return <AnnotatePanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
         }
         
-        const signTools = ['stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate', 'stamp', 'signature', 'date', 'formFill'];
+        const signTools = ['stamp', 'signature', 'formFill'];
         if (signTools.includes(customType)) {
             return (
                 <SignPanel
