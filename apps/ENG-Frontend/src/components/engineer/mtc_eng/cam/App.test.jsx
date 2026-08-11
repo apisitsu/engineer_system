@@ -96,6 +96,13 @@ function siderCommands() {
   return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
 }
 
+/** The same, for the rail that floats over the viewport. */
+function railCommands() {
+  const el = document.querySelector('[data-cam-overlay="bottom"]');
+  if (!el) return [];
+  return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
+}
+
 /** A command button anywhere in the app, by id. */
 const cmd = (id) => q(`button[data-cmd="${id}"]`);
 
@@ -135,8 +142,20 @@ describe('the sidebar while setting up', () => {
   it('offers the file, project and setup controls', async () => {
     await mount();
     expect(siderCommands()).toEqual(
-      expect.arrayContaining(['parse', 'openLibrary', 'exportGcode', 'simulate']),
+      expect.arrayContaining(['parse', 'openLibrary', 'exportGcode', 'simulateVoxel']),
     );
+  });
+
+  it('keeps Simulate on the viewport rail and its grid size in the drawer', async () => {
+    // The button is pressed with the show/hide toggles the result is judged by;
+    // the number it is judged AT is a setting typed once per job. Splitting them
+    // that way is the point — a rail you press and a drawer you fill in.
+    await mount();
+    expect(siderCommands()).not.toContain('simulate');
+    expect(railCommands()).toContain('simulate');
+    // The height-field grid box is still in the drawer, and now says which
+    // resolution it is now that the glyph beside it has gone.
+    expect(sider().textContent).toContain('Height field');
   });
 
   it('names every icon-only button it offers', async () => {
@@ -269,6 +288,50 @@ describe('the holder toggle', () => {
     await setStore({ page: 'turn', mode: 'turn' });
     await mount();
     expect(arborButton()).toBeNull();
+  });
+});
+
+describe('the toolpath toggle', () => {
+  // The backplot covers the very surface it describes on a dense program, so it
+  // drops the same way the holder does — and sits beside it, because they are
+  // the same question asked of two different things in the way of the cut.
+  const pathButton = () => cmd('showToolpath');
+  const isOn = () => pathButton().classList.contains('ant-btn-primary');
+
+  it('sits on the viewport rail, next to the holder toggle', async () => {
+    await mount();
+    expect(pathButton()).not.toBeNull();
+    const rail = railCommands();
+    expect(rail).toContain('showToolpath');
+    expect(Math.abs(rail.indexOf('showToolpath') - rail.indexOf('showArbor'))).toBe(1);
+  });
+
+  it('carries its name for anyone who does not read the glyph', async () => {
+    await mount();
+    expect(pathButton().getAttribute('aria-label')).toBe('Show toolpath');
+  });
+
+  it('starts on, with the backplot drawn', async () => {
+    await mount();
+    expect(useCamStore.getState().showToolpath).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('hides the toolpath when clicked, and brings it back', async () => {
+    await mount();
+    await act(async () => { pathButton().click(); });
+    expect(useCamStore.getState().showToolpath).toBe(false);
+    expect(isOn()).toBe(false);
+
+    await act(async () => { pathButton().click(); });
+    expect(useCamStore.getState().showToolpath).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('stays available while the program runs', async () => {
+    await mount();
+    await setStore({ playing: true });
+    expect(pathButton()).not.toBeNull();
   });
 });
 

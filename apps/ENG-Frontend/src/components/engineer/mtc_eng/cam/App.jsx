@@ -19,7 +19,7 @@ import {
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
-  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon,
+  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
   CUTTER_ICONS,
 } from './components/glyph.jsx';
 import {
@@ -534,6 +534,7 @@ export default function App() {
   const stockEnabled = useCamStore((s) => s.stockEnabled);
   const showStock = useCamStore((s) => s.showStock);
   const showArbor = useCamStore((s) => s.showArbor);
+  const showToolpath = useCamStore((s) => s.showToolpath);
   const cutFollowsPlayback = useCamStore((s) => s.cutFollowsPlayback);
   const simReady  = useCamStore((s) => s.simReady);
   const removalNote = useCamStore((s) => s.removalNote);
@@ -564,6 +565,7 @@ export default function App() {
   const setBillet = useCamStore((s) => s.setBillet);
   const toggleStockEnabled = useCamStore((s) => s.toggleStockEnabled);
   const toggleArbor = useCamStore((s) => s.toggleArbor);
+  const toggleToolpath = useCamStore((s) => s.toggleToolpath);
   const setCutFollows = useCamStore((s) => s.setCutFollows);
   const setPage     = useCamStore((s) => s.setPage);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
@@ -1558,17 +1560,16 @@ export default function App() {
                         cell and the voxel block's edge. Sitting in one column
                         under a shared "Stock" heading, they read as two settings
                         of one simulator, which they have never been. */}
+                    {/* **The button is on the viewport rail, not here.** It is
+                        pressed with the show/hide toggles it is judged by, and
+                        the drawer keeps the number it is judged AT — a grid
+                        size is typed once per job, a Simulate is pressed all
+                        day. The addon spells out which of the two resolutions
+                        this is, now that the glyph beside it has gone. */}
                     <Space.Compact>
-                      <CommandButton
-                        id={simPlan.method === 'voxel'
-                          ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
-                          : 'simulate'}
-                        type="primary"
-                        ghost
-                        icon={simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
-                        loading={simStatus === 'running'}
-                        onClick={() => simulate()}
-                      />
+                      <span className="ant-input-group-addon" style={addonStyle('left')}>
+                        Height field
+                      </span>
                       <Tooltip title={cellSizeUsed && cellSizeUsed !== cellSize
                         ? `The coarsest the height field may be. The last run carved at ${cellSizeUsed.toFixed(3)} mm${cellLimited ? ' — as fine as this program can afford' : ', refined to the smallest cutter so its holes come out round'}.`
                         : 'The coarsest the height field may be — a small cutter refines it further, so its holes come out round'}
@@ -1587,6 +1588,9 @@ export default function App() {
                       </Tooltip>
                       <span className="ant-input-group-addon" style={addonStyle('right')}>mm</span>
                     </Space.Compact>
+                    {/* The voxel run keeps its own button here: it is the
+                        deliberate second opinion, not the one you reach for
+                        mid-job, and the rail has the one that is. */}
                     <Space.Compact>
                       <CommandButton
                         id="simulateVoxel"
@@ -1747,6 +1751,36 @@ export default function App() {
                   onClick={toggleArbor}
                 />
               )}
+              {/* The backplot covers the surface it describes on a dense
+                  program, so it drops the same way the holder does. */}
+              {!sketching && (
+                <CommandButton
+                  id="showToolpath" size="small"
+                  type={showToolpath ? 'primary' : 'default'}
+                  icon={<ToolpathIcon />}
+                  onClick={toggleToolpath}
+                />
+              )}
+              {/* **Simulate lives here, with the toggles it is judged by.**
+                  Cutting the material and then hiding the holder or the
+                  toolpath to look at what came off is one motion, and it used
+                  to cross the whole screen: press a button in a drawer, close
+                  the drawer, then reach for these. The NUMBERS stay in the
+                  drawer — a grid size is a setting you type once per job, not
+                  something to keep on a rail you press mid-run. */}
+              {!sketching && !turning && (
+                <CommandButton
+                  id={simPlan.method === 'voxel'
+                    ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
+                    : 'simulate'}
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
+                  loading={simStatus === 'running'}
+                  onClick={() => simulate()}
+                />
+              )}
               {/* 4th axis: which end of the same rigid motion to watch. A rotary
                   table turns the WORK — that is what a 4-axis machine selects by
                   default — but the part frame, which keeps the workpiece still
@@ -1837,6 +1871,7 @@ export default function App() {
               mode={sketching ? 'mill' : mode}
               sketching={sketching}
               showArbor={showArbor}
+              showToolpath={showToolpath}
               rotaryFrame={rotaryFrame}
               rotaryCenter={rotaryCenter}
               simFrameA={simFrameA}

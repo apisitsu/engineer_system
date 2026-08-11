@@ -472,9 +472,26 @@ export function SceneContents({
   bounds, turnChuck, showStock, toolPos, toolRotary, toolRadius, toolType,
   toolCutter, toolAngle, toolThickness, toolShank, toolLength, turnInsert, bufVer, drawVer, partVer,
   showPart = true,
-  mode = 'mill', sketching = false, showArbor = true,
+  mode = 'mill', sketching = false, showArbor = true, showToolpath = true,
   rotaryFrame = 'part', rotaryCenter, simFrameA = 0, stockSolid = null,
 }) {
+  // **If the scene re-rendered, the scene needs painting.**
+  //
+  // The canvas is `frameloop="demand"`, so nothing reaches the screen without an
+  // `invalidate()`. `Viewport` has one, outside the `<Canvas>`, with a hand-kept
+  // list of every prop that ought to trigger a frame — and a list like that is
+  // only ever as right as the last person to add a prop. It was already wrong:
+  // toggling the arbor changed the scene graph and left the last frame on
+  // screen, so the button flipped and the picture did not. Measured: 0.00% of
+  // viewport pixels changed on the toggle, 9.78% once the camera was nudged into
+  // repainting.
+  //
+  // This one is bound to *this* root (`useThree`, from inside the canvas) and
+  // has **no dependency array on purpose**: React re-rendering these contents is
+  // itself the signal, and it costs exactly the one frame that was wanted.
+  const requestFrame = useThree((s) => s.invalidate);
+  useEffect(() => { requestFrame(); });
+
   // Where the workpiece and the carved stock sit for this frame. They can differ:
   // the height-field sim carves one index in the machine frame, so its block is
   // already turned to `simFrameA` and must only travel the rest of the way.
@@ -509,7 +526,7 @@ export function SceneContents({
           {/* The backplot is never rotated: it is where the tool went, and in
               the machine frame that is exactly the stationary trail the
               programmed coordinates describe. */}
-          <Backplot drawVer={drawVer} />
+          <Backplot drawVer={drawVer} visible={showToolpath} />
           <WorkGroup name="stock-work" t={stockT}>
             <StockMesh simVer={bufVer} visible={showStock} />
             {/* The uncarved blank, live off the store. Yielded to the carved
@@ -554,6 +571,7 @@ export default function Viewport({
   toolCutter, toolAngle, toolThickness, toolShank, toolLength, turnInsert, bufVer, playhead, partVer,
   showPart = true,
   mode = 'mill', sketching = false, view = 'iso', viewNonce = 0, showArbor = true,
+  showToolpath = true,
   rotaryFrame = 'part', rotaryCenter, simFrameA = 0, stockSolid = null,
 }) {
   const controlsRef = useRef();
@@ -587,7 +605,7 @@ export default function Viewport({
   // `rotaryFrame`/`simFrameA` belong here for the same reason `showArbor` does:
   // the canvas is frameloop="demand", so flipping the frame would not appear on
   // screen until some other input happened to change.
-  }, [drawVer, showStock, toolPos, toolRotary, toolRadius, toolType, toolLength, turnInsert, mode, partVer, showPart, showArbor, rotaryFrame, simFrameA, stockSolid, toolCutter, toolAngle, toolThickness, toolShank]);
+  }, [drawVer, showStock, toolPos, toolRotary, toolRadius, toolType, toolLength, turnInsert, mode, partVer, showPart, showArbor, showToolpath, rotaryFrame, simFrameA, stockSolid, toolCutter, toolAngle, toolThickness, toolShank]);
 
   // The gradient goes on the canvas ELEMENT, not on a three.js scene background:
   // CSS paints it for free behind the renderer's transparent clear colour, where
@@ -623,6 +641,7 @@ export default function Viewport({
         mode={mode}
         sketching={sketching}
         showArbor={showArbor}
+        showToolpath={showToolpath}
         rotaryFrame={rotaryFrame}
         rotaryCenter={rotaryCenter}
         simFrameA={simFrameA}
