@@ -103,14 +103,26 @@ export default function LeftColumn({ activeLine = 0 }) {
       {tab === 'model' ? (
         <FeatureTree embedded />
       ) : (
+        // `hidden`, not `auto`: the listing owns the scrolling now — it draws
+        // only the rows on screen, so it has to be the element whose height is
+        // the panel's and whose scrollTop means a position in the program. A
+        // second scroller around it would take both away.
         <div style={{
-          flex: 1, minHeight: 0, overflow: 'auto', padding: 6,
+          flex: 1, minHeight: 0, overflow: 'hidden', padding: 6,
           display: 'flex', flexDirection: 'column', gap: 6,
         }}
         >
           {/* The parse error rides with the listing: it is about this text, and
               the line it names is in the panel underneath it. */}
-          {error && <Alert type="error" showIcon message="Parse failed" description={error} />}
+          {error && (
+            <Alert
+              type="error"
+              showIcon
+              message="Parse failed"
+              description={error}
+              style={{ flex: '0 0 auto' }}
+            />
+          )}
           <GcodePanel gcode={gcode} activeLine={activeLine} onChange={setGcode} />
         </div>
       )}

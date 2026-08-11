@@ -284,6 +284,45 @@ Project files are **v4** (`features`), on top of v3's `sketches: { active,
 items }`. v1/v2/v3 all still open — an older file simply has no tree, which is
 exactly what it had.
 
+## The program listing draws a window, not the program (2026-08-10)
+
+`GcodePanel` renders only the rows on screen plus a few either side, from
+`engine/view/listing.js`. It is not an optimisation looking for a problem: the
+panel used to render **every line of the program**, and playback re-renders it 25
+times a second. Measured in Chrome on a 6,000-line program with the removal sim
+carving along: **~250 ms of main thread per frame with the listing on screen,
+~80 ms with it hidden.** The UI ran at about four frames a second, playback fell
+to less than half its own speed setting, and the highlight lurched ~50 lines at a
+time — which is what reached the floor as *"the highlight doesn't follow what is
+actually running."* Single-stepping never showed it, because one update has
+nothing to keep up with. After: ~50 ms, and a 100 % run finishes in the 6 s the
+speed setting says it should.
+
+Three things it rests on, none of them obvious from the file:
+
+- **Every row is exactly `LINE_H` tall**, set as an explicit `height`. The window
+  is row index × row height, so a row that sizes itself to its font puts the
+  highlight on the wrong line. The two pad divs above and below are what keep the
+  scrollbar the whole program's length.
+- **Following the playhead writes `scrollTop`, never `scrollIntoView`** — which
+  forces a synchronous layout of the whole box, on every tick. `followScrollTop`
+  returns `null` for a line already in view, which is the common case and is what
+  stops the panel taking itself away from an operator who is reading it. A jump of
+  more than a screenful centres instead of scrolling minimally: a slider drag that
+  lands the running line hard against an edge shows none of what comes next.
+- **A `clientHeight` of 0 is refused, not believed.** It means "not laid out" far
+  more often than it means a zero-tall panel — it is what every environment
+  without layout reports — and believing it renders a blank listing. That is a
+  real regression, not a hypothetical: it failed `App.test.jsx`'s "pressing play
+  shows the program" the first time round.
+
+The panel fills its column for the same reason it is virtualised at all: while a
+program runs the listing is the one live thing on screen, and the 320 px box it
+used to sit in left two thirds of the column empty under it. `LeftColumn`'s
+program pane is therefore `overflow: hidden` — the listing has to be the element
+whose height is the panel's and whose `scrollTop` means a position in the
+program, and a second scroller around it takes both away.
+
 ## The library: a private shelf per operator, plus one shared shelf
 
 Saved work is the `cam_saved_work` table behind `/api/engineer/cam/library`,
