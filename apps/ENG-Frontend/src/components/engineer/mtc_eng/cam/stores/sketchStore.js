@@ -22,7 +22,7 @@ import {
   deleteEntity, removeConstraint, chamfer as chamferEdit, fillet as filletEdit,
   filletLineArc as filletLineArcEdit, filletArcArc as filletArcArcEdit,
   filletCircleCircle as filletCircleCircleEdit,
-  trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetEntity,
+  trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement,
@@ -1331,7 +1331,12 @@ export const useSketchStore = create((set, get) => ({
     if (!geom.length) { set({ error: 'Select lines/circles/arcs to offset' }); return; }
     if (!(Number.isFinite(dist) && dist !== 0)) { set({ error: 'Offset needs a non-zero distance' }); return; }
     get()._snapshot();
-    const created = geom.map((id) => offsetEntity(sk, id, dist)).filter((x) => x != null);
+    // `offsetChain`, not one `offsetEntity` per selection: offsetting a profile
+    // entity by entity leaves a gap at every corner, because a line moved along
+    // its own normal ends where it ended and nothing extends or trims it to
+    // where the neighbour now runs. A selection that is not a chain falls
+    // through it unchanged — see `engine/sketch/edit.js`.
+    const created = offsetChain(sk, geom, dist);
     if (!created.length) { get()._undoSnapshot(); set({ error: 'Nothing could be offset (radius would collapse?)' }); return; }
     set({ selection: [], error: null, offsetPending: false });
     get()._bump();
