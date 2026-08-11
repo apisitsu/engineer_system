@@ -104,12 +104,19 @@ function ToolSelect({ step, choices, onChange }) {
 }
 
 /**
- * The faces and edges of the part, as a list to pick from.
+ * The faces and edges of the part, as a list to pick from — **closed by default.**
  *
- * A list, not only a click target in the 3D view. Picking in 3D is faster when
- * the face is visible and useless when it is not — a pocket floor under an
- * overhang, the underside, the face that is currently pointing away. The list
- * reaches everything, and hovering a row is what highlights it in the viewport.
+ * The model itself is now the primary way to pick: hovering it highlights what a
+ * click would take, and an edge under the cursor wins over the face behind it
+ * (`PartMesh` + `engine/mesh/pickEdge.js`). Two long lists open on the panel were
+ * noise once that worked, so they start collapsed and the headers stay as a
+ * count.
+ *
+ * They are collapsed and not deleted, and the distinction is the point: picking
+ * in 3D is only possible for a face you can *see*. A pocket floor under an
+ * overhang, the underside, the face currently pointing away from the camera —
+ * none of those has a cursor position, and the list is the only thing that
+ * reaches them. Hovering a row still highlights it, exactly as before.
  */
 /**
  * The pickable faces and edges, as a list.
@@ -165,7 +172,9 @@ const FeaturePicker = React.memo(function FeaturePicker({ features, selected, on
     <Collapse
       size="small"
       ghost
-      defaultActiveKey={['faces']}
+      // Closed. The viewport is where picking happens now; this is the reach for
+      // what the camera cannot see — see the note above.
+      defaultActiveKey={[]}
       items={[
         {
           key: 'faces',

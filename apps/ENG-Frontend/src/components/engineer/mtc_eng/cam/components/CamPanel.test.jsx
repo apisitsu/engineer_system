@@ -409,8 +409,17 @@ describe('indexing and picking, on screen', () => {
 
     const el = await render();
     // The header still reports the true total, so nothing is hidden from the
-    // count — only from the rendered rows.
+    // count — only from the rendered rows. It reads without opening anything,
+    // which is the whole reason the panel can start closed.
     expect(el.textContent).toMatch(new RegExp(`Faces \\(${total}\\)`));
+
+    // The list is collapsed by default now — the model is where picking
+    // happens. Open it: what is inside still has to be capped and still has to
+    // account for the overflow.
+    const facesHeader = [...el.querySelectorAll('.ant-collapse-header')]
+      .find((h) => /^Faces \(/.test(h.textContent.trim()));
+    expect(facesHeader).toBeTruthy();
+    await act(async () => { facesHeader.click(); });
 
     // Every drawn row carries a face tag (F0, F1, …); there must be no more of
     // them than the cap, however many faces the part has.

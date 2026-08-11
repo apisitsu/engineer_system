@@ -17,10 +17,11 @@
  * React's dev Performance Track structured-clones changed props and dies on
  * large typed arrays.
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { getMesh, useCamPlanStore } from '../stores/camPlanStore.js';
 import { faceOfTriangle } from '../engine/mesh/features.js';
+import { featureAtPoint } from '../engine/mesh/pickEdge.js';
 import { originMarkerSize, rotaryAxisLength } from '../engine/view/originMarker.js';
 import { CAD } from '../theme.js';
 
@@ -62,7 +63,11 @@ function highlightGeometry(feature, soup) {
 
 export default function PartMesh({ meshVer, visible = true, wireframe = false }) {
   const selectFeature = useCamPlanStore((s) => s.selectFeature);
+  const previewFeatureAt = useCamPlanStore((s) => s.previewFeatureAt);
   const features = useCamPlanStore((s) => s.features);
+  // The id currently highlighted, so a pointer move that stays on the same
+  // feature costs nothing. A ref, not state: it must not itself re-render.
+  const hoverIdRef = useRef(null);
   const datumPickMode = useCamPlanStore((s) => s.datumPickMode);
   const pickAxisOrigin = useCamPlanStore((s) => s.pickAxisOrigin);
   const pickRotaryCenter = useCamPlanStore((s) => s.pickRotaryCenter);
@@ -118,17 +123,66 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
       if (event.face?.normal) pickRotaryZero(event.face.normal.toArray());
       return;
     }
-    const detected = features();
-    if (!detected?.faces?.length) return;
+    const picked = featureUnder(event);
+    if (picked === undefined) return;
     event.stopPropagation();
-    const face = faceOfTriangle(detected, event.faceIndex);
-    selectFeature(face ?? null);
+    selectFeature(picked);
+  };
+
+  /**
+   * What the cursor is over: the edge it is sitting on, else the merged face.
+   * `undefined` means "nothing detected here" — which is not the same as `null`,
+   * a deliberate miss that clears the selection.
+   */
+  const featureUnder = (event) => {
+    const detected = features();
+    if (!detected?.faces?.length) return undefined;
+    return featureAtPoint({
+      edges: detected.edges,
+      face: faceOfTriangle(detected, event.faceIndex),
+      point: event.point?.toArray?.(),
+    });
+  };
+
+  /**
+   * Hover highlights what a click would take.
+   *
+   * The list in the CAM panel used to be the only thing that could do this, so
+   * the model was a click target you had to aim at blind. One rule for both —
+   * `featureAtPoint` — because a highlight that follows a different rule from
+   * the click after it teaches the wrong place to aim.
+   *
+   * Guarded on the id: a pointer move fires on every pixel, and re-setting the
+   * same feature would re-render the panel and the overlay for nothing.
+   */
+  const onPointerMove = (event) => {
+    if (datumPickMode) return;   // the cursor means an origin right now, not a feature
+    const picked = featureUnder(event);
+    if (picked === undefined) return;
+    if ((picked?.id ?? null) !== (hoverIdRef.current ?? null)) {
+      hoverIdRef.current = picked?.id ?? null;
+      previewFeatureAt(picked ?? null);
+    }
+  };
+
+  const onPointerOut = () => {
+    if (hoverIdRef.current === null) return;
+    hoverIdRef.current = null;
+    previewFeatureAt(null);
   };
 
   return (
     // Named so it can be picked out of the scene graph — by a test asking
     // "is the part actually on screen?", and by anyone inspecting the scene.
-    <mesh name="imported-part" geometry={geometry} castShadow receiveShadow onClick={onClick}>
+    <mesh
+      name="imported-part"
+      geometry={geometry}
+      castShadow
+      receiveShadow
+      onClick={onClick}
+      onPointerMove={onPointerMove}
+      onPointerOut={onPointerOut}
+    >
       {/* Distinct from the simulated stock's aluminium grey: this is the model
           to be made, not the material it is made from. DoubleSide because an
           inside-out STL is common enough that back faces must still draw —
