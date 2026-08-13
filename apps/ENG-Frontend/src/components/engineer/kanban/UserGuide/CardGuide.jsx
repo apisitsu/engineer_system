@@ -4,17 +4,17 @@
  * comments, sidebar actions, and suspension system.
  */
 import React, { useState } from 'react';
-import { Typography, Button, Input, Switch, Tag, Badge, Avatar, Tooltip, Progress, Space, Checkbox, Divider, DatePicker } from 'antd';
+import { Typography, Button, Input, Switch, Tag, Avatar, Progress, Space, Checkbox, Divider } from 'antd';
 import { MdOutlineSubtitles, MdAccessTime, MdOutlineTimer, MdLockOutline, MdOutlinePeople, MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdLowPriority } from 'react-icons/md';
 import { FaCheckSquare } from 'react-icons/fa';
 import { FiUpload } from 'react-icons/fi';
-import { IoArchiveOutline, IoSearchOutline } from 'react-icons/io5';
-import { AiOutlineTags, AiOutlineCopy, AiOutlineCheck, AiOutlineDelete } from 'react-icons/ai';
+import { IoArchiveOutline } from 'react-icons/io5';
+import { AiOutlineTags, AiOutlineCopy, AiOutlineDelete } from 'react-icons/ai';
 import { BiMove, BiLinkExternal } from 'react-icons/bi';
 import { BsCheckSquare } from 'react-icons/bs';
 import { CiMemoPad } from 'react-icons/ci';
-import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel, StepRow, Callout, LabeledDivider } from './guideStyles';
-import { MOCK_CARDS, MOCK_USERS, MOCK_LABELS, MOCK_TASK_LISTS, MOCK_COMMENTS, MOCK_ATTACHMENTS, MOCK_ISSUES, MOCK_ACTIVITY, MOCK_LISTS, MOCK_SUSPENDED_CARD, LABEL_PALETTE } from './mockData';
+import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel, StepRow, Callout } from './guideStyles';
+import { MOCK_CARDS, MOCK_USERS, MOCK_LABELS, MOCK_TASK_LISTS, MOCK_COMMENTS, MOCK_ATTACHMENTS, MOCK_ISSUES } from './mockData';
 
 const { Text, Paragraph } = Typography;
 

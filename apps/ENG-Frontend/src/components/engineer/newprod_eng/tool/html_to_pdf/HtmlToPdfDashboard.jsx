@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Tag, Upload, Tooltip, Spin, Typography, Layout, App, Popconfirm } from 'antd';
-import { ReloadOutlined, UploadOutlined, DownloadOutlined, UserOutlined, FilePdfOutlined, Html5Outlined, DeleteOutlined, RetweetOutlined } from '@ant-design/icons';
+import { Table, Button, Upload, Tooltip, Spin, Typography, Layout, App, Popconfirm } from 'antd';
+import { ReloadOutlined, UploadOutlined, UserOutlined, FilePdfOutlined, Html5Outlined, DeleteOutlined, RetweetOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
 import { server } from '../../../../../constance/constance';

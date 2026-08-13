@@ -15,7 +15,7 @@ import { Drawer, Typography, Space, Input, Badge, Button, Divider, Tooltip } fro
 import { BsKanban } from 'react-icons/bs';
 import { IoSearchOutline, IoChevronForwardOutline, IoBookOutline, IoOpenOutline } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
-import { GUIDE_SECTIONS, getSectionCardStyle } from './guideStyles';
+import { GUIDE_SECTIONS } from './guideStyles';
 
 // Sub-guide imports
 import ProjectGuide from './ProjectGuide';

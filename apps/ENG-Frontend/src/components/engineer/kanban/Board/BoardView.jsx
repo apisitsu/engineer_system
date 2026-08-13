@@ -5,7 +5,7 @@ import { FiPlus } from 'react-icons/fi';
 import { MdOutlineSubtitles, MdOutlineDescription, MdOutlineComment, MdAccessTime } from 'react-icons/md';
 import { CiMemoPad } from 'react-icons/ci';
 import { AiOutlinePaperClip } from 'react-icons/ai';
-import dayjs from 'dayjs';
+import 'dayjs';
 import {
     DndContext,
     DragOverlay,

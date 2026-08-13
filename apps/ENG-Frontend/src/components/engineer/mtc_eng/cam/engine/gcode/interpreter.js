@@ -712,6 +712,12 @@ export function interpret(text, opts = {}) {
       // cutter — null for a drill/tap/reamer, and for a tool that only ever
       // appeared as a bare `T5`.
       cutter: def?.cutter ?? null,
+      // Whether anything was said about the SHAPE at all. `cutter: null` alone
+      // cannot answer that: a reamer is recognised and deliberately shapeless,
+      // while an unrecognised comment (or no comment) said nothing — and only
+      // the second may take the shape from the operator's fallback pick. See
+      // `classify` in tools.js and `cam/effectiveTool.js`.
+      ...(def ? (def.unclassified ? { unclassified: true } : {}) : { unclassified: true }),
       diameter: def?.diameter ?? null,
       radius: def?.radius ?? null,
       length: def?.length ?? null,

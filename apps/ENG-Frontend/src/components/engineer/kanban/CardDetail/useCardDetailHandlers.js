@@ -292,7 +292,7 @@ export const useCardDetailHandlers = (deps) => {
         }
 
         const urlPattern = /^(?:https?:\/\/[\w\d-]+(?:\.[\w\d-]+)*(?::\d+)?(?:\/.*)?|(?:[\w\d-]+\.)+[\w\d]{2,}(?::\d+)?(?:\/.*)?|[\w\d-]+:\d+(?:\/.*)?)$/i;
-        const localPathPattern = /^[a-zA-Z]:[\\\/]|^\\\\[^\/\\]+/;
+        const localPathPattern = /^[a-zA-Z]:[\\/]|^\\\\[^/\\]+/;
 
         if (!urlPattern.test(url) && !localPathPattern.test(url)) {
             Swal.fire('Error', 'Invalid link format. Must be a URL or a direct file path (e.g. H:\\...)', 'error');

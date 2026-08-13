@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Modal, Typography, Space, Tag, Button, Table, Input, Descriptions } from 'antd';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { BsCardChecklist } from 'react-icons/bs';
-import { FiSearch, FiList, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 
 const { Text } = Typography;
 

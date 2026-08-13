@@ -14,7 +14,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   ConfigProvider,
   Layout,
-  Card,
   Form,
   Input,
   Button,
@@ -42,8 +41,6 @@ import {
   DownloadOutlined,
   ReloadOutlined,
   CloudUploadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   LoadingOutlined,
   ClockCircleOutlined,
   EyeOutlined,

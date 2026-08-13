@@ -204,7 +204,7 @@ const CardBody = () => {
                     <SectionHeader icon={<MdOutlineAttachFile />} title="Attachments" theme={theme} />
                     <div style={{ marginLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {fileAttachments.map(att => {
-                            const cleanPath = att.file_path?.replace(/^public[\/\\]/, '')?.replace(/\\/g, '/');
+                            const cleanPath = att.file_path?.replace(/^public[/\\]/, '')?.replace(/\\/g, '/');
                             const fileUrl = att.file_path?.startsWith('http') ? att.file_path : `${server.API_URL}${cleanPath}`;
                             return (
                                 <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: `${theme.spacing.xs} ${theme.spacing.sm}`, background: theme.colors.surfaceHover, borderRadius: theme.borderRadius.sm, border: `1px solid ${theme.colors.border}` }}>

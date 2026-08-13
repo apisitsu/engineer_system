@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Form, Row, Col, Radio, Divider, Input, Upload, List, Tag, Spin, Space } from 'antd';
+import { Card, Button, Form, Row, Col, Divider, Input, Upload, List, Tag, Spin, Space } from 'antd';
 import { useTheme } from '../../../../../../theme';
-import { UploadOutlined, CheckCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import Swal from 'sweetalert2';
 import axios from 'axios';
 import { server, key_constance } from '../../../../../../constance/constance';

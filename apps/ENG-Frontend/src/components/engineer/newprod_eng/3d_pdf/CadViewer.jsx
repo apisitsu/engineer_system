@@ -5,7 +5,7 @@
  * Loads glTF/glb models, supports STL fallback, and renders PMI annotations.
  */
 import React, { useState, useRef, useEffect, Suspense, useCallback } from 'react';
-import { Canvas, useThree, useLoader } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import {
   OrbitControls,
   Environment,

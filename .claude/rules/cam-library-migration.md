@@ -68,13 +68,21 @@ It downloads `cam-library.json`.
 
 ## 2. IMPORT — run on the EngineerSystem CAD/CAM page
 
-**Upload into the shared library**, which is a table on the server
-(`cam_saved_work`) — *not* into the browser. Writing to IndexedDB here would do
-nothing at all now: since the shared library landed, the app reads its list from
+**Upload to the server** (`cam_saved_work`) — *not* into the browser. Writing to
+IndexedDB here would do nothing at all now: the app reads its list from
 `/api/engineer/cam/library` and never looks at the local database.
 
 Because the destination is the server, this only has to be done **once**, from
-any one origin. Every origin and every operator then sees it.
+any one origin, and it follows you to every other one.
+
+> **These land on YOUR OWN shelf**, under the login whose token the page is
+> holding — `PUT /library` always saves privately, and there is no parameter that
+> could make it do otherwise. That is the right default for carrying in a
+> personal backlog. If some of it belongs to the whole shop, press **Share** on
+> those items afterwards; there is no bulk publish, deliberately.
+>
+> It also means whoever runs this becomes the owner of everything in the file. If
+> the export is somebody else's work, have *them* run it on their own login.
 
 Open CAD/CAM (`/eng/mtc_eng/cam`) so the page has your login, F12 → Console,
 paste, Enter, then pick the `cam-library.json`.

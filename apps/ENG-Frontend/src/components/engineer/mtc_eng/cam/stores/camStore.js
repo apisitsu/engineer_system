@@ -155,6 +155,10 @@ export const useCamStore = create((set, get) => ({
   // Deliberately not a saved setting (see projectFile's SETTING_KEYS): it is how
   // you are looking at the job right now, not part of the job.
   showArbor: true,
+  // The backplot — where the tool went. Worth being able to drop for the same
+  // reason as the arbor: on a dense program the lines cover the very surface
+  // you are trying to judge. Also not a saved setting, for the same reason.
+  showToolpath: true,
   _carving: false,
   // The feed-move target `carveToPlayhead` last actually carved to. Scrubbing
   // ticks every 40ms regardless of whether the playhead crossed a new feed
@@ -286,6 +290,7 @@ export const useCamStore = create((set, get) => ({
     });
   },
   toggleArbor: () => set((s) => ({ showArbor: !s.showArbor })),
+  toggleToolpath: () => set((s) => ({ showToolpath: !s.showToolpath })),
   setCutFollows: (v) => {
     set({ cutFollowsPlayback: v });
     if (v) get().carveToPlayhead();

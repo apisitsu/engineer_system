@@ -13,13 +13,28 @@ import { invalidate, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
+import { polygonPreview, slotPreview, axisDistance } from '../engine/sketch/shapes.js';
+import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
+import { planeMatrix } from '../engine/sketch/plane.js';
+import { CAD } from '../theme.js';
+
+/**
+ * A preview only when there is something to draw.
+ *
+ * A drei `<Line>` with fewer than two points throws: `LineGeometry.setPositions`
+ * sizes a `Float32Array` at `count - 6` and asks for a negative length. An empty
+ * array is *truthy*, so `{preview && <Line …/>}` does not catch it — and the
+ * slot preview is legitimately empty whenever the cursor sits on the slot's own
+ * axis, which is most of the time while the third click is being aimed.
+ */
+const drawable = (pts) => (Array.isArray(pts) && pts.length >= 2 ? pts : null);
 
 const noRaycast = () => null;
 const Z = 0.05; // lift a hair above the Z=0 pick plane to avoid z-fighting
-const PREVIEW = '#f59e0b'; // amber rubber-band while drawing
-const SNAP_COLOR = '#f0abfc'; // magenta snap indicator (vertex / rim)
-const TANGENT_COLOR = '#34d399'; // green — tangent snap indicator
-const AXIS_COLOR = '#22d3ee'; // cyan — angle-lock guide axis
+const PREVIEW = CAD.skPreview; // amber rubber-band while drawing
+const SNAP_COLOR = CAD.skSnap; // magenta snap indicator (vertex / rim)
+const TANGENT_COLOR = CAD.skTangent; // green — tangent snap indicator
+const AXIS_COLOR = CAD.skAxis; // cyan — angle-lock guide axis
 
 // Unit circle in the XY plane (local coords), for the screen-scaled snap ring.
 const UNIT_RING = (() => {
@@ -46,30 +61,36 @@ function ScreenRing({ x, y, color, pixels = 10 }) {
     </group>
   );
 }
-const CONSTRUCTION = '#94a3b8'; // slate — construction (reference) geometry, drawn dashed
-const HOVER = '#fbbf24'; // amber pre-select highlight (the entity a click will pick)
-const SELECTED = '#f43f5e'; // red selected highlight
-const GEOM = '#38bdf8'; // default geometry colour
-const ANGLE_BASE = '#22d3ee'; // cyan — the fixed reference line of an angle dimension
-const ANGLE_ROTATE = '#f59e0b'; // amber — the line the angle rotates
+const CONSTRUCTION = CAD.skConstruction; // slate — construction (reference) geometry, drawn dashed
+const HOVER = CAD.skHover; // amber pre-select highlight (the entity a click will pick)
+const SELECTED = CAD.skSelected; // green selected highlight (SolidWorks' own)
+const GEOM = CAD.skUnder; // default geometry colour
+const ANGLE_BASE = CAD.skAxis; // cyan — the fixed reference line of an angle dimension
+const ANGLE_ROTATE = CAD.skPreview; // amber — the line the angle rotates
 
 const TWO_PI = Math.PI * 2;
-const norm = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
-
-/** Polyline sweeping counter-clockwise from angle a0 to a1 (planegcs arc order). */
-function arcRing(cx, cy, r, a0, a1, segs = 48) {
-  const span = norm(a1 - a0) || TWO_PI;
+/**
+ * Polyline sweeping counter-clockwise from a0 to a1 (planegcs arc order), lifted
+ * to the sketch layer's Z.
+ *
+ * Delegates to the **same** `tessellateArc` the geometry uses, rather than
+ * splitting the sweep into a fixed number of segments as this did before. Two
+ * copies at different fidelities meant the screen and the solid disagreed, and
+ * they disagreed most where it matters: at R200 a fixed 64 segments strays
+ * 0.24 mm from the true arc while the geometry stays within 0.01 mm. The
+ * operator decides from the picture, so the picture has to be the thing that
+ * gets cut.
+ */
+function arcRing(cx, cy, r, a0, a1, chordTol = CHORD_TOL) {
+  const flat = tessellateArc(cx, cy, r, a0, a1, chordTol);
   const pts = [];
-  for (let i = 0; i <= segs; i++) {
-    const a = a0 + (span * i) / segs;
-    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a), Z]);
-  }
+  for (let i = 0; i < flat.length; i += 2) pts.push([flat[i], flat[i + 1], Z]);
   return pts;
 }
 
-const DIM_COLOR = '#facc15'; // yellow — placed dimensions (witness/dimension lines)
+const DIM_COLOR = CAD.skDim; // near-black — placed dimensions (witness/dimension lines)
 const dimLabelStyle = {
-  color: '#fde68a', background: 'rgba(15,23,42,0.85)', border: '1px solid #a16207',
+  color: CAD.skDim, background: CAD.glassSolid, border: `1px solid ${CAD.border}`,
   borderRadius: 4, font: '600 11px monospace', padding: '0 4px',
   whiteSpace: 'nowrap', userSelect: 'none',
   // Pointer events on so a dimension label is double-clickable to edit its value;
@@ -79,9 +100,9 @@ const dimLabelStyle = {
 
 /** Live angle/length readout shown at the line rubber-band's tip while drawing. */
 const angleReadoutStyle = (locked) => ({
-  color: locked ? '#0f172a' : '#e2e8f0',
-  background: locked ? AXIS_COLOR : 'rgba(15,23,42,0.9)',
-  border: `1px solid ${locked ? AXIS_COLOR : '#475569'}`,
+  color: locked ? CAD.surface : CAD.text,
+  background: locked ? AXIS_COLOR : CAD.glassSolid,
+  border: `1px solid ${locked ? AXIS_COLOR : CAD.border}`,
   borderRadius: 4, font: '600 11px monospace', padding: '1px 5px',
   whiteSpace: 'nowrap', userSelect: 'none', pointerEvents: 'none',
   transform: 'translate(12px, -18px)',
@@ -126,7 +147,7 @@ function DimensionAnnotations({ sk, version }) {
           <Html key={b.key} position={b.pos} center zIndexRange={[2, 0]}>
             <div
               style={driven
-                ? { ...dimLabelStyle, color: '#c4b5fd', borderColor: '#7c3aed', fontStyle: 'italic' }
+                ? { ...dimLabelStyle, color: CAD.skDriven, borderColor: CAD.skDriven, fontStyle: 'italic' }
                 : dimLabelStyle}
               title={driven ? 'Driven (reference) — double-click to edit' : 'Double-click to edit'}
               onDoubleClick={(e) => { e.stopPropagation(); beginEditConstraint(b.ci); }}
@@ -140,9 +161,26 @@ function DimensionAnnotations({ sk, version }) {
   );
 }
 
+/**
+ * Sketch coordinates from a pointer event.
+ *
+ * `event.point` is in **world** space. That used to be the same thing as sketch
+ * space, because the sketch was always the Z=0 plane; now the layer sits under
+ * the active sketch's plane matrix, so a click on the front plane arrives as
+ * (x, 0, z) and reading `.x` / `.y` off it would drop the sketch's whole second
+ * axis. Asking the picked object to convert undoes exactly the transform that
+ * was applied to draw it, whatever plane that is.
+ */
+const localPoint = (e) => {
+  const p = e.point.clone();
+  return e.object?.parent ? e.object.worldToLocal(p) : p;
+};
+
 export default function SketchLayer() {
   const version = useSketchStore((s) => s.version);
   const sk = useSketchStore((s) => s.sk);
+  const sketches = useSketchStore((s) => s.sketches);
+  const activeId = useSketchStore((s) => s.activeId);
   const tool = useSketchStore((s) => s.tool);
   const selection = useSketchStore((s) => s.selection);
   const pending = useSketchStore((s) => s.pending);
@@ -155,6 +193,7 @@ export default function SketchLayer() {
   const dofState = useSketchStore((s) => s.dofState);
   const solveResult = useSketchStore((s) => s.solveResult);
   const dimensionPending = useSketchStore((s) => s.dimensionPending);
+  const polygonSides = useSketchStore((s) => s.polygonSides);
   const clickAt = useSketchStore((s) => s.clickAt);
   const hover = useSketchStore((s) => s.hover);
   const clearHover = useSketchStore((s) => s.clearHover);
@@ -254,7 +293,7 @@ export default function SketchLayer() {
   }, [cancelPending, deleteSelected, undo, redo]);
 
   const drawing = tool === 'point' || tool === 'line' || tool === 'rectangle'
-    || tool === 'circle' || tool === 'arc';
+    || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
   // Geometry is clickable in select/dimension (pick), trim (cut) and chamfer
   // (pick two lines) modes.
   const picking = tool === 'select' || tool === 'dimension' || tool === 'trim' || tool === 'chamfer';
@@ -262,11 +301,12 @@ export default function SketchLayer() {
   // selection — not while trimming/chamfering (both act on lines).
   const selecting = tool === 'select' || tool === 'dimension';
   const selected = new Set(selection);
-  // SolidWorks-style solve-state colouring of the geometry: under-defined stays
-  // blue (still has freedom), fully defined goes light grey (SW's "black" — done),
-  // and an over-defined/conflicting sketch goes rose. Selection/hover still win.
+  // SolidWorks' solve-state colouring of the geometry, now literally its three
+  // colours on a light ground: under-defined stays blue (still has freedom),
+  // fully defined goes black (done), and an over-defined/conflicting sketch goes
+  // red. Selection/hover still win.
   const overDefined = dofState?.state === 'over' || (solveResult && !solveResult.success && solveResult.conflicting?.length > 0);
-  const baseGeom = overDefined ? '#fb7185' : dofState?.state === 'full' ? '#d1d5db' : GEOM;
+  const baseGeom = overDefined ? CAD.skOver : dofState?.state === 'full' ? CAD.skFull : GEOM;
   // While an angle dimension is being entered, colour its base (fixed reference)
   // and rotating line distinctly so it's clear which one moves to the set angle.
   const angleBase = dimensionPending?.angular ? dimensionPending.refs[0] : null;
@@ -294,7 +334,19 @@ export default function SketchLayer() {
     }
     if (tool === 'circle') {
       const r = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
-      return arcRing(anchor.x, anchor.y, r, 0, TWO_PI, 64);
+      return arcRing(anchor.x, anchor.y, r, 0, TWO_PI);
+    }
+    if (tool === 'polygon') {
+      return drawable(polygonPreview(anchor.x, anchor.y, tip.x, tip.y, polygonSides)
+        .map(([px, py]) => [px, py, Z]));
+    }
+    if (tool === 'slot') {
+      // Click 1 done (one end of the axis): show the axis to the cursor. Click 2
+      // done: show the whole slot, its radius following the cursor off the axis.
+      if (!arcStart) return [[anchor.x, anchor.y, Z], [tip.x, tip.y, Z]];
+      const r = axisDistance(tip.x, tip.y, anchor, arcStart);
+      return drawable(slotPreview(anchor.x, anchor.y, arcStart.x, arcStart.y, r)
+        .map(([px, py]) => [px, py, Z]));
     }
     if (tool === 'arc') {
       // Click 1 done (centre = anchor): show the radius as a spoke to the cursor.
@@ -303,13 +355,23 @@ export default function SketchLayer() {
       const r = Math.hypot(arcStart.x - anchor.x, arcStart.y - anchor.y);
       const a0 = Math.atan2(arcStart.y - anchor.y, arcStart.x - anchor.x);
       const a1 = Math.atan2(tip.y - anchor.y, tip.x - anchor.x);
-      return arcRing(anchor.x, anchor.y, r, a0, a1, 48);
+      return arcRing(anchor.x, anchor.y, r, a0, a1);
     }
     return null;
-  }, [anchor, arcStart, tip, tool]);
+  }, [anchor, arcStart, tip, tool, polygonSides]);
+
+  // The whole layer is drawn in sketch coordinates and then placed by the active
+  // sketch's plane, so nothing below this line had to learn about planes: local
+  // (x, y, 0) lands wherever the plane puts it. `matrixAutoUpdate={false}` is
+  // required — three.js would otherwise recompose the matrix from the group's
+  // (untouched) position/rotation/scale on the next frame and wipe it out.
+  const planeMat = useMemo(() => {
+    const entry = sketches.find((s) => s.id === activeId) || sketches[0];
+    return new THREE.Matrix4().fromArray(planeMatrix(entry?.plane));
+  }, [sketches, activeId]);
 
   return (
-    <group>
+    <group matrix={planeMat} matrixAutoUpdate={false}>
       <DimensionAnnotations sk={sk} version={version} />
 
       {/* Pick plane. In draw mode it takes pointer-downs immediately and tracks
@@ -322,20 +384,22 @@ export default function SketchLayer() {
           onPointerDown={(e) => {
             if (!drawing) return;
             e.stopPropagation();
-            clickAt(e.point.x, e.point.y);
+            const p = localPoint(e);
+            clickAt(p.x, p.y);
           }}
           onPointerMove={(e) => {
+            const p = localPoint(e);
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
-            if (useSketchStore.getState().dragging) { dragTo(e.point.x, e.point.y); return; }
+            if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
             // Track the cursor for the rubber-band (draw) and the snap indicator
             // (both). In pick modes don't stopPropagation, so OrbitControls still
             // rotates the view while snapping shows which point a click will grab.
             if (drawing) {
               e.stopPropagation();
-              hover(e.point.x, e.point.y);
+              hover(p.x, p.y);
             } else if (picking) {
-              hover(e.point.x, e.point.y);
+              hover(p.x, p.y);
             }
           }}
           onPointerLeave={() => clearHover()}
@@ -343,7 +407,8 @@ export default function SketchLayer() {
             if (!picking) return;
             e.stopPropagation();
             if (swallowClick.current) { swallowClick.current = false; return; }
-            clickAt(e.point.x, e.point.y);
+            const p = localPoint(e);
+            clickAt(p.x, p.y);
           }}
         >
           {/* Large enough that clicks still land on the plane when zoomed far out. */}
@@ -397,7 +462,7 @@ export default function SketchLayer() {
           {snap.tangent && (
             <Html position={[snap.x, snap.y, Z]} zIndexRange={[3, 0]}>
               <div style={{
-                color: '#0f172a', background: TANGENT_COLOR, borderRadius: 4,
+                color: CAD.surface, background: TANGENT_COLOR, borderRadius: 4,
                 font: '600 10px monospace', padding: '0 4px', whiteSpace: 'nowrap',
                 userSelect: 'none', pointerEvents: 'none', transform: 'translate(10px, 6px)',
               }}>
@@ -435,7 +500,7 @@ export default function SketchLayer() {
               if (!picking) return;
               e.stopPropagation();
               // Trim cuts the segment at the click point; select toggles the line.
-              if (tool === 'trim') clickAt(e.point.x, e.point.y);
+              if (tool === 'trim') { const p = localPoint(e); clickAt(p.x, p.y); }
               else toggleSelect(l.id);
             }}
           />
@@ -446,12 +511,7 @@ export default function SketchLayer() {
         // Outline only — the centre point already renders via the points loop.
         const isSel = selected.has(c.id);
         const isHover = picking && !isSel && hoverId === c.id;
-        const segs = 64;
-        const ring = [];
-        for (let i = 0; i <= segs; i++) {
-          const a = (i / segs) * Math.PI * 2;
-          ring.push([c.cx + c.r * Math.cos(a), c.cy + c.r * Math.sin(a), Z]);
-        }
+        const ring = arcRing(c.cx, c.cy, c.r, 0, TWO_PI);
         return (
           <Line
             key={c.id}
@@ -481,7 +541,7 @@ export default function SketchLayer() {
         return (
           <Line
             key={a.id}
-            points={arcRing(a.cx, a.cy, a.r, a.a0, a.a1, 64)}
+            points={arcRing(a.cx, a.cy, a.r, a.a0, a.a1)}
             color={isSel ? SELECTED : isHover ? HOVER : a.construction ? CONSTRUCTION : baseGeom}
             lineWidth={isSel ? 4 : isHover ? 3 : a.construction ? 1.5 : 2}
             dashed={a.construction}
@@ -534,7 +594,7 @@ export default function SketchLayer() {
         // Origin: fixed green reference point (a touch larger); still selectable
         // so you can dimension/constrain from it. Precedence: pending → selected →
         // hover (amber "lock") → origin → plain vertex.
-        const color = isPending ? '#f59e0b' : isSel ? SELECTED : isHover ? HOVER : p.origin ? '#22c55e' : '#e2e8f0';
+        const color = isPending ? CAD.skPreview : isSel ? SELECTED : isHover ? HOVER : p.origin ? CAD.feed : CAD.text;
         const radius = p.origin ? 1.3 : isSel || isPending || isHover ? 1.3 : 0.8;
         return (
           <mesh

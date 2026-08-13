@@ -5,7 +5,7 @@ import Swal from "sweetalert2";
 import moment from "moment";
 import axios from "axios";
 import { server, key_constance } from '../../../../constance/constance';
-import imageCompression from 'browser-image-compression';
+import 'browser-image-compression';
 import { useTheme } from '../../../../theme';
 
 export default function CreateECRModal({ open, onClose, onSuccess }) {

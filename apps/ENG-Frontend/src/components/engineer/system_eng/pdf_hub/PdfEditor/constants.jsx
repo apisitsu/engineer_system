@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     EyeOutlined, HighlightOutlined, BorderOutlined,
-    EditOutlined, FormOutlined, MergeCellsOutlined,
+    FormOutlined, MergeCellsOutlined,
     FileImageOutlined, BgColorsOutlined
 } from '@ant-design/icons';
 

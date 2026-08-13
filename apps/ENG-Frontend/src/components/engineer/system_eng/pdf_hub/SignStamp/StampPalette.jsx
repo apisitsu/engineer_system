@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-    Card, Button, Typography, Upload, InputNumber, Divider, Space,
+    Button, Typography, Upload, InputNumber, Divider, Space,
     Spin, Empty, message, Tooltip, Modal, Form,
 } from 'antd';
 import {

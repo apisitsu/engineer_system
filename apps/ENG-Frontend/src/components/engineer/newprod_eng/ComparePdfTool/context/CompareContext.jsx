@@ -1,4 +1,4 @@
-import React, { createContext, useReducer, useContext, useCallback, useEffect } from 'react';
+import React, { createContext, useReducer, useContext, useEffect } from 'react';
 
 // ── localStorage helpers for review persistence ──
 const STORAGE_KEY_PREFIX = 'pdf-compare-review-';

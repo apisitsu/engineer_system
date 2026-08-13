@@ -8,18 +8,18 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
-  InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip,
+  InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip, Drawer,
 } from 'antd';
 import {
   ThunderboltOutlined, BulbOutlined,
   PlayCircleFilled, PauseCircleFilled, UploadOutlined, StepBackwardOutlined,
   StepForwardOutlined, FastBackwardOutlined, RollbackOutlined,
   ExpandOutlined, DownloadOutlined,
-  PlusOutlined, ColumnWidthOutlined, DatabaseOutlined,
+  PlusOutlined, ColumnWidthOutlined, DatabaseOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
-  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon,
+  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
   CUTTER_ICONS,
 } from './components/glyph.jsx';
 import {
@@ -27,17 +27,17 @@ import {
 } from './engine/cam/cutters.js';
 import { effectiveTool } from './engine/cam/effectiveTool.js';
 import { useCamStore } from './stores/camStore.js';
+import { useFeatureStore } from './stores/featureStore.js';
 import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
 import { exportGcode, openProjectFile } from './lib/projectIO.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
-import { useLibraryStore } from './stores/libraryStore.js';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
-import { SPEEDS, PLAY_BASE_SECONDS, perTick } from './engine/view/playback.js';
+import { SPEEDS, perTick } from './engine/view/playback.js';
 import { sidebarSections } from './engine/view/sidebar.js';
 import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
@@ -53,11 +53,13 @@ import {
 } from './engine/sim/billet.js';
 import { SAMPLE_GCODE, SAMPLE_TURNING } from './SAMPLE_GCODE.js';
 import Viewport from './components/Viewport.jsx';
-import GcodePanel from './components/GcodePanel.jsx';
 import PositionReadout from './components/PositionReadout.jsx';
 import SketchToolbar from './components/SketchToolbar.jsx';
+import LeftColumn from './components/LeftColumn.jsx';
+import { TREE_SIZE } from './components/FeatureTree.jsx';
 import { invalidate } from '@react-three/fiber';
 import { getBuf } from './engine/bufferCache.js';
+import { CAD } from './theme.js';
 
 const { Sider, Content, Header } = Layout;
 const { Title, Text } = Typography;
@@ -136,10 +138,14 @@ function formatDuration(seconds) {
 
 // Metallic palette for the realistic tool glyphs (fixed colours, like the real
 // tool — the active state is shown by the button's highlighted background).
+// Deliberately NOT theme tokens: these are steel and carbide, and the picture is
+// only readable if it stays the colour of the thing. They are a shade deeper
+// than a photograph would be because they are now drawn on a light button, where
+// true bright steel would disappear into it.
 const TG = {
-  steel: '#c3ccd8', steelEdge: '#7b8798', steelHi: '#eef2f7',
-  gold: '#f4c53d', goldEdge: '#9a6b0f', goldHi: '#fbe7a0',
-  screw: '#6b5212',
+  steel: '#b3bdcb', steelEdge: '#5d6a7c', steelHi: '#e7ecf3',
+  gold: '#f0bc2c', goldEdge: '#8a5f0d', goldHi: '#fae09a',
+  screw: '#5c4610',
 };
 
 /**
@@ -216,7 +222,7 @@ function TurnInsertPicker({ value, onChange }) {
             type={value === x.id ? 'primary' : 'text'}
             icon={<TurnToolGlyph tool={x} />}
             onClick={() => onChange(x.id)}
-            style={{ width: 32, height: 32, padding: 0, color: value === x.id ? undefined : '#cbd5e1' }}
+            style={{ width: 32, height: 32, padding: 0, color: value === x.id ? undefined : CAD.icon }}
           />
         </Tooltip>
       ))}
@@ -264,7 +270,7 @@ function CutterPicker({ value, onChange, box = 32, scope = 'fallback' }) {
               onClick={() => onChange(c.id)}
               style={{
                 width: box, height: box, padding: 0,
-                color: value === c.id ? undefined : '#cbd5e1',
+                color: value === c.id ? undefined : CAD.icon,
               }}
             />
           </Tooltip>
@@ -292,7 +298,7 @@ function ToolFallback({
     return (
       <Space size={6} align="center">
         <CommandButton id="toolFallback" size="small" icon={<PlusOutlined />} onClick={onOpen} />
-        <Text style={{ color: '#475569', fontSize: 11 }}>
+        <Text style={{ color: CAD.dim, fontSize: 11 }}>
           {detected > 0
             ? `Cutter from the program (${detected} ${detected === 1 ? 'tool' : 'tools'})`
             : `Cutter — the program names none, using ⌀${diameter} ${spec.label.toLowerCase()}`}
@@ -442,10 +448,10 @@ function BilletBox({
           onClick={onToggle}
         />
         <Tooltip title="The blank in the vice, in mm. Leave an axis blank to wrap the toolpath instead.">
-          <span style={{ color: enabled ? '#94a3b8' : '#475569' }}>Stock</span>
+          <span style={{ color: enabled ? CAD.label : CAD.dim }}>Stock</span>
         </Tooltip>
         {['x', 'y', 'z'].map((k) => field(k, size, onSize, 'auto', false))}
-        <span style={{ color: '#475569', fontSize: 12 }}>mm</span>
+        <span style={{ color: CAD.dim, fontSize: 12 }}>mm</span>
         {suggestion && enabled && (
           <CommandButton
             id="fitStock"
@@ -459,18 +465,18 @@ function BilletBox({
       <Space align="center" wrap size="small">
         <span style={{ width: 24, display: 'inline-block' }} />
         <Tooltip title="Where the blank's X−/Y−/Z− corner sits in work coordinates. Blank centres it on the cutting in X and Y, and puts the top face on Z0 — which is now only a default, not a rule.">
-          <span style={{ color: enabled ? '#94a3b8' : '#475569' }}>Origin</span>
+          <span style={{ color: enabled ? CAD.label : CAD.dim }}>Origin</span>
         </Tooltip>
         {['x', 'y', 'z'].map((k) => field(k, origin, onOrigin, 'auto', true))}
-        <span style={{ color: '#475569', fontSize: 12 }}>mm</span>
+        <span style={{ color: CAD.dim, fontSize: 12 }}>mm</span>
       </Space>
       {enabled && extents && (
-        <Text style={{ color: '#475569', fontSize: 11, fontFamily: 'monospace' }}>
+        <Text style={{ color: CAD.dim, fontSize: 11, fontFamily: 'monospace' }}>
           X {range(extents.x)} · Y {range(extents.y)} · Z {range(extents.z)}
         </Text>
       )}
       {!enabled && (
-        <Text style={{ color: '#475569', fontSize: 11 }}>
+        <Text style={{ color: CAD.dim, fontSize: 11 }}>
           Stock off — the sim fits a blank around the toolpath.
         </Text>
       )}
@@ -494,7 +500,6 @@ export default function App() {
   const gcode = useCamStore((s) => s.gcode);
   const fileName = useCamStore((s) => s.fileName);
   const status   = useCamStore((s) => s.status);
-  const error    = useCamStore((s) => s.error);
   const bufVer   = useCamStore((s) => s.bufVer);  // version counter — triggers re-render
   const playhead = useCamStore((s) => s.playhead);
   const playT    = useCamStore((s) => s.playT);
@@ -529,6 +534,7 @@ export default function App() {
   const stockEnabled = useCamStore((s) => s.stockEnabled);
   const showStock = useCamStore((s) => s.showStock);
   const showArbor = useCamStore((s) => s.showArbor);
+  const showToolpath = useCamStore((s) => s.showToolpath);
   const cutFollowsPlayback = useCamStore((s) => s.cutFollowsPlayback);
   const simReady  = useCamStore((s) => s.simReady);
   const removalNote = useCamStore((s) => s.removalNote);
@@ -536,7 +542,6 @@ export default function App() {
   const rotaryFrame = useCamStore((s) => s.rotaryFrame);
   const simFrameA   = useCamStore((s) => s.simFrameA);
   // Actions are stable references defined once in the store.
-  const setGcode = useCamStore((s) => s.setGcode);
   const parse    = useCamStore((s) => s.parse);
   const loadFile = useCamStore((s) => s.loadFile);
   const setPlayhead = useCamStore((s) => s.setPlayhead);
@@ -544,7 +549,6 @@ export default function App() {
   const stepBlock   = useCamStore((s) => s.stepBlock);
   const simulate    = useCamStore((s) => s.simulate);
   const simulateVoxel = useCamStore((s) => s.simulateVoxel);
-  const setTurnTool = useCamStore((s) => s.setTurnTool);
   const setToolOverride = useCamStore((s) => s.setToolOverride);
   const setToolCutter = useCamStore((s) => s.setToolCutter);
   const setToolThickness = useCamStore((s) => s.setToolThickness);
@@ -561,15 +565,16 @@ export default function App() {
   const setBillet = useCamStore((s) => s.setBillet);
   const toggleStockEnabled = useCamStore((s) => s.toggleStockEnabled);
   const toggleArbor = useCamStore((s) => s.toggleArbor);
+  const toggleToolpath = useCamStore((s) => s.toggleToolpath);
   const setCutFollows = useCamStore((s) => s.setCutFollows);
-  const setMode     = useCamStore((s) => s.setMode);
   const setPage     = useCamStore((s) => s.setPage);
   const setViewPreset = useCamStore((s) => s.setViewPreset);
   const setRapidRate = useCamStore((s) => s.setRapidRate);
   const setDiameterMode = useCamStore((s) => s.setDiameterMode);
-  const setAIndex   = useCamStore((s) => s.setAIndex);
   const setRotaryFrame = useCamStore((s) => s.setRotaryFrame);
-  const loadPart      = useCamPlanStore((s) => s.loadPart);
+  // Through the feature tree, so a dropped file becomes the base of a history
+  // rather than a part with no record of where it came from.
+  const loadPart      = useFeatureStore((s) => s.importPart);
   const partAnalysis  = useCamPlanStore((s) => s.analysis);
   const partVer       = useCamPlanStore((s) => s.meshVer);
   // Where the physical A axis runs, so the work turns about the line it was
@@ -583,6 +588,11 @@ export default function App() {
 
   const [speed, setSpeed] = useState(1);
   const [dragActive, setDragActive] = useState(false);
+  // The setup drawer, opened from the toolbar. Closed by default: it is a job
+  // you do once per part, not something to keep on screen while cutting.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Drives the feature-tree column's width; the tree itself owns the toggle.
+  const treeOpen = useFeatureStore((s) => s.treeOpen);
   const sketching = page === 'sketch';
   const turning = page === 'turn';
 
@@ -711,7 +721,9 @@ export default function App() {
   const { bounds, stats, path, sim } = getBuf();
 
   const warnings = stats?.warnings ?? [];
-  const rotaryIndices = stats?.aIndices ?? [0];
+  // Memoised because `?? [0]` mints a new array on every render otherwise,
+  // which defeats the memo further down that lists it as a dependency.
+  const rotaryIndices = useMemo(() => stats?.aIndices ?? [0], [stats]);
   // Live sketch bounds, so "Fit" frames what's drawn on the plane even with no
   // program loaded. Merged into the fit inside CameraRig (kept out of the fit
   // *key* there so drawing doesn't snap the camera — only an explicit Fit does).
@@ -811,6 +823,11 @@ export default function App() {
   );
   // Tools auto-detected from the program's comments, and the one cutting now.
   const detectedTools = stats?.tools ?? [];
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const currentToolNum = useMemo(() => toolAt(path, playhead), [path, playhead, bufVer]);
   const currentTool = detectedTools.find((t) => t.n === currentToolNum) || null;
   // The tool marker follows the active cutter's real size AND shape, so it
@@ -843,17 +860,24 @@ export default function App() {
   // MVJNR's insert nose angle is adjustable; MVVNN's is fixed.
   const baseTurnTool = STANDARD_TURN_TOOLS.find((t) => t.id === (currentOverride.insert ?? turnTool))
     ?? STANDARD_TURN_TOOLS[0];
-  const turnInsert = turning
+  // Memoised for the same reason as `rotaryIndices`: a fresh object each render
+  // makes every memo listing it re-run every render.
+  const turnInsert = useMemo(() => (turning
     ? {
-        ...baseTurnTool,
-        angle: baseTurnTool.adjustable ? (currentOverride.insertAngle ?? baseTurnTool.angle) : baseTurnTool.angle,
-      }
-    : null;
+      ...baseTurnTool,
+      angle: baseTurnTool.adjustable ? (currentOverride.insertAngle ?? baseTurnTool.angle) : baseTurnTool.angle,
+    }
+    : null), [turning, baseTurnTool, currentOverride.insertAngle]);
   // Feed and spindle speed at the playhead, and what the tool in the spindle
   // is, for the position page's footer. The tool description is the one the
   // marker draws and the carvers cut with (`effectiveTool` above), not the
   // program's comment on its own — the readout must name the tool that is
   // actually making the cut on screen.
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const running = useMemo(() => runningAt(path, playhead), [path, playhead, bufVer]);
   const droToolDesc = useMemo(() => ({
     cutter: turning ? null : marker.cutter ?? null,
@@ -876,6 +900,11 @@ export default function App() {
       }
     }
     return m;
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, bufVer]);
   const toolsAtIndexLabel = (a) => {
     const set = toolsByIndex.get(a);
@@ -883,8 +912,18 @@ export default function App() {
     return [...set].sort((x, y) => x - y).map((n) => `T${n}`).join(', ');
   };
   const count = path?.count ?? 0;
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const activeLine = useMemo(() => lineAt(path, playhead), [path, playhead, bufVer]);
   // Machine time consumed by the segments executed so far.
+  // `bufVer` is listed on purpose and eslint is wrong to call it unnecessary:
+  // `path` comes from the module-level buffer cache and is **mutated in
+  // place**, so its identity never changes and a re-parse would otherwise
+  // never re-run this. The version token is the only signal there is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const elapsed = useMemo(() => timeAt(path, playhead), [path, playhead, bufVer]);
 
   // Park the tool at the current tip (end of the last executed segment). Just a
@@ -940,10 +979,10 @@ export default function App() {
   }, [path, playhead, count, bufVer]);
 
   const addonStyle = (side) => ({
-    padding: '0 8px', background: '#1e293b', border: '1px solid #334155',
+    padding: '0 8px', background: CAD.raised, border: `1px solid ${CAD.border}`,
     [side === 'left' ? 'borderRight' : 'borderLeft']: 0,
-    display: 'inline-flex', alignItems: 'center', color: '#94a3b8',
-    fontSize: 12, borderRadius: side === 'left' ? '6px 0 0 6px' : '0 6px 6px 0',
+    display: 'inline-flex', alignItems: 'center', color: CAD.label,
+    fontSize: 12, borderRadius: side === 'left' ? '4px 0 0 4px' : '0 4px 4px 0',
   });
 
   return (
@@ -957,9 +996,15 @@ export default function App() {
       style={{ height: '100%' }}
     >
       <Layout style={{ height: '100%' }}>
-        <Header style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0b1220' }}>
+        {/* The command bar. A flat fill and a hairline under it, the way a CAD
+            application separates its chrome from its workspace — without the
+            rule the bar and the sidebar below it are one undifferentiated gray. */}
+        <Header style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: CAD.headerBg, borderBottom: `1px solid ${CAD.border}`,
+        }}>
           <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 22 }} />
-          <Title level={4} style={{ color: '#e2e8f0', margin: 0 }}>
+          <Title level={4} style={{ color: CAD.text, margin: 0 }}>
             Engineer CAD/CAM
           </Title>
           <Segmented
@@ -969,20 +1014,63 @@ export default function App() {
             disabled={status === 'parsing'}
           />
           {fileName && <Tag color="blue">{fileName}</Tag>}
-          <Text style={{ color: '#64748b', marginLeft: 'auto' }}>
-            Rapid <span style={{ color: '#ef4444' }}>-----</span>   Feed {' '}
-            <span style={{ color: '#22c55e' }}>-----</span>
+          <Text style={{ color: CAD.muted, marginLeft: 'auto' }}>
+            Rapid <span style={{ color: CAD.rapid }}>-----</span>   Feed {' '}
+            <span style={{ color: CAD.feed }}>-----</span>
           </Text>
         </Header>
         <Layout>
-          {!sketching && (
-          <Sider width={430} style={{ background: '#111827', padding: 16, overflow: 'auto' }}>
+          {/* The left column is the **feature tree**, the way a CAD lays a part
+              window out: the model's structure is the thing that stays on
+              screen. It is a real `Sider`, not an overlay, so the viewport is
+              genuinely narrower and the camera fit needs no knowledge of it.
+
+              What used to live here — files, machine, tooling, stock, removal —
+              is a *setup* job, not something you watch while you work, so it
+              moved into the drawer below and opens from the toolbar. */}
+          <Sider
+            width={treeOpen ? TREE_SIZE.TREE_W : TREE_SIZE.TREE_STRIP + 8}
+            style={{
+              background: CAD.panelBg,
+              borderRight: `1px solid ${CAD.border}`,
+              transition: 'width 120ms ease',
+            }}
+          >
+            <LeftColumn activeLine={activeLine} />
+          </Sider>
+
+          <Drawer
+            title="Setup"
+            placement="left"
+            width={470}
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            destroyOnHidden={false}
+            styles={{ body: { background: CAD.panelBg, padding: 16 } }}
+          >
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              {/* Icon-only, like every other rail in the app: the names and the
-                  descriptions come from the command catalogue and appear on
-                  hover. See `engine/view/commands.js`. */}
-              {show.files && (
-              <Space wrap>
+              {/* One rail, two groups, the way a CAD command bar is built:
+                  what brings a program IN (parse, open, sample), a separator,
+                  then what keeps one or hands it on (the library, export).
+                  Icon-only, like every other rail in the app — the names and
+                  the descriptions come from the command catalogue and appear on
+                  hover. See `engine/view/commands.js`.
+
+                  These were two stacked `Space`s, and five glyphs across a
+                  430 px sidebar had no reason to be on two lines: the wrap was
+                  buying nothing and the second row read as a second, unrelated
+                  toolbar. Grouped by a rule instead, which says the same thing
+                  in one line.
+
+                  Saving to a **file** — the project as .camweb.json, and opening
+                  one back — is deliberately not here: the library keeps the same
+                  thing under a name, with no dialog and no folder to find again,
+                  and two ways to do one job on one rail is two ways to be unsure
+                  which one you used. A file still opens by dropping it on the
+                  window. */}
+              {(show.files || show.project) && (
+              <Space wrap size={6} align="center">
+                {show.files && (
                 <CommandButton
                   id="parse"
                   type="primary"
@@ -990,6 +1078,8 @@ export default function App() {
                   loading={status === 'parsing'}
                   onClick={() => parse()}
                 />
+                )}
+                {show.files && (
                 <Upload
                   accept=".nc,.gcode,.gc,.tap,.cnc,.ngc,.txt,.mpf"
                   showUploadList={false}
@@ -997,23 +1087,18 @@ export default function App() {
                 >
                   <CommandButton id="openProgram" icon={<UploadOutlined />} />
                 </Upload>
+                )}
+                {show.files && (
                 <CommandButton
                   id="sample"
                   icon={<BulbOutlined />}
                   onClick={() => parse(turning ? SAMPLE_TURNING : SAMPLE_GCODE)}
                 />
-              </Space>
-              )}
-
-              {/* Keeping and handing on work. Saving to a **file** — the
-                  project as .camweb.json, and opening one back — has moved out
-                  of here: the library keeps the same thing in the browser under
-                  a name, with no dialog and no folder to find again, and two
-                  ways to do one job on one rail is two ways to be unsure which
-                  one you used. A file still opens by dropping it on the window.
-                  What is left is one row: keep it, or hand the program on. */}
-              {show.project && <>
-              <Space wrap>
+                )}
+                {show.files && show.project && (
+                  <div style={{ width: 1, height: 22, background: CAD.border, margin: '0 2px' }} />
+                )}
+                {show.project && (
                 <CommandButton
                   id="openLibrary"
                   icon={<DatabaseOutlined />}
@@ -1021,21 +1106,26 @@ export default function App() {
                   ghost={libraryOpen}
                   onClick={() => setLibraryOpen((v) => !v)}
                 />
+                )}
+                {show.project && (
                 <CommandButton
                   id="exportGcode"
                   icon={<DownloadOutlined />}
                   disabled={!gcode}
                   onClick={onExportGcode}
                 />
+                )}
               </Space>
+              )}
 
+              {show.project && <>
               {/* The library works *in* the sidebar rather than in a popover:
                   saving, looking through what is there, opening one and deleting
                   two is a session, and a layer that shuts when you click near
                   its edge is the wrong container for one. */}
               <LibraryPanel inline open={libraryOpen} onDone={setSaveMsg} />
 
-              <Text style={{ color: '#475569', fontSize: 12 }}>
+              <Text style={{ color: CAD.dim, fontSize: 12 }}>
                 …or drag &amp; drop a .nc / .gcode / .tap program, a .camweb.json project,
                 or an .stl / .obj / .ply to machine
               </Text>
@@ -1049,7 +1139,7 @@ export default function App() {
 
               <Divider style={{ margin: '4px 0' }} />
               <Space align="center" size="small" style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Title level={5} style={{ color: '#e2e8f0', margin: 0 }}>Program</Title>
+                <Title level={5} style={{ color: CAD.text, margin: 0 }}>Program</Title>
                 {/* Say why the rest of the panel went away — a sidebar that loses
                     most of its contents on its own reads as a bug. */}
                 {playing && (
@@ -1059,15 +1149,11 @@ export default function App() {
                 )}
               </Space>
 
-              <GcodePanel gcode={gcode} activeLine={activeLine} onChange={setGcode} />
-
-              {error && <Alert type="error" showIcon message="Parse failed" description={error} />}
-
               {/* ---- Machine ---- */}
               {show.machine && (
               <Space align="center" wrap size="small">
                 <Tooltip title="Traverse speed used to time G0 moves">
-                  <span style={{ color: '#94a3b8' }}>Rapid</span>
+                  <span style={{ color: CAD.label }}>Rapid</span>
                 </Tooltip>
                 <Space.Compact>
                   <InputNumber controls={false}
@@ -1084,7 +1170,7 @@ export default function App() {
                 {turning && (
                   <Tooltip title="Lathe convention: the X word is a diameter, not a radius">
                     <Space>
-                      <span style={{ color: '#94a3b8' }}>X = ⌀</span>
+                      <span style={{ color: CAD.label }}>X = ⌀</span>
                       <Switch checked={diameterMode} onChange={setDiameterMode} size="small" />
                     </Space>
                   </Tooltip>
@@ -1125,12 +1211,12 @@ export default function App() {
 
               {show.tools && detectedTools.length > 0 && (
                 <>
-                  <Divider style={{ margin: '4px 0', borderColor: '#334155' }}>
-                    <Text style={{ color: '#64748b' }}>
+                  <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
+                    <Text style={{ color: CAD.muted }}>
                       Tool table{currentTool ? ` — cutting: T${currentTool.n}` : ''}
                     </Text>
                   </Divider>
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Auto-detected from comments — edit any value to match the program;
                     the simulation uses these. Re-run Simulate after editing.
                   </Text>
@@ -1166,14 +1252,14 @@ export default function App() {
                           style={{
                             display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
                             padding: '3px 6px', borderRadius: 4, fontSize: 12,
-                            background: active ? '#1e293b' : 'transparent',
-                            border: `1px solid ${active ? token.colorPrimary : '#1e293b'}`,
+                            background: active ? CAD.selected : 'transparent',
+                            border: `1px solid ${active ? token.colorPrimary : CAD.borderSoft}`,
                           }}
                         >
-                          <b style={{ color: active ? token.colorPrimary : '#cbd5e1', minWidth: 26 }}>
+                          <b style={{ color: active ? token.colorPrimary : CAD.icon, minWidth: 26 }}>
                             T{t.n}
                           </b>
-                          <span style={{ minWidth: 58, color: '#64748b' }}>{t.type}</span>
+                          <span style={{ minWidth: 58, color: CAD.muted }}>{t.type}</span>
                           {turning ? (() => {
                             const holderId = ov.insert ?? turnTool;
                             const holder = STANDARD_TURN_TOOLS.find((x) => x.id === holderId);
@@ -1185,7 +1271,7 @@ export default function App() {
                                 />
                                 {holder?.adjustable && (
                                   <>
-                                    <span style={{ color: '#94a3b8' }}>insert°</span>
+                                    <span style={{ color: CAD.label }}>insert°</span>
                                     <InputNumber controls={false}
                                       size="small"
                                       min={20}
@@ -1201,7 +1287,7 @@ export default function App() {
                             );
                           })() : (
                             <>
-                              <span style={{ color: '#94a3b8' }}>⌀</span>
+                              <span style={{ color: CAD.label }}>⌀</span>
                               <InputNumber controls={false}
                                 size="small"
                                 min={0.1}
@@ -1276,7 +1362,7 @@ export default function App() {
                                 </Tooltip>
                               )}
                               <Tooltip title="Gauge length — tip to the collet face (stick-out)">
-                                <span style={{ color: '#94a3b8' }}>L</span>
+                                <span style={{ color: CAD.label }}>L</span>
                               </Tooltip>
                               <InputNumber controls={false}
                                 size="small"
@@ -1289,7 +1375,7 @@ export default function App() {
                               />
                             </>
                           )}
-                          <span style={{ marginLeft: 'auto', color: '#475569' }}>
+                          <span style={{ marginLeft: 'auto', color: CAD.dim }}>
                             {t.cutLength > 0 ? `${t.cutLength.toFixed(0)} mm` : 'unused'}
                           </span>
                           {edited && (
@@ -1299,7 +1385,7 @@ export default function App() {
                               type="text"
                               icon={<RollbackOutlined />}
                               onClick={() => clearToolOverride(t.n)}
-                              style={{ color: '#64748b', padding: '0 4px' }}
+                              style={{ color: CAD.muted, padding: '0 4px' }}
                             />
                           )}
                         </div>
@@ -1314,18 +1400,18 @@ export default function App() {
 
               {/* ---- Phase 1: material removal ---- */}
               {show.removal && <>
-              <Divider style={{ margin: '4px 0', borderColor: '#334155' }}>
-                <Text style={{ color: '#64748b' }}>Material removal</Text>
+              <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
+                <Text style={{ color: CAD.muted }}>Material removal</Text>
               </Divider>
 
               {turning ? (
                 <>
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Pick each tool's insert in the Tool table above.
                   </Text>
                   <Space align="center" wrap>
                     <Tooltip title="Raw bar diameter over the largest turned diameter in the program">
-                      <span style={{ color: '#94a3b8' }}>Stock ⌀ oversize</span>
+                      <span style={{ color: CAD.label }}>Stock ⌀ oversize</span>
                     </Tooltip>
                     <Space.Compact>
                       <InputNumber controls={false}
@@ -1354,12 +1440,12 @@ export default function App() {
                   {sim && (
                     <Space size="large" wrap>
                       <Space>
-                        <span style={{ color: '#94a3b8' }}>Show stock</span>
+                        <span style={{ color: CAD.label }}>Show stock</span>
                         <Switch checked={showStock} onChange={toggleStock} size="small" />
                       </Space>
                       <Space>
                         <Tooltip title="Turn the bar down progressively as the playhead moves">
-                          <span style={{ color: '#94a3b8' }}>Cut with playback</span>
+                          <span style={{ color: CAD.label }}>Cut with playback</span>
                         </Tooltip>
                         <Switch
                           checked={cutFollowsPlayback}
@@ -1474,17 +1560,16 @@ export default function App() {
                         cell and the voxel block's edge. Sitting in one column
                         under a shared "Stock" heading, they read as two settings
                         of one simulator, which they have never been. */}
+                    {/* **The button is on the viewport rail, not here.** It is
+                        pressed with the show/hide toggles it is judged by, and
+                        the drawer keeps the number it is judged AT — a grid
+                        size is typed once per job, a Simulate is pressed all
+                        day. The addon spells out which of the two resolutions
+                        this is, now that the glyph beside it has gone. */}
                     <Space.Compact>
-                      <CommandButton
-                        id={simPlan.method === 'voxel'
-                          ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
-                          : 'simulate'}
-                        type="primary"
-                        ghost
-                        icon={simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
-                        loading={simStatus === 'running'}
-                        onClick={() => simulate()}
-                      />
+                      <span className="ant-input-group-addon" style={addonStyle('left')}>
+                        Height field
+                      </span>
                       <Tooltip title={cellSizeUsed && cellSizeUsed !== cellSize
                         ? `The coarsest the height field may be. The last run carved at ${cellSizeUsed.toFixed(3)} mm${cellLimited ? ' — as fine as this program can afford' : ', refined to the smallest cutter so its holes come out round'}.`
                         : 'The coarsest the height field may be — a small cutter refines it further, so its holes come out round'}
@@ -1503,6 +1588,9 @@ export default function App() {
                       </Tooltip>
                       <span className="ant-input-group-addon" style={addonStyle('right')}>mm</span>
                     </Space.Compact>
+                    {/* The voxel run keeps its own button here: it is the
+                        deliberate second opinion, not the one you reach for
+                        mid-job, and the rail has the one that is. */}
                     <Space.Compact>
                       <CommandButton
                         id="simulateVoxel"
@@ -1533,14 +1621,14 @@ export default function App() {
                       description={removalNote}
                     />
                   )}
-                  <Text style={{ color: '#475569', fontSize: 11 }}>
+                  <Text style={{ color: CAD.dim, fontSize: 11 }}>
                     Left carves a <b>height field</b> — one Z per cell, so it is fast and
                     scrubs with playback, but cannot show an undercut. Right carves a{' '}
                     <b>voxel block</b> — every rotary face and every undercut, one shot,
                     no scrubbing.
                   </Text>
                   {simMethod === 'voxel' && sim && (
-                    <Text style={{ color: '#475569', fontSize: 12 }}>
+                    <Text style={{ color: CAD.dim, fontSize: 12 }}>
                       Voxel model — all faces &amp; undercuts, {(sim.cells / 1e6).toFixed(2)}M cells removed {sim.removedVolume?.toFixed(0)} mm³
                     </Text>
                   )}
@@ -1550,12 +1638,12 @@ export default function App() {
                       <Statistic title="Removed (mm³)" value={sim.removedVolume} precision={0} />
                       <Space direction="vertical" size={2}>
                         <Space>
-                          <span style={{ color: '#94a3b8' }}>Show stock</span>
+                          <span style={{ color: CAD.label }}>Show stock</span>
                           <Switch checked={showStock} onChange={toggleStock} size="small" />
                         </Space>
                         <Space>
                           <Tooltip title="Carve the stock progressively as the playhead moves">
-                            <span style={{ color: '#94a3b8' }}>Cut with playback</span>
+                            <span style={{ color: CAD.label }}>Cut with playback</span>
                           </Tooltip>
                           <Switch
                             checked={cutFollowsPlayback}
@@ -1571,8 +1659,8 @@ export default function App() {
               )}
               </>}
             </Space>
-          </Sider>
-          )}
+          </Drawer>
+
           <Content style={{ position: 'relative' }}>
             {/* Sketcher controls float over the viewport — only on the Sketch page,
                 so the design workspace is separate from Milling / Turning. */}
@@ -1581,9 +1669,12 @@ export default function App() {
             {dragActive && (
               <div style={{
                 position: 'absolute', inset: 0, zIndex: 10,
-                background: 'rgba(56,189,248,0.12)', border: '2px dashed #38bdf8',
+                // A tint, not a cover — the model has to stay visible under the
+                // drop target, so this one colour is spelled out rather than
+                // taken from `accentSoft`, which is opaque by design.
+                background: 'rgba(22,104,196,0.10)', border: `2px dashed ${CAD.accent}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#e2e8f0', fontSize: 20, pointerEvents: 'none',
+                color: CAD.text, fontSize: 20, pointerEvents: 'none',
               }}>
                 Drop a G-code program or an .stl / .obj / .ply model
               </div>
@@ -1609,12 +1700,27 @@ export default function App() {
             />
 
             {/* Bottom toolbar: view/plan selector and playback controls in one row. */}
-            <div style={{
+            <div data-cam-overlay="bottom" style={{
               position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
               display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-              background: 'rgba(15,23,42,0.82)', border: '1px solid #334155',
-              padding: '6px 12px', borderRadius: 8,
+              background: CAD.glass, border: `1px solid ${CAD.border}`,
+              padding: '6px 12px', borderRadius: 4,
+              // On the old near-black viewport a pale panel lifted off the
+              // background by contrast alone. On a light one it does not, so the
+              // rails that float over the model carry a shadow instead.
+              boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
+              backdropFilter: 'blur(2px)',
             }}>
+              <Tooltip title="Setup — files, machine, tooling, stock and the removal simulation">
+                <Button
+                  size="small"
+                  icon={<SettingOutlined />}
+                  onClick={() => setSettingsOpen(true)}
+                  data-open-setup
+                >
+                  Setup
+                </Button>
+              </Tooltip>
               <Segmented size="small" value={view} onChange={setViewPreset} options={VIEWS} />
               <CommandButton
                 id="fitView" size="small"
@@ -1645,6 +1751,36 @@ export default function App() {
                   onClick={toggleArbor}
                 />
               )}
+              {/* The backplot covers the surface it describes on a dense
+                  program, so it drops the same way the holder does. */}
+              {!sketching && (
+                <CommandButton
+                  id="showToolpath" size="small"
+                  type={showToolpath ? 'primary' : 'default'}
+                  icon={<ToolpathIcon />}
+                  onClick={toggleToolpath}
+                />
+              )}
+              {/* **Simulate lives here, with the toggles it is judged by.**
+                  Cutting the material and then hiding the holder or the
+                  toolpath to look at what came off is one motion, and it used
+                  to cross the whole screen: press a button in a drawer, close
+                  the drawer, then reach for these. The NUMBERS stay in the
+                  drawer — a grid size is a setting you type once per job, not
+                  something to keep on a rail you press mid-run. */}
+              {!sketching && !turning && (
+                <CommandButton
+                  id={simPlan.method === 'voxel'
+                    ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
+                    : 'simulate'}
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
+                  loading={simStatus === 'running'}
+                  onClick={() => simulate()}
+                />
+              )}
               {/* 4th axis: which end of the same rigid motion to watch. A rotary
                   table turns the WORK — that is what a 4-axis machine selects by
                   default — but the part frame, which keeps the workpiece still
@@ -1662,7 +1798,7 @@ export default function App() {
                 />
               )}
               {!sketching && <>
-              <div style={{ width: 1, alignSelf: 'stretch', background: '#334155' }} />
+              <div style={{ width: 1, alignSelf: 'stretch', background: CAD.border }} />
               <CommandButton
                 id="restart"
                 size="small" shape="circle"
@@ -1705,7 +1841,7 @@ export default function App() {
                 disabled={count === 0}
               />
               <Text style={{
-                color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap',
+                color: CAD.label, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap',
               }}>
                 {formatDuration(elapsed)} / {formatDuration(stats?.cycleTime ?? 0)}
               </Text>
@@ -1735,6 +1871,7 @@ export default function App() {
               mode={sketching ? 'mill' : mode}
               sketching={sketching}
               showArbor={showArbor}
+              showToolpath={showToolpath}
               rotaryFrame={rotaryFrame}
               rotaryCenter={rotaryCenter}
               simFrameA={simFrameA}

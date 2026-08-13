@@ -4,6 +4,7 @@ import ReactThreeTestRenderer from '@react-three/test-renderer';
 import PartMesh, { FeatureHighlight, OriginMarker, RotaryAxisLine } from './PartMesh.jsx';
 import { useCamPlanStore, getMesh } from '../stores/camPlanStore.js';
 import { box, cylinder, turnedShaft } from '../engine/mesh/fixtures.js';
+import { CAD } from '../theme.js';
 
 /** A binary-STL File-alike, the way the store receives one from a drop. */
 function stlFile(soup, name = 'part.stl') {
@@ -111,7 +112,10 @@ describe('picking a face off the model', () => {
     expect(meshes).toHaveLength(1);
     // One highlight triangle per triangle of the merged face.
     expect(meshes[0].instance.geometry.attributes.position.count).toBe(top.triangles.length * 3);
-    expect(meshes[0].instance.material.color.getHexString()).toBe('fbbf24');
+    // The highlight colour comes from the palette, not from a hex frozen here:
+    // what matters is that the picked face is drawn in the pre-select colour.
+    expect(meshes[0].instance.material.color.getHexString())
+      .toBe(CAD.skHover.replace('#', '').toLowerCase());
   });
 
   it('draws a selected edge as a line, not a surface', async () => {

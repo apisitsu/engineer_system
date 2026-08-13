@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts, PDFName, PDFDict, PDFArray, PDFString, PDFHexString, PDFStream } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFDict, PDFArray, PDFString, PDFHexString } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 /**

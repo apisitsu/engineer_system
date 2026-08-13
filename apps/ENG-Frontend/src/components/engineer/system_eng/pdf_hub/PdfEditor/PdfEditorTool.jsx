@@ -1,14 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-    Segmented, Button, Tooltip, Upload, Typography, Spin, Tag,
-    Select, Space, message,
+    Segmented, Button, Tooltip, Upload, Typography, Space, message,
 } from 'antd';
 import {
-    EyeOutlined, HighlightOutlined, BorderOutlined,
-    EditOutlined, FormOutlined, MergeCellsOutlined,
-    FileImageOutlined, ZoomInOutlined, ZoomOutOutlined,
-    UndoOutlined, RedoOutlined, DownloadOutlined, DeleteOutlined,
-    AppstoreOutlined, DashboardOutlined, BgColorsOutlined, ToolOutlined
+    DashboardOutlined, ToolOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -26,7 +21,7 @@ import MergePreview from './MergePreview';
 import PhysicalRuler from './canvas/PhysicalRuler';
 import PdfUsageDashboard from './wrappers/PdfUsageDashboard.jsx';
 import WatermarkManagerModal from './wrappers/WatermarkManagerModal.jsx';
-import { MODE_OPTIONS, ZOOM_OPTIONS } from './constants.jsx';
+import { MODE_OPTIONS } from './constants.jsx';
 
 // UI Extract Components
 import UploadLanding from './ui/UploadLanding';

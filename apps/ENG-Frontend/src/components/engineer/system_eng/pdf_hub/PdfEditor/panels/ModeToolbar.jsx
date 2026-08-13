@@ -1,14 +1,13 @@
 import React from 'react';
-import { Button, Tooltip, Select, Divider } from 'antd';
+import { Button, Tooltip } from 'antd';
 import {
     HighlightOutlined, UnderlineOutlined, StrikethroughOutlined,
     MessageOutlined, BorderOutlined, RadiusSettingOutlined,
     ArrowRightOutlined, LineOutlined, EditOutlined,
     ColumnWidthOutlined, FontSizeOutlined, BlockOutlined,
-    FormOutlined, SignatureOutlined, SafetyCertificateOutlined,
+    FormOutlined, SafetyCertificateOutlined,
     CalendarOutlined, MergeCellsOutlined, FileImageOutlined,
-    SelectOutlined, DragOutlined, ColumnHeightOutlined,
-    CheckOutlined, CloseOutlined, CheckCircleOutlined, IdcardOutlined,
+    SelectOutlined, DragOutlined, CheckOutlined, CloseOutlined, CheckCircleOutlined, IdcardOutlined,
     ClearOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';

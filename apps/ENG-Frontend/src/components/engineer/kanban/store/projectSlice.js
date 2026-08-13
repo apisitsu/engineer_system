@@ -8,7 +8,7 @@
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import Swal from 'sweetalert2';
-import { useAuthStore } from '../../../../stores/authStore';
+import '../../../../stores/authStore';
 
 export const createProjectSlice = (set, get) => ({
     // --- Project Data State ---

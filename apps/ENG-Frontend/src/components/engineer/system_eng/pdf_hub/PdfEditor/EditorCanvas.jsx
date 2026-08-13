@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as fabric from 'fabric';
 import * as pdfjsLib from 'pdfjs-dist';
-import { useTheme } from '../../../../../theme';
+import '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
 import { useAuthStore } from '../../../../../stores/authStore';
 import ToolPreview from './canvas/ToolPreview';

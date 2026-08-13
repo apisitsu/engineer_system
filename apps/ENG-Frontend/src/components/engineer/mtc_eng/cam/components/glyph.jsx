@@ -131,6 +131,32 @@ export const ArborIcon = glyph(
   </>,
 );
 
+/**
+ * The programmed path — a run of moves with a rapid dashing back over it. The
+ * two colours the viewport draws it in cannot be used here (a glyph is one
+ * `currentColor`), so the rapid is the dashed leg and the feed the solid one.
+ */
+export const ToolpathIcon = glyph(
+  <>
+    <path
+      d="M4 17 L8 9 L12 15 L16 6 L20 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4 17 L20 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeDasharray="2 2"
+      opacity="0.55"
+    />
+  </>,
+);
+
 // ---- Planning --------------------------------------------------------------
 
 /** A wand — the planner proposing the whole job on its own. */

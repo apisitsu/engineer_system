@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select,
   Space, Popconfirm, message, Typography, Tag,
@@ -24,7 +24,11 @@ const dwgRefOf = (dd) => {
  */
 export default function PartNoMapManager() {
   const { token } = useAuthStore();
-  const headers = { Authorization: `Bearer ${token}` };
+  // Memoised so it can be a real dependency below. Listing a fresh object in
+  // a dependency array makes the callback new on every render, and the
+  // `useEffect(() => load(), [load])` under it would then loop forever —
+  // which is why the deps used to name `token` instead and eslint objected.
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -47,14 +51,14 @@ export default function PartNoMapManager() {
     } finally {
       setLoading(false);
     }
-  }, [filter, token]);
+  }, [filter, headers]);
 
   const loadMeta = useCallback(async () => {
     try {
       const res = await axios.get(`${server.TSV2_PARTNO_MAP}/meta`, { headers });
       setMeta({ machines: res.data.machines || [], toolings: res.data.toolings || [] });
     } catch { /* non-fatal */ }
-  }, [token]);
+  }, [headers]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadMeta(); }, [loadMeta]);

@@ -164,6 +164,13 @@ const REASON_LABELS = {
   NO_TOOL_NO_EXCEL: 'No tool + no Excel config',
 };
 
+// Extra reason-filter entry that is NOT a pending_reason. A limit anomaly is a
+// separate flag (`limit_excluded` — produced on a machine its T-Select size LIMIT
+// says it cannot run) that rides along on a row which still classifies under one of
+// the reasons above, so it can never be a REASON_LABELS key. The sentinel keeps it
+// selectable in the same dropdown; filteredAttention special-cases it.
+const LIMIT_ANOMALY = '__LIMIT_ANOMALY__';
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
   const { message } = App.useApp();
@@ -458,8 +465,13 @@ export default function SdsCoverageDashboard() {
   }, [data]);
 
   const reasonOptions = useMemo(() => {
-    const reasons = [...new Set((data?.needsAttention || []).map(r => r.pending_reason).filter(Boolean))].sort();
+    const rows = data?.needsAttention || [];
+    const reasons = [...new Set(rows.map(r => r.pending_reason).filter(Boolean))].sort();
+    const anomalyCount = rows.filter(r => r.limit_excluded).length;
     return [{ value: '', label: 'All Reasons' },
+      // Listed only when such rows exist, so picking it always yields rows (same
+      // rule as the other two dropdowns).
+      ...(anomalyCount ? [{ value: LIMIT_ANOMALY, label: `⚠ Limit Anomaly (${anomalyCount})` }] : []),
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r }))];
   }, [data]);
 
@@ -468,7 +480,9 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
-      if (filterReason && r.pending_reason !== filterReason) return false;
+      // The anomaly entry filters on the limit_excluded flag, not pending_reason.
+      if (filterReason === LIMIT_ANOMALY) { if (!r.limit_excluded) return false; }
+      else if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
   }, [data, filterPt, filterMc, filterReason]);
