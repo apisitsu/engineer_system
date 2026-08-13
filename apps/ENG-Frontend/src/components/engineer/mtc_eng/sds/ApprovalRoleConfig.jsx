@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select, Popconfirm,
-  Space, Tag, App, Switch, Alert, Typography,
+  Tag, App, Switch, Alert, Typography,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';

@@ -3,8 +3,8 @@ import { Modal, Form, Input, Button, Space, Select, Divider, Card, Collapse, Typ
 import { FiTrash2, FiPlus, FiDownload } from 'react-icons/fi';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
-import axios from 'axios';
-import { server } from '../../../../../constance/constance';
+import 'axios';
+import '../../../../../constance/constance';
 
 const { TextArea } = Input;
 const { Option } = Select;

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Input, Button, Typography, Card, Row, Col,
   Table, Tag, Spin, Layout, App, Descriptions,
-  Modal, Select, Space, Tooltip, Divider, Popconfirm, DatePicker,
+  Modal, Select, Space, Tooltip, Divider, Popconfirm, DatePicker, Alert,
 } from 'antd';
 import { SearchOutlined, FilePdfOutlined, SettingOutlined, WarningOutlined, SwapOutlined, CheckCircleOutlined, EditOutlined } from '@ant-design/icons';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
@@ -163,9 +163,11 @@ const SdsV2Page = () => {
     setCompareModal((prev) => (prev.open ? { ...prev, loading: false, factory, similar } : prev));
   };
 
-  const handleSearch = async () => {
-    if (!cn.trim()) return;
-    const cnVal = cn.trim();
+  // Split from handleSearch so a deep link can search a CN immediately without
+  // waiting a render for setCn to land. handleSearch stays bound to onClick /
+  // onPressEnter, which hand it a DOM event — it must take no argument.
+  const runSearch = async (cnVal) => {
+    if (!cnVal) return;
     setLoading(true);
     setData(null);
     setTsData(null);
@@ -196,6 +198,8 @@ const SdsV2Page = () => {
       setLoading(false);
     }
   };
+
+  const handleSearch = () => runSearch(cn.trim());
 
   const openPdfModal = (processRow) => {
     setSelectedProcess(processRow);
@@ -253,6 +257,40 @@ const SdsV2Page = () => {
     if (list.length === 1) setSelectedMachine(list[0].machine_type_name);
     setPdfModal(true);
   };
+
+  // ── Deep link (?cn=&machine=&process=&sign=1) ──────────────────────────────
+  // Entry point for the "Open SDS — sign" link on a Kanban card: land straight on
+  // the sheet's sign panel instead of retyping the CN and re-picking machine/process.
+  const [deepLink, setDeepLink] = useState(null);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const linkCn = (q.get('cn') || '').trim();
+    if (!linkCn) return;
+    setCn(linkCn);
+    setDeepLink({ machine: q.get('machine') || '', process: q.get('process') || '' });
+    runSearch(linkCn);
+    // Mount-only: the URL is read once so a later manual search is never overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // openPdfModal needs the machine/tool config the search fetches, so the target
+  // sheet can only be opened once those have landed — hence a second effect
+  // rather than doing this inline in runSearch.
+  useEffect(() => {
+    if (!deepLink || !data?.process_info?.length || !allMachineTypes.length) return;
+    const row = data.process_info.find(
+      (r) => String(r.process_code) === String(deepLink.process)
+    );
+    setDeepLink(null);                       // one shot, whether or not the row matched
+    if (!row) {
+      message.warning(`Process ${deepLink.process} not found on ${data.cn}`);
+      return;
+    }
+    openPdfModal(row);
+    if (deepLink.machine) setSelectedMachine(deepLink.machine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLink, data, allMachineTypes, machineToolsConfig]);
 
   // Label shown for a machine in the picker / on the PDF: a split group shows the specific
   // machine name (KS-400B2); a combined group (sole entry in the list) shows the group name
@@ -460,6 +498,67 @@ const SdsV2Page = () => {
     Object.values(map).forEach(arr => arr.sort((a, b) => b.production_count - a.production_count));
     return map;
   }, [cnHistory]);
+
+  // Machines Tooling Select ruled OUT for this part, by machine limit, with the reason.
+  //
+  // The PDF machine picker is built from `sds_machine_tool` config and tool-DWG code
+  // prefix — neither of which knows whether the part actually fits the machine. Where
+  // two machines share a tooling family and split the range between them (KS-03A takes
+  // bore < 12, KS-B22RD bore >= 12, same 4559-* tooling), BOTH are offered for the same
+  // process, and picking the wrong one yields a sheet whose Tooling Select slots are all
+  // blank — with nothing on screen saying why, while the Tooling table right behind the
+  // modal shows a full 10-tool list for the machine that does fit.
+  //
+  // T-Select already reports the exclusion; this just surfaces it. Keyed by the
+  // representative machine_type_name, since T-Select names groups (see resolveMachine).
+  const tsExclusionByMachine = useMemo(() => {
+    const groupToRep = {};
+    for (const m of allMachineTypes) {
+      if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
+    }
+    const map = {};
+    for (const w of tsData?.warnings || []) {
+      if (w?.type !== 'limit' || !w.machine) continue;
+      const name = groupToRep[w.machine] || w.machine;
+      if (!map[name]) map[name] = w.reason || 'not eligible for this part';
+    }
+    return map;
+  }, [tsData, allMachineTypes]);
+
+  // Machines worth pointing at when the user has landed on an excluded one: those
+  // Tooling Select DID compute tooling for AND that own this process's tooling
+  // family. The family test matters — every machine configured for a process is in
+  // the picker, but KS-B22G (4027-*) and KS-B80 (4021-*) have nothing to do with a
+  // part whose plan calls out 4559-* tools, so offering them as the alternative
+  // sends the user to another empty sheet. With no factory tools on the process
+  // there is no family to match, so every eligible machine stays a candidate.
+  const tsEligibleInPicker = useMemo(() => {
+    const groupToRep = {};
+    for (const m of allMachineTypes) {
+      if (m.machine_group) groupToRep[m.machine_group] = m.machine_type_name;
+    }
+    const eligible = new Set(
+      (tsData?.results || []).map(r => groupToRep[r.machine] || r.machine)
+    );
+    const pc = String(selectedProcess?.process_code || '').trim();
+    const planPrefixes = new Set(
+      (data?.process_plan || [])
+        .filter(t => String(t.process_code) === pc)
+        .map(t => dwgPrefix(t.tool_dwg_no))
+        .filter(Boolean)
+    );
+    const ownsFamily = (name) => {
+      if (!planPrefixes.size) return true;
+      return machineToolsConfig.some(c =>
+        c.machine_type?.trim() === name &&
+        String(c.process_code) === pc &&
+        planPrefixes.has(dwgPrefix(c.tool_drawing_no))
+      );
+    };
+    return filteredMachineTypes
+      .map(m => m.machine_type_name)
+      .filter(n => eligible.has(n) && ownsFamily(n));
+  }, [tsData, allMachineTypes, filteredMachineTypes, selectedProcess, data, machineToolsConfig]);
 
   const processInfoCols = [
     { title: 'Seq', dataIndex: 'process_seqno', width: 60, align: 'center' },
@@ -1108,14 +1207,52 @@ const SdsV2Page = () => {
           style={{ width: '100%' }}
           value={selectedMachine}
           onChange={setSelectedMachine}
+          // `label` may be a node once a machine is flagged, so search on the plain
+          // text kept alongside it rather than on the label itself.
           filterOption={(input, opt) =>
-            opt.label.toLowerCase().includes(input.toLowerCase())
+            (opt.searchText || '').toLowerCase().includes(input.toLowerCase())
           }
-          options={filteredMachineTypes.map(m => ({
-            value: m.machine_type_name,
-            label: displayLabelFor(m.machine_type_name),
-          }))}
+          options={filteredMachineTypes.map(m => {
+            const label = displayLabelFor(m.machine_type_name);
+            const excluded = tsExclusionByMachine[m.machine_type_name];
+            return {
+              value: m.machine_type_name,
+              searchText: label,
+              label: excluded ? (
+                <span>
+                  {label}
+                  <Text type="warning" style={{ fontSize: 11, marginLeft: 8 }}>
+                    <WarningOutlined /> no Tooling Select data — {excluded}
+                  </Text>
+                </span>
+              ) : label,
+            };
+          })}
         />
+        {selectedMachine && tsExclusionByMachine[selectedMachine] && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginTop: 12 }}
+            message={`Tooling Select excludes ${displayLabelFor(selectedMachine)} for this part`}
+            description={(
+              <>
+                <div>{tsExclusionByMachine[selectedMachine]}</div>
+                <div style={{ marginTop: 4 }}>
+                  The sheet will still generate, but every tool slot Tooling Select
+                  would have filled stays blank — only tools listed in the part's own
+                  factory process plan appear.
+                </div>
+                {tsEligibleInPicker.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    Machine{tsEligibleInPicker.length > 1 ? 's' : ''} with tooling for
+                    this part: <b>{tsEligibleInPicker.map(displayLabelFor).join(', ')}</b>
+                  </div>
+                )}
+              </>
+            )}
+          />
+        )}
         {renderApprovalSection()}
       </Modal>
 

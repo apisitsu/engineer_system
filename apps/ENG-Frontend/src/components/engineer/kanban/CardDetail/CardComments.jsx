@@ -15,7 +15,7 @@ import { Typography, Row, Col, Space, Divider, Button, Tabs, Popconfirm, Timelin
 import { useCardDetailState } from './useCardDetailState';
 
 import { AiOutlineDelete } from 'react-icons/ai';
-import dayjs from 'dayjs';
+import 'dayjs';
 
 const { Text } = Typography;
 

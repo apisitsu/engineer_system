@@ -47,6 +47,9 @@ const SYSTEMS = {
     'apps/ENG-Frontend/src/components/engineer/mtc_eng/sds/SdsCoverageDashboard.jsx',
     'apps/ENG-Backend/api/engineer/mtc/controllers/sdsV2ReportController.js',
   ],
+  'cam': [
+    'apps/ENG-Frontend/src/components/engineer/mtc_eng/cam',
+  ],
 };
 
 function todayStr() {

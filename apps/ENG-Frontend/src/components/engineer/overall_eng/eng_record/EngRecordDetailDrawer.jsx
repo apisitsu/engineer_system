@@ -1,5 +1,5 @@
 import React from 'react';
-import { Drawer, Typography, Tag, Divider, Descriptions, Space, Button, App } from 'antd';
+import { Drawer, Typography, Tag, Divider, Descriptions, Button, App } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../../theme';

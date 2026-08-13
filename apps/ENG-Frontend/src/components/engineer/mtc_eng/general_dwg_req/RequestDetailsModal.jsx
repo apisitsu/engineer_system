@@ -53,8 +53,6 @@ const stripFilePrefix = (p) => {
 
 const FileLinks = ({ paths, names, label }) => {
   if (!paths?.length) return null;
-  // Use server API URL from config instead of hardcoded localhost
-  const baseUrl = server.API_URL || 'http://localhost:2005';
   return (
     <div style={{ marginBottom: 12 }}>
       <Text strong>{label}: </Text>
@@ -337,7 +335,6 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const [permissions, setPermissions] = useState({});
   const userName = useAuthStore(state => state.userName);
   const userInfo = useAuthStore(state => state.userInfo);
-  const userRole = useAuthStore(state => state.userRole);
   const userDepartment = useAuthStore(state => state.userDepartment);
   const userCode = userInfo?.u_code || '';        // e.g. "apisit.su" หรือ "LE485"
   const userEmail = userInfo?.gmail_email || userInfo?.email || '';

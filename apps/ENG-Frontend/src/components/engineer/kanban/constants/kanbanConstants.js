@@ -6,9 +6,9 @@ import {
     IoFlagOutline, IoGlobeOutline, IoHammerOutline, IoPizzaOutline,
     IoPulseOutline, IoSchoolOutline, IoTerminalOutline, IoThunderstormOutline,
     IoWaterOutline, IoAirplaneOutline, IoBicycleOutline, IoCafeOutline,
-    IoFitnessOutline, IoHomeOutline, IoLockClosedOutline, IoSettingsOutline,
+    IoFitnessOutline, IoHomeOutline, IoSettingsOutline,
     IoStarOutline, IoTimeOutline, IoCalendarOutline, IoLayersOutline,
-    IoDocumentOutline, IoChatbubbleOutline, IoCartOutline, IoBarChartOutline, IoEyeOutline
+    IoDocumentOutline, IoChatbubbleOutline, IoCartOutline, IoBarChartOutline
 } from 'react-icons/io5';
 import { BsKanban } from 'react-icons/bs';
 

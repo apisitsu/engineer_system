@@ -4,7 +4,7 @@
  */
 import React, { useMemo } from 'react';
 import { Typography, Progress, Tag, Avatar, Tooltip, Empty } from 'antd';
-import { MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdBugReport, MdLayersClear } from 'react-icons/md';
+import { MdOutlinePeople, MdOutlineLabel, MdAccessTime, MdBugReport } from 'react-icons/md';
 import { IoLayersOutline, IoPieChartOutline, IoStatsChartOutline, IoCheckmarkDoneOutline } from 'react-icons/io5';
 import { BsKanban } from 'react-icons/bs';
 import dayjs from 'dayjs';

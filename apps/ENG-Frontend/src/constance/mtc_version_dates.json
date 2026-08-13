@@ -1,8 +1,9 @@
 {
-  "tool-request": "2026-07-05",
-  "tooling-inspect": "2026-08-03",
-  "tooling-select": "2026-07-05",
-  "sds-v2": "2026-07-23",
+  "tool-request": "2026-08-08",
+  "tooling-inspect": "2026-08-04",
+  "tooling-select": "2026-08-08",
+  "sds-v2": "2026-08-08",
   "tooling-result-dashboard": "2026-07-04",
-  "sds-coverage-report": "2026-07-07"
+  "sds-coverage-report": "2026-08-09",
+  "cam": "2026-08-12"
 }

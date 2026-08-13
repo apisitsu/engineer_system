@@ -1,6 +1,6 @@
 import React from 'react';
 import { Divider, Progress, Typography } from 'antd';
-import { AreaChartOutlined, BoxPlotOutlined, ExperimentOutlined, InfoCircleOutlined, CodeSandboxOutlined } from '@ant-design/icons';
+import { AreaChartOutlined, BoxPlotOutlined, ExperimentOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { MODEL_TYPES } from '../../constants';
 
 const { Text } = Typography;

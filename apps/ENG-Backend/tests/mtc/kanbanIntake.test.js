@@ -61,6 +61,125 @@ describe('kanbanIntake.syncCard fail-open', () => {
   });
 });
 
+describe('kanbanIntake link attachment', () => {
+  // A transactional client whose statements we can inspect. The card INSERT has to
+  // return a row, since _upsertLink is called with the new card's id.
+  const clientFor = (existingLinkRows = []) => {
+    const statements = [];
+    const client = {
+      query: jest.fn((sql, params) => {
+        statements.push({ sql, params });
+        // Anchored on the column list so it cannot also catch kb_card_membership
+        // / kb_card_subscription, whose inserts follow immediately.
+        if (/INSERT INTO kb_card\s*\(/.test(sql)) return Promise.resolve({ rows: [{ id: 77, board_id: 9, list_id: 5 }] });
+        if (sql.includes('FROM kb_attachment')) return Promise.resolve({ rows: existingLinkRows });
+        if (sql.includes('SELECT * FROM kb_card')) return Promise.resolve({ rows: [{ id: 77, board_id: 9, list_id: 5 }] });
+        if (sql.includes('COALESCE(MAX(position)')) return Promise.resolve({ rows: [{ pos: 100 }] });
+        return Promise.resolve({ rows: [] });
+      }),
+      release: jest.fn(),
+    };
+    return { client, statements };
+  };
+  const attachInsert = (statements) => statements.find((s) => s.sql.includes('INSERT INTO kb_attachment'));
+
+  beforeEach(() => {
+    configRows = [{ source_type: 'sds_approval', enabled: true, default_list_id: 5, stage_list_map: {}, system_u_code: 'LE485' }];
+  });
+
+  it('attaches the deep link as a link-type attachment on create', async () => {
+    const { client, statements } = clientFor();
+    engPool.connect.mockResolvedValue(client);
+
+    const r = await kanbanIntake.syncCard({
+      sourceType: 'sds_approval', sourceRef: 'C1||M||1021', name: 'SDS',
+      link: { url: '/eng/mtc_eng/sds-v2?cn=C1', name: 'Open SDS C1 — sign' },
+    });
+
+    expect(r.ok).toBe(true);
+    const ins = attachInsert(statements);
+    expect(ins).toBeDefined();
+    expect(ins.params).toEqual([77, 'LE485', 'Open SDS C1 — sign', '/eng/mtc_eng/sds-v2?cn=C1',
+      JSON.stringify({ url: '/eng/mtc_eng/sds-v2?cn=C1', name: 'Open SDS C1 — sign' })]);
+  });
+
+  it('does not duplicate a link that is already on the card', async () => {
+    const { client, statements } = clientFor([{ id: 1 }]); // attachment already exists
+    engPool.connect.mockResolvedValue(client);
+
+    await kanbanIntake.syncCard({
+      sourceType: 'sds_approval', sourceRef: 'C1||M||1021', name: 'SDS',
+      link: { url: '/eng/mtc_eng/sds-v2?cn=C1' },
+    });
+
+    expect(attachInsert(statements)).toBeUndefined();
+  });
+
+  it('skips silently when no link is supplied', async () => {
+    const { client, statements } = clientFor();
+    engPool.connect.mockResolvedValue(client);
+
+    await kanbanIntake.syncCard({ sourceType: 'sds_approval', sourceRef: 'C1||M||1021', name: 'SDS' });
+
+    expect(attachInsert(statements)).toBeUndefined();
+    expect(statements.some((s) => s.sql.includes('FROM kb_attachment'))).toBe(false);
+  });
+});
+
+describe('kanbanIntake createOnly', () => {
+  // A backlog feed re-runs on every report build. Without createOnly it would drag
+  // every card that has since progressed back to the first list.
+  const clientOn = (existingCard) => {
+    const statements = [];
+    const client = {
+      query: jest.fn((sql, params) => {
+        statements.push({ sql, params });
+        if (/INSERT INTO kb_card\s*\(/.test(sql)) return Promise.resolve({ rows: [{ id: 88, board_id: 9, list_id: 3 }] });
+        if (sql.includes('SELECT * FROM kb_card')) return Promise.resolve({ rows: [existingCard] });
+        if (sql.includes('COALESCE(MAX(position)')) return Promise.resolve({ rows: [{ pos: 100 }] });
+        return Promise.resolve({ rows: [] });
+      }),
+      release: jest.fn(),
+    };
+    return { client, statements };
+  };
+
+  beforeEach(() => {
+    configRows = [{ source_type: 'sds_approval', enabled: true, default_list_id: 76, stage_list_map: {}, system_u_code: 'LE485' }];
+  });
+
+  it('leaves an existing card where it is instead of moving it', async () => {
+    // Link row exists → the card is already on the board, sitting on list 79 (Done).
+    engPool.query.mockImplementation((sql) => {
+      if (sql.includes('CREATE TABLE')) return Promise.resolve({});
+      if (sql.includes('FROM mtc_board_config')) return Promise.resolve({ rows: configRows });
+      if (sql.includes('FROM mtc_board_card_link')) return Promise.resolve({ rows: [{ card_id: 55 }] });
+      return Promise.resolve({ rows: [] });
+    });
+    const { client, statements } = clientOn({ id: 55, board_id: 9, list_id: 79 });
+    engPool.connect.mockResolvedValue(client);
+
+    const r = await kanbanIntake.syncCard({
+      sourceType: 'sds_approval', sourceRef: 'C1||M||1021', name: 'SDS', stageKey: null, createOnly: true,
+    });
+
+    expect(r).toEqual({ ok: true, action: 'noop', cardId: 55 });
+    expect(statements.some((s) => s.sql.includes('UPDATE kb_card SET list_id'))).toBe(false);
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it('still creates the card when the job has none', async () => {
+    const { client } = clientOn(null);
+    engPool.connect.mockResolvedValue(client);
+
+    const r = await kanbanIntake.syncCard({
+      sourceType: 'sds_approval', sourceRef: 'C1||M||1021', name: 'SDS', stageKey: null, createOnly: true,
+    });
+
+    expect(r).toMatchObject({ ok: true, action: 'created', cardId: 88 });
+  });
+});
+
 describe('kanbanIntake.resolveListId', () => {
   it('prefers the stage map, falls back to default_list_id', () => {
     const cfg = { stage_list_map: { eng_check: 11, draft_man: 12 }, default_list_id: 99 };

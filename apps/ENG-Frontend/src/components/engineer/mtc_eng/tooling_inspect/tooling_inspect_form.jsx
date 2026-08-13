@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Modal, Form, Input, DatePicker, Select, Row, Col, Button, Alert, Space, InputNumber } from "antd";
 import { SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
-import moment from "moment";
+import "moment";
 import dayjs from "dayjs";
 import axios from "axios";
 import Swal from 'sweetalert2';

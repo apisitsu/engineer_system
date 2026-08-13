@@ -64,6 +64,42 @@ const dwgPrefix = (no) => { const p = no?.split('-'); return p?.length >= 2 ? `$
 ```
 Applied in `SdsV2Page.jsx`: T-Select result assignment tries exact match first, then `dwgPrefix` fallback via `sdsPrefixToNo` map. Validation against `sds_machine_tool` uses `sdsPrefixSet`.
 
+**3b. A blank PDF is usually the WRONG MACHINE, not a missing-data bug**
+
+The PDF machine picker (`openPdfModal`) is built from `sds_machine_tool` config for the
+process **plus** machines whose `machine_type_code` matches the plan's tool-DWG prefix.
+Neither source knows whether the part actually *fits* the machine, so machines Tooling
+Select has excluded are offered anyway — and the resulting sheet renders with every
+T-Select tool slot blank while the Tooling table behind the modal shows a full list.
+
+This bites hardest on **range-split pairs**: two machines sharing one tooling family with
+the range divided between them. `tooling_machine_limit` records the split *and* names the
+partner in `description`:
+
+| machine | input_var | bound | description |
+|---|---|---|---|
+| KS-03A | ID | max 12 (exclusive) | `KS-03A: ID < 12 (use KS-B22RD for ID >= 12)` |
+| KS-B22RD | ID | min 12 | `KS-B22RD: ID >= 12 (same formulas as KS-03A)` |
+
+Diagnosed 2026-08-05 on **C31-00839** (BALL, bore 12.700), process 1061: the KS-B22RD
+sheet carried all 10 tools (2 factory + 8 from T-Select/similar-part, marked ` *`); the
+KS-03A sheet carried only the 2 factory tools. Correct behaviour — bore 12.7 belongs to
+KS-B22RD — but nothing said so. `SdsV2Page` now flags excluded machines in the picker
+with the T-Select reason (`ID=12.7 > max 12`) and names the machine that does own the
+part's tooling family.
+
+> The alternative-machine suggestion **must** be filtered by tooling family, not just by
+> T-Select eligibility. Every machine configured for the process is in the picker, so for
+> this part KS-B22G (4027-*) and KS-B80 (4021-*) were "eligible" yet irrelevant — offering
+> them just sends the user to another empty sheet. Match `sds_machine_tool.tool_drawing_no`
+> prefixes against the part's own `process_plan` tool prefixes.
+
+> **Production history is not proof the limit is wrong.** The `Machine History` chips are
+> real `lpb.pc_production` lots, and they showed 3 lots of this CN on KS-03A (floor machine
+> IDG-10, which has ground bores 6.35–16.0). Reality crosses the documented split; the
+> limit still encodes the intended routing. **Do not "fix" a limit from production data
+> alone** — the split is deliberate and shared by both machines' formulas.
+
 **4. Independent caches — invalidation does not cross systems**
 SDS admin mutations now auto-flush the `sds:` cache: `/machine-types` (inline) and `/parameters`, `/parameters/bulk`, `/machine-tools/bulk`, `/machine-tools/combo`, `/mappings` (via the `flushSds` `res.on('finish')` middleware in `sdsV2AdminController.js`). So edits reflect on the next search/PDF. (Fixed 2026-06-09 — previously only machine-types flushed, so parameter/tool/mapping edits served stale data until the 10-min TTL.) The T-Select config cache flushes independently (see `tsv2ConfigCache`).
 
@@ -161,6 +197,62 @@ part nor tooling (four CNs sharing one arbor carry four different values), so it
 | `GET` | `/audit/data-integrity` | multiple | Cross-check param keys vs excel mapping |
 
 ---
+
+## SDS Approval → Kanban board (auto-intake)
+
+`POST /api/sds/v2/approval` (a **live** sign) calls `kanbanIntake.syncCard` with
+`sourceType='sds_approval'`, `sourceRef='<cn>||<machine_type_name>||<process_code>'`,
+`stageKey=<role>`. One sheet → one card; each later sign moves that card. Fail-open:
+a board problem never blocks the signature. `POST /backfill` is deliberately **not**
+hooked — 4,196 historical rows would flood the board.
+
+Whether anything happens at all is config, not code: `syncCard` silently no-ops
+unless `mtc_board_config` has an enabled row. Current live config (set 2026-08-04):
+board 25 `Setup Data Sheet`, `prepared→77 In Progress`, `checked→78 Check`,
+`approved→79 Done`, owner `LE485`. Admin API: `GET/PUT /api/tooling-select/board-config/:sourceType`
+(isAdmin) — **no frontend UI yet**.
+
+### Backlog feed — coverage report → To Do (2026-08-04)
+
+`default_list_id` (76 To Do) is reached by the *other* producer: after every successful
+coverage build, `services/sdsBacklogIntake.syncNoStampBacklog` seeds a card for each row
+that is `pending_reason === 'NO_STAMP'` **and not** `limit_excluded`. Those are sheets that
+are tool- and config-complete with only the signature missing — a real task. The other
+pending reasons are config gaps (256 rows vs 38 when this was built) and would bury the
+board; limit-anomaly rows rest on contradictory data and are not actionable.
+
+Manual trigger: `POST /api/sds/v2/report/backlog-to-board` (isAdmin), `?dryRun=1` to preview.
+It reads the cached payload only and never kicks a cold build. `MAX_CARDS_PER_RUN = 150`
+aborts the run rather than flooding a shared board.
+
+Cards are seeded with **`createOnly`** — the feed re-runs on every rebuild, and without it
+each run would drag already-signed cards back to To Do. One sheet therefore has one card
+for its whole life: seeded in To Do, then moved by each signature.
+
+> **Both producers must agree on `sourceRef` or a sheet gets two cards.** The report
+> deduplicates a machine group to its *representative* (`TSG-300W`), while a signer picks a
+> specific *member* (`TSG-300ZNC`). `utils/sdsBoardRef.boardRef` normalises the machine
+> segment to the **group label** (`TSG-300W/TSG-300ZNC`) on both sides — the group, not the
+> representative, because the representative is whichever member holds the Excel config and
+> moves when config moves, orphaning every card keyed to the old value. Cards linked before
+> this were re-keyed by `db_migrations/20260804_rekey_sds_board_card_link_to_group.js`
+> (idempotent; skips rather than merges on collision).
+
+> A helper that takes a process code must not name the parameter `process` — it shadows the
+> Node global and `process.env` throws. Cost a silent no-op run before it was caught.
+
+**Deep link.** The card carries a `kb_attachment` of `attachment_type='link'` pointing at
+`/eng/mtc_eng/sds-v2?cn=&machine=&process=`, which `SdsV2Page` parses on mount to search
+the CN and open that sheet's PDF/sign modal. It is an attachment, not a description line,
+because the description renders as plain text (clicking it opens the editor). `_upsertLink`
+is idempotent on `(card_id, file_path)` and runs on move as well as create, so cards made
+before the link existed acquire one on their next stage change. Absolute when
+`FRONTEND_BASE_URL` is set, else relative — fine while board and SDS page share an origin.
+
+**Who may sign** — `sds_approval_role_config`, evaluated by `userCanSign`: department `AD`
+or role `AD` bypasses everything; otherwise a role with **no enabled row denies everyone**.
+`match_type` ∈ `any | department | role | feature_perm | em_id`. Sequential gating applies
+to live signs only (`prepared` → `checked` → `approved`); `/backfill` skips it.
 
 ## Tool Request Workflow (`/api/engineer/mtc/tool-requests/*`)
 

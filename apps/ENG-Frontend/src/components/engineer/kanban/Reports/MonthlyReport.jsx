@@ -4,8 +4,8 @@
  */
 import React, { useMemo, useState } from 'react';
 import { Typography, Progress, Tag, Tooltip, Avatar, Empty, Radio, Button } from 'antd';
-import { MdCheckCircle, MdAccessTime, MdTrendingUp, MdWarning, MdBuild, MdAssignment, MdAddCircle } from 'react-icons/md';
-import { IoFlashOutline, IoAlertCircleOutline, IoCheckmarkDoneOutline, IoCalendarOutline } from 'react-icons/io5';
+import { MdCheckCircle, MdTrendingUp, MdWarning, MdBuild, MdAssignment, MdAddCircle } from 'react-icons/md';
+import { IoAlertCircleOutline, IoCheckmarkDoneOutline, IoCalendarOutline } from 'react-icons/io5';
 import dayjs from 'dayjs';
 import {
     formatDuration, filterCardsDoneInMonth, calculateKPIs,

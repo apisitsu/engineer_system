@@ -49,6 +49,7 @@ npm run cypress:run  # Cypress E2E headless
   - `api/engineer/mtc/` — tooling inspection, SDS v1/v2, formula engine (`expr-eval`), tooling selection, tool-request workflow
   - `api/engineer/process/` — ECR workflow (`/api/ecr/*`), tumble conditions/models (`/api/tumble/*`)
   - `api/engineer/system/` — PDF converter (`pdfConverter.js`) at `/api/engineer/system`
+  - `api/engineer/cam/` — CAD/CAM saved-work library (`/api/engineer/cam/library`, `verifyToken`); table `cam_saved_work` in `engPool`. **A private shelf per operator plus one shared shelf**: saving is always private, publishing is an explicit `POST /library/:id/share`, and every ownership rule is enforced in `camService` against the row (not by a route guard). Replaced the module's per-browser IndexedDB store, then replaced the single shared namespace that first fix created — where two operators saving "OP10" overwrote each other. Rows are addressed by `id`, not by the record key → `.claude/rules/cam-web.md`
   - `api/engineer/new_prod/` — external job-check proxy (`/api/proxy/job_check`, **no auth** — whitelisted in global auth middleware)
   - `api/kanban/` — real-time board/card CRUD via Socket.io
   - `api/fea/` — FEA simulation (BullMQ job queue + `fea_worker.js`); **not** under `api/engineer/`
@@ -73,7 +74,8 @@ npm run cypress:run  # Cypress E2E headless
 - **UI:** Ant Design v5 + vanilla CSS. No TailwindCSS. Use `destroyOnHidden` (not `destroyOnClose`) on Modal/Drawer.
 - **API constants:** `src/constance/constance.js` + `src/constance/mtc_constance.js`. Add new API constants to `constance.js` only — **`constance_prod.js` is dead** (imported by nothing; do not update it).
 - **`apiUrl` is branch-specific (prod-safety invariant):** `constance.js` hardcodes `export const apiUrl`. Branch `mtc` → `http://plbmp118:2005/` (dev); branches `dev` and `main` → `http://plbmp130:2005/` (**PROD**). Use `http://localhost:2005/` for local dev. Every `mtc`→`dev` merge risks flipping this — **`main` must stay plbmp130**, or the production frontend calls the dev backend silently. `runner.js` auto-repairs a duplicated `apiUrl` on startup via `scripts/fix_constance_prod.ps1` (which edits `constance.js`, despite its name); `git_sync_mtc.ps1` gates the release flow on it.
-- **Navigation:** Adding a page → update `App.jsx` (route) + `menu_sidebar.jsx` (sidebar entry). MTC paths in `mtc_constance.js` → `MTC_PATHS`.
+- **Navigation:** Adding a page → update `App.jsx` (route) + `menu_sidebar.jsx` (sidebar entry). MTC paths in `mtc_constance.js` → `MTC_PATHS`. `menu_sidebar.jsx` numbers items from a fixed `numberIcons` array with a `|| numberIcons[0]` fallback — adding an item past the end of that array silently renumbers it "1".
+- **CAD/CAM (`mtc_eng/cam`)** is a vendored copy of the standalone **cam-web** project, not code written here. It is the only `React.lazy` route, it carries its own vitest suite, and it has four deliberate divergences from upstream that a naive re-copy undoes. Read `.claude/rules/cam-web.md` before touching it.
 
 ### Infrastructure
 - **Docker:** `docker-compose.yml` — backend (port 2005) + frontend (port 80) + PostgreSQL volume for uploads
@@ -96,6 +98,7 @@ npm run cypress:run  # Cypress E2E headless
 | **TI import (retired)** | ~~`PYTHON_EXE`, `TOOLING_IMPORT_SCRIPT`, `DWG_PRINT_IMPORT_SCRIPT`, `TOOLING_IMPORT_ENGINE`~~ | **Retired 2026-08-04** — "Update data" no longer shells out to Python; the scripts, the `PATHS` entries and the fallback branch are all gone. Unused. |
 | **SDS PDF** | ~~`SOFFICE_PATH`, `SDS_TEMPLATE_DIR`~~ | **Retired 2026-06-14** — LibreOffice removed; SDS PDF renders via Chrome grid (`/api/sds/v2-headless/pdf-chrome/grid`). These env vars are unused. |
 | **Misc** | `EXTERNAL_JOB_CHECK_API_KEY`, `GAS_EMAIL_URL` | External integrations |
+| **Frontend URL** | `FRONTEND_BASE_URL` | Optional. Origin used to build deep links the backend puts on Kanban cards (SDS approval → sign page). Unset → relative URLs, which resolve correctly while board and app share an origin |
 
 Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.
 
@@ -146,3 +149,5 @@ Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
 > **But `services/agents/` still exists and is live** — `BaseAgent.js`, `CacheAgent.js`, `MonitorAgent.js`, `SdsAgent.js` survived V1 and now serve SDS: required by `services/SdsOrchestrator.js`, `controllers/specController.js`, `controllers/sdsV2AdminController.js`. Do not delete them as V1 leftovers.
 > SDS pipeline, Tooling↔SDS coupling, SDS Admin sub-routes, ECR/Tumble/System routes: `.claude/rules/sds-pipeline.md`
 > Tooling Select V2 (DB-driven): DB tables, routes, formula evaluation, search logic, adding a new machine, frontend components → `.claude/rules/tooling-select.md`
+> CAD/CAM (`mtc_eng/cam`, vendored from cam-web): re-sync procedure, the vite→webpack divergences, the planegcs WASM assets, the two test runners → `.claude/rules/cam-web.md`
+> CAD/CAM deployment to plbmp118/plbmp130 (what must reach the host, the `/wasm/` nginx location, why the saved library does not travel) → `.claude/rules/cam-deploy.md`; moving a library between origins → `.claude/rules/cam-library-migration.md`

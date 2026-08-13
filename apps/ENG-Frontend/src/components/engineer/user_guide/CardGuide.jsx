@@ -1,37 +1,22 @@
 import React, { useState } from 'react';
 import { 
     Typography, Card, Row, Col, Tag, Button, Space, Divider, 
-    Input, Switch, Select, Avatar, Tooltip, Tabs, Badge,
-    Progress, Checkbox, List, Popover, Alert, Table, Timeline,
-    Empty, Upload, message, Modal, InputNumber, Radio, Descriptions
+    Input, Avatar, Tabs, Progress, Checkbox, List, Alert, Table, Timeline,
+    Descriptions
 } from 'antd';
 import {
     ThunderboltOutlined, ClockCircleOutlined, TeamOutlined, 
-    TagOutlined, PaperClipOutlined, MessageOutlined, 
+    PaperClipOutlined, MessageOutlined, 
     NodeIndexOutlined, SafetyCertificateOutlined,
     LockOutlined, HistoryOutlined, FieldTimeOutlined,
-    CheckSquareOutlined, WarningOutlined, InfoCircleOutlined,
-    PushpinOutlined, EditOutlined, DeleteOutlined, 
-    CopyOutlined, ArrowRightOutlined, LinkOutlined,
-    UploadOutlined, MoreOutlined, UserOutlined,
-    DatabaseOutlined, FilePdfOutlined, FileExcelOutlined,
-    FileImageOutlined, SolutionOutlined, DeploymentUnitOutlined,
-    ContainerOutlined, InteractionOutlined, CheckCircleOutlined,
-    UnlockOutlined, AuditOutlined, CloudSyncOutlined,
-    SearchOutlined, SettingOutlined, QuestionCircleOutlined,
-    BlockOutlined, BranchesOutlined, SisternodeOutlined,
-    FileTextOutlined, SaveOutlined, SyncOutlined,
-    SafetyOutlined, KeyOutlined, TranslationOutlined
+    CheckSquareOutlined, WarningOutlined, ArrowRightOutlined, MoreOutlined, DatabaseOutlined, FilePdfOutlined, FileImageOutlined, SolutionOutlined, DeploymentUnitOutlined,
+    UnlockOutlined, AuditOutlined, SyncOutlined,
+    SafetyOutlined
 } from '@ant-design/icons';
-import { 
-    MdOutlineDescription, MdAccessTime, MdOutlineTimer, 
-    MdOutlineSubtitles, MdOutlineComment, MdOutlineAttachFile,
-    MdFamilyRestroom, MdLowPriority, MdOutlineHistory,
-    MdOutlineSecurity, MdOutlineAnalytics
-} from 'react-icons/md';
-import { IoAddOutline, IoCloseOutline, IoArchiveOutline, IoFlaskOutline, IoShieldCheckmarkOutline, IoSettingsOutline } from 'react-icons/io5';
-import { BsLayersHalf, BsFillShieldLockFill, BsStopwatch } from 'react-icons/bs';
-import { AiOutlineCheck, AiOutlineClose, AiOutlineHistory } from 'react-icons/ai';
+import 'react-icons/md';
+import { IoFlaskOutline, IoSettingsOutline } from 'react-icons/io5';
+import { BsStopwatch } from 'react-icons/bs';
+import 'react-icons/ai';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;

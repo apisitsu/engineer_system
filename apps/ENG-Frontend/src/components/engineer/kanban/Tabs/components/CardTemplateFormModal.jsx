@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Button, Space, Select, InputNumber, Divider, Card, Tooltip, Collapse, Typography, Spin } from 'antd';
+import { Modal, Form, Input, Button, Space, Select, InputNumber, Divider, Card, Collapse, Typography, Spin } from 'antd';
 import { FiTrash2, FiPlus, FiDownload } from 'react-icons/fi';
 import { useKanbanStore } from '../../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';

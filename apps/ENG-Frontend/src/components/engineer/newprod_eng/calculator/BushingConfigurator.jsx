@@ -2,7 +2,7 @@
  * BushingConfigurator - Main Application Layout
  * Assembles the three-column layout: Controls, 3D Viewer, and Results.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ConfigProvider, Button, Tooltip, theme } from 'antd';
 import { ArrowLeftOutlined, BgColorsOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,7 @@ import ResultsPanel from './components/Results/ResultsPanel';
 import MiniPreview from './components/Results/MiniPreview';
 
 // Utils
-import { exportToSTL } from './utils/exportUtils';
+import './utils/exportUtils';
 import { DEFAULT_MATERIAL } from './constants';
 
 import './BushingConfigurator.css';

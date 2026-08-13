@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize } from './commitHelpers';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.

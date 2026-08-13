@@ -1,35 +1,25 @@
 import React, { useState } from 'react';
 import { 
     Typography, Card, Row, Col, Tag, Button, Space, Divider, 
-    Input, Switch, Select, Avatar, Tooltip, Menu, Popconfirm, DatePicker,
-    Alert, Timeline, Steps, Badge, Table, Statistic, Progress, List, Empty,
-    Checkbox, Form, InputNumber, Radio
+    Input, Switch, Avatar, Menu, Alert, Timeline, Steps, Badge, Table, Statistic, Progress, List
 } from 'antd';
 import {
-    ProjectOutlined, RocketOutlined, BgColorsOutlined, LockOutlined,
-    TeamOutlined, UserOutlined, SettingOutlined, QuestionCircleOutlined,
-    EditOutlined, DeleteOutlined, ArrowRightOutlined,
-    CheckCircleOutlined, InfoCircleOutlined, ClockCircleOutlined,
-    SafetyCertificateOutlined, GlobalOutlined, HistoryOutlined,
+    RocketOutlined, LockOutlined,
+    TeamOutlined, SettingOutlined, ArrowRightOutlined,
+    CheckCircleOutlined, HistoryOutlined,
     SyncOutlined, DatabaseOutlined, SecurityScanOutlined,
-    CloudSyncOutlined, ContainerOutlined, SaveOutlined,
-    DeploymentUnitOutlined, FileSearchOutlined, AuditOutlined,
-    LineChartOutlined, BarChartOutlined, PieChartOutlined,
-    ShareAltOutlined, CloudUploadOutlined, BellOutlined,
-    ThunderboltOutlined, BuildOutlined, NodeIndexOutlined,
-    GlobalOutlined as GlobeIcon, FileTextOutlined,
-    SafetyOutlined, KeyOutlined, TranslationOutlined,
-    ApartmentOutlined, SisternodeOutlined, BranchesOutlined,
-    InteractionOutlined, CommentOutlined, WarningOutlined
+    CloudSyncOutlined, SaveOutlined,
+    BarChartOutlined, PieChartOutlined,
+    CloudUploadOutlined, BellOutlined,
+    ThunderboltOutlined, BuildOutlined, GlobalOutlined as GlobeIcon, KeyOutlined, ApartmentOutlined, SisternodeOutlined, InteractionOutlined, CommentOutlined, WarningOutlined
 } from '@ant-design/icons';
 import { 
     IoSettingsOutline, IoShieldCheckmarkOutline, IoFlaskOutline, 
-    IoCopyOutline, IoPeopleOutline, IoColorPaletteOutline,
-    IoInfiniteOutline, IoCloudDoneOutline, IoPulseOutline
+    IoCopyOutline
 } from 'react-icons/io5';
-import { MdOutlineDashboardCustomize, MdOutlineAnalytics, MdHistoryEdu } from 'react-icons/md';
-import { BsLayersHalf, BsFillShieldLockFill } from 'react-icons/bs';
-import { AiOutlineApi, AiOutlineCloudSync } from 'react-icons/ai';
+import 'react-icons/md';
+import 'react-icons/bs';
+import { AiOutlineApi } from 'react-icons/ai';
 
 const { Title, Text, Paragraph } = Typography;
 const AntCard = Card;

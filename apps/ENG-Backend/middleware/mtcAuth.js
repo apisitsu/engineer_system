@@ -55,10 +55,30 @@ const hasFeature = (feature) => {
   };
 };
 
+/**
+ * The same test `isAdmin` applies, as a plain predicate.
+ *
+ * A guard can only answer "may this request proceed at all". Some routes need
+ * the answer *inside* the handler instead — the CAD/CAM library lets anyone
+ * delete their own saved work and an admin delete anybody's, which is one route
+ * with two rules, not two routes. Those handlers must not re-derive "is an
+ * admin" from `req.user` themselves: two spellings of the same rule drift, and
+ * the one that drifts is the one nobody is looking at.
+ *
+ * Deliberately identical to `authorize(['AD'])`'s condition — department OR role
+ * being 'AD'. Change one and change the other.
+ */
+const isAdminUser = (user) => {
+  const dept = user?.department || user?.u_department || '';
+  const role = user?.role || user?.u_role || '';
+  return dept === 'AD' || role === 'AD';
+};
+
 module.exports = {
   verifyToken,
   authorize,
   hasFeature,
   isAdmin: authorize(['AD']),
+  isAdminUser,
   isEngineer: authorize(['AD', 'Engineering'])
 };

@@ -2,12 +2,12 @@
  * TemplatesGuide.jsx — Guide for Blueprints, Card, Checklist & Label templates.
  */
 import React, { useState } from 'react';
-import { Typography, Button, Input, Tag, Avatar, Switch, Space, Divider } from 'antd';
-import { BsKanban, BsCardChecklist } from 'react-icons/bs';
+import { Typography, Button, Input, Space } from 'antd';
+import { BsCardChecklist } from 'react-icons/bs';
 import { FiCopy } from 'react-icons/fi';
 import { AiOutlineDelete } from 'react-icons/ai';
 import { MdOutlineLabel } from 'react-icons/md';
-import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel, StepRow, Callout, LabeledDivider } from './guideStyles';
+import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, StepRow, Callout } from './guideStyles';
 import { MOCK_CARD_TEMPLATES, MOCK_CHECKLIST_TEMPLATES, MOCK_LABEL_TEMPLATES, MOCK_USERS } from './mockData';
 
 const { Text } = Typography;
