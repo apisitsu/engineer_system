@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Row, Col, Card, Statistic, Table, DatePicker, message, Spin, Space, Tabs, Tag, Progress, Empty, Checkbox } from 'antd';
-import { FilePdfOutlined, CheckCircleOutlined, InfoCircleOutlined, DollarOutlined, HistoryOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Modal, Row, Col, Card, Table, DatePicker, message, Spin, Tabs, Tag, Progress, Empty, Checkbox } from 'antd';
+import { InfoCircleOutlined, DollarOutlined, HistoryOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
 import { useTheme } from '../../../../../../theme';

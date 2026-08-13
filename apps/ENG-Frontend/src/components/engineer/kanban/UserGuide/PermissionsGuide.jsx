@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Typography, Tag, Switch, Table } from 'antd';
 import { MdLockOutline, MdOutlinePeople, MdOutlineNotifications } from 'react-icons/md';
 import { IoShieldCheckmarkOutline } from 'react-icons/io5';
-import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, StepRow, Callout, LabeledDivider } from './guideStyles';
+import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, StepRow, Callout } from './guideStyles';
 import { RBAC_MATRIX, MOCK_SUSPENDED_CARD, MOCK_ACTIVITY } from './mockData';
 
 const { Text } = Typography;

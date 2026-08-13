@@ -1,24 +1,20 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Typography, Spin, Alert, Select, Button, Space, Input, Avatar, Tooltip, Badge, Dropdown, Form, Tag, Popover, Tabs, Row, Col, Progress, Statistic, Layout, Switch, Menu, Checkbox, Modal } from 'antd';
+import { Typography, Spin, Alert, Button, Layout } from 'antd';
 import { useKanbanStore } from './store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../theme';
 import { useAuthStore } from '../../../stores/authStore';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, useSortable, arrayMove } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import {
-    IoSettingsOutline, IoSearchOutline, IoAddOutline, IoGridOutline,
-    IoListOutline, IoChevronBackOutline, IoNotificationsOutline, IoTimeOutline, IoHelpCircleOutline,
-    IoLockClosedOutline
-} from 'react-icons/io5';
+import { PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable';
+import '@dnd-kit/utilities';
+import 'react-icons/io5';
 import { useKanbanPermissions } from './hooks/useKanbanPermissions';
-import { MdOutlinePeople, MdOutlineLabel, MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator } from 'react-icons/md';
+import 'react-icons/md';
 import { BsKanban } from 'react-icons/bs';
-import { FiPlus, FiEdit2, FiFilter } from 'react-icons/fi';
-import { AiOutlineCheck, AiOutlineClose } from 'react-icons/ai';
-import { RiKanbanView } from 'react-icons/ri';
+import 'react-icons/fi';
+import 'react-icons/ai';
+import 'react-icons/ri';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 

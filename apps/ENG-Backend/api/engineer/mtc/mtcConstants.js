@@ -36,6 +36,7 @@ const TABLES = {
   LPB_ENG_ITEM:           'lpb.eng_item',
   LPB_ENG_CAD_REV_DATA:   'lpb.eng_cad_rev_data',
   LPB_ENG_PROCESS_INFO:   'lpb.eng_process_info',
+  LPB_ENG_PROCESS:        'lpb.eng_process',          // process_code → process_eng / process_name
 
   // SDS v2 — Local tables (engPool / eng_system)
   SDS_MACHINE_TYPE_CODE:  'sds_machine_type_code',  // machine lookup + grinding_area_label
@@ -74,16 +75,23 @@ const TABLES = {
 };
 
 const PATHS = {
-  // Resolve the python executable path (can be a relative path to a venv)
-  PYTHON_EXE: process.env.PYTHON_EXE 
-    ? path.resolve(__dirname, '../../../', process.env.PYTHON_EXE)
-    : 'python',
-  // Resolve the script path relative to the root of the backend
-  TOOLING_IMPORT_SCRIPT: process.env.TOOLING_IMPORT_SCRIPT 
-    ? path.resolve(__dirname, '../../../', process.env.TOOLING_IMPORT_SCRIPT)
-    : path.resolve(__dirname, 'src/importPCtooling.py'),
   EMAIL_RENDERER: path.join(__dirname, '../../../templates/email/emailRenderer'),
   SDS_TEMPLATE_DIR: process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'),
+
+  // Tooling Inspection import sources / output, used by services/toolingImportService.js.
+  // All three are host-specific and none can be carried by git, so each is env-overridable:
+  //  - the two sources are UNC shares the running account must have credentials for;
+  //  - the output default is the MAPPED DRIVE G:, which only exists inside an interactive
+  //    session — the PM2 service account on plbmp130 has no G:. Point TI_CSV_OUTPUT_DIR at
+  //    the equivalent UNC path there instead of re-mapping the drive.
+  // The trailing "2026" in the source paths is the folder name on the share, not a computed
+  // fiscal year (the Python originals hardcoded it the same way) — override on rollover.
+  TI_INSP_REC_DIR: process.env.TI_INSP_REC_DIR
+    || String.raw`\\sanlb01\MPA-DIV\03-Purchase\02-Budget\INSP REC\2026`,
+  TI_DWG_PRINT_FILE: process.env.TI_DWG_PRINT_FILE
+    || String.raw`\\10.121.34.19\data_rod\08-Engineer\14. Share file Back up\KUNPREAW\PC - Engineer\2026\2026 Record for drawing printed.xlsm`,
+  TI_CSV_OUTPUT_DIR: process.env.TI_CSV_OUTPUT_DIR
+    || String.raw`G:\Shared drives\ROD-Engineer\ToolingInspection`,
 };
 
 const WORKFLOW_STATUS = {

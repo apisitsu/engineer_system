@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Typography, Avatar, Tooltip, Progress } from 'antd';
-import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdAccountTree, MdFamilyRestroom } from 'react-icons/md';
+import { MdOutlineDescription, MdOutlineAttachFile, MdOutlineComment, MdAccessTime, MdOutlineSubtitles, MdLockOutline, MdFamilyRestroom } from 'react-icons/md';
 import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';

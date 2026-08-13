@@ -193,59 +193,77 @@ const ParamsTab = ({ theme }) => {
 
 // ── Tab 3: Images ─────────────────────────────────────────────────────────────
 
+// The descriptive half of each label is the Aras `part_class_rd` (Sub Class) list label —
+// the CN prefix is not an opaque serial, it already states the part's form (thread hand,
+// inch/milli, liner type, straight vs flanged). Picking the right grinding picture depends
+// on that, so the text is carried here rather than left as a bare family name.
 const CN_PREFIX_OPTIONS = [
-  // BALL
-  { value: 'C31', label: 'C31 — BALL' },
-  { value: 'C32', label: 'C32 — BALL' },
-  { value: 'C33', label: 'C33 — BALL' },
-  { value: 'C34', label: 'C34 — BALL' },
-  { value: 'C35', label: 'C35 — BALL' },
+  // BALL — material / size split; eng_ball carries NO shape column, so these cannot be
+  // shape-verified from factory data and need a human eye on the picture.
+  { value: 'C31', label: 'C31 — BALL · 440C SID under 1"' },
+  { value: 'C32', label: 'C32 — BALL · 440C SID over 1"' },
+  { value: 'C33', label: 'C33 — BALL · 52100 (SUJ2) SID under 1"' },
+  { value: 'C34', label: 'C34 — BALL · 52100 (SUJ2) SID over 1"' },
+  { value: 'C35', label: 'C35 — BALL · Y-Ball' },
   { value: 'C37', label: 'C37 — BALL' },
-  { value: 'C38', label: 'C38 — BALL' },
-  { value: 'C39', label: 'C39 — BALL' },
+  { value: 'C38', label: 'C38 — BALL · Powdered Metal' },
+  { value: 'C39', label: 'C39 — BALL · Others (incl. Inner Ring, Split Ball)' },
   // RACE
-  { value: 'C21', label: 'C21 — RACE' },
-  { value: 'C22', label: 'C22 — RACE' },
-  { value: 'C23', label: 'C23 — RACE' },
-  { value: 'C24', label: 'C24 — RACE' },
-  { value: 'C25', label: 'C25 — RACE' },
-  { value: 'C26', label: 'C26 — RACE' },
+  { value: 'C21', label: 'C21 — RACE · 4130, M/M' },
+  { value: 'C22', label: 'C22 — RACE · 410, M/M' },
+  { value: 'C23', label: 'C23 — RACE · 410, TFE' },
+  { value: 'C24', label: 'C24 — RACE · 17-4PH (SUS630), M/M' },
+  { value: 'C25', label: 'C25 — RACE · 17-4PH (SUS630), TFE' },
+  { value: 'C26', label: 'C26 — RACE · Al-Bz' },
   { value: 'C27', label: 'C27 — RACE' },
-  { value: 'C28', label: 'C28 — RACE' },
-  { value: 'C29', label: 'C29 — RACE' },
+  { value: 'C28', label: 'C28 — RACE · Fracture' },
+  { value: 'C29', label: 'C29 — RACE · Others (incl. Outer Ring, Steady Rest Housing)' },
   // BODY (C1x)
-  { value: 'C11', label: 'C11 — BODY' },
-  { value: 'C12', label: 'C12 — BODY' },
-  { value: 'C13', label: 'C13 — BODY' },
-  { value: 'C14', label: 'C14 — BODY' },
-  { value: 'C15', label: 'C15 — BODY' },
-  { value: 'C16', label: 'C16 — BODY' },
-  { value: 'C17', label: 'C17 — BODY' },
-  { value: 'C18', label: 'C18 — BODY' },
-  { value: 'C19', label: 'C19 — BODY' },
+  { value: 'C11', label: 'C11 — BODY · Inch, Male Thread' },
+  { value: 'C12', label: 'C12 — BODY · Inch, Female Thread' },
+  { value: 'C13', label: 'C13 — BODY · Milli, Male Thread' },
+  { value: 'C14', label: 'C14 — BODY · Milli, Female Thread' },
+  { value: 'C15', label: 'C15 — BODY · Inch, Male Thread, 4PCS' },
+  { value: 'C16', label: 'C16 — BODY · Inch, Female Thread, 4PCS' },
+  { value: 'C17', label: 'C17 — BODY · Milli, Male Thread, 4PCS' },
+  { value: 'C18', label: 'C18 — BODY · Milli, Female Thread, 4PCS' },
+  { value: 'C19', label: 'C19 — BODY · Special Shape (Loading Slot etc.)' },
   // BODY (C5x)
-  { value: 'C51', label: 'C51 — BODY' },
-  { value: 'C52', label: 'C52 — BODY' },
-  { value: 'C53', label: 'C53 — BODY' },
-  { value: 'C54', label: 'C54 — BODY' },
-  { value: 'C55', label: 'C55 — BODY' },
-  { value: 'C56', label: 'C56 — BODY' },
-  { value: 'C57', label: 'C57 — BODY' },
-  { value: 'C58', label: 'C58 — BODY' },
-  { value: 'C59', label: 'C59 — BODY' },
-  // SLEEVE
-  { value: 'C61', label: 'C61 — SLEEVE' },
-  { value: 'C62', label: 'C62 — SLEEVE' },
-  { value: 'C63', label: 'C63 — SLEEVE' },
-  { value: 'C64', label: 'C64 — SLEEVE' },
-  { value: 'C69', label: 'C69 — SLEEVE' },
+  { value: 'C51', label: 'C51 — BODY · Inch, Male Thread, 2PCS, M/M' },
+  { value: 'C52', label: 'C52 — BODY · Inch, Female Thread, 2PCS, M/M' },
+  { value: 'C53', label: 'C53 — BODY · Milli, Male Thread, 2PCS, M/M' },
+  { value: 'C54', label: 'C54 — BODY · Milli, Female Thread, 2PCS, M/M' },
+  { value: 'C55', label: 'C55 — BODY · Inch, Male Thread, 2PCS, TFE' },
+  { value: 'C56', label: 'C56 — BODY · Inch, Female Thread, 2PCS, TFE' },
+  { value: 'C57', label: 'C57 — BODY · Milli, Male Thread, 2PCS, TFE' },
+  { value: 'C58', label: 'C58 — BODY · Milli, Female Thread, 2PCS, TFE' },
+  { value: 'C59', label: 'C59 — BODY · Die Casting' },
+  // SLEEVE — straight vs flanged is a real shape difference; do NOT put them on one image
+  { value: 'C61', label: 'C61 — SLEEVE · Aluminum, Straight' },
+  { value: 'C62', label: 'C62 — SLEEVE · Aluminum, Flanged' },
+  { value: 'C63', label: 'C63 — SLEEVE · Steel, Straight' },
+  { value: 'C64', label: 'C64 — SLEEVE · Steel, Flanged' },
+  { value: 'C69', label: 'C69 — SLEEVE · Others (Special Shape)' },
   // SPHERICAL
-  { value: 'A41', label: 'A41 — SPHERICAL' },
-  { value: 'A42', label: 'A42 — SPHERICAL' },
-  { value: 'A43', label: 'A43 — SPHERICAL' },
-  { value: 'A44', label: 'A44 — SPHERICAL' },
-  { value: 'A48', label: 'A48 — SPHERICAL' },
-  { value: 'A49', label: 'A49 — SPHERICAL' },
+  { value: 'A41', label: 'A41 — SPHERICAL · Inch, TFE' },
+  { value: 'A42', label: 'A42 — SPHERICAL · Milli, TFE' },
+  { value: 'A43', label: 'A43 — SPHERICAL · Inch, M/M' },
+  { value: 'A44', label: 'A44 — SPHERICAL · Milli, M/M' },
+  { value: 'A48', label: 'A48 — SPHERICAL · Fracture for Insert' },
+  { value: 'A49', label: 'A49 — SPHERICAL · Sub Assembly' },
+  // Other classes that also carry grinding processes. These were missing, which made their
+  // families impossible to upload a family image for at all.
+  { value: 'C81', label: 'C81 — STUD' },
+  { value: 'C87', label: 'C87 — OTHER · Link' },
+  { value: 'C88', label: 'C88 — OTHER · Ball Stud' },
+  { value: 'C89', label: 'C89 — OTHER · Seal Retainer' },
+  { value: 'C90', label: 'C90 — FORGING BLANK' },
+  { value: 'C95', label: 'C95 — MECHA · Mechanical Parts' },
+  { value: 'C96', label: 'C96 — OTHER · Tooling' },
+  { value: 'C97', label: 'C97 — OTHER · Blank Processing (Fastener Div.)' },
+  { value: 'C99', label: 'C99 — OTHER · Others or Purchase Products' },
+  { value: 'F00', label: 'F00 — FINISH GOODS' },
+  { value: 'F01', label: 'F01 — FINISH GOODS' },
 ];
 
 const ToolingImagesTab = ({ theme }) => {
@@ -513,6 +531,9 @@ const GrindingImagesTab = ({ theme }) => {
   const [uploading, setUploading] = useState(false);
   const [form] = Form.useForm();
   const [fileList, setFileList] = useState([]);
+  const [coverage, setCoverage] = useState(null);
+  const [covLoading, setCovLoading] = useState(false);
+  const [view, setView] = useState('uploaded');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -526,7 +547,40 @@ const GrindingImagesTab = ({ theme }) => {
     }
   }, [message]);
 
-  useEffect(() => { load(); }, [load]);
+  // Which (CN prefix × grinding process) pairs exist in the factory process plans but have
+  // no image yet — so the upload list is driven by real demand, not guesswork.
+  const loadCoverage = useCallback(async (refresh) => {
+    setCovLoading(true);
+    try {
+      const res = await axios.get(server.MTC_SDS_V2_IMAGES_GRINDING_COVERAGE, {
+        params: refresh ? { refresh: 1 } : undefined,
+      });
+      setCoverage(res.data);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Coverage load failed');
+    } finally {
+      setCovLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { load(); loadCoverage(); }, [load, loadCoverage]);
+
+  const riskById = useMemo(
+    () => Object.fromEntries((coverage?.image_risk || []).map(r => [r.id, r])),
+    [coverage]
+  );
+
+  // Pre-fill the upload form from a gap row so the prefix/process pair cannot be mistyped.
+  const fillFromGap = (gap) => {
+    form.setFieldsValue({
+      cn_prefixes: [gap.cn_prefix],
+      cn_full: [],
+      process_codes: [gap.process_code],
+    });
+    // Stay on the Missing list — the form sits above both tables, so the user can work
+    // straight down the backlog without the list jumping away after every pick.
+    message.info(`Form set to ${gap.cn_prefix} / ${gap.process_code} — select an image and Upload`);
+  };
 
   const handleUpload = async () => {
     if (!fileList.length) { message.warning('Select an image file'); return; }
@@ -546,7 +600,7 @@ const GrindingImagesTab = ({ theme }) => {
       await axios.post(server.MTC_SDS_V2_IMAGES_GRINDING, fd);
       message.success('Uploaded');
       form.resetFields(); setFileList([]);
-      load();
+      load(); loadCoverage(true);
     } catch (err) {
       if (err.errorFields) return;
       message.error(err.response?.data?.error || 'Upload failed');
@@ -559,7 +613,7 @@ const GrindingImagesTab = ({ theme }) => {
     try {
       await axios.delete(`${server.MTC_SDS_V2_IMAGES_GRINDING}/${id}`);
       message.success('Deleted');
-      load();
+      load(); loadCoverage(true);
     } catch (err) {
       message.error(err.response?.data?.error || 'Delete failed');
     }
@@ -581,8 +635,12 @@ const GrindingImagesTab = ({ theme }) => {
       ),
     },
     {
+      // Tags stay short (the bare code) so the Shape fit column to the right stays on
+      // screen — a record can carry nine prefixes, and the full Sub Class descriptions
+      // would push everything else out of view. The description is on hover instead.
       title: 'CN / Prefix',
       dataIndex: 'cn_prefixes',
+      width: 260,
       render: (v) => (
         <Space size={2} wrap>
           {(Array.isArray(v) ? v : [v]).map(p => {
@@ -590,8 +648,8 @@ const GrindingImagesTab = ({ theme }) => {
             // override; a bare family prefix (C39) is shown plain.
             const isSpecificCn = String(p).includes('-');
             return (
-              <Tag key={p} color={isSpecificCn ? 'blue' : undefined}>
-                {isSpecificCn ? p : (CN_PREFIX_LABEL_MAP[p] || p)}
+              <Tag key={p} color={isSpecificCn ? 'blue' : undefined} title={CN_PREFIX_LABEL_MAP[p] || p}>
+                {p}
               </Tag>
             );
           })}
@@ -606,6 +664,28 @@ const GrindingImagesTab = ({ theme }) => {
         ? <Space size={2} wrap>{v.map(c => <Tag key={c}>{c}</Tag>)}</Space>
         : <Tag>default</Tag>,
     },
+    {
+      // One picture stands in for every prefix listed on the record. If those prefixes hold
+      // more than one factory shape, the picture is right for the dominant one and wrong
+      // for the rest — this is that count, not a guess.
+      title: 'Shape fit',
+      key: 'fit',
+      width: 190,
+      render: (_, row) => {
+        const r = riskById[row.id];
+        if (!r || r.off_shape_cns == null) return <Text type="secondary">no shape data</Text>;
+        if (r.off_shape_cns === 0) return <Tag color="green">all {r.served_cns} CN same shape</Tag>;
+        const pct = Math.round(r.dominant_share * 100);
+        return (
+          <Space direction="vertical" size={0}>
+            <Tag color={pct >= 90 ? 'gold' : 'red'}>{r.off_shape_cns} CN off-shape</Tag>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              dominant {r.dominant_shape} {pct}% of {r.served_cns}
+            </Text>
+          </Space>
+        );
+      },
+    },
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
@@ -616,6 +696,53 @@ const GrindingImagesTab = ({ theme }) => {
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
+    },
+  ];
+
+  const gapCols = [
+    {
+      title: 'CN Prefix',
+      dataIndex: 'cn_prefix',
+      width: 260,
+      render: (v) => <Text strong>{CN_PREFIX_LABEL_MAP[v] || v}</Text>,
+    },
+    {
+      title: 'Process',
+      key: 'proc',
+      width: 190,
+      render: (_, r) => <Space size={4}><Tag>{r.process_code}</Tag><Text>{r.process_name || ''}</Text></Space>,
+    },
+    {
+      title: 'CNs affected',
+      dataIndex: 'cns',
+      width: 110,
+      sorter: (a, b) => a.cns - b.cns,
+      defaultSortOrder: 'descend',
+      render: v => <Text strong>{v.toLocaleString()}</Text>,
+    },
+    {
+      title: 'Shape in this family',
+      key: 'shape',
+      render: (_, r) => {
+        if (!r.shape_mix) return <Text type="secondary">no shape column for this family</Text>;
+        const pct = Math.round(r.dominant_share * 100);
+        return (
+          <Space size={2} wrap>
+            {r.shape_mix.slice(0, 5).map(s => (
+              <Tag key={s.shape} color={s.shape === r.dominant_shape ? 'blue' : undefined}>
+                {s.shape}:{s.n}
+              </Tag>
+            ))}
+            {pct < 90 && <Tag color="orange">mixed — {pct}% dominant</Tag>}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '',
+      key: 'fill',
+      width: 90,
+      render: (_, r) => <Button size="small" onClick={() => fillFromGap(r)}>Fill form</Button>,
     },
   ];
 
@@ -663,14 +790,47 @@ const GrindingImagesTab = ({ theme }) => {
         </Form>
       </Card>
 
-      <Table
-        loading={loading}
-        dataSource={rows.map(r => ({ ...r, key: r.id }))}
-        columns={cols}
-        size="small"
-        pagination={{ pageSize: 50 }}
-        scroll={{ x: 'max-content' }}
-      />
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { label: `Uploaded (${rows.length})`, value: 'uploaded' },
+            { label: `Missing (${coverage?.summary?.gaps ?? '…'})`, value: 'missing' },
+          ]}
+        />
+        <Button size="small" icon={<ReloadOutlined />} loading={covLoading} onClick={() => loadCoverage(true)}>
+          Recheck coverage
+        </Button>
+        {coverage && (
+          <Text type="secondary">
+            {coverage.summary.coverage_pct}% covered —
+            {' '}{coverage.summary.cns_covered.toLocaleString()} CN have an image,
+            {' '}<Text type="danger">{coverage.summary.cns_gap.toLocaleString()} CN do not</Text>
+            {' '}({coverage.summary.combos} prefix × process pairs in use)
+          </Text>
+        )}
+      </Space>
+
+      {view === 'uploaded' ? (
+        <Table
+          loading={loading}
+          dataSource={rows.map(r => ({ ...r, key: r.id }))}
+          columns={cols}
+          size="small"
+          pagination={{ pageSize: 50 }}
+          scroll={{ x: 'max-content' }}
+        />
+      ) : (
+        <Table
+          loading={covLoading}
+          dataSource={(coverage?.gaps || []).map(g => ({ ...g, key: `${g.cn_prefix}|${g.process_code}` }))}
+          columns={gapCols}
+          size="small"
+          pagination={{ pageSize: 50, showSizeChanger: true }}
+          scroll={{ x: 'max-content' }}
+        />
+      )}
     </div>
   );
 };
@@ -1215,10 +1375,13 @@ const MachineToolManager = ({ theme, visibleMachineNames }) => {
 // ── Tab 4: Machine Config (A16:I58 + AN53:AV58) ──────────────────────────────
 
 const COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-const EXCLUDED_ROWS = new Set([17, 27, 37, 47]);
 // Param panel spans grid rows 16–58 (extended from 55 on 2026-06-19 when the grid
 // grew 56→59: rows 56–58 are blank param rows, row 59 is the company footer).
-const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16).filter(r => !EXCLUDED_ROWS.has(r));
+// No rows are excluded here: 17/27/37/47 were once assumed to be blank separator
+// rows and hidden from this table, but KS-500RD (row 47) and KVD350S (row 37) both
+// store real, PDF-rendered param data there — hiding them made those rows invisible
+// AND un-editable in this admin table while still printing on the PDF (2026-07-23).
+const ROW_RANGE = Array.from({ length: 43 }, (_, i) => i + 16);
 
 const GW_COL_LETTERS = ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV'];
 // GW panel = grid rows 53–58 (2026-06-19): rows 50–52 dropped (unused/blank, no machine

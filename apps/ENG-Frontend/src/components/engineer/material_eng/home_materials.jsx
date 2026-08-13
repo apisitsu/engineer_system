@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Layout, DatePicker, Spin } from "antd";
 import { Card, Row, Col, Table, Tag, Progress, Button, Select } from 'antd';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
-import { server } from '../../../constance/constance';
+import '../../../constance/constance';
 import { useTheme } from '../../../theme';
 import { MenuTemplate } from "../../menu_sidebar/menu_template";
 
@@ -43,7 +43,6 @@ const dataSource = [
     qty: 6,
     status: 'Pending'
   },
-  ,
   {
     key: '4',
     receiveDate: '07/01/2026',

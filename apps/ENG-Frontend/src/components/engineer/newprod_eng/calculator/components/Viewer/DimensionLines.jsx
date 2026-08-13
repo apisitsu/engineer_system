@@ -1,5 +1,5 @@
 import React from 'react';
-import { Line, Text, Html } from '@react-three/drei';
+import { Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { MODEL_TYPES } from '../../constants';
 

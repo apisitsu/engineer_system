@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
 import CacheBuster from 'react-cache-buster';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, Spin } from 'antd';
 import { App as AntdApp } from 'antd';
 import packageInfo from '../package.json';
 import { useAuthStore } from "./stores/authStore";
@@ -58,7 +58,6 @@ import ToolingSelectPage from './components/engineer/mtc_eng/tooling_select/Tool
 import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2AdminPage';
 import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
 import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
-
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
@@ -89,6 +88,13 @@ import PdfToImageWrapper from './components/engineer/system_eng/pdf_hub/PdfToIma
 import DwgCheckWrapper from './components/engineer/system_eng/pdf_hub/DwgCheckWrapper';
 import PdfEditorTool from './components/engineer/system_eng/pdf_hub/PdfEditor/PdfEditorTool';
 import ActivityDashboard from './components/engineer/system_eng/activity/ActivityDashboard';
+
+// The one lazily-loaded route in the app. CAD/CAM pulls in the whole cam-web
+// engine — the constraint solver's WASM bridge, the voxel/dexel carvers, the
+// post-processors — which is megabytes nobody visiting Tooling Inspection on a
+// shop terminal should have to download. Everything else above is imported
+// eagerly, as before.
+const CamPage = React.lazy(() => import('./components/engineer/mtc_eng/cam/CamPage'));
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
@@ -331,6 +337,14 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
+                  <Route
+                    path={MTC_PATHS.CAM}
+                    element={(
+                      <React.Suspense fallback={<Spin size="large" style={{ display: 'block', margin: '80px auto' }} />}>
+                        <CamPage />
+                      </React.Suspense>
+                    )}
+                  />
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />

@@ -1,4 +1,4 @@
-export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
+﻿export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
 export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please try again.";
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
@@ -9,9 +9,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -60,7 +60,7 @@ export const server = {
   TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
   TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
-  TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`, // ?machine=&tooling_no= โ’ dim row (SDS compare)
+  TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`, // ?machine=&tooling_no= เนยโ€ dim row (SDS compare)
   TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
   TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
   TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
@@ -69,7 +69,7 @@ export const server = {
   TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
   TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
   TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
-  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No โ’ tool map; /meta for filters, /:id for PUT/DELETE
+  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No เนยโ€ tool map; /meta for filters, /:id for PUT/DELETE
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
@@ -102,6 +102,7 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING: `${apiUrl}api/sds/v2/images/tooling`,
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
+  MTC_SDS_V2_IMAGES_GRINDING_COVERAGE: `${apiUrl}api/sds/v2/images/grinding/coverage`,
   MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
   MTC_SDS_V2_REPORT_CONFIG: `${apiUrl}api/sds/v2/report/config`,
   MTC_SDS_V2_REPORT_WC_OPTIONS: `${apiUrl}api/sds/v2/report/wc-options`,
@@ -250,7 +251,7 @@ export const mm_safety = {
 export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
 
 // Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
-// โ ๏ธ Paste your deployed GAS URL here after deploying Code.gs
+// เนยย เนเธย Paste your deployed GAS URL here after deploying Code.gs
 
 // By Everyone
 export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';

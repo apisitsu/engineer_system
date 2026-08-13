@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Modal, Spin, Card, Row, Col, Divider, Tag, Button, Typography, Space } from 'antd';
-import { FilePdfOutlined, CheckCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Modal, Spin, Card, Row, Col, Divider, Tag, Button, Typography } from 'antd';
+import { FilePdfOutlined } from '@ant-design/icons';
 import axios from "axios";
 import moment from "moment";
 import { useReactToPrint } from 'react-to-print';

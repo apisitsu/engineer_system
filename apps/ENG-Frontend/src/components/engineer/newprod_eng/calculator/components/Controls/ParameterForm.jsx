@@ -1,8 +1,8 @@
 import React from 'react';
-import { Form, InputNumber, Slider, Collapse, Space, Tag, Tooltip, Alert, Select } from 'antd';
+import { InputNumber, Slider, Collapse, Space, Tag, Tooltip, Alert, Select } from 'antd';
 import { RadiusSettingOutlined, ColumnWidthOutlined, AimOutlined } from '@ant-design/icons';
 import { PARAM_LIMITS, GDT_SYMBOLS, MODEL_TYPES } from '../../constants';
-import useBushingParams from '../../hooks/useBushingParams';
+import '../../hooks/useBushingParams';
 
 const { Panel } = Collapse;
 const { Option } = Select;

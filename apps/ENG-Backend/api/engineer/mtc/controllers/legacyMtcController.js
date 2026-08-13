@@ -1,7 +1,7 @@
 const { engPool } = require('../../../../instance/eng_db');
 const moment = require('moment');
-const { exec } = require('child_process');
-const { TABLES, PATHS } = require('../mtcConstants');
+const { TABLES } = require('../mtcConstants');
+const { runToolingImports } = require('../services/toolingImportService');
 
 const ToolingInspectGetlist = async (req, res) => {
     const pageNum = Math.max(1, parseInt(req.query.page) || 1);
@@ -513,30 +513,32 @@ const ToolingStatusPreview = async (req, res) => {
     }
 };
 
+// "Update data" on the Tooling Inspection page. Runs BOTH imports in sequence
+// (they touch different sources — the INSP REC share + ti_list, and the
+// drawing-print record) and reports each step independently.
 const ToolingSyncCSV = async (req, res) => {
     try {
-        console.log(`Executing Python script: ${PATHS.TOOLING_IMPORT_SCRIPT} using venv`);
+        const steps = await runToolingImports();
 
-        exec(`"${PATHS.PYTHON_EXE}" "${PATHS.TOOLING_IMPORT_SCRIPT}"`, { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Python script error: ${error.message}`);
-                return res.status(500).json({ 
-                    success: false, 
-                    message: "Execution failed", 
-                    error: error.message, 
-                    stderr 
-                });
-            }
-            if (stderr) {
-                console.warn(`Python script stderr: ${stderr}`);
-            }
-            
-            console.log(`Python script stdout: ${stdout}`);
-            return res.json({ 
-                success: true, 
-                message: "CSV Synced Successfully", 
-                output: stdout 
+        const failed = steps.filter(s => !s.ok);
+        const output = steps.map(s => `=== ${s.name} ===\n${s.output || ''}`).join('\n');
+
+        if (failed.length) {
+            return res.status(500).json({
+                success: false,
+                message: `Execution failed: ${failed.map(s => s.name).join(', ')}`,
+                error: failed.map(s => `${s.name}: ${s.error}`).join(' | '),
+                stderr: failed.map(s => s.stderr).filter(Boolean).join('\n'),
+                steps,
+                output,
             });
+        }
+
+        return res.json({
+            success: true,
+            message: "CSV Synced Successfully",
+            steps,
+            output,
         });
     } catch (error) {
         console.error("ToolingSyncCSV Error:", error);

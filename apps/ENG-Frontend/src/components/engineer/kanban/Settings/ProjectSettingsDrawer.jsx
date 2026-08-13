@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, Alert, DatePicker } from 'antd';
+import { Drawer, Typography, Form, Input, Button, Divider, Space, Popconfirm, Switch, Select, Avatar, Tooltip, Menu, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineClose, AiOutlineBgColors, AiOutlineUser, AiOutlineQuestionCircle } from 'react-icons/ai';
 import { IoSettingsOutline, IoRocketOutline, IoLockClosedOutline, IoLayersOutline } from 'react-icons/io5';
@@ -9,8 +9,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../../../../stores/authStore';
 import { useKanbanPermissions } from '../hooks/useKanbanPermissions';
 import { useTheme } from '../../../../theme';
-import axios from 'axios';
-import { server } from '../../../../constance/constance';
+import 'axios';
+import '../../../../constance/constance';
 import Swal from 'sweetalert2';
 import TemplateBuilderDrawer from './TemplateBuilderDrawer';
 import { GRADIENTS, PROJECT_ICONS } from '../constants/kanbanConstants';
