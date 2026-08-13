@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Divider } from 'antd';
+import { Button } from 'antd';
 import { EditOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../../../../theme';
 import { SectionTitle } from './SharedProperties';

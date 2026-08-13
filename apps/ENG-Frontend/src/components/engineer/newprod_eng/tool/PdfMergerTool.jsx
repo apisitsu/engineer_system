@@ -7,10 +7,8 @@ import {
     Row,
     Col,
     Upload,
-    List,
     Space,
-    message,
-    Spin
+    message
 } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';

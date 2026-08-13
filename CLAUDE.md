@@ -49,7 +49,7 @@ npm run cypress:run  # Cypress E2E headless
   - `api/engineer/mtc/` — tooling inspection, SDS v1/v2, formula engine (`expr-eval`), tooling selection, tool-request workflow
   - `api/engineer/process/` — ECR workflow (`/api/ecr/*`), tumble conditions/models (`/api/tumble/*`)
   - `api/engineer/system/` — PDF converter (`pdfConverter.js`) at `/api/engineer/system`
-  - `api/engineer/cam/` — CAD/CAM shared saved-work library (`/api/engineer/cam/library`, `verifyToken`); table `cam_saved_work` in `engPool`. Replaced the CAM module's per-browser IndexedDB store, which was invisible across origins and between operators
+  - `api/engineer/cam/` — CAD/CAM saved-work library (`/api/engineer/cam/library`, `verifyToken`); table `cam_saved_work` in `engPool`. **A private shelf per operator plus one shared shelf**: saving is always private, publishing is an explicit `POST /library/:id/share`, and every ownership rule is enforced in `camService` against the row (not by a route guard). Replaced the module's per-browser IndexedDB store, then replaced the single shared namespace that first fix created — where two operators saving "OP10" overwrote each other. Rows are addressed by `id`, not by the record key → `.claude/rules/cam-web.md`
   - `api/engineer/new_prod/` — external job-check proxy (`/api/proxy/job_check`, **no auth** — whitelisted in global auth middleware)
   - `api/kanban/` — real-time board/card CRUD via Socket.io
   - `api/fea/` — FEA simulation (BullMQ job queue + `fea_worker.js`); **not** under `api/engineer/`

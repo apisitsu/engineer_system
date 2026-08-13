@@ -1,15 +1,13 @@
 /**
  * ExportActions - Action buttons for Update Model, Export STL, and Save Config.
  */
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   Space,
-  Dropdown,
   Modal,
   Input,
   Select,
-  Switch,
   Tooltip,
   message,
   Popconfirm,
@@ -17,7 +15,6 @@ import {
   Typography,
 } from 'antd';
 import {
-  SyncOutlined,
   ExportOutlined,
   SaveOutlined,
   ReloadOutlined,

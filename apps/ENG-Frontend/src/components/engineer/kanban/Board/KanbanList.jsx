@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Typography, Space, Button, Input, Dropdown, Popconfirm, Badge, Switch, Tooltip } from 'antd';
+import { Typography, Space, Button, Input, Dropdown, Popconfirm, Badge, Switch, Tooltip } from 'antd';
 import { BsThreeDots, BsGripVertical, BsCardChecklist } from 'react-icons/bs';
 import { IoCloseOutline, IoArchiveOutline, IoSaveOutline } from 'react-icons/io5';
 import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';

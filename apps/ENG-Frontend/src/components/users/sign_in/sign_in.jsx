@@ -6,7 +6,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { server, key_constance } from "../../../constance/constance";
 import { useTheme } from '../../../theme';
-import ThemeSwitcher from '../../common/ThemeSwitcher';
+import '../../common/ThemeSwitcher';
 import { useAuthStore } from "../../../stores/authStore";
 
 const { Text } = Typography;

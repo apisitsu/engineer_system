@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Segmented, Space, Typography } from 'antd';
-import { AppstoreOutlined, TableOutlined, RocketFilled, IdcardFilled } from '@ant-design/icons';
+import { Segmented, Typography } from 'antd';
+import { RocketFilled, IdcardFilled } from '@ant-design/icons';
 import { useTheme } from '../../../../theme';
 
 const { Text } = Typography;

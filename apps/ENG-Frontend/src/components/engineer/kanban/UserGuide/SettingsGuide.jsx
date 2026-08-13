@@ -2,13 +2,13 @@
  * SettingsGuide.jsx — Guide for Board & Project Settings drawers.
  */
 import React, { useState } from 'react';
-import { Typography, Input, Select, Switch, Button, Tag, Avatar, Divider, Space, InputNumber } from 'antd';
-import { IoSettingsOutline, IoArchiveOutline, IoTrashOutline } from 'react-icons/io5';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineBgColors } from 'react-icons/ai';
+import { Typography, Input, Select, Switch, Button, Divider, InputNumber } from 'antd';
+import { IoSettingsOutline } from 'react-icons/io5';
+import { AiOutlineEdit, AiOutlineDelete } from 'react-icons/ai';
 import { FiEdit2 } from 'react-icons/fi';
-import { MdOutlinePeople, MdOutlineLabel } from 'react-icons/md';
-import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel, StepRow, Callout, LabeledDivider } from './guideStyles';
-import { MOCK_LABELS, MOCK_BOARD_MEMBERS, MOCK_PROJECT_MANAGERS, MOCK_USERS, LABEL_PALETTE } from './mockData';
+import 'react-icons/md';
+import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, StepRow, Callout, LabeledDivider } from './guideStyles';
+import { MOCK_LABELS, LABEL_PALETTE } from './mockData';
 
 const { Text } = Typography;
 

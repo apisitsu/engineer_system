@@ -4,10 +4,8 @@ import {
   CalculatorOutlined,
   FileSearchOutlined,
   BarChartOutlined,
-  SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
-  CheckCircleOutlined,
   FilePdfOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';

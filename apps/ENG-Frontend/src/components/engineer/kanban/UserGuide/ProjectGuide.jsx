@@ -7,17 +7,16 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Typography, Input, Select, Button, Switch, Tag, Badge, Avatar, Tooltip, Progress, Row, Col, Tabs, Divider } from 'antd';
+import { Typography, Input, Select, Button, Switch, Tag, Tooltip, Tabs } from 'antd';
 import { BsKanban, BsGrid3X3Gap, BsListUl } from 'react-icons/bs';
-import { IoSearchOutline, IoLayersOutline, IoStarOutline, IoStar, IoLockClosedOutline, IoAddOutline } from 'react-icons/io5';
+import { IoSearchOutline, IoLayersOutline, IoLockClosedOutline } from 'react-icons/io5';
 import { MdOutlinePeople } from 'react-icons/md';
 import { AiFillStar, AiOutlineStar } from 'react-icons/ai';
-import { FiPlus, FiEdit2 } from 'react-icons/fi';
+import { FiPlus } from 'react-icons/fi';
 import {
     getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel,
-    StepRow, Callout, LabeledDivider,
-} from './guideStyles';
-import { MOCK_PROJECTS, MOCK_USERS } from './mockData';
+    StepRow, Callout, } from './guideStyles';
+import { MOCK_PROJECTS } from './mockData';
 
 const { Text, Paragraph } = Typography;
 

@@ -116,6 +116,13 @@ describe('turningSpeeds', () => {
     expect(r.feed).toBeCloseTo(0.12, 3); // mm/rev, not mm/min
   });
 
+  it('also gives the feed in mm/min, so it can be compared with anything else', () => {
+    // 0.12 mm/rev at 1273 rpm is what the slide is actually doing: ~153 mm/min.
+    const r = turningSpeeds({ material: 'mild-steel', diameter: 50 });
+    expect(r.feedPerMin).toBe(Math.round(r.fn * r.rpm));
+    expect(r.feedPerMin).toBeCloseTo(153, 0);
+  });
+
   it('rises as the tool works toward centre, and clamps there', () => {
     const big = turningSpeeds({ material: 'mild-steel', diameter: 50 });
     const small = turningSpeeds({ material: 'mild-steel', diameter: 5 });

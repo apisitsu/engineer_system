@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, List, Typography, Spin, Empty, Tag, Button, Space, App as AntdApp } from 'antd';
+import { Modal, List, Typography, Spin, Empty, Tag, Button, App as AntdApp } from 'antd';
 import { BsTags } from 'react-icons/bs';
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';

@@ -40,9 +40,24 @@ const { useCamPlanStore } = await import('./stores/camPlanStore.js');
 let container;
 let root;
 
-async function mount() {
+async function mount({ setup = true } = {}) {
   await act(async () => {
     root.render(React.createElement(App));
+  });
+  // What used to be a permanent sidebar is now the **Setup drawer**, opened
+  // from the toolbar — the left column belongs to the feature tree, the way a
+  // CAD lays a part window out. These tests are about what setup offers in each
+  // run state, so they open it; the drawer is closed by default because setting
+  // a job up is done once, not watched while cutting.
+  if (setup) await openSetup();
+}
+
+/** Press the toolbar's Setup button and let the drawer mount. */
+async function openSetup() {
+  const btn = q('[data-open-setup]');
+  if (!btn) return;
+  await act(async () => {
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 }
 
@@ -51,8 +66,21 @@ async function setStore(patch) {
   await act(async () => { useCamStore.setState(patch); });
 }
 
-/** The sidebar element, or null when the page has none (the sketch page). */
-const sider = () => container.querySelector('.ant-layout-sider');
+/**
+ * The setup panel's body, or null when the drawer has never been opened.
+ * Portalled to `document.body`, not inside `container`.
+ */
+const sider = () => document.querySelector('.ant-drawer-body');
+
+/**
+ * Query the whole document, not just the render container.
+ *
+ * The Setup drawer is portalled to `document.body`, so a helper scoped to the
+ * container stopped seeing most of what these tests are about the moment the
+ * sidebar became a drawer. `container` is inside the document, so widening the
+ * search costs nothing and misses nothing.
+ */
+const q = (sel) => document.querySelector(sel);
 
 /**
  * Every command currently offered in the sidebar, by id.
@@ -68,12 +96,19 @@ function siderCommands() {
   return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
 }
 
+/** The same, for the rail that floats over the viewport. */
+function railCommands() {
+  const el = document.querySelector('[data-cam-overlay="bottom"]');
+  if (!el) return [];
+  return [...el.querySelectorAll('button[data-cmd]')].map((b) => b.dataset.cmd);
+}
+
 /** A command button anywhere in the app, by id. */
-const cmd = (id) => container.querySelector(`button[data-cmd="${id}"]`);
+const cmd = (id) => q(`button[data-cmd="${id}"]`);
 
 /** The tool the viewport is being asked to draw — see the Viewport stub. */
 function marker() {
-  const el = container.querySelector('[data-testid="viewport-stub"]');
+  const el = q('[data-testid="viewport-stub"]');
   return {
     cutter: el.dataset.toolCutter,
     type: el.dataset.toolType,
@@ -107,8 +142,20 @@ describe('the sidebar while setting up', () => {
   it('offers the file, project and setup controls', async () => {
     await mount();
     expect(siderCommands()).toEqual(
-      expect.arrayContaining(['parse', 'openLibrary', 'exportGcode', 'simulate']),
+      expect.arrayContaining(['parse', 'openLibrary', 'exportGcode', 'simulateVoxel']),
     );
+  });
+
+  it('keeps Simulate on the viewport rail and its grid size in the drawer', async () => {
+    // The button is pressed with the show/hide toggles the result is judged by;
+    // the number it is judged AT is a setting typed once per job. Splitting them
+    // that way is the point — a rail you press and a drawer you fill in.
+    await mount();
+    expect(siderCommands()).not.toContain('simulate');
+    expect(railCommands()).toContain('simulate');
+    // The height-field grid box is still in the drawer, and now says which
+    // resolution it is now that the glyph beside it has gone.
+    expect(sider().textContent).toContain('Height field');
   });
 
   it('names every icon-only button it offers', async () => {
@@ -164,10 +211,25 @@ describe('pressing Play collapses the sidebar to the program', () => {
     expect(sider().textContent).toMatch(/pause to edit/i);
   });
 
-  it('never hides a parse failure', async () => {
-    await mount();
+  it('never hides a parse failure — and needs nothing opened to show it', async () => {
+    // The oldest rule in `engine/view/sidebar.js`: a failure must not be
+    // suppressed by a mode change. It is stronger now than when the listing
+    // lived in the sidebar — the error is in the **left column**, which is
+    // always on screen, so it does not depend on Setup being open at all.
+    await mount({ setup: false });
     await setStore({ playing: true, error: 'Unbalanced bracket on line 4' });
-    expect(sider().textContent).toContain('Parse failed');
+    expect(container.textContent).toContain('Parse failed');
+    expect(container.textContent).toContain('Unbalanced bracket on line 4');
+  });
+
+  it('shows the program while it runs, without Setup being open', async () => {
+    // What broke when setup became a drawer: pressing Play left nothing to
+    // watch, because the listing had gone into the drawer with everything else.
+    await mount({ setup: false });
+    const src = ['G0 X0 Y0 Z5', 'G1 Z-2 F200', 'G1 X40 F400'].join(String.fromCharCode(10));
+    await setStore({ gcode: src, playing: true });
+    // The column switched itself to Program, and the text is on screen.
+    expect(container.textContent).toContain('G1 X40 F400');
   });
 
   it('brings the setup back on pause', async () => {
@@ -229,17 +291,61 @@ describe('the holder toggle', () => {
   });
 });
 
+describe('the toolpath toggle', () => {
+  // The backplot covers the very surface it describes on a dense program, so it
+  // drops the same way the holder does — and sits beside it, because they are
+  // the same question asked of two different things in the way of the cut.
+  const pathButton = () => cmd('showToolpath');
+  const isOn = () => pathButton().classList.contains('ant-btn-primary');
+
+  it('sits on the viewport rail, next to the holder toggle', async () => {
+    await mount();
+    expect(pathButton()).not.toBeNull();
+    const rail = railCommands();
+    expect(rail).toContain('showToolpath');
+    expect(Math.abs(rail.indexOf('showToolpath') - rail.indexOf('showArbor'))).toBe(1);
+  });
+
+  it('carries its name for anyone who does not read the glyph', async () => {
+    await mount();
+    expect(pathButton().getAttribute('aria-label')).toBe('Show toolpath');
+  });
+
+  it('starts on, with the backplot drawn', async () => {
+    await mount();
+    expect(useCamStore.getState().showToolpath).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('hides the toolpath when clicked, and brings it back', async () => {
+    await mount();
+    await act(async () => { pathButton().click(); });
+    expect(useCamStore.getState().showToolpath).toBe(false);
+    expect(isOn()).toBe(false);
+
+    await act(async () => { pathButton().click(); });
+    expect(useCamStore.getState().showToolpath).toBe(true);
+    expect(isOn()).toBe(true);
+  });
+
+  it('stays available while the program runs', async () => {
+    await mount();
+    await setStore({ playing: true });
+    expect(pathButton()).not.toBeNull();
+  });
+});
+
 describe('the single-block controls', () => {
   // Three plainly separate blocks, so a step lands somewhere identifiable.
   const PROGRAM = ['G0 X0 Y0 Z5', 'G1 Z-1 F200', 'G1 X20 F400'].join('\n');
 
   /** A toolbar button, found by the icon it carries. */
   const iconBtn = (name) =>
-    container.querySelector(`[aria-label="${name}"]`)?.closest('button') ?? null;
+    q(`[aria-label="${name}"]`)?.closest('button') ?? null;
 
   /** The distance-to-go cell of an axis row in the position readout. */
   const dtg = (label) =>
-    container.querySelector(`[data-dtg="${label}"]`)?.textContent ?? null;
+    q(`[data-dtg="${label}"]`)?.textContent ?? null;
 
   /** Put a real parsed path in the buffer cache, the way parse() does. */
   async function loadProgram() {
@@ -323,7 +429,7 @@ describe('the Material removal panel', () => {
     await act(async () => { cmd('toolFallback').click(); });
     for (const id of ['endmill', 'shoulder', 'face', 'slot', 'ball', 'chamfer']) {
       expect(
-        container.querySelector(`button[data-cutter="${id}"][data-cutter-scope="fallback"]`),
+        q(`button[data-cutter="${id}"][data-cutter-scope="fallback"]`),
         id,
       ).not.toBeNull();
     }
@@ -336,7 +442,7 @@ describe('the Material removal panel', () => {
     await mount();
     await loadWithTools([]);
     expect(cmd('toolFallback')).not.toBeNull();
-    expect(container.querySelector('button[data-cutter="endmill"]')).toBeNull();
+    expect(q('button[data-cutter="endmill"]')).toBeNull();
     // ...but it says which cutter the sim will use, since nothing else can.
     expect(sider().textContent).toMatch(/the program names none/);
   });
@@ -546,8 +652,7 @@ describe('sizing stock before any program exists', () => {
 });
 
 describe('choosing the cutting tool', () => {
-  const cutterBtn = (id) => container
-    .querySelector(`button[data-cutter="${id}"][data-cutter-scope="fallback"]`);
+  const cutterBtn = (id) => q(`button[data-cutter="${id}"][data-cutter-scope="fallback"]`);
 
   async function openPicker() {
     const src = 'G0 X0 Y0 Z5\nG1 Z-8 F200\nG1 X60 F400';
@@ -635,7 +740,7 @@ describe('choosing the cutting tool', () => {
   it('asks for the thickness only of a slot cutter, and draws it', async () => {
     // The slot mill is the one type whose cutting body its diameter cannot
     // imply. Every other type follows `bodyRatio` and is not worth a field.
-    const field = () => container.querySelector('input[aria-label="Cutter thickness"]');
+    const field = () => q('input[aria-label="Cutter thickness"]');
     await mount();
     await openPicker();
     expect(field()).toBeNull();
@@ -650,7 +755,7 @@ describe('choosing the cutting tool', () => {
   it('asks for the shank diameter on the same one type, and draws it', async () => {
     // A necked slot mill is wide where it cuts and narrow where it is held —
     // two independent numbers, and the marker has to show both.
-    const field = () => container.querySelector('input[aria-label="Shank diameter"]');
+    const field = () => q('input[aria-label="Shank diameter"]');
     await mount();
     await openPicker();
     expect(field()).toBeNull();
@@ -734,8 +839,7 @@ describe('choosing the cutting tool', () => {
  * row, and `cam/effectiveTool.js` decides which source wins.
  */
 describe('the cutter type of a tool the program named', () => {
-  const rowBtn = (n, id) => container
-    .querySelector(`button[data-cutter="${id}"][data-cutter-scope="T${n}"]`);
+  const rowBtn = (n, id) => q(`button[data-cutter="${id}"][data-cutter-scope="T${n}"]`);
   const pressed = (b) => b.classList.contains('ant-btn-primary');
 
   /** Load a program whose comments describe its tools, parked at the end. */
@@ -797,7 +901,7 @@ describe('the cutter type of a tool the program named', () => {
   it('takes a thickness per tool, and the marker takes that shape', async () => {
     // The Ø50 the program named, cut to the 4 mm slot cutter actually on the
     // shelf: same tool number, same diameter, a different tool.
-    const field = () => container.querySelector('input[aria-label="T1 cutter thickness"]');
+    const field = () => q('input[aria-label="T1 cutter thickness"]');
     await mount();
     await loadProgramWithTools(FACE);
     expect(field()).toBeNull();                       // a face mill is not asked
@@ -812,7 +916,7 @@ describe('the cutter type of a tool the program named', () => {
   });
 
   it('takes a shank diameter per tool, independent of what it cuts', async () => {
-    const field = () => container.querySelector('input[aria-label="T1 shank diameter"]');
+    const field = () => q('input[aria-label="T1 shank diameter"]');
     await mount();
     await loadProgramWithTools(FACE);
     expect(field()).toBeNull();                       // a face mill is not asked
@@ -858,7 +962,7 @@ describe('the library is a place in the sidebar, not a menu over it', () => {
 
   it('stays shut until the library button is pressed', async () => {
     await mount();
-    expect(container.querySelector('[data-testid="library-panel"]')).toBeNull();
+    expect(q('[data-testid="library-panel"]')).toBeNull();
   });
 
   it('opens inside the sidebar, and stays open', async () => {
@@ -870,7 +974,7 @@ describe('the library is a place in the sidebar, not a menu over it', () => {
     expect(document.body.contains(panel)).toBe(true);
     // A second press closes it again.
     await act(async () => { cmd('openLibrary').click(); });
-    expect(container.querySelector('[data-testid="library-panel"]')).toBeNull();
+    expect(q('[data-testid="library-panel"]')).toBeNull();
   });
 });
 

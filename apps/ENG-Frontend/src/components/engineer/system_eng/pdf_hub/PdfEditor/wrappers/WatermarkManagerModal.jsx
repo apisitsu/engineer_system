@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Form, Input, Button, List, Spin, Space, Popconfirm, Select, Slider, message, ColorPicker, Row, Col, Badge, Tooltip, InputNumber, Switch, Segmented, Tag, Radio } from 'antd';
-import { DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined, EditOutlined, BoldOutlined, ItalicOutlined, FontSizeOutlined, BorderOuterOutlined, VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined, ColumnHeightOutlined } from '@ant-design/icons';
+import { DeleteOutlined, ShareAltOutlined, PlusOutlined, FormatPainterOutlined, EditOutlined, BoldOutlined, ItalicOutlined, BorderOuterOutlined, VerticalAlignTopOutlined, VerticalAlignBottomOutlined, VerticalAlignMiddleOutlined, ColumnHeightOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import * as fabric from 'fabric';
 import { server } from '../../../../../../constance/constance';

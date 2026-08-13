@@ -3,7 +3,7 @@ import { Select, Button, message, Tag, Radio } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
-import { useAuthStore } from '../../../../../stores/authStore';
+import '../../../../../stores/authStore';
 import { debounce } from 'lodash';
 
 const STYLES = `

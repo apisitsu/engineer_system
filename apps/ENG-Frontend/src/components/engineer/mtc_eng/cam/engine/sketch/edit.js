@@ -1514,3 +1514,232 @@ export function offsetEntity(sk, id, dist) {
   if (nid != null && e.construction) sk.entities.get(nid).construction = true;
   return nid;
 }
+
+/** The endpoint ids of an entity, in its own direction. `null` for a circle. */
+function chainEnds(e) {
+  if (!e) return null;
+  if (e.type === 'line') return [e.p1, e.p2];
+  if (e.type === 'arc') return [e.start, e.end];
+  return null;
+}
+
+/** Replace one endpoint of an offset entity, keeping the entity's own field names. */
+function setChainEnd(e, which, pointId) {
+  if (e.type === 'line') { if (which === 0) e.p1 = pointId; else e.p2 = pointId; return; }
+  if (e.type === 'arc') { if (which === 0) e.start = pointId; else e.end = pointId; }
+}
+
+/**
+ * Where two offset entities should meet, given the corner they came from.
+ *
+ * Lines are intersected as **infinite** lines, not as segments: that is the
+ * whole point of the join. An outward offset leaves the two short of each other
+ * and needs extending; an inward one leaves them crossing and needs trimming.
+ * One formula does both, and `segIntersect` — which rejects anything off either
+ * segment — cannot.
+ *
+ * Where an arc is involved the answer is on its offset circle, and the corner it
+ * came from picks which of the (up to two) candidates is meant. Returns `null`
+ * when there is no sensible meeting point (parallel lines, a circle the line
+ * no longer reaches), and the caller then leaves the two ends where the plain
+ * offset put them rather than inventing a corner.
+ */
+function offsetJoin(sk, eA, eB, corner) {
+  const pick = (cands) => {
+    let best = null;
+    let bestD = Infinity;
+    for (const p of cands) {
+      const d = (p.x - corner.x) ** 2 + (p.y - corner.y) ** 2;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  };
+  if (eA.type === 'line' && eB.type === 'line') {
+    const a = sk.entities.get(eA.p1);
+    const b = sk.entities.get(eA.p2);
+    const c = sk.entities.get(eB.p1);
+    const d = sk.entities.get(eB.p2);
+    const rx = b.x - a.x;
+    const ry = b.y - a.y;
+    const sx = d.x - c.x;
+    const sy = d.y - c.y;
+    const denom = rx * sy - ry * sx;
+    if (Math.abs(denom) < 1e-12) return null;   // parallel: no corner to make
+    const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / denom;
+    return { x: a.x + t * rx, y: a.y + t * ry };
+  }
+  const lineOf = (e) => [sk.entities.get(e.p1), sk.entities.get(e.p2)];
+  const circleOf = (e) => {
+    const c = sk.entities.get(e.center);
+    return { x: c.x, y: c.y, r: e.r };
+  };
+  if (eA.type === 'line' && eB.type === 'arc') {
+    const [a, b] = lineOf(eA);
+    const C = circleOf(eB);
+    const ts = lineCircleParams(a, b, C.x, C.y, C.r);
+    if (!ts.length) return null;
+    return pick(ts.map((t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })));
+  }
+  if (eA.type === 'arc' && eB.type === 'line') {
+    const [a, b] = lineOf(eB);
+    const C = circleOf(eA);
+    const ts = lineCircleParams(a, b, C.x, C.y, C.r);
+    if (!ts.length) return null;
+    return pick(ts.map((t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })));
+  }
+  if (eA.type === 'arc' && eB.type === 'arc') {
+    const A = circleOf(eA);
+    const B = circleOf(eB);
+    const hits = circleCircleInts(A.x, A.y, A.r, B.x, B.y, B.r);
+    if (!hits.length) return null;
+    return pick(hits);
+  }
+  return null;
+}
+
+/**
+ * Which entities of a chain are stored back-to-front relative to a single walk
+ * around it.
+ *
+ * A profile has one inside and one outside, but its entities each remember only
+ * the direction they happened to be *drawn* in. Offsetting per entity therefore
+ * sends some sides one way and some the other, which is a wrong shape rather
+ * than a wrong-looking one. So the chain is walked once, end to end, and every
+ * entity that disagrees with that walk is marked — the caller flips its distance
+ * and the whole profile then moves to one side.
+ *
+ * Anything not in a chain (a lone line, a circle, a fork where three entities
+ * meet at a point) is simply never marked, and keeps the distance as given.
+ *
+ * @returns {Set<number>} entity ids whose stored direction runs against the walk
+ */
+function reversedInChain(sk, ids) {
+  const set = new Set(ids);
+  const flipped = new Set();
+  // point id -> the entities of the selection that end there
+  const at = new Map();
+  for (const id of ids) {
+    const ends = chainEnds(sk.entities.get(id));
+    if (!ends) continue;
+    for (const p of ends) {
+      if (!at.has(p)) at.set(p, []);
+      at.get(p).push(id);
+    }
+  }
+  const visited = new Set();
+  /** Walk from `id`, leaving by `exitPoint`, marking as we go. */
+  const walk = (startId, startExit) => {
+    let id = startId;
+    let exit = startExit;
+    while (true) {
+      visited.add(id);
+      const neighbours = (at.get(exit) || []).filter((n) => n !== id && set.has(n));
+      // A fork is ambiguous — three ways to continue is not a profile, and
+      // guessing one would silently offset part of it the wrong way.
+      if (neighbours.length !== 1) return;
+      const next = neighbours[0];
+      if (visited.has(next)) return;          // closed the loop
+      const ends = chainEnds(sk.entities.get(next));
+      if (!ends) return;
+      // Entered through `exit`. If that is the entity's END, it is stored
+      // backwards relative to this walk.
+      if (ends[1] === exit) flipped.add(next);
+      exit = ends[1] === exit ? ends[0] : ends[1];
+      id = next;
+    }
+  };
+  for (const id of ids) {
+    if (visited.has(id)) continue;
+    const ends = chainEnds(sk.entities.get(id));
+    if (!ends) continue;
+    // Start each walk from the entity as it is stored, so the first entity of a
+    // chain defines the direction the rest are measured against.
+    walk(id, ends[1]);
+    // ...then back the other way, for the half of an open chain behind it.
+    const back = (at.get(ends[0]) || []).filter((n) => n !== id && set.has(n));
+    if (back.length === 1 && !visited.has(back[0])) {
+      const bEnds = chainEnds(sk.entities.get(back[0]));
+      if (bEnds) {
+        if (bEnds[0] === ends[0]) flipped.add(back[0]);
+        visited.add(back[0]);
+        walk(back[0], bEnds[0] === ends[0] ? bEnds[1] : bEnds[0]);
+      }
+    }
+  }
+  return flipped;
+}
+
+/**
+ * Offset a **chain** of entities and close the corners between them.
+ *
+ * `offsetEntity` moves one entity along its own normal, which is right for one
+ * entity and wrong for a profile: offsetting the four sides of a square that way
+ * gives four parallel lines with a gap at every corner, because nothing extends
+ * or trims them to where they now cross. That is the reported bug, and it is not
+ * only cosmetic — `loops.js` finds a region by walking *shared endpoints*, so an
+ * offset profile with four loose segments cannot be built, only looked at.
+ *
+ * So neighbours are found first (they share an endpoint in the ORIGINAL), each
+ * entity is offset as before, and then each shared corner is replaced by one
+ * point where the two offsets actually meet. One point, not two coincident ones:
+ * the loop walk keys on point identity, and two points on top of each other look
+ * right until something drags one of them.
+ *
+ * Free ends — the two ends of an open chain, a lone line, a circle — are left
+ * exactly where the plain offset put them. There is nothing to meet there.
+ *
+ * @param {number} dist signed; a line moves along its left normal
+ * @returns {number[]} the new entity ids, in the order given
+ */
+export function offsetChain(sk, ids, dist) {
+  const flipped = reversedInChain(sk, ids);
+  const created = [];
+  const srcOf = new Map();          // new id -> source entity id
+  for (const id of ids) {
+    // **The side is the chain's, not the entity's.** `offsetEntity` measures
+    // from each entity's own left normal, which is its *drawing* direction — and
+    // nothing makes a profile's entities agree about that. Draw three sides of a
+    // square and close it back to the start and the last line runs the other
+    // way, so it offsets outward while its neighbours offset inward. Joined up,
+    // that is the octagon-ish shape this used to produce; before the corners
+    // were joined the gaps hid it.
+    const nid = offsetEntity(sk, id, flipped.has(id) ? -dist : dist);
+    if (nid != null) { created.push(nid); srcOf.set(nid, id); }
+  }
+  if (created.length < 2) return created;
+
+  // Which offsets are neighbours, and at which end of each. Keyed off the
+  // ORIGINAL entities, because the offsets deliberately share no points yet.
+  for (let i = 0; i < created.length; i++) {
+    for (let j = i + 1; j < created.length; j++) {
+      const srcA = sk.entities.get(srcOf.get(created[i]));
+      const srcB = sk.entities.get(srcOf.get(created[j]));
+      const endsA = chainEnds(srcA);
+      const endsB = chainEnds(srcB);
+      if (!endsA || !endsB) continue;
+      // The corner is a point the two originals share outright.
+      let ai = -1;
+      let bi = -1;
+      for (let x = 0; x < 2; x++) {
+        for (let y = 0; y < 2; y++) if (endsA[x] === endsB[y]) { ai = x; bi = y; }
+      }
+      if (ai < 0) continue;
+      const corner = sk.entities.get(endsA[ai]);
+      const eA = sk.entities.get(created[i]);
+      const eB = sk.entities.get(created[j]);
+      const meet = offsetJoin(sk, eA, eB, corner);
+      if (!meet) continue;          // nothing sensible to meet at: leave both
+
+      // One shared point at the meeting place, replacing the two the offsets
+      // made. The old ones are dropped if nothing else still refers to them.
+      const oldA = chainEnds(eA)[ai];
+      const oldB = chainEnds(eB)[bi];
+      const shared = addPoint(sk, meet.x, meet.y);
+      setChainEnd(eA, ai, shared);
+      setChainEnd(eB, bi, shared);
+      removeIfOrphan(sk, oldA);
+      removeIfOrphan(sk, oldB);
+    }
+  }
+  return created;
+}

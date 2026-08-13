@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { Badge, Button, Checkbox, Upload, Typography, Spin } from 'antd';
-import { PlusOutlined, InboxOutlined, FileOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Upload, Typography, Spin } from 'antd';
+import { PlusOutlined, FileOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
 import {

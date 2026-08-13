@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Card, Upload, Button, Typography, Table, Tag, Space,
-    Row, Col, App, Alert,
+    Card, Upload, Typography, Table, Tag, Space,
+    App, Alert,
 } from 'antd';
 import {
-    UploadOutlined, SyncOutlined,
+    SyncOutlined,
     CheckCircleOutlined, CloseCircleOutlined,
     FileExcelOutlined,
 } from '@ant-design/icons';

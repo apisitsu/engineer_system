@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  Button, Input, Space, Modal, Form, Select, Dropdown, Tooltip, Switch,
-  Popconfirm, message, Layout, Spin, Card, Row, Col, Typography, Tag, Avatar,
-  Drawer, Descriptions, Badge, Empty, Divider
+  Button, Input, Space, Modal, Form, Select, Dropdown, Popconfirm, message, Layout, Spin, Card, Row, Col, Typography, Tag, Avatar,
+  Drawer, Descriptions, Empty, Divider
 } from "antd";
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SettingOutlined, SearchOutlined,
-  SafetyCertificateOutlined, UserOutlined, TeamOutlined, MoreOutlined,
-  DatabaseOutlined, CloseOutlined
+  SafetyCertificateOutlined, UserOutlined, TeamOutlined, DatabaseOutlined
 } from "@ant-design/icons";
 import axios from "axios";
 import { server } from "../../../../constance/constance";

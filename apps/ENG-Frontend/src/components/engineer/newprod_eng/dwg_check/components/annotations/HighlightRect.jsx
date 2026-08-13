@@ -1,5 +1,5 @@
 import React from 'react';
-import { usePdf } from '../../context/PdfContext';
+import '../../context/PdfContext';
 import useDraggable from '../../hooks/useDraggable';
 import useResizable from '../../hooks/useResizable';
 

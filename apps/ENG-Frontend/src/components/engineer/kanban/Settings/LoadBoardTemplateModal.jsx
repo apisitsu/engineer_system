@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Select, Typography, Button } from 'antd';
+import { Modal, Select, Typography } from 'antd';
 import { useKanbanStore } from '../store/kanbanStore';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';

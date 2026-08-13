@@ -2,26 +2,20 @@ import React, { useState } from 'react';
 import { 
     Layout, Typography, Anchor, Space, Button, Divider, 
     Row, Col, Statistic, Card, Badge, Collapse, Timeline,
-    Steps, Progress, List, Tag, Table, Alert, Empty, Input, FloatButton
+    Steps, List, Tag, Table, Alert, Input, FloatButton
 } from 'antd';
 import {
     ProjectOutlined, RocketOutlined, ArrowRightOutlined,
-    EyeOutlined, SecurityScanOutlined, NodeIndexOutlined,
-    ThunderboltOutlined, GlobalOutlined, AppstoreOutlined,
-    HistoryOutlined, SafetyCertificateOutlined,
+    EyeOutlined, SecurityScanOutlined, ThunderboltOutlined, AppstoreOutlined,
     BulbOutlined, BookOutlined, InteractionOutlined,
-    CloudSyncOutlined, DatabaseOutlined, TeamOutlined,
-    ControlOutlined, FieldTimeOutlined, ToolOutlined,
-    QuestionCircleOutlined, InfoCircleOutlined,
-    ContainerOutlined, DeploymentUnitOutlined,
-    SyncOutlined, AuditOutlined, BarChartOutlined,
-    CheckCircleOutlined, WarningOutlined, BugOutlined,
-    SearchOutlined, SettingOutlined, QuestionCircleOutlined as FaqIcon,
-    FlagOutlined, AimOutlined, SolutionOutlined,
-    SafetyOutlined, KeyOutlined, TranslationOutlined
+    DatabaseOutlined, TeamOutlined,
+    ControlOutlined, ToolOutlined,
+    SyncOutlined, AuditOutlined, WarningOutlined, BugOutlined,
+    SearchOutlined, QuestionCircleOutlined as FaqIcon,
+    FlagOutlined
 } from '@ant-design/icons';
-import { IoRocketOutline, IoCompassOutline, IoSchoolOutline, IoTerminalOutline, IoPulseOutline } from 'react-icons/io5';
-import { MdOutlineSecurity, MdOutlineAnalytics, MdHistoryEdu } from 'react-icons/md';
+import { IoRocketOutline, IoSchoolOutline, IoPulseOutline } from 'react-icons/io5';
+import 'react-icons/md';
 
 import { useTheme } from '../../../theme';
 

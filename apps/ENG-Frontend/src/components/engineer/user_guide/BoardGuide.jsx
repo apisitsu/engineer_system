@@ -1,37 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Typography, Card, Row, Col, Tag, Button, Space, Divider,
-    Input, Switch, Select, Avatar, Tooltip, Menu, Popconfirm, DatePicker,
-    Alert, Badge, List, Progress, Table, Statistic, Timeline, Empty,
-    Checkbox, Popover, Segmented, Drawer, InputNumber
+    Input, Switch, Select, Menu, Alert, Badge, List, Progress, Table, Statistic, Timeline, Segmented, Drawer, InputNumber
 } from 'antd';
 import {
-    AppstoreOutlined, SettingOutlined, TagOutlined, LockOutlined,
-    BgColorsOutlined, AppstoreAddOutlined, InboxOutlined,
-    NodeIndexOutlined, DragOutlined, CheckCircleOutlined,
-    AlertOutlined, InfoCircleOutlined, DashboardOutlined,
-    AuditOutlined, DatabaseOutlined, TeamOutlined,
-    EditOutlined, DeleteOutlined, SaveOutlined,
+    AppstoreOutlined, InboxOutlined,
+    CheckCircleOutlined,
+    DashboardOutlined,
+    DatabaseOutlined, SaveOutlined,
     ThunderboltOutlined, NotificationOutlined,
-    BarChartOutlined, LineChartOutlined, SwapOutlined,
-    GlobalOutlined, SafetyCertificateOutlined, CodeOutlined,
-    RocketOutlined, CloudSyncOutlined, InteractionOutlined,
+    BarChartOutlined, LineChartOutlined, CodeOutlined,
+    RocketOutlined, InteractionOutlined,
     ExportOutlined, FileExcelOutlined, FileTextOutlined,
-    FilterOutlined, SearchOutlined, HistoryOutlined,
-    DeploymentUnitOutlined, BulbOutlined, SafetyOutlined,
-    EyeOutlined, MoreOutlined, SyncOutlined,
-    PushpinOutlined, LayoutOutlined, AimOutlined,
-    SolutionOutlined, ProjectOutlined
+    HistoryOutlined,
+    BulbOutlined, SafetyOutlined,
+    SyncOutlined
 } from '@ant-design/icons';
 import {
-    IoSettingsOutline, IoArchiveOutline, IoRocketOutline,
-    IoLockClosedOutline, IoSaveOutline, IoGridOutline, IoListOutline,
-    IoPulseOutline, IoCloudDownloadOutline, IoFlaskOutline
+    IoSettingsOutline, IoLockClosedOutline, IoGridOutline, IoListOutline
 } from 'react-icons/io5';
-import { MdOutlineDashboard, MdOutlineAssessment, MdDragIndicator, MdHistoryEdu } from 'react-icons/md';
-import { FiUsers, FiTag, FiFilter } from 'react-icons/fi';
-import { BsGrid1X2, BsLightningFill } from 'react-icons/bs';
-import { AiOutlineEdit, AiOutlineDelete, AiOutlineCheck, AiOutlineClose, AiOutlineBgColors } from 'react-icons/ai';
+import { MdOutlineDashboard, MdOutlineAssessment } from 'react-icons/md';
+import { FiUsers, FiTag } from 'react-icons/fi';
+import 'react-icons/bs';
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineBgColors } from 'react-icons/ai';
 
 const { Title, Text, Paragraph } = Typography;
 const AntCard = Card;

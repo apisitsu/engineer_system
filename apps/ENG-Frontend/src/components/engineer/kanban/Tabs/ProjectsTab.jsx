@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Input, Select, Tooltip, Button, Row, Col, Typography, Tabs, Collapse, Segmented } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Input, Select, Tooltip, Button, Row, Col, Typography, Tabs, Collapse } from 'antd';
 import { IoSearchOutline, IoLayersOutline } from 'react-icons/io5';
 import { FiPlus } from 'react-icons/fi';
 import { BsKanban, BsGrid3X3Gap, BsListUl } from 'react-icons/bs';

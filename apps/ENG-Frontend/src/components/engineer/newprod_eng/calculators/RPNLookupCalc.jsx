@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Button, InputNumber, Typography, Row, Col, Card, Collapse, Layout } from 'antd';
 import { DownloadOutlined, CalculatorOutlined } from '@ant-design/icons';
 import html2canvas from 'html2canvas';
