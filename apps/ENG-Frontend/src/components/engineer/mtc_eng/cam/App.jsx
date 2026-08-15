@@ -39,6 +39,7 @@ import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
 import { SPEEDS, perTick } from './engine/view/playback.js';
 import { sidebarSections } from './engine/view/sidebar.js';
+import { formatDuration, programStatRows, timingBreakdown } from './engine/view/programStats.js';
 import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
 import { sweptFitBox } from './engine/view/rotaryFrame.js';
@@ -124,17 +125,6 @@ const VIEWS = [
   { value: 'left', ...viewGlyph('Left', <CubeGlyph face="right" hollow />) },
   { value: 'right', ...viewGlyph('Right', <CubeGlyph face="right" />) },
 ];
-
-/** Seconds → `1:02:03` / `2:03` / `0:03`, the way a control posts cycle time. */
-function formatDuration(seconds) {
-  if (!isFinite(seconds) || seconds <= 0) return '0:00';
-  const total = Math.round(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
 
 // Metallic palette for the realistic tool glyphs (fixed colours, like the real
 // tool — the active state is shown by the button's highlighted background).
@@ -721,6 +711,11 @@ export default function App() {
   const { bounds, stats, path, sim } = getBuf();
 
   const warnings = stats?.warnings ?? [];
+  // The viewport's top-left panel. Memoised for the same reason `rotaryIndices` is:
+  // this renders on every playback tick, and a fresh array per render would make the
+  // panel re-render 25 times a second for numbers that only change on a re-parse.
+  const statRows = useMemo(() => programStatRows(stats), [stats]);
+  const statBreakdown = useMemo(() => timingBreakdown(stats), [stats]);
   // Memoised because `?? [0]` mints a new array on every render otherwise,
   // which defeats the memo further down that lists it as a dependency.
   const rotaryIndices = useMemo(() => stats?.aIndices ?? [0], [stats]);
@@ -1070,15 +1065,11 @@ export default function App() {
                   window. */}
               {(show.files || show.project) && (
               <Space wrap size={6} align="center">
-                {show.files && (
-                <CommandButton
-                  id="parse"
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  loading={status === 'parsing'}
-                  onClick={() => parse()}
-                />
-                )}
+                {/* **Parse is on the viewport rail**, beside Simulate. It is pressed
+                    after every edit to the program, and pressing it from in here meant
+                    opening the drawer over the backplot it redraws. What stays is the
+                    two ways of *getting* a program — neither of which is a mid-session
+                    action. */}
                 {show.files && (
                 <Upload
                   accept=".nc,.gcode,.gc,.tap,.cnc,.ngc,.txt,.mpf"
@@ -1178,23 +1169,10 @@ export default function App() {
               </Space>
               )}
 
-              {show.stats && stats && (
-                <Space size="large" wrap>
-                  <Tooltip title={
-                    `feed ${formatDuration(stats.feedTime)} · rapid ${formatDuration(stats.rapidTime)}`
-                    + (stats.dwellTime > 0 ? ` · dwell ${formatDuration(stats.dwellTime)}` : '')
-                  }>
-                    <Statistic
-                      title="Cycle time"
-                      value={formatDuration(stats.cycleTime)}
-                      valueStyle={{ color: token.colorPrimary }}
-                    />
-                  </Tooltip>
-                  <Statistic title="Cutting length (mm)" value={stats.feedLength} precision={1} />
-                  <Statistic title="Rapid (mm)" value={stats.rapidLength} precision={1} />
-                  <Statistic title="Segments" value={stats.blocks} />
-                </Space>
-              )}
+              {/* **Cycle time and the lengths are on the viewport now**, top-left,
+                  not here. They are how a run is judged, and this drawer covers the
+                  run — reading them meant opening a panel over the thing they
+                  describe. See `engine/view/programStats.js`. */}
 
               {show.warnings && warnings.length > 0 && (
                 <Alert
@@ -1424,19 +1402,16 @@ export default function App() {
                       <span className="ant-input-group-addon" style={addonStyle('right')}>mm</span>
                     </Space.Compact>
                   </Space>
-                  <Space wrap align="center">
-                    <CommandButton
-                      id="simulateTurning"
-                      type="primary"
-                      ghost
-                      icon={<TurningIcon />}
-                      loading={simStatus === 'running'}
-                      onClick={() => simulate()}
-                    />
-                    {sim && (
+                  {/* **The button is on the viewport rail**, beside the toolpath
+                      toggle, exactly where milling's is — same act, same place. It
+                      used to be the one Simulate that was still in the drawer, so
+                      turning was the mode where carving the bar and then hiding the
+                      backplot to look at it crossed the whole screen. */}
+                  {sim && (
+                    <Space wrap align="center">
                       <Statistic title="Removed (mm³)" value={sim.removedVolume} precision={0} />
-                    )}
-                  </Space>
+                    </Space>
+                  )}
                   {sim && (
                     <Space size="large" wrap>
                       <Space>
@@ -1699,6 +1674,48 @@ export default function App() {
               count={count}
             />
 
+            {/* The program's headline numbers, top-left — the corner opposite the
+                position readout, and the one free corner in mill/turn mode (the
+                sketcher's toolbar owns it, hence `!sketching`).
+
+                They read against the simulation, so they sit on it: from the sidebar
+                they were behind the Setup drawer, which covers the viewport. Unlike
+                the sidebar block they survive playback, because that is what the
+                whole rail does and cycle time is the figure the elapsed clock on the
+                bottom bar is measured against. */}
+            {!sketching && statRows.length > 0 && (
+              <div data-cam-overlay="stats" style={{
+                position: 'absolute', top: 12, left: 12, zIndex: 5,
+                display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap',
+                background: CAD.glass, border: `1px solid ${CAD.border}`,
+                padding: '6px 12px', borderRadius: 4,
+                boxShadow: '0 2px 10px rgba(23,42,66,0.18)',
+                backdropFilter: 'blur(2px)',
+                pointerEvents: 'auto',
+              }}>
+                {statRows.map((row) => {
+                  const cell = (
+                    <div key={row.key} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <span style={{ color: CAD.muted, fontSize: 10, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                        {row.label}{row.unit ? ` (${row.unit})` : ''}
+                      </span>
+                      {/* Monospace so the digits do not dance as the numbers change
+                          under playback — the panel is read while it updates. */}
+                      <span style={{
+                        color: row.key === 'cycleTime' ? token.colorPrimary : CAD.text,
+                        fontFamily: 'monospace', fontSize: 14, lineHeight: 1.2, whiteSpace: 'nowrap',
+                      }}>
+                        {row.value}
+                      </span>
+                    </div>
+                  );
+                  return row.key === 'cycleTime'
+                    ? <Tooltip key={row.key} title={statBreakdown}>{cell}</Tooltip>
+                    : cell;
+                })}
+              </div>
+            )}
+
             {/* Bottom toolbar: view/plan selector and playback controls in one row. */}
             <div data-cam-overlay="bottom" style={{
               position: 'absolute', bottom: 12, left: 12, right: 12, zIndex: 5,
@@ -1721,6 +1738,20 @@ export default function App() {
                   Setup
                 </Button>
               </Tooltip>
+              {/* Parse sits next to Setup because it is the other thing done *to* the
+                  program rather than to the view: edit the file, press it, watch the
+                  backplot redraw. In the drawer it was behind the very picture it
+                  redraws. */}
+              {!sketching && (
+                <CommandButton
+                  id="parse"
+                  size="small"
+                  type="primary"
+                  icon={<ThunderboltOutlined />}
+                  loading={status === 'parsing'}
+                  onClick={() => parse()}
+                />
+              )}
               <Segmented size="small" value={view} onChange={setViewPreset} options={VIEWS} />
               <CommandButton
                 id="fitView" size="small"
@@ -1767,16 +1798,26 @@ export default function App() {
                   to cross the whole screen: press a button in a drawer, close
                   the drawer, then reach for these. The NUMBERS stay in the
                   drawer — a grid size is a setting you type once per job, not
-                  something to keep on a rail you press mid-run. */}
-              {!sketching && !turning && (
+                  something to keep on a rail you press mid-run.
+
+                  **Turning is here too.** It is the same act on the same rail; it
+                  only ever differed in which glyph names it, and leaving it in the
+                  drawer made the lathe the one mode where this motion crossed the
+                  screen. The voxel run keeps its own button in the drawer — that is
+                  the deliberate second opinion, not the one reached for mid-job. */}
+              {!sketching && (
                 <CommandButton
-                  id={simPlan.method === 'voxel'
-                    ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
-                    : 'simulate'}
+                  id={turning
+                    ? 'simulateTurning'
+                    : simPlan.method === 'voxel'
+                      ? (rotaryIndices.length > 1 ? 'simulateFaces' : 'simulateUndercut')
+                      : 'simulate'}
                   size="small"
                   type="primary"
                   ghost
-                  icon={simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
+                  icon={turning
+                    ? <TurningIcon />
+                    : simPlan.method === 'voxel' ? <VoxelIcon /> : <StockCutIcon />}
                   loading={simStatus === 'running'}
                   onClick={() => simulate()}
                 />
