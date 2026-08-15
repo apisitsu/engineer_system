@@ -33,7 +33,15 @@ Host-specific *paths* are the half git still cannot carry. See the mapped-drive 
 
 One step failing does not stop the other; the response is 500 when **any** step fails, and the frontend downgrades to a warning (and still refreshes) when `steps[]` shows a partial success.
 
-**`TI_CSV_OUTPUT_DIR` defaults to the mapped drive `G:\Shared drives\ROD-Engineer\ToolingInspection`.** A mapped drive is per-interactive-session — the PM2 service account on plbmp130 does not have `G:` even where the same UNC path is reachable. Set the env var to the UNC path on prod. Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work), but step 2's CSV *is* its only output, so there it is a hard failure.
+**`TI_CSV_OUTPUT_DIR` defaults to `G:\Shared drives\ROD-Engineer\ToolingInspection`, and `G:` is Google Drive for Desktop — not a mapped network drive.** `Win32_LogicalDisk` reports it `DriveType 3` with an empty `ProviderName`, so **there is no UNC equivalent to point at**; earlier advice here to "set the env var to the UNC path" was wrong and would send you looking for a path that does not exist. A Drive letter exists only inside a signed-in interactive session, and no credential configuration gives a service account one.
+
+Where the backend does not run as a Drive-mounted user, point `TI_CSV_OUTPUT_DIR` at an ordinary folder (a real UNC share or local disk) and move the file to Drive separately. Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work), but step 2's CSV *is* its only output, so there it is a hard failure.
+
+`M:` and `N:` on these machines **are** network drives (`\\10.121.34.19\data_rod`, `\\sanlb01\MPA-DIV`) — which is why the two *sources* are written as UNC and only need credentials for the running account. Do not generalise from them to `G:`.
+
+**Never point `TI_CSV_OUTPUT_DIR` inside the repo.** `npm run dev` is nodemon and `package.json`'s `nodemonConfig.ignore` covers only `output/*` and `files/*`; a CSV written anywhere else under `apps/ENG-Backend/` restarts the server mid-import, which presents as the request hanging and never returning rather than as an error.
+
+> `node scripts/ti_check_paths.js` reports all three paths, whether the output folder is writable, and **which account it ran as** — run it as the account that runs the backend, since running it in your own shell proves nothing about a service account. It touches no database. On plbmp118 as an interactive user all three pass in ~30 s (8 workbooks, ~3,100 rows, plus a 10 MB xlsm), so a request that dies in ~10 s is a client timeout and one that dies near 60 s is a proxy timeout — neither is the import itself.
 
 ### Porting notes (why the Node code looks the way it does)
 

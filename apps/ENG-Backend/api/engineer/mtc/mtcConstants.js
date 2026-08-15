@@ -81,9 +81,18 @@ const PATHS = {
   // Tooling Inspection import sources / output, used by services/toolingImportService.js.
   // All three are host-specific and none can be carried by git, so each is env-overridable:
   //  - the two sources are UNC shares the running account must have credentials for;
-  //  - the output default is the MAPPED DRIVE G:, which only exists inside an interactive
-  //    session — the PM2 service account on plbmp130 has no G:. Point TI_CSV_OUTPUT_DIR at
-  //    the equivalent UNC path there instead of re-mapping the drive.
+  //  - the output default is G:, which is GOOGLE DRIVE FOR DESKTOP, not a mapped network
+  //    drive. Win32_LogicalDisk reports it DriveType 3 with an empty ProviderName, so
+  //    **it has no UNC equivalent** and no credential setup can give a service account
+  //    one. It exists only inside a signed-in interactive session. Where the backend does
+  //    not run as such a user, point TI_CSV_OUTPUT_DIR at an ordinary folder — a real UNC
+  //    share or local disk — and get the file to Drive some other way.
+  //    (M: and N: on these machines ARE network drives, \\10.121.34.19\data_rod and
+  //    \\sanlb01\MPA-DIV, which is why the two sources below are written as UNC.)
+  //    Never point it inside apps/ENG-Backend: `npm run dev` is nodemon and its
+  //    nodemonConfig.ignore covers only output/* and files/*, so a CSV written anywhere
+  //    else here restarts the server mid-import and the request never returns.
+  //    scripts/ti_check_paths.js reports all of this per host and per account.
   // The trailing "2026" in the source paths is the folder name on the share, not a computed
   // fiscal year (the Python originals hardcoded it the same way) — override on rollover.
   TI_INSP_REC_DIR: process.env.TI_INSP_REC_DIR
