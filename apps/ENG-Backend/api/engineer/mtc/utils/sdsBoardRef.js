@@ -50,10 +50,39 @@ async function boardRef(cn, machineTypeName, processCode) {
   return `${cn}||${await boardMachineName(machineTypeName)}||${processCode}`;
 }
 
+/**
+ * The reverse direction: a board key's machine segment → the real machine type
+ * names it could mean.
+ *
+ * `boardRef` deliberately loses information — TSG-300ZNC and TSG-300W both write
+ * `TSG-300W/TSG-300ZNC` — which is right for identifying the card and wrong for
+ * anything that has to touch `sds_approval`, whose rows are keyed by the actual
+ * machine. Anyone reading a `source_ref` back (the board's inline sign panel) has
+ * to expand it and then decide, because a group label names no single sheet.
+ *
+ * A name that is not a group label is its own only candidate, which is the common
+ * case: 38 of the 40 links on the live board resolve straight through.
+ *
+ * @returns {Promise<string[]>} one entry for an ordinary machine, several for a group
+ */
+async function groupMembers(machineSegment) {
+  if (!machineSegment) return [];
+  try {
+    const map = await groupMap();
+    const members = Object.entries(map)
+      .filter(([, group]) => group === machineSegment)
+      .map(([name]) => name)
+      .sort();
+    return members.length ? members : [machineSegment];
+  } catch (_) {
+    return [machineSegment];
+  }
+}
+
 /** Drop the cache — call after machine types are renamed or regrouped. */
 function invalidate() {
   _map = null;
   _loadedAt = 0;
 }
 
-module.exports = { boardRef, boardMachineName, invalidate };
+module.exports = { boardRef, boardMachineName, groupMembers, invalidate };
