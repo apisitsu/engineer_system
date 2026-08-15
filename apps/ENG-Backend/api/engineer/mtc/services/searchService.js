@@ -99,6 +99,14 @@ function parseThreadTpi(name) {
   return m ? Number(m[1]) : 0;
 }
 
+// SPH とば口径. Returns 0 — the house "absent dimension" value — when either input is
+// missing or when the geometry is invalid (a race wider than the ball it wraps), so a
+// non-SPH part behaves like every other absent dimension instead of yielding NaN.
+function sphTb(ballDia, raceWidth) {
+  if (!(ballDia > 0) || !(raceWidth > 0) || raceWidth >= ballDia) return 0;
+  return Math.sqrt(ballDia * ballDia - raceWidth * raceWidth);
+}
+
 function buildSpecContext(spec) {
   const num = (v) => (v !== null && v !== undefined && v !== '') ? Number(v) : 0;
   const str = (v) => (v ?? '').toString().toUpperCase().trim();
@@ -173,9 +181,6 @@ function buildSpecContext(spec) {
     // Column identity was scored against the FTL workbook's own C/N sheet: ball_width and
     // ball_bore reproduced 100%, ball_dia 86%, race_od 88%.
     //
-    // NOTE: SPH TB (とば口径) and SW are still unresolved — no column in eng_sph_design,
-    // eng_race, eng_ball or eng_sleeve reproduces them. X-100 ARBOR B/D and FTL PUSHER
-    // stay unshipped until they are found; do not substitute sphWidth for SW.
     sphOd: num(spec.sph_od),
     sphWidth: num(spec.sph_width),
     ballDia: num(spec.ball_dia),
@@ -183,6 +188,14 @@ function buildSpecContext(spec) {
     ballBore: num(spec.ball_bore),
     raceOd: num(spec.race_od),
     raceWidth: num(spec.race_width),
+
+    // とば口径 — the diameter of the race opening. It is stored in no factory table, and
+    // it does not need to be: a race of width RW wrapped around a sphere of diameter BD
+    // leaves a circular mouth of exactly sqrt(BD^2 - RW^2). Checked against the 503 C/N
+    // rows of the XD-8 workbook's DIMENSION sheet — 96.6 % land within 0.01 mm, median
+    // error 0.003. That is a geometric identity showing through, not a fitted curve; the
+    // residual is spec revision drift.
+    TB: sphTb(num(spec.ball_dia), num(spec.race_width)),
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),

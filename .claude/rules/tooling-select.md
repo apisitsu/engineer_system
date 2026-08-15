@@ -319,10 +319,33 @@ lpb.eng_sph --sph_design_no--> lpb.eng_sph_design   sph_od, sph_width,
 Coverage is 5,166 of 16,627 spec rows (31 %) — the SPH/ball population. A body or a sleeve
 correctly has none of these.
 
-> **`SW`, `TB` (とば口径) and `SD` are still unresolved.** No column in `eng_sph_design`,
-> `eng_race`, `eng_ball` or `eng_sleeve` reproduces them. They block X-100 ARBOR **B**,
-> FTL **COLLET OP2** + **PUSHER**, and all of J-WAVE 4879 — roughly 600 rows. Do not
-> substitute a near-name; `sph_width` is *not* `SW` in the J-WAVE sheet, which lists both.
+**`SW` is `sphWidth`**, confirmed three ways: X-100 ARBOR D reproduces 87 % with it against
+59 % for `raceWidth`; J-WAVE scores 91 % within 0.3 (n=23); FTL 79 % (n=19).
+
+**`TB` (とば口径) is stored nowhere and does not need to be.** It is a *race* dimension —
+the XD-8 workbook groups it under RACE beside RACE WIDTH — but `lpb.eng_race` has no column
+for it; od, width, id, chaner and mating_ball were each scored against 366 matched rows and
+none comes close. It is geometry: a race of width RW wrapped around a sphere of diameter BD
+leaves a mouth of
+
+```
+TB = sqrt(BD² − RW²)
+```
+
+which reproduces the XD-8 DIMENSION sheet's own TB column **within 0.01 mm on 96.6 % of its
+503 rows**, median error 0.003. `buildSpecContext` exposes it as `TB`; 2,679 spec rows can
+produce it. Guarded to return 0 when either input is missing or `RW >= BD`.
+
+> **Still unresolved: `SD2`, and the `OD` / `OD1` / `OD2` columns.** FTL's `OD` sits within
+> 0.3 of `sph_od` on 80 % of rows but matches exactly on 0 % — it is derived from it, not
+> equal to it. `SD1` is `lpb.eng_ball.shoulder_dia` (62 % exact, 95 % within 0.3, n=21) but
+> is not synced yet. These block FTL **COLLET OP2** + **PUSHER** and all of J-WAVE 4879.
+
+**A fourth simultaneous filter empties the result.** X-100 ARBOR B is a sound rule — it
+lands within 0.5 of a shelf value on 93 % of eligible parts — but A, C, D and B must hit the
+*same* arbor, and adding B as a filter took a 4-of-4 sample to 1-of-5. It ships rank-only
+(`is_match_dim = false`, no tolerance), which restored 5-of-6. Count the filters before
+adding one: on a 123-row shelf, three is the practical ceiling.
 
 Two things shipped the moment the sync landed:
 
