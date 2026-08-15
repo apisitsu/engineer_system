@@ -65,7 +65,7 @@ const SystemVersionsModal = ({ open, onClose }) => {
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ marginTop: 16 }}>
         <Table

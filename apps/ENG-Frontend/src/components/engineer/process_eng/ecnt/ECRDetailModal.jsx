@@ -137,7 +137,7 @@ export default function ECRDetailModal({ open, ecrId, onClose, onActionComplete 
             open={open}
             onCancel={onClose}
             centered
-            destroyOnClose
+            destroyOnHidden
             footer={null}
             styles={{
                 body: {
