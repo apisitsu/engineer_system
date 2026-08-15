@@ -35,6 +35,308 @@ Registered in `server.js` via `api/engineer/mtc/tsv2Routes.js`. Main endpoints:
 - `POST /spec/sync/:cn` — Upsert factory dims into spec
 - `POST /spec/sync-new` — Bulk insert new CNs from factory
 
+### Conformance to the RE330xx design standards (2026-08-14)
+
+The five machine tooling-design standards in `api/engineer/mtc/doc/` are the authority for
+work-size limits and for KN-312's TYPE branch conditions. `db_migrations/20260814_conform_tooling_select_to_re330_standards.js`
+brought the config in line and is **idempotent** — re-running reports "already correct".
+
+| Machine | Standard | What it now enforces |
+|---|---|---|
+| KS-B22G | RE33042 A | ID φ4.8–16, OD ≤38, W ≥14 |
+| KS-03A / KS-B22RD | RE33038 F | OD ≤33, ID ≤19 (pair), W ≤29 |
+| KN-312A / KN-312B | RE33032 B | ID ≥4, OD ≤66.7, W ≤68 · ARBOR/NUT TYPE |
+| KS-B80 | RE33041 B | ID ≥7.9, OD ≤70, W ≥14 |
+| KS-400B1 | RE33037 D | OD ≤32, W ≤30 |
+
+Four things worth knowing before touching any of it:
+
+- **Tightening a limit removes a machine from parts it was offered for.** KS-B22G went from
+  8,255 eligible parts to 1,186 — RE33042 A's `W ≥ 14` alone excludes 11,751 of the population,
+  against the `W ≥ 5` that was stored. Every limit row now carries its clause
+  (`RE33042 A §7: …`) in `description`, so the next reader can tell a standard's number from a
+  local one. **The old state is in `tooling_config_backup_re330_20260814`**; the migration's
+  `--revert` restores it in one command.
+- **`ID < 12` on KS-03A and `ID ≥ 12` on KS-B22RD is the routing split, not an outer limit.**
+  RE33038 F caps the *pair* at ID ≤ 19; that cap belongs on B22RD, which is where it now is.
+- **Two bounds are stricter than their standard and were kept** — KN-312 `ID ≤ 48` and KS-B80
+  `OD ≥ 15`. Conforming does not mean loosening a limit somebody added deliberately; both say
+  so in their description.
+- **KN-312's TYPE read the wrong variable.** ARBOR branched on `SD` where RE33032 B §8-1
+  branches on `ID` (35.5% of parts got a different type); NUT branched on `B < 30` where §8-2
+  says `(SD−0.5)+8 ≤ 20`, i.e. the `A` the formula already computes (63.4% differed). TYPE feeds
+  no search rule — it gates the reported design dimensions `F/G/H/D4/L1/L3` — so this was
+  wrong *drawings*, never a wrong tool off the shelf.
+
+**`LOADER` pointed at the family withdrawn in 2015** — fixed by
+`db_migrations/20260814b_re330_loader_rename_and_provenance.js`. `tooling_ks03a` held
+`LOADER` = 4559-06 and `NYLON LOADER` = 4559-41, which is backwards in every source:
+RE33038 F §6-10 names 4559-41 as LOADER, its rev C (2015.03.20) demoted 4559-06 to
+reference-only, TEMPLATE_B calls both rows LOADER and marks 4559-06
+*「2017/04/03より選定/設計しないこと」*, and **the word NYLON appears in no standard, no
+worksheet row and no drawing number**. `LOADER` is now 4559-41 (104 rows); 4559-06
+survives as `LOADER (4559-06 REF)` (154 rows) because the worksheet still lists it,
+marked do-not-select. The rename covered `tooling_name` *and*
+`inventory_tooling_filter` — missing the filter would have returned nothing.
+
+**Provenance is now honest about which machines a standard actually names.** RE33032 B
+is written for KN-312**B**; KN-312A's limits say so rather than claiming the standard
+covers them. KS-400B5 / KS-400B6 say plainly that RE33037 D's scope is B1–B4 and that
+their OD bounds (40 / 35) are local and deliberately exceed it.
+
+### The tooling the standards name and the system cannot select yet
+
+Against the **standards** (not TEMPLATE_B — that distinction matters) the system now covers
+17 of the 18 tooling the five standards name. The one gap is **STOCKER CHUTE 4664-34**,
+RE33037 D §6-6. QUILL / QUILL BOLT / WHEEL (4021-03/04/05) and the second plug pair
+(4664-21/22) appear in TEMPLATE_B and in **no standard**, so their absence is the
+standards lagging the worksheet, not the system failing conformance.
+
+**The source data exists and is reachable** — this was wrongly written off twice. The
+authoritative lists are on the Google shared drive, mirroring the Japan-side
+`U:\製造技術\yamamoto\設計基準・寸法・在庫データ` tree that TEMPLATE_B's LINK LIST points at:
+
+```
+G:\Shared drives\RD Development Technology Review Request\Tooling Select\
+  20260202_Tooling_Excel_List.xlsm                 ← the index of every list, per machine
+  DesignStandards_Dimensions_InventoryData\
+    研磨_内研_4021-XX_KS-B80(坂本)\20241223_TOOLING LIST_KS-B80.xlsx    → sheet 砥石・クイル
+    研磨_球研_4664-XX_KS-400B1~4(百瀬)\20210628_TOOLING LIST_KS400B(SPHERICAL GRIND).xlsx
+                                                                      → sheet STOCKER CHUTE (88 rows)
+```
+
+**And the engine can already express their selection.** The quill sheet is a *range
+lookup* — `巾min | 巾max | 内径min | 内径max → QUILL | QUILL BOLT | WHEEL` — which looks
+like it needs containment matching the search rules do not have. It does not: a one-sided
+tolerance emits `col <= computed + tol_plus` or `col >= computed - tol_minus`, so
+`tol_plus = 0` against the min column plus `tol_minus = 0` against the max column is
+exactly `min <= value <= max`. **KS-03A LOADER already uses that `+0` pattern.**
+
+**STOCKER CHUTE 4664-34 is implemented** (`db_migrations/20260814c_…`): 80 inventory rows
+in `tooling_ks400b`, six formulas and four search rules on KS-400B1. The design rule is on
+the **tooling drawing**, not in RE33037 D — the standard publishes only the TYPE split:
+
+```
+OD : Turning OD 荒径 (MAX)     A = OD + 0.5      D = 2 (SD≤6) 4 (6<SD≤8) 6 (8<SD≤10) 8 (10<SD)
+W  : Width 巾 (Nominal)        B = W + 0.5       E = B / 2
+SD : Shoulder Dia. (Nominal)   C = 22 (B≤17) 32 (17<B≤27)     TYPE1 W≤10 · TYPE2 10<W
+```
+
+> **`OD` means the BEFORE-TURNING diameter at its MAX** (荒径). That one word is why three
+> attempts to reverse-engineer this failed: against the after-grind OD the rule matches
+> **1 of 87** rows and against the plain before-grind OD **40 of 87** — against
+> `odBf_max` it matches **73 of 87**. The rules needing no part data land at 79/80 (C) and
+> 80/80 (E). Never infer a dimension rule from the tooling list when the drawing exists.
+
+The remaining ~16 % is part-revision drift, not a wrong formula: the sheet accumulated over
+years against specs that have since moved. That is what the search tolerance is for — the
+formula computes the target, the search finds the nearest chute that exists.
+
+Two things about the config, both deliberate:
+
+- **A and B carry the tolerance (±1.0); C and D rank but never exclude.** C and D are steps
+  derived from B and SD, so a hard filter on them discards a chute that fits on the
+  dimensions that actually matter.
+- **Coverage is 30 % of KS-400B1-eligible parts, and that is normal.** 80 chutes against
+  12,555 eligible parts; a chute is made per part family as it is needed. WORK DRIVER, the
+  same machine's oldest tooling, has 43 rows against the same population.
+
+> Verified live after commit: `C31-00190` → `4664-34-0078` (computed A 25.24 vs dim_a 26),
+> `C31-00213` → `4664-34-0016` (computed A 13.33 vs dim_a 13.3), 5 of 6 sample CNs matched.
+> **`KS-400B1` is in a `machine_group`, so search results carry the group label
+> `KS-400B1/B2/B7` — filtering results on the bare machine name finds nothing.**
+
+### Machines added from the TEMPLATE_B sheet audit (2026-08-14)
+
+Working the SPH sheets and then the RACE / SLEEVE / BALL sheets end-to-end produced four
+new machines. Every one took its rules from the **Excel calculation block inside the
+tooling workbook** (`加工対象物寸法記入欄`), never from the tooling list beside it.
+
+| Migration | Machine | Tooling | Rows |
+|---|---|---|---|
+| `20260814d_x100_sph_arbor.js` | **X-100** (組切削, proc 2071/2031) | ARBOR | 123 |
+| `20260814e_x100_sph_rest.js` | X-100 | ARBOR PIN · CENTER · WRIST END | 81 / 132 / 68 |
+| `20260814f_xd8_sph.js` | **XD-8** | COLLET · STOPPER L/R · WRIST END ASSY · LOADER JAW · INVERSION JAW | 62 / 32 / 44 / 30 / 4 / 5 |
+| `20260814g_ksb80_wheel.js` | KS-B80 | WHEEL 4021-05 | 17 |
+| `20260814h_kn113a_ball_inner_grind.js` | **KN-113A** (和泉 ball inner grind, proc 1181) | WHEEL · BACK PLATE · JAW | 3 / 3 / 8 |
+| `20260814i_oc16a_collar_and_pin.js` | OC-16A (centreless) | COLLAR · PIN | 44 / 3 |
+| `20260814j_rolling_dies.js` | **ROLLING** (転造, proc 2511/2501) | ROLL DIE | 73 |
+| `20260814k_marking_and_ball_arbor.js` | **MARKING** (proc 3491) · **LB-15** (球削) | PALLET · ARBOR/NUT/COLLAR | 37 / 60·56·3 |
+
+### Reading a tooling workbook: where the rule actually hides
+
+A first pass over these files wrote six of them off as "flat list, no calculation block".
+That was wrong on all six, and the four places the rule turned out to be hiding are worth
+knowing before declaring any future sheet unimplementable:
+
+1. **A prose note above a *sibling* sheet.** OC-16A's COLLAR and PIN sheets have no rule;
+   the RACE PUSHER sheet in the same workbook prints `A = OD − 0.5` with `OD < A ・・・×`
+   over the whole file. Same for MARKING — the 4918-03 sheet states
+   `W = ワーク最大巾 + GAP (0.05〜0.35)` and 4918-02 follows it.
+2. **Columns past the ones you sampled.** The rolling-die sheet looks like a bare AS8879
+   standards table for its first fourteen rows; the drawing numbers are in columns 11–13,
+   headed 巾 60mm / 巾 80mm / 巾 100mm.
+3. **A `NOTE` column that encodes the dimensions.** COLLAR notes read `FACS-V11-D14-L11` —
+   V = bore, D = outside dia, L = length. It restates the dimension columns, which is how
+   you confirm which column is which. *(The user pointed at this column; it was the thread
+   that unpicked the rest.)*
+4. **A `P/N` column, which is ground truth.** `tooling_spec_process.pn` joins straight to
+   it, so a sheet with part numbers can be *validated* even when the rule is only stated
+   loosely. That is how `A = OD − 0.5` was confirmed for COLLAR (5 pairs, all within
+   ±0.45) and how the B column was ruled out (off by 2.4–4.9 on the same rows).
+
+### Thread-driven selection (`threadDia`, `threadTPI`)
+
+`buildSpecContext` derives two thread variables from `tooling_spec_process.thread_name`
+(populated on 1,064 rows). They exist for the rolling dies, which key on thread and
+nothing else — no OD/ID/W rule is possible for them.
+
+`thread_name` arrives in **two spellings for the same thread** — `.3125-24UNJF` and
+`5/16-24UNF` — so it is parsed to a number rather than string-matched. `threadDia` is the
+nominal diameter in **inches**, matching column A of `新_転造ダイス先端R.xls`.
+
+> **Mixed fractions must be tested before the decimal form.** `1-1/8-12UNJF` splits on `-`
+> to a head of `1`, which the decimal branch accepts as 1 inch — checking decimals first
+> silently truncates every 1-1/8, 1-1/4 and 1-3/8 die to 1″. Nine spellings are covered by
+> the parser test in `tests/mtc/searchService.test.js`.
+
+Both rolling rules match **exactly** (`tol_plus = tol_minus = 0`): a die either cuts the
+thread or it does not, so there is no nearest-fit. Die width (60/80/100 mm) deliberately
+carries no rule — it is a setup choice, so every width for the thread is returned.
+
+Two shapes recur and are worth recognising on sight:
+
+- **A range table** (`巾min | 巾max | 内径min | 内径max`) is the `+0` containment pattern —
+  `tol_plus = 0` on the min column and `tol_minus = 0` on the max column. It needs **two
+  distinct `output_key`s** per range (a floor key and a ceiling key); `tooling_search_rule`
+  is UNIQUE on `(machine_id, tooling_name, output_key)`, so reusing one key for both
+  columns fails on the second insert. KS-B80 WHEEL uses four keys for two ranges.
+- **`tooling_ksb80` stops at `dim_e`.** The KS-B80 wheel list carries both 砥石長 and 砥石径;
+  only the length is stored. Adding `dim_f` to that table is the fix if the diameter is
+  ever needed for ranking.
+
+### Coverage by process code (audited 2026-08-15)
+
+TEMPLATE_B's first column is the **process code**, the second its name, the third the
+machine, the fifth the tooling and the sixth the drawing family. That makes it the map
+from a process number to everything Tooling Select would need to cover it. Against the
+24 codes on the floor's list:
+
+| | codes |
+|---|---|
+| ✅ complete | `0083` TURNING(3) |
+| 🟡 partial | `1181` `1081` `3491` `1241` `1161` `0451` `2071` `2031` `3002` `3001` |
+| ❌ none | `0351` `2411` `3161` `2211` `3041` `0561` |
+| — not in TEMPLATE_B | `0401` `0082` `2021` (absent entirely) · `0081` `3131` `3221` `3191` (present, but their tooling carries non-`NNNN-NN` numbers) |
+
+Two things this shows that a per-machine view does not:
+
+- **The ❌ group's parts are not in `tooling_spec_process` at all.** This is the real
+  blocker and it is structural, not a missing tooling list. The spec table holds **16,627
+  rows, every one a numeric CN** — bearing and SPH components. The assembly-side processes
+  (STAKING, RELEASE, INSTALL LUB FITTING, CHECK CLEARANCE, HAND FEEL INSPECT) work on
+  *assembled rod-ends*, whose C/Ns are alphanumeric (`00M950`, `00B220`) and whose P/Ns are
+  assembly numbers (`ASRD4-1`, `ARRL6MDZ-30C`). Zero of the 83 C/Ns on the STAKING jig list
+  and zero of its 117 P/Ns resolve against the spec table.
+
+  So `2211` STAKING is otherwise ready — `20230523_リベッティングマシン用治具リスト` has a
+  C/N-driven DIMENSION sheet, BASE 4843-01 (42 rows) and HEAD 4843-02 (41 rows), and the
+  BASE columns map cleanly (`dim_a` = DIMENSION col N アウター外径, `dim_b` = col O
+  インナー内径MIN, both of which the context could supply). It cannot be *validated or
+  used* until those parts exist in the system. Loading the rod-end assembly universe into
+  `tooling_spec_process` is a data-model decision, not a config gap.
+
+  `0081`'s tooling is separately out of scope — it is a cutting insert (`INSERT Q-51-`,
+  `HOLDER MXC-`), selected from a catalogue, not designed per part.
+- **`0351` FINISH ID was the exception, and is now implemented** (`20260815c_…`, BODY
+  HOLDER 4651-20, 203 rows) — see below.
+
+### Body tooling and the `HD` / `headWidth` / `shankDia` context variables
+
+`0351` FINISH ID is designed off the **blank's head**, not off the finished bearing, so it
+needed inputs `buildSpecContext` did not carry. Three were added. Their identity was
+*measured*, not assumed — the 4651-20 workbook's `DIMENSION` sheet lists 147 C/Ns with
+their HD/CD/W/FL/SHD, so every candidate column was scored against it:
+
+| sheet input | spec column | agreement |
+|---|---|---|
+| HD 頭部径 | `blank_head` → context `HD` | 73/73 (100 %) |
+| 巾 | `head_width` → context `headWidth` | 81/81 (98 %) |
+| SHD | `female_shankdia` → context `shankDia` | 20/21 (95 %) |
+| CD 面取り径 | — no column above 50 % | not available |
+| FL フラット部長さ | — no column above 50 % | not available |
+
+> **`head_width` is not the head diameter.** Reading it as HD puts a 25.85 mm head against
+> an 8.31 mm value. The names in `tooling_spec_process` do not all mean what they look
+> like; score a candidate against a C/N list before wiring it into a formula.
+
+BODY HOLDER ships `A = ROUND(HD, 2)` and `C = ROUND(10 + 巾×0.75, 0)` only — B needs CD and
+D/E need FL. **It carries the only eligibility limit any machine added this week has**:
+`HD ≤ 68`, from RE33024 D §7 対象ワークサイズ, verified live (a CN with HD 70.48 is excluded).
+
+Two families named by RE33024 D are deliberately absent. **CLAMP PLATE 4651-13 has no
+tooling list on the shared drive** under any searched name. **BODY HOLDER 4651-12's only
+list is `使用禁止_BD5XXX_ボディーホルダーLIST.xlsx`** — 使用禁止, do not use. Its design
+sheet does carry live formulas (`A = 外径最大値`, `C = 面取り径最大値 + 0.5`, `D = 29 − 巾`,
+`B = D + 0.75×巾 + 19`), so the family is implementable the day a permitted list exists —
+but loading a do-not-use shelf into a selection system would actively mislead. Rev D of the
+standard made the thin holder (4651-20) the standard design anyway.
+
+The partial rows are mostly one or two families short. The recurring absentees are
+QUILL 4853-05 (no shelf — see below), the 9901 measuring pins, and the 4879 / 4501 collet
+sets on X-100.
+
+### Tooling that is documented but cannot be selected, and why
+
+These were each chased to their source file and are **not** oversights. Do not re-open one
+without new source material — three earlier attempts to reverse-engineer a rule from a
+tooling list all produced wrong answers.
+
+| Tooling | Blocker |
+|---|---|
+| **4664-21 / 4664-22** (KS-400B1 second plug pair) | No dimension data exists anywhere. The referenced `プラグA_B（榊原）/球研機KS400_プラグA_B.xls` is **an empty workbook** (Sheet1 one row, Sheet2/3 blank), and the main file's PLUG(A)/(B) sheets hold only 4664-06/07. |
+| **4560-04-0001…0005** (押さえ棒) and the OC-16A **ARBOR** sheet | Every dimension cell is blank — the ARBOR sheet says so outright (`CAD図無し`). The 3 PIN rows that *do* carry dimensions are implemented. |
+| **4560-11-0001…0022, 0024** | Noted 詳細不明（図面が見つからない）— drawing lost — and 未設計. No dimensions exist to store. The other 44 COLLAR rows are implemented. |
+| **QUILL 4853-05** (KN-113A) | Its whole block reads cells out of the WHEEL sheet (`='WHEEL(4853-14)'!B34`), and the sheet has no 図番 rows at all. Dependent on the wheel — there is no shelf to search. |
+| **JAW 4853-15 dimension C** | The sheet computes `ROUND(18.5 + 0.6×OD, 1)` stepped to 0.5, but the shelf runs 39·34·32.5·32·30·28 against A 47.75→25.12 and then rises again — not monotonic in A, so it is not the quantity the formula produces. Stored, no search rule. |
+| **4918-03 SPACER** | Its stated key is `S = シャンク（ねじ）外径`, the shank thread OD. `threadOd_max`/`threadOd_min` now reach the context, but the sheet's 穴径 ladder is keyed on hole pattern and array (`7×5`, 35 holes) as much as on S — it is a plate layout, not a one-dimension fit. 4918-02 PALLET *is* implemented. |
+
+> **`加工対象物寸法記入欄` is sufficient, not necessary.** A workbook carrying that block is
+> implementable outright. A flat list is not automatically hopeless — check the four hiding
+> places above before writing one off. Six sheets were wrongly written off on the first pass.
+
+**One rule in this system is inferred rather than sourced**, and it is marked as such in
+both the migration header and the formula `description`: **LB-15 ARBOR `A = ID − 0.3`**.
+The 球削 workbook has no calculation block anywhere; the rule rests on two 適用型式 that
+resolve to real spec rows (D3 at ID −0.24 and −0.35) plus the shape of X-100's documented
+arbor rule. Its ±1.0 tolerance is deliberately wide — the result is a shortlist, not an
+answer. If the 球削 drawing surfaces, replace the formula; do not tune the tolerance.
+
+### The TEMPLATE_B grey-fill convention
+
+Worth knowing, because it settles several arguments at once: a tooling row shaded grey
+(`theme0` with a negative tint) is **not selected for that part family**; white is selected.
+Counting white vs grey across all 33 sheets:
+
+| drawing | white | grey | reading | in Tooling Select |
+|---|---|---|---|---|
+| 4021-03 QUILL, 4021-04 QUILL BOLT | **0** | 10 | never selected | absent — **correct** |
+| 4559-06 LOADER (old) | **0** | 5 | never selected | kept as `LOADER (4559-06 REF)` |
+| 4559-41 LOADER (new) | 5 | 0 | always selected | now `LOADER` — **independently confirms the rename** |
+| 4021-05 WHEEL | 7 | 3 | selected | absent — real gap, but in no standard |
+| 4664-21 / -22 PLUG pair | 2 | 3 | selected | absent — real gap, but in no standard |
+| 4664-34 STOCKER CHUTE | 1 | **0** | selected | absent — **the one conformance gap** |
+
+The control that proves the reading: `4664-06` PLUG(A) is grey on BALL(1)(2)(3) and white on
+BALL(内径にTFE) and S_ROLLER_ASSY — and it *is* in Tooling Select. So grey means "not for
+this family", never "not implemented".
+
+> The same caution applies to the QUILL / WHEEL sheet if it is ever wired up — each row
+> carries three drawing numbers for three tooling names and the wheel column is a spec
+> string (`15D-20T-6H-4.4X`), not a dimension.
+
+Full findings, with the measured counts behind each: the RE330 Conformance Review artifact.
+
 ### Excluding a part class from sync-new
 
 `sync-new` scans only prefixes listed in `PREFIX_TABLE_MAP` in `specController.js`. To permanently exclude a part class, remove its prefix entries from `PREFIX_TABLE_MAP`.
