@@ -296,9 +296,9 @@ sheet does carry live formulas (`A = 外径最大値`, `C = 面取り径最大�
 but loading a do-not-use shelf into a selection system would actively mislead. Rev D of the
 standard made the thin holder (4651-20) the standard design anyway.
 
-The partial rows are mostly one or two families short. The recurring absentees are
-QUILL 4853-05 (no shelf — see below), the 9901 measuring pins, and the 4879 / 4501 collet
-sets on X-100.
+The partial rows are mostly one or two families short. The recurring absentee is now
+QUILL 4853-05 (no shelf — see below); the 4879 / 4501 collet sets shipped on 2026-08-15,
+and so did the 9901 measuring pin that mattered — see below.
 
 ### SPH / ball / race component dimensions (2026-08-15)
 
@@ -446,7 +446,11 @@ Two things worth carrying forward:
 **PUSHER OP1 is withdrawn, and that is a finding, not a gap.** Shipped exactly as its sheet
 states it (`A7 = IF(WORK TYPE="Y", SD1, SD2)`, ceiling) it is right **2 %** of the time.
 Seventeen candidate quantities were scored against its 659 planned pushers and the best
-(`TB`) puts only 25 % within 0.5 mm of its own median. Even the 適合表's coarser claim
+(`TB`) puts only 25 % within 0.5 mm of its own median. A second pass split the answer key by
+drawing block — `FTLコレット設計時の注意点.txt` (2013.02.06 山本) documents that the No.1 /
+No.2 push-arbor blocks are assigned on レース単体外径 — and it changes nothing: on the
+A/0/1 blocks alone (n=366) the best candidate reaches 22 %, and **362 of the 812 planned
+OP1 pushers are 9xxx**, the 特殊形状 block the 区分 sheet marks 新規設計禁止. Even the 適合表's coarser claim
 fails — deriving the pusher's TYPE band from the ball shoulder (`≤13 → 1`, `≤28 → 2`, else
 3) agrees on 62 % and errs high 215 times. Every sheet in the workbook says why at the top:
 `設計計算のみ有効・結果はACCESSに入力の事` — the sheet designs a *new* pusher; the shop's
@@ -503,6 +507,42 @@ Four things this workbook settles or teaches:
 the shelf is keyed on ストローク (38 と 48 の時の径), a machine setting — and its only
 formulas (`A = 36.5 − L`, `A MIN = SW/2`) read values out of a row rather than producing
 one. The 10 rows are stored so the data is not lost.
+
+### The measuring pin nobody was looking for (`20260815q_`)
+
+**9901-09 CONCENTRICITY MEASURING PIN (同心度測定ピン), 263 rows, 87 % to top-2 on n=400** —
+the highest-coverage rule in the system, and it was invisible for three passes over the
+組切削 workbooks because **it is inspection tooling, not a machining fixture**. No machine's
+own workbook mentions it. It is the most-planned tooling of process 2071 outright — 820
+plan rows there and 322 at 2031, ahead of FTL's collets — and it appears on **890 of the
+1,540 C/Ns that carry X-100 tooling**, so a majority of X-100 work needs one.
+
+The way to find this class is the index workbook, not a machine folder:
+`20260202_Tooling_Excel_List.xlsm` has a 工程 column, and everything with
+**工程 = 検査(CHECK)** is a family no machine sheet will ever name. It lists six 9901
+entries; 9901-09 is `品管_9901-09_同心度測定ピン(榊原)/20190524_TOOLING LIST_CONCENTRICITY
+MEASURING PIN.xlsx`.
+
+Its sheet `9901-09-0XXX_SPH` carries a full calculation block, and only A filters:
+
+```
+A ピン外径   = ROUNDDOWN(ID − 0.01, 2)    median −0.01 · 98 % within 0.02   (n=949)
+B ザグリ径   = ROUNDUP(TB + 0.5, 1)       56 % within 0.5   rank
+C ザグリ深さ = ROUNDUP((W1 − W2)/2 + 0.5, 1)  44 %          rank
+D 外径       = ROUND(OD − 1, 0)           56 %              rank
+```
+
+A is the pin that enters the ball bore — the functional fit, and it behaves like one. The
+rest are counterbore and flange, where the shelf visibly mixes generations (many rows carry
+`-`). Blocks are `0XXX` SPH, `1XXX` BALL切削, `2XXX` BALL・SLEEVE; all are loaded, since the
+bore already decides which can fit.
+
+> **A fourth workbook, and the fourth to define TB off SW.** Its DIMENSION sheet computes
+> `トバ口径 = SQRT(ボール球径² − SPHレース巾²)`. X-100, FTL, J-WAVE and this one agree;
+> XD-8 alone means the race blank.
+
+The machine is **`測定用治具全般`** — SDS `machine_type_code` 901, matching the 9901 prefix
+the same way 501 matches 4501 and 879 matches 4879.
 
 Two things shipped the moment the sync landed:
 
