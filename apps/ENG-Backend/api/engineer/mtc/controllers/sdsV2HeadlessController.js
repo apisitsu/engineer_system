@@ -12,6 +12,7 @@ const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
 const cnFormat = require('../utils/cnFormat');
 const { resolvePartDims, SPHERICAL_DESIGN } = require('../utils/partDimAlias');
+const { cnMatchKeys } = require('../utils/grindingPrefix');
 const { getApprovalSeals } = require('./sdsApprovalController');
 
 // Approval-stamp param keys → role. The seal image comes from the sds_approval
@@ -617,20 +618,24 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     }
   }
 
-  // Grinding layout image: a per-CN image (full control-no stored in cn_prefixes, e.g.
-  // 'C39-04137') wins over a family-wide prefix image ('C39'); within the same specificity
-  // a process-specific image wins over the process-default. cn_prefixes is matched against
-  // BOTH the full CN and its 3-char prefix so either granularity resolves.
-  const cnFull = searchData.cn;                 // control-no: C39-04137
-  const cnPrefix = searchData.cn.slice(0, 3);   // family prefix: C39
+  // Grinding layout image — three targeting levels, most specific wins:
+  //   full control-no ('C39-04137')  >  family prefix ('C39')  >  class prefix ('C3')
+  // Within one level a process-specific image beats the process-default. The class level
+  // is the fallback that makes a family with no picture of its own still print one, so a
+  // single shop drawing covering all of BALL can be uploaded once as 'C3'.
+  // Rules live in utils/grindingPrefix so the admin coverage report cannot disagree with
+  // what actually renders here.
+  const { exact: cnExact, family: cnFamily, keys: cnKeys } = cnMatchKeys(searchData.cn);
   const grindingQ = await engPool.query(
     `SELECT image_data, mime_type FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-     WHERE ($1 = ANY(cn_prefixes) OR $2 = ANY(cn_prefixes))
-       AND ($3::text IS NULL OR process_codes IS NULL OR process_codes = '{}' OR $3::text = ANY(process_codes))
-     ORDER BY ($1 = ANY(cn_prefixes)) DESC,
-              ($3::text IS NOT NULL AND process_codes IS NOT NULL AND process_codes != '{}' AND $3::text = ANY(process_codes)) DESC NULLS LAST
+     WHERE (cn_prefixes && $1::text[])
+       AND ($2::text IS NULL OR process_codes IS NULL OR process_codes = '{}' OR $2::text = ANY(process_codes))
+     ORDER BY (CASE WHEN cn_prefixes && $3::text[] THEN 0
+                    WHEN cn_prefixes && $4::text[] THEN 1
+                    ELSE 2 END) ASC,
+              ($2::text IS NOT NULL AND process_codes IS NOT NULL AND process_codes != '{}' AND $2::text = ANY(process_codes)) DESC NULLS LAST
      LIMIT 1`,
-    [cnFull, cnPrefix, process_code || null]
+    [cnKeys, process_code || null, cnExact, cnFamily ? [cnFamily] : []]
   );
   if (grindingQ.rows[0]) {
     map['grinding_layout_image'] = `data:${grindingQ.rows[0].mime_type};base64,${grindingQ.rows[0].image_data.toString('base64')}`;
