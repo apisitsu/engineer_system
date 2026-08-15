@@ -237,6 +237,12 @@ from a process number to everything Tooling Select would need to cover it. Again
 | ❌ none | `0351` `2411` `3161` `2211` `3041` `0561` |
 | — not in TEMPLATE_B | `0401` `0082` `2021` (absent entirely) · `0081` `3131` `3221` `3191` (present, but their tooling carries non-`NNNN-NN` numbers) |
 
+> **`2071` / `2031` 組切削 moved from partial to near-complete on 2026-08-15.** All four of
+> its workbooks are now implemented — X-100 and XD-8 (`20260814d–f_`), FTL 4501
+> (`20260815h/l/m/n_`) and J-WAVE 4879 (`20260815p_`) — leaving only the two families
+> disproved with evidence (FTL PUSHER OP1, J-WAVE INVERSION JAW). `0351` also moved off ❌
+> with BODY HOLDER 4651-20; the table above is as audited and has not been re-run since.
+
 Two things this shows that a per-machine view does not:
 
 - **The ❌ group's parts are not in `tooling_spec_process` at all.** This is the real
@@ -449,11 +455,54 @@ rows stay in `tooling_ftl10`; only the formulas and rules were removed, so the f
 reports nothing rather than something wrong. SD1/SD2 are what made the disproof possible,
 and PUSHER OP2 — the larger family — ships on the same sync.
 
-> **Next: J-WAVE 4879.** The three quantities that blocked it — `SW`, `TB`, `SD` — are all
-> in the context now, and its workbook (`20210315_TOOLING LIST_J-WAVE.xlsx`) has the same
-> `DIMENSION` + per-tooling-sheet shape as FTL's. Its sheets have not yet been worked.
-> Build the `lpb.eng_r_pi_tool` answer key **first** this time: it is what caught PUSHER
-> OP1, and it would have caught the TB wiring too.
+### J-WAVE 4879 (2026-08-15, `20260815p_`)
+
+The last family blocked on the component dimensions, and the cheapest of the three 組切削
+workbooks to implement — because `20210315_TOOLING LIST_J-WAVE.xlsx` **states its own
+definitions**. `DIMENSION` row 17 names every column in Japanese and row 18 says whether it
+is ノミナル, MAX, 計算値 or 入力値. Nothing was reverse-engineered.
+
+Six families ship, 253 shelf rows, measured against the answer key (52 C/Ns, 47 specced):
+
+| tooling | drawing | rows | key | → top-2 |
+|---|---|---|---|---|
+| GUIDE PIN | 4879-03-…-02 | 37 | `A = ID − 0.3`, ±0.1 | **93 %** |
+| WRIST END COLLAR | 4879-06-…-02 | 35 | `B = TB + 0.5`, ±0.5 | **89 %** |
+| COLLET OP2 | 4879-05 | 48 | `B = OD2`, −0.05/+0.15 | **85 %** |
+| COLLET OP1 | 4879-04 | 56 | `B = OD2`, −0.05/+0.15 | **68 %** |
+| GUIDE PIN HOLDER | 4879-03-…-01 | 37 | `B = OD2 − 0.4`, ±0.5 | **68 %** |
+| WRIST END | 4879-06-…-01 | 35 | `A = ID − 0.3`, ±0.3 | **64 %** |
+
+Four things this workbook settles or teaches:
+
+- **It is the third sheet to define TB off SW, and here exactly** — `sqrt(BD² − SW²)`
+  reproduces its own TB column **100 % (23/23)** against 9 % for RW. X-100, FTL and J-WAVE
+  agree; XD-8 alone means the race blank.
+- **The collets' tolerance is documented, not fitted.** `COLLET OP1` looks up on **column B,
+  not A**, and rows 18–19 of the sheet write the band out in words: 推奨値 = ワーク外径MAX to
+  MAX + 0.1, 許容値 = ワーク外径ノミナル to MAX + 0.15 → `tol_minus 0.05, tol_plus 0.15`.
+- **`TYPE` (工程パターン) turned out not to matter.** `B` is `VLOOKUP(TYPE)` — ROD for TYPE 1,
+  OD1 for TYPE 2, OD2 for TYPE 3 — and TYPE is not derivable (process codes separate TYPE 1
+  but not 2 from 3, because `eng_r_pi_tool` only lists processes that carry tooling). Against
+  the plan it is moot: `dim_b = OD2` scores median 0.00 / 68 % ±0.05, `dim_b = ROD` scores
+  2 %. **OD1 is never needed** — it differs from OD2 only on TYPE 2, and even there the shelf
+  follows OD2. `OD2 = sph_od + 0.15`, the fourth confirmation of that allowance.
+- **The α/β/γ step tables are inside the sheet** (keyed on RW and SW) and transcribe directly
+  to nested `if`s. No drawing needed for any of it.
+
+> **`is_match_dim = false` is not "rank-only" — it is "does not rank either".** Both
+> tolerances NULL already means no filter; the flag additionally removes the dim from the
+> `ORDER BY`. Three families here shipped at 36–46 % and went to 64–93 % on that flag alone
+> (GUIDE PIN 46→93, GUIDE PIN HOLDER 36→68, WRIST END 36→64, COLLET OP2 76→85). Primary dims
+> tie heavily — `ID − 0.3` does not separate the shelf's duplicates — so the secondaries have
+> to rank. Set it from the measurement, not by habit: WRIST END COLLAR went **89 → 67** with
+> its secondaries on, matching their poor offline scores (A 33 % within 0.1, C 11 %), and
+> keeps them off.
+
+**INVERSION JAW (4879-02) is loaded but not selectable.** Its sheet has no design block —
+the shelf is keyed on ストローク (38 と 48 の時の径), a machine setting — and its only
+formulas (`A = 36.5 − L`, `A MIN = SW/2`) read values out of a row rather than producing
+one. The 10 rows are stored so the data is not lost.
 
 Two things shipped the moment the sync landed:
 
