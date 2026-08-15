@@ -166,6 +166,24 @@ function buildSpecContext(spec) {
     headWidth: num(spec.head_width),
     shankDia: num(spec.female_shankdia),
 
+    // ── SPH / ball / race components ──────────────────────────────────────────
+    // The assembly's own OD/ID/W say nothing about the ball and race inside it, which is
+    // what the组切削 tooling is designed against. Synced from lpb by 20260815f_ and filled
+    // on 5,166 rows — the SPH population; a body or sleeve correctly has none of these.
+    // Column identity was scored against the FTL workbook's own C/N sheet: ball_width and
+    // ball_bore reproduced 100%, ball_dia 86%, race_od 88%.
+    //
+    // NOTE: SPH TB (とば口径) and SW are still unresolved — no column in eng_sph_design,
+    // eng_race, eng_ball or eng_sleeve reproduces them. X-100 ARBOR B/D and FTL PUSHER
+    // stay unshipped until they are found; do not substitute sphWidth for SW.
+    sphOd: num(spec.sph_od),
+    sphWidth: num(spec.sph_width),
+    ballDia: num(spec.ball_dia),
+    ballWidth: num(spec.ball_width),
+    ballBore: num(spec.ball_bore),
+    raceOd: num(spec.race_od),
+    raceWidth: num(spec.race_width),
+
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
     isABR: flag(type.includes('ABR')),

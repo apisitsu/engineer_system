@@ -286,6 +286,54 @@ The partial rows are mostly one or two families short. The recurring absentees a
 QUILL 4853-05 (no shelf — see below), the 9901 measuring pins, and the 4879 / 4501 collet
 sets on X-100.
 
+### SPH / ball / race component dimensions (2026-08-15)
+
+The 組切削 tooling is designed against the **ball and race inside** an SPH assembly, not
+against the assembly's own OD/ID/W. Those dimensions live in the factory DB and are now
+synced into `tooling_spec_process` by `20260815f_spec_component_dims.js`.
+
+`tooling_spec_process.cn` is numeric (`434061`); every `lpb` table keys on a prefixed form
+(`A43-04061`). **Build the join on the lpb side** — the reverse conversion is exact, while
+forward you would have to guess the class letter:
+
+```sql
+substring(control_no from 2 for 2) || ltrim(substring(control_no from 5), '0')
+```
+
+```
+lpb.eng_sph --sph_design_no--> lpb.eng_sph_design   sph_od, sph_width,
+     |                                              ball_sph_dia, ball_width, dall_id
+     +--lpb.eng_bom (parent_cn -> child_cn)-------> lpb.eng_race  (od, width)
+                                                    lpb.eng_ball  (ball_dia, width, in_dia)
+```
+
+| context var | column | agreement | scored against |
+|---|---|---|---|
+| `ballWidth` | `ball_width` | 100 % | FTL sheet (n=20) · J-WAVE (n=23) |
+| `ballBore` | `ball_bore` | 100 % | FTL (n=20) · J-WAVE (n=23) |
+| `ballDia` | `ball_dia` | 85–100 % | FTL (n=20) · J-WAVE (n=23) |
+| `raceOd` | `race_od` | 88–95 % | FTL `RD` (n=16) · J-WAVE `ROD` (n=21) |
+| `raceWidth` | `race_width` | 100 % | J-WAVE `RW` (n=21) |
+| `sphOd`, `sphWidth` | `sph_od`, `sph_width` | — | equal to `OD`/`W` on SPH parts |
+
+Coverage is 5,166 of 16,627 spec rows (31 %) — the SPH/ball population. A body or a sleeve
+correctly has none of these.
+
+> **`SW`, `TB` (とば口径) and `SD` are still unresolved.** No column in `eng_sph_design`,
+> `eng_race`, `eng_ball` or `eng_sleeve` reproduces them. They block X-100 ARBOR **B**,
+> FTL **COLLET OP2** + **PUSHER**, and all of J-WAVE 4879 — roughly 600 rows. Do not
+> substitute a near-name; `sph_width` is *not* `SW` in the J-WAVE sheet, which lists both.
+
+Two things shipped the moment the sync landed:
+
+- **X-100 ARBOR `D`** (`20260815g_`) — `ceilN((ballWidth - sphWidth)/2 + 0.5, 1)`. Which
+  column was `SPH SW` was settled by computing D both ways against the 121 arbors that
+  have one: `sphWidth` reproduces the shelf exactly on **87 %**, `raceWidth` on 59 %.
+- **FTL COLLET OP1** (`20260815h_`, 126 rows) — the first piece of process 2071's biggest
+  gap. `A = raceOd` with a **ceiling** lookup, not a nearest match: the sheet does
+  `MIN(IF(A >= A7))`, which `searchInventory` expresses as a lone `tol_minus = 0`
+  (`col >= computed`) plus the existing ranking.
+
 ### Tooling that is documented but cannot be selected, and why
 
 These were each chased to their source file and are **not** oversights. Do not re-open one
