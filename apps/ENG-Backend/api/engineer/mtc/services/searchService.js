@@ -70,6 +70,35 @@ async function mapLimit(items, limit, fn) {
  * DB tolerance columns (od_aft_max, od_aft_min …) store signed DELTA from nominal,
  * so the context already converts them to absolute values (nominal + delta).
  */
+// Thread designations reach us in two spellings for the same thread: the decimal form
+// `.3125-24UNJF` / `0.1640-36UNJF` and the fractional form `5/16-24UNF` / `1-1/8-12UNJF`.
+// Both mean the same nominal diameter in inches. Returns 0 for the placeholder '0000'
+// and for anything unparseable, so a missing thread behaves like every other absent
+// dimension in this context rather than throwing.
+function parseThreadDia(name) {
+  const s = (name ?? '').toString().trim();
+  if (!s || s === '0000') return 0;
+  // Mixed fractions FIRST. `1-1/8-12UNJF` splits on '-' to a head of '1', which the
+  // decimal test below happily accepts as 1 inch — so checking decimals first silently
+  // truncates every 1-1/8, 1-1/4 and 1-3/8 die to 1.
+  const mixed = s.match(/^(\d+)-(\d+)\/(\d+)/);
+  if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const frac = s.match(/^(\d+)\/(\d+)/);
+  if (frac) return Number(frac[1]) / Number(frac[2]);
+  const head = s.split('-')[0].trim();               // decimal form: everything before the pitch
+  if (/^\.?\d*\.?\d+$/.test(head)) {
+    const v = Number(head.startsWith('.') ? `0${head}` : head);
+    return Number.isFinite(v) ? v : 0;
+  }
+  return 0;
+}
+
+// Threads per inch — the number immediately before the series letters (UNJF / UNF / UNC).
+function parseThreadTpi(name) {
+  const m = (name ?? '').toString().match(/-(\d+)\s*UN/i);
+  return m ? Number(m[1]) : 0;
+}
+
 function buildSpecContext(spec) {
   const num = (v) => (v !== null && v !== undefined && v !== '') ? Number(v) : 0;
   const str = (v) => (v ?? '').toString().toUpperCase().trim();
@@ -116,6 +145,26 @@ function buildSpecContext(spec) {
 
     // Ball-insert groove protrusion width (Excel "Y"; manual). Used by CPX SHOE V.
     Y: num(spec.groove_y),
+
+    // ── Thread (rod-end shank) ────────────────────────────────────────────────
+    // Populated on ~1,064 spec rows. `thread_name` is the only key the thread-rolling
+    // die lists are organised by, and it arrives in two spellings for the same thread —
+    // '.3125-24UNJF' and '5/16-24UNF' — so it is parsed to a number here rather than
+    // matched as a string. threadDia is the NOMINAL DIAMETER IN INCHES, which is exactly
+    // what column A of 新_転造ダイス先端R.xls holds.
+    threadDia: parseThreadDia(spec.thread_name),
+    threadTPI: parseThreadTpi(spec.thread_name),
+    threadOd_max: num(spec.thread_max_od), threadOd_min: num(spec.thread_min_od),
+
+    // ── Body blank (rod-end head) ─────────────────────────────────────────────
+    // The body tooling — BODY HOLDER / CLAMP PLATE, RE33024 D — is designed off the
+    // blank, not off the finished bearing, so it needs the head rather than OD/ID/W.
+    // Column identity was settled against the 4651-20 workbook's own C/N→dimension
+    // sheet: HD == blank_head on 73/73 rows, its 巾 == head_width on 81/81, and
+    // SHD == female_shankdia on 20/21.
+    HD: num(spec.blank_head),
+    headWidth: num(spec.head_width),
+    shankDia: num(spec.female_shankdia),
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
