@@ -99,12 +99,14 @@ function parseThreadTpi(name) {
   return m ? Number(m[1]) : 0;
 }
 
-// SPH とば口径. Returns 0 — the house "absent dimension" value — when either input is
-// missing or when the geometry is invalid (a race wider than the ball it wraps), so a
-// non-SPH part behaves like every other absent dimension instead of yielding NaN.
-function sphTb(ballDia, raceWidth) {
-  if (!(ballDia > 0) || !(raceWidth > 0) || raceWidth >= ballDia) return 0;
-  return Math.sqrt(ballDia * ballDia - raceWidth * raceWidth);
+// A race of width W wrapped around a sphere of diameter D leaves a circular mouth of
+// sqrt(D^2 - W^2). Used for both とば口径 variants below and for SD2. Returns 0 — the
+// house "absent dimension" value — when either input is missing or the geometry is
+// invalid (a width at or beyond the ball diameter), so a non-SPH part behaves like every
+// other absent dimension instead of yielding NaN.
+function chordDia(ballDia, width) {
+  if (!(ballDia > 0) || !(width > 0) || width >= ballDia) return 0;
+  return Math.sqrt(ballDia * ballDia - width * width);
 }
 
 function buildSpecContext(spec) {
@@ -189,16 +191,61 @@ function buildSpecContext(spec) {
     raceOd: num(spec.race_od),
     raceWidth: num(spec.race_width),
 
-    // とば口径 — the diameter of the race opening. It is stored in no factory table, and
-    // it does not need to be: a race of width RW wrapped around a sphere of diameter BD
-    // leaves a circular mouth of exactly sqrt(BD^2 - RW^2). Checked against the 503 C/N
-    // rows of the XD-8 workbook's DIMENSION sheet — 96.6 % land within 0.01 mm, median
-    // error 0.003. That is a geometric identity showing through, not a fitted curve; the
-    // residual is spec revision drift.
-    TB: sphTb(num(spec.ball_dia), num(spec.race_width)),
+    // ── とば口径, both of them ────────────────────────────────────────────────
+    // The mouth left by the race around the ball, sqrt(BD^2 - width^2). The identity is
+    // not in dispute; WHICH WIDTH goes into it is, and the workbooks do not agree:
+    //
+    //   X-100 DIMENSION  I = SQRT(D^2 - H^2)   H = SW  SPH RACE WIDTH  (assembled)
+    //   FTL   DIMENSION  L = SQRT(I^2 - E^2)   E = SW  SPH レース巾    (assembled)
+    //   XD-8  DIMENSION  N = SQRT(J^2 - D^2)   D = RW  レース単体巾    (the race blank)
+    //
+    // They are different numbers — on C/N 413010 the assembled race is 12.70 and the
+    // blank is 14.38 — so the two mouths differ by over a millimetre. X-100's own sheet
+    // carries both widths in adjacent columns and warns above them that older rows had
+    // the SW value typed into RW (`旧設計はRWにSWの値が入っている。要修正。`), which is
+    // exactly the confusion to avoid here. Measured against the sheets' own TB columns:
+    //
+    //             sqrt(ball_dia^2 - sph_width^2)   sqrt(ball_dia^2 - race_width^2)
+    //   X-100        35 % exact · 81 % ±0.1               2 % exact ·  5 % ±0.3
+    //   XD-8          6 % exact · 13 % ±0.1              74 % exact · 81 % ±0.1
+    //
+    // So each sheet is reproduced by its own width and by no other. `TB` is the
+    // assembled one because its only consumer, X-100 ARBOR B, is one of the sheets that
+    // means it; `TBrace` is the blank, for XD-8's families. The residual on either is
+    // spec revision drift, and it tracks the width's own agreement exactly (sph_width
+    // reproduces the sheet's SW at 41 % exact / 82 % ±0.1) rather than adding error.
+    TB: chordDia(num(spec.ball_dia), num(spec.sph_width)),
+    TBrace: chordDia(num(spec.ball_dia), num(spec.race_width)),
+
+    // ── ボール肩径, the ball's shoulder diameter ──────────────────────────────
+    // Also two quantities, but here the sheets agree and simply split by ball type: a
+    // Y-ball's is a drawing value, a normal ball's is geometry. FTL PUSHER OP1 selects
+    // on `IF(WORK TYPE = "Y", SD1, SD2)`, so a formula wanting "the shoulder" writes
+    // `if(isYBall == 1, SD1, SD2)` and gets the same branch the workbook takes.
+    //   SD1  synced from lpb.eng_ball.shoulder_dia by 20260815j_ — 245 rows, the Y-balls
+    //        (62 % exact / 95 % within 0.1 against the XD-8 sheet, n=21)
+    //   SD2  =IF(TYPE="Y","-",ROUND(SQRT(BD^2-BW^2),2)) — needs no column
+    //        (86 % exact / 96 % within 0.1 against the same sheet, n=382)
+    SD1: num(spec.ball_shoulder_dia),
+    SD2: chordDia(num(spec.ball_dia), num(spec.ball_width)),
+
+    // ── SPH 切削外径, the diameter the SPH is turned to ───────────────────────
+    // Neither sheet's OD is `sph_od`: both sit a fixed machining allowance above it, and
+    // the two workbooks corroborate each other's constant. XD-8 states its OD as a
+    // nominal with a separate +TOL column (0.05 on 360 of 413 rows) and runs
+    // sph_od + 0.10 (81 % of 371 rows within 0.01); FTL states its OD as already-MAX and
+    // runs sph_od + 0.15 (53 % of 32). 0.10 + 0.05 = 0.15 — the same allowance, quoted
+    // two ways. Rows that miss are two-stage parts, where an intermediate D-cut diameter
+    // is a design choice no spec column holds.
+    sphCutOd: num(spec.sph_od) > 0 ? num(spec.sph_od) + 0.10 : 0,
+    sphCutOd_max: num(spec.sph_od) > 0 ? num(spec.sph_od) + 0.15 : 0,
 
     // ── Derived boolean flags (1 = true, 0 = false) ───────────────────────────
     isBallInner: flag(type.includes('INNER') || yball === 'Y'),
+    // The 組切削 sheets' WORK TYPE column, N/Y. Narrower than isBallInner, which also
+    // takes an INNER type — a formula branching on SD1 vs SD2 must use this one, since
+    // only a Y-ball has an SD1 at all.
+    isYBall: flag(yball === 'Y'),
     isABR: flag(type.includes('ABR')),
     isIDtoOD: flag(process === 'ID->OD'),
     isODtoID: flag(process === 'OD->ID'),

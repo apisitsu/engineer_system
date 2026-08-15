@@ -43,7 +43,7 @@ brought the config in line and is **idempotent** — re-running reports "already
 
 | Machine | Standard | What it now enforces |
 |---|---|---|
-| KS-B22G | RE33042 A | ID φ4.8–16, OD ≤38, W ≥14 |
+| KS-B22G | RE33042 A | ID φ4.8–16, OD ≤38, **W ≥5** (see below — the standard's ≥14 is behind practice) |
 | KS-03A / KS-B22RD | RE33038 F | OD ≤33, ID ≤19 (pair), W ≤29 |
 | KN-312A / KN-312B | RE33032 B | ID ≥4, OD ≤66.7, W ≤68 · ARBOR/NUT TYPE |
 | KS-B80 | RE33041 B | ID ≥7.9, OD ≤70, W ≥14 |
@@ -57,6 +57,14 @@ Four things worth knowing before touching any of it:
   (`RE33042 A §7: …`) in `description`, so the next reader can tell a standard's number from a
   local one. **The old state is in `tooling_config_backup_re330_20260814`**; the migration's
   `--revert` restores it in one command.
+- **KS-B22G's `W ≥ 14` is the one place the standard lost, and the factory plan is why**
+  (settled 2026-08-15, `20260815o_`). The bound went back to `W ≥ 5` at the floor's request
+  with the question left open; `lpb.eng_r_pi_tool` answers it. 453 C/Ns plan one of the
+  machine's two tooling families (4027-01 / 4027-02); of the 161 that also carry a finished
+  width, **97 are between 5 and 14** — 60 % — and **none is below 5**, the narrowest being
+  5.97 (`3MHT5V-603`). `W ≥ 5` is the measured floor of what the machine actually runs, not
+  a concession pending review. RE33042 A §7 is what needs revising. When a standard and the
+  plan disagree, the plan is evidence — go and get it before restoring a bound "temporarily".
 - **`ID < 12` on KS-03A and `ID ≥ 12` on KS-B22RD is the routing split, not an outer limit.**
   RE33038 F caps the *pair* at ID ≤ 19; that cap belongs on B22RD, which is where it now is.
 - **Two bounds are stricter than their standard and were kept** — KN-312 `ID ≤ 48` and KS-B80
@@ -336,16 +344,116 @@ which reproduces the XD-8 DIMENSION sheet's own TB column **within 0.01 mm on 96
 503 rows**, median error 0.003. `buildSpecContext` exposes it as `TB`; 2,679 spec rows can
 produce it. Guarded to return 0 when either input is missing or `RW >= BD`.
 
-> **Still unresolved: `SD2`, and the `OD` / `OD1` / `OD2` columns.** FTL's `OD` sits within
-> 0.3 of `sph_od` on 80 % of rows but matches exactly on 0 % — it is derived from it, not
-> equal to it. `SD1` is `lpb.eng_ball.shoulder_dia` (62 % exact, 95 % within 0.3, n=21) but
-> is not synced yet. These block FTL **COLLET OP2** + **PUSHER** and all of J-WAVE 4879.
+**A fourth simultaneous filter empties the result.** X-100 ARBOR B is a sound rule — after
+the TB correction below it reproduces the arbor the shop plans with median error 0.00 and
+93 % within 1.0 (n=249) — but A, C, D and B must hit the *same* arbor. Flipping B to a
+±1.0 filter was measured against the factory plan and **loses**: 69 % to top-2 against
+72 % rank-only, with 47 no-matches against 38. It stays rank-only (`is_match_dim = false`,
+no tolerance). Count the filters before adding one: on a 123-row shelf, three is the
+practical ceiling, and a better formula does not raise it.
 
-**A fourth simultaneous filter empties the result.** X-100 ARBOR B is a sound rule — it
-lands within 0.5 of a shelf value on 93 % of eligible parts — but A, C, D and B must hit the
-*same* arbor, and adding B as a filter took a 4-of-4 sample to 1-of-5. It ships rank-only
-(`is_match_dim = false`, no tolerance), which restored 5-of-6. Count the filters before
-adding one: on a 123-row shelf, three is the practical ceiling.
+### Two とば口径, two ボール肩径, and one machining allowance (2026-08-15)
+
+The 組切削 workbooks share vocabulary and **do not share definitions**. Three quantities
+were resolved by measuring each sheet against the live data rather than by reading a label.
+
+**`TB` — the same name for two different numbers.** The identity is not in dispute: a race
+of width *w* around a ball of diameter *BD* leaves a mouth of `sqrt(BD² − w²)`. Which width
+goes in is:
+
+| sheet | column | width it uses | spec column |
+|---|---|---|---|
+| X-100 `DIMENSION` I | `=SQRT(D²−H²)` | **H** = SW, SPH RACE WIDTH (assembled) | `sph_width` |
+| FTL `DIMENSION` L | `=SQRT(I²−E²)` | **E** = SW, SPH レース巾 (assembled) | `sph_width` |
+| XD-8 `DIMENSION` N | `=SQRT(J²−D²)` | **D** = RW, レース単体巾 (the blank) | `race_width` |
+
+On C/N 413010 the assembled race is 12.70 and the blank 14.38, so the two mouths differ by
+over a millimetre. Each sheet is reproduced by its own width and by no other:
+
+|  | `sqrt(ball_dia²−sph_width²)` | `sqrt(ball_dia²−race_width²)` |
+|---|---|---|
+| X-100 TB | 35 % exact · 81 % ±0.1 | 2 % exact · 5 % ±0.3 |
+| XD-8 TB | 6 % exact · 13 % ±0.1 | 74 % exact · 81 % ±0.1 |
+
+> The context now carries **both** — `TB` (assembled, what X-100 and FTL mean) and `TBrace`
+> (the blank, what XD-8 means). `TB` shipped in `20260815i_` wired to `race_width`, which is
+> XD-8's reading inside X-100's only consumer; the 96.6 % that justified it was the XD-8
+> **sheet reproducing itself**, never the DB column. X-100's own sheet warns about exactly
+> this above the two columns: `旧設計はRWにSWの値が入っている。要修正。`
+
+**`SD1` / `SD2` — the sheets agree here, and simply split by ball type.** Both FTL and XD-8
+carry the two in adjacent columns with exactly one filled per row. `SD1` (ボール肩径 Yボール)
+is a drawing value, synced from `lpb.eng_ball.shoulder_dia` by `20260815j_` — 245 rows, the
+Y-ball population, 62 % exact / 95 % within 0.1 (n=21). `SD2` (通常) is
+`ROUND(SQRT(BD²−BW²),2)`, needs no column, and reproduces at 86 % exact / 96 % within 0.1
+(n=382). A formula wanting "the shoulder" writes `if(isYBall == 1, SD1, SD2)` — and
+`isYBall`, not `isBallInner`, which also takes an INNER type and would send normal balls
+down a branch where they have no value.
+
+**`OD` (SPH 切削外径) is `sph_od` plus a fixed allowance**, which two workbooks quote two
+ways: XD-8 states a nominal with its own +TOL column (0.05 on 360 of 413 rows) and runs
+`sph_od + 0.10` on 81 % of 371 rows; FTL states an already-MAX value and runs `sph_od + 0.15`
+on 53 % of 32. `0.10 + 0.05 = 0.15`. Exposed as `sphCutOd` / `sphCutOd_max`. The rows that
+miss are two-stage parts, where an intermediate D-cut diameter is a designer's choice no
+spec column holds.
+
+### A ceiling rule's sentinel is 999999, not −999
+
+The seeding rule "gate a tooling branch with an unmatchable sentinel" has a worked example
+of `-999` that is correct for a `BETWEEN` and **backwards for a ceiling**:
+
+| rule shape | emitted SQL | sentinel |
+|---|---|---|
+| `tol_plus` **and** `tol_minus` | `col BETWEEN lo AND hi` | `-999` |
+| `tol_minus` only (ceiling) | `col >= computed - tol_minus` | `999999` |
+| `tol_plus` only (floor) | `col <= computed + tol_plus` | `-999` |
+
+FTL COLLET OP1 shipped as `A = raceOd` with `tol_minus = 0`. On a part with no race,
+`raceOd` is 0, the filter becomes `dim_a >= 0`, the whole 126-row shelf qualifies and the
+ranking returns the two smallest — verified live on C/N 110001/110011/110016, bodies with
+no dimension of any kind, each handed `4501-01-A004`. Fixed in `20260815k_`.
+
+### FTL 4501, validated against the factory plan (2026-08-15)
+
+`lpb.eng_r_pi_tool` joined on `process_plan_no` (the prefixed C/N) is a live answer key —
+938 C/Ns carry a 4501-01 or 4501-02, 691 of them specced. Measuring
+`planned dim_a − computed A` over ~280 planned tools per family says what each shelf
+lookup actually is, and it is not always what the sheet's `MIN(IF(A >= A7))` implies:
+
+| family | rows | median Δ | shape shipped | → top-2 |
+|---|---|---|---|---|
+| COLLET OP1 | 126 | 0.00 | ceiling, `tol_minus = 0.1` | **81 %** (was 64 % at `0`) |
+| COLLET OP2 | 142 | 0.00 | ceiling on `sphCutOd_max`, `tol_minus = 0.1` | **80 %** |
+| PUSHER OP2 | 116 | −0.15 | nearest on `sphOd`, ±0.5 | **85 %** (was 3 %) |
+| PUSHER OP1 | 63 | +4.75 | **withdrawn** | — |
+
+Two things worth carrying forward:
+
+- **The allowance belongs to the collet, not to the pusher.** PUSHER OP2's −0.15 offset is
+  exactly the turning allowance COLLET OP2 needs. A collet grips the turned diameter and is
+  built to it at MAX; a pusher bears on the face and is built to the SPH's own OD. Same
+  sheet, same word `OD`, two different quantities — so it has to be measured per family.
+- **A quarter of planned collets sit 0.01–0.05 *below* the computed value.** That is spec
+  revision after the collet was made. `tol_minus = 0.1` keeps the ceiling's shape and lets
+  the ranking reach them; it is worth 17 and 27 points respectively.
+
+**PUSHER OP1 is withdrawn, and that is a finding, not a gap.** Shipped exactly as its sheet
+states it (`A7 = IF(WORK TYPE="Y", SD1, SD2)`, ceiling) it is right **2 %** of the time.
+Seventeen candidate quantities were scored against its 659 planned pushers and the best
+(`TB`) puts only 25 % within 0.5 mm of its own median. Even the 適合表's coarser claim
+fails — deriving the pusher's TYPE band from the ball shoulder (`≤13 → 1`, `≤28 → 2`, else
+3) agrees on 62 % and errs high 215 times. Every sheet in the workbook says why at the top:
+`設計計算のみ有効・結果はACCESSに入力の事` — the sheet designs a *new* pusher; the shop's
+choice among existing ones lives in an ACCESS database this system cannot see. The 63 shelf
+rows stay in `tooling_ftl10`; only the formulas and rules were removed, so the family
+reports nothing rather than something wrong. SD1/SD2 are what made the disproof possible,
+and PUSHER OP2 — the larger family — ships on the same sync.
+
+> **Next: J-WAVE 4879.** The three quantities that blocked it — `SW`, `TB`, `SD` — are all
+> in the context now, and its workbook (`20210315_TOOLING LIST_J-WAVE.xlsx`) has the same
+> `DIMENSION` + per-tooling-sheet shape as FTL's. Its sheets have not yet been worked.
+> Build the `lpb.eng_r_pi_tool` answer key **first** this time: it is what caught PUSHER
+> OP1, and it would have caught the TB wiring too.
 
 Two things shipped the moment the sync landed:
 
@@ -354,8 +462,10 @@ Two things shipped the moment the sync landed:
   have one: `sphWidth` reproduces the shelf exactly on **87 %**, `raceWidth` on 59 %.
 - **FTL COLLET OP1** (`20260815h_`, 126 rows) — the first piece of process 2071's biggest
   gap. `A = raceOd` with a **ceiling** lookup, not a nearest match: the sheet does
-  `MIN(IF(A >= A7))`, which `searchInventory` expresses as a lone `tol_minus = 0`
-  (`col >= computed`) plus the existing ranking.
+  `MIN(IF(A >= A7))`, which `searchInventory` expresses as a lone `tol_minus`
+  (`col >= computed - tol_minus`) plus the existing ranking. It shipped at `tol_minus = 0`
+  and with no sentinel; both were wrong and are corrected in `20260815k_` / `20260815n_`
+  — see "A ceiling rule's sentinel" and the factory-plan table above.
 
 ### Tooling that is documented but cannot be selected, and why
 
@@ -444,7 +554,7 @@ These recur in every machine added so far — treat them as defaults, not per-ma
 
 1. **Shared inventory table → `inventory_tooling_filter` is mandatory.** When several tooling types live in ONE inventory table keyed by `tooling_name` (ks400b5/b6, ks500rd, oc16a, kl20, psg64), **every** search rule MUST set `inventory_tooling_filter=<tooling_name>`. Otherwise search ranks across the whole table and returns wrong-tooling rows. This is consistently the single biggest accuracy fix when onboarding a shared-table machine.
 
-2. **Gate a tooling branch with an unmatchable sentinel, never a skipped `condition_expr`.** To disable a tooling for parts it doesn't apply to, make its key compute an impossible value, e.g. `A = if(Type=="N", odBf, -999)`. A *skipped* `condition_expr` leaves the output undefined → `searchInventory` drops the tolerance WHERE filter and returns **arbitrary** rows (silent wrong-match bug). The `-999` keeps the `BETWEEN` filter active so the wrong-gate tooling correctly returns nothing.
+2. **Gate a tooling branch with an unmatchable sentinel, never a skipped `condition_expr`.** To disable a tooling for parts it doesn't apply to, make its key compute an impossible value, e.g. `A = if(Type=="N", odBf, -999)`. A *skipped* `condition_expr` leaves the output undefined → `searchInventory` drops the tolerance WHERE filter and returns **arbitrary** rows (silent wrong-match bug). The `-999` keeps the `BETWEEN` filter active so the wrong-gate tooling correctly returns nothing. **The sentinel's sign depends on the rule shape** — `-999` is right for a `BETWEEN` and for a floor, and backwards for a ceiling, where it must be `999999`. See "A ceiling rule's sentinel is 999999, not −999" below; getting it wrong on a one-sided rule fails *open*, not closed.
 
 3. **Before-grind NULL fallback: `if(xBf>0, xBf_min, xAft_min)`.** `id_bf`/`od_bf` are NULL/0 for ~62% of spec rows, so a raw `idBf_min`/`odBf_max` reference computes garbage (e.g. `A=−1` → no match). Use the fallback to after-grind dims whenever a before-grind variable drives selection. (See Troubleshooting #6 for the symptom; the fallback is the preferred fix when before-grind is the *correct* design variable and you only need NULL safety.)
 
