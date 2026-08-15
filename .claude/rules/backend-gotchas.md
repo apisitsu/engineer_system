@@ -43,6 +43,21 @@ Where the backend does not run as a Drive-mounted user, point `TI_CSV_OUTPUT_DIR
 
 > `node scripts/ti_check_paths.js` reports all three paths, whether the output folder is writable, and **which account it ran as** — run it as the account that runs the backend, since running it in your own shell proves nothing about a service account. It touches no database. On plbmp118 as an interactive user all three pass in ~30 s (8 workbooks, ~3,100 rows, plus a 10 MB xlsm), so a request that dies in ~10 s is a client timeout and one that dies near 60 s is a proxy timeout — neither is the import itself.
 
+### Telling apart the three ways "Update data" fails
+
+`runStep` catches everything, so **a failing import always returns a 500 with a message**. If the browser gets *no response at all* it is not the import failing — the process or the connection went. The console tells you which:
+
+| what you see | what it is |
+|---|---|
+| toast with a real message, `httpStatus: 500` | an import step failed — read `steps[]`, the path is named |
+| `httpStatus: null`, died at ~10 s | a client timeout: something called the endpoint without the explicit 15-min `timeout` (`HttpClient` forces 10 s) |
+| `httpStatus: null`, died at ~60 s | a reverse proxy's read timeout — `nginx.conf` sets none, so nginx's own default 60 s applies. Prod's `apiUrl` goes straight to `:2005` and bypasses it; reaching the app on port 80 does not |
+| `httpStatus: null`, no fixed time, backend console shows a restart | the process died — out of memory, or nodemon restarting on a file change |
+
+The backend console prints `[ti:importPCtooling] START · heap …` and an `OK in …s · heap …` per step. **A run that logs START and never logs OK or FAILED did not throw — the process went.** `StepLog` echoes each progress line to the console for this reason: its buffer only reaches the browser in the reply, which a dead process never sends. Watch the heap figure — the backend shares the host with a CRA dev server (`npm run dev` runs both), and this step holds several workbooks plus a 10 MB xlsm in memory at once.
+
+The frontend logs `{ elapsedSeconds, code, httpStatus, url, body }`, and says plainly when there was no reply that the import is probably still running — pressing the button again while it runs is how you get two concurrent imports.
+
 ### Porting notes (why the Node code looks the way it does)
 
 - **UID stability is load-bearing.** Rows already in `ti_list` were written by pandas and are de-duplicated on `po_no_receive_date_time_item_name`. `buildUid` pads a 4-char time (`9:00` → `09:00`) and strips a trailing `.0` (pandas rendered a numeric PO cell as `12345.0`, SheetJS gives `12345`). Change either and every existing row re-imports as new.

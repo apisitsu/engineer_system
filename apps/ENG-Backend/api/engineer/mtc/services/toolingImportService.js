@@ -69,19 +69,26 @@ const DB_COLUMN_RENAMES = {
  * only diagnostic an engineer on the floor gets.
  */
 class StepLog {
-  constructor() {
+  constructor(name = 'import') {
     this.lines = [];
     this.warnings = [];
+    this.name = name;
   }
 
+  // Buffered for the HTTP response AND echoed to the server console. The buffer alone
+  // is invisible when the process dies mid-run — an out-of-memory kill or a nodemon
+  // restart takes the reply with it, so the only record of how far the import got would
+  // be lost exactly when it matters. The console line survives.
   log(msg) {
     this.lines.push(msg);
+    console.log(`[ti:${this.name}] ${msg}`);
     return this;
   }
 
   warn(msg) {
     this.warnings.push(msg);
     this.lines.push(`WARNING: ${msg}`);
+    console.warn(`[ti:${this.name}] WARNING: ${msg}`);
     return this;
   }
 
@@ -435,12 +442,20 @@ async function importDwgPrint(log = new StepLog()) {
  * every step's result so a later failure cannot hide an earlier success.
  */
 async function runStep(name, fn) {
-  const log = new StepLog();
+  const log = new StepLog(name);
+  // Heap is worth printing: this reads several workbooks plus a 10 MB xlsm into memory
+  // while a CRA dev server shares the host, and an out-of-memory kill is one of the few
+  // failures runStep cannot catch — the process simply goes, and the request never gets
+  // a reply. A rising number here across the two steps is the tell.
+  const heap = () => `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`;
+  const started = Date.now();
+  console.log(`[ti:${name}] START · heap ${heap()}`);
   try {
     const detail = await fn(log);
+    console.log(`[ti:${name}] OK in ${((Date.now() - started) / 1000).toFixed(1)}s · heap ${heap()}`);
     return { name, ok: true, detail, stderr: log.stderr, output: log.output };
   } catch (error) {
-    console.error(`[${name}] failed:`, error);
+    console.error(`[ti:${name}] FAILED after ${((Date.now() - started) / 1000).toFixed(1)}s:`, error);
     return { name, ok: false, error: error.message, stderr: log.stderr || error.message, output: log.output };
   }
 }
