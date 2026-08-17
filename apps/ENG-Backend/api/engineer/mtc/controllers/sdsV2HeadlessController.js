@@ -7,6 +7,7 @@ const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const tselectFallback = require('../services/tselectFallback');
+const noJigRule = require('../services/noJigRule');
 const SdsOrchestrator = require('../services/SdsOrchestrator');
 const { TABLES } = require('../mtcConstants');
 const { toDD, toDwg } = require('../utils/rotaryDwg');
@@ -349,10 +350,33 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     for (const t of legacy) placeTool(null, { tool_name: t.tool_name || '', tool_dwg_no: t.tool_dwg_no || '', fromTs: false });
   }
 
+  // Did the FACTORY plan / Machine Tool Config place anything? Captured before the
+  // Tooling Select fallback fills any slot, so it means "the factory assigned a fixture".
+  const hadFactoryTool = slotData.some(Boolean);
+
   // withSimilarRef so buildValueMap can prefer a dimensionally-similar produced part's
   // tool (similarRef) over the raw dimensional match when filling an empty slot.
   const tsResult = slotData.some(s => s === null) ? await tselectFallback.safeSearch(searchData.cn, { withSimilarRef: true }) : null;
-  if (tsResult) {
+
+  // ── "No jig required" (surface grind 1101/1102, OD > 40 or W > 38) ──────────
+  // The rule itself lives in searchService, which already emits a type:'no_jig'
+  // warning for the machine — read it rather than re-deriving, so the PDF and the
+  // Tooling Select page can never disagree about the same part. `appliesTo` is
+  // re-checked here because the PDF also knows the process_code, which Tooling
+  // Select does not; a machine is only offered for 1101/1102, so this is belt and
+  // braces rather than a second rule.
+  //
+  // FACTORY FIRST: if the plan assigned a fixture, that is the answer — the sheet
+  // prints it and says nothing about jigs. This only replaces the Tooling Select
+  // FALLBACK, which would otherwise rank the nearest small-part fixture and print
+  // it with a ' *' as though it were the selection for a part that needs none.
+  const noJigRequired = !hadFactoryTool
+    && noJigRule.appliesTo({ machineName: machine_type_name, processCode: process_code })
+    && (tsResult?.warnings || []).some(
+      w => w.type === 'no_jig' && (w.machine === machine_type_name || w.machine === machineGroup)
+    );
+
+  if (tsResult && !noJigRequired) {
     const acceptable = new Set([machine_type_name]);
     if (machineGroup) acceptable.add(machineGroup);
     // The PDF is generated for a process_code the part actually has (the user picked
@@ -457,7 +481,9 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // configured fixture's NAME (resolved from lpb.eng_tooling by DWG family) so the SDS
   // always lists every fixture per Machine Tool Config — even when the factory plan
   // carries no Tool No for it. Tool No cell stays blank (no factory no); name shows.
-  if (mtRows.length > 0) {
+  // Skipped when no jig is required — listing every configured fixture name for a
+  // part that needs none is exactly the misleading output this rule exists to stop.
+  if (mtRows.length > 0 && !noJigRequired) {
     const emptyCfg = mtRows.filter(r => {
       const slot = parseInt(r.tool_number.slice(1), 10);
       return slot >= 1 && slot <= 20 && !slotData[slot - 1] && r.tool_drawing_no;
@@ -554,7 +580,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       cleanDwg: s ? toDwg(s.tool_dwg_no) : null
     });
   }
+  // A part needing no fixture must SAY so. Twenty blank tool rows read as "the data
+  // is missing" — the state this sheet is printed to rule out — so the statement goes
+  // in the first slot's name cell, where a fixture name would have been, and the Tool
+  // No cell stays empty because there is no drawing to quote.
+  if (noJigRequired) {
+    finalTools[0].name = noJigRule.LABEL;
+    console.log(`[sds-pdf] ${noJigRule.LABEL}: cn=${searchData.cn} machine=${machine_type_name} process=${process_code}`);
+  }
   map['tooling'] = finalTools;
+  map['no_jig_required'] = noJigRequired ? '1' : '';
 
   // Per-CN override must win over the machine default. `searchData.cn` is control-no
   // form (e.g. C32-00641), but the admin Excel-Config UI may store the override cn in

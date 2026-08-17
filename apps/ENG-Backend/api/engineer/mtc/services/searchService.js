@@ -6,6 +6,7 @@ const { TSV2_TABLES } = require('../tsv2Constants');
 const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
+const noJigRule = require('./noJigRule');
 
 // Cap on concurrent inventory queries per search (pg pool max is 20).
 const SEARCH_CONCURRENCY = 8;
@@ -537,6 +538,77 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
   }
 }
 
+// ── Does the factory plan assign a fixture on the no-jig processes? ──────────
+//
+// The "no jig required" rule (services/noJigRule.js) states the engineering rule;
+// the factory process plan states what the shop actually does, and on four live
+// C/Ns they disagree — 394010 / 394011 / 394013 / 394021 are all OD 47–53 on
+// process 1101 and the plan assigns COLLET 4547-01-0031-01 anyway. The plan wins:
+// a sheet that says "no jig required" beside a part the plan tools is worse than
+// no statement at all. This mirrors the SDS PDF, which is factory-first for the
+// same reason, so the two never contradict each other on the same part.
+//
+// Called at most once per search, and only when the part is actually over one of
+// the size bounds — so the ~85% of parts the rule cannot touch pay nothing.
+//
+// Fails to the RULE, not to silence: an unreadable maqdb means we do not know that
+// the plan disagrees, and the engineering rule is the default answer.
+async function _factoryPlansJig(specCn) {
+  const controlNo = cnFormat.toControlNo(specCn);
+  if (!controlNo) return false;
+  try {
+    const { rows } = await maqPool.query(
+      `SELECT 1 FROM lpb.eng_r_pi_tool
+        WHERE process_plan_no = $1
+          AND process_code = ANY($2)
+          AND tool_dwg_no IS NOT NULL AND btrim(tool_dwg_no) <> ''
+        LIMIT 1`,
+      [controlNo, [...noJigRule.NO_JIG_PROCESS_CODES]]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.warn(`[tselect] no-jig plan check skipped for ${specCn}: ${err.message}`);
+    return false;
+  }
+}
+
+// ── The lookup map: two keys, one table ──────────────────────────────────────
+//
+// `tooling_partno_map` pins tooling that no dimensional formula can select. It
+// started keyed on the workpiece part number (品番) and now also carries a `cn`
+// key, because the two real cases need different keys:
+//
+//   parts_no — a fixture chosen by part number (KS-400B5/B6 ROTARY DRESSER,
+//              the KS-H70 grindstone set). One part number, one tool.
+//   cn       — a fixture chosen per CONTROL NUMBER, where the shop's choice is
+//              recorded per part and no rule reproduces it. FTL-10(I) PUSHER OP1
+//              is the case that forced it: its design sheet is right 2% of the
+//              time and the real selection lives in an ACCESS database, but the
+//              factory PLAN records what was actually fitted, C/N by C/N.
+//              Only 66 of its 811 planned C/Ns carry a parts_no in the spec
+//              table, against 658 that resolve by CN — so parts_no was the wrong
+//              key for it, not a smaller version of the right one.
+//
+// A cn-keyed row leaves `parts_no` NULL. That is load-bearing twice over: the
+// table's UNIQUE is (machine_name, tooling_name, parts_no, tool_dwg_no) and
+// hundreds of C/Ns share one pusher drawing, so any constant there collapses them
+// onto one key — Postgres treats NULLs as distinct and they don't. And SQL
+// equality against NULL is never true, so every legacy `parts_no = <part number>`
+// consumer is blind to these rows.
+async function _lookupMapRows(partsNo, specCn) {
+  if (!partsNo && !specCn) return [];
+  const { rows } = await engPool.query(
+    `SELECT machine_name, tooling_name, tool_dwg_no,
+            CASE WHEN $1::text <> '' AND parts_no = $1 THEN 'parts_no' ELSE 'cn' END AS matched_by
+       FROM ${TSV2_TABLES.PARTNO_MAP}
+      WHERE is_forbidden = false
+        AND ( ($1::text <> '' AND parts_no = $1)
+           OR ($2::text <> '' AND cn       = $2) )`,
+    [partsNo || '', specCn || '']
+  );
+  return rows;
+}
+
 // ── Part-number override (hybrid lookup) ─────────────────────────────────────
 //
 // Some tooling is NOT selected by a dimensional formula — it is pinned by the
@@ -550,18 +622,14 @@ async function _linkSupportBlockToLoadingChute(results, machineByDisplay) {
 //
 // One indexed query per search, guarded: parts with no map row (every machine
 // that doesn't use the table) get zero rows back → no-op, no behaviour change.
-async function _applyPartnoOverrides(results, machineByDisplay, partsNo) {
-  if (!partsNo) return;
+// `mapRows` comes from a single _lookupMapRows call per search — both this and
+// _applyLookupOnlyToolings read the same rows, so it is fetched once by the caller.
+async function _applyPartnoOverrides(results, machineByDisplay, mapRows) {
   // Fail-open: this runs on every search. A DB error must leave the formula-driven
   // matches intact (a sensible default) rather than 500 the whole search — the pinned
   // override resumes once a transient error clears.
   try {
-    const { rows } = await engPool.query(
-      `SELECT machine_name, tooling_name, tool_dwg_no
-         FROM ${TSV2_TABLES.PARTNO_MAP}
-        WHERE parts_no = $1 AND is_forbidden = false`,
-      [partsNo]
-    );
+    const rows = mapRows || [];
     if (!rows.length) return;
 
     const override = {};
@@ -582,6 +650,107 @@ async function _applyPartnoOverrides(results, machineByDisplay, partsNo) {
     }
   } catch (err) {
     console.warn(`[tselect] parts_no override skipped for ${partsNo}: ${err.message}`);
+  }
+}
+
+// ── Lookup-only toolings (no formula exists at all) ──────────────────────────
+//
+// `_applyPartnoOverrides` can only overwrite a result the formula pass produced,
+// and that pass iterates the tooling names found in `tooling_formula`. A tooling
+// with NO formula therefore never enters the search at all — which is exactly the
+// state FTL-10(I) PUSHER OP1 was left in: 63 shelf rows, zero formulas, zero
+// search rules, unreachable.
+//
+// This pass adds those. For every map row whose (machine, tooling) produced no
+// result, it emits one — the pinned inventory row, flagged `overrideBy`, with an
+// empty `computedDims` because nothing was computed.
+//
+// Two guards keep it honest:
+//   • only machines that PASSED eligibility (limits + no-jig) are eligible. A map
+//     row must not smuggle a tooling onto a machine the part cannot run on.
+//   • never touches an existing result, so a formula-driven match always wins and
+//     this can only ADD.
+async function _applyLookupOnlyToolings(results, eligibleByDisplay, mapRows) {
+  try {
+    const rows = mapRows || [];
+
+    const seen = new Set(results.map(r => `${r.machine}||${r.tooling}`));
+    // machine_name → the display name it was searched under (group label or its own)
+    const displayByMachineName = {};
+    for (const [display, m] of Object.entries(eligibleByDisplay)) {
+      displayByMachineName[m.machine_name] = display;
+    }
+
+    // ── 1. This part's own pinned rows ──────────────────────────────────────
+    // Must run BEFORE the placeholder pass below, or the placeholder claims the
+    // (machine, tooling) key and the real pinned match is skipped as a duplicate.
+    for (const r of rows) {
+      const display = displayByMachineName[r.machine_name];
+      if (!display) continue;                                    // machine excluded or disabled
+      if (seen.has(`${display}||${r.tooling_name}`)) continue;    // formula pass already covered it
+      const table = eligibleByDisplay[display]?.inventory_table;
+      if (!table) continue;
+      const { rows: inv } = await engPool.query(
+        `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+        [r.tool_dwg_no]
+      );
+      if (!inv.length) continue;
+      seen.add(`${display}||${r.tooling_name}`);
+      results.push({
+        machine: display,
+        tooling: r.tooling_name,
+        computedDims: {},
+        columnMap: {},
+        matchDimCols: [],
+        matches: inv,
+        overrideBy: r.matched_by,
+      });
+    }
+
+    // ── 2. Lookup-only families this part has no pinned row for ─────────────
+    // The map records what the shop has actually fitted — 810 C/Ns for PUSHER OP1
+    // against a far larger eligible population — so on most parts no pinned row
+    // exists. Emitting nothing makes that indistinguishable from "this system has
+    // never heard of the tooling", which is exactly how it looked before the map
+    // was seeded. An EMPTY result instead says "this family applies here and has
+    // no pinned selection" — and it is also what `_applySimilarPartFallback`
+    // fills, so without it the nearest-twin suggestion can never reach these
+    // families at all.
+    const machineNames = Object.values(eligibleByDisplay).map(m => m.machine_name);
+    if (!machineNames.length) return;
+    const { rows: families } = await engPool.query(
+      `SELECT DISTINCT p.machine_name, p.tooling_name
+         FROM ${TSV2_TABLES.PARTNO_MAP} p
+        WHERE p.machine_name = ANY($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM ${TSV2_TABLES.FORMULA} f
+              JOIN ${TSV2_TABLES.MACHINE} tm ON tm.id = f.machine_id
+             WHERE tm.machine_name = p.machine_name
+               AND f.tooling_name = p.tooling_name)`,
+      [machineNames]
+    );
+    for (const f of families) {
+      const display = displayByMachineName[f.machine_name];
+      if (!display) continue;
+      const key = `${display}||${f.tooling_name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push({
+        machine: display,
+        tooling: f.tooling_name,
+        computedDims: {},
+        columnMap: {},
+        matchDimCols: [],
+        matches: [],
+        // No formula exists for this tooling, so nothing GATED it empty — it is empty
+        // only because this part has no pinned row. _applySimilarPartFallback keys on
+        // this to fill the whole fixture set from one reference part; a formula-driven
+        // tooling may be empty *deliberately* (a sentinel gate) and must not be.
+        lookupOnly: true,
+      });
+    }
+  } catch (err) {
+    console.warn(`[tselect] lookup-only toolings skipped: ${err.message}`);
   }
 }
 
@@ -637,36 +806,75 @@ async function _applySimilarPartFallback(results, machineByDisplay, spec, specCt
     // SDS-overlay batch). A DB error here must skip THIS machine's suggestion, never
     // abort the whole search — mirrors the catch-and-skip of the similar-ref attachers.
     try {
-      // Globally-nearest reference part across this machine's empty toolings.
+      // ONE reference part per machine. From it, the nearest tooling always — plus
+      // every LOOKUP-ONLY tooling that same part has a mapping for.
+      //
+      // Why not simply take all of them: on a grip-exclusive machine two fixtures are
+      // alternatives, not a set. KL-20's OD-chuck and ID-chuck collets share an
+      // inventory table, and 4 part numbers in the map carry BOTH — so filling every
+      // mapping would put two mutually exclusive collets on one sheet. Those collets
+      // have formulas, and the one that came back empty was gated empty on purpose
+      // (the cnPrefix grip test emits a sentinel), so "empty" there means "not this
+      // part's grip", not "unknown".
+      //
+      // Why not keep taking only one: a machine whose fixtures ARE a set gets starved.
+      // XD-8 runs COLLET + STOPPER L + STOPPER R + WRIST END ASSY on the same part, and
+      // the single-row rule left three of them blank even though the very same reference
+      // part had them mapped. Reported from the floor 2026-08-17: XD-8 showed a STOPPER L
+      // suggestion from ref C/N 410452 while STOPPER R — which 410452 also has, as
+      // 4858-17-0036 — was simply absent.
+      //
+      // `lookupOnly` separates the two cases exactly: it is set only on toolings with no
+      // formula at all, so nothing could have gated them. Raising the LIMIT instead would
+      // mix reference parts and reintroduce the grip problem from a different direction.
       const { rows } = await engPool.query(
-        `SELECT m.tooling_name, m.tool_dwg_no, s.cn AS ref_cn, s.pn AS parts_no,
-                (ABS(COALESCE(s.od_aft,0) - $1)
-               + ABS(COALESCE(s.id_aft,0) - $2)
-               + $8 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
-           FROM ${TSV2_TABLES.PARTNO_MAP} m
-           JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
+        `WITH nearest AS (
+           SELECT s.cn, s.pn,
+                  (ABS(COALESCE(s.od_aft,0) - $1)
+                 + ABS(COALESCE(s.id_aft,0) - $2)
+                 + $8 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
+             FROM ${TSV2_TABLES.PARTNO_MAP} m
+             -- The reference set is keyed EITHER way: a parts_no-keyed row resolves via
+             -- the spec's own part number, a cn-keyed one via its control number. Without
+             -- the second arm every cn-pinned family (FTL PUSHER OP1) contributes nothing
+             -- to the suggestion pool, because its parts_no is NULL and NULL never joins.
+             JOIN ${TSV2_TABLES.SPEC_PROCESS} s
+               ON (m.parts_no IS NOT NULL AND s.pn = m.parts_no)
+               OR (m.cn       IS NOT NULL AND s.cn = m.cn)
+            WHERE m.machine_name = $4
+              AND m.tooling_name = ANY($5)
+              AND m.is_forbidden = false
+              AND left(s.cn, 2) = $6
+              AND s.cn <> $7
+            ORDER BY dist ASC
+            LIMIT 1
+         )
+         SELECT m.tooling_name, m.tool_dwg_no, n.cn AS ref_cn, n.pn AS parts_no, n.dist
+           FROM nearest n
+           JOIN ${TSV2_TABLES.PARTNO_MAP} m
+             ON (m.cn IS NOT NULL AND m.cn = n.cn)
+             OR (m.parts_no IS NOT NULL AND n.pn IS NOT NULL AND m.parts_no = n.pn)
           WHERE m.machine_name = $4
             AND m.tooling_name = ANY($5)
-            AND m.is_forbidden = false
-            AND left(s.cn, 2) = $6
-            AND s.cn <> $7
-          ORDER BY dist ASC
-          LIMIT 1`,
+            AND m.is_forbidden = false`,
         [od, id, w, machineName, toolingNames, cls, String(spec.cn), W_DIST_WEIGHT]
       );
       if (!rows.length) continue;
+      if (Number(rows[0].dist) > SIMILAR_DIST_MAX) continue;
 
-      const best = rows[0];
-      if (Number(best.dist) > SIMILAR_DIST_MAX) continue;
+      // rows[0] is the nearest tooling (the historical behaviour); the rest are only
+      // taken when the target is lookup-only.
+      const nearestTooling = rows[0].tooling_name;
+      for (const best of rows) {
+        const target = emptyResults.find(r => r.tooling === best.tooling_name);
+        if (!target || target.matches?.length) continue;
+        if (best.tooling_name !== nearestTooling && !target.lookupOnly) continue;
 
-      const target = emptyResults.find(r => r.tooling === best.tooling_name);
-      if (!target) continue;
-
-      const { rows: inv } = await engPool.query(
-        `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
-        [best.tool_dwg_no]
-      );
-      if (inv.length) {
+        const { rows: inv } = await engPool.query(
+          `SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`,
+          [best.tool_dwg_no]
+        );
+        if (!inv.length) continue;
         target.matches = inv;
         target.overrideBy = 'similar_part';
         target.similarPart = {
@@ -728,7 +936,13 @@ async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, s
                + ABS(COALESCE(s.id_aft,0) - $2)
                + $8 * ABS(COALESCE(s.w_aft,0) - $3)) AS dist
            FROM ${TSV2_TABLES.PARTNO_MAP} m
-           JOIN ${TSV2_TABLES.SPEC_PROCESS} s ON s.pn = m.parts_no
+           -- The reference set is keyed EITHER way: a parts_no-keyed row resolves via
+           -- the spec's own part number, a cn-keyed one via its control number. Without
+           -- the second arm every cn-pinned family (FTL PUSHER OP1) contributes nothing
+           -- to the suggestion pool, because its parts_no is NULL and NULL never joins.
+           JOIN ${TSV2_TABLES.SPEC_PROCESS} s
+             ON (m.parts_no IS NOT NULL AND s.pn = m.parts_no)
+             OR (m.cn       IS NOT NULL AND s.cn = m.cn)
           WHERE m.machine_name = $4
             AND m.tooling_name = ANY($5)
             AND m.is_forbidden = false
@@ -912,9 +1126,16 @@ async function search(cn, opts = {}) {
   const results = [];
   const warnings = [];
 
+  // The no-jig rule can only fire on an over-size part, so the plan lookup it needs
+  // is resolved once here and skipped entirely for everything else.
+  const factoryPlansJig = noJigRule.exceedsSize(specCtx) ? await _factoryPlansJig(specCn) : false;
+
   // Phase 1 — eligibility check (limits/tooling names come from the in-memory
   // config cache, so this is cheap) → flatten to (machine, tooling) tasks.
   const tasks = [];
+  // Machines that survived eligibility — the only ones a lookup-only tooling may
+  // be attached to (see _applyLookupOnlyToolings).
+  const eligibleByDisplay = {};
   await Promise.all(searchMachines.map(async (machine) => {
     const displayName = machine._displayName || machine.machine_name;
     try {
@@ -926,6 +1147,18 @@ async function search(cn, opts = {}) {
         warnings.push({ machine: displayName, reason: limitCheck.reason, type: 'limit' });
         return;
       }
+      // "No jig required" — a large part on a surface grinder holds on the magnetic
+      // chuck and no fixture is designed for it. Distinct from a limit exclusion (the
+      // part runs fine here) and from an empty result (nothing is missing), so it gets
+      // its own warning type and the machine's toolings are not searched at all —
+      // otherwise the closest-match ranking would hand back the nearest small-part
+      // fixture as if it were the answer. See services/noJigRule.js.
+      const noJig = noJigRule.evaluate({ machineName: machine.machine_name, ctx: specCtx });
+      if (noJig.noJig && !factoryPlansJig) {
+        warnings.push({ machine: displayName, reason: noJig.reason, type: 'no_jig' });
+        return;
+      }
+      eligibleByDisplay[displayName] = machine;
       const toolingNames = await configCache.getToolingNames(machine.id);
       for (const tooling_name of toolingNames) tasks.push({ machine, displayName, tooling_name });
     } catch (err) {
@@ -983,7 +1216,17 @@ async function search(cn, opts = {}) {
     machineByDisplay[m._displayName || m.machine_name] = m;
   }
   await _linkSupportBlockToLoadingChute(results, machineByDisplay);
-  await _applyPartnoOverrides(results, machineByDisplay, spec.pn);
+  // One map read per search, shared by the two passes below. Fails open to [] so a
+  // transient DB error leaves the formula-driven matches exactly as they are.
+  let mapRows = [];
+  try { mapRows = await _lookupMapRows(spec.pn, specCn); }
+  catch (err) { console.warn(`[tselect] lookup map skipped for ${specCn}: ${err.message}`); }
+
+  await _applyPartnoOverrides(results, machineByDisplay, mapRows);
+  // Toolings selected purely by lookup, with no formula to put them in the search
+  // in the first place (FTL-10(I) PUSHER OP1). Runs after the override so a
+  // formula-driven result is never displaced.
+  await _applyLookupOnlyToolings(results, eligibleByDisplay, mapRows);
   // Last resort — fill any still-empty tooling with the factory's pick for the
   // most dimensionally-similar part (suggestion only; flagged similar_part).
   await _applySimilarPartFallback(results, machineByDisplay, spec, specCtx);
@@ -1015,6 +1258,10 @@ function _clearCaches() {
 }
 
 module.exports = { search, limitExcludedMachines, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };
+// Exported for unit testing the lookup-only tooling pass — it is the only path that
+// can CREATE a result for a tooling no formula covers, so its guards (eligible
+// machines only, never displace a formula match) need pinning.
+module.exports._applyLookupOnlyToolings = _applyLookupOnlyToolings;
 // Exported for unit testing the NULL-safety guard + distance cap of the
 // informational "Similar" reference column (tests/mtc/searchSimilarRef.test.js).
 module.exports._attachSimilarRefFromPartnoMap = _attachSimilarRefFromPartnoMap;

@@ -10,15 +10,51 @@ paths:
 
 Domain at `api/engineer/mtc/` (tsv2 files) — registered in `server.js` as `/api/tooling-select`. The legacy V1 system has been retired; V1 files remain on disk but are not routed.
 
+### Sources of truth — read these before writing any rule
+
+Every formula, limit and search rule in this system must trace to one of three
+sources. **Nothing in Tooling Select is invented, and nothing is inferred from an
+inventory list alone** — three attempts to reverse-engineer a rule from a tooling
+list produced wrong answers (see "Tooling that is documented but cannot be selected").
+
+| # | Source | Where | What it is authoritative for |
+|---|---|---|---|
+| 1 | **`20260202_Tooling_Excel_List.xlsm`** | `G:\Shared drives\RD Development Technology Review Request\Tooling Select\` | **The index.** Every tooling list, per machine, with a 工程 (process) column. Start here — it is the only way to find a family no machine folder names, which is how 9901-09 was found under 工程 = 検査(CHECK). The per-machine workbooks it points at live under `DesignStandards_Dimensions_InventoryData\` and carry the `加工対象物寸法記入欄` calculation block that *is* the rule. |
+| 2 | **`TEMPLATE_B.xlsx`** | `api/engineer/mtc/doc/TEMPLATE_B.xlsx` (vendored) · also on the shared drive | **The process→machine→tooling map.** Col 1 process code, 2 its name, 3 machine, 5 tooling, 6 drawing family. Decides *what* should be covered and for which part families — including the grey-fill convention (grey = not selected for that family; white = selected). |
+| 3 | **RE33xxx design standards** | `api/engineer/mtc/doc/RE33*.pdf` — 12 files | **The design authority.** Work-size limits (`tooling_machine_limit`) and TYPE branch conditions come from here, cited by clause in each row's `description` (e.g. `RE33042 A §7: …`). |
+
+Precedence when they disagree:
+
+- **A tooling drawing beats a tooling list.** The list is what exists on the shelf; the
+  drawing is the rule that made it. STOCKER CHUTE's `OD` meaning 荒径 (before-turning,
+  at MAX) is on the drawing and nowhere in RE33037 D — reading it off the list matched
+  1 of 87 rows.
+- **The factory plan beats a standard.** `lpb.eng_r_pi_tool` is a live answer key of what
+  the shop actually plans per C/N. Where RE33042 A §7 says `W ≥ 14` and the plan shows 60 %
+  of the machine's work between 5 and 14, the standard is what needs revising — go and
+  measure before restoring a bound.
+- **A standard beats TEMPLATE_B for *how*; TEMPLATE_B beats a standard for *whether*.**
+  QUILL / WHEEL / the second plug pair are in TEMPLATE_B and in no standard — that is the
+  standards lagging the worksheet, not a conformance failure.
+
+Which files exist is verified: 12 RE PDFs (`RE33024 D`, `RE33025 B`, `RE33026 A`, `RE33032 B`,
+`RE33034 B`, `RE33036 C`, `RE33037 D`, `RE33038 F`, `RE33039 A`, `RE33040 A`, `RE33041 B`,
+`RE33042 A`) plus `TEMPLATE_B.xlsx` sit in `api/engineer/mtc/doc/`. The index workbook is
+**not** vendored — it is only on `G:`, which is Google Drive for Desktop and exists only
+inside a signed-in interactive session (→ `.claude/rules/backend-gotchas.md`).
+
 ### DB Tables
 
 | Table | Purpose |
 |---|---|
-| `tooling_machine` | Machine registry (inventory_table, inventory_machine_filter, enabled) |
+| `tooling_machine` | Machine registry — `machine_name, label, inventory_table, inventory_machine_filter, enabled, machine_group, sds_machine_type_id` |
 | `tooling_machine_limit` | Eligibility limits on spec inputs per machine |
-| `tooling_formula` | Formula rows: one per (machine_id, tooling_name, output_key) — evaluated in sort_order ASC |
-| `tooling_search_rule` | Maps formula output_key → inventory column with optional tolerance |
-| `tooling_spec_process` | Part specifications (CN, OD/ID/W Bf/Aft, type, yball, process) — managed via admin |
+| `tooling_formula` | Formula rows: one per (machine_id, tooling_name, output_key) — evaluated in sort_order ASC. **Keys on `machine_id`; there is no `machine_name` column** |
+| `tooling_search_rule` | Maps formula output_key → inventory column — `tol_plus, tol_minus, sort_priority, inventory_tooling_filter, inventory_table_override, is_match_dim` |
+| `tooling_spec_process` | Part specifications (CN, OD/ID/W Bf/Aft, type, yball, process, thread, blank-head and SPH/ball/race component dims) — managed via admin |
+| `mtc_formula_error_log` | Every formula/condition evaluation failure, deduped on the root cause for 10 min. **The first place to look when a family stops appearing** |
+| `tooling_partno_map` | Lookup-pinned tooling, for fixtures no dimensional formula can select. Keyed by **`parts_no` OR `cn`** (ROTARY DRESSER 4800-42 by part number; FTL PUSHER OP1 by control number). Keys on `machine_name`, not `machine_id` |
+| `tselect_cn_cache` | Persisted per-CN search result (6 h TTL) consumed by the SDS PDF + coverage report — see the cache-invalidation note under Routes |
 
 > `tsv2Constants.js` maps constant names to the above table names. Always use `TSV2_TABLES.*` — never hardcode.
 
@@ -26,19 +62,136 @@ Domain at `api/engineer/mtc/` (tsv2 files) — registered in `server.js` as `/ap
 
 Registered in `server.js` via `api/engineer/mtc/tsv2Routes.js`. Main endpoints:
 - `POST /search` — search by CN
+- `POST /formula/test` · `GET/DELETE /formula/errors` — ad-hoc evaluation and the error log
 - `GET/POST/PUT/DELETE /machines[/:id]`
 - `GET/POST/PUT/DELETE /machines/:machineId/limits`
-- `GET/POST/PUT/DELETE /machines/:machineId/formulas`
+- `GET/POST/PUT/DELETE /machines/:machineId/formulas` · `GET /machines/:machineId/toolings`
 - `GET/POST/PUT/DELETE /machines/:machineId/search-rules`
+- `GET /inventory-tables` · `GET /columns/:table` · `GET /inventory-lookup`
+- `GET/POST/PUT/DELETE /inventory/:table` — the tool-list (shelf) rows themselves
+- `GET/POST/PUT/DELETE /partno-map` · `GET /partno-map/meta`
+- `GET/PUT /board-config/:sourceType` — MTC → Kanban auto-card intake
 - `GET/POST/PUT/DELETE /spec[/:cn]` — Part spec CRUD
 - `GET /spec/factory-preview/:cn` — Read-only factory dim preview
 - `POST /spec/sync/:cn` — Upsert factory dims into spec
 - `POST /spec/sync-new` — Bulk insert new CNs from factory
 
+**The admin guard is `hasFeature('tooling_admin')`, not `isAdmin`.** `tsv2Routes.js` binds
+the local name `isAdmin` to it, which reads like the `mtcAuth` export but is not: it passes
+full `AD` admins *or* a non-AD user carrying the `tooling_admin` permission in `req.user.perms`.
+Reads are open to any authenticated user.
+
+**Two caches must be invalidated on a write, and the routes do it for you.** `flushConfig`
+drops the in-memory `tsv2ConfigCache` (machines/limits/formulas/rules) so an admin edit
+applies on the very next search; `flushTselectOnWrite` drops the persisted `tselect_cn_cache`,
+without which the SDS PDF and the coverage report serve stale tool matches for up to 6 h.
+Inventory, partno-map and spec writes all go through the second one — a new mutating route
+must carry the right middleware or the change appears in the admin UI and nowhere else.
+
+### Machine names come from the SDS registry, not from a hyphen rule
+
+`tooling_machine.machine_name` must equal `sds_machine_type_code.machine_type_name`
+(or the T-Select `machine_group` must). **That registry is the factory's own spelling
+and it wins** — audited 2026-08-17, all 30 enabled machines match, and the roster is:
+
+```
+FTL-10(I)  GS-64PFII  HAMAI 5B  J-WAVE   KL-20     KN-113A  KN-312A  KN-312B
+KS-03A     KS-400B1   KS-400B5  KS-400B6 KS-500RD  KS-B22G  KS-B22RD KS-B80
+KS-H70     KVD-300CRII  LB15     LNC45/C200  MD-V9910WA  MSG-410  OC-16A
+PSG-64     THREAD ROLL  TP-SW-03他  TSG-300W  X-100    XD-8    測定用治具全般
+```
+
+Groups: `KS-400B1` → `KS-400B1/B2/B7`, `TSG-300W` → `TSG-300W/TSG-300ZNC`. B2/B7 and
+TSG-300ZNC have no rows of their own — they exist only as group labels, so filtering
+search results on a bare member name finds nothing.
+
+> **`LB15` and `LNC45/C200` are correct as spelled — do not "fix" them to `LB-15` /
+> `LNC-45`.** The hyphen convention is about the grinder names, not a house style; CLAUDE.md
+> read as if it covered every machine until 2026-08-17, and someone acting on that would
+> break these two. `sds_machine_type_code` spells the whole lathe family without hyphens —
+> `LB12` (672), `LB15` (649 **and** 682), `LB15Ⅱ-M` (814) — and `LNC45/C200` (651) is one
+> registry entry naming two machines. `LB-15` was the name here until `20260815_` and
+> `20260815d_` deliberately moved it to the registry spelling. Renaming it back breaks the
+> SDS join.
+>
+> The mechanism CLAUDE.md used to cite for the convention — "`FormulaService` uses
+> exact-match SQL, a missing hyphen returns 0 for every parameter" — **no longer exists in
+> V2.** `tooling_formula` keys on `machine_id` and has no `machine_name` column, and
+> `tooling_selection_rules` has been dropped from the database entirely, so all three of
+> that snippet's `UPDATE`s would error. The hyphen rule still holds for the `KS-` / `KN-` /
+> `TSG-` names, where the hyphen *is* the registry spelling — it is a statement about those
+> machines, not a house style to enforce on new ones.
+
+**Where the name is matched as a raw string** — these are what a rename actually breaks,
+and all three fail silently (a missing row, not an error):
+
+| Site | Query |
+|---|---|
+| `sdsV2HeadlessController.js` (SDS PDF tooling-slot order) | `tooling_machine tm … WHERE tm.machine_name = ANY([machine_type_name, machineGroup])` |
+| `sdsV2HeadlessController.js` · `searchService.js` ×2 (partno override, similar-part fallback) | `tooling_partno_map … WHERE machine_name = $1` |
+| `inventoryController.js` (resolve name → inventory table) | `WHERE (machine_name = $1 OR machine_group = $1)` |
+
+Everything else — formulas, limits, search rules — keys on `machine_id`.
+
+### "No jig required" — the third answer a search can give (2026-08-17)
+
+`services/noJigRule.js`. Surface grind (process **1101 / 1102**) on a part with
+**OD > 40 or W > 38** needs no fixture: the MSB grinders hold work on a magnetic chuck
+and a part that large is stable on it unaided. Emitted by `search()` as a machine-level
+warning `{ type: 'no_jig' }`, and the machine's toolings are **not searched at all** —
+left to run, the closest-match ranking would return the nearest small-part fixture and
+present it as the selection.
+
+It is deliberately not either of the two answers the system already had:
+
+| | means | consumers |
+|---|---|---|
+| `type: 'limit'` | the part **cannot run** on this machine | SDS Production-History red badge, coverage anomaly filter |
+| empty `matches` | a fixture should exist and none was found | the missing-tooling gap the coverage report counts |
+| `type: 'no_jig'` | the part runs here and **needs no fixture** | T-Select page (info alert), SDS PDF (prints the label) |
+
+Reusing `'limit'` would have reported a false problem on every large surface-ground part —
+2,509 of 16,627 specced rows are over one of the bounds (2,497 by OD, 355 by W, 343 by both).
+
+**Process ↔ machine is 1:1, which is the only reason Tooling Select can apply this at all.**
+`searchService` is per-CN and has no concept of a process code. `sds_machine_tool` (audited
+2026-08-17) shows 1101/1102 served by exactly `PSG-64`, `GS-64PFII`, `MSG-410` and those three
+serving nothing else, so gating on the machine is equivalent. The SDS PDF knows both and
+passes both; `appliesTo` requires every identifier it is given to match, so there is one rule,
+not two to keep in step.
+
+**Both sides are factory-first, and this is not hypothetical.** **Four real C/Ns break the
+floor's rule**: `394010`, `394011`, `394013`, `394021` are all OD 47–53 on process 1101 and the
+plan assigns COLLET `4547-01-0031-01` anyway. A sheet that says "no jig required" beside a part
+the shop tools is worse than saying nothing, so the plan wins on both sides:
+
+- **Tooling Select** — `_factoryPlansJig(specCn)` asks `lpb.eng_r_pi_tool` whether any tool is
+  planned on 1101/1102. If one is, the warning is suppressed and the machine's toolings are
+  searched normally. Run at most **once per search and only when the part is over a bound**, so
+  the ~85 % of parts the rule cannot touch pay nothing for it.
+- **SDS PDF** — the label prints only when the plan placed no tool. It replaces the *Tooling
+  Select fallback*, never factory data, and the Machine-Tool-Config name fill is skipped with it.
+
+Both **fail to the rule, not to silence**: an unreadable maqdb means we do not know the plan
+disagrees, and the engineering rule is the default answer.
+
+> Verified live after the change: all four counter-examples now report `no_jig=0` and get
+> their normal 12 surface-grind results, while `324024` and `254007` — large, with no planned
+> tool — still report it on all three machines.
+
+> Verified live 2026-08-17: large parts (`324024` 67.9/46.0, `254007` 85.8/37.1) get the label
+> on PSG-64 and GS-64PFII and zero surface-grind tooling results, while every other machine is
+> searched exactly as before; normal parts (`394038`, `354017`) are untouched. Unit tests in
+> `tests/mtc/noJigRule.test.js` pin the bounds as **strictly greater** (OD 40.0 / W 38.0 exactly
+> still take a jig) and pin that a part with no dimensions at all never reports "no jig".
+
 ### Conformance to the RE330xx design standards (2026-08-14)
 
-The five machine tooling-design standards in `api/engineer/mtc/doc/` are the authority for
-work-size limits and for KN-312's TYPE branch conditions. `db_migrations/20260814_conform_tooling_select_to_re330_standards.js`
+The five machine tooling-design standards that existed in `api/engineer/mtc/doc/` when this
+was written are the authority for work-size limits and for KN-312's TYPE branch conditions.
+(Twelve RE33xxx PDFs sit there now — the seven added later that same day cover FTL, X-100,
+XD-8, the body/shank holders and HydraGrip, and the conformance pass below did **not**
+re-run against them.) `db_migrations/20260814_conform_tooling_select_to_re330_standards.js`
 brought the config in line and is **idempotent** — re-running reports "already correct".
 
 | Machine | Standard | What it now enforces |
@@ -165,11 +318,25 @@ tooling workbook** (`加工対象物寸法記入欄`), never from the tooling li
 | `20260814d_x100_sph_arbor.js` | **X-100** (組切削, proc 2071/2031) | ARBOR | 123 |
 | `20260814e_x100_sph_rest.js` | X-100 | ARBOR PIN · CENTER · WRIST END | 81 / 132 / 68 |
 | `20260814f_xd8_sph.js` | **XD-8** | COLLET · STOPPER L/R · WRIST END ASSY · LOADER JAW · INVERSION JAW | 62 / 32 / 44 / 30 / 4 / 5 |
+
+> **That XD-8 row overstated what shipped, and the floor caught it (2026-08-17).** The
+> migration loaded all six families into `tooling_xd8` but wrote formulas for only three —
+> COLLET, LOADER JAW, INVERSION JAW. STOPPER L, STOPPER R and WRIST END ASSY sat on the
+> shelf with no formula and no search rule, so the search never listed them: 106 rows,
+> unreachable. XD-8 therefore returned 4858-22 / 4858-12 / 4858-08 while TEMPLATE_B's
+> SPH(DT) sheet lists 4858-22 / 4858-15 / 4858-17 / 4858-01. Fixed by
+> `20260817b_xd8_cn_maps.js` — see below. **Loading a shelf is not implementing a family;
+> check formula AND rule counts per tooling, not per machine.**
 | `20260814g_ksb80_wheel.js` | KS-B80 | WHEEL 4021-05 | 17 |
 | `20260814h_kn113a_ball_inner_grind.js` | **KN-113A** (和泉 ball inner grind, proc 1181) | WHEEL · BACK PLATE · JAW | 3 / 3 / 8 |
 | `20260814i_oc16a_collar_and_pin.js` | OC-16A (centreless) | COLLAR · PIN | 44 / 3 |
 | `20260814j_rolling_dies.js` | **ROLLING** (転造, proc 2511/2501) | ROLL DIE | 73 |
 | `20260814k_marking_and_ball_arbor.js` | **MARKING** (proc 3491) · **LB-15** (球削) | PALLET · ARBOR/NUT/COLLAR | 37 / 60·56·3 |
+
+> Names in this table are as the migrations created them. Two were renamed the next day to
+> the SDS registry spelling: **MARKING → `MD-V9910WA`** and **LB-15 → `LB15`** (`20260815_`,
+> `20260815d_`). Look a machine up by the current roster above, not by the name in a
+> migration filename.
 
 ### Reading a tooling workbook: where the rule actually hides
 
@@ -431,7 +598,7 @@ lookup actually is, and it is not always what the sheet's `MIN(IF(A >= A7))` imp
 | COLLET OP1 | 126 | 0.00 | ceiling, `tol_minus = 0.1` | **81 %** (was 64 % at `0`) |
 | COLLET OP2 | 142 | 0.00 | ceiling on `sphCutOd_max`, `tol_minus = 0.1` | **80 %** |
 | PUSHER OP2 | 116 | −0.15 | nearest on `sphOd`, ±0.5 | **85 %** (was 3 %) |
-| PUSHER OP1 | 63 | +4.75 | **withdrawn** | — |
+| PUSHER OP1 | 63 | +4.75 | **no formula — pinned per C/N** (`20260817_`) | 100 % exact |
 
 Two things worth carrying forward:
 
@@ -458,6 +625,133 @@ choice among existing ones lives in an ACCESS database this system cannot see. T
 rows stay in `tooling_ftl10`; only the formulas and rules were removed, so the family
 reports nothing rather than something wrong. SD1/SD2 are what made the disproof possible,
 and PUSHER OP2 — the larger family — ships on the same sync.
+
+**It ships after all, as a lookup rather than a formula (2026-08-17, `20260817_pusher_op1_cn_map.js`).**
+The disproof above stands and none of it was revisited — no formula was found, because there
+is none. What changed is the question: the ACCESS database records the *design*, but
+`lpb.eng_r_pi_tool` records what was actually **fitted**, C/N by C/N, and that is a selection
+this system can serve without deriving anything.
+
+- **811 C/Ns** plan a PUSHER OP1 that is on the shelf; **exactly one** (`414250`) plans two
+  different ones and is skipped rather than guessed. All 811 exist in `tooling_spec_process`.
+- The key is `cn`, and that is the whole point: only **66 of the 811 (8 %)** carry a
+  `parts_no`, so `tooling_partno_map`'s original key would have reached one part in twelve.
+  The table now takes either key — see below.
+- Verified live: 40 random mapped C/Ns returned the planned pusher, **40/40 exact, 0 misses**,
+  and it reaches the SDS sheet on both 2071 and 2031.
+
+> Convert `control_no` → spec `cn` with **`cnFormat.toSpecCn` and nothing else**. An ad-hoc
+> "strip the leading zeros" version mangles short suffixes — `A41-00045` → `4145` instead of
+> `410045` — which is what made a first pass of this analysis report 658 reachable C/Ns
+> instead of 811. The migration is idempotent, so re-running it is also the refresh when the
+> plan moves.
+
+### XD-8 STOPPER L / STOPPER R / WRIST END ASSY (2026-08-17, `20260817b_`)
+
+Pinned per C/N from the plan, for the same reason as PUSHER OP1 — and here the workbook
+*does* have a calculation block, which was measured and rejected before choosing the map.
+Against 1,206 planned stoppers:
+
+| what the STOPPER(L) sheet states | how it scores |
+|---|---|
+| `A: ボール肩径以上なら可` → `dim_a >= SD` | **99 % (L) / 100 % (R)** — real, but the median stopper sits **5.45 / 8.13 mm** above SD. A sanity floor, not a selector: on a 32-row shelf it excludes almost nothing. |
+| `B = ROUND(BW/2, 2)` | **20 % within 0.1 mm (L)**, **0 % (R)** — R's median Δ is +10.34, so its `dim_b` is not that quantity at all. |
+| the block's other outputs | read the COLLET sheet (`J41/K41 = IF(COLLET!D25…)`) — not computable from the part. |
+| the shelf's own `組合せ コレット` pairing column | **62 % (L) / 69 % (R)**, covering 27 of 32 and 21 of 44 shelf rows. The cell lists several collets separated by `・`, so read it as a list — exact-string matching scores 31 %/55 % and is measuring the wrong thing. |
+
+The sheet says why in its own words above the block:
+「設計では従来通り進めてもらうが、"選定"では…」 — *proceed as before for DESIGN, but SELECTION
+is a different question.* Mapped: STOPPER L 1,343 C/Ns (2 ambiguous), STOPPER R 1,344 (1),
+WRIST END ASSY 863 (0). **30-C/N samples: 30/30 exact on all three.**
+
+Two things left deliberately alone:
+
+- **WRIST END ASSY's 109 off-shelf plan rows.** Its shelf holds 29 drawings; the plan names
+  others. An unstocked drawing is not selectable, so those C/Ns are reported by the
+  migration and not mapped.
+- **TEMPLATE_B marks WRIST END ASSY `(△1)` and INVERSION JAW `(△2)`, with
+  「←左記がある場合は△2より優先」** — when the former exists it takes priority over the
+  latter. They are alternatives, and the system currently offers both. Encoding that
+  priority needs a rule the sheet does not give in computable form; the two are shown
+  side by side rather than guessed at.
+
+### The lookup map takes two keys, and lookup-only toolings now reach the search
+
+`tooling_partno_map` was "fixture pinned by workpiece part number". It now carries a nullable
+`cn` as a second key, because the two real cases key differently: a ROTARY DRESSER is chosen
+per **part number**, a PUSHER OP1 per **control number**.
+
+- **A cn-keyed row leaves `parts_no` NULL, and that is load-bearing twice.** The table's
+  UNIQUE is `(machine_name, tooling_name, parts_no, tool_dwg_no)` and hundreds of C/Ns share
+  one pusher drawing, so any constant placeholder collapses them onto one key and the insert
+  fails; NULLs are distinct in a Postgres unique index. And `parts_no = <value>` is never true
+  for NULL, so every legacy consumer is blind to these rows — adding them cannot change an
+  existing selection. (No spec row carries an empty-string `pn`; all 14,353 blanks are NULL.)
+- **`_applyPartnoOverrides` could only ever overwrite a result that already existed**, and the
+  search enumerates toolings from `tooling_formula` — so a tooling with no formula never
+  entered the search at all. `_applyLookupOnlyToolings` is the pass that adds those, and its
+  two guards are the ones to preserve: only machines that **passed eligibility** (limits and
+  no-jig) may receive one, and it never displaces a formula-driven result. Results carry
+  `overrideBy: 'cn' | 'parts_no'`, neither of which `tselectFallback` gates, so they flow to
+  the SDS PDF like any other match. Pinned by `tests/mtc/lookupOnlyToolings.test.js`.
+- **A lookup-only family is shown as an EMPTY result when the part has no pinned row.** The
+  map records what the shop has fitted, which is always a subset of the eligible population
+  (PUSHER OP1: 657 of 5,166 SPH parts). Emitting nothing made "no pinned selection for this
+  part" indistinguishable from "the system has never heard of this tooling" — which is
+  exactly what the floor reported after the first PUSHER OP1 sync looked like it had done
+  nothing. The empty row is also what the similar-part fallback fills.
+- **The similar-part fallback reaches cn-keyed rows too.** Its reference join was
+  `ON s.pn = m.parts_no`; a cn-keyed row has NULL there and NULL never joins, so every
+  cn-pinned family contributed nothing to the suggestion pool. It is now
+  `ON (m.parts_no IS NOT NULL AND s.pn = m.parts_no) OR (m.cn IS NOT NULL AND s.cn = m.cn)`.
+  Worth 2,693 more parts for PUSHER OP1 alone: **60 % of the 4,507 unmapped SPH parts have a
+  dimensional twin within `SIMILAR_DIST_MAX` (0.2)**, median distance 0.00. Combined coverage
+  goes from 0 to roughly 65 % of the SPH population — 13 % pinned exactly, ~52 % as a labelled
+  `similar_part` suggestion.
+
+- **The fallback fills the whole fixture SET, from one reference part.** It picks the single
+  nearest reference part per machine (unchanged — that is what stops two mutually exclusive
+  fixtures landing on one sheet), then fills the nearest tooling **plus every `lookupOnly`
+  tooling that same part has mapped**. Before this, XD-8 showed a STOPPER L suggestion from
+  ref C/N 410452 and left STOPPER R blank even though 410452 has one (`4858-17-0036`) —
+  reported from the floor. `lookupOnly` is the discriminator and it matters: KL-20's two
+  collets have formulas and 4 part numbers map to both, but the empty one was gated empty on
+  purpose by the cnPrefix grip test, so "empty" there means "not this part's grip". Raising
+  the `LIMIT` instead would mix reference parts and break that from the other direction.
+
+> **Two different "similar" values, and they are not the same thing.** A row can carry both
+> and they routinely disagree, which reads as a contradiction unless you know the difference:
+>
+> | | `overrideBy = 'similar_part'` (SIMILAR PART badge) | `similarRef` (Similar ref column) |
+> |---|---|---|
+> | what it is | the **substitute**: this tooling found nothing, so the shown tool IS the answer offered | a **reference**, shown beside whatever was already matched |
+> | effect | replaces `matches` | never touches `matches` |
+> | chosen by | `_applySimilarPartFallback` — one reference part for the whole machine | `_attachSimilarRefFromPartnoMap` / `…FromFactoryPlan` — nearest per tooling, and the second one keys on tool family via `lpb.eng_r_pi_tool` |
+> | when computed | every search | only when the caller passes `withSimilarRef` |
+>
+> Because one picks per machine and the other per tooling, they land on different reference
+> parts. Both pages therefore **suppress the reference column on a row that is itself a
+> similar-part fill** — `ToolingSelectV2Page` always did; `SdsV2Page` was showing both and
+> now matches.
+
+> **`SIMILAR_DIST_MAX` is 0.2 and that is tight on purpose** — it means "a dimensional twin",
+> not "something nearby". A part 0.79 away gets no suggestion, which is why spot-checking
+> three random unmapped C/Ns can show nothing filled while 60 % of the population is covered.
+> Sample from the parts that *have* a twin before concluding the mechanism is broken.
+
+### Seeding a cn-keyed family
+
+`db_migrations/lib/seedCnMapFromPlan.js` does the whole job — shelf as whitelist, plan as
+answer, ambiguous C/Ns skipped rather than guessed, idempotent per (machine, tooling) so
+re-running is the refresh when the plan moves. A new family is a few lines:
+
+```js
+await seedCnMapFromPlan({ engPool, maqPool, machine: 'XD-8', inventory: 'tooling_xd8',
+                          tooling: 'STOPPER L', family: '4858-15', source: '…' });
+```
+
+Use it when — and only when — the design rule has been measured and rejected. The map is
+what the shop *did*, not why; it cannot extrapolate to a part nobody has made.
 
 ### J-WAVE 4879 (2026-08-15, `20260815p_`)
 
@@ -576,7 +870,8 @@ tooling list all produced wrong answers.
 > places above before writing one off. Six sheets were wrongly written off on the first pass.
 
 **One rule in this system is inferred rather than sourced**, and it is marked as such in
-both the migration header and the formula `description`: **LB-15 ARBOR `A = ID − 0.3`**.
+both the migration header and the formula `description`: **LB-15 ARBOR `A = ID − 0.3`**
+(the machine is now named `LB15`).
 The 球削 workbook has no calculation block anywhere; the rule rests on two 適用型式 that
 resolve to real spec rows (D3 at ID −0.24 and −0.35) plus the shape of X-100's documented
 arbor rule. Its ±1.0 tolerance is deliberately wide — the result is a shortlist, not an
@@ -625,7 +920,19 @@ Full findings, with the measured counts behind each: the RE330 Conformance Revie
 - **withTol rules** (`tol_plus` or `tol_minus` not null): add `WHERE col BETWEEN lo AND hi`
 - **withoutTol rules** (both null): no WHERE filter; closest-match only
 - **Ranking** — combined-distance `ORDER BY`:
-  `ORDER BY (ABS(col_A - val_A) + ABS(col_B - val_B) + ...) ASC`
+  `ORDER BY (ABS(col_A - val_A) + ABS(col_B - val_B) + ...) ASC`, then `LIMIT 2`
+- **Guard: if no rule resolves to a computed dim, the search returns `[]`.** Without it the
+  SQL degrades to `SELECT * FROM table [filters] LIMIT 2` — no WHERE, no ORDER BY — and hands
+  back arbitrary rows presented as real matches. This is the path taken when every formula
+  for a tooling *errors*, so the guard is what turns a broken formula into "no match" instead
+  of a silent wrong match. Do not remove it when refactoring.
+- **`sort_priority` currently has no effect.** The code sorts `distanceRules` by it and the
+  comment says the ORDER BY is "hierarchical (primary first)" — but the emitted SQL is one
+  summed distance `(ABS(a) + ABS(b) + …)`, and addition is commutative, so reordering the
+  terms changes nothing. 153 of 277 rules carry a non-zero value that does nothing. Making it
+  real means emitting `ORDER BY ABS(a), ABS(b)` (separate terms), which would change live
+  results on every multi-dim tooling — measure against `lpb.eng_r_pi_tool` before doing it,
+  and do not "fix" it as a tidy-up.
 - **`is_match_dim` (bool, default true)** on `tooling_search_rule` selects which dims feed the ranking. Only rules with `is_match_dim = true` contribute to the `ORDER BY` distance; set `false` on constant / SD-lookup dims so the closest match is ranked by the OD/ID/W part-fit dims only. **Tolerance WHERE filters apply regardless of this flag.** Fallback: if every rule for a tooling is `false`, ranking falls back to all mapped dims (deterministic result). Editable in `V2SearchRuleManager` (the "Use in closest-match ranking" switch / "Ranking" column). Migration: `db_migrations/20260605_add_is_match_dim_to_search_rule.sql`. The `/search` response exposes `result.matchDimCols` (inventory columns of match-dim rules); `ToolingSelectV2Page` highlights those result-table headers (gold ★).
 
 ### Adding a new machine (DB-only, no code change)
@@ -693,4 +1000,4 @@ When T-Select returns "(-)None" or the wrong match, check in this order:
 - Cause: formula references `odBf_max`/`wBf_max` but the CN has `od_bf = NULL` → `buildSpecContext` converts null → 0 → variable = 0, formula output is near 0
 - Diagnose: check `tooling_spec_process` for the CN — if `od_bf` is NULL but `od_aft` is populated, and formula uses `odBf_max`, output will be 0
 - Fix: update `tooling_formula` to use `OD`/`W` (= `od_aft`/`w_aft`) instead of `odBf_max`/`wBf_max`
-- Example fixed (2026-05-28): TSG-300 (formerly TSG-300ZNC) CARRIER A: `ceil05(odBf_max+0.5)` → `ceil05(OD+0.5)`; CHUTE COVER A: `odBf_max+0.2` → `OD+0.2`; CHUTE COVER B: `wBf_max+0.1` → `W+0.1`
+- Example fixed (2026-05-28): TSG-300 (formerly TSG-300ZNC; now named `TSG-300W`, group `TSG-300W/TSG-300ZNC`) CARRIER A: `ceil05(odBf_max+0.5)` → `ceil05(OD+0.5)`; CHUTE COVER A: `odBf_max+0.2` → `OD+0.2`; CHUTE COVER B: `wBf_max+0.1` → `W+0.1`
