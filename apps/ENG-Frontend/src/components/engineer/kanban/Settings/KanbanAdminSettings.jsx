@@ -106,7 +106,7 @@ const KanbanAdminSettings = ({ open, onClose }) => {
             onCancel={onClose}
             width={700}
             footer={null}
-            destroyOnClose
+            destroyOnHidden
         >
             <Spin spinning={loading}>
                 <Form 
