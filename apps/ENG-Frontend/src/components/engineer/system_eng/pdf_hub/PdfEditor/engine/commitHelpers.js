@@ -1,4 +1,5 @@
 import { StandardFonts, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 
 /**
  * commitHelpers.js — Utilities for PDF manipulation.
@@ -52,9 +53,38 @@ export const FONT_MAP = {
     'monospace': StandardFonts.Courier,
 };
 
-export async function getFont(doc, fontFamily) {
-    const stdFont = FONT_MAP[fontFamily] || StandardFonts.Helvetica;
-    return await doc.embedFont(stdFont);
+const fontCache = {};
+
+export async function getFont(doc, fontFamily, fontWeight, fontStyle) {
+    if (!doc.defaultFontLoaded) {
+        doc.registerFontkit(fontkit);
+        doc.defaultFontLoaded = true;
+    }
+
+    let fontName = 'Sarabun-Regular.ttf';
+    const isBold = fontWeight === 'bold' || fontWeight >= 700;
+    const isItalic = fontStyle === 'italic';
+
+    if (isBold && isItalic) fontName = 'Sarabun-BoldItalic.ttf';
+    else if (isBold) fontName = 'Sarabun-Bold.ttf';
+    else if (isItalic) fontName = 'Sarabun-Italic.ttf';
+
+    const cacheKey = fontName;
+
+    try {
+        if (!fontCache[cacheKey]) {
+            const fontUrl = `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sarabun/${fontName}`;
+            fontCache[cacheKey] = await fetch(fontUrl).then(res => {
+                if (!res.ok) throw new Error('Font fetch failed');
+                return res.arrayBuffer();
+            });
+        }
+        return await doc.embedFont(fontCache[cacheKey]);
+    } catch (e) {
+        console.warn('Failed to load custom font, falling back to StandardFonts', e);
+        const stdFont = FONT_MAP[fontFamily] || StandardFonts.Helvetica;
+        return await doc.embedFont(stdFont);
+    }
 }
 
 // ── Embed image (try PNG first, fallback to JPG) ──

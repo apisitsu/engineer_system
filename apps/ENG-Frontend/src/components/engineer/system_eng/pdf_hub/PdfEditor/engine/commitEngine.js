@@ -171,6 +171,8 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         };
     };
 
+
+
     switch (fabricType) {
         case 'rect': {
             const bl = rotatePoint(leftEdge, topEdge + objH);
@@ -219,17 +221,16 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             break;
         }
 
-        case 'triangle': {
+        case 'triangle':
+        case 'arrowhead': {
             const p1 = rotatePoint(leftEdge + objW / 2, topEdge);
             const p2 = rotatePoint(leftEdge, topEdge + objH);
             const p3 = rotatePoint(leftEdge + objW, topEdge + objH);
 
-            const path = `M ${toPdf(p1.x, cW, pW)},${toPdfY(p1.y, cH, pH)} ` +
-                         `L ${toPdf(p2.x, cW, pW)},${toPdfY(p2.y, cH, pH)} ` +
-                         `L ${toPdf(p3.x, cW, pW)},${toPdfY(p3.y, cH, pH)} Z`;
+            const path = `M ${toPdf(p1.x, cW, pW)},${toPdfY(p1.y, cH, pH)} L ${toPdf(p2.x, cW, pW)},${toPdfY(p2.y, cH, pH)} L ${toPdf(p3.x, cW, pW)},${toPdfY(p3.y, cH, pH)} Z`;
 
             page.drawSvgPath(path, {
-                color: hexToRgb(obj.fill) || undefined,
+                color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                 borderColor: hexToRgb(obj.stroke) || undefined,
                 borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, pW) : undefined,
                 opacity: obj.opacity ?? 1,
@@ -280,24 +281,61 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                 }
             }
             
-            const font = await getFont(doc, obj.fontFamily);
+            const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle);
             const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
-            const lines = obj.textLines || obj.text.split('\n');
-            const lineHeight = size * 1.2;
+            
+            const lines = [];
+            if (obj.textLines && Array.isArray(obj.textLines) && obj.textLines.length > 0) {
+                obj.textLines.forEach(l => lines.push(typeof l === 'string' ? l : (l.text || '')));
+            } else if (obj.text) {
+                lines.push(...obj.text.split('\n'));
+            }
+            
+            lines.forEach((lineText, i) => {
+                const textWidthPdf = font.widthOfTextAtSize(lineText, size);
+                const boxWidthPdf = toPdf(objW, cW, pW);
 
-            lines.forEach((line, i) => {
+                let alignOffsetPdf = 0;
+                if (obj.textAlign === 'center') {
+                    alignOffsetPdf = (boxWidthPdf - textWidthPdf) / 2;
+                } else if (obj.textAlign === 'right') {
+                    alignOffsetPdf = boxWidthPdf - textWidthPdf;
+                }
+
                 const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * 1.2));
                 const bl = rotatePoint(leftEdge, lineBaseY);
-                const x = toPdf(bl.x, cW, pW);
-                const y = toPdfY(bl.y, cH, pH);
+                const xPdf = toPdf(bl.x, cW, pW);
+                const yPdf = toPdfY(bl.y, cH, pH);
 
-                page.drawText(line, {
-                    x, y,
+                const rad = obj.angle ? obj.angle * Math.PI / 180 : 0;
+                const finalX = xPdf + alignOffsetPdf * Math.cos(rad);
+                const finalY = yPdf - alignOffsetPdf * Math.sin(rad);
+
+                page.drawText(lineText, {
+                    x: finalX, 
+                    y: finalY,
                     size, font,
                     color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                     opacity: obj.opacity ?? 1,
                     rotate: obj.angle ? degrees(-obj.angle) : undefined,
                 });
+
+                if (obj.underline) {
+                    const lineThick = Math.max(1, size * 0.08);
+                    const dUnder = size * 0.15;
+                    const underStartX = finalX - dUnder * Math.sin(rad);
+                    const underStartY = finalY - dUnder * Math.cos(rad);
+                    const underEndX = underStartX + textWidthPdf * Math.cos(rad);
+                    const underEndY = underStartY - textWidthPdf * Math.sin(rad);
+
+                    page.drawLine({
+                        start: { x: underStartX, y: underStartY },
+                        end: { x: underEndX, y: underEndY },
+                        thickness: lineThick,
+                        color: hexToRgb(obj.fill) || rgb(0, 0, 0),
+                        opacity: obj.opacity ?? 1,
+                    });
+                }
             });
             break;
         }

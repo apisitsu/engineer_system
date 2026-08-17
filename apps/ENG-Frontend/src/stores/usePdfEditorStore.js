@@ -118,6 +118,10 @@ export const usePdfEditorStore = create((set, get) => ({
     setStrokeWidth: (w) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), strokeWidth: w } } })),
     setFontSize: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontSize: s } } })),
     setFontFamily: (f) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontFamily: f } } })),
+    setFontWeight: (w) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontWeight: w } } })),
+    setFontStyle: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontStyle: s } } })),
+    setUnderline: (u) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), underline: u } } })),
+    setTextAlign: (a) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), textAlign: a } } })),
     setOpacity: (o) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), opacity: o } } })),
     setHighlightColor: (c) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), highlightColor: c } } })),
     
@@ -210,8 +214,9 @@ export const usePdfEditorStore = create((set, get) => ({
                             obj.set({ scaleX: scale, scaleY: scale });
                         }
                     }
-                } else if (key === 'fontFamily') {
-                    if (obj.fontFamily !== undefined) obj.set('fontFamily', value);
+                } else if (key === 'fontFamily' || key === 'fontWeight' || key === 'fontStyle' || key === 'underline' || key === 'textAlign') {
+                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') obj.set(key, value);
+                    else if (key === 'fontFamily' && obj.fontFamily !== undefined) obj.set('fontFamily', value);
                 } else if (key === 'opacity') {
                     if (obj.opacity !== undefined) obj.set('opacity', value);
                 }

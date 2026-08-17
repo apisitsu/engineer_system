@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ColorPicker, InputNumber, Divider, Select, Slider, Switch, Input } from 'antd';
+import { ColorPicker, InputNumber, Divider, Select, Slider, Switch, Input, Button, Space } from 'antd';
+import { BoldOutlined, ItalicOutlined, UnderlineOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../../stores/usePdfEditorStore';
 import { SectionTitle, PropRow, COLOR_PRESETS } from './SharedProperties';
@@ -51,6 +52,29 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
     const handleSetFontFamily = (f) => {
         store.setFontFamily(f);
         if (store.selectedObjectId) store.updateSelectedObjectProperty('fontFamily', f, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetFontWeight = (w) => {
+        const newWeight = w === currentSettings.fontWeight ? 'normal' : w;
+        store.setFontWeight(newWeight);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontWeight', newWeight, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetFontStyle = (s) => {
+        const newStyle = s === currentSettings.fontStyle ? 'normal' : s;
+        store.setFontStyle(newStyle);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('fontStyle', newStyle, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetUnderline = () => {
+        const newUnderline = !currentSettings.underline;
+        store.setUnderline(newUnderline);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('underline', newUnderline, fabricCanvasRefs, currentPage);
+    };
+
+    const handleSetTextAlign = (a) => {
+        store.setTextAlign(a);
+        if (store.selectedObjectId) store.updateSelectedObjectProperty('textAlign', a, fabricCanvasRefs, currentPage);
     };
 
     const handleSetOpacity = (o) => {
@@ -157,6 +181,44 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage }) {
                                             { value: 'Courier', label: 'Courier' },
                                         ]}
                                     />
+                                </PropRow>
+                                <PropRow label="Format">
+                                    <Space.Compact size="small">
+                                        <Button 
+                                            type={currentSettings.fontWeight === 'bold' ? 'primary' : 'default'}
+                                            onClick={() => handleSetFontWeight('bold')}
+                                            icon={<BoldOutlined />} 
+                                        />
+                                        <Button 
+                                            type={currentSettings.fontStyle === 'italic' ? 'primary' : 'default'}
+                                            onClick={() => handleSetFontStyle('italic')}
+                                            icon={<ItalicOutlined />} 
+                                        />
+                                        <Button 
+                                            type={currentSettings.underline ? 'primary' : 'default'}
+                                            onClick={handleSetUnderline}
+                                            icon={<UnderlineOutlined />} 
+                                        />
+                                    </Space.Compact>
+                                </PropRow>
+                                <PropRow label="Align">
+                                    <Space.Compact size="small">
+                                        <Button 
+                                            type={currentSettings.textAlign === 'left' || !currentSettings.textAlign ? 'primary' : 'default'}
+                                            onClick={() => handleSetTextAlign('left')}
+                                            icon={<AlignLeftOutlined />} 
+                                        />
+                                        <Button 
+                                            type={currentSettings.textAlign === 'center' ? 'primary' : 'default'}
+                                            onClick={() => handleSetTextAlign('center')}
+                                            icon={<AlignCenterOutlined />} 
+                                        />
+                                        <Button 
+                                            type={currentSettings.textAlign === 'right' ? 'primary' : 'default'}
+                                            onClick={() => handleSetTextAlign('right')}
+                                            icon={<AlignRightOutlined />} 
+                                        />
+                                    </Space.Compact>
                                 </PropRow>
                             </div>
                         ) : (
