@@ -33,9 +33,16 @@ Host-specific *paths* are the half git still cannot carry. See the mapped-drive 
 
 One step failing does not stop the other; the response is 500 when **any** step fails, and the frontend downgrades to a warning (and still refreshes) when `steps[]` shows a partial success.
 
-**`TI_CSV_OUTPUT_DIR` defaults to `G:\Shared drives\ROD-Engineer\ToolingInspection`, and `G:` is Google Drive for Desktop — not a mapped network drive.** `Win32_LogicalDisk` reports it `DriveType 3` with an empty `ProviderName`, so **there is no UNC equivalent to point at**; earlier advice here to "set the env var to the UNC path" was wrong and would send you looking for a path that does not exist. A Drive letter exists only inside a signed-in interactive session, and no credential configuration gives a service account one.
+**`TI_CSV_OUTPUT_DIR` defaults to `G:\Shared drives\ROD-Engineer\ToolingInspection`, and `G:` is Google Drive for Desktop — not a mapped network drive.** `Win32_LogicalDisk` reports it `DriveType 3` with an empty `ProviderName`, so **there is no UNC equivalent to point at**; earlier advice here to "set the env var to the UNC path" was wrong and would send you looking for a path that does not exist.
 
-Where the backend does not run as a Drive-mounted user, point `TI_CSV_OUTPUT_DIR` at an ordinary folder (a real UNC share or local disk) and move the file to Drive separately. Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work), but step 2's CSV *is* its only output, so there it is a hard failure.
+These machines all have Drive installed, so `G:` is normally present on each of them — do not assume its absence is the problem. Two things about it are still per-host and worth checking rather than assuming:
+
+- **It is mounted per signed-in session, not per machine.** Installed everywhere is not the same as visible to the account running node. There is no UNC fallback, so if that account cannot see it, point `TI_CSV_OUTPUT_DIR` at an ordinary folder (a real UNC share or local disk) and move the file to Drive separately.
+- **A write to it is a cloud sync, not a disk write**, so how long the two CSVs (~0.5 MB and ~1.1 MB) take depends on the host's link. `ti_check_paths.js` writes a realistic 1 MB and times it; on plbmp118 that is 0.1 s.
+
+Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work), but step 2's CSV *is* its only output, so there it is a hard failure.
+
+> **`ls -l` ownership on `G:` is meaningless.** The mount reports the local user as owner for every file on it, including ones other people created years ago — so it can never tell you which host wrote a file. Use mtimes.
 
 `M:` and `N:` on these machines **are** network drives (`\\10.121.34.19\data_rod`, `\\sanlb01\MPA-DIV`) — which is why the two *sources* are written as UNC and only need credentials for the running account. Do not generalise from them to `G:`.
 

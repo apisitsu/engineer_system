@@ -20,11 +20,19 @@
  * ── The trap this exists for ────────────────────────────────────────────────
  * `TI_CSV_OUTPUT_DIR` defaults to `G:\Shared drives\...`, and **G: is Google Drive for
  * Desktop, not a network share** — `Win32_LogicalDisk` reports DriveType 3 with an empty
- * ProviderName. So it has NO UNC equivalent, it exists only inside a signed-in
- * interactive session, and no amount of credential configuration will give a service
- * account a G:. If the backend does not run as a user with Drive mounted, point
- * `TI_CSV_OUTPUT_DIR` at an ordinary folder (a real UNC share, or local disk) and move the
- * file to Drive separately.
+ * ProviderName. These machines all have Drive set up, so G: is normally there; the two
+ * things that still differ per host are worth checking rather than assuming:
+ *
+ *  - **It is mounted per signed-in session, not per machine.** Having Drive installed
+ *    everywhere is not the same as the account running node being able to see G:. There
+ *    is also no UNC form to fall back on, so if that account cannot, the fix is to point
+ *    `TI_CSV_OUTPUT_DIR` at an ordinary folder and move the file to Drive separately.
+ *  - **A write to it is a cloud sync, not a disk write.** The two CSVs are ~0.5 and
+ *    ~1.1 MB, and how long that takes is a property of the host's link, not of the code.
+ *    The write probe below therefore writes a realistic 1 MB and times it.
+ *
+ * Do not read `ls -l` ownership on G: as evidence of who wrote a file: the mount reports
+ * the local user for everything on it, including files created by other people years ago.
  *
  * `TI_INSP_REC_DIR` and `TI_DWG_PRINT_FILE` are genuine UNC shares (`\\sanlb01\MPA-DIV`,
  * `\\10.121.34.19\data_rod`) and only need credentials for the running account.
@@ -64,11 +72,21 @@ function inspect(label, target, { needsWrite = false } = {}) {
   const size = stat.isDirectory() ? 'directory' : `${(stat.size / 1024 / 1024).toFixed(1)} MB`;
   let note = '';
   if (needsWrite) {
+    // Write a realistic payload, not a token byte. The real CSVs are ~0.5 and ~1.1 MB,
+    // and the usual target is a Google Drive folder, where a write is a sync to the
+    // cloud rather than a disk write — a probe of five bytes would come back instantly
+    // and prove nothing about how long the import's own writes take.
     const probe = path.join(target, `.ti_write_probe_${process.pid}.tmp`);
+    const payload = Buffer.alloc(1024 * 1024, 0x2c); // 1 MB of commas
+    const w = Date.now();
     try {
-      fs.writeFileSync(probe, 'probe');
+      fs.writeFileSync(probe, payload);
+      const written = since(w);
       fs.unlinkSync(probe);
-      note = ' · writable';
+      note = ` · 1 MB write in ${written}`;
+      if (Date.now() - w > 20000) {
+        problems.push(`${label}: writable, but a 1 MB write took ${written} — slow enough to matter`);
+      }
     } catch (err) {
       note = ` · NOT WRITABLE (${err.code})`;
       problems.push(`${label}: readable but not writable — ${err.code}`);
@@ -103,9 +121,10 @@ inspect('TI_CSV_OUTPUT_DIR', PATHS.TI_CSV_OUTPUT_DIR, { needsWrite: true });
 
 if (/^[A-Za-z]:/.test(PATHS.TI_CSV_OUTPUT_DIR)) {
   console.log(`\n  NOTE  TI_CSV_OUTPUT_DIR is a drive letter (${PATHS.TI_CSV_OUTPUT_DIR.slice(0, 2)}).`);
-  console.log('        Drive letters are per-session. If the backend runs as a service this will');
-  console.log('        not exist for it even when it works in your own shell. G: is Google Drive');
-  console.log('        and has no UNC form at all — use a real folder and sync separately.');
+  console.log('        Drive letters are mounted per signed-in session, not per machine, so this');
+  console.log('        line only proves it exists for the account above. G: is Google Drive and');
+  console.log('        has no UNC form to fall back on — if the backend account cannot see it,');
+  console.log('        use an ordinary folder and move the file to Drive separately.');
 }
 
 const repoRoot = path.resolve(__dirname, '..');

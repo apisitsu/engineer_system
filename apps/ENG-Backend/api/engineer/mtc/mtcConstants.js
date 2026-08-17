@@ -83,9 +83,10 @@ const PATHS = {
   //  - the two sources are UNC shares the running account must have credentials for;
   //  - the output default is G:, which is GOOGLE DRIVE FOR DESKTOP, not a mapped network
   //    drive. Win32_LogicalDisk reports it DriveType 3 with an empty ProviderName, so
-  //    **it has no UNC equivalent** and no credential setup can give a service account
-  //    one. It exists only inside a signed-in interactive session. Where the backend does
-  //    not run as such a user, point TI_CSV_OUTPUT_DIR at an ordinary folder — a real UNC
+  //    **it has no UNC equivalent**. Drive is installed on all these machines, so G: is
+  //    normally there — but it mounts per signed-in session, not per machine, and a write
+  //    to it is a cloud sync rather than a disk write. Where the account running the
+  //    backend cannot see it, point TI_CSV_OUTPUT_DIR at an ordinary folder — a real UNC
   //    share or local disk — and get the file to Drive some other way.
   //    (M: and N: on these machines ARE network drives, \\10.121.34.19\data_rod and
   //    \\sanlb01\MPA-DIV, which is why the two sources below are written as UNC.)
