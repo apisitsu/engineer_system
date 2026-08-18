@@ -70,7 +70,19 @@ The whole sequence retries (3 attempts, linear backoff) on `UNKNOWN`/`EBUSY`/`EP
 
 > **This improves the odds; it does not remove the need to set `TI_CSV_OUTPUT_DIR`.** A retry helps a transient lock, not a folder the account cannot write at all.
 
-### Uploading to Drive through the API is blocked on a credential
+### Getting the CSVs to Drive without a drive letter
+
+Writing into a Drive-for-Desktop folder fails intermittently with `UNKNOWN` / -4094, and the retry only buys time — Drive's sync is **asynchronous**, so it can be holding a file minutes or hours after whatever triggered it (observed stuck at "1.1 MB, 0% downloaded"). Two machines writing the same file makes it worse, but one machine hitting its own previous upload is enough.
+
+**`TI_CSV_GAS_URL` uploads them instead.** `docs/gas_ti_csv_doPost.gs` is an Apps Script web app deployed **Execute as: Me**; the backend POSTs `{ secret, fileName, base64Data }` and the script writes into the folder with the deployer's own Drive rights. No file on local disk for Drive to lock, and no OAuth — the same pattern `GAS_EMAIL_URL` and `api/kanban/gas/Code.gs` already use.
+
+- Unset ⇒ nothing happens, so an unconfigured host behaves exactly as before.
+- The local `writeCsv` still runs and is still the step's real output; the upload only mirrors it, so a Drive outage or a stale URL degrades to a warning.
+- Only the **authoritative** exports are mirrored — not the backup copy `importPcTooling` writes before its DB round trip, which would upload the same filename twice per run.
+- Set `TI_CSV_GAS_SECRET` to match the script, or anyone in the org who finds the URL can overwrite the files.
+- **Re-deploying the script mints a new `/exec` URL.** Uploads that silently stop after someone "fixed" the script are almost always that; the warning says so when the response is HTML rather than JSON.
+
+### Uploading to Drive through the official API is blocked on a credential
 
 The obvious way to stop depending on a drive letter is to have the backend upload through the Drive API — `googleapis` is already a dependency. It cannot be done without someone re-authorising first:
 

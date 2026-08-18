@@ -20,6 +20,7 @@
 
 const fs = require('fs/promises');
 const path = require('path');
+const axios = require('axios');
 const { engPool } = require('../../../../instance/eng_db');
 const { PATHS } = require('../mtcConstants');
 const {
@@ -232,6 +233,58 @@ async function writeCsv(dir, filename, columns, rows, { attempts = 5, backoffMs 
   }
 }
 
+/**
+ * Push a CSV to Google Drive through the Apps Script web app, when one is configured.
+ *
+ * Writing into a Drive for Desktop folder is what produced the `UNKNOWN` / -4094
+ * failures: Drive holds the file while it syncs, asynchronously, long after whatever
+ * triggered the sync. Uploading removes the contended file entirely — there is nothing
+ * on the local disk for Drive to be busy with.
+ *
+ * Deliberately additive. The local write in `writeCsv` still happens and is still the
+ * step's real output; this only mirrors it. So a Drive outage, an expired deployment
+ * URL or a network blip degrades to a warning instead of failing an import that
+ * otherwise succeeded.
+ *
+ * Off unless `TI_CSV_GAS_URL` is set, so nothing changes for a host that has not been
+ * configured for it. See docs/gas_ti_csv_doPost.gs for the script and how to deploy it.
+ */
+async function uploadCsvToDrive(filename, columns, rows, log) {
+  const url = PATHS.TI_CSV_GAS_URL;
+  if (!url) return { skipped: true };
+
+  const body = toCsv(columns, rows);
+  const started = Date.now();
+  try {
+    // `proxy: false` matches emailService's call to the other GAS endpoint — this
+    // shell exports HTTP_PROXY globally and routing an internal request through the
+    // corporate gateway returns a McAfee page with HTTP 200 rather than an error.
+    const response = await axios.post(url, {
+      secret: PATHS.TI_CSV_GAS_SECRET,
+      fileName: filename,
+      base64Data: Buffer.from(body, 'utf8').toString('base64'),
+    }, {
+      proxy: false,
+      maxRedirects: 5,
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 120000,
+    });
+
+    const data = response.data || {};
+    if (!data.success) throw new Error(data.error || 'Apps Script reported no success flag');
+    log.log(`=== Uploaded ${filename} to Drive (${data.action}, ${data.bytes} bytes) in ${((Date.now() - started) / 1000).toFixed(1)}s ===`);
+    return data;
+  } catch (err) {
+    // A 302 to a Google login page means the deployment is not "Anyone within the
+    // organisation", and an HTML body means the URL is stale — both are worth naming.
+    const detail = err.response?.data && typeof err.response.data === 'string'
+      ? 'the URL returned HTML, not JSON — the deployment URL is probably stale'
+      : (err.response?.data?.error || err.message);
+    log.warn(`Cannot upload ${filename} to Drive: ${detail}`);
+    return { error: detail };
+  }
+}
+
 /** Every .xlsx under the share, minus the ~$ lock files Excel leaves behind. */
 async function findWorkbooks(dir) {
   const found = [];
@@ -437,6 +490,10 @@ async function importPcTooling(log = new StepLog()) {
   try {
     await writeCsv(outputDir, TI_CSV_NAME, exportColumns, exportRows);
     log.log(`=== Successfully exported ${exportRows.length} rows from Database to ${outputDir} ===`);
+    // Only the authoritative export is mirrored, not the backup written earlier in this
+    // step — the backup exists for the case where the DB round trip fails, and pushing
+    // both would upload the same filename twice a run for no gain.
+    await uploadCsvToDrive(TI_CSV_NAME, exportColumns, exportRows, log);
   } catch (err) {
     log.warn(`Cannot export from Database to ${outputDir}: ${err.message}`);
   }
@@ -494,6 +551,7 @@ async function importDwgPrint(log = new StepLog()) {
 
   await writeCsv(outputDir, DWG_CSV_NAME, columns, rows);
   log.log(`=== Complete csv to ${outputDir}! File name: ${DWG_CSV_NAME} ===`);
+  await uploadCsvToDrive(DWG_CSV_NAME, columns, rows, log);
 
   return { rows: rows.length };
 }
@@ -549,4 +607,5 @@ module.exports = {
   formatWorkCenter,
   StepLog,
   writeCsv,
+  uploadCsvToDrive,
 };

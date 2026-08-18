@@ -133,6 +133,14 @@ const PATHS = {
     || String.raw`\\10.121.34.19\data_rod\08-Engineer\14. Share file Back up\KUNPREAW\PC - Engineer\2026\2026 Record for drawing printed.xlsm`,
   TI_CSV_OUTPUT_DIR: envPath('TI_CSV_OUTPUT_DIR')
     || String.raw`G:\Shared drives\ROD-Engineer\ToolingInspection`,
+
+  // Optional: mirror the two CSVs to Drive through an Apps Script web app instead of
+  // relying on a Drive-for-Desktop letter. Unset means "don't", so a host that has not
+  // been configured behaves exactly as before. docs/gas_ti_csv_doPost.gs is the script,
+  // and explains why this exists rather than the Drive API (the OAuth token this project
+  // holds carries only `gmail.send`).
+  TI_CSV_GAS_URL: envPath('TI_CSV_GAS_URL'),
+  TI_CSV_GAS_SECRET: envPath('TI_CSV_GAS_SECRET'),
 };
 
 const WORKFLOW_STATUS = {
