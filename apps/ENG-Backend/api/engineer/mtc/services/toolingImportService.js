@@ -189,7 +189,13 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * fall back to writing the target directly: a stale file that could not be replaced
  * is worse than a torn one nobody is reading yet.
  */
-async function writeCsv(dir, filename, columns, rows, { attempts = 3, backoffMs = 750 } = {}) {
+// 5 attempts with a linear backoff waits 2+4+6+8 = 20s before giving up. The first
+// numbers here (3 x 750ms ≈ 4.5s) were chosen for a brief file lock and are too short for
+// what actually holds these files: Google Drive uploading the previous version. The two
+// CSVs are ~0.5 and ~1.1 MB, and the request budget is 15 minutes, so 20s is cheap
+// insurance — while still bounded, because a target that is genuinely unwritable must
+// fail rather than hang.
+async function writeCsv(dir, filename, columns, rows, { attempts = 5, backoffMs = 2000 } = {}) {
   await fs.mkdir(dir, { recursive: true });
   const target = path.join(dir, filename);
   const tmp = path.join(dir, `.${filename}.${process.pid}.tmp`);
