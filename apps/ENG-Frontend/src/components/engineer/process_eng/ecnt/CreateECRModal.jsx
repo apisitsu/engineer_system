@@ -149,7 +149,7 @@ export default function CreateECRModal({ open, onClose, onSuccess }) {
             open={open}
             onCancel={onClose}
             centered
-            destroyOnClose
+            destroyOnHidden
             maskClosable={false}
             styles={{
                 body: {
