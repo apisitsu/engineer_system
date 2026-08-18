@@ -6,9 +6,21 @@ Non-obvious server / Express / env pitfalls in `apps/ENG-Backend`. These bite si
 
 `server.js` registers JSON body parsers **twice**. The FIRST one (`express.json()`) runs before the `bodyParser.json({ limit: '50mb' })` below it, so its limit wins. Both must carry the `50mb` limit or large bodies (e.g. the saved SDS grid layout) throw `PayloadTooLargeError` even though a 50mb parser exists further down.
 
-## Gmail creds format (`.env`)
+## `.env` mixes two conventions, and nothing signposts which a key wants
 
-`.env` stores Gmail values as JS assignment syntax (e.g., `GMAIL_CLIENT_ID = '47418...';`). Always use `cleanEnv(key)` from `api/engineer/mtc/utils/emailHelper.js` — **never** `process.env.KEY` directly — or the OAuth call gets `invalid_client` from the literal quote characters in the value.
+The file contains both `KEY=value` and `KEY = 'value';` (JS assignment syntax). A reader has no way to tell which style a given key expects, and picking the wrong one fails in ways that do not name the cause.
+
+**Gmail creds are the JS-assignment kind.** Always use `cleanEnv(key)` from `api/engineer/mtc/utils/emailHelper.js` — **never** `process.env.KEY` directly — or the OAuth call gets `invalid_client` from the literal quote characters in the value.
+
+**The `TI_*` paths accept either**, via `envPath()` in `mtcConstants.js`, because the alternative was this on plbmp130:
+
+```
+ENOENT: mkdir 'D:\00_system\EngineerSystem\apps\ENG-Backend\'D:\ToolingInspectionCSV';'
+```
+
+`TI_CSV_OUTPUT_DIR = 'D:\ToolingInspectionCSV';` was written to match the Gmail keys directly above it. The quotes and semicolon became part of the path, Node resolved that relative to the backend directory, and the error named a path nobody had typed. `envPath()` strips a trailing `;` and **matched** wrapping quotes only — a lone quote is a typo and stays, so the ENOENT still names it. Covered by `tests/mtc/envPath.test.js`.
+
+> If you add another path-shaped env var, read it through `envPath()`. If you add a credential, read it through `cleanEnv()`.
 
 ## Gitignored artifacts never reach prod ("works on plbmp118, 500s on plbmp130")
 

@@ -74,6 +74,37 @@ const TABLES = {
   TOOLING_PARTNO_MAP: 'tooling_partno_map',
 };
 
+/**
+ * Read a path from the environment, tolerating the JS-assignment style this project's
+ * `.env` also uses.
+ *
+ * The file mixes two conventions — plain `KEY=value` alongside `KEY = 'value';` — and the
+ * Gmail credentials are the second kind, which is why `emailHelper.cleanEnv()` exists.
+ * Nothing signposts which kind a given key wants, so `TI_CSV_OUTPUT_DIR = 'D:\out';` was
+ * a reasonable thing to write and produced a genuinely baffling failure: the quotes and
+ * semicolon became part of the path, Node resolved it relative to the backend directory,
+ * and the import died on
+ *
+ *     ENOENT: mkdir 'D:\00_system\EngineerSystem\apps\ENG-Backend\'D:\ToolingInspectionCSV';'
+ *
+ * — an error that names a path nobody typed. Accept either form rather than expect anyone
+ * to remember which of two conventions a key belongs to.
+ *
+ * Only wrapping quotes and one trailing semicolon are stripped: a path may legitimately
+ * end in a space-free quote-free string, and nothing here should silently rewrite the
+ * middle of what someone configured.
+ */
+function envPath(key) {
+  const raw = process.env[key];
+  if (raw == null) return '';
+  return String(raw)
+    .trim()
+    .replace(/;+$/, '')                 // trailing `;` from the JS-assignment style
+    .trim()
+    .replace(/^(['"])([\s\S]*)\1$/, '$2') // matched wrapping quotes, not stray ones
+    .trim();
+}
+
 const PATHS = {
   EMAIL_RENDERER: path.join(__dirname, '../../../templates/email/emailRenderer'),
   SDS_TEMPLATE_DIR: process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'),
@@ -96,11 +127,11 @@ const PATHS = {
   //    scripts/ti_check_paths.js reports all of this per host and per account.
   // The trailing "2026" in the source paths is the folder name on the share, not a computed
   // fiscal year (the Python originals hardcoded it the same way) — override on rollover.
-  TI_INSP_REC_DIR: process.env.TI_INSP_REC_DIR
+  TI_INSP_REC_DIR: envPath('TI_INSP_REC_DIR')
     || String.raw`\\sanlb01\MPA-DIV\03-Purchase\02-Budget\INSP REC\2026`,
-  TI_DWG_PRINT_FILE: process.env.TI_DWG_PRINT_FILE
+  TI_DWG_PRINT_FILE: envPath('TI_DWG_PRINT_FILE')
     || String.raw`\\10.121.34.19\data_rod\08-Engineer\14. Share file Back up\KUNPREAW\PC - Engineer\2026\2026 Record for drawing printed.xlsm`,
-  TI_CSV_OUTPUT_DIR: process.env.TI_CSV_OUTPUT_DIR
+  TI_CSV_OUTPUT_DIR: envPath('TI_CSV_OUTPUT_DIR')
     || String.raw`G:\Shared drives\ROD-Engineer\ToolingInspection`,
 };
 
