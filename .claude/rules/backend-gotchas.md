@@ -48,6 +48,28 @@ Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work)
 
 **Never point `TI_CSV_OUTPUT_DIR` inside the repo.** `npm run dev` is nodemon and `package.json`'s `nodemonConfig.ignore` covers only `output/*` and `files/*`; a CSV written anywhere else under `apps/ENG-Backend/` restarts the server mid-import, which presents as the request hanging and never returning rather than as an error.
 
+### Writing the CSV: temp file, rename, retry
+
+`writeCsv` does **not** write the target directly, and the reason is a production failure rather than a preference. On plbmp130 `open` of the existing `RecordForDrawingPrinted.csv` inside the Drive folder failed with `UNKNOWN` / errno **-4094** while the folder itself listed and stat'd perfectly — Drive's virtual filesystem refusing a *truncating* open on a file it is syncing. Creating a new file beside it succeeds where overwriting does not, so the write goes to `.<name>.<pid>.tmp` and is renamed over the target.
+
+That also means a reader never sees a half-written file, which matters because these CSVs are consumed by a Google Sheet.
+
+The whole sequence retries (3 attempts, linear backoff) on `UNKNOWN`/`EBUSY`/`EPERM`/`EACCES` — all transient by nature, whether it is Drive mid-sync or someone with the CSV open in Excel — and falls back to a direct write if the rename never succeeds. A non-retryable error (`ENOENT` for a folder that does not exist) still throws, because that is the one the step needs to report. Verified against the real Drive folder: create 0.10 s, overwrite 0.06 s, no temp left behind.
+
+> **This improves the odds; it does not remove the need to set `TI_CSV_OUTPUT_DIR`.** A retry helps a transient lock, not a folder the account cannot write at all.
+
+### Uploading to Drive through the API is blocked on a credential
+
+The obvious way to stop depending on a drive letter is to have the backend upload through the Drive API — `googleapis` is already a dependency. It cannot be done without someone re-authorising first:
+
+```
+GMAIL_REFRESH_TOKEN scopes: https://www.googleapis.com/auth/gmail.send
+```
+
+That is the **only** scope on the token. Drive needs `…/auth/drive.file` (or `…/auth/drive` for an existing Shared Drive folder), which means a fresh consent flow producing a new refresh token, and the Drive API enabled on the same OAuth client. Store it as its own variable rather than widening the Gmail one — a token that can both send mail and write Drive is a bigger blast radius than either job needs.
+
+The frontend's `uploadFileToDrive.js` is not a precedent to copy: it goes through a Google Apps Script web app deployed as *"execute as the user accessing the web app"*, which is why it needs a popup and why a server cannot use it.
+
 > `node scripts/ti_check_paths.js` reports all three paths, whether the output folder is writable, and **which account it ran as** — run it as the account that runs the backend, since running it in your own shell proves nothing about a service account. It touches no database. On plbmp118 as an interactive user all three pass in ~30 s (8 workbooks, ~3,100 rows, plus a 10 MB xlsm), so a request that dies in ~10 s is a client timeout and one that dies near 60 s is a proxy timeout — neither is the import itself.
 
 ### Telling apart the three ways "Update data" fails
