@@ -38,7 +38,7 @@ const { buildSealSvg, buildSealDataUri, toSealName } = require('../utils/stampSe
 // Auto-intake: mirror each SDS approval sheet onto the shared Kanban board, moving
 // the card as it advances prepared→checked→approved. Fail-open (never blocks sign).
 const kanbanIntake = require('../services/kanbanIntake');
-const { boardRef } = require('../utils/sdsBoardRef');
+const { boardRef, groupMembers } = require('../utils/sdsBoardRef');
 const SDS_SOURCE = 'sds_approval';
 
 // Deep link to the Setup Data Sheet screen with the sheet already opened at the
@@ -250,6 +250,154 @@ router.get('/state', async (req, res) => {
     res.json({ success: true, state, isAdmin: isAdminUser(req.user), sds_rev });
   } catch (e) {
     console.error('sdsApproval state:', e.message);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── GET /board — every SDS sheet on one board, with its sign state ───────────
+/**
+ * Lets the Project board offer Prepared / Checked / Approved on the card itself,
+ * instead of sending the signer to the SDS page to find the sheet again.
+ *
+ * **Batched on purpose.** The board carries one card per sheet — 40 today, and the
+ * backlog feed seeds up to 150 a run — so the obvious `/state` per card is 40+
+ * round trips on every board load, each re-reading the role config. This answers
+ * the whole board in four queries regardless of card count.
+ *
+ * The hard part is going *backwards* through `boardRef`, which normalises a machine
+ * to its group label (see utils/sdsBoardRef). A group names no single sheet, so:
+ *
+ *   • one candidate                       → sign inline, the normal case
+ *   • several, exactly one already started → that is the sheet; sign inline
+ *   • several and none or more than one   → `ambiguous`, no inline signing; the
+ *     card falls back to the deep link so the operator picks the machine on the
+ *     SDS page, which is the only place that choice can honestly be made
+ *
+ * Guessing a member instead would write a signature against a sheet that is not
+ * the one printed, and nothing downstream would show it was the wrong one.
+ */
+router.get('/board', async (req, res) => {
+  const boardId = Number(req.query.board_id);
+  if (!Number.isInteger(boardId)) {
+    return res.status(400).json({ success: false, error: 'board_id is required' });
+  }
+  try {
+    const { rows: links } = await engPool.query(
+      `SELECT card_id, source_ref FROM mtc_board_card_link
+        WHERE source_type = $1 AND board_id = $2`,
+      [SDS_SOURCE, boardId]
+    );
+    if (!links.length) return res.json({ success: true, cards: {} });
+
+    // Parse + expand the group labels. `split('||')` not a regex: a CN never
+    // contains the separator and a machine name never does either.
+    const parsed = await Promise.all(links.map(async (l) => {
+      const [cn, machineSeg, process_code] = String(l.source_ref).split('||');
+      return {
+        card_id: l.card_id,
+        cn: cn || '',
+        machineSeg: machineSeg || '',
+        process_code: process_code || '',
+        candidates: await groupMembers(machineSeg),
+      };
+    }));
+    const usable = parsed.filter((p) => p.cn && p.machineSeg && p.process_code);
+
+    const uniq = (xs) => [...new Set(xs.filter(Boolean))];
+    const cns = uniq(usable.map((p) => p.cn));
+    const machines = uniq(usable.flatMap((p) => p.candidates));
+    const procs = uniq(usable.map((p) => p.process_code));
+
+    const [apprRes, revRes, cfg] = await Promise.all([
+      engPool.query(
+        `SELECT * FROM ${T}
+          WHERE cn = ANY($1) AND machine_type_name = ANY($2) AND process_code = ANY($3)`,
+        [cns, machines, procs]
+      ),
+      // Same precedence as resolveSdsRev, read for the whole board at once: the
+      // process-agnostic row only, with a cn-specific value beating the machine default.
+      engPool.query(
+        `SELECT cn, machine_type_name, param_value FROM ${TABLES.SDS_PARAMETER}
+          WHERE param_key = 'sds_rev' AND process_code IS NULL
+            AND machine_type_name = ANY($1) AND (cn IS NULL OR cn = ANY($2))`,
+        [machines, cns]
+      ),
+      getRoleConfig(),
+    ]);
+
+    const revDefault = new Map();   // machine → rev
+    const revByCn = new Map();      // `${cn}||${machine}` → rev
+    for (const r of revRes.rows) {
+      if (r.cn == null) revDefault.set(r.machine_type_name, r.param_value);
+      else revByCn.set(`${r.cn}||${r.machine_type_name}`, r.param_value);
+    }
+    const revFor = (cn, machine) =>
+      revKey(revByCn.get(`${cn}||${machine}`) ?? revDefault.get(machine) ?? '') || 'NC';
+
+    const sheets = new Map();       // `${cn}||${machine}||${pc}||${rev}` → row
+    for (const row of apprRes.rows) {
+      sheets.set(`${row.cn}||${row.machine_type_name}||${row.process_code}||${revKey(row.sds_rev)}`, row);
+    }
+    const sheetFor = (cn, machine, pc) =>
+      sheets.get(`${cn}||${machine}||${pc}||${revKey(revFor(cn, machine))}`) || null;
+
+    const cards = {};
+    for (const p of usable) {
+      const started = p.candidates.filter((m) => sheetFor(p.cn, m, p.process_code));
+      let machine = null;
+      if (p.candidates.length === 1) machine = p.candidates[0];
+      else if (started.length === 1) machine = started[0];
+
+      const base = {
+        cn: p.cn,
+        process_code: p.process_code,
+        machine_label: p.machineSeg,
+        signUrl: signPageUrl(p.cn, machine || p.machineSeg, p.process_code),
+      };
+
+      if (!machine) {
+        cards[p.card_id] = {
+          ...base,
+          machine_type_name: null,
+          ambiguous: true,
+          candidates: p.candidates,
+          sds_rev: null,
+          state: [],
+        };
+        continue;
+      }
+
+      const sds_rev = revFor(p.cn, machine);
+      const row = sheetFor(p.cn, machine, p.process_code);
+      const map = roleMap(row);
+      cards[p.card_id] = {
+        ...base,
+        machine_type_name: machine,
+        ambiguous: false,
+        candidates: p.candidates,
+        sds_rev,
+        state: ROLE_ORDER.map((role, i) => {
+          const rec = map[role] || null;
+          const prevSigned = i === 0 || !!map[ROLE_ORDER[i - 1]];
+          const permitted = userCanSign(req.user, role, cfg);
+          return {
+            role,
+            signed: !!rec,
+            signer_name: rec?.signer_name || null,
+            signed_at: rec?.signed_at || null,
+            em_id: rec?.em_id || null,
+            source: rec?.source || null,
+            canSign: permitted && prevSigned,
+            permitted,
+            blockedByOrder: permitted && !prevSigned,
+          };
+        }),
+      };
+    }
+
+    res.json({ success: true, cards, isAdmin: isAdminUser(req.user) });
+  } catch (e) {
+    console.error('sdsApproval board:', e.message);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });

@@ -2,6 +2,7 @@ const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { TABLES } = require('../mtcConstants');
+const { normalizeTarget, prefixLevel, cnMatchKeys, shapeFamiliesFor } = require('../utils/grindingPrefix');
 
 const router = express.Router();
 
@@ -211,11 +212,22 @@ router.get('/grinding/coverage', async (req, res) => {
     };
 
     const images = imgRes.rows;
-    const matchImage = (prefix, pc) => images.find((im) => {
-      if (!(im.cn_prefixes || []).includes(prefix)) return false;
-      const pcs = im.process_codes || [];
-      return pcs.length === 0 || pcs.includes(pc);
-    });
+    // Same three-level rule the PDF renderer uses: a family prefix (C39) is covered by
+    // its own image OR by the class image (C3). Matching only the exact prefix here would
+    // list families as gaps that already print a picture.
+    const matchImage = (prefix, pc) => {
+      const { keys } = cnMatchKeys(prefix);   // ['C39','C3'] for a family prefix
+      const hit = (level) => images.find((im) => {
+        if (!(im.cn_prefixes || []).some(p => normalizeTarget(p) === level)) return false;
+        const pcs = im.process_codes || [];
+        return pcs.length === 0 || pcs.includes(pc);
+      });
+      for (const k of keys) {             // most specific first
+        const im = hit(k);
+        if (im) return im;
+      }
+      return undefined;
+    };
 
     const combos = planRes.rows.map((r) => ({
       cn_prefix: r.cn_prefix,
@@ -234,8 +246,14 @@ router.get('/grinding/coverage', async (req, res) => {
     const cnsGap = sum(gaps);
 
     // Shape risk per image: one picture, how many distinct shapes is it standing in for?
+    // A class-level entry (C3) has to be expanded to the family prefixes that actually
+    // exist in factory data, or it reports "no shape data" while in fact covering more
+    // parts than any other record — exactly the entry that most needs the check.
+    const knownFamilies = [...mix.keys()];
     const imageRisk = images.map((im) => {
-      const prefixes = (im.cn_prefixes || []).filter((p) => /^[A-Z]\d{2}$/.test(p));
+      const prefixes = [...new Set(
+        (im.cn_prefixes || []).flatMap((p) => shapeFamiliesFor(p, knownFamilies))
+      )];
       const agg = new Map();
       for (const p of prefixes) {
         const m = mix.get(p);
@@ -300,33 +318,30 @@ router.get('/grinding/view/:id', async (req, res) => {
 
 /**
  * GET /api/sds/v2/images/grinding/:cn_prefix — serve image binary (Legacy/Lookup)
- * Optional ?process_code=IDG001 to get process-specific image; falls back to default (empty process_codes)
+ *
+ * Accepts a full control-no, a family prefix or a class prefix and resolves the same way
+ * the PDF renderer does (see utils/grindingPrefix): full → family → class, with a
+ * process-specific image beating the process-default *within* one level.
+ * Optional ?process_code=IDG001.
  */
 router.get('/grinding/:cn_prefix', async (req, res) => {
   const { cn_prefix } = req.params;
   const { process_code } = req.query;
   try {
-    let result;
-    if (process_code) {
-      result = await engPool.query(
-        `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE $1 = ANY(cn_prefixes) AND $2 = ANY(process_codes) LIMIT 1`,
-        [cn_prefix, process_code]
-      );
-      if (!result.rows[0]) {
-        result = await engPool.query(
-          `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-           WHERE $1 = ANY(cn_prefixes) AND (process_codes IS NULL OR process_codes = '{}') LIMIT 1`,
-          [cn_prefix]
-        );
-      }
-    } else {
-      result = await engPool.query(
-        `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
-         WHERE $1 = ANY(cn_prefixes) AND (process_codes IS NULL OR process_codes = '{}') LIMIT 1`,
-        [cn_prefix]
-      );
-    }
+    const { exact, family, keys } = cnMatchKeys(cn_prefix);
+    if (!keys.length) return res.status(400).json({ error: 'cn_prefix is required' });
+
+    const result = await engPool.query(
+      `SELECT image_data, mime_type, file_name FROM ${TABLES.SDS_V2_GRINDING_IMAGE}
+       WHERE (cn_prefixes && $1::text[])
+         AND ($2::text IS NULL OR process_codes IS NULL OR process_codes = '{}' OR $2::text = ANY(process_codes))
+       ORDER BY (CASE WHEN cn_prefixes && $3::text[] THEN 0
+                      WHEN cn_prefixes && $4::text[] THEN 1
+                      ELSE 2 END) ASC,
+                ($2::text IS NOT NULL AND process_codes IS NOT NULL AND process_codes != '{}' AND $2::text = ANY(process_codes)) DESC NULLS LAST
+       LIMIT 1`,
+      [keys, process_code || null, exact, family ? [family] : []]
+    );
     if (!result.rows[0]) return res.status(404).json({ error: 'Grinding image not found' });
     const { image_data, mime_type, file_name } = result.rows[0];
     res.setHeader('Content-Type', mime_type || 'image/jpeg');
@@ -337,32 +352,59 @@ router.get('/grinding/:cn_prefix', async (req, res) => {
   }
 });
 
-/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_codes JSON array, file) */
-router.post('/grinding', async (req, res) => {
-  const { cn_prefixes: cn_prefixes_raw, process_codes: process_codes_raw } = req.body;
-  if (!cn_prefixes_raw) return res.status(400).json({ error: 'cn_prefixes is required' });
-  if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
+/**
+ * Shared parse/validate for the grinding upload + edit bodies (both are multipart, so
+ * the arrays arrive as JSON strings). Returns `{ error }` or `{ prefixes, process_codes, label }`.
+ *
+ * Prefixes are normalised and level-checked here rather than at the DB: `cn_prefixes` is a
+ * free text[], so a typo like 'c3 9' would insert happily and then match nothing forever,
+ * with no error anywhere to explain the blank picture on the sheet.
+ */
+function parseGrindingTargets(body) {
+  const { cn_prefixes: cn_prefixes_raw, process_codes: process_codes_raw } = body;
+  if (cn_prefixes_raw == null) return { error: 'cn_prefixes is required' };
 
   let cn_prefixes;
   try {
     cn_prefixes = typeof cn_prefixes_raw === 'string' ? JSON.parse(cn_prefixes_raw) : cn_prefixes_raw;
   } catch (_) {
-    return res.status(400).json({ error: 'cn_prefixes must be a JSON array' });
+    return { error: 'cn_prefixes must be a JSON array' };
   }
   if (!Array.isArray(cn_prefixes) || !cn_prefixes.length) {
-    return res.status(400).json({ error: 'cn_prefixes must be a non-empty array' });
+    return { error: 'cn_prefixes must be a non-empty array' };
+  }
+
+  // normalizeTarget upgrades a 6-digit item-no ('290774') to the control-no the renderer
+  // compares against ('C29-00774') — typed daily and, stored raw, matches nothing forever.
+  const prefixes = [...new Set(cn_prefixes.map(normalizeTarget).filter(Boolean))];
+  const bad = prefixes.filter(p => prefixLevel(p) === 'unknown');
+  if (bad.length) {
+    return {
+      error: `Invalid CN target(s): ${bad.join(', ')}. Use a class prefix (C3), a family prefix (C39), a control-no (C39-04137) or a 6-digit item-no (390 4137 → 394137).`,
+    };
   }
 
   let process_codes = [];
   if (process_codes_raw) {
     try {
       const parsed = typeof process_codes_raw === 'string' ? JSON.parse(process_codes_raw) : process_codes_raw;
-      process_codes = Array.isArray(parsed) ? parsed.map(c => String(c).trim()).filter(Boolean) : [];
+      process_codes = Array.isArray(parsed)
+        ? [...new Set(parsed.map(c => String(c).trim()).filter(Boolean))]
+        : [];
     } catch (_) { process_codes = []; }
   }
 
-  const prefixes = cn_prefixes.map(p => String(p).trim()).filter(Boolean);
   const label = prefixes.join(', ') + (process_codes.length ? ` — ${process_codes.join(', ')}` : '');
+  return { prefixes, process_codes, label };
+}
+
+/** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_codes JSON array, file) */
+router.post('/grinding', async (req, res) => {
+  const parsed = parseGrindingTargets(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
+
+  const { prefixes, process_codes, label } = parsed;
 
   const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
   const mime = file.mimetype || 'image/jpeg';
@@ -398,6 +440,63 @@ router.post('/grinding', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error('SDS Grinding Upload Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/sds/v2/images/grinding/:id — edit an existing record.
+ *
+ * Retargeting used to mean delete-and-re-upload, which forced the operator to still have
+ * the original file on hand just to fix a prefix or add a process code; if they didn't,
+ * the only way forward was to drop the picture entirely. The image file is therefore
+ * **optional** here — omit it and only the targeting changes, send one and it replaces
+ * the binary in place, keeping the same id (and so the same preview URL).
+ *
+ * Unlike POST this does NOT delete overlapping records: an edit is aimed at one row the
+ * operator picked, and silently removing its neighbours is not what "save" should mean.
+ */
+router.put('/grinding/:id', async (req, res) => {
+  const parsed = parseGrindingTargets(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { prefixes, process_codes, label } = parsed;
+
+  const file = req.files?.image
+    ? (Array.isArray(req.files.image) ? req.files.image[0] : req.files.image)
+    : null;
+
+  try {
+    const result = await engPool.query(
+      // Every parameter is cast explicitly: the COALESCE arms are NULL whenever no file was
+      // sent, and pg cannot infer a bytea/text parameter from a bare NULL — it errors out
+      // on exactly the "targeting only" edit this route exists to support.
+      `UPDATE ${TABLES.SDS_V2_GRINDING_IMAGE} SET
+         cn_prefixes   = $1::text[],
+         process_codes = $2::text[],
+         label         = $3::text,
+         image_data    = COALESCE($4::bytea, image_data),
+         mime_type     = COALESCE($5::text,  mime_type),
+         file_name     = COALESCE($6::text,  file_name),
+         updated_by    = $7::text,
+         updated_at    = NOW()
+       WHERE id = $8::int
+       RETURNING id, cn_prefixes, process_codes, label, mime_type, file_name, updated_at`,
+      [
+        prefixes,
+        process_codes,
+        label,
+        file ? file.data : null,
+        file ? (file.mimetype || 'image/jpeg') : null,
+        file ? file.name : null,
+        req.user?.empno || null,
+        req.params.id,
+      ]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Image not found' });
+    _covCache = null;   // retargeting moves which combos are covered
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('SDS Grinding Update Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

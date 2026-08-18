@@ -149,6 +149,38 @@ invariant behind it now. They read as arbitrary until you know what they fixed.
   something up was one click from writing a record nobody named. Naming now
   happens in the save dialog, and nothing is written until it is confirmed.
 
+## The viewport rail is the run surface; the drawer is the setup surface (2026-08-14)
+
+Setup is a **drawer**, and a drawer covers the viewport. So the split is not
+cosmetic: anything pressed or read *while looking at the cut* has to be on the
+rail, or using it means opening a panel over the thing it is about.
+
+| on the rail | in the drawer |
+|---|---|
+| Parse — pressed after every edit, and it redraws the backplot | Open file / Load sample — how a program *arrives*, once |
+| Simulate — **milling and turning both**, beside the toggles the result is judged by | the grid sizes it is judged AT (height-field cell, voxel edge) |
+| the show/hide toggles (part, arbor, toolpath) | the voxel run — the deliberate second opinion, not the mid-job press |
+| Cycle time · Cutting length · Rapid · Segments (top-left, `data-cam-overlay="stats"`) | machine settings, tool table, stock, warnings |
+
+Turning's Simulate was the last one still in the drawer, which made the lathe the
+one mode where carving the bar and then dropping the backplot to look at it
+crossed the whole screen. It is now the same button in the same place, differing
+only in glyph — `App.test.jsx` asserts both sit exactly one position from
+`showToolpath`.
+
+The four figures moved out of the sidebar for the same reason and are formatted by
+**`engine/view/programStats.js`** (pure, tested) rather than in JSX. Two
+consequences worth knowing:
+
+- **`'stats'` is gone from `SECTIONS`** in `engine/view/sidebar.js`. That list is
+  checked against App.jsx by `sidebar.test.js` in both directions, so a name left
+  behind for a block that no longer exists fails the suite rather than rotting.
+- **They survive playback**, unlike the sidebar block, because the rail does and
+  cycle time is what the bottom bar's elapsed clock is measured against.
+
+`formatDuration` lives in that module too — it was a local in App.jsx and the
+bottom bar still uses it, so a second copy would drift silently.
+
 ## 2D → 3D: the sketch builds the part now (2026-08-08)
 
 The sketcher used to end at DXF. It now makes solids, and they enter the CAM

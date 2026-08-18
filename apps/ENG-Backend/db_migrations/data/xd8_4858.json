@@ -1,0 +1,1173 @@
+{
+ "COLLET": [
+  {
+   "tooling_no": "4858-22-0041",
+   "dim_a": 23.11,
+   "dim_b": 25,
+   "dim_c": 0.7300000000000004
+  },
+  {
+   "tooling_no": "4858-22-0005",
+   "dim_a": 22.32,
+   "dim_b": 20,
+   "dim_c": 0.05999999999999872
+  },
+  {
+   "tooling_no": "4858-22-0009",
+   "dim_a": 10.1,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0008",
+   "dim_a": 12.1,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0006",
+   "dim_a": 14.1,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0010",
+   "dim_a": 14.39,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0007",
+   "dim_a": 14.6,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0050",
+   "dim_a": 14.9,
+   "dim_b": 20,
+   "dim_c": 5
+  },
+  {
+   "tooling_no": "4858-22-0004",
+   "dim_a": 15.1,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0029",
+   "dim_a": 16,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0037",
+   "dim_a": 16.1,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0056",
+   "dim_a": 16.28,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0038",
+   "dim_a": 16.6,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0003",
+   "dim_a": 16.77,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0060",
+   "dim_a": 17.07,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0030",
+   "dim_a": 17.56,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0033",
+   "dim_a": 17.56,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0012",
+   "dim_a": 17.6,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0055",
+   "dim_a": 17.61,
+   "dim_b": 25,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0053",
+   "dim_a": 17.87,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0015",
+   "dim_a": 18.1,
+   "dim_b": 25,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0026",
+   "dim_a": 18.9,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0019",
+   "dim_a": 19.15,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0020",
+   "dim_a": 19.94,
+   "dim_b": 20,
+   "dim_c": 8
+  },
+  {
+   "tooling_no": "4858-22-0027",
+   "dim_a": 20.74,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0052",
+   "dim_a": 21.04,
+   "dim_b": 25,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0039",
+   "dim_a": 21.1,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0023",
+   "dim_a": 21.58,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0040",
+   "dim_a": 22.1,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0005",
+   "dim_a": 22.32,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0041",
+   "dim_a": 23.11,
+   "dim_b": 25,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0035",
+   "dim_a": 23.12,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0031",
+   "dim_a": 23.91,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0025",
+   "dim_a": 24.1,
+   "dim_b": 25,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0014",
+   "dim_a": 24.81,
+   "dim_b": 20,
+   "dim_c": 11
+  },
+  {
+   "tooling_no": "4858-22-0042",
+   "dim_a": 25.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0028",
+   "dim_a": 25.5,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0049",
+   "dim_a": 25.75,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0043",
+   "dim_a": 26.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0044",
+   "dim_a": 27.6,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0034",
+   "dim_a": 27.98,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0045",
+   "dim_a": 28.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0036",
+   "dim_a": 28.68,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0046",
+   "dim_a": 29.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0032",
+   "dim_a": 30.26,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0016",
+   "dim_a": 30.52,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0051",
+   "dim_a": 30.82,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0018",
+   "dim_a": 31.06,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0054",
+   "dim_a": 31.16,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0047",
+   "dim_a": 33.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0021",
+   "dim_a": 33.44,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0048",
+   "dim_a": 34.15,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0024",
+   "dim_a": 34.23,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0002",
+   "dim_a": 35.03,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0057",
+   "dim_a": 35.33,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0058",
+   "dim_a": 35.59,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0017",
+   "dim_a": 36.1,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0001",
+   "dim_a": 36.61,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0059",
+   "dim_a": 36.92,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0022",
+   "dim_a": 37.46,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0011",
+   "dim_a": 39.79,
+   "dim_b": 25,
+   "dim_c": 14
+  },
+  {
+   "tooling_no": "4858-22-0013",
+   "dim_a": 41.38,
+   "dim_b": 25,
+   "dim_c": 14
+  }
+ ],
+ "STOPPER L": [
+  {
+   "tooling_no": "4858-15-0023",
+   "dim_a": 0,
+   "dim_b": 0,
+   "dim_c": 0,
+   "dim_d": 0
+  },
+  {
+   "tooling_no": "4858-15-0018",
+   "dim_a": 6,
+   "dim_b": 2.5,
+   "dim_c": 7.5,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-15-0005",
+   "dim_a": 9,
+   "dim_b": 3.5,
+   "dim_c": 6.5,
+   "dim_d": 31.5
+  },
+  {
+   "tooling_no": "4858-15-0001",
+   "dim_a": 10,
+   "dim_b": 3.2,
+   "dim_c": 6.8,
+   "dim_d": 31.8
+  },
+  {
+   "tooling_no": "4858-15-0019",
+   "dim_a": 10,
+   "dim_b": 6,
+   "dim_c": 4,
+   "dim_d": 29
+  },
+  {
+   "tooling_no": "4858-15-0016",
+   "dim_a": 12,
+   "dim_b": 4.5,
+   "dim_c": 5.5,
+   "dim_d": 30.5
+  },
+  {
+   "tooling_no": "4858-15-0026",
+   "dim_a": 14,
+   "dim_b": 8,
+   "dim_c": 7,
+   "dim_d": 27
+  },
+  {
+   "tooling_no": "4858-15-0032",
+   "dim_a": 14,
+   "dim_b": 9,
+   "dim_c": 6,
+   "dim_d": 26
+  },
+  {
+   "tooling_no": "4858-15-0002",
+   "dim_a": 15,
+   "dim_b": 4.5,
+   "dim_c": 5.5,
+   "dim_d": 30.5
+  },
+  {
+   "tooling_no": "4858-15-0004",
+   "dim_a": 15,
+   "dim_b": 5.5,
+   "dim_c": 4.5,
+   "dim_d": 29.5
+  },
+  {
+   "tooling_no": "4858-15-0007",
+   "dim_a": 15,
+   "dim_b": 6.5,
+   "dim_c": 3.5,
+   "dim_d": 28.5
+  },
+  {
+   "tooling_no": "4858-15-0015",
+   "dim_a": 15,
+   "dim_b": 3.5,
+   "dim_c": 6.5,
+   "dim_d": 31.5
+  },
+  {
+   "tooling_no": "4858-15-0009",
+   "dim_a": 17,
+   "dim_b": 15,
+   "dim_c": 5,
+   "dim_d": 30
+  },
+  {
+   "tooling_no": "4858-15-0017",
+   "dim_a": 17,
+   "dim_b": 5.5,
+   "dim_c": 4.5,
+   "dim_d": 29.5
+  },
+  {
+   "tooling_no": "4858-15-0008",
+   "dim_a": 18,
+   "dim_b": 7.5,
+   "dim_c": 2.5,
+   "dim_d": 27.3
+  },
+  {
+   "tooling_no": "4858-15-0003",
+   "dim_a": 19,
+   "dim_b": 5,
+   "dim_c": 5,
+   "dim_d": 30
+  },
+  {
+   "tooling_no": "4858-15-0014",
+   "dim_a": 20,
+   "dim_b": 6.5,
+   "dim_c": 8.5,
+   "dim_d": 33.5
+  },
+  {
+   "tooling_no": "4858-15-0006",
+   "dim_a": 20,
+   "dim_b": 5,
+   "dim_c": 5,
+   "dim_d": 30
+  },
+  {
+   "tooling_no": "4858-15-0010",
+   "dim_a": 20,
+   "dim_b": 6.5,
+   "dim_c": 3.5,
+   "dim_d": 28.5
+  },
+  {
+   "tooling_no": "4858-15-0011",
+   "dim_a": 20,
+   "dim_b": 7,
+   "dim_c": 8,
+   "dim_d": 33
+  },
+  {
+   "tooling_no": "4858-15-0025",
+   "dim_a": 20,
+   "dim_b": 14,
+   "dim_c": 1,
+   "dim_d": 26
+  },
+  {
+   "tooling_no": "4858-15-0029",
+   "dim_a": 20,
+   "dim_b": 8,
+   "dim_c": 7,
+   "dim_d": 32
+  },
+  {
+   "tooling_no": "4858-15-0030",
+   "dim_a": 20,
+   "dim_b": 12,
+   "dim_c": 3,
+   "dim_d": 28
+  },
+  {
+   "tooling_no": "4858-15-0031",
+   "dim_a": 21,
+   "dim_b": 7,
+   "dim_c": 8,
+   "dim_d": 33
+  },
+  {
+   "tooling_no": "4858-15-0027",
+   "dim_a": 23,
+   "dim_b": 8.9,
+   "dim_c": 6.1,
+   "dim_d": 26.1
+  },
+  {
+   "tooling_no": "4858-15-0022",
+   "dim_a": 24,
+   "dim_b": 11.8,
+   "dim_c": 3.2,
+   "dim_d": 23.2
+  },
+  {
+   "tooling_no": "4858-15-0028",
+   "dim_a": 24,
+   "dim_b": 10.6,
+   "dim_c": 4.4,
+   "dim_d": 24.4
+  },
+  {
+   "tooling_no": "4858-15-0013",
+   "dim_a": 25,
+   "dim_b": 12,
+   "dim_c": 3,
+   "dim_d": 28
+  },
+  {
+   "tooling_no": "4858-15-0024",
+   "dim_a": 25.3,
+   "dim_b": 13,
+   "dim_c": 2,
+   "dim_d": 22
+  },
+  {
+   "tooling_no": "4858-15-0012",
+   "dim_a": 26,
+   "dim_b": 9,
+   "dim_c": 6,
+   "dim_d": 31
+  },
+  {
+   "tooling_no": "4858-15-0021",
+   "dim_a": 30.5,
+   "dim_b": 11,
+   "dim_c": 4,
+   "dim_d": 29
+  },
+  {
+   "tooling_no": "4858-15-0020",
+   "dim_a": 32,
+   "dim_b": 11.3,
+   "dim_c": -1.3,
+   "dim_d": 0
+  }
+ ],
+ "STOPPER R": [
+  {
+   "tooling_no": "4858-17-0027",
+   "dim_a": 9.6,
+   "dim_b": 7,
+   "dim_c": 1.5,
+   "dim_d": 1.7
+  },
+  {
+   "tooling_no": "4858-17-0001",
+   "dim_a": 11.6,
+   "dim_b": 9,
+   "dim_c": 2,
+   "dim_d": 2.3
+  },
+  {
+   "tooling_no": "4858-17-0020",
+   "dim_a": 13.5,
+   "dim_b": 10.5,
+   "dim_c": 2,
+   "dim_d": 2.5
+  },
+  {
+   "tooling_no": "4858-17-0028",
+   "dim_a": 13.9,
+   "dim_b": 10.5,
+   "dim_c": 5,
+   "dim_d": 2.5
+  },
+  {
+   "tooling_no": "4858-17-0025",
+   "dim_a": 14.6,
+   "dim_b": 11.5,
+   "dim_c": 3,
+   "dim_d": 3.5
+  },
+  {
+   "tooling_no": "4858-17-0005",
+   "dim_a": 15,
+   "dim_b": 10,
+   "dim_c": 2.5,
+   "dim_d": 2.4
+  },
+  {
+   "tooling_no": "4858-17-0004",
+   "dim_a": 15.5,
+   "dim_b": 11.5,
+   "dim_c": 2.5,
+   "dim_d": 4.1
+  },
+  {
+   "tooling_no": "4858-17-0007",
+   "dim_a": 15.5,
+   "dim_b": 13.5,
+   "dim_c": 4.5,
+   "dim_d": 2.67
+  },
+  {
+   "tooling_no": "4858-17-0002",
+   "dim_a": 16,
+   "dim_b": 12.5,
+   "dim_c": 2.5,
+   "dim_d": 3.2
+  },
+  {
+   "tooling_no": "4858-17-0024",
+   "dim_a": 16,
+   "dim_b": 12.5,
+   "dim_c": 2.5,
+   "dim_d": 2.5
+  },
+  {
+   "tooling_no": "4858-17-0006",
+   "dim_a": 17,
+   "dim_b": 13.5,
+   "dim_c": 2.5,
+   "dim_d": 4
+  },
+  {
+   "tooling_no": "4858-17-0011",
+   "dim_a": 17,
+   "dim_b": 13,
+   "dim_c": 2.5,
+   "dim_d": 4
+  },
+  {
+   "tooling_no": "4858-17-0043",
+   "dim_a": 17,
+   "dim_b": 13.8,
+   "dim_c": 8.5,
+   "dim_d": 3
+  },
+  {
+   "tooling_no": "4858-17-0044",
+   "dim_a": 17,
+   "dim_b": 13.8,
+   "dim_c": 8.5,
+   "dim_d": 3
+  },
+  {
+   "tooling_no": "4858-17-0016",
+   "dim_a": 17.2,
+   "dim_b": 14.2,
+   "dim_c": 6,
+   "dim_d": 3.5
+  },
+  {
+   "tooling_no": "4858-17-0035",
+   "dim_a": 17.6,
+   "dim_b": 14.1,
+   "dim_c": 6.5,
+   "dim_d": 3
+  },
+  {
+   "tooling_no": "4858-17-0008",
+   "dim_a": 18.4,
+   "dim_b": 14.5,
+   "dim_c": 5,
+   "dim_d": 3.2
+  },
+  {
+   "tooling_no": "4858-17-0003",
+   "dim_a": 19,
+   "dim_b": 14,
+   "dim_c": 3,
+   "dim_d": 4.1
+  },
+  {
+   "tooling_no": "4858-17-0010",
+   "dim_a": 20,
+   "dim_b": 15.5,
+   "dim_c": 3.5,
+   "dim_d": 4
+  },
+  {
+   "tooling_no": "4858-17-0040",
+   "dim_a": 21,
+   "dim_b": 17,
+   "dim_c": 3,
+   "dim_d": 4
+  },
+  {
+   "tooling_no": "4858-17-0038",
+   "dim_a": 21.1,
+   "dim_b": 14.6,
+   "dim_c": 2.6,
+   "dim_d": 4.8
+  },
+  {
+   "tooling_no": "4858-17-0026",
+   "dim_a": 21.8,
+   "dim_b": 16.5,
+   "dim_c": 3,
+   "dim_d": 4.5
+  },
+  {
+   "tooling_no": "4858-17-0009",
+   "dim_a": 22.6,
+   "dim_b": 18.5,
+   "dim_c": 7,
+   "dim_d": 4.38
+  },
+  {
+   "tooling_no": "4858-17-0021",
+   "dim_a": 22.6,
+   "dim_b": 17,
+   "dim_c": 3,
+   "dim_d": 4.5
+  },
+  {
+   "tooling_no": "4858-17-0039",
+   "dim_a": 23,
+   "dim_b": 18,
+   "dim_c": 3,
+   "dim_d": 7
+  },
+  {
+   "tooling_no": "4858-17-0012",
+   "dim_a": 23.5,
+   "dim_b": 17,
+   "dim_c": 3,
+   "dim_d": 5.5
+  },
+  {
+   "tooling_no": "4858-17-0013",
+   "dim_a": 25,
+   "dim_b": 20,
+   "dim_c": 3,
+   "dim_d": 6
+  },
+  {
+   "tooling_no": "4858-17-0017",
+   "dim_a": 25,
+   "dim_b": 21,
+   "dim_c": 7.5,
+   "dim_d": 4.4
+  },
+  {
+   "tooling_no": "4858-17-0023",
+   "dim_a": 25,
+   "dim_b": 20,
+   "dim_c": 3,
+   "dim_d": 5
+  },
+  {
+   "tooling_no": "4858-17-0041",
+   "dim_a": 25.5,
+   "dim_b": 19,
+   "dim_c": 8,
+   "dim_d": 7.5
+  },
+  {
+   "tooling_no": "4858-17-0034",
+   "dim_a": 25.6,
+   "dim_b": 21.8,
+   "dim_c": 8.3,
+   "dim_d": 4
+  },
+  {
+   "tooling_no": "4858-17-0042",
+   "dim_a": 27.1,
+   "dim_b": 22,
+   "dim_c": 3,
+   "dim_d": 5.5
+  },
+  {
+   "tooling_no": "4858-17-0014",
+   "dim_a": 27.5,
+   "dim_b": 22.5,
+   "dim_c": 3,
+   "dim_d": 6
+  },
+  {
+   "tooling_no": "4858-17-0018",
+   "dim_a": 28.2,
+   "dim_b": 23.8,
+   "dim_c": 7.5,
+   "dim_d": 5.1
+  },
+  {
+   "tooling_no": "4858-17-0031",
+   "dim_a": 28.6,
+   "dim_b": 24.5,
+   "dim_c": 8.5,
+   "dim_d": 5
+  },
+  {
+   "tooling_no": "4858-17-0015",
+   "dim_a": 30,
+   "dim_b": 24.5,
+   "dim_c": 3,
+   "dim_d": 7
+  },
+  {
+   "tooling_no": "4858-17-0019",
+   "dim_a": 32.5,
+   "dim_b": 26,
+   "dim_c": 3,
+   "dim_d": 8
+  },
+  {
+   "tooling_no": "4858-17-0033",
+   "dim_a": 32.6,
+   "dim_b": 26.3,
+   "dim_c": 8.5,
+   "dim_d": 6
+  },
+  {
+   "tooling_no": "4858-17-0036",
+   "dim_a": 32.9,
+   "dim_b": 25,
+   "dim_c": 3.5,
+   "dim_d": 6.9
+  },
+  {
+   "tooling_no": "4858-17-0022",
+   "dim_a": 34.5,
+   "dim_b": 29,
+   "dim_c": 4.5,
+   "dim_d": 7.5
+  },
+  {
+   "tooling_no": "4858-17-0032",
+   "dim_a": 34.6,
+   "dim_b": 29.5,
+   "dim_c": 10,
+   "dim_d": 7
+  },
+  {
+   "tooling_no": "4858-17-0037",
+   "dim_a": 37,
+   "dim_b": 25.5,
+   "dim_c": 3.5,
+   "dim_d": 8.6
+  },
+  {
+   "tooling_no": "4858-17-0029",
+   "dim_a": 39.2,
+   "dim_b": 32,
+   "dim_c": 10,
+   "dim_d": 8
+  },
+  {
+   "tooling_no": "4858-17-0030",
+   "dim_a": 39.3,
+   "dim_b": 30.5,
+   "dim_c": 3.7,
+   "dim_d": 9
+  }
+ ],
+ "WRIST END ASSY": [
+  {
+   "tooling_no": "4858-01-0008-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0037-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0049-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0021-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0021-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0036-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0032-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0044-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0025-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0046-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0048-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0028-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0029-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0040-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0041-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0030-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0043-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0042-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0022-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0023-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0031-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0024-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0047-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0033-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0039-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0034-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0045-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0035-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0038-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  },
+  {
+   "tooling_no": "4858-01-0050-99",
+   "dim_a": null,
+   "dim_b": null,
+   "dim_c": null,
+   "dim_d": null
+  }
+ ],
+ "LOADER JAW": [
+  {
+   "tooling_no": "4858-08-0005",
+   "dim_a": 10,
+   "dim_b": 15
+  },
+  {
+   "tooling_no": "4858-08-0002",
+   "dim_a": 15,
+   "dim_b": 25
+  },
+  {
+   "tooling_no": "4858-08-0003",
+   "dim_a": 25,
+   "dim_b": 35
+  },
+  {
+   "tooling_no": "4858-08-0004",
+   "dim_a": 35,
+   "dim_b": 42
+  }
+ ],
+ "INVERSION JAW": [
+  {
+   "tooling_no": "4858-12-0005",
+   "dim_a": 10,
+   "dim_b": 15
+  },
+  {
+   "tooling_no": "4858-12-0001",
+   "dim_a": 14,
+   "dim_b": 20
+  },
+  {
+   "tooling_no": "4858-12-0002",
+   "dim_a": 20,
+   "dim_b": 27
+  },
+  {
+   "tooling_no": "4858-12-0004",
+   "dim_a": 27,
+   "dim_b": 33
+  },
+  {
+   "tooling_no": "4858-12-0003",
+   "dim_a": 33,
+   "dim_b": 40
+  }
+ ]
+}

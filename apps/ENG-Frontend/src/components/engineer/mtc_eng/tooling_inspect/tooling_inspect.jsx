@@ -98,6 +98,7 @@ function InspectionReport() {
     // The run takes minutes, so keep a persistent hint up instead of leaving the
     // user staring at a spinner with no explanation.
     const closeHint = message.loading('Updating data (running imports)...', 0);
+    const startedAt = Date.now();
     try {
       // HttpClient forces a 10s default timeout, but this endpoint runs two
       // imports back to back (many .xlsx off a UNC share + a 16k-row .xlsm),
@@ -109,8 +110,9 @@ function InspectionReport() {
       fetchToolingInspectData();
       fetchDashboardData(selectedMonth);
     } catch (e) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
       // Surface the real backend failure (network share unreachable, CSV target
-      // not mapped, DB error) instead of a generic message — the real reason
+      // not writable, DB error) instead of a generic message — the real reason
       // only lives in the 500 body.
       const d = e?.response?.data || {};
       const detail = d.error || d.stderr || d.message || e.message || 'Unknown error';
@@ -121,10 +123,31 @@ function InspectionReport() {
         message.warning({ content: `Partly updated (${okSteps.join(', ')} OK). ${detail}`, duration: 10 });
         fetchToolingInspectData();
         fetchDashboardData(selectedMonth);
+      } else if (!e.response) {
+        // No response at all is a DIFFERENT failure from a 500 and needs saying so: the
+        // request never reached a reply, so the import is probably still running on the
+        // server and may well finish. Causes seen: the backend restarting mid-import
+        // (nodemon watches everything outside output/ and files/), a reverse proxy
+        // cutting the connection at its own read timeout, or the network dropping.
+        message.warning({
+          content: `No reply from the server after ${elapsed}s — the import is probably still running. `
+            + `Wait a minute, then refresh before pressing again. (${e.code || detail})`,
+          duration: 12,
+        });
       } else {
         message.error({ content: `Failed to update data: ${detail}`, duration: 8 });
       }
-      console.error('Sync CSV failed:', d);
+      // Log the transport facts too. `e.response.data` alone is {} for a connection
+      // failure, which is exactly the case that most needs diagnosing — an empty object
+      // in the console tells whoever is debugging nothing at all.
+      console.error('Sync CSV failed:', {
+        elapsedSeconds: elapsed,
+        code: e.code || null,               // ECONNABORTED / ERR_NETWORK / ...
+        message: e.message,
+        httpStatus: e.response?.status ?? null,   // null = never got a response
+        url: server.TOOLING_SYNC_CSV,
+        body: d,
+      });
     } finally {
       closeHint();
       setLoading(false);

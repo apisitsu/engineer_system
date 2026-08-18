@@ -1,0 +1,22 @@
+{
+  "WHEEL": [
+    { "tooling_no": "4853-14-0001", "dim_a": 19,   "dim_b": 13,   "dim_c": 17,   "dim_d": 8,    "dim_e": 38, "dim_f": 8 },
+    { "tooling_no": "4853-14-0002", "dim_a": 19,   "dim_b": 13,   "dim_c": 24,   "dim_d": 14,   "dim_e": 45, "dim_f": 8 },
+    { "tooling_no": "4853-14-0003", "dim_a": 14.5, "dim_b": 9.5,  "dim_c": 16,   "dim_d": 10.5, "dim_e": 37, "dim_f": 6 }
+  ],
+  "BACK PLATE": [
+    { "tooling_no": "4853-16-0001", "dim_a": 26 },
+    { "tooling_no": "4853-16-0002", "dim_a": 23 },
+    { "tooling_no": "4853-16-0003", "dim_a": 19.6 }
+  ],
+  "JAW": [
+    { "tooling_no": "4853-15-0001", "dim_a": 47.75,  "dim_b": 47.43, "dim_c": 39 },
+    { "tooling_no": "4853-15-0002", "dim_a": 39.8,   "dim_b": 39.48, "dim_c": 34 },
+    { "tooling_no": "4853-15-0003", "dim_a": 35.06,  "dim_b": 34.76, "dim_c": 32.5 },
+    { "tooling_no": "4853-15-0004", "dim_a": 30.932, "dim_b": 30.63, "dim_c": 32 },
+    { "tooling_no": "4853-15-0005", "dim_a": 31.745, "dim_b": 31.45, "dim_c": 30 },
+    { "tooling_no": "4853-15-0006", "dim_a": 25.12,  "dim_b": 24.82, "dim_c": 28 },
+    { "tooling_no": "4853-15-0007", "dim_a": 33.47,  "dim_b": 33.14, "dim_c": 32.5 },
+    { "tooling_no": "4853-15-0008", "dim_a": 28.69,  "dim_b": 28.39, "dim_c": 32 }
+  ]
+}

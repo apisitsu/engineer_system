@@ -89,8 +89,27 @@ SHOT_DIR=/tmp/shots node .claude/skills/run-engineersystem/driver.mjs \
 `driver.mjs login-shot <url> <jwt> <empno> <name> <role> <department> <outfile.png>`
 — injects a synthetic authenticated session before the app boots, then navigates
 and screenshots. Swap the URL for any route under `MTC_PATHS`
-(`apps/ENG-Frontend/src/constance/mtc_constance.js`) — e.g.
-`http://localhost:3000/eng/mtc/tooling-select`.
+(`apps/ENG-Frontend/src/constance/mtc_constance.js`) — **take the path from that
+file, don't guess it**: a wrong route silently redirects to `/eng/home` and the
+screenshot looks like a working page of the wrong screen.
+
+`driver.mjs login-do <url> <jwt> <empno> <name> <role> <dept> <typeSel> <text> <clickSel> <waitSel> <waitMs> <out.png>`
+— same session, then type into a field, click something, wait, and screenshot
+full-page. `login-shot` only proves a route renders; this exercises what the page
+*does*. Pass `-` to skip any of the three selectors.
+
+```bash
+# Search a C/N on Tooling Select and capture the results
+SHOT_DIR=/tmp/shots node .claude/skills/run-engineersystem/driver.mjs login-do \
+  http://localhost:3000/eng/mtc_eng/tooling-select "$TOKEN" LC043 "Phanuwach Thongpradab" HEAD ENG \
+  'input[placeholder="C/N Number"]' $'412998\n' - - 45000 result.png
+```
+
+Selectors: prefer `placeholder` / `aria-label` over class names — Ant Design
+regenerates those. The Tooling Select search is a plain `Button`, **not**
+`Input.Search`, so there is no `.ant-input-search-button` to click; the input
+carries `onPressEnter`, so appending `\n` to the typed text (`$'412998\n'` in
+bash) runs the search without needing a button selector at all.
 
 ## Direct invocation (for PRs that touch backend logic only)
 

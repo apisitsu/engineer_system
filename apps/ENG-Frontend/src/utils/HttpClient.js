@@ -8,6 +8,11 @@ import {
 
 const isAbsoluteURLRegex = /^(?:\w+:)\/\//;
 
+// Ordinary API calls should fail fast; a file transfer should not be held to the same
+// deadline. See the request interceptor below for why an upload needs its own.
+export const DEFAULT_TIMEOUT_MS = 10 * 1000;
+export const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
 axios.defaults.withCredentials = true;
 
 let isRefreshing = false;
@@ -37,7 +42,23 @@ axios.interceptors.request.use(async (config) => {
 
   // Default 10s, but respect a longer per-request timeout when explicitly set
   // (e.g. heavy reports like SDS coverage that can take >10s on a cold build).
-  if (config.timeout == null || config.timeout === 0) config.timeout = 10000;
+  //
+  // An upload cannot live with 10s. axios's `timeout` is a deadline for the WHOLE
+  // request, not an idle timeout, so a large file transferring at a perfectly healthy
+  // rate is still aborted the moment it expires — the failure looks like a network
+  // error and gets worse the bigger the file, which is the opposite of what a user
+  // expects. The server accepts up to 500 MB (express-fileupload, server.js), so a 10s
+  // client deadline caps real uploads at whatever the link can push in ten seconds and
+  // silently makes most of that limit unusable. Thirteen of the fourteen FormData call
+  // sites set no timeout of their own, so the default is what they all get.
+  //
+  // Finite rather than 0: a genuinely stuck request must still fail instead of leaving
+  // the UI spinning forever. Per-request overrides still win.
+  const isUpload =
+    typeof FormData !== 'undefined' && config.data instanceof FormData;
+  if (config.timeout == null || config.timeout === 0) {
+    config.timeout = isUpload ? UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+  }
   return config;
 });
 
