@@ -20,9 +20,9 @@ try {
         Write-Host "No updates found on main branch. Exiting." -ForegroundColor Yellow
         node apps\ENG-Backend\scripts\log_update.js "NO_UPDATE" "No updates found on main branch" "$LocalHash" "$RemoteHash"
     } else {
-        Write-Host "Update found. Pulling latest code..." -ForegroundColor Cyan
-        git pull origin main
-        if ($LASTEXITCODE -ne 0) { throw "git pull origin main failed with exit code $LASTEXITCODE" }
+        Write-Host "Update found. Resetting local repository to match origin/main..." -ForegroundColor Cyan
+        git reset --hard origin/main
+        if ($LASTEXITCODE -ne 0) { throw "git reset --hard origin/main failed with exit code $LASTEXITCODE" }
 
         # Update LocalHash after pull
         $NewLocalHash = git rev-parse HEAD
