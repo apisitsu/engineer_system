@@ -17,7 +17,7 @@ export const usePdfEditorStore = create((set, get) => ({
 
     // ── Active Tool within current mode ──
     // View:     select, pan
-    // Annotate: highlight, underline, strikethrough, sticky, addText, maskReplace
+    // Annotate: highlight, underline, strikethrough, sticky, addText, maskReplace, addImage
     // Shapes:   rect, circle, arrow, line, freehand, ruler
     // Sign:     formFill, signature, stamp, date
     // dwgCheck: rect, circle, arrow, addText, stampCheckmark, stampCross, stampCircle, stampOk, stampUserDate
@@ -42,6 +42,7 @@ export const usePdfEditorStore = create((set, get) => ({
         stampCircle: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
         stampOk: { strokeColor: '#3498db', strokeWidth: 3, fontSize: 12 },
         stampUserDate: { strokeColor: '#e74c3c', fontSize: 12 },
+        addImage: { opacity: 1.0 },
         // Fallback for missing tools
         default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
     },

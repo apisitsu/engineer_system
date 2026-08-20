@@ -451,6 +451,7 @@ const EditorCanvas = ({
             case 'maskReplace':
             case 'sticky':
             case 'stamp':
+            case 'addImage':
             case 'stampCheckmark':
             case 'stampCross':
             case 'stampCircle':
