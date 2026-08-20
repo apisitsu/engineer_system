@@ -74,6 +74,37 @@ const TABLES = {
   TOOLING_PARTNO_MAP: 'tooling_partno_map',
 };
 
+/**
+ * Read a path from the environment, tolerating the JS-assignment style this project's
+ * `.env` also uses.
+ *
+ * The file mixes two conventions — plain `KEY=value` alongside `KEY = 'value';` — and the
+ * Gmail credentials are the second kind, which is why `emailHelper.cleanEnv()` exists.
+ * Nothing signposts which kind a given key wants, so `TI_CSV_OUTPUT_DIR = 'D:\out';` was
+ * a reasonable thing to write and produced a genuinely baffling failure: the quotes and
+ * semicolon became part of the path, Node resolved it relative to the backend directory,
+ * and the import died on
+ *
+ *     ENOENT: mkdir 'D:\00_system\EngineerSystem\apps\ENG-Backend\'D:\ToolingInspectionCSV';'
+ *
+ * — an error that names a path nobody typed. Accept either form rather than expect anyone
+ * to remember which of two conventions a key belongs to.
+ *
+ * Only wrapping quotes and one trailing semicolon are stripped: a path may legitimately
+ * end in a space-free quote-free string, and nothing here should silently rewrite the
+ * middle of what someone configured.
+ */
+function envPath(key) {
+  const raw = process.env[key];
+  if (raw == null) return '';
+  return String(raw)
+    .trim()
+    .replace(/;+$/, '')                 // trailing `;` from the JS-assignment style
+    .trim()
+    .replace(/^(['"])([\s\S]*)\1$/, '$2') // matched wrapping quotes, not stray ones
+    .trim();
+}
+
 const PATHS = {
   EMAIL_RENDERER: path.join(__dirname, '../../../templates/email/emailRenderer'),
   SDS_TEMPLATE_DIR: process.env.SDS_TEMPLATE_DIR || path.join(__dirname, 'templates'),
@@ -81,17 +112,35 @@ const PATHS = {
   // Tooling Inspection import sources / output, used by services/toolingImportService.js.
   // All three are host-specific and none can be carried by git, so each is env-overridable:
   //  - the two sources are UNC shares the running account must have credentials for;
-  //  - the output default is the MAPPED DRIVE G:, which only exists inside an interactive
-  //    session — the PM2 service account on plbmp130 has no G:. Point TI_CSV_OUTPUT_DIR at
-  //    the equivalent UNC path there instead of re-mapping the drive.
+  //  - the output default is G:, which is GOOGLE DRIVE FOR DESKTOP, not a mapped network
+  //    drive. Win32_LogicalDisk reports it DriveType 3 with an empty ProviderName, so
+  //    **it has no UNC equivalent**. Drive is installed on all these machines, so G: is
+  //    normally there — but it mounts per signed-in session, not per machine, and a write
+  //    to it is a cloud sync rather than a disk write. Where the account running the
+  //    backend cannot see it, point TI_CSV_OUTPUT_DIR at an ordinary folder — a real UNC
+  //    share or local disk — and get the file to Drive some other way.
+  //    (M: and N: on these machines ARE network drives, \\10.121.34.19\data_rod and
+  //    \\sanlb01\MPA-DIV, which is why the two sources below are written as UNC.)
+  //    Never point it inside apps/ENG-Backend: `npm run dev` is nodemon and its
+  //    nodemonConfig.ignore covers only output/* and files/*, so a CSV written anywhere
+  //    else here restarts the server mid-import and the request never returns.
+  //    scripts/ti_check_paths.js reports all of this per host and per account.
   // The trailing "2026" in the source paths is the folder name on the share, not a computed
   // fiscal year (the Python originals hardcoded it the same way) — override on rollover.
-  TI_INSP_REC_DIR: process.env.TI_INSP_REC_DIR
+  TI_INSP_REC_DIR: envPath('TI_INSP_REC_DIR')
     || String.raw`\\sanlb01\MPA-DIV\03-Purchase\02-Budget\INSP REC\2026`,
-  TI_DWG_PRINT_FILE: process.env.TI_DWG_PRINT_FILE
+  TI_DWG_PRINT_FILE: envPath('TI_DWG_PRINT_FILE')
     || String.raw`\\10.121.34.19\data_rod\08-Engineer\14. Share file Back up\KUNPREAW\PC - Engineer\2026\2026 Record for drawing printed.xlsm`,
-  TI_CSV_OUTPUT_DIR: process.env.TI_CSV_OUTPUT_DIR
+  TI_CSV_OUTPUT_DIR: envPath('TI_CSV_OUTPUT_DIR')
     || String.raw`G:\Shared drives\ROD-Engineer\ToolingInspection`,
+
+  // Optional: mirror the two CSVs to Drive through an Apps Script web app instead of
+  // relying on a Drive-for-Desktop letter. Unset means "don't", so a host that has not
+  // been configured behaves exactly as before. docs/gas_ti_csv_doPost.gs is the script,
+  // and explains why this exists rather than the Drive API (the OAuth token this project
+  // holds carries only `gmail.send`).
+  TI_CSV_GAS_URL: envPath('TI_CSV_GAS_URL'),
+  TI_CSV_GAS_SECRET: envPath('TI_CSV_GAS_SECRET'),
 };
 
 const WORKFLOW_STATUS = {

@@ -16,6 +16,7 @@ import { server } from '../../../../constance/constance';
 import { createProjectSlice } from './projectSlice';
 import { createBoardSlice } from './boardSlice';
 import { createCardSlice } from './cardSlice';
+import { createSdsApprovalSlice } from './sdsApprovalSlice.js';
 
 export const useKanbanStore = create((set, get) => ({
     // ====================================================================
@@ -122,4 +123,5 @@ export const useKanbanStore = create((set, get) => ({
     ...createProjectSlice(set, get),
     ...createBoardSlice(set, get),
     ...createCardSlice(set, get),
+    ...createSdsApprovalSlice(set, get),
 }));

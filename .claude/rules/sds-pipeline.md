@@ -26,9 +26,56 @@ Both systems key on CN number but use **entirely separate orchestrators** and **
 
 **PDF generation (current — Chrome grid, Approach B; LibreOffice retired 2026-06-14):** `sdsV2HeadlessController.js` route `GET /api/sds/v2-headless/pdf-chrome/grid?cn=&machine_type_name=&process_code=[&template_id=]`. Resolves the **grid layout** via `loadGridForMachine`: the machine's assigned template (`sds_machine_type_code.grid_template_id`) → the `is_default` template → the legacy `sds_template_css_config` key `grid-layout` (fallback). Grids live in **`sds_grid_template`** (multi-template, migration `20260703_create_sds_grid_template.js`; the old single grid-layout was migrated into a `Standard` default row). Then `buildValueMap` → `applyDataToGrid` injects per-CN data by **cell address** (`sds_excel_mapping` param_key→cell + `row_N_COL` param table + GW + `row_N_is_header` highlight + `tool_dwg_no_T01` + `IMAGE_EXTENTS` images) → warm Puppeteer → PDF. `sds_template.xlsx` is now only the **grid import source**. Full detail: auto-memory `project_sds_grid_pdf`.
 
-> **Multi-template + CN-override precedence (2026-07-03):** (1) Templates: admin CRUD at `/api/sds/v2/admin/template-grids[/:id][/default]`; assign per machine via `PUT /machine-types/:id/grid-template`; editor picker in `SdsBlankTemplateGrid.jsx`; assignment column in `MachineTypes.jsx`. Singular `/template-grid` GET/PUT now target the **default** template. (2) In `applyDataToGrid` an explicit `sds_parameter` value (machine-default or per-CN, CN wins) now **overrides** the auto-derived factory scalar — this is what lets a CN override edit `ct` (CYCLE TIME → cell B4); `ct` is exposed in `HEADER_CELL_FIELDS` (SdsV2AdminPage MachineConfigTab). (3) Grinding image lookup matches the **full CN and the 3-char prefix**, ranking a per-CN image above a family-prefix image; upload UI (`GrindingImagesTab`) accepts specific CNs (stored in the same `cn_prefixes` text[]).
+> **Multi-template + CN-override precedence (2026-07-03):** (1) Templates: admin CRUD at `/api/sds/v2/admin/template-grids[/:id][/default]`; assign per machine via `PUT /machine-types/:id/grid-template`; editor picker in `SdsBlankTemplateGrid.jsx`; assignment column in `MachineTypes.jsx`. Singular `/template-grid` GET/PUT now target the **default** template. (2) In `applyDataToGrid` an explicit `sds_parameter` value (machine-default or per-CN, CN wins) now **overrides** the auto-derived factory scalar — this is what lets a CN override edit `ct` (CYCLE TIME → cell B4); `ct` is exposed in `HEADER_CELL_FIELDS` (SdsV2AdminPage MachineConfigTab). (3) Grinding image lookup matches the **full CN and the 3-char prefix**, ranking a per-CN image above a family-prefix image; upload UI (`GrindingImagesTab`) accepts specific CNs (stored in the same `cn_prefixes` text[]). **Superseded 2026-08-13** by a third, broader level (2-char class prefix) plus an edit route — see "Three targeting levels" below.
 
 > **Retired:** `sdsV2PdfController.js` (ExcelJS → LibreOffice/soffice), `mtcController.generateSdsPdf`, and the LibreOfficePortable binary were deleted. The old "never apply ExcelJS borders to `sds_template.xlsx`" constraint only mattered for that xlsx→LibreOffice path; borders are now designed in the grid editor.
+
+### Adding a machine to Tooling Select does NOT put it in SDS
+
+The two systems share no table. `sdsV2SearchService` never reads `tooling_machine`; it reads
+the factory process plan (`lpb.eng_r_pi_tool`, `lpb.eng_process_info`, `rodpc.eng_process`).
+A machine added to Tooling Select stays invisible in the Setup Data Sheet picker until it is
+registered separately. `SdsV2Page.jsx` builds that picker from two sources:
+
+| path | matches on | table |
+|---|---|---|
+| `byConfig` (authoritative — "has SDS data") | `machine_type_name` having a row for the process | `sds_machine_tool` |
+| `byCode` (fallback) | `machine_type_code` == `tool_dwg_no.substring(1,4)` | `sds_machine_type_code` |
+
+So **`machine_type_code` is the drawing family prefix minus its leading digit** — 021 =
+KS-B80 (4021), 560 = OC-16A (4560), 857 = X-100 (4857). It is UNIQUE.
+
+**Check the dictionary before naming a new machine.** `sds_machine_type_code` already
+assigns most drawing families to the machine model that uses them, and those names predate
+anything added to Tooling Select. Three machines named after their *process* in
+`20260815_rename_…` had to be renamed again in `20260815d_…` once the dictionary was read:
+
+```
+649 → LB15          (was TURNING)      918 → MD-V9910WA   (was L/MARKING)
+651 → LNC45/C200    (was FINISH ID)    800 → その他 — a catch-all bucket, not a machine
+```
+
+Two names for one machine is precisely the drift `GET /api/sds/v2/admin/audit/machine-identity`
+exists to surface, so align Tooling Select to the dictionary, never the reverse. THREAD ROLL
+kept its process name only because 4800 maps to the その他 bucket; it claimed code 801, an
+inactive `no data` placeholder nothing referenced.
+
+`tooling_machine.sds_machine_type_id` fills itself from `machine_name` via trigger
+`trg_tm_set_sds_machine_type_id` — but only if a dictionary row with that exact name exists,
+and **no application code reads the column** (it is a join/audit link only). A NULL there
+breaks nothing; a missing `sds_machine_tool` row is what keeps a machine out of the picker.
+
+> `SCOPE_WC = ['09','29','30','37']` in `sdsV2AdminController.js` scopes the read-only
+> machine-identity **audit** to grinding work centres. It does not gate the picker — widening
+> it only adds rows to a report.
+
+Registering a machine makes it *selectable*; it creates no SDS content. Grid layout, Excel
+parameters and grinding-wheel config still have to be set up in SDS Admin.
+
+**Duplicate dictionary rows are normal and mostly harmless**: KN-113A has three (816/852/853),
+LB15 two (649/682). The picker dedupes by name (`mergedMap[machine_type_name] = m`), but the
+trigger links `sds_machine_type_id` to the **lowest id**, so a join that matters should not
+assume the code matches the drawing family.
 
 ### Critical Coupling Points
 
@@ -116,6 +163,34 @@ Raw input `C25-0235` → query fails silently (0 rows → `dimension: null`). Fi
 Each `param_key` in `sds_parameter` must have a corresponding row in `sds_excel_mapping` (same `machine_type_name`) to appear in PDF. Audit: `GET /api/sds/v2/admin/audit/data-integrity`.
 
 **`sds_grinding_image`**: uses `cn_prefixes text[]` and `process_codes text[]` (GIN indexed). Empty `process_codes='{}'` = default (matches any process).
+
+**Three targeting levels (2026-08-13).** `cn_prefixes` holds any mix of:
+
+| stored value | level | meaning |
+|---|---|---|
+| `C39-04137` | CN | this part only |
+| `C39` | family | the Sub Class |
+| `C3` | **class** | every Sub Class under it — the fallback when the family has no picture |
+
+Resolution is **specificity-first** (CN → family → class); a process-code match only breaks
+ties *within* one level, so a per-CN default still beats a family image that names the
+process. The rules live in **`utils/grindingPrefix.js`** and all three consumers must use
+them — `sdsV2HeadlessController.buildValueMap` (what prints),
+`GET /images/grinding/:cn_prefix` (the admin preview) and the coverage report's
+`matchImage` (the "Missing" list). Coverage matching the exact prefix only would list
+families as gaps that already print a class picture.
+
+> **6-digit item-no trap.** A part is written both `C29-00774` and `290774`, and the
+> renderer only ever holds the control-no — so a target stored as `290774` matches
+> nothing, prints nothing and logs nothing. Found live on record #47, dead since upload.
+> Both sides now tolerate it: writes normalise via `normalizeTarget`, lookups match either
+> spelling via `cnMatchKeys().exact`. Re-saving an affected row through the admin UI
+> rewrites it canonically.
+
+**Editing** — `PUT /api/sds/v2/images/grinding/:id` (multipart, same fields as POST). The
+image file is **optional**: omit it to change only the targeting and keep the binary, so
+retargeting no longer requires having the original file to hand. Unlike POST it does not
+delete overlapping records. Both POST and PUT flush `_covCache`.
 
 ### `sds_parameter` param_key naming
 - A:I section: `row_{N}_{COL}` (value), `row_{N}_is_header`, `row_{N}_{COL}_type` (e.g. `red`)
@@ -240,6 +315,33 @@ for its whole life: seeded in To Do, then moved by each signature.
 
 > A helper that takes a process code must not name the parameter `process` — it shadows the
 > Node global and `process.env` throws. Cost a silent no-op run before it was caught.
+
+### Signing from the board itself (2026-08-14)
+
+`GET /api/sds/v2/approval/board?board_id=` answers **one board in four queries** — links,
+approval rows, `sds_rev` params, role config — and the board renders Prepared / Checked /
+Approved on each SDS card (`Board/SdsSignBadge.jsx`, fed by `store/sdsApprovalSlice.js`,
+fetched from `fetchBoardDetails`). Signing posts the existing `POST /approval`; the card
+then moves itself, because the intake above already fires on a live sign.
+
+- **Batched on purpose.** The obvious `/state`-per-card is 40+ round trips on load today
+  and up to 150 after a backlog run, each re-reading the role config.
+- **`canSign` is never re-derived client-side.** It comes from the same `userCanSign` +
+  sequential gate the POST enforces; a second copy drifts towards a button that looks
+  available and then fails.
+- **A group label names no single sheet.** `boardRef` normalises the machine to the group
+  (`TSG-300W/TSG-300ZNC`), and `sds_approval` is keyed by the real machine — so the
+  endpoint expands it via `sdsBoardRef.groupMembers` and resolves only when there is one
+  candidate, or when exactly one candidate already has a sheet started. Otherwise the card
+  is returned `ambiguous: true` with no inline signing and falls back to the deep link, so
+  the operator picks the machine on the SDS page. Guessing a member would stamp a signature
+  on a sheet that is not the one printed. Live board: 38 of 40 links resolve straight
+  through, 1 resolves by "already started", 1 stays ambiguous.
+
+> **The list a card sits in and the signatures on its sheet can disagree**, and the badge
+> now makes that visible — a card was found sitting in *Check* with only Prepared signed.
+> The list is moved by the intake at sign time and by anyone dragging it; the badge reads
+> `sds_approval`. The badge is the authority on what is signed.
 
 **Deep link.** The card carries a `kb_attachment` of `attachment_type='link'` pointing at
 `/eng/mtc_eng/sds-v2?cn=&machine=&process=`, which `SdsV2Page` parses on mount to search

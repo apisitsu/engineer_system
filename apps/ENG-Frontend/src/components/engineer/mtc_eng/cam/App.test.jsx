@@ -142,8 +142,18 @@ describe('the sidebar while setting up', () => {
   it('offers the file, project and setup controls', async () => {
     await mount();
     expect(siderCommands()).toEqual(
-      expect.arrayContaining(['parse', 'openLibrary', 'exportGcode', 'simulateVoxel']),
+      expect.arrayContaining(['openProgram', 'openLibrary', 'exportGcode', 'simulateVoxel']),
     );
+  });
+
+  it('keeps Parse on the viewport rail, with the two ways of getting a program in the drawer', async () => {
+    // Parse is pressed after every edit and redraws the backplot; from the drawer
+    // it was behind the picture it redraws. Opening a file and loading the sample
+    // are not mid-session actions, so they stay.
+    await mount();
+    expect(siderCommands()).not.toContain('parse');
+    expect(railCommands()).toContain('parse');
+    expect(siderCommands()).toEqual(expect.arrayContaining(['openProgram', 'sample']));
   });
 
   it('keeps Simulate on the viewport rail and its grid size in the drawer', async () => {
@@ -176,12 +186,12 @@ describe('the sidebar while setting up', () => {
 describe('pressing Play collapses the sidebar to the program', () => {
   it('drops the file and project buttons', async () => {
     await mount();
-    expect(siderCommands()).toContain('parse');
+    expect(siderCommands()).toContain('openProgram');
     await setStore({ playing: true });
     const cmds = siderCommands();
-    expect(cmds).not.toContain('parse');
-    expect(cmds).not.toContain('openLibrary');
     expect(cmds).not.toContain('openProgram');
+    expect(cmds).not.toContain('sample');
+    expect(cmds).not.toContain('openLibrary');
   });
 
   it('drops the material-removal controls', async () => {
@@ -191,11 +201,10 @@ describe('pressing Play collapses the sidebar to the program', () => {
     expect(siderCommands()).not.toContain('simulate');
   });
 
-  it('drops the machine settings and the cycle-time figures', async () => {
+  it('drops the machine settings', async () => {
     await mount();
     await setStore({ playing: true });
     expect(sider().textContent).not.toContain('Rapid');
-    expect(sider().textContent).not.toContain('Cycle time');
   });
 
   it('keeps the program listing — the whole point of the collapse', async () => {
@@ -235,9 +244,9 @@ describe('pressing Play collapses the sidebar to the program', () => {
   it('brings the setup back on pause', async () => {
     await mount();
     await setStore({ playing: true });
-    expect(siderCommands()).not.toContain('parse');
+    expect(siderCommands()).not.toContain('openProgram');
     await setStore({ playing: false });
-    expect(siderCommands()).toContain('parse');
+    expect(siderCommands()).toContain('openProgram');
     expect(sider().textContent).toContain('Material removal');
   });
 });
@@ -332,6 +341,116 @@ describe('the toolpath toggle', () => {
     await mount();
     await setStore({ playing: true });
     expect(pathButton()).not.toBeNull();
+  });
+});
+
+describe('Simulate sits beside the toolpath toggle in both modes', () => {
+  // Milling's Simulate moved to the rail because carving the material and then
+  // hiding the backplot to look at what came off is one motion. Turning was left
+  // behind in the drawer, which made the lathe the one mode where that motion
+  // crossed the whole screen. Same act, same place.
+  const railSim = () => railCommands().find((c) => c.startsWith('simulate'));
+
+  it('is on the rail for milling', async () => {
+    await mount();
+    expect(railSim()).toBe('simulate');
+  });
+
+  it('is on the rail for turning, not in the drawer', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    expect(railCommands()).toContain('simulateTurning');
+    expect(siderCommands()).not.toContain('simulateTurning');
+  });
+
+  it('lands next to the toolpath toggle when milling', async () => {
+    await mount();
+    const rail = railCommands();
+    expect(Math.abs(rail.indexOf('simulate') - rail.indexOf('showToolpath'))).toBe(1);
+  });
+
+  it('lands next to the toolpath toggle when turning', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    const rail = railCommands();
+    expect(Math.abs(rail.indexOf('simulateTurning') - rail.indexOf('showToolpath'))).toBe(1);
+  });
+
+  it('names itself for the lathe', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    expect(cmd('simulateTurning').getAttribute('aria-label')).toBe('Simulate turning');
+  });
+});
+
+describe('the program figures float over the viewport', () => {
+  // They are read against the simulation, so they sit on it. In the sidebar they
+  // were behind the Setup drawer — which covers the viewport — so judging a run by
+  // them meant opening a panel over the thing being judged.
+  const panel = () => q('[data-cam-overlay="stats"]');
+  const SRC = 'G0 X0 Y0 Z5\nG1 Z-2 F200\nG1 X60 Y40 F400';
+
+  async function loadProgram(mode = 'mill') {
+    const { segments, bounds, stats } = interpret(SRC, { mode });
+    setBuffers({ path: buildPath(segments), bounds, stats });
+    await setStore({ gcode: SRC, bufVer: 1, playing: false });
+  }
+
+  afterEach(() => clearBuffers());
+
+  it('is on the viewport, not in the drawer', async () => {
+    await mount();
+    await loadProgram();
+    expect(panel()).not.toBeNull();
+    expect(sider().textContent).not.toContain('Cycle time');
+  });
+
+  it('carries all four figures', async () => {
+    await mount();
+    await loadProgram();
+    const text = panel().textContent;
+    for (const label of ['Cycle time', 'Cutting length', 'Rapid', 'Segments']) {
+      expect(text, label).toContain(label);
+    }
+  });
+
+  it('shows the two lengths in mm', async () => {
+    await mount();
+    await loadProgram();
+    expect(panel().textContent).toContain('Cutting length (mm)');
+    expect(panel().textContent).toContain('Rapid (mm)');
+  });
+
+  it('posts real numbers, not placeholders', async () => {
+    await mount();
+    await loadProgram();
+    // 60/40 diagonal + the 7 mm plunge — the figures come off the interpreter,
+    // so an empty or dashed panel means the stats never reached the view.
+    expect(panel().textContent).not.toContain('—');
+    expect(panel().textContent).toMatch(/\d/);
+  });
+
+  it('survives playback, unlike the sidebar block it replaced', async () => {
+    // The rail keeps working while the program runs, and cycle time is the figure
+    // the elapsed clock on the bottom bar is measured against.
+    await mount();
+    await loadProgram();
+    await setStore({ playing: true });
+    expect(panel()).not.toBeNull();
+  });
+
+  it('is there on the lathe too', async () => {
+    await setStore({ page: 'turn', mode: 'turn' });
+    await mount();
+    await loadProgram('turn');
+    expect(panel()).not.toBeNull();
+  });
+
+  it('stays away until there is a program to describe', async () => {
+    // An unparsed program has no stats; a rail of dashes over the viewport is
+    // worse than no rail.
+    await mount();
+    expect(panel()).toBeNull();
   });
 });
 

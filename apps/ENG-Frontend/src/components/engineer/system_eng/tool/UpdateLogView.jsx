@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Table, Typography, Card, Spin, message, Tag, Layout, Button, Popconfirm, Alert, Badge, Row, Col } from 'antd';
+import { Table, Typography, Card, Spin, message, Tag, Layout, Button, Popconfirm, Alert, Badge, Row, Col, Modal } from 'antd';
 import { SyncOutlined, CheckCircleOutlined, InfoCircleOutlined, ExclamationCircleOutlined, CodeOutlined, CloudDownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { apiUrl } from '../../../../constance/constance';
@@ -18,9 +18,14 @@ const UpdateLogView = () => {
     const [updateStatus, setUpdateStatus] = useState(null);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
+    const isUpdatingRef = useRef(false);
     const [staleUpdate, setStaleUpdate] = useState(false);
     const pollIntervalRef = useRef(null);
     const pollCountRef = useRef(0);
+    const [progressLog, setProgressLog] = useState('');
+    const [showLogModal, setShowLogModal] = useState(false);
+    const logPollIntervalRef = useRef(null);
+    const logEndRef = useRef(null);
 
     const MAX_POLL_ATTEMPTS = 60; // 60 x 5s = 5 minutes
     const STALE_TRIGGER_MS = 5 * 60 * 1000; // 5 minutes
@@ -42,15 +47,18 @@ const UpdateLogView = () => {
                         const triggerAge = Date.now() - new Date(latestLog.executed_at).getTime();
                         if (triggerAge > STALE_TRIGGER_MS) {
                             setIsUpdating(false);
+                            isUpdatingRef.current = false;
                             setStaleUpdate(true);
                             stopPolling();
                         } else {
                             setStaleUpdate(false);
                             setIsUpdating(true);
+                            isUpdatingRef.current = true;
                             startPolling();
                         }
                     } else {
                         setIsUpdating(false);
+                        isUpdatingRef.current = false;
                         setStaleUpdate(false);
                         stopPolling();
 
@@ -76,7 +84,10 @@ const UpdateLogView = () => {
             }
         } catch (error) {
             console.error('Error fetching logs:', error);
-            message.error('Error fetching update logs.');
+            // Suppress error message if we are actively waiting for server restart
+            if (!isUpdatingRef.current) {
+                message.error('Error fetching update logs.');
+            }
         } finally {
             setLoadingLogs(false);
         }
@@ -115,6 +126,7 @@ const UpdateLogView = () => {
                     // Polling timed out — stop and show stale warning
                     stopPolling();
                     setIsUpdating(false);
+                    isUpdatingRef.current = false;
                     setStaleUpdate(true);
                     message.warning('Update polling timed out. The update may have stalled or completed outside this session.');
                     // Fetch one more time to pick up any auto-expired record from the backend
@@ -140,11 +152,44 @@ const UpdateLogView = () => {
         return () => stopPolling();
     }, []);
 
+    const fetchProgressLog = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${apiUrl}api/system/update-progress`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.success) {
+                setProgressLog(response.data.log);
+                if (logEndRef.current) {
+                    logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        } catch (error) {
+            // Silently ignore network errors during restart
+        }
+    };
+
+    useEffect(() => {
+        if (isUpdating || showLogModal) {
+            fetchProgressLog();
+            logPollIntervalRef.current = setInterval(fetchProgressLog, 2000);
+        } else {
+            if (logPollIntervalRef.current) {
+                clearInterval(logPollIntervalRef.current);
+                logPollIntervalRef.current = null;
+            }
+        }
+        return () => {
+            if (logPollIntervalRef.current) clearInterval(logPollIntervalRef.current);
+        };
+    }, [isUpdating, showLogModal]);
+
     const triggerUpdate = async () => {
         try {
             const token = localStorage.getItem('token');
             message.loading({ content: 'Initiating server update...', key: 'update' });
             setIsUpdating(true);
+            isUpdatingRef.current = true;
             const response = await axios.post(`${apiUrl}api/system/trigger-update`, {}, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -154,11 +199,13 @@ const UpdateLogView = () => {
                 setTimeout(() => fetchLogs(), 2000); 
             } else {
                 setIsUpdating(false);
+                isUpdatingRef.current = false;
                 message.error({ content: 'Failed to trigger update.', key: 'update', duration: 3 });
             }
         } catch (error) {
             console.error('Error triggering update:', error);
             setIsUpdating(false);
+            isUpdatingRef.current = false;
             const detail = error.response?.data?.message || error.message || 'Unknown error';
             message.error({ content: `Error: ${detail}`, key: 'update', duration: 5 });
         }
@@ -331,7 +378,14 @@ const UpdateLogView = () => {
                         {isUpdating && (
                             <Alert
                                 message={<span style={{ fontWeight: 'bold', fontSize: 16 }}>System Update in Progress</span>}
-                                description="The server is currently pulling code and restarting. Please wait..."
+                                description={
+                                    <div>
+                                        <div style={{ marginBottom: 8 }}>The server is currently pulling code and restarting. Please wait...</div>
+                                        <Button type="primary" size="small" onClick={() => setShowLogModal(true)}>
+                                            View Live Logs
+                                        </Button>
+                                    </div>
+                                }
                                 type="warning"
                                 showIcon
                                 icon={<SyncOutlined spin />}
@@ -366,6 +420,32 @@ const UpdateLogView = () => {
                                 size="middle"
                             />
                         </Card>
+
+                        {/* LIVE PROGRESS MODAL */}
+                        <Modal
+                            title="Live Update Progress Log"
+                            open={showLogModal}
+                            onCancel={() => setShowLogModal(false)}
+                            footer={[
+                                <Button key="close" onClick={() => setShowLogModal(false)}>Close</Button>
+                            ]}
+                            width={800}
+                            style={{ top: 20 }}
+                        >
+                            <div style={{
+                                backgroundColor: '#1e1e1e',
+                                color: '#00ff00',
+                                padding: '16px',
+                                borderRadius: '8px',
+                                fontFamily: 'monospace',
+                                height: '500px',
+                                overflowY: 'auto',
+                                whiteSpace: 'pre-wrap'
+                            }}>
+                                {progressLog || 'Waiting for log data...'}
+                                <div ref={logEndRef} />
+                            </div>
+                        </Modal>
                     </div>
                 </Content>
             </Layout>

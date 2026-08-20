@@ -20,6 +20,7 @@
 
 const fs = require('fs/promises');
 const path = require('path');
+const axios = require('axios');
 const { engPool } = require('../../../../instance/eng_db');
 const { PATHS } = require('../mtcConstants');
 const {
@@ -69,19 +70,26 @@ const DB_COLUMN_RENAMES = {
  * only diagnostic an engineer on the floor gets.
  */
 class StepLog {
-  constructor() {
+  constructor(name = 'import') {
     this.lines = [];
     this.warnings = [];
+    this.name = name;
   }
 
+  // Buffered for the HTTP response AND echoed to the server console. The buffer alone
+  // is invisible when the process dies mid-run — an out-of-memory kill or a nodemon
+  // restart takes the reply with it, so the only record of how far the import got would
+  // be lost exactly when it matters. The console line survives.
   log(msg) {
     this.lines.push(msg);
+    console.log(`[ti:${this.name}] ${msg}`);
     return this;
   }
 
   warn(msg) {
     this.warnings.push(msg);
     this.lines.push(`WARNING: ${msg}`);
+    console.warn(`[ti:${this.name}] WARNING: ${msg}`);
     return this;
   }
 
@@ -155,9 +163,126 @@ function formatTimeCell(value) {
   return String(value).trim();
 }
 
-async function writeCsv(dir, filename, columns, rows) {
+// Transient filesystem errors worth another attempt. UNKNOWN is the one that
+// actually bit: on plbmp130 `open` of the existing CSV inside the Google Drive
+// folder failed with `UNKNOWN` / errno -4094 while the folder itself was perfectly
+// readable — Drive's virtual filesystem rejecting a truncating open on a file it is
+// syncing or holding. EBUSY/EPERM are the SMB equivalents when someone has the CSV
+// open in Excel.
+const RETRYABLE_WRITE_ERRORS = new Set(['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES']);
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Write the CSV to a temp name in the same folder, then rename it over the target.
+ *
+ * Two reasons, both seen in production rather than imagined:
+ *
+ *  - **Truncating an existing file is the operation that fails.** Creating a new one
+ *    usually succeeds where overwriting does not, because the lock or sync is held
+ *    against the existing path. Writing beside it and renaming sidesteps that.
+ *  - **A reader never sees half a file.** These CSVs are picked up by a Google Sheet;
+ *    a rename swaps the whole thing at once, where a direct write leaves the file
+ *    truncated and growing for as long as it takes.
+ *
+ * The whole sequence is retried, because the condition is transient by nature — a
+ * sync finishes, a spreadsheet gets closed. If rename still fails after the retries,
+ * fall back to writing the target directly: a stale file that could not be replaced
+ * is worse than a torn one nobody is reading yet.
+ */
+// 5 attempts with a linear backoff waits 2+4+6+8 = 20s before giving up. The first
+// numbers here (3 x 750ms ≈ 4.5s) were chosen for a brief file lock and are too short for
+// what actually holds these files: Google Drive uploading the previous version. The two
+// CSVs are ~0.5 and ~1.1 MB, and the request budget is 15 minutes, so 20s is cheap
+// insurance — while still bounded, because a target that is genuinely unwritable must
+// fail rather than hang.
+async function writeCsv(dir, filename, columns, rows, { attempts = 5, backoffMs = 2000 } = {}) {
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, filename), toCsv(columns, rows), 'utf8');
+  const target = path.join(dir, filename);
+  const tmp = path.join(dir, `.${filename}.${process.pid}.tmp`);
+  const body = toCsv(columns, rows);
+
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await fs.writeFile(tmp, body, 'utf8');
+      try {
+        await fs.rename(tmp, target);
+      } catch (renameErr) {
+        // Windows will not rename onto an existing file on every filesystem; remove
+        // it first and try once more before giving this attempt up.
+        if (!RETRYABLE_WRITE_ERRORS.has(renameErr.code) && renameErr.code !== 'EEXIST') throw renameErr;
+        await fs.unlink(target).catch(() => {});
+        await fs.rename(tmp, target);
+      }
+      return;
+    } catch (err) {
+      lastError = err;
+      await fs.unlink(tmp).catch(() => {});
+      if (!RETRYABLE_WRITE_ERRORS.has(err.code) || attempt === attempts) break;
+      await delay(backoffMs * attempt);
+    }
+  }
+
+  // Last resort: the direct write this function used to do. It may well succeed where
+  // the rename could not, and if it fails too the error is the real one to report.
+  try {
+    await fs.writeFile(target, body, 'utf8');
+  } catch (directErr) {
+    throw lastError && lastError.code ? lastError : directErr;
+  }
+}
+
+/**
+ * Push a CSV to Google Drive through the Apps Script web app, when one is configured.
+ *
+ * Writing into a Drive for Desktop folder is what produced the `UNKNOWN` / -4094
+ * failures: Drive holds the file while it syncs, asynchronously, long after whatever
+ * triggered the sync. Uploading removes the contended file entirely — there is nothing
+ * on the local disk for Drive to be busy with.
+ *
+ * Deliberately additive. The local write in `writeCsv` still happens and is still the
+ * step's real output; this only mirrors it. So a Drive outage, an expired deployment
+ * URL or a network blip degrades to a warning instead of failing an import that
+ * otherwise succeeded.
+ *
+ * Off unless `TI_CSV_GAS_URL` is set, so nothing changes for a host that has not been
+ * configured for it. See docs/gas_ti_csv_doPost.gs for the script and how to deploy it.
+ */
+async function uploadCsvToDrive(filename, columns, rows, log) {
+  const url = PATHS.TI_CSV_GAS_URL;
+  if (!url) return { skipped: true };
+
+  const body = toCsv(columns, rows);
+  const started = Date.now();
+  try {
+    // `proxy: false` matches emailService's call to the other GAS endpoint — this
+    // shell exports HTTP_PROXY globally and routing an internal request through the
+    // corporate gateway returns a McAfee page with HTTP 200 rather than an error.
+    const response = await axios.post(url, {
+      secret: PATHS.TI_CSV_GAS_SECRET,
+      fileName: filename,
+      base64Data: Buffer.from(body, 'utf8').toString('base64'),
+    }, {
+      proxy: false,
+      maxRedirects: 5,
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 120000,
+    });
+
+    const data = response.data || {};
+    if (!data.success) throw new Error(data.error || 'Apps Script reported no success flag');
+    log.log(`=== Uploaded ${filename} to Drive (${data.action}, ${data.bytes} bytes) in ${((Date.now() - started) / 1000).toFixed(1)}s ===`);
+    return data;
+  } catch (err) {
+    // A 302 to a Google login page means the deployment is not "Anyone within the
+    // organisation", and an HTML body means the URL is stale — both are worth naming.
+    const detail = err.response?.data && typeof err.response.data === 'string'
+      ? 'the URL returned HTML, not JSON — the deployment URL is probably stale'
+      : (err.response?.data?.error || err.message);
+    log.warn(`Cannot upload ${filename} to Drive: ${detail}`);
+    return { error: detail };
+  }
 }
 
 /** Every .xlsx under the share, minus the ~$ lock files Excel leaves behind. */
@@ -365,6 +490,10 @@ async function importPcTooling(log = new StepLog()) {
   try {
     await writeCsv(outputDir, TI_CSV_NAME, exportColumns, exportRows);
     log.log(`=== Successfully exported ${exportRows.length} rows from Database to ${outputDir} ===`);
+    // Only the authoritative export is mirrored, not the backup written earlier in this
+    // step — the backup exists for the case where the DB round trip fails, and pushing
+    // both would upload the same filename twice a run for no gain.
+    await uploadCsvToDrive(TI_CSV_NAME, exportColumns, exportRows, log);
   } catch (err) {
     log.warn(`Cannot export from Database to ${outputDir}: ${err.message}`);
   }
@@ -422,6 +551,7 @@ async function importDwgPrint(log = new StepLog()) {
 
   await writeCsv(outputDir, DWG_CSV_NAME, columns, rows);
   log.log(`=== Complete csv to ${outputDir}! File name: ${DWG_CSV_NAME} ===`);
+  await uploadCsvToDrive(DWG_CSV_NAME, columns, rows, log);
 
   return { rows: rows.length };
 }
@@ -435,12 +565,20 @@ async function importDwgPrint(log = new StepLog()) {
  * every step's result so a later failure cannot hide an earlier success.
  */
 async function runStep(name, fn) {
-  const log = new StepLog();
+  const log = new StepLog(name);
+  // Heap is worth printing: this reads several workbooks plus a 10 MB xlsm into memory
+  // while a CRA dev server shares the host, and an out-of-memory kill is one of the few
+  // failures runStep cannot catch — the process simply goes, and the request never gets
+  // a reply. A rising number here across the two steps is the tell.
+  const heap = () => `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`;
+  const started = Date.now();
+  console.log(`[ti:${name}] START · heap ${heap()}`);
   try {
     const detail = await fn(log);
+    console.log(`[ti:${name}] OK in ${((Date.now() - started) / 1000).toFixed(1)}s · heap ${heap()}`);
     return { name, ok: true, detail, stderr: log.stderr, output: log.output };
   } catch (error) {
-    console.error(`[${name}] failed:`, error);
+    console.error(`[ti:${name}] FAILED after ${((Date.now() - started) / 1000).toFixed(1)}s:`, error);
     return { name, ok: false, error: error.message, stderr: log.stderr || error.message, output: log.output };
   }
 }
@@ -468,4 +606,6 @@ module.exports = {
   formatTimeCell,
   formatWorkCenter,
   StepLog,
+  writeCsv,
+  uploadCsvToDrive,
 };

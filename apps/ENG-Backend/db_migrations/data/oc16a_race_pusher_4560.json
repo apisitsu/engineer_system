@@ -1,0 +1,626 @@
+[
+ {
+  "tooling_no": "4560-18-1001",
+  "type": 2,
+  "dim_a": 5,
+  "dim_b": 3,
+  "dim_c": null,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1002",
+  "type": 2,
+  "dim_a": 6,
+  "dim_b": 4,
+  "dim_c": null,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1055",
+  "type": 1,
+  "dim_a": 6.5,
+  "dim_b": 4,
+  "dim_c": 4,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1003",
+  "type": 1,
+  "dim_a": 7,
+  "dim_b": 5,
+  "dim_c": 1.5,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1078",
+  "type": 1,
+  "dim_a": 7,
+  "dim_b": 5,
+  "dim_c": 1.5,
+  "dim_d": 2
+ },
+ {
+  "tooling_no": "4560-18-1052",
+  "type": 1,
+  "dim_a": 7.7,
+  "dim_b": 4,
+  "dim_c": 4,
+  "dim_d": 3
+ },
+ {
+  "tooling_no": "4560-18-1004",
+  "type": 2,
+  "dim_a": 8,
+  "dim_b": 6,
+  "dim_c": null,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1005",
+  "type": 1,
+  "dim_a": 9,
+  "dim_b": 7,
+  "dim_c": 2,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1006",
+  "type": 2,
+  "dim_a": 10,
+  "dim_b": 7,
+  "dim_c": null,
+  "dim_d": null
+ },
+ {
+  "tooling_no": "4560-18-1007",
+  "type": 1,
+  "dim_a": 11,
+  "dim_b": 8,
+  "dim_c": 3,
+  "dim_d": 5.5
+ },
+ {
+  "tooling_no": "4560-18-1008",
+  "type": 1,
+  "dim_a": 11.5,
+  "dim_b": 9,
+  "dim_c": 3,
+  "dim_d": 5.5
+ },
+ {
+  "tooling_no": "4560-18-1033",
+  "type": 1,
+  "dim_a": 12.5,
+  "dim_b": 10,
+  "dim_c": 5,
+  "dim_d": 4
+ },
+ {
+  "tooling_no": "4560-18-1009",
+  "type": 1,
+  "dim_a": 13,
+  "dim_b": 10,
+  "dim_c": 3,
+  "dim_d": 4
+ },
+ {
+  "tooling_no": "4560-18-1037",
+  "type": 1,
+  "dim_a": 13.5,
+  "dim_b": 11,
+  "dim_c": 5,
+  "dim_d": 4
+ },
+ {
+  "tooling_no": "4560-18-1010",
+  "type": 1,
+  "dim_a": 14,
+  "dim_b": 11,
+  "dim_c": 5,
+  "dim_d": 4
+ },
+ {
+  "tooling_no": "4560-18-1011",
+  "type": 1,
+  "dim_a": 15,
+  "dim_b": 12,
+  "dim_c": 6,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1032",
+  "type": 1,
+  "dim_a": 15,
+  "dim_b": 13,
+  "dim_c": 6,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1012",
+  "type": 1,
+  "dim_a": 16,
+  "dim_b": 13.5,
+  "dim_c": 6,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1064",
+  "type": 1,
+  "dim_a": 16.5,
+  "dim_b": 12,
+  "dim_c": 6,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1013",
+  "type": 1,
+  "dim_a": 17,
+  "dim_b": 14,
+  "dim_c": 10,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1014",
+  "type": 1,
+  "dim_a": 18,
+  "dim_b": 15,
+  "dim_c": 7,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1061",
+  "type": 1,
+  "dim_a": 18.5,
+  "dim_b": 16,
+  "dim_c": 5,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1015",
+  "type": 1,
+  "dim_a": 19,
+  "dim_b": 16,
+  "dim_c": 8,
+  "dim_d": 6
+ },
+ {
+  "tooling_no": "4560-18-1016",
+  "type": 1,
+  "dim_a": 20,
+  "dim_b": 17,
+  "dim_c": 8,
+  "dim_d": 6
+ },
+ {
+  "tooling_no": "4560-18-1017",
+  "type": 1,
+  "dim_a": 21,
+  "dim_b": 18,
+  "dim_c": 9,
+  "dim_d": 6
+ },
+ {
+  "tooling_no": "4560-18-1018",
+  "type": 1,
+  "dim_a": 22,
+  "dim_b": 19,
+  "dim_c": 10,
+  "dim_d": 7
+ },
+ {
+  "tooling_no": "4560-18-1019",
+  "type": 1,
+  "dim_a": 23,
+  "dim_b": 20,
+  "dim_c": 10,
+  "dim_d": 7
+ },
+ {
+  "tooling_no": "4560-18-1035",
+  "type": 1,
+  "dim_a": 23.5,
+  "dim_b": 20,
+  "dim_c": 10,
+  "dim_d": 7
+ },
+ {
+  "tooling_no": "4560-18-1020",
+  "type": 1,
+  "dim_a": 24,
+  "dim_b": 21,
+  "dim_c": 10,
+  "dim_d": 7
+ },
+ {
+  "tooling_no": "4560-18-1021",
+  "type": 1,
+  "dim_a": 25,
+  "dim_b": 21,
+  "dim_c": 10,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1044",
+  "type": 2,
+  "dim_a": 25,
+  "dim_b": 21,
+  "dim_c": null,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1022",
+  "type": 1,
+  "dim_a": 25.5,
+  "dim_b": 22,
+  "dim_c": 11,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1062",
+  "type": 1,
+  "dim_a": 26.5,
+  "dim_b": 22.5,
+  "dim_c": 5,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1023",
+  "type": 1,
+  "dim_a": 27,
+  "dim_b": 23,
+  "dim_c": 11,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1024",
+  "type": 1,
+  "dim_a": 28,
+  "dim_b": 24,
+  "dim_c": 12,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1050",
+  "type": 2,
+  "dim_a": 28,
+  "dim_b": 25,
+  "dim_c": null,
+  "dim_d": 8
+ },
+ {
+  "tooling_no": "4560-18-1025",
+  "type": 1,
+  "dim_a": 29,
+  "dim_b": 25,
+  "dim_c": 12,
+  "dim_d": 9
+ },
+ {
+  "tooling_no": "4560-18-1026",
+  "type": 1,
+  "dim_a": 30,
+  "dim_b": 26,
+  "dim_c": 13,
+  "dim_d": 9
+ },
+ {
+  "tooling_no": "4560-18-1027",
+  "type": 1,
+  "dim_a": 31,
+  "dim_b": 27,
+  "dim_c": 13,
+  "dim_d": 9
+ },
+ {
+  "tooling_no": "4560-18-1074",
+  "type": 1,
+  "dim_a": 31.5,
+  "dim_b": 24,
+  "dim_c": 5,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1028",
+  "type": 1,
+  "dim_a": 32,
+  "dim_b": 28,
+  "dim_c": 14,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1045",
+  "type": 2,
+  "dim_a": 32,
+  "dim_b": 26,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1029",
+  "type": 1,
+  "dim_a": 33,
+  "dim_b": 29,
+  "dim_c": 14,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1030",
+  "type": 1,
+  "dim_a": 34,
+  "dim_b": 30,
+  "dim_c": 15,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1039",
+  "type": 2,
+  "dim_a": 34,
+  "dim_b": 29,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1046",
+  "type": 1,
+  "dim_a": 34.8,
+  "dim_b": 31,
+  "dim_c": 3,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1031",
+  "type": 1,
+  "dim_a": 35,
+  "dim_b": 31,
+  "dim_c": 15,
+  "dim_d": 11
+ },
+ {
+  "tooling_no": "4560-18-1069",
+  "type": 1,
+  "dim_a": 36,
+  "dim_b": 32,
+  "dim_c": 5,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1036",
+  "type": 1,
+  "dim_a": 36.5,
+  "dim_b": 29,
+  "dim_c": 14,
+  "dim_d": 11
+ },
+ {
+  "tooling_no": "4560-18-1066",
+  "type": 1,
+  "dim_a": 37.5,
+  "dim_b": 30,
+  "dim_c": 6,
+  "dim_d": 16
+ },
+ {
+  "tooling_no": "4560-18-1051",
+  "type": 2,
+  "dim_a": 38,
+  "dim_b": 34,
+  "dim_c": null,
+  "dim_d": 11
+ },
+ {
+  "tooling_no": "4560-18-1038",
+  "type": 2,
+  "dim_a": 39,
+  "dim_b": 32,
+  "dim_c": null,
+  "dim_d": 11
+ },
+ {
+  "tooling_no": "4560-18-1063",
+  "type": 2,
+  "dim_a": 40,
+  "dim_b": 36,
+  "dim_c": null,
+  "dim_d": 12
+ },
+ {
+  "tooling_no": "4560-18-1075",
+  "type": 1,
+  "dim_a": 40.5,
+  "dim_b": 30,
+  "dim_c": 5,
+  "dim_d": 5
+ },
+ {
+  "tooling_no": "4560-18-1034",
+  "type": 1,
+  "dim_a": 41,
+  "dim_b": 35,
+  "dim_c": 17,
+  "dim_d": 12
+ },
+ {
+  "tooling_no": "4560-18-1067",
+  "type": 1,
+  "dim_a": 42,
+  "dim_b": 36,
+  "dim_c": 5,
+  "dim_d": 12
+ },
+ {
+  "tooling_no": "4560-18-1040",
+  "type": 2,
+  "dim_a": 44,
+  "dim_b": 39,
+  "dim_c": null,
+  "dim_d": 13
+ },
+ {
+  "tooling_no": "4560-18-1056",
+  "type": 2,
+  "dim_a": 45,
+  "dim_b": 41,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1072",
+  "type": 1,
+  "dim_a": 46.5,
+  "dim_b": 38.5,
+  "dim_c": 5,
+  "dim_d": 27
+ },
+ {
+  "tooling_no": "4560-18-1047",
+  "type": 2,
+  "dim_a": 49,
+  "dim_b": 40,
+  "dim_c": null,
+  "dim_d": 15
+ },
+ {
+  "tooling_no": "4560-18-1041",
+  "type": 2,
+  "dim_a": 50,
+  "dim_b": 40,
+  "dim_c": null,
+  "dim_d": 15
+ },
+ {
+  "tooling_no": "4560-18-1049",
+  "type": 2,
+  "dim_a": 51,
+  "dim_b": 45,
+  "dim_c": null,
+  "dim_d": 15
+ },
+ {
+  "tooling_no": "4560-18-1073",
+  "type": 1,
+  "dim_a": 51,
+  "dim_b": 42,
+  "dim_c": 5,
+  "dim_d": 29
+ },
+ {
+  "tooling_no": "4560-18-1042",
+  "type": 2,
+  "dim_a": 53,
+  "dim_b": 45,
+  "dim_c": null,
+  "dim_d": 16
+ },
+ {
+  "tooling_no": "4560-18-1059",
+  "type": 2,
+  "dim_a": 54,
+  "dim_b": 49,
+  "dim_c": 5,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1057",
+  "type": 2,
+  "dim_a": 55,
+  "dim_b": 45,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1065",
+  "type": 1,
+  "dim_a": 56,
+  "dim_b": 51,
+  "dim_c": 5,
+  "dim_d": 31
+ },
+ {
+  "tooling_no": "4560-18-1077",
+  "type": 2,
+  "dim_a": 56,
+  "dim_b": 50,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1048",
+  "type": 2,
+  "dim_a": 59,
+  "dim_b": 50,
+  "dim_c": null,
+  "dim_d": 18
+ },
+ {
+  "tooling_no": "4560-18-1068",
+  "type": 1,
+  "dim_a": 61,
+  "dim_b": 53,
+  "dim_c": 5,
+  "dim_d": 34
+ },
+ {
+  "tooling_no": "4560-18-1043",
+  "type": 2,
+  "dim_a": 63,
+  "dim_b": 55,
+  "dim_c": null,
+  "dim_d": 19
+ },
+ {
+  "tooling_no": "4560-18-1058",
+  "type": 2,
+  "dim_a": 65,
+  "dim_b": 61,
+  "dim_c": 10,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1060",
+  "type": 1,
+  "dim_a": 66,
+  "dim_b": 60,
+  "dim_c": 5,
+  "dim_d": 36
+ },
+ {
+  "tooling_no": "4560-18-1071",
+  "type": 1,
+  "dim_a": 68,
+  "dim_b": 59,
+  "dim_c": 5,
+  "dim_d": 37
+ },
+ {
+  "tooling_no": "4560-18-1053",
+  "type": 2,
+  "dim_a": 68.5,
+  "dim_b": 60,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1070",
+  "type": 1,
+  "dim_a": 72.5,
+  "dim_b": 63,
+  "dim_c": 5,
+  "dim_d": 39
+ },
+ {
+  "tooling_no": "4560-18-1054",
+  "type": 2,
+  "dim_a": 75,
+  "dim_b": 65,
+  "dim_c": null,
+  "dim_d": 10
+ },
+ {
+  "tooling_no": "4560-18-1076",
+  "type": 2,
+  "dim_a": 78.5,
+  "dim_b": 70,
+  "dim_c": null,
+  "dim_d": 10
+ }
+]

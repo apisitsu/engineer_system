@@ -266,3 +266,94 @@ describe('runToolingImports', () => {
     expect(steps[1].error).toMatch(/Cannot find source workbook/);
   });
 });
+
+describe('writeCsv — surviving a filesystem that will not be overwritten', () => {
+  const OUT = path.join(ROOT, 'writecsv');
+  const FILE = 'probe.csv';
+  const TARGET = path.join(OUT, FILE);
+  const COLS = ['a', 'b'];
+  const ROWS = [{ a: '1', b: '2' }];
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('writes through a temp file and renames, leaving no temp behind', async () => {
+    await svc.writeCsv(OUT, FILE, COLS, ROWS);
+    expect(fs.readFileSync(TARGET, 'utf8')).toContain('1,2');
+    // The temp name is dot-prefixed; nothing but the CSV should remain.
+    expect(fs.readdirSync(OUT)).toEqual([FILE]);
+  });
+
+  it('retries a transient UNKNOWN and succeeds — the plbmp130 Google Drive failure', async () => {
+    // Fail the first write the way Drive's virtual filesystem did (errno -4094),
+    // then let it through. Without the retry this surfaced as a hard step failure.
+    let calls = 0;
+    const real = fs.promises.writeFile;
+    jest.spyOn(fs.promises, 'writeFile').mockImplementation((...args) => {
+      if (++calls === 1) {
+        const err = new Error('UNKNOWN: unknown error, open');
+        err.code = 'UNKNOWN';
+        return Promise.reject(err);
+      }
+      return real(...args);
+    });
+
+    await svc.writeCsv(OUT, FILE, COLS, ROWS, { backoffMs: 1 });
+    expect(calls).toBeGreaterThan(1);
+    expect(fs.readFileSync(TARGET, 'utf8')).toContain('1,2');
+  });
+
+  it('replaces an existing file rather than failing on it', async () => {
+    fs.writeFileSync(TARGET, 'stale\n');
+    await svc.writeCsv(OUT, FILE, COLS, ROWS);
+    expect(fs.readFileSync(TARGET, 'utf8')).not.toContain('stale');
+  });
+
+  it('still throws when the target is genuinely unwritable', async () => {
+    // A non-retryable error must not be swallowed by the fallback — the step needs
+    // to report it, which is what turns into the 500 the UI shows.
+    const err = new Error('ENOENT: no such file or directory');
+    err.code = 'ENOENT';
+    jest.spyOn(fs.promises, 'writeFile').mockRejectedValue(err);
+    await expect(svc.writeCsv(OUT, FILE, COLS, ROWS, { backoffMs: 1 })).rejects.toThrow(/ENOENT/);
+  });
+
+  it('gives up after the configured attempts instead of retrying forever', async () => {
+    let calls = 0;
+    jest.spyOn(fs.promises, 'writeFile').mockImplementation(() => {
+      calls++;
+      const err = new Error('UNKNOWN: unknown error, open');
+      err.code = 'UNKNOWN';
+      return Promise.reject(err);
+    });
+    await expect(svc.writeCsv(OUT, FILE, COLS, ROWS, { attempts: 2, backoffMs: 1 }))
+      .rejects.toThrow(/UNKNOWN/);
+    // 2 temp attempts + the one direct-write fallback.
+    expect(calls).toBe(3);
+  });
+});
+
+describe('writeCsv retry budget', () => {
+  const OUT = path.join(ROOT, 'writecsv-budget');
+  const FILE = 'budget.csv';
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('rides out a lock that lasts several seconds — a Drive upload, not a brief blip', async () => {
+    // Four consecutive UNKNOWNs is longer than the original 3-attempt budget allowed.
+    // Google Drive holding the previous version while it uploads is measured in seconds,
+    // not milliseconds, which is why the default is 5 attempts.
+    let calls = 0;
+    const real = fs.promises.writeFile;
+    jest.spyOn(fs.promises, 'writeFile').mockImplementation((...args) => {
+      if (++calls <= 4) {
+        const err = new Error('UNKNOWN: unknown error, open');
+        err.code = 'UNKNOWN';
+        return Promise.reject(err);
+      }
+      return real(...args);
+    });
+
+    await svc.writeCsv(OUT, FILE, ['a'], [{ a: '1' }], { backoffMs: 1 });
+    expect(fs.readFileSync(path.join(OUT, FILE), 'utf8')).toContain('1');
+  });
+});

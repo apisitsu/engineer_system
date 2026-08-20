@@ -1,5 +1,10 @@
 $ErrorActionPreference = "Stop"
 $ProjectPath = "D:\00_system\EngineerSystem"
+$LogFile = "$ProjectPath\system_update.log"
+
+# Clean old log
+if (Test-Path $LogFile) { Remove-Item $LogFile -Force }
+Start-Transcript -Path $LogFile -Force
 
 try {
     Set-Location -Path $ProjectPath
@@ -12,9 +17,13 @@ try {
 
     if ($LocalHash -eq $RemoteHash) {
         Write-Host "No updates found on main branch. Exiting." -ForegroundColor Yellow
+        node apps\ENG-Backend\scripts\log_update.js "NO_UPDATE" "No updates found on main branch" "$LocalHash" "$RemoteHash"
     } else {
         Write-Host "Update found. Pulling latest code..." -ForegroundColor Cyan
         git pull origin main
+
+        # Update LocalHash after pull
+        $NewLocalHash = git rev-parse HEAD
 
         $ConstFile = "apps\ENG-Frontend\src\constance\constance.js"
         if (Test-Path $ConstFile) {
@@ -49,11 +58,14 @@ try {
         Write-Host "Starting npm run dev in a new window..." -ForegroundColor Cyan
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" -WorkingDirectory $ProjectPath -WindowStyle Normal
 
-        Write-Host "Process completed successfully!" -ForegroundColor Green
+        Write-Host "Process completed successfully! Logging UPDATE_SUCCESS..." -ForegroundColor Green
+        node apps\ENG-Backend\scripts\log_update.js "UPDATE_SUCCESS" "System updated and restarted successfully" "$LocalHash" "$NewLocalHash"
     }
 } catch {
     Write-Host "An error occurred during execution:`n$($_.Exception.Message)" -ForegroundColor Red
+    node apps\ENG-Backend\scripts\log_update.js "ERROR" "$($_.Exception.Message)" "" ""
 } finally {
     Write-Host "`nThis window will close in 10 seconds..." -ForegroundColor Magenta
+    Stop-Transcript
     Start-Sleep -Seconds 10
 }

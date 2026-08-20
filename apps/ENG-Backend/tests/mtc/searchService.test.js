@@ -200,6 +200,90 @@ describe('buildSpecContext groove Y + isABR (CPX SHOE V)', () => {
   });
 });
 
+// ── buildSpecContext: SPH component dimensions ───────────────────────────────
+
+describe('buildSpecContext とば口径 (TB / TBrace)', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  // C/N 413010, the row that makes the two widths visibly different:
+  // assembled SPH race 12.70, race blank 14.38, ball 25.40.
+  const SPH = { ball_dia: 25.4, sph_width: 12.7, race_width: 14.38 };
+
+  it('TB uses the ASSEMBLED race width — X-100 ARBOR B is the consumer', () => {
+    // The X-100 sheet's own TB for this part is 22.04; sqrt(25.4² − 12.7²) = 21.997
+    expect(ctx(SPH).TB).toBeCloseTo(21.9970, 3);
+  });
+
+  it('TBrace uses the race BLANK width — XD-8 means this one', () => {
+    expect(ctx(SPH).TBrace).toBeCloseTo(20.9374, 3);
+  });
+
+  it('the two are over a millimetre apart, which is why they are separate keys', () => {
+    const c = ctx(SPH);
+    expect(Math.abs(c.TB - c.TBrace)).toBeGreaterThan(1);
+  });
+
+  it('both are 0 on a part with no SPH components, never NaN', () => {
+    const c = ctx({ od_aft: 20, w_aft: 10 });
+    expect(c.TB).toBe(0);
+    expect(c.TBrace).toBe(0);
+  });
+
+  it('is 0 rather than NaN when the width meets or exceeds the ball', () => {
+    expect(ctx({ ball_dia: 10, sph_width: 10 }).TB).toBe(0);
+    expect(ctx({ ball_dia: 10, sph_width: 12 }).TB).toBe(0);
+  });
+});
+
+describe('buildSpecContext ボール肩径 (SD1 / SD2)', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  it('SD1 is the stored Y-ball value, SD2 the geometric normal-ball one', () => {
+    // C/N 432639: ball 22.225 x 22.220, stored shoulder 15.70
+    const c = ctx({ ball_dia: 22.225, ball_width: 22.22, ball_shoulder_dia: 15.7, yball: 'Y' });
+    expect(c.SD1).toBeCloseTo(15.7, 5);
+    expect(c.isYBall).toBe(1);
+    // BW is all but equal to BD here, so the normal-ball geometry is tiny — which is
+    // exactly why a Y-ball takes the drawing value instead.
+    expect(c.SD2).toBeLessThan(2);
+  });
+
+  it('SD2 reproduces the sheet formula ROUND(SQRT(BD²−BW²),2)', () => {
+    // C/N 413010: BD 25.4, BW 15.88 → the XD-8 sheet prints 19.82
+    const c = ctx({ ball_dia: 25.4, ball_width: 15.88 });
+    expect(c.SD2).toBeCloseTo(19.8239, 3);
+    expect(c.SD1).toBe(0);
+    expect(c.isYBall).toBe(0);
+  });
+
+  it('isYBall is narrower than isBallInner (an INNER type is not a Y-ball)', () => {
+    const c = ctx({ od_aft: 20, w_aft: 10, type: 'BALL INNER' });
+    expect(c.isBallInner).toBe(1);
+    expect(c.isYBall).toBe(0);
+  });
+
+  it('SD1 is 0 on a part with no ball, so a sentinel branch can catch it', () => {
+    expect(ctx({ od_aft: 20, w_aft: 10 }).SD1).toBe(0);
+    expect(ctx({ od_aft: 20, w_aft: 10 }).SD2).toBe(0);
+  });
+});
+
+describe('buildSpecContext SPH 切削外径 (sphCutOd)', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  it('adds the machining allowance to sph_od — nominal +0.10, MAX +0.15', () => {
+    const c = ctx({ sph_od: 30.67 });
+    expect(c.sphCutOd).toBeCloseTo(30.77, 5);
+    expect(c.sphCutOd_max).toBeCloseTo(30.82, 5);
+  });
+
+  it('stays 0 on a part with no SPH, so it cannot pass a ceiling filter', () => {
+    const c = ctx({ od_aft: 20, w_aft: 10 });
+    expect(c.sphCutOd).toBe(0);
+    expect(c.sphCutOd_max).toBe(0);
+  });
+});
+
 // ── Edge cases ────────────────────────────────────────────────────────────────
 
 describe('edge cases', () => {

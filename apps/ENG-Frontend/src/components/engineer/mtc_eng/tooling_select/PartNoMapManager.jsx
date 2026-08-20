@@ -33,7 +33,7 @@ export default function PartNoMapManager() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState({ machines: [], toolings: [] });
-  const [filter, setFilter] = useState({ machine_name: undefined, tooling_name: undefined, parts_no: '' });
+  const [filter, setFilter] = useState({ machine_name: undefined, tooling_name: undefined, parts_no: '', cn: '' });
   const [modal, setModal] = useState({ open: false, record: null });
   const [form] = Form.useForm();
 
@@ -44,6 +44,7 @@ export default function PartNoMapManager() {
       if (filter.machine_name) params.machine_name = filter.machine_name;
       if (filter.tooling_name) params.tooling_name = filter.tooling_name;
       if (filter.parts_no?.trim()) params.parts_no = filter.parts_no.trim();
+      if (filter.cn?.trim()) params.cn = filter.cn.trim();
       const res = await axios.get(server.TSV2_PARTNO_MAP, { headers, params });
       setRows(res.data.rows || []);
     } catch {
@@ -117,8 +118,12 @@ export default function PartNoMapManager() {
     { title: 'Machine', dataIndex: 'machine_name', key: 'machine_name', width: 120,
       render: v => <Tag color="geekblue">{v}</Tag> },
     { title: 'Tooling', dataIndex: 'tooling_name', key: 'tooling_name', width: 150 },
+    // A row is keyed by ONE of these. Showing both columns is what makes that legible —
+    // a blank Part No with no C/N column beside it just reads as missing data.
     { title: 'Part No (品番)', dataIndex: 'parts_no', key: 'parts_no', width: 200,
-      render: v => <Text strong copyable>{v}</Text> },
+      render: v => (v ? <Text strong copyable>{v}</Text> : <Text type="secondary">—</Text>) },
+    { title: 'C/N', dataIndex: 'cn', key: 'cn', width: 120,
+      render: v => (v ? <Text strong copyable>{v}</Text> : <Text type="secondary">—</Text>) },
     { title: 'Tool No (DD)', dataIndex: 'tool_dwg_no', key: 'tool_dwg_no', width: 200,
       render: v => (
         <span>
@@ -170,6 +175,12 @@ export default function PartNoMapManager() {
           onChange={e => setFilter(f => ({ ...f, parts_no: e.target.value }))}
           onSearch={load}
         />
+        <Input.Search
+          allowClear placeholder="C/N contains…" style={{ width: 170 }}
+          value={filter.cn}
+          onChange={e => setFilter(f => ({ ...f, cn: e.target.value }))}
+          onSearch={load}
+        />
         <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
         <Text type="secondary">{rows.length} rows</Text>
       </Space>
@@ -200,9 +211,17 @@ export default function PartNoMapManager() {
               <Input placeholder="ROTARY DRESSER" />
             </Form.Item>
           </div>
-          <Form.Item name="parts_no" label="Part No (品番)" rules={[{ required: true }]}>
-            <Input placeholder="e.g. 3HTY6VP-60B-T" />
-          </Form.Item>
+          {/* A row is keyed by ONE of these — the backend rejects both or neither. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="parts_no" label="Part No (品番)"
+              tooltip="Use this when the fixture is chosen by part number (e.g. ROTARY DRESSER). Leave blank if you are keying on C/N.">
+              <Input placeholder="e.g. 3HTY6VP-60B-T" allowClear />
+            </Form.Item>
+            <Form.Item name="cn" label="C/N"
+              tooltip="Use this when the fixture is chosen per control number (e.g. FTL PUSHER OP1). Leave blank if you are keying on Part No.">
+              <Input placeholder="e.g. 412145" allowClear />
+            </Form.Item>
+          </div>
           <Form.Item name="tool_dwg_no" label="Tool No (DD)" rules={[{ required: true }]}
             tooltip="Enter the DD#### form (e.g. DD0226). 4800-42-0226 is also accepted and auto-converted to DD0226. This is what prints on the SDS sheet.">
             <Input placeholder="e.g. DD0226" />

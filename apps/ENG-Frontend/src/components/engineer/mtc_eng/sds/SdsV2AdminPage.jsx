@@ -266,6 +266,40 @@ const CN_PREFIX_OPTIONS = [
   { value: 'F01', label: 'F01 — FINISH GOODS' },
 ];
 
+// Class-level targets (two characters). One entry stands in for every Sub Class beneath it,
+// so a shop drawing that is correct for all of BALL is uploaded once as C3 instead of nine
+// times as C31…C39. The renderer still prefers a Sub Class picture where one exists — the
+// class image is the fallback, not an override (see utils/grindingPrefix on the backend).
+const CN_CLASS_OPTIONS = [
+  { value: 'C1', label: 'C1 — BODY (all Sub Classes)' },
+  { value: 'C2', label: 'C2 — RACE (all Sub Classes)' },
+  { value: 'C3', label: 'C3 — BALL (all Sub Classes)' },
+  { value: 'C5', label: 'C5 — BODY · 2PCS / Die Casting (all Sub Classes)' },
+  { value: 'C6', label: 'C6 — SLEEVE (all Sub Classes)' },
+  { value: 'C8', label: 'C8 — STUD / OTHER (all Sub Classes)' },
+  { value: 'C9', label: 'C9 — MECHA / OTHER (all Sub Classes)' },
+  { value: 'A4', label: 'A4 — SPHERICAL (all Sub Classes)' },
+  { value: 'F0', label: 'F0 — FINISH GOODS (all Sub Classes)' },
+];
+
+// Class group first: it is the broadest choice and the one that clears a backlog fastest,
+// so it should not be buried under 50 Sub Class rows.
+const CN_TARGET_GROUPS = [
+  { label: 'Class — covers every Sub Class below it', options: CN_CLASS_OPTIONS },
+  { label: 'Sub Class — this family only', options: CN_PREFIX_OPTIONS },
+];
+
+// 'C39-04137' / '394137' → CN · 'C39' → family · 'C3' → class.
+// Mirrors prefixLevel() in the backend's utils/grindingPrefix — including the 6-digit
+// item-no, which is the same part written the other way and IS a per-CN target.
+const targetLevel = (p) => {
+  const s = String(p || '').trim().toUpperCase();
+  if (/^[A-Z]\d{2}-\d{4,5}$/.test(s) || /^\d{6}$/.test(s)) return 'cn';
+  if (/^[A-Z]\d{2}$/.test(s)) return 'family';
+  if (/^[A-Z]\d$/.test(s)) return 'class';
+  return 'unknown';
+};
+
 const ToolingImagesTab = ({ theme }) => {
   const { message } = App.useApp();
   const [rows, setRows] = useState([]);
@@ -522,7 +556,9 @@ const ToolingImagesTab = ({ theme }) => {
   );
 };
 
-const CN_PREFIX_LABEL_MAP = Object.fromEntries(CN_PREFIX_OPTIONS.map(o => [o.value, o.label]));
+const CN_PREFIX_LABEL_MAP = Object.fromEntries(
+  [...CN_CLASS_OPTIONS, ...CN_PREFIX_OPTIONS].map(o => [o.value, o.label])
+);
 
 const GrindingImagesTab = ({ theme }) => {
   const { message } = App.useApp();
@@ -534,6 +570,10 @@ const GrindingImagesTab = ({ theme }) => {
   const [coverage, setCoverage] = useState(null);
   const [covLoading, setCovLoading] = useState(false);
   const [view, setView] = useState('uploaded');
+  const [editing, setEditing] = useState(null);        // row open in the edit modal
+  const [editForm] = Form.useForm();
+  const [editFileList, setEditFileList] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -619,6 +659,49 @@ const GrindingImagesTab = ({ theme }) => {
     }
   };
 
+  // Retargeting a picture — fixing a typo'd prefix, adding a process code, widening C39 to
+  // C3 — used to mean delete + re-upload, which needs the original file back on hand. Here
+  // the file is optional: leave it empty and only the targeting changes, and the record
+  // keeps its id (so its preview URL and coverage history survive the edit).
+  const openEdit = (row) => {
+    const all = Array.isArray(row.cn_prefixes) ? row.cn_prefixes : [];
+    // Split by what each control can actually hold, not by level: the CN Target Select has
+    // a fixed option list and silently DROPS a value it does not offer, so anything not in
+    // that list — a control-no, a 6-digit item-no, a legacy oddity — has to land in the
+    // free-text "Specific CN" tags box or saving the row would quietly delete it.
+    const isOption = (p) => Object.prototype.hasOwnProperty.call(CN_PREFIX_LABEL_MAP, String(p).trim().toUpperCase());
+    setEditing(row);
+    setEditFileList([]);
+    editForm.setFieldsValue({
+      cn_prefixes:   all.filter(isOption),
+      cn_full:       all.filter(p => !isOption(p)),
+      process_codes: row.process_codes || [],
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const vals = await editForm.validateFields();
+      const specificCns = (vals.cn_full || []).map(c => String(c).trim().toUpperCase()).filter(Boolean);
+      const targets = [...new Set([...(vals.cn_prefixes || []), ...specificCns])];
+      if (!targets.length) { message.warning('Select a CN target or enter a specific CN'); return; }
+      setSaving(true);
+      const fd = new FormData();
+      fd.append('cn_prefixes', JSON.stringify(targets));
+      fd.append('process_codes', JSON.stringify(vals.process_codes || []));
+      if (editFileList.length) fd.append('image', editFileList[0].originFileObj);
+      await axios.put(`${server.MTC_SDS_V2_IMAGES_GRINDING}/${editing.id}`, fd);
+      message.success('Saved');
+      setEditing(null); setEditFileList([]);
+      load(); loadCoverage(true);
+    } catch (err) {
+      if (err.errorFields) return;
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const cols = [
     {
       title: 'Preview',
@@ -644,11 +727,16 @@ const GrindingImagesTab = ({ theme }) => {
       render: (v) => (
         <Space size={2} wrap>
           {(Array.isArray(v) ? v : [v]).map(p => {
-            // A specific control-no (contains a dash, e.g. C39-04137) is a per-CN
-            // override; a bare family prefix (C39) is shown plain.
-            const isSpecificCn = String(p).includes('-');
+            // Three targeting levels, and which one a tag is decides whether it wins over
+            // its neighbours, so they must be tellable apart at a glance:
+            //   blue   C39-04137  this part only — beats everything
+            //   plain  C39        the Sub Class
+            //   purple C3         the whole class — fallback when no Sub Class picture
+            const level = targetLevel(p);
+            const color = level === 'cn' ? 'blue' : level === 'class' ? 'purple' : undefined;
+            const hint = level === 'class' ? ' (fallback for the whole class)' : '';
             return (
-              <Tag key={p} color={isSpecificCn ? 'blue' : undefined} title={CN_PREFIX_LABEL_MAP[p] || p}>
+              <Tag key={p} color={color} title={(CN_PREFIX_LABEL_MAP[p] || p) + hint}>
                 {p}
               </Tag>
             );
@@ -689,12 +777,15 @@ const GrindingImagesTab = ({ theme }) => {
     { title: 'Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '',
-      key: 'del',
-      width: 80,
+      key: 'act',
+      width: 100,
       render: (_, row) => (
-        <Popconfirm title="Delete image?" onConfirm={() => handleDelete(row.id)} okText="Delete" okButtonProps={{ danger: true }}>
-          <Button size="small" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} title="Edit targeting / replace image" />
+          <Popconfirm title="Delete image?" onConfirm={() => handleDelete(row.id)} okText="Delete" okButtonProps={{ danger: true }}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -750,10 +841,14 @@ const GrindingImagesTab = ({ theme }) => {
     <div>
       <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Upload Grinding Layout Image">
         <Form form={form} layout="inline">
-          <Form.Item name="cn_prefixes" label="CN Prefix (family)">
+          <Form.Item
+            name="cn_prefixes"
+            label="CN Target"
+            tooltip="Class (C3) covers every Sub Class under it and is used only where that Sub Class has no picture of its own. Sub Class (C39) wins over it."
+          >
             <Select
               mode="multiple"
-              options={CN_PREFIX_OPTIONS}
+              options={CN_TARGET_GROUPS}
               style={{ minWidth: 220 }}
               maxTagCount="responsive"
               optionFilterProp="label"
@@ -831,6 +926,61 @@ const GrindingImagesTab = ({ theme }) => {
           scroll={{ x: 'max-content' }}
         />
       )}
+
+      <Modal
+        open={!!editing}
+        title="Edit Grinding Layout Image"
+        onCancel={() => { setEditing(null); setEditFileList([]); }}
+        onOk={handleSaveEdit}
+        confirmLoading={saving}
+        okText="Save"
+        destroyOnHidden
+        width={640}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item
+            name="cn_prefixes"
+            label="CN Target"
+            tooltip="Class (C3) covers every Sub Class under it and is used only where that Sub Class has no picture of its own. Sub Class (C39) wins over it."
+          >
+            <Select
+              mode="multiple"
+              options={CN_TARGET_GROUPS}
+              maxTagCount="responsive"
+              optionFilterProp="label"
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="cn_full" label="Specific CN" tooltip="e.g. C39-04137 — overrides both the Sub Class and the class image for just this control-no">
+            <Select mode="tags" placeholder="e.g. C39-04137" tokenSeparators={[',', ' ']} maxTagCount="responsive" />
+          </Form.Item>
+          <Form.Item name="process_codes" label="Process Code" tooltip="Leave empty to make this the default image for the targets above">
+            <Select mode="tags" placeholder="e.g. 1011, IDG001" tokenSeparators={[',']} maxTagCount="responsive" />
+          </Form.Item>
+          <Form.Item label="Image">
+            <Space align="start" wrap>
+              {editing && (
+                <Image
+                  width={120}
+                  height={90}
+                  style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+                  src={`${server.MTC_SDS_V2_IMAGES_GRINDING}/view/${editing.id}?token=${localStorage.getItem('token')}`}
+                  fallback="/image_m.png"
+                />
+              )}
+              <Space direction="vertical" size={4}>
+                <Upload accept="image/*" maxCount={1} fileList={editFileList} beforeUpload={() => false}
+                  onChange={({ fileList: fl }) => setEditFileList(fl)}>
+                  <Button icon={<UploadOutlined />}>Replace image</Button>
+                </Upload>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Optional — leave empty to keep the current picture and change only the targeting.
+                </Text>
+              </Space>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

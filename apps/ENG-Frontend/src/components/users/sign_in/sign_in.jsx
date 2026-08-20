@@ -85,8 +85,6 @@ function Sign_in() {
       });
 
       if (res.data.result === "true") {
-        saveSession(res.data, values.empno);
-        
         // Get the page to redirect to (from state or default based on department)
         const from = location.state?.from?.pathname || null;
         const isEngineer = res.data.userInfo?.u_department === "ENG" || res.data.userInfo?.u_department === "AD" || res.data.userInfo?.u_department === "SYSTEM_ENG" || res.data.userInfo?.u_department === "QA";
@@ -95,6 +93,8 @@ function Sign_in() {
         const destination = from || defaultPath;
         
         await Toast.fire({ icon: "success", title: "เข้าสู่ระบบสำเร็จ" });
+        
+        saveSession(res.data, values.empno);
         navigate(destination, { replace: true });
       } else {
         Toast.fire({
