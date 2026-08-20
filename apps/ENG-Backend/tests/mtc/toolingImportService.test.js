@@ -331,3 +331,29 @@ describe('writeCsv — surviving a filesystem that will not be overwritten', () 
     expect(calls).toBe(3);
   });
 });
+
+describe('writeCsv retry budget', () => {
+  const OUT = path.join(ROOT, 'writecsv-budget');
+  const FILE = 'budget.csv';
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('rides out a lock that lasts several seconds — a Drive upload, not a brief blip', async () => {
+    // Four consecutive UNKNOWNs is longer than the original 3-attempt budget allowed.
+    // Google Drive holding the previous version while it uploads is measured in seconds,
+    // not milliseconds, which is why the default is 5 attempts.
+    let calls = 0;
+    const real = fs.promises.writeFile;
+    jest.spyOn(fs.promises, 'writeFile').mockImplementation((...args) => {
+      if (++calls <= 4) {
+        const err = new Error('UNKNOWN: unknown error, open');
+        err.code = 'UNKNOWN';
+        return Promise.reject(err);
+      }
+      return real(...args);
+    });
+
+    await svc.writeCsv(OUT, FILE, ['a'], [{ a: '1' }], { backoffMs: 1 });
+    expect(fs.readFileSync(path.join(OUT, FILE), 'utf8')).toContain('1');
+  });
+});

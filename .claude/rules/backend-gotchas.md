@@ -6,9 +6,21 @@ Non-obvious server / Express / env pitfalls in `apps/ENG-Backend`. These bite si
 
 `server.js` registers JSON body parsers **twice**. The FIRST one (`express.json()`) runs before the `bodyParser.json({ limit: '50mb' })` below it, so its limit wins. Both must carry the `50mb` limit or large bodies (e.g. the saved SDS grid layout) throw `PayloadTooLargeError` even though a 50mb parser exists further down.
 
-## Gmail creds format (`.env`)
+## `.env` mixes two conventions, and nothing signposts which a key wants
 
-`.env` stores Gmail values as JS assignment syntax (e.g., `GMAIL_CLIENT_ID = '47418...';`). Always use `cleanEnv(key)` from `api/engineer/mtc/utils/emailHelper.js` — **never** `process.env.KEY` directly — or the OAuth call gets `invalid_client` from the literal quote characters in the value.
+The file contains both `KEY=value` and `KEY = 'value';` (JS assignment syntax). A reader has no way to tell which style a given key expects, and picking the wrong one fails in ways that do not name the cause.
+
+**Gmail creds are the JS-assignment kind.** Always use `cleanEnv(key)` from `api/engineer/mtc/utils/emailHelper.js` — **never** `process.env.KEY` directly — or the OAuth call gets `invalid_client` from the literal quote characters in the value.
+
+**The `TI_*` paths accept either**, via `envPath()` in `mtcConstants.js`, because the alternative was this on plbmp130:
+
+```
+ENOENT: mkdir 'D:\00_system\EngineerSystem\apps\ENG-Backend\'D:\ToolingInspectionCSV';'
+```
+
+`TI_CSV_OUTPUT_DIR = 'D:\ToolingInspectionCSV';` was written to match the Gmail keys directly above it. The quotes and semicolon became part of the path, Node resolved that relative to the backend directory, and the error named a path nobody had typed. `envPath()` strips a trailing `;` and **matched** wrapping quotes only — a lone quote is a typo and stays, so the ENOENT still names it. Covered by `tests/mtc/envPath.test.js`.
+
+> If you add another path-shaped env var, read it through `envPath()`. If you add a credential, read it through `cleanEnv()`.
 
 ## Gitignored artifacts never reach prod ("works on plbmp118, 500s on plbmp130")
 
@@ -58,7 +70,19 @@ The whole sequence retries (3 attempts, linear backoff) on `UNKNOWN`/`EBUSY`/`EP
 
 > **This improves the odds; it does not remove the need to set `TI_CSV_OUTPUT_DIR`.** A retry helps a transient lock, not a folder the account cannot write at all.
 
-### Uploading to Drive through the API is blocked on a credential
+### Getting the CSVs to Drive without a drive letter
+
+Writing into a Drive-for-Desktop folder fails intermittently with `UNKNOWN` / -4094, and the retry only buys time — Drive's sync is **asynchronous**, so it can be holding a file minutes or hours after whatever triggered it (observed stuck at "1.1 MB, 0% downloaded"). Two machines writing the same file makes it worse, but one machine hitting its own previous upload is enough.
+
+**`TI_CSV_GAS_URL` uploads them instead.** `docs/gas_ti_csv_doPost.gs` is an Apps Script web app deployed **Execute as: Me**; the backend POSTs `{ secret, fileName, base64Data }` and the script writes into the folder with the deployer's own Drive rights. No file on local disk for Drive to lock, and no OAuth — the same pattern `GAS_EMAIL_URL` and `api/kanban/gas/Code.gs` already use.
+
+- Unset ⇒ nothing happens, so an unconfigured host behaves exactly as before.
+- The local `writeCsv` still runs and is still the step's real output; the upload only mirrors it, so a Drive outage or a stale URL degrades to a warning.
+- Only the **authoritative** exports are mirrored — not the backup copy `importPcTooling` writes before its DB round trip, which would upload the same filename twice per run.
+- Set `TI_CSV_GAS_SECRET` to match the script, or anyone in the org who finds the URL can overwrite the files.
+- **Re-deploying the script mints a new `/exec` URL.** Uploads that silently stop after someone "fixed" the script are almost always that; the warning says so when the response is HTML rather than JSON.
+
+### Uploading to Drive through the official API is blocked on a credential
 
 The obvious way to stop depending on a drive letter is to have the backend upload through the Drive API — `googleapis` is already a dependency. It cannot be done without someone re-authorising first:
 
