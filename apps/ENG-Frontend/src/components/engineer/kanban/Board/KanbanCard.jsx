@@ -5,7 +5,7 @@ import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../../theme';
-import SdsSignBadge from './SdsSignBadge';
+import SdsSignBadge from './SdsSignBadge.jsx';
 
 const { Text } = Typography;
 
