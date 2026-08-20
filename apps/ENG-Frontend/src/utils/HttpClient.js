@@ -4,6 +4,7 @@ import {
   apiUrl,
   NOT_CONNECT_NETWORK,
   NETWORK_CONNECTION_MESSAGE,
+  key_constance
 } from "../constance/constance";
 
 const isAbsoluteURLRegex = /^(?:\w+:)\/\//;
@@ -65,7 +66,8 @@ axios.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await axios.post(join(apiUrl, 'api/refresh-token'), {}, { withCredentials: true });
+        const refreshAxios = axios.create();
+        await refreshAxios.post(join(apiUrl, 'api/refresh-token'), {}, { withCredentials: true });
         processQueue(null);
         return axios(originalRequest);
       } catch (err) {
@@ -78,6 +80,7 @@ axios.interceptors.response.use(
         localStorage.removeItem("u_code");
         localStorage.removeItem("full_name");
         localStorage.removeItem("user_info");
+        localStorage.removeItem(key_constance.LOGIN_PASSED);
 
         // Force redirect to login page
         if (window.location.pathname !== "/sign_in" && window.location.pathname !== "/" && window.location.pathname !== "/job_check_tracker") {

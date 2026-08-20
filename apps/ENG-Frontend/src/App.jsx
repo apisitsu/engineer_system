@@ -203,7 +203,7 @@ const AppContent = () => {
             localStorage.removeItem("tokenExpiresAt");
 
             if (!isPublicPath) {
-              // window.location.href = "/sign_in";
+              window.location.href = "/sign_in";
             }
             return;
           }
