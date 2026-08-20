@@ -74,11 +74,10 @@ exports.triggerUpdate = async (req, res) => {
             console.error('[UpdateLog] Failed to pre-log trigger:', logErr.message);
         }
 
-        // Uses PowerShell Start-Process to create a new independent window 
-        // that survives when the batch file kills port 2005 (this Node.js server).
-        const child = spawn('powershell.exe', [
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-            `Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File '${scriptPath}'" -WorkingDirectory '${cwdPath}'`
+        // Uses cmd.exe /c start to reliably create a new independent window 
+        // that survives when the script kills port 2005 (this Node.js server).
+        const child = spawn('cmd.exe', [
+            '/c', 'start', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath
         ], {
             detached: true,
             stdio: 'ignore',

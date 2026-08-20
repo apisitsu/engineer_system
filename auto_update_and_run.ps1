@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$ProjectPath = "D:\00_system\EngineerSystem"
+$ProjectPath = $PSScriptRoot
 $LogFile = "$ProjectPath\system_update.log"
 
 # Clean old log
@@ -11,6 +11,7 @@ try {
 
     Write-Host "Fetching from origin..." -ForegroundColor Cyan
     git fetch origin main
+    if ($LASTEXITCODE -ne 0) { throw "git fetch origin main failed with exit code $LASTEXITCODE" }
 
     $LocalHash = git rev-parse HEAD
     $RemoteHash = git rev-parse origin/main
@@ -21,6 +22,7 @@ try {
     } else {
         Write-Host "Update found. Pulling latest code..." -ForegroundColor Cyan
         git pull origin main
+        if ($LASTEXITCODE -ne 0) { throw "git pull origin main failed with exit code $LASTEXITCODE" }
 
         # Update LocalHash after pull
         $NewLocalHash = git rev-parse HEAD
@@ -48,10 +50,12 @@ try {
         Write-Host "Stopping existing development server processes on ports 2005 and 3000..." -ForegroundColor Cyan
         $Ports = @(2005, 3000)
         foreach ($Port in $Ports) {
-            $Process = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-            if ($Process) {
-                Write-Host "Killing process with PID $Process on port $Port" -ForegroundColor Yellow
-                Stop-Process -Id $Process -Force -ErrorAction SilentlyContinue
+            $PIDs = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+            if ($PIDs) {
+                foreach ($PidValue in $PIDs) {
+                    Write-Host "Killing process with PID $PidValue on port $Port" -ForegroundColor Yellow
+                    Stop-Process -Id $PidValue -Force -ErrorAction SilentlyContinue
+                }
             }
         }
 
@@ -62,8 +66,9 @@ try {
         node apps\ENG-Backend\scripts\log_update.js "UPDATE_SUCCESS" "System updated and restarted successfully" "$LocalHash" "$NewLocalHash"
     }
 } catch {
-    Write-Host "An error occurred during execution:`n$($_.Exception.Message)" -ForegroundColor Red
-    node apps\ENG-Backend\scripts\log_update.js "ERROR" "$($_.Exception.Message)" "" ""
+    $ErrorMsg = $_.Exception.Message
+    Write-Host "An error occurred during execution:`n$ErrorMsg" -ForegroundColor Red
+    node apps\ENG-Backend\scripts\log_update.js "ERROR" "$ErrorMsg" "" ""
 } finally {
     Write-Host "`nThis window will close in 10 seconds..." -ForegroundColor Magenta
     Stop-Transcript
