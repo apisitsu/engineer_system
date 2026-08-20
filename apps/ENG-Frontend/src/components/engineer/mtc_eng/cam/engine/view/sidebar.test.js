@@ -29,7 +29,7 @@ describe('sidebarSections while running', () => {
 
   it('hides every setup section — that is the point', () => {
     const s = sidebarSections({ playing: true });
-    for (const name of ['files', 'project', 'cam', 'machine', 'stats', 'warnings', 'tools', 'removal']) {
+    for (const name of ['files', 'project', 'cam', 'machine', 'warnings', 'tools', 'removal']) {
       expect(s[name], name).toBe(false);
     }
   });

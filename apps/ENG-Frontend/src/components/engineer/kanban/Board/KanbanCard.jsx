@@ -5,6 +5,7 @@ import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../../theme';
+import SdsSignBadge from './SdsSignBadge';
 
 const { Text } = Typography;
 
@@ -462,6 +463,11 @@ const KanbanCard = ({ card, isOverlay }) => {
                         )}
                     </div>
                 )}
+
+                {/* Prepared / Checked / Approved for a Setup Data Sheet card. Renders
+                    nothing at all unless this card is linked to a sheet, so it costs
+                    ordinary cards a lookup and no space. */}
+                <SdsSignBadge cardId={card.id} />
             </div>
         </div>
     );

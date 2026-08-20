@@ -355,7 +355,12 @@ export default function ToolingSelectV2Page() {
 
   const hasResults    = result?.results?.length > 0;
   const allWarnings   = result?.warnings || [];
-  const machineSkips  = allWarnings.filter(w => !w.tooling);
+  // A machine-level warning is one of two very different things, and the copy below
+  // states the limit case outright ("Spec out of limit") — so a 'no_jig' warning must
+  // not be lumped in with it. no_jig means the part runs on the machine and needs no
+  // fixture; limit means it cannot run there at all.
+  const noJigNotes    = allWarnings.filter(w => !w.tooling && w.type === 'no_jig');
+  const machineSkips  = allWarnings.filter(w => !w.tooling && w.type !== 'no_jig');
   const toolingErrors = allWarnings.filter(w => w.tooling);
   const foundCount    = result?.results?.length || 0;
   const totalAttempted = foundCount + toolingErrors.length;
@@ -506,6 +511,24 @@ export default function ToolingSelectV2Page() {
                           {toolingErrors.map((w, i) => (
                             <li key={i}>
                               {w.machine} / {w.tooling}: {w.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      }
+                      showIcon
+                    />
+                  )}
+
+                  {noJigNotes.length > 0 && (
+                    <Alert
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message="No jig required"
+                      description={
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {noJigNotes.map((w, i) => (
+                            <li key={i}>
+                              {w.machine}: {w.reason}
                             </li>
                           ))}
                         </ul>

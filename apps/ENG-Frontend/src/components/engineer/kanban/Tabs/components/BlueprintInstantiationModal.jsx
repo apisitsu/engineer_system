@@ -259,7 +259,7 @@ const BlueprintInstantiationModal = ({ open, onCancel, template, theme, onSucces
                     </Button>
                 ]}
                 width={500}
-                destroyOnClose
+                destroyOnHidden
             >
                 <div style={{ marginBottom: 16 }}>
                     <Text type="secondary">

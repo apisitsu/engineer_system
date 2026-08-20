@@ -174,6 +174,12 @@ export const createBoardSlice = (set, get) => ({
 
             const visibleLists = fetchedLists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
             visibleLists.forEach(list => get().fetchCardsForList(list.id));
+
+            // Sign state for any Setup Data Sheet cards on this board, so they can be
+            // signed here instead of via the card's link to the SDS page. One request
+            // for the whole board, and it never blocks the board: a project with no
+            // SDS cards simply gets an empty map back.
+            get().fetchSdsApprovals(boardId);
         } catch (err) {
             console.error("Failed to fetch board details", err);
             if (err.response?.status === 403) {

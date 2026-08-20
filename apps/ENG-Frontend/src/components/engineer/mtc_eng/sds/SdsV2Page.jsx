@@ -925,6 +925,14 @@ const SdsV2Page = () => {
             const res = r._isExtra ? r._tsResult : matchMap[r.tool_dwg_no?.trim()]?.result;
             const sr = res?.similarRef;
             if (!sr) return <span style={{ color: '#bbb' }}>-</span>;
+            // A row already filled BY a similar part must not also show a similar
+            // REFERENCE. Both are "the tool a dimensionally-close part used", but they
+            // are chosen by different passes — the fill takes one reference part for the
+            // whole machine, the reference column takes the nearest per tooling — so they
+            // routinely name different tools. Two disagreeing gold numbers on one row
+            // reads as a contradiction rather than as corroboration. ToolingSelectV2Page
+            // has always suppressed it here; this matches it.
+            if (res?.overrideBy === 'similar_part') return <span style={{ color: '#bbb' }}>-</span>;
             return (
               <Tooltip title={`Similar-work ref C/N ${sr.ref_cn}` +
                 (sr.parts_no ? ` · P/N ${sr.parts_no}` : '') +

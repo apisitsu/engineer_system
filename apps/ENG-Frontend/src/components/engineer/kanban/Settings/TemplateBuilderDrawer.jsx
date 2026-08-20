@@ -231,7 +231,7 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
             open={open}
             onClose={onClose}
             width={560}
-            destroyOnClose
+            destroyOnHidden
             footer={
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>

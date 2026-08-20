@@ -81,11 +81,67 @@ async function cmdLoginShot() {
   });
 }
 
-const commands = { shot: cmdShot, 'login-shot': cmdLoginShot };
+/** The session injection `login-shot` uses, factored out so `login-do` shares it. */
+function injectSession(page, token, empno, name, role, department) {
+  return page.evaluateOnNewDocument(
+    (t, e, n, r, d) => {
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      localStorage.setItem('token', t);
+      localStorage.setItem('tokenExpiresAt', future);
+      localStorage.setItem('LOGIN_PASSED', 'yes');
+      localStorage.setItem('USER_EMPNO', e);
+      localStorage.setItem('USER_NAME', n);
+      localStorage.setItem('ROLE', r);
+      localStorage.setItem('USER_DEPARTMENT', d);
+      localStorage.setItem('USER_AUTH', d);
+      localStorage.setItem('USER_PERMS', '[]');
+      localStorage.setItem('USER_INFO', '{}');
+    },
+    token, empno, name, role, department
+  );
+}
+
+async function cmdLoginDo() {
+  // Loads a protected route, types into a field, clicks something, waits, shoots.
+  // `login-shot` only proves a route renders; most of what is worth checking is
+  // what the page does after an input — a search that returns rows, a form that
+  // saves. Selectors are CSS, so prefer placeholder/aria attributes over class
+  // names, which Ant Design regenerates.
+  //
+  //   login-do <url> <jwt> <empno> <name> <role> <dept> <typeSel> <text> <clickSel> <waitSel> <waitMs> <out.png>
+  //
+  // Pass "-" for any of typeSel / clickSel / waitSel to skip that step.
+  const [url, token, empno, name, role, department,
+         typeSel, text, clickSel, waitSel, waitMs, outfile] = rest;
+  await withPage(async (page) => {
+    await injectSession(page, token, empno, name, role, department);
+    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    if (typeSel && typeSel !== '-') {
+      await page.waitForSelector(typeSel, { timeout: 30000 });
+      await page.click(typeSel);
+      await page.type(typeSel, text ?? '');
+    }
+    if (clickSel && clickSel !== '-') {
+      await page.waitForSelector(clickSel, { timeout: 30000 });
+      await page.click(clickSel);
+    }
+    if (waitSel && waitSel !== '-') {
+      // A result table can take seconds — the search fans out over every machine.
+      await page.waitForSelector(waitSel, { timeout: Number(waitMs) || 60000 });
+    } else {
+      await new Promise((r) => setTimeout(r, Number(waitMs) || 3000));
+    }
+    await page.screenshot({ path: `${SHOT_DIR}/${outfile}`, fullPage: true });
+    console.log(`saved ${SHOT_DIR}/${outfile} (title: ${await page.title()}, url: ${page.url()})`);
+  });
+}
+
+const commands = { shot: cmdShot, 'login-shot': cmdLoginShot, 'login-do': cmdLoginDo };
 const fn = commands[cmd];
 if (!fn) {
   console.error('Usage: node .claude/skills/run-engineersystem/driver.mjs shot <url> <outfile.png>');
   console.error('       node .claude/skills/run-engineersystem/driver.mjs login-shot <url> <jwt> <empno> <name> <role> <department> <outfile.png>');
+  console.error('       node .claude/skills/run-engineersystem/driver.mjs login-do <url> <jwt> <empno> <name> <role> <department> <typeSel> <text> <clickSel> <waitSel> <waitMs> <outfile.png>');
   process.exit(1);
 }
 await fn();

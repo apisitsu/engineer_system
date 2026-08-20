@@ -73,6 +73,7 @@ npm run cypress:run  # Cypress E2E headless
 - **Auth state:** Zustand store at `src/stores/authStore.js`
 - **UI:** Ant Design v5 + vanilla CSS. No TailwindCSS. Use `destroyOnHidden` (not `destroyOnClose`) on Modal/Drawer.
 - **API constants:** `src/constance/constance.js` + `src/constance/mtc_constance.js`. Add new API constants to `constance.js` only — **`constance_prod.js` is dead** (imported by nothing; do not update it).
+- **Request timeouts are set centrally in `utils/HttpClient.js`**, whose interceptors are installed on the *default* axios instance (`export const httpClient = axios`), so `import axios from 'axios'` gets them everywhere. Ordinary calls default to 10 s; **a `FormData` body defaults to 10 min instead**, because axios's `timeout` is a deadline for the whole request rather than an idle timeout — a large upload transferring healthily would otherwise be aborted mid-flight, and the server accepts up to 500 MB. An explicit per-request `timeout` always wins; use one for any endpoint that is slow for reasons other than payload size (the Tooling Inspection import passes 15 min). Locked in by `utils/HttpClient.test.js`.
 - **`apiUrl` is branch-specific (prod-safety invariant):** `constance.js` hardcodes `export const apiUrl`. Branch `mtc` → `http://plbmp118:2005/` (dev); branches `dev` and `main` → `http://plbmp130:2005/` (**PROD**). Use `http://localhost:2005/` for local dev. Every `mtc`→`dev` merge risks flipping this — **`main` must stay plbmp130**, or the production frontend calls the dev backend silently. `runner.js` auto-repairs a duplicated `apiUrl` on startup via `scripts/fix_constance_prod.ps1` (which edits `constance.js`, despite its name); `git_sync_mtc.ps1` gates the release flow on it.
 - **Navigation:** Adding a page → update `App.jsx` (route) + `menu_sidebar.jsx` (sidebar entry). MTC paths in `mtc_constance.js` → `MTC_PATHS`. `menu_sidebar.jsx` numbers items from a fixed `numberIcons` array with a `|| numberIcons[0]` fallback — adding an item past the end of that array silently renumbers it "1".
 - **CAD/CAM (`mtc_eng/cam`)** is a vendored copy of the standalone **cam-web** project, not code written here. It is the only `React.lazy` route, it carries its own vitest suite, and it has four deliberate divergences from upstream that a naive re-copy undoes. Read `.claude/rules/cam-web.md` before touching it.
@@ -113,19 +114,19 @@ Frontend `.env` only needs `BROWSER=none` and `GENERATE_SOURCEMAP=false`.
 - `verifyToken` on all non-public routes; public exceptions listed explicitly in `server.js`
 - `middleware/auth.js` accepts JWT via `req.query.token` as fallback (for file-download `<a target="_blank">` links only)
 
-### Machine Name Hyphen Convention (MTC)
+### Machine Names (MTC) — the SDS registry is the spelling
 
-Machine names **must use hyphens** consistently. `FormulaService` uses exact-match SQL — a missing hyphen silently returns `0` for every parameter.
+**A machine's name must match `sds_machine_type_code.machine_type_name` exactly** (or its T-Select `machine_group` must) — that registry is the factory's own spelling. The name is matched as a raw string in three places, so a mismatch fails silently rather than loudly: the SDS PDF's tooling-slot ordering (`tooling_machine.machine_name = ANY([machine_type_name, group])`), the Part-No fixture map (`tooling_partno_map.machine_name`, used by both the SDS PDF and the similar-part fallback), and inventory-table resolution (`machine_name = $1 OR machine_group = $1`).
 
-Canonical names: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B2`, `KS-400B5`, `KS-400B6`, `KS-400B7`, `KS-500RD`, `TSG-300`, `HAMAI 5B`
-Exceptions (no hyphen): `KS400B` (retired — formula still computed but legacy SQL skipped via `use_dynamic_rules=true`); `HAMAI 5B` (Machine Type Code 564, active — Hamai-brand 5B grinder, replaces TSG-300W; floor code VSG-02. Renamed from `5B` 2026-06-05).
+For the grinder families the registry spelling carries hyphens, and the `KS-` / `KN-` / `TSG-` names **must** keep them: `KS-B22G`, `KS-B80`, `KS-03A`, `KS-B22RD`, `KS-400B1`, `KS-400B5`, `KS-400B6`, `KS-500RD`, `TSG-300W`, `HAMAI 5B`. (`KS-400B2`, `KS-400B7` and `TSG-300ZNC` exist only inside the group labels `KS-400B1/B2/B7` and `TSG-300W/TSG-300ZNC`.)
 
-When renaming a machine, always pair with a DB migration:
-```sql
-UPDATE tooling_formula         SET machine_name = 'KS-XXX' WHERE machine_name = 'KSXXX';
-UPDATE tooling_selection_rules SET calc_context  = 'KS-XXX' WHERE calc_context = 'KSXXX';
-UPDATE tooling_selection_rules SET machine_name  = 'KS-XXX' WHERE machine_name = 'KSXXX';
-```
+**This is not a house style to enforce on new machines.** The registry spells other families without hyphens — `LB12`, `LB15`, `LNC45/C200`, `THREAD ROLL`, `測定用治具全般` — and those names are correct as they stand. Renaming `LB15` to `LB-15` breaks the SDS join. Take the spelling from `sds_machine_type_code`, never from the pattern of the name next to it.
+
+Historical exception, still true: `KS400B` (retired) and `HAMAI 5B` (Machine Type Code 564, active — Hamai-brand 5B grinder replacing TSG-300W; floor code VSG-02; renamed from `5B` 2026-06-05).
+
+When renaming a machine, pair it with a DB migration that updates **`tooling_machine.machine_name`, `sds_machine_type_code.machine_type_name` and `tooling_partno_map.machine_name`** together — the last keys on the string rather than on `machine_id`. Formulas, limits and search rules all key on `machine_id` and need no change.
+
+> An older version of this section claimed `FormulaService` matches machines by exact-match SQL and prescribed `UPDATE`s against `tooling_formula.machine_name` and `tooling_selection_rules`. **All three statements would error today** — `tooling_formula` has only `machine_id`, and `tooling_selection_rules` was dropped from the database with V1. Verified live 2026-08-17. Details → `.claude/rules/tooling-select.md`.
 
 ### MTC Legacy vs New API
 Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
