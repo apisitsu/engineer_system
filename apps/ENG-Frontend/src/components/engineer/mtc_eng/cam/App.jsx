@@ -39,7 +39,7 @@ import { unionBounds } from './engine/view/camera.js';
 import { simMethodFor } from './engine/sim/method.js';
 import { SPEEDS, perTick } from './engine/view/playback.js';
 import { sidebarSections } from './engine/view/sidebar.js';
-import { formatDuration, programStatRows, timingBreakdown } from './engine/view/programStats.js';
+import { formatDuration, programStatRows, timingBreakdown } from './engine/view/programStats';
 import { autoSimKey, shouldAutoSimulate } from './engine/view/autoSim.js';
 import { offerArborToggle, parkedTip } from './engine/view/millTool.js';
 import { sweptFitBox } from './engine/view/rotaryFrame.js';
