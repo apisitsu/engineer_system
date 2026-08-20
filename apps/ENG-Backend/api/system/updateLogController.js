@@ -152,7 +152,7 @@ exports.checkUpdates = async (req, res) => {
 
 exports.getUpdateProgress = async (req, res) => {
     try {
-        const logPath = path.resolve(__dirname, '../../../../system_update.log');
+        const logPath = path.resolve(__dirname, '../../../../update_progress_live.log');
         if (fs.existsSync(logPath)) {
             const content = fs.readFileSync(logPath, 'utf8');
             res.json({ success: true, log: content });

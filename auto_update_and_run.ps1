@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $ProjectPath = $PSScriptRoot
-$LogFile = "$ProjectPath\system_update.log"
+$LogFile = "$ProjectPath\update_progress_live.log"
 
 # Clean old log
 if (Test-Path $LogFile) { Remove-Item $LogFile -Force }

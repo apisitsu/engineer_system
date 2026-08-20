@@ -56,4 +56,5 @@ GEMINI.md
 
 ./apps/uploads
 
-git_sync_mtc.ps1
+git_sync_mtc.ps1system_update.log
+update_progress_live.log
