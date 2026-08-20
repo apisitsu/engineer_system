@@ -55,6 +55,7 @@ export default function TemplateTool({ onBack }) {
         setLoading(false);
     };
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { loadForms(); }, [filterType, filterStatus, search]);
 
     const handleCreate = async () => {

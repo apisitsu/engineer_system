@@ -57,6 +57,7 @@ import useCadStore from '../../../../stores/cadStore';
 import './CadJobDashboard.css';
 
 const { Header, Content } = Layout;
+// eslint-disable-next-line no-unused-vars
 const { Text, Title } = Typography;
 const { Option } = Select;
 
@@ -177,6 +178,7 @@ export default function CadJobDashboard() {
   const {
     titleBlock,
     parameters: xmlParameters,
+    // eslint-disable-next-line no-unused-vars
     loading: xmlLoading
   } = useXmlParser(polledResult?.output_metadata_xml, { autoFetch: false });
 

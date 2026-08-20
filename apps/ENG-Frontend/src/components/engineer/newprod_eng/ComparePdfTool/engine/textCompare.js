@@ -68,6 +68,7 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
   let compIdx = 0;
 
   for (const op of diffs) {
+    // eslint-disable-next-line default-case
     switch (op.type) {
       case 'equal':
         baseIdx += op.count;

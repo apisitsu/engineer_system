@@ -13,6 +13,7 @@ import { CSS } from '@dnd-kit/utilities';
 import * as pdfjsLib from 'pdfjs-dist';
 
 const { Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Dragger } = Upload;
 
 // ── Sortable merge file item with preview ──

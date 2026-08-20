@@ -44,6 +44,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
         setSearchQuery, toggleFilterMember, toggleFilterLabel, viewMode, setViewMode, clearFilters,
         openBoardSettings,
         notifications, unreadNotificationCount, fetchNotifications, markAllNotificationsRead, markNotificationRead, openCardDetail,
+        // eslint-disable-next-line no-unused-vars
         projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager,
         users, fetchUsers
     } = useKanbanStore(
@@ -95,6 +96,7 @@ const BoardToolbar = ({ theme, activeProject }) => {
         fetchNotifications();
         const interval = setInterval(fetchNotifications, 30000);
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const hasFilters = searchQuery || filterMembers.length > 0 || filterLabels.length > 0;

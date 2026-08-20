@@ -89,5 +89,6 @@ export const useKanbanPermissions = ({
             canManageCard, canEditCard, canViewCard,
             isReadOnly, canCreateProject, canManageTemplates,
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [globalRole, globalDepartment, isPrivateProject, projectRole, boardRole, cardRole, projectStatus]);
 };

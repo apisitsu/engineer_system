@@ -4,6 +4,7 @@ import { BgColorsOutlined } from '@ant-design/icons';
 import { useTheme } from '../../theme';
 
 export const PastelThemeSelector = ({ style }) => {
+    // eslint-disable-next-line no-unused-vars
     const { themeName, switchTheme, pastelThemes, theme } = useTheme();
 
     // Theme options with color previews

@@ -14,6 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  // eslint-disable-next-line no-unused-vars
   createSketch, addPoint, addLine, addLineXY, addCircle, addCircleXY, addArc,
   addConstraint, CONSTRAINT_KINDS,
 } from './model.js';
@@ -24,6 +25,7 @@ const ofType = (prims, type) => prims.filter((p) => p.type === type);
 /** The single primitive of a type, asserting there is exactly one. */
 function only(prims, type) {
   const found = ofType(prims, type);
+  // eslint-disable-next-line jest/valid-expect
   expect(found, `expected exactly one ${type}`).toHaveLength(1);
   return found[0];
 }
@@ -139,6 +141,7 @@ describe('toPlanegcs — constraints', () => {
       // Rebuild each time so ids line up with a fresh rig.
       const fresh = rig();
       addConstraint(fresh.sk, kind, refs, value);
+      // eslint-disable-next-line jest/valid-expect
       expect(ofType(toPlanegcs(fresh.sk), type), `${kind} → ${type}`).toHaveLength(1);
       expect(sk).toBeTruthy();
     }
@@ -259,6 +262,7 @@ describe('toPlanegcs — constraints', () => {
         return pick;
       });
       addConstraint(r.sk, kind, refs, spec.value ? 5 : undefined);
+      // eslint-disable-next-line jest/valid-expect
       expect(() => toPlanegcs(r.sk), `${kind} has no planegcs mapping`).not.toThrow();
     }
   });

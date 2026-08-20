@@ -26,6 +26,7 @@ export default function useFabricTools({
 
         const handleOneClickTool = (pointer, tool) => {
             pushHistory(pageNum);
+            // eslint-disable-next-line default-case
             switch (tool) {
                 case 'date': {
                     const today = new Date().toLocaleDateString('en-GB', {
@@ -568,5 +569,6 @@ export default function useFabricTools({
             fc.off('mouse:up', onMouseUp);
             fc.off('path:created', onPathCreated);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [store.activeTool, store.toolSettings, pageNum, store.rulerScale, store.rulerUnit, pushHistory, stampData, userName, fabricCanvasRefs]);
 }

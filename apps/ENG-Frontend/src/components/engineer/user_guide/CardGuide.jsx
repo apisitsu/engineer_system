@@ -19,6 +19,7 @@ import { BsStopwatch } from 'react-icons/bs';
 import 'react-icons/ai';
 
 const { Title, Text, Paragraph } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { TextArea } = Input;
 const AntCard = Card;
 

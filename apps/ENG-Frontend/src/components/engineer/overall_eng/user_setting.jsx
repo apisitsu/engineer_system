@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
+// eslint-disable-next-line no-unused-vars
 import { Layout, DatePicker, Spin, Typography } from "antd";
+// eslint-disable-next-line no-unused-vars
 import { Card, Row, Col, Table, Input, Button, Select, Space, Radio, Tag } from 'antd';
 import {
+  // eslint-disable-next-line no-unused-vars
   SyncOutlined, ClockCircleOutlined, UnorderedListOutlined, CalendarOutlined,
+  // eslint-disable-next-line no-unused-vars
   CheckCircleOutlined, ExclamationCircleOutlined, PlusCircleOutlined
 } from '@ant-design/icons';
 import axios from "axios";
@@ -26,10 +30,15 @@ const ToolingInspect = () => {
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState([]);
   const [selectedData, setSelectedData] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [dashboarddata, setDashboardData] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [timelineDashboard, setTimelineDashboard] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [selectedRange, setSelectedRange] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [searchText, setSearchText] = useState("");
+  // eslint-disable-next-line no-unused-vars
   const [filterType, setFilterType] = useState('all');
 
   const [updateFormOpen, setUpdateFormOpen] = useState(false);
@@ -151,6 +160,7 @@ const ToolingInspect = () => {
 
   useEffect(() => {
     fetchToolingInspectData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const columns = [

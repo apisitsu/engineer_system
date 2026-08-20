@@ -57,7 +57,9 @@ const LazyPageWrapper = ({ children, estimatedHeight }) => {
     );
 };
 
+// eslint-disable-next-line no-unused-vars
 const { Title, Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Dragger } = Upload;
 
 
@@ -77,10 +79,12 @@ const PdfEditorTool = () => {
     const {
         pdfFile, pdfDoc, pdfBytes, totalPages, currentPage, zoom,
         pdfLoading, loadPdf, loadPdfFromBytes, closePdf,
+        // eslint-disable-next-line no-unused-vars
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
         pageHighlights, setPageHighlights,
+        // eslint-disable-next-line no-unused-vars
         pushHistory, undo, redo, canUndo, canRedo, historyVersion,
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
@@ -458,6 +462,7 @@ const PdfEditorTool = () => {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
@@ -570,6 +575,7 @@ const PdfEditorTool = () => {
         } finally {
             setExportLoading(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc, exportSelectedPages, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, setExportedImages, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════

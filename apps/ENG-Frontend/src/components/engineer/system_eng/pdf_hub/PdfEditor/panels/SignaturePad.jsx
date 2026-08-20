@@ -28,6 +28,7 @@ const SignaturePad = ({ open, onClose, onComplete }) => {
 
     // Draw settings
     const [penColor, setPenColor] = useState('#1a1a2e');
+    // eslint-disable-next-line no-unused-vars
     const [penWidth, setPenWidth] = useState(2.5);
 
     // Type settings

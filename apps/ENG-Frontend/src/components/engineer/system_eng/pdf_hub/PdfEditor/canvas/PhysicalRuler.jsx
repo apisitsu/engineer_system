@@ -12,6 +12,7 @@ const PAPER_SIZES = {
 
 export default function PhysicalRuler({ pdfDoc, zoom }) {
     const store = usePdfEditorStore();
+    // eslint-disable-next-line no-unused-vars
     const { theme } = useTheme();
     const rulerRef = useRef(null);
 
@@ -87,6 +88,7 @@ export default function PhysicalRuler({ pdfDoc, zoom }) {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isDragging, dragStart]);
 
     // ── Rotation Logic ──

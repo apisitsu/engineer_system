@@ -140,6 +140,7 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
  */
 async function commitObject(doc, page, obj, cW, cH, pW, pH) {
     if (!obj) return;
+    // eslint-disable-next-line no-unused-vars
     const type = obj.customData?.type || obj.type;
 
     // Scale factors

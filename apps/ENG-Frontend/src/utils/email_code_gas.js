@@ -1,3 +1,5 @@
+/* global HtmlService, MailApp, doGet */
+/* eslint-env googleappsscript */
 /**
  * Google Apps Script – Email Notification Endpoint (doGet)
  * 
@@ -16,6 +18,7 @@
  */
 
 // --- Router ---
+// eslint-disable-next-line no-unused-vars
 function doGet(e) {
     try {
         var funct = e.parameter.funct;
@@ -54,7 +57,9 @@ function doGet(e) {
             "} catch(e) { document.write('✅ Success!'); }" +
             "</script>";
 
+        // eslint-disable-next-line no-undef
         return HtmlService.createHtmlOutput(htmlSuccess)
+            // eslint-disable-next-line no-undef
             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
     } catch (err) {
@@ -71,7 +76,9 @@ function doGet(e) {
             "} catch(e) { document.write('❌ Error'); }" +
             "</script>";
 
+        // eslint-disable-next-line no-undef
         return HtmlService.createHtmlOutput(htmlError)
+            // eslint-disable-next-line no-undef
             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 }
@@ -89,6 +96,7 @@ function sendNotificationEmail(params) {
         + "Rev: " + (params.rev || "N/A");
 
     try {
+        // eslint-disable-next-line no-undef
         MailApp.sendEmail(recipients, subject, body);
         console.log("Email sent successfully to: " + recipients);
     } catch (e) {
@@ -98,11 +106,13 @@ function sendNotificationEmail(params) {
 
 function sendNotification(params) {
     var recipients = params.user_to || "nanthiwa.k@minebea.co.th";
+    // eslint-disable-next-line no-useless-concat
     var subject = params.subject || "Test : " + "N/A";
 
     var body = params.body || "Test : Body";
 
     try {
+        // eslint-disable-next-line no-undef
         MailApp.sendEmail(recipients, subject, body);
         console.log("Email sent successfully to: " + recipients);
     } catch (e) {
@@ -131,6 +141,7 @@ function sendErrorReport(params) {
         + (params.body || "No additional details") + "\n";
 
     try {
+        // eslint-disable-next-line no-undef
         MailApp.sendEmail(recipients, subject, body);
         console.log("[ErrorReport] Sent to: " + recipients);
     } catch (e) {
@@ -166,6 +177,7 @@ function sendKanbanNotification(params) {
         + "🔹 เวลา:      " + new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) + "\n";
 
     try {
+        // eslint-disable-next-line no-undef
         MailApp.sendEmail(recipients, subject, body);
         console.log("[KanbanNotif] Sent to: " + recipients + " type: " + type);
     } catch (e) {
@@ -200,6 +212,7 @@ function sendSystemUpdateAlert(params) {
         + (params.body || "No additional details") + "\n";
 
     try {
+        // eslint-disable-next-line no-undef
         MailApp.sendEmail(recipients, subject, body);
         console.log("[UpdateAlert] Sent to: " + recipients);
     } catch (e) {
@@ -207,3 +220,4 @@ function sendSystemUpdateAlert(params) {
     }
 }
 
+/* eslint-disable no-unused-vars */

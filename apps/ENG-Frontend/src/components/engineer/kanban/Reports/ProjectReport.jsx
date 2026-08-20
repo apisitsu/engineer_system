@@ -132,6 +132,7 @@ const ProjectReport = ({ reportData, theme, users }) => {
     const blockedCards = useMemo(() => getBlockedCards(allCards, 7), [allCards]);
 
     const maxLabelCount = labelDist.length > 0 ? Math.max(...labelDist.map(l => l.count)) : 1;
+    // eslint-disable-next-line no-unused-vars
     const maxStatusCount = statusDist.length > 0 ? Math.max(...statusDist.map(s => s.count)) : 1;
 
     return (

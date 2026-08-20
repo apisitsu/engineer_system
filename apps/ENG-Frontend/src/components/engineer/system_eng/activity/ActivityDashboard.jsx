@@ -101,6 +101,7 @@ function ActivityDashboard() {
         } catch (err) {
             console.error('Failed to fetch stats:', err);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters.dateRange]);
 
     // ── Fetch Logs ───────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ function ActivityDashboard() {
         } catch (err) {
             console.error('Failed to fetch logs:', err);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters, logsPagination.limit]);
 
     // ── Fetch Sessions ───────────────────────────────────────────────────────
@@ -136,6 +138,7 @@ function ActivityDashboard() {
         } catch (err) {
             console.error('Failed to fetch sessions:', err);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ── Fetch Modules ────────────────────────────────────────────────────────
@@ -148,6 +151,7 @@ function ActivityDashboard() {
         } catch (err) {
             console.error('Failed to fetch modules:', err);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ── Initial Load ─────────────────────────────────────────────────────────

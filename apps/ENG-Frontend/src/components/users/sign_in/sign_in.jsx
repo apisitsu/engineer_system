@@ -4,6 +4,7 @@ import { Form, Input, Button, Typography, Layout, Card, Spin } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, SettingFilled, ToolOutlined, BuildOutlined, ExperimentOutlined } from '@ant-design/icons';
 import axios from "axios";
 import Swal from "sweetalert2";
+// eslint-disable-next-line no-unused-vars
 import { server, key_constance } from "../../../constance/constance";
 import { useTheme } from '../../../theme';
 import '../../common/ThemeSwitcher';
@@ -42,6 +43,7 @@ function Sign_in() {
 
     // Trigger animation
     setTimeout(() => setIsVisible(true), 100);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveSession = (data, empno) => {

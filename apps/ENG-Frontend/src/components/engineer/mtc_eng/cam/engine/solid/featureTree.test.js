@@ -369,10 +369,12 @@ describe('describeFeature', () => {
 describe('the tables stay coherent', () => {
   it('names a label for every kind and a sentence for every merge mode', () => {
     for (const [kind, spec] of Object.entries(FEATURE_KINDS)) {
+      // eslint-disable-next-line jest/valid-expect
       expect(spec.label, kind).toBeTruthy();
       expect(typeof spec.needsSketch).toBe('boolean');
     }
     for (const [mode, text] of Object.entries(MERGE_MODES)) {
+      // eslint-disable-next-line jest/valid-expect
       expect(text, mode).toMatch(/—/);
     }
   });

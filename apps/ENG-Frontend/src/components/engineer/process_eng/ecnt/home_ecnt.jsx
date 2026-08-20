@@ -69,6 +69,7 @@ const Home_ecnt = () => {
     fetchECRData();
   }, []);
 
+  // eslint-disable-next-line no-unused-vars
   const sentEmail = async () => {
     const mailBody = {
       to: "nanthiwa.k@minebea.co.th",

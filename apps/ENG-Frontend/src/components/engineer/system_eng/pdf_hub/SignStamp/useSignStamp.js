@@ -52,6 +52,7 @@ export default function useSignStamp() {
     // ── PDF State ──
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfDoc, setPdfDoc] = useState(null);         // pdfjs-dist document
+    // eslint-disable-next-line no-unused-vars
     const [pdfLibDoc, setPdfLibDoc] = useState(null);    // pdf-lib document (for manipulation)
     const [pdfBytes, setPdfBytes] = useState(null);      // Raw ArrayBuffer
     const [totalPages, setTotalPages] = useState(0);

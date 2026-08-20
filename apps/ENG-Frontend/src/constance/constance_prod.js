@@ -11,6 +11,7 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // ── Environment Detection ────────────────────────────────────────────────────
 // Detect if running on production server (plbmp129)
+// eslint-disable-next-line no-unused-vars
 const isProduction = window.location.hostname === 'plbmp129' || 
                      window.location.hostname === 'localhost' === false;
 

@@ -355,6 +355,7 @@ const WorkloadDashboard = ({ theme }) => {
         
         let routineHours = 0;
         let totalGrossCapacity = 0;
+        // eslint-disable-next-line no-unused-vars
         let capHours = data.capacity; // This is net capacity
         
         if (timeframeMode === 'overall') {

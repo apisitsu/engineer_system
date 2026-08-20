@@ -438,6 +438,7 @@ const ListViewSection = ({ list, cards, theme }) => {
 // ─── Board View with DnD ───────────────────────────────────────────
 const BoardView = () => {
     const {
+        // eslint-disable-next-line no-unused-vars
         activeBoard, lists, cards, moveCard,
         searchQuery, filterMembers, filterLabels,
         viewMode, createList, reorderList, reorderCard,

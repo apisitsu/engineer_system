@@ -36,6 +36,7 @@ export default function ActionCard({ currentStep, onNextStep, ecrData, actionLog
     const userName = getData()?.name || localStorage.getItem(key_constance.USER_NAME) || "User user";
     const userRole = getData()?.role || localStorage.getItem(key_constance.ROLE) || "USER";
     const userDept = getData()?.department || localStorage.getItem(key_constance.USER_DEPARTMENT) || "User department";
+    // eslint-disable-next-line no-unused-vars
     const userPos = getData()?.position || localStorage.getItem("POSITION") || "User position";
     const userSec = getData()?.section || localStorage.getItem(key_constance.USER_SECTION) || "User section";
 
@@ -177,12 +178,19 @@ export default function ActionCard({ currentStep, onNextStep, ecrData, actionLog
         }
 
         switch (currentStep) {
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.1: return <Step3_1 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.2: return <Step3_2 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.3: return <Step3_3 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.4: return <Step3_4 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.45: return <Step3_4_5 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.5: return <Step3_5 onNext={handleStepSubmit} ecrData={ecrData} />;
+            // eslint-disable-next-line react/jsx-pascal-case
             case 3.6: return <Step3_6 onNext={handleStepSubmit} ecrData={ecrData} />;
             default: return null;
         }

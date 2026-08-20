@@ -69,6 +69,7 @@ function readoutProps(path, stats, playT, playing, view = {}) {
 }
 
 async function render(props) {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => {
     root.render(React.createElement(PositionReadout, props));
   });

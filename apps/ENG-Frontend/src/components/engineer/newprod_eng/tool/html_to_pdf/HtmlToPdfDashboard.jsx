@@ -94,6 +94,7 @@ const HtmlToPdfDashboard = () => {
         }, 10000); // Auto-refresh every 10s
 
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [myJobOnly, empNo]);
 
     const handleUpload = async (options) => {

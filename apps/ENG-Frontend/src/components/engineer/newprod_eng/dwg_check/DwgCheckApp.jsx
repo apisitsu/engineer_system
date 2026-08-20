@@ -33,6 +33,7 @@ function ShortcutsHandler() {
                     return;
                 }
 
+                // eslint-disable-next-line default-case
                 switch (e.code) {
                     case 'KeyZ':
                         e.preventDefault();
@@ -60,6 +61,7 @@ function ShortcutsHandler() {
                         break;
                 }
             } else {
+                // eslint-disable-next-line default-case
                 switch (e.code) {
                     case 'Delete':
                     case 'Backspace':

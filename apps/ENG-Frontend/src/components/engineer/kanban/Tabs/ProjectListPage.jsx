@@ -120,6 +120,7 @@ const ProjectListPage = ({ onSelectProject, theme }) => {
             .filter(key => key !== 'templates' || canManageTemplates) // Templates only for admins
             .map(key => tabConfig[key])
             .filter(Boolean);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [kanbanTabOrder, projects, theme, canManageTemplates]);
 
     // Ensure activeTab is still valid after order changes

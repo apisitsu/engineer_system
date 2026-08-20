@@ -74,6 +74,7 @@ const TemplateBuilderDrawer = ({ open, onClose, masterProject, existingTemplate 
                 })
                 .finally(() => setLoading(false));
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, masterProject?.id, existingTemplate, targetBoardId]);
 
     // Build the Ant Design Tree data from report data

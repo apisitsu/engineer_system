@@ -12,6 +12,7 @@ import CreateBoardModal from '../Tabs/components/CreateBoardModal';
 const BoardTabBar = ({ theme, activeProject, projectBoardGroups, currentBoardGroupId, filteredOrderedBoards, handleDragEndBoards, handleOpenGroupModal }) => {
     const activeBoard = useKanbanStore(state => state.activeBoard);
     const setActiveBoard = useKanbanStore(state => state.setActiveBoard);
+    // eslint-disable-next-line no-unused-vars
     const openBoardSettings = useKanbanStore(state => state.openBoardSettings);
     const setActiveBoardGroup = useKanbanStore(state => state.setActiveBoardGroup);
 

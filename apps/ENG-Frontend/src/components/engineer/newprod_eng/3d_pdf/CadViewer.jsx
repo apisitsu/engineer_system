@@ -28,6 +28,7 @@ import './CadViewer.css';
 // ============================================================================
 function ModelLoader({ url, onLoaded, wireframe }) {
   const meshRef = useRef();
+  // eslint-disable-next-line no-unused-vars
   const { camera, scene } = useThree();
 
   useEffect(() => {
@@ -98,6 +99,7 @@ function ModelLoader({ url, onLoaded, wireframe }) {
 // ============================================================================
 // Viewport Image Fallback — For when no 3D model is available
 // ============================================================================
+// eslint-disable-next-line no-unused-vars
 function ViewportImage({ imageUrl }) {
   if (!imageUrl) return null;
 
@@ -187,6 +189,7 @@ export default function CadViewer({
     }
   }, []);
 
+  // eslint-disable-next-line no-unused-vars
   const hasModel = modelUrl || viewportImageUrl;
 
   return (

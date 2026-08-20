@@ -48,6 +48,7 @@ afterEach(() => {
   delete HTMLElement.prototype.scrollTop;
 });
 
+// eslint-disable-next-line testing-library/no-unnecessary-act
 const render = (props) => act(() => {
   root.render(<GcodePanel gcode={program()} activeLine={0} onChange={() => {}} {...props} />);
 });

@@ -18,6 +18,7 @@ import {
     StepRow, Callout, } from './guideStyles';
 import { MOCK_PROJECTS } from './mockData';
 
+// eslint-disable-next-line no-unused-vars
 const { Text, Paragraph } = Typography;
 
 const ProjectGuide = ({ theme }) => {
@@ -30,6 +31,7 @@ const ProjectGuide = ({ theme }) => {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectPrivate, setNewProjectPrivate] = useState(false);
+    // eslint-disable-next-line no-unused-vars
     const [selectedIcon, setSelectedIcon] = useState('rocket');
     const [selectedGradient, setSelectedGradient] = useState('linear-gradient(135deg,#6366f1,#8b5cf6)');
 

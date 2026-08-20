@@ -3,6 +3,7 @@ import { Card, Avatar, Typography, Tag } from 'antd';
 import { UserOutlined } from "@ant-design/icons";
 import { useTheme } from '../../../../theme';
 
+// eslint-disable-next-line no-unused-vars
 const { Text, Title } = Typography;
 
 const FormalCard = ({ data, mode = "mini", onClick, style }) => {

@@ -1,4 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
+// eslint-disable-next-line no-unused-vars
 import { commitAllToPdf, exportPageToImage, mergePdfFiles } from './PdfCommitEngine';
 
 describe('PdfCommitEngine', () => {

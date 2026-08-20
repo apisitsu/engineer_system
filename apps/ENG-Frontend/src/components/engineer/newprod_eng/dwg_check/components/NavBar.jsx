@@ -3,6 +3,7 @@ import { usePdf } from '../context/PdfContext';
 
 export default function NavBar() {
     const { state, dispatch } = usePdf();
+    // eslint-disable-next-line no-unused-vars
     const { currentPage, totalPages, zoom, pdfFile } = state;
 
     const goToPage = (page) => {

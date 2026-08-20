@@ -1,0 +1,369 @@
+[1] src\components\engineer\home_eng.jsx
+[1]   Line 21:27:  'userRole' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Board\BoardTabBar.jsx
+[1]   Line 15:11:  'openBoardSettings' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Board\BoardToolbar.jsx
+[1]   Line 47:48:  'addProjectManager' is assigned a value but never used                                                                 no-unused-vars
+[1]   Line 47:67:  'removeProjectManager' is assigned a value but never used                                                              no-unused-vars
+[1]   Line 98:8:   React Hook useEffect has a missing dependency: 'fetchNotifications'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Board\BoardView.jsx
+[1]   Line 441:36:  'moveCard' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Board\KanbanCard.jsx
+[1]   Line 14:57:  'lists' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\CardDetail\CardBody.jsx
+[1]   Line 52:40:  'cards' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\CardDetail\CardSidebar.jsx
+[1]   Line 65:24:  'canEditCard' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\CardDetail\useCardDetailHandlers.js
+[1]   Line 32:19:  'setEditName' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\CardDetail\useCardDetailState.js
+[1]   Line 98:13:   'user' is assigned a value but never used                                                                                                                                                            
+                                          no-unused-vars
+[1]   Line 302:8:   React Hook useMemo has a missing dependency: 'card'. Either include it or remove the dependency array                                                                                                
+                                          react-hooks/exhaustive-deps
+[1]   Line 305:11:  The 'cardLabels' logical expression could make the dependencies of useMemo Hook (at line 503) change on every render. To fix this, wrap the initialization of 'cardLabels' in its own useMemo() Hook 
+                                          react-hooks/exhaustive-deps
+[1]   Line 307:11:  The 'taskLists' logical expression could make the dependencies of useMemo Hook (at line 503) change on every render. To fix this, wrap the initialization of 'taskLists' in its own useMemo() Hook   
+                                          react-hooks/exhaustive-deps
+[1]   Line 308:11:  The 'comments' logical expression could make the dependencies of useMemo Hook (at line 503) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'comments' in its own useMemo() Hook        react-hooks/exhaustive-deps
+[1]   Line 309:11:  The 'attachments' logical expression could make the dependencies of useMemo Hook (at line 503) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'attachments' in its own useMemo() Hook  react-hooks/exhaustive-deps
+[1]   Line 311:11:  The 'cardIssues' logical expression could make the dependencies of useMemo Hook (at line 503) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'cardIssues' in its own useMemo() Hook    react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\KanbanMain.jsx
+[1]   Line 39:9:    'Content' is assigned a value but never used                                                                                                                                                         
+            no-unused-vars
+[1]   Line 40:9:    'Title' is assigned a value but never used                                                                                                                                                           
+            no-unused-vars
+[1]   Line 50:42:   'fetchBoards' is assigned a value but never used                                                                                                                                                     
+            no-unused-vars
+[1]   Line 51:9:    'lists' is assigned a value but never used                                                                                                                                                           
+            no-unused-vars
+[1]   Line 51:16:   'openProjectSettings' is assigned a value but never used                                                                                                                                             
+            no-unused-vars
+[1]   Line 54:9:    'resetBoardTabOrder' is assigned a value but never used                                                                                                                                              
+            no-unused-vars
+[1]   Line 55:9:    'projectManagers' is assigned a value but never used                                                                                                                                                 
+            no-unused-vars
+[1]   Line 55:26:   'users' is assigned a value but never used                                                                                                                                                           
+            no-unused-vars
+[1]   Line 55:33:   'addProjectManager' is assigned a value but never used                                                                                                                                               
+            no-unused-vars
+[1]   Line 55:52:   'removeProjectManager' is assigned a value but never used                                                                                                                                            
+            no-unused-vars
+[1]   Line 55:74:   'fetchProjectManagers' is assigned a value but never used                                                                                                                                            
+            no-unused-vars
+[1]   Line 93:11:   The 'projectBoardGroups' conditional could make the dependencies of useMemo Hook (at line 109) change on every render. To fix this, wrap the initialization of 'projectBoardGroups' in its own useMemo() Hook    react-hooks/exhaustive-deps
+[1]   Line 93:11:   The 'projectBoardGroups' conditional could make the dependencies of useEffect Hook (at line 173) change on every render. To fix this, wrap the initialization of 'projectBoardGroups' in its own useMemo() Hook  react-hooks/exhaustive-deps
+[1]   Line 112:11:  'sensors' is assigned a value but never used                                                                                                                                                         
+            no-unused-vars
+[1]   Line 152:13:  'canManageProject' is assigned a value but never used                                                                                                                                                
+            no-unused-vars
+[1]   Line 195:8:   React Hook useEffect has a missing dependency: 'projectIdParam'. Either include it or remove the dependency array                                                                                    
+            react-hooks/exhaustive-deps
+[1]   Line 214:8:   React Hook useEffect has missing dependencies: 'fetchSystemSettings', 'fetchUserPreferences', and 'fetchUsers'. Either include them or remove the dependency array                                   
+            react-hooks/exhaustive-deps
+[1]   Line 302:11:  'handleBackToProjects' is assigned a value but never used                                                                                                                                            
+            no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Reports\MonthlyReport.jsx
+[1]   Line 61:35:  'allIssues' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Reports\ProjectReport.jsx
+[1]   Line 135:11:  'maxStatusCount' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Reports\ReportDashboard.jsx
+[1]   Line 18:15:  'Title' is assigned a value but never used                                                                    no-unused-vars
+[1]   Line 72:8:   React Hook useCallback has a missing dependency: 'message'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 125:8:  React Hook useCallback has a missing dependency: 'message'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Settings\BoardSettingsDrawer.jsx
+[1]   Line 95:9:    'baseCustomFieldGroups' is assigned a value but never used                                                                                                                                           
+                                                      no-unused-vars
+[1]   Line 97:9:    'notificationServices' is assigned a value but never used                                                                                                                                            
+                                                      no-unused-vars
+[1]   Line 98:9:    'createNotificationService' is assigned a value but never used                                                                                                                                       
+                                                      no-unused-vars
+[1]   Line 98:36:   'deleteNotificationService' is assigned a value but never used                                                                                                                                       
+                                                      no-unused-vars
+[1]   Line 101:9:   'boardTabOrders' is assigned a value but never used                                                                                                                                                  
+                                                      no-unused-vars
+[1]   Line 101:25:  'setBoardTabOrder' is assigned a value but never used                                                                                                                                                
+                                                      no-unused-vars
+[1]   Line 102:9:   'cfGroupPreferences' is assigned a value but never used                                                                                                                                              
+                                                      no-unused-vars
+[1]   Line 102:29:  'setCfGroupPreference' is assigned a value but never used                                                                                                                                            
+                                                      no-unused-vars
+[1]   Line 104:9:   'createTemplateConfig' is assigned a value but never used                                                                                                                                            
+                                                      no-unused-vars
+[1]   Line 144:12:  'nsUrl' is assigned a value but never used                                                                                                                                                           
+                                                      no-unused-vars
+[1]   Line 144:19:  'setNsUrl' is assigned a value but never used                                                                                                                                                        
+                                                      no-unused-vars
+[1]   Line 145:12:  'nsFormat' is assigned a value but never used                                                                                                                                                        
+                                                      no-unused-vars
+[1]   Line 145:22:  'setNsFormat' is assigned a value but never used                                                                                                                                                     
+                                                      no-unused-vars
+[1]   Line 149:12:  'memberSearch' is assigned a value but never used                                                                                                                                                    
+                                                      no-unused-vars
+[1]   Line 149:26:  'setMemberSearch' is assigned a value but never used                                                                                                                                                 
+                                                      no-unused-vars
+[1]   Line 198:8:   React Hook useEffect has missing dependencies: 'canManageBoardStructure', 'fetchBaseCustomFieldGroups', 'fetchNotificationServices', and 'fetchWebhooks'. Either include them or remove the dependency array                                               react-hooks/exhaustive-deps
+[1]   Line 787:96:  React Hook useEffect has unnecessary dependencies: 'activeBoard' and 'activeTab'. Either exclude them or remove the dependency array. Outer scope values like 'activeTab' aren't valid dependencies because mutating them doesn't re-render the component  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Settings\KanbanAdminSettings.jsx
+[1]   Line 24:8:  React Hook useEffect has a missing dependency: 'fetchSettings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Settings\ProjectSettingsDrawer.jsx
+[1]   Line 93:11:   'activeProject' is assigned a value but never used                                                                                                                    no-unused-vars
+[1]   Line 96:79:   'fetchProjects' is assigned a value but never used                                                                                                                    no-unused-vars
+[1]   Line 97:9:    'setActiveProject' is assigned a value but never used                                                                                                                 no-unused-vars
+[1]   Line 112:12:  'form' is assigned a value but never used                                                                                                                             no-unused-vars
+[1]   Line 127:26:  'setMemberSearch' is assigned a value but never used                                                                                                                  no-unused-vars
+[1]   Line 164:8:   React Hook useEffect has missing dependencies: 'isSingleProjectMode', 'loadProjectData', and 'selectedProjectId'. Either include them or remove the dependency array  react-hooks/exhaustive-deps    
+[1]   Line 251:11:  'availableUsersForProject' is assigned a value but never used                                                                                                         no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Settings\TemplateBuilderDrawer.jsx
+[1]   Line 77:8:  React Hook useEffect has a missing dependency: 'fetchProjectReportData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Tabs\ProjectListPage.jsx
+[1]   Line 123:8:  React Hook useMemo has a missing dependency: 'tabConfig'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Tabs\components\BlueprintInstantiationModal.jsx
+[1]   Line 89:11:  The 'config' conditional could make the dependencies of useMemo Hook (at line 145) change on every render. To fix this, wrap the initialization of 'config' in its own useMemo() Hook  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Tabs\components\CardTemplateFormModal.jsx
+[1]   Line 12:9:  'Panel' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Tabs\components\CreateBoardModal.jsx
+[1]   Line 165:11:  The 'config' conditional could make the dependencies of useMemo Hook (at line 220) change on every render. To fix this, wrap the initialization of 'config' in its own useMemo() Hook  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\kanban\Tabs\components\CreateProjectModal.jsx
+[1]   Line 56:11:  'setActiveProject' is assigned a value but never used      no-unused-vars
+[1]   Line 57:11:  'templateConfigs' is assigned a value but never used       no-unused-vars
+[1]   Line 58:11:  'fetchTemplateConfigs' is assigned a value but never used  no-unused-vars
+[1]   Line 59:11:  'instantiateTemplate' is assigned a value but never used   no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Tabs\components\LabelTemplateFormModal.jsx
+[1]   Line 8:9:  'Option' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\UserGuide\CardGuide.jsx
+[1]   Line 19:15:  'Paragraph' is assigned a value but never used       no-unused-vars
+[1]   Line 54:12:  'newTaskName' is assigned a value but never used     no-unused-vars
+[1]   Line 54:25:  'setNewTaskName' is assigned a value but never used  no-unused-vars
+[1]   Line 57:12:  'memo' is assigned a value but never used            no-unused-vars
+[1]   Line 57:18:  'setMemo' is assigned a value but never used         no-unused-vars
+[1]   Line 58:24:  'setCardLabels' is assigned a value but never used   no-unused-vars
+[1]   Line 59:22:  'setEstHours' is assigned a value but never used     no-unused-vars
+[1]
+[1] src\components\engineer\kanban\UserGuide\ProjectGuide.jsx
+[1]   Line 21:15:  'Paragraph' is assigned a value but never used        no-unused-vars
+[1]   Line 33:12:  'selectedIcon' is assigned a value but never used     no-unused-vars
+[1]   Line 33:26:  'setSelectedIcon' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\Workload\WorkloadDashboard.jsx
+[1]   Line 358:13:  'capHours' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\kanban\hooks\useKanbanPermissions.js
+[1]   Line 92:8:  React Hook useMemo has a missing dependency: 'globalAuth'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\material_eng\home_materials.jsx
+[1]   Line 215:19:  'setLoading' is assigned a value but never used   no-unused-vars
+[1]   Line 216:10:  'workList' is assigned a value but never used     no-unused-vars
+[1]   Line 216:20:  'setWorkList' is assigned a value but never used  no-unused-vars
+[1]   Line 217:11:  'RangePicker' is assigned a value but never used  no-unused-vars
+[1]   Line 218:9:   'reload' is assigned a value but never used       no-unused-vars
+[1]
+[1] src\components\engineer\mtc_eng\cam\engine\sim\mesh.js
+[1]   Line 299:11:  'y1' is assigned a value but never used  no-unused-vars
+[1]   Line 365:11:  'y1' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\mtc_eng\cam\engine\sketch\edit.js
+[1]   Line 1636:54:  Function declared in a loop contains unsafe references to variable(s) 'id'  no-loop-func
+[1]
+[1] src\components\engineer\newprod_eng\3d_pdf\CadJobDashboard.jsx
+[1]   Line 60:15:   'Title' is assigned a value but never used       no-unused-vars
+[1]   Line 180:14:  'xmlLoading' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\3d_pdf\CadViewer.jsx
+[1]   Line 31:19:   'scene' is assigned a value but never used     no-unused-vars
+[1]   Line 101:10:  'ViewportImage' is defined but never used      no-unused-vars
+[1]   Line 190:9:   'hasModel' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\ComparePdfTool\components\DiffPanel.jsx
+[1]   Line 44:9:  'getDiffTypeInfo' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\ComparePdfTool\engine\textCompare.js
+[1]   Line 71:5:  Expected a default case  default-case
+[1]
+[1] src\components\engineer\newprod_eng\TemplateTool\TemplateTool.jsx
+[1]   Line 58:39:  React Hook useEffect has a missing dependency: 'loadForms'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\newprod_eng\TemplateTool\forms\PIDForm.jsx
+[1]   Line 92:22:   React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                                 react-hooks/exhaustive-deps
+[1]   Line 103:94:  React Hook useEffect has missing dependencies: 'formId', 'isApproved', and 'saveData'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\newprod_eng\calculator\hooks\useCalculations.js
+[1]   Line 23:6:  React Hook useMemo has a missing dependency: 'params'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 35:6:  React Hook useMemo has a missing dependency: 'params'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\newprod_eng\calculator\utils\exportUtils.js
+[1]   Line 98:9:  'normals' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\calculators\AreaVolumeCalc.jsx
+[1]   Line 9:22:  'Paragraph' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\DwgCheckApp.jsx
+[1]   Line 36:17:  Expected a default case  default-case
+[1]   Line 63:17:  Expected a default case  default-case
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\components\AnnotationLayer.jsx
+[1]   Line 30:51:   'selectedAnnotationIds' is assigned a value but never used                                                                                                no-unused-vars
+[1]   Line 42:11:   'isSelectionOnThisPage' is assigned a value but never used                                                                                                no-unused-vars
+[1]   Line 139:8:   React Hook useCallback has a missing dependency: 'authUserName'. Either include it or remove the dependency array                                         react-hooks/exhaustive-deps
+[1]   Line 273:8:   React Hook useCallback has missing dependencies: 'state.defaultLineThickness' and 'state.stampColor'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 275:11:  'handleLayerClick' is assigned a value but never used                                                                                                     no-unused-vars
+[1]   Line 284:8:   React Hook useCallback has an unnecessary dependency: 'dispatch'. Either exclude it or remove the dependency array                                        react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\components\SettingsModal.jsx
+[1]   Line 1:17:   'useEffect' is defined but never used                 no-unused-vars
+[1]   Line 17:86:  'defaultUserName' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\components\Sidebar.jsx
+[1]   Line 215:11:  'stamps' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\components\annotations\HighlightRect.jsx
+[1]   Line 10:44:  'isResizing' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\components\annotations\StampCheckmark.jsx
+[1]   Line 11:11:  'size' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\hooks\useDraggable.js
+[1]   Line 4:11:  'startRef' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\newprod_eng\dwg_check\utils\savePdf.js
+[1]   Line 96:9:  Expected a default case  default-case
+[1]
+[1] src\components\engineer\newprod_eng\tool\html_to_pdf\HtmlToPdfDashboard.jsx
+[1]   Line 97:8:  React Hook useEffect has a missing dependency: 'fetchJobs'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\overall_eng\components\FormalCard.jsx
+[1]   Line 6:15:  'Title' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\overall_eng\components\ViewSwitcher.jsx
+[1]   Line 6:9:  'Text' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\overall_eng\eng_record\EngRecordQuickCreate.jsx
+[1]   Line 12:15:  'Title' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\overall_eng\eng_record\EngRecordTable.jsx
+[1]   Line 127:10:  'ConditionalFilterDropdown' is defined but never used  no-unused-vars
+[1]
+[1] src\components\engineer\process_eng\ecnt\CloseECN.jsx
+[1]   Line 1:17:  'useState' is defined but never used  no-unused-vars
+[1]
+[1] src\components\engineer\process_eng\ecnt\MyTasks.jsx
+[1]   Line 14:9:   'Option' is assigned a value but never used          no-unused-vars
+[1]   Line 46:11:  'dashboardStats' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\process_eng\ecnt\components\WorkflowActions\ActionCard.jsx
+[1]   Line 39:11:   'userPos' is assigned a value but never used                                    no-unused-vars
+[1]   Line 180:30:  Imported JSX component Step3_1 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]   Line 181:30:  Imported JSX component Step3_2 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]   Line 182:30:  Imported JSX component Step3_3 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]   Line 183:30:  Imported JSX component Step3_4 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]   Line 184:31:  Imported JSX component Step3_4_5 must be in PascalCase or SCREAMING_SNAKE_CASE  react/jsx-pascal-case
+[1]   Line 185:30:  Imported JSX component Step3_5 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]   Line 186:30:  Imported JSX component Step3_6 must be in PascalCase or SCREAMING_SNAKE_CASE    react/jsx-pascal-case
+[1]
+[1] src\components\engineer\process_eng\ecnt\components\WorkflowActions\Step3_6.jsx
+[1]   Line 24:8:  React Hook useEffect has a missing dependency: 'fetchTasks'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\process_eng\ecnt\components\WorkflowActions\StepResubmit.jsx
+[1]   Line 11:13:  'theme' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\process_eng\home_process.jsx
+[1]   Line 9:19:   'setLoading' is assigned a value but never used   no-unused-vars
+[1]   Line 10:11:  'RangePicker' is assigned a value but never used  no-unused-vars
+[1]   Line 11:9:   'reload' is assigned a value but never used       no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\activity\ActivityDashboard.jsx
+[1]   Line 104:8:  React Hook useCallback has a missing dependency: 'headers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 124:8:  React Hook useCallback has a missing dependency: 'headers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 139:8:  React Hook useCallback has a missing dependency: 'headers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]   Line 151:8:  React Hook useCallback has a missing dependency: 'headers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\PdfEditorTool.jsx
+[1]   Line 60:9:   'Title' is assigned a value but never used                                                                                                               no-unused-vars
+[1]   Line 60:16:  'Text' is assigned a value but never used                                                                                                                no-unused-vars
+[1]   Line 61:9:   'Dragger' is assigned a value but never used                                                                                                             no-unused-vars
+[1]   Line 80:19:  'nextPage' is assigned a value but never used                                                                                                            no-unused-vars
+[1]   Line 80:29:  'prevPage' is assigned a value but never used                                                                                                            no-unused-vars
+[1]   Line 84:52:  'historyVersion' is assigned a value but never used                                                                                                      no-unused-vars
+[1]   Line 461:8:  React Hook useCallback has a missing dependency: 'pageHighlights'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
+[1]   Line 573:8:  React Hook useCallback has missing dependencies: 'exportedImages', 'pageHighlights', and 'pdfBytes'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\ThumbnailPanel.jsx
+[1]   Line 16:9:  'Dragger' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\canvas\PhysicalRuler.jsx
+[1]   Line 15:13:  'theme' is assigned a value but never used                                                                          no-unused-vars
+[1]   Line 90:8:   React Hook useEffect has a missing dependency: 'handleMouseMove'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\canvas\hooks\useFabricTools.js
+[1]   Line 29:13:  Expected a default case                                                                                   default-case
+[1]   Line 571:8:  React Hook useEffect has a missing dependency: 'store'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\engine\commitEngine.js
+[1]   Line 143:11:  'type' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\panels\PropertiesPanel.jsx
+[1]   Line 48:15:  'type' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\panels\SignaturePad.jsx
+[1]   Line 31:22:  'setPenWidth' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\panels\properties\ExportPanel.jsx
+[1]   Line 19:32:  'setExportIncludeAnnot' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\PdfEditor\wrappers\WatermarkManagerModal.jsx
+[1]   Line 225:8:  React Hook useEffect has a missing dependency: 'form'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\SignStamp\PdfCanvas.jsx
+[1]   Line 101:15:  'rect' is assigned a value but never used                                                                                                        no-unused-vars
+[1]   Line 139:8:   React Hook useCallback has missing dependencies: 'canvasSize.height' and 'canvasSize.width'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\SignStamp\SignStampTool.jsx
+[1]   Line 37:34:  'fetchStamps' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\pdf_hub\SignStamp\useSignStamp.js
+[1]   Line 55:12:  'pdfLibDoc' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\engineer\system_eng\tool\UpdateLogView.jsx
+[1]   Line 153:8:  React Hook useEffect has a missing dependency: 'fetchLogs'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\components\engineer\user_guide\CardGuide.jsx
+[1]   Line 22:9:  'TextArea' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\home\home.jsx
+[1]   Line 20:27:  'userRole' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\shared\PastelThemeSelector.jsx
+[1]   Line 7:37:  'pastelThemes' is assigned a value but never used  no-unused-vars
+[1]
+[1] src\components\shared\SystemVersionsModal.jsx
+[1]   Line 1:17:  'useState' is defined but never used  no-unused-vars
+[1]
+[1] src\components\users\sign_in\sign_in.jsx
+[1]   Line 7:18:  'key_constance' is defined but never used                                                                                      no-unused-vars
+[1]   Line 45:6:  React Hook useEffect has missing dependencies: 'logout' and 'switchTheme'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+[1]
+[1] src\constance\constance.js
+[1]   Line 1:1:  Unexpected Unicode BOM (Byte Order Mark)  unicode-bom

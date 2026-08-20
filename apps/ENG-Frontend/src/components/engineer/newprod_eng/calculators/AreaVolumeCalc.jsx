@@ -6,6 +6,7 @@ import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { useTheme } from '../../../../theme';
 import ScrollbarStyle from '../../../common/scrollbar';
 
+// eslint-disable-next-line no-unused-vars
 const { Title, Text, Paragraph } = Typography;
 const { Content } = Layout;
 

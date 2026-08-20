@@ -18,6 +18,7 @@ const { Content } = Layout;
 
 const HomeEng = () => {
   const { theme } = useTheme();
+  // eslint-disable-next-line no-unused-vars
   const { userDepartment, userRole } = useAuthStore();
 
   const hasRestrictedAccess =

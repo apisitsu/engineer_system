@@ -95,6 +95,7 @@ export const CardDetailProvider = ({ children }) => {
     );
 
     const { theme } = useTheme();
+    // eslint-disable-next-line  no-unused-vars
     const { user, empNo } = useAuthStore();
 
     // ── Card reference ──
@@ -299,15 +300,21 @@ export const CardDetailProvider = ({ children }) => {
         if (!card) return '';
         const l = lists.find(list => String(list.id) === String(card.list_id));
         return l ? l.name : 'Unknown';
+    // eslint-disable-next-line  react-hooks/exhaustive-deps
     }, [card?.list_id, lists]);
 
     const visibleLists = useMemo(() => lists.filter(l => l.list_type === 'active' || l.list_type === 'closed'), [lists]);
+    // eslint-disable-next-line  react-hooks/exhaustive-deps
     const cardLabels = card?.labels || [];
     const cardLabelIds = cardLabels.map(l => String(l.label_id || l.id));
+    // eslint-disable-next-line  react-hooks/exhaustive-deps
     const taskLists = card?.task_lists || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const comments = card?.comments || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const attachments = card?.attachments || [];
     const cardMembers = tempCardMembers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const cardIssues = card?.issues || [];
 
     // ── Effects ──

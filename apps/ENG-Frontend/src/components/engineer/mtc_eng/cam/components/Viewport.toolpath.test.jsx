@@ -68,6 +68,7 @@ function drawn(o) {
 describe('the toolpath toggle reaches the scene', () => {
   it('draws the backplot by default', async () => {
     const r = await mount();
+    // eslint-disable-next-line testing-library/await-async-query
     const ls = lines(r);
     expect(ls.length).toBeGreaterThan(0);
     expect(ls.every((l) => drawn(l.instance))).toBe(true);
@@ -75,6 +76,7 @@ describe('the toolpath toggle reaches the scene', () => {
 
   it('stops drawing it when switched off — hidden, not unmounted', async () => {
     const r = await mount({ showToolpath: false });
+    // eslint-disable-next-line testing-library/await-async-query
     const ls = lines(r);
     // Still in the graph on purpose: the geometry stays ready for the next
     // toggle, and removal is what did not work.
@@ -84,6 +86,7 @@ describe('the toolpath toggle reaches the scene', () => {
 
   it('leaves the tool marker alone — only the path goes', async () => {
     const r = await mount({ showToolpath: false });
+    // eslint-disable-next-line testing-library/await-async-query
     const named = r.scene.findAllByType('Mesh').filter((m) => m.instance.name === 'tool-flutes');
     expect(named).toHaveLength(1);
   });

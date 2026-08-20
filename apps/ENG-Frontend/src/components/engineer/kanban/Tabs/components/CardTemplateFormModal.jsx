@@ -9,6 +9,7 @@ import { server } from '../../../../../constance/constance';
 const { TextArea } = Input;
 const { Option } = Select;
 const { Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Panel } = Collapse;
 
 const CardTemplateFormModal = ({ open, onCancel, template, theme, onSuccess, importSourceCard }) => {

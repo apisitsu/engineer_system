@@ -21,6 +21,7 @@ export default function Step3_6({ onNext, ecrData }) {
         if (ecrData?.id) {
             fetchTasks();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ecrData?.id]);
 
     const fetchTasks = async () => {

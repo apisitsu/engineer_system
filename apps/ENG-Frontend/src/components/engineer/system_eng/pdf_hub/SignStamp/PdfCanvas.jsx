@@ -98,6 +98,7 @@ const PdfCanvas = ({
         e.stopPropagation();
         onPlacementSelect(placementId);
 
+        // eslint-disable-next-line no-unused-vars
         const rect = containerRef.current.getBoundingClientRect();
         const placement = placements.find(p => p.id === placementId);
         if (!placement) return;
@@ -136,6 +137,7 @@ const PdfCanvas = ({
 
         onPlacementDragEnd(dragState.id, newX / canvasSize.width, newY / canvasSize.height);
         setDragState(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dragState, onPlacementDragEnd]);
 
     useEffect(() => {

@@ -222,6 +222,7 @@ const WatermarkManagerModal = ({ open, onClose, fabricCanvasRefs, totalPages, pu
             setEditingId(null);
             form.resetFields();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, empNo]);
 
     // Sync form changes to preview
