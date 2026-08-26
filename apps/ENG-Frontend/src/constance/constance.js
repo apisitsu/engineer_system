@@ -9,9 +9,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-export const apiUrl = "http://plbmp129:2005/";
+// export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
-// export const apiUrl = "http://plbmp118:2005/";
+export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
