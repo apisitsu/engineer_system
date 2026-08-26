@@ -65,6 +65,11 @@ const PropertiesPanel = ({
                 />
             );
         }
+
+        const imageTypes = ['addImage'];
+        if (imageTypes.includes(customType)) {
+            return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
+        }
         
         // Default for rect, circle, arrow, line, freehand, ruler
         return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;

@@ -8,7 +8,7 @@ import {
     FormOutlined, SafetyCertificateOutlined,
     CalendarOutlined, MergeCellsOutlined, FileImageOutlined,
     SelectOutlined, DragOutlined, CheckOutlined, CloseOutlined, CheckCircleOutlined, IdcardOutlined,
-    ClearOutlined,
+    ClearOutlined, PictureOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import { useAuthStore } from '../../../../../../stores/authStore';
@@ -89,6 +89,7 @@ const ModeToolbar = () => {
                         <ToolBtn tool="sticky" icon={<MessageOutlined />} label="Sticky Note" />
                         <ToolDivider />
                         <ToolBtn tool="addText" icon={<FontSizeOutlined />} label="Add Text" />
+                        <ToolBtn tool="addImage" icon={<PictureOutlined />} label="Insert Image" />
                         <ToolBtn tool="maskReplace" icon={<BlockOutlined />} label="Mask & Replace Text" />
                         <ToolDivider />
                         <ToolBtn tool="eraser" icon={<ClearOutlined />} label="Eraser (Delete)" danger={true} />

@@ -239,6 +239,50 @@ export default function useFabricTools({
                     };
                     break;
                 }
+
+                case 'addImage': {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/png,image/jpeg,image/webp,image/gif';
+                    input.onchange = (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const dataUrl = reader.result;
+                            const imgEl = new Image();
+                            imgEl.src = dataUrl;
+                            imgEl.onload = () => {
+                                const maxDim = Math.min(fc.width, fc.height) * 0.5;
+                                let scale = 1;
+                                if (imgEl.width > maxDim || imgEl.height > maxDim) {
+                                    scale = maxDim / Math.max(imgEl.width, imgEl.height);
+                                }
+                                const imgInstance = new fabric.FabricImage(imgEl, {
+                                    id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                                    left: pointer.x,
+                                    top: pointer.y,
+                                    originX: 'center',
+                                    originY: 'center',
+                                    scaleX: scale,
+                                    scaleY: scale,
+                                    opacity: currentSettings.opacity ?? 1.0,
+                                    customData: {
+                                        type: 'addImage',
+                                        filename: file.name,
+                                        createdAt: Date.now(),
+                                    },
+                                });
+                                fc.add(imgInstance);
+                                fc.setActiveObject(imgInstance);
+                                fc.renderAll();
+                            };
+                        };
+                        reader.readAsDataURL(file);
+                    };
+                    input.click();
+                    break;
+                }
             }
         };
 
@@ -370,7 +414,7 @@ export default function useFabricTools({
                 return;
             }
 
-            if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate'].includes(tool)) {
+            if (['stamp', 'signature', 'date', 'stampCheckmark', 'stampCross', 'stampCircle', 'stampOk', 'stampUserDate', 'addImage'].includes(tool)) {
                 const pointer = opt.scenePoint || opt.pointer;
                 if (pointer) handleOneClickTool(pointer, tool);
                 return;

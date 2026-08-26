@@ -90,7 +90,7 @@ const HomeNewProd = () => {
     },
     {
       id: 'pdf-hub',
-      title: 'PDF Management Hub',
+      title: 'PDF Workstation',
       description: 'All-in-one PDF toolkit — Sign & Stamp, Merge, Convert to Image, and Drawing Check in one place.',
       icon: <FilePdfOutlined style={{ fontSize: '32px' }} />,
       path: '/eng/pdf-hub',
