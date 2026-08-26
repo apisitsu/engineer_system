@@ -97,7 +97,7 @@ A mismatch → silent wrong or missing PDF data. Always rename machine types via
 **3. `sds_machine_tool` controls PDF tool list**
 When rows exist for a `(machine_type, process_code)` pair → authoritative ordered whitelist for T01–T20 slots. No rows → fallback to `machine_type_code` prefix filter.
 
-> **`process_code` must be ONE code per row.** Every consumer matches it exactly (PDF whitelist `WHERE process_code = $2`; coverage `checkToolingMatch` keyed `machine||process`), so a comma-joined value like `'1241,1242'` is silently dead config — the tools never appear in PDFs and never count as a tooling match. Insert one row per process code. Existing comma rows (KS-H70/OC-16A/GS-64PF) were split by `db_migrations/20260613_split_sds_machine_tool_comma_process.js` (idempotent — safe to re-run).
+> **`process_code` must be ONE code per row.** Every consumer matches it exactly (PDF whitelist `WHERE process_code = $2`; coverage `checkToolingMatch` keyed `machine||process`), so a comma-joined value like `'1241,1242'` is silently dead config — the tools never appear in PDFs and never count as a tooling match. Insert one row per process code. Existing comma rows (KS-H70/OC-16A/GS-64PF) were split by `api/engineer/mtc/db_migrations/20260613_split_sds_machine_tool_comma_process.js` (idempotent — safe to re-run).
 
 **3a. Tool DWG No matching requires prefix fallback**
 DWG numbers follow `XXXX-XX-NNNN` (or `XXXX-XX-NNNN-NN`). The first two dash-segments (`XXXX-XX`) identify the tool family/machine type. Three data sources may store **different suffixes** for the same tool family:
@@ -223,7 +223,7 @@ substitutes a different dimension.
 logs `[sds-pdf] dim.X unresolved for cn=…`. Blank reads as incomplete on a setup sheet; a
 leftover number reads as real.
 
-**Currently tokenised** (migration `db_migrations/20260719_sds_param_dim_tokens.js`):
+**Currently tokenised** (migration `api/engineer/mtc/db_migrations/20260719_sds_param_dim_tokens.js`):
 KN-312A `row_38_H`/`row_39_H` (W, OD) · KS-500RD `row_45_H`/`row_46_H` (W, OD) ·
 KS-B80 `row_24_H` (ID) · KS-H70 `row_56_H`/`row_57_H` (ID, W).
 
@@ -310,7 +310,7 @@ for its whole life: seeded in To Do, then moved by each signature.
 > segment to the **group label** (`TSG-300W/TSG-300ZNC`) on both sides — the group, not the
 > representative, because the representative is whichever member holds the Excel config and
 > moves when config moves, orphaning every card keyed to the old value. Cards linked before
-> this were re-keyed by `db_migrations/20260804_rekey_sds_board_card_link_to_group.js`
+> this were re-keyed by `api/engineer/mtc/db_migrations/20260804_rekey_sds_board_card_link_to_group.js`
 > (idempotent; skips rather than merges on collision).
 
 > A helper that takes a process code must not name the parameter `process` — it shadows the
@@ -395,3 +395,74 @@ Note: routes use "ECR" not "ECN" — ECN appears in legacy UI text only.
 ## External Proxy
 
 `GET /api/proxy/job_check` — no auth (whitelisted in global auth middleware). Proxies factory job-check API at `pkv0198.kz.minebea.local:5002`. Handler: `api/engineer/new_prod/tool.js`.
+
+---
+
+## SDS print log — `sds_print_log` (2026-08-25)
+
+**PDF generation had recorded nothing since 2026-06-14.** The `INSERT ... 'PDF'` lived at
+`sdsV2PdfController.js:687`; commit `cd689e9f` ("PDF cancel LibraOfice") deleted that whole
+file when the Chrome grid renderer replaced LibreOffice, and the replacement never carried
+the logging over. Last `access_type='PDF'` row in `sds_access_log` is 2026-06-13, while VIEW
+kept running (200–400/month). The public deep link has **never** logged anything.
+
+`sds_print_log` (migration `20260825_sds_print_log.js`) is separate from `sds_access_log` on
+purpose: that one answers "who opened the screen", this one answers "which sheet was printed,
+for which part and lot, when" — and only the second has to stand up as a reference later.
+
+Written by `services/sdsPrintLog.js`, called from both PDF paths **after** `res.send`:
+
+| path | source | requested_by | carries a lot? |
+|---|---|---|---|
+| `GET /api/sds/v2-headless/pdf-chrome/grid` (JWT) | `app` | `req.user.empno` | **no** — see below |
+| `GET /api/public/sds/pdf` (shared key) | `public` | (none — `source` is the whole attribution) | yes, when the caller sends `&lot=` |
+
+**The in-app button has no lot picker, by decision (2026-08-25).** The route accepts `lot`, but
+nothing sends one: the lot is knowledge the production-planning side holds and an operator at
+the SDS screen does not, so asking there would only invite a typo. `source = 'app'` rows
+therefore carry `lot_no = NULL` and `lot_verified = NULL` — the correct record of "no lot was
+stated", not a gap to backfill.
+
+Four rules that are easy to undo:
+
+- **A logging failure must never fail a print.** `record()` catches everything and returns
+  null; both callers invoke it without `await` after the response is sent.
+- **The lot is never guessed.** One SDS serves a (CN, machine, process) and therefore many
+  lots — C31-04050 @1041 has 28, C31-00781 has 208 — and even within ±15 days only **67.4 %**
+  of (CN, process) pairs resolve to a single lot. `lot_verified` is `null` (not supplied) /
+  `true` (found in `lpb.pc_lot_process`) / `false` (supplied, not found). A mismatch is
+  **flagged, never refused** — the plan can lag the floor, and blocking a print to protect a
+  log stops real work.
+- **`parts_no` comes from `lpb.eng_item`, not from `tooling_spec_process.pn`** — the plan has
+  it for essentially every C/N, the spec table for 13.7 % (2,274 / 16,631).
+- **`pdf_sha256` is the point of the table.** Configuration moves (24 slots were added to
+  `sds_machine_tool` on 2026-08-25 alone), so the same CN printed on two dates is legitimately
+  two different sheets. The PDF itself is not stored; the hash and `tooling_snapshot` (the
+  T01–Tn list as rendered) are.
+
+> The two `control_no` spellings are NOT interchangeable: `lpb.pc_lot.control_no` is the
+> **6-digit item number** and may carry a variant suffix (`350528-C`); `lpb.eng_item.control_no`
+> is the **control number** (`C31-04050`). `cnForms()` derives both — use it rather than
+> picking one.
+
+### The public link now takes `lot`, and it does not break an old link
+
+The route ignores query params it does not know, so `&lot=` was added with no version bump —
+existing links work byte for byte and the caller adopts it whenever it is ready.
+
+```
+GET /api/public/sds/pdf?cn=314050&machine=SPG-03&process_code=1041&lot=C14781&key=…
+GET /api/public/sds/lots?cn=314050&process_code=1041&key=…      ← so `lot` is picked, never typed
+```
+
+**No per-caller field.** This route has exactly one caller, so `source = 'public'` is the whole
+attribution; a `?by=` would only ever hold one value. Add one the day a second system calls it.
+
+`/sds/lots` mirrors the role `/sds/machines` already plays. **Send `process_code` with `lot`**:
+a lot belongs to a (control_no, process) pair, so without it the check only proves the lot
+exists somewhere on that CN. `_meta` on `buildGridHtmlForRequest` is an out-param each request
+owns — it carries `valueMap.tooling` back out for the snapshot without changing existing callers.
+
+Covered by `tests/mtc/sdsPrintLog.test.js` (13 tests) — the two properties pinned are that
+"not checked" never collapses into "not found", and that a DB failure returns null instead of
+throwing.

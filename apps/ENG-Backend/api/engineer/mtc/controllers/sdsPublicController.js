@@ -9,6 +9,23 @@
  * shared secret in `SDS_PDF_LINK_KEY` (mirrors the EXTERNAL_JOB_CHECK_API_KEY pattern).
  *
  *   GET /api/public/sds/pdf?cn=<CN>&machine=<IDG-09|SPG-01|VSG-02|NAME>&process_code=<PC>&key=<SECRET>
+ *                          [&lot=<LOT_NO>]
+ *
+ * `lot` is OPTIONAL and was added 2026-08-25 without a version bump: this route ignores query
+ * parameters it does not know, so every existing link keeps working byte for byte and the
+ * caller can adopt it whenever it is ready.
+ *
+ *   lot — the production lot the sheet is being printed for, e.g. 'C14781'. It is
+ *         `lpb.pc_lot.lot_no` verbatim, no conversion. Send it if you have it: this side
+ *         CANNOT derive it, because one Setup Data Sheet serves a (CN, machine, process) and
+ *         therefore many lots (C31-04050 at 1041 has 28), and even within a ±15-day window
+ *         only 67 % of (CN, process) pairs resolve to a single one. What we DO is verify it
+ *         against the plan and record the verdict. A lot that does not match is not refused —
+ *         the sheet still prints and the row is flagged `lot_verified = false`, because the
+ *         plan can lag the floor and blocking a print to protect a log stops real work.
+ *
+ * Every produced PDF is recorded in `sds_print_log` (services/sdsPrintLog.js) with the part
+ * number resolved from the plan, the fixture list as rendered, and a SHA-256 of the bytes.
  *
  * `machine` accepts the factory machine_code (the other team's floor code, e.g. 'IDG-09',
  * 'SPG-01', 'VSG-02'). It is resolved via rodpc.m_setup_datasheet.machine_code →
@@ -19,8 +36,11 @@
  * Returns the PDF inline (Content-Disposition inline) so a browser tab shows it like the
  * in-app button. No token ever appears in the URL.
  *
- * Companion: GET /api/public/sds/machines?key=<SECRET> — JSON list of every usable
- * machine_code (with the SDS machine it resolves to) for the caller to validate against.
+ * Companions, both for the caller to validate against before building a link:
+ *   GET /api/public/sds/machines?key=<SECRET>
+ *       every usable machine_code with the SDS machine it resolves to.
+ *   GET /api/public/sds/lots?cn=<CN>&process_code=<PC>&key=<SECRET>
+ *       the lots the production plan holds for that CN, so `lot` is picked, never typed.
  */
 
 const express = require('express');
@@ -28,6 +48,7 @@ const { engPool } = require('../../../../instance/eng_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const headless = require('./sdsV2HeadlessController');
 const cnFormat = require('../utils/cnFormat');
+const sdsPrintLog = require('../services/sdsPrintLog');
 
 const router = express.Router();
 
@@ -105,6 +126,14 @@ router.get('/sds/pdf', async (req, res) => {
   const process_code = String(req.query.process_code || '').trim();
   if (!cnRaw) return res.status(400).json({ error: 'cn is required' });
 
+  // OPTIONAL, and optional on purpose. `lot` is the caller's own data — Ball_Grinding_Plan
+  // holds it by definition, and nothing on this side can derive it: one SDS serves a
+  // (CN, machine, process) and therefore many lots (C31-04050 @1041 has 28), so a guess
+  // would be wrong about a third of the time. A link without it keeps working exactly as
+  // before and simply logs no lot; a link with it gets the lot verified against
+  // lpb.pc_lot_process.
+  const lot = String(req.query.lot || '').trim();
+
   try {
     // machine_type_name wins if given; otherwise resolve the machine code / WC / group.
     const machine_type_name =
@@ -120,8 +149,9 @@ router.get('/sds/pdf', async (req, res) => {
     // split group (multiple visible members) shows the per-machine name. Without it buildValueMap
     // falls back to machine_group and the header wrongly prints all sibling machines. Config
     // lookups still key off machine_type_name, so this only changes the printed label.
+    const _meta = {};
     const html = await headless.buildGridHtmlForRequest({
-      cn, machine_type_name, process_code: process_code || null, display_name: machine_type_name,
+      cn, machine_type_name, process_code: process_code || null, display_name: machine_type_name, _meta,
     });
     const pdfBuffer = await headless.renderPdf(html, {
       margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' },
@@ -131,8 +161,46 @@ router.get('/sds/pdf', async (req, res) => {
     res.setHeader('Content-Disposition', `inline; filename="SDS_${cn}_${machine_type_name}.pdf"`);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.send(pdfBuffer);
+
+    // Evidentiary record, AFTER the response. A lot that does not match the plan is
+    // recorded with lot_verified = false rather than refused: the plan can lag the floor,
+    // and blocking a print would stop real work to protect a log. The flag makes the
+    // doubtful rows findable later, which is what evidence needs.
+    // `source: 'public'` is the whole attribution — this route has exactly one caller, so a
+    // per-caller field would only ever hold one value.
+    sdsPrintLog.record({
+      cn, machineTypeName: machine_type_name, processCode: process_code, lot,
+      source: 'public', pdfBuffer, tooling: _meta.tooling,
+    });
   } catch (err) {
     res.status(500).json({ error: `SDS PDF render failed: ${err.message}` });
+  }
+});
+
+/** GET /api/public/sds/lots?cn=<CN>&process_code=<PC>&key=<SECRET>
+ *  The lots the production plan holds for a CN, so the calling team can populate its own
+ *  picker and send a `lot` it knows is real — the same role /sds/machines already plays
+ *  for machine codes. `cn` takes the 6-digit item number or a control number.
+ *  `process_code` is optional but strongly recommended: a lot belongs to a
+ *  (control_no, process) pair, so without it the list spans every process the CN runs.
+ */
+router.get('/sds/lots', async (req, res) => {
+  const expected = process.env.SDS_PDF_LINK_KEY;
+  if (!expected) return res.status(503).json({ error: 'Public SDS PDF link is not configured' });
+  if (String(req.query.key || '') !== expected) return res.status(401).json({ error: 'Invalid key' });
+
+  const cn = String(req.query.cn || '').trim();
+  if (!cn) return res.status(400).json({ error: 'cn is required' });
+
+  try {
+    const lots = await sdsPrintLog.listLots({
+      cn,
+      processCode: String(req.query.process_code || '').trim() || null,
+      limit: req.query.limit,
+    });
+    res.json({ cn, process_code: String(req.query.process_code || '').trim() || null, count: lots.length, lots });
+  } catch (err) {
+    res.status(500).json({ error: `Lot lookup failed: ${err.message}` });
   }
 });
 

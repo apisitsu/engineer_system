@@ -191,7 +191,7 @@ The five machine tooling-design standards that existed in `api/engineer/mtc/doc/
 was written are the authority for work-size limits and for KN-312's TYPE branch conditions.
 (Twelve RE33xxx PDFs sit there now — the seven added later that same day cover FTL, X-100,
 XD-8, the body/shank holders and HydraGrip, and the conformance pass below did **not**
-re-run against them.) `db_migrations/20260814_conform_tooling_select_to_re330_standards.js`
+re-run against them.) `api/engineer/mtc/db_migrations/20260814_conform_tooling_select_to_re330_standards.js`
 brought the config in line and is **idempotent** — re-running reports "already correct".
 
 | Machine | Standard | What it now enforces |
@@ -230,7 +230,7 @@ Four things worth knowing before touching any of it:
   wrong *drawings*, never a wrong tool off the shelf.
 
 **`LOADER` pointed at the family withdrawn in 2015** — fixed by
-`db_migrations/20260814b_re330_loader_rename_and_provenance.js`. `tooling_ks03a` held
+`api/engineer/mtc/db_migrations/20260814b_re330_loader_rename_and_provenance.js`. `tooling_ks03a` held
 `LOADER` = 4559-06 and `NYLON LOADER` = 4559-41, which is backwards in every source:
 RE33038 F §6-10 names 4559-41 as LOADER, its rev C (2015.03.20) demoted 4559-06 to
 reference-only, TEMPLATE_B calls both rows LOADER and marks 4559-06
