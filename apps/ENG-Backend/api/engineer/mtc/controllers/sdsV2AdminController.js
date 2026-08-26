@@ -1161,7 +1161,7 @@ async function ensureTemplateCssTable() {
   `);
 }
 
-// Multi-template support (see db_migrations/20260703_create_sds_grid_template.js).
+// Multi-template support (see api/engineer/mtc/db_migrations/20260703_create_sds_grid_template.js).
 // Self-heals on a DB where the migration hasn't been run: creates the table + the
 // per-machine assignment column, and lazily seeds a 'Standard' default from the legacy
 // single grid-layout so nothing renders blank.

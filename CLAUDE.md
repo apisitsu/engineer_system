@@ -136,7 +136,41 @@ Two parallel MTC route namespaces coexist — **do not remove legacy routes**:
 ### Adding a new backend domain
 1. Create `api/engineer/<domain>/` with `<domain>Routes.js`, `<domain>Controller.js`, `<domain>Service.js`, `<domain>Constants.js`
 2. Register the router in `server.js`
-3. Add SQL migration to `apps/ENG-Backend/db_migrations/`
+3. Add SQL migration to `apps/ENG-Backend/db_migrations/` — MTC's live in `api/engineer/mtc/db_migrations/` (see below)
+
+### Migrations — where they live and how they record themselves
+
+There is **no migration runner**. Nothing in `server.js` / `runner.js` / `package.json` reads
+these folders; each is run by hand as `node <path>/<file>.js`, and every one should support
+`--revert` and be idempotent.
+
+| folder | holds |
+|---|---|
+| `apps/ENG-Backend/db_migrations/` | shared + non-MTC domains (CAM, PDF Hub, Kanban, RBAC, new_prod, tumble) |
+| `apps/ENG-Backend/api/engineer/mtc/db_migrations/` | **all MTC** (`tooling_*`, `sds_*`, `mtc_*`) — 93 files, plus its own `lib/` and `data/` |
+
+**Every new migration must wire itself into the run log** (`db_migrations/lib/migrationLog.js`,
+table `db_migrations`). Before it existed the table held **one row against 111 files**, so
+"has this already been applied?" had no answer — and on 2026-08-26 a hand-made config change
+was one accidental re-run away from being silently reverted.
+
+```js
+const { guard, recordRun, recordRevert } = require('./lib/migrationLog');
+//  from api/engineer/mtc/db_migrations/:  require('../../../../db_migrations/lib/migrationLog')
+
+async function main() {
+  if (await guard({ file: __filename, revert })) return;   // first line of main()
+  if (revert) { /* … */ await recordRevert({ file: __filename }); return; }
+  /* … */
+  await recordRun({ file: __filename });
+}
+```
+
+`guard` stops an accidental re-run and prints when it was applied. It never blocks
+`--revert`, never blocks `--dry-run`, and `--force` overrides it. A migration that is
+*meant* to be re-run — the `seedCnMapFromPlan` cn-map seeds, where re-running IS the refresh
+when the factory plan moves — passes `alwaysRerun: true` and only gets a note. The helper
+**fails open**: a missing table or a failed query lets the migration proceed.
 
 ### Adding a new frontend feature
 1. Create component under `src/components/engineer/<domain>/`

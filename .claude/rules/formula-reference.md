@@ -56,7 +56,7 @@ Key B:
 | D | 360 ÷ B | `360 / B` |
 | E | W × 0.9 (range 0.6–0.9; round down 0.5) | `floor05(W*0.9)` (W=`wAft_min`) — **match dim_e** |
 
-> **B fix 2026-06-11** (`db_migrations/20260611_fix_hamai5b_carrier_hole_count.js`): was
+> **B fix 2026-06-11** (`api/engineer/mtc/db_migrations/20260611_fix_hamai5b_carrier_hole_count.js`): was
 > `2*floor(PI*(88-A)/(2*(A+4)))` → gave 14 for A=12. The holes sit on the **fixed Ø88 pitch
 > circle** (the `88-A` is C, not the hole circle); per-hole pitch = A+4 (pocket + 4mm min gap):
 > `2*floor(PI*88/(2*(A+4)))` → **16**. expr-eval has no trig, so this linear circumference/pitch
@@ -90,7 +90,7 @@ alternative), D=22.5, E=5
 
 **Example result:** OD=22.35, W=15.94 → A=24, B=380, C=22, D=8, E=36, F=10, G=(19,21) (G≥8.4), H=No heat build-up required, J=SS400
 
-> **Note (2026-06-20 audit):** the live DB had **reverted** to the NULL-unsafe `ceil05(odBf_max + 0.5)` and `floor(wBf_max*0.55)` (od_bf NULL ~35% → A≈0.5, D=0 → carrier returned NONE for 70% of CNs). Re-fixed to the xlsx form with a NULL-safe before→after fallback and the snap-ladder D, and disabled the collinear B/C filters. CARRIER factory top-1 24%→34%, top-2 24%→65% (none 616→26). Migration `db_migrations/20260620_fix_tsg300_hamai5b_formulas.js`. The xlsx selects on **turning (before-grind) OD/W**; residual misses are factory adjacent-size discretion.
+> **Note (2026-06-20 audit):** the live DB had **reverted** to the NULL-unsafe `ceil05(odBf_max + 0.5)` and `floor(wBf_max*0.55)` (od_bf NULL ~35% → A≈0.5, D=0 → carrier returned NONE for 70% of CNs). Re-fixed to the xlsx form with a NULL-safe before→after fallback and the snap-ladder D, and disabled the collinear B/C filters. CARRIER factory top-1 24%→34%, top-2 24%→65% (none 616→26). Migration `api/engineer/mtc/db_migrations/20260620_fix_tsg300_hamai5b_formulas.js`. The xlsx selects on **turning (before-grind) OD/W**; residual misses are factory adjacent-size discretion.
 
 ---
 
@@ -113,7 +113,7 @@ alternative), D=22.5, E=5
 
 **Example result:** OD=24.99, W=17.46 → A=25.19, B=17.56, C=23, D=24.6
 
-> **Note (2026-06-20):** live DB had reverted to bare `odBf_max + 0.2` / `wBf_max + 0.1` (NULL od_bf → A≈0.2 → wrong/smallest tool). Re-fixed to the NULL-safe before→after form (xlsx uses turning OD/W MAX). CHUTE COVER factory top-1 55%→82%, top-2→92%; dim_a/dim_b within ±1.0 of req for 99%. Only A and B drive selection. Migration `db_migrations/20260620_fix_tsg300_hamai5b_formulas.js`.
+> **Note (2026-06-20):** live DB had reverted to bare `odBf_max + 0.2` / `wBf_max + 0.1` (NULL od_bf → A≈0.2 → wrong/smallest tool). Re-fixed to the NULL-safe before→after form (xlsx uses turning OD/W MAX). CHUTE COVER factory top-1 55%→82%, top-2→92%; dim_a/dim_b within ±1.0 of req for 99%. Only A and B drive selection. Migration `api/engineer/mtc/db_migrations/20260620_fix_tsg300_hamai5b_formulas.js`.
 
 ---
 
@@ -126,7 +126,7 @@ alternative), D=22.5, E=5
 | ID | φ4 ≤ ID ≤ φ20 |
 | W  | ≥ 5 |
 
-> **Widened 2026-06-20** (`db_migrations/20260620_fix_ksb22g_ksb80_jaw_and_limits.js`): was ID 4.8–16, W≥10 — too strict; excluded 70 (W 7–9.5) + 19 (ID up to 19.62) real factory CNs the xlsx itself tools. Factory proc-1061 range: OD≤34.9, ID 4–19.6, W from ~7. JAW/BACK PLATE `none` 88→11.
+> **Widened 2026-06-20** (`api/engineer/mtc/db_migrations/20260620_fix_ksb22g_ksb80_jaw_and_limits.js`): was ID 4.8–16, W≥10 — too strict; excluded 70 (W 7–9.5) + 19 (ID up to 19.62) real factory CNs the xlsx itself tools. Factory proc-1061 range: OD≤34.9, ID 4–19.6, W from ~7. JAW/BACK PLATE `none` 88→11.
 
 ---
 
@@ -145,7 +145,7 @@ alternative), D=22.5, E=5
 | C | 18.5 + W/2 + 3 (normal) / 18.5 + W − 2 (ABR) | `ceil05(...)` (cond `isABR`) |
 | D | 10 | `10` |
 
-> **JAW A = process-dependent machining OD** (xlsx VLOOKUP on PROCESS): the jaw grips the workpiece OD — for **ID→OD** (ID-grind first) it grips the **turning/before-grind OD**; for **OD→ID** the already-ground **after-grind OD**. **Fixed 2026-06-20:** live formula was bare `odBf_max` → 0 when od_bf NULL → search returned the smallest jaw `4027-01-0079` for ~half the CNs. Now NULL-safe + process-aware. Factory top-1 18.5%→57.5% (top-2 87.4%); dim_a/dim_b within ±1.0 of req for 100%. Migration `db_migrations/20260620_fix_ksb22g_ksb80_jaw_and_limits.js`. Same fix on KS-B80 JAW (id 3): 52.8%→73.1%.
+> **JAW A = process-dependent machining OD** (xlsx VLOOKUP on PROCESS): the jaw grips the workpiece OD — for **ID→OD** (ID-grind first) it grips the **turning/before-grind OD**; for **OD→ID** the already-ground **after-grind OD**. **Fixed 2026-06-20:** live formula was bare `odBf_max` → 0 when od_bf NULL → search returned the smallest jaw `4027-01-0079` for ~half the CNs. Now NULL-safe + process-aware. Factory top-1 18.5%→57.5% (top-2 87.4%); dim_a/dim_b within ±1.0 of req for 100%. Migration `api/engineer/mtc/db_migrations/20260620_fix_ksb22g_ksb80_jaw_and_limits.js`. Same fix on KS-B80 JAW (id 3): 52.8%→73.1%.
 
 **Result format:** OD=x.xxx, W=x.xx, A=x.xx, B=x.xx, C=x(x.5), D=x
 
@@ -540,13 +540,13 @@ alternative), D=22.5, E=5
 * **E:** OD / 6 *(Round Down)*
 * **F:** (C)
 
-> **Audit fix (2026-06-10, `db_migrations/20260610_fix_ks400b1_search_rules.js`):** CN311008
+> **Audit fix (2026-06-10, `api/engineer/mtc/db_migrations/20260610_fix_ks400b1_search_rules.js`):** CN311008
 > returned (NONE) for PLUG(A)/PLUG(B)/WORK DRIVER and the wrong LOADING CHUTE/SUPPORT BLOCK
 > suffix. Root causes: (1) LOADING CHUTE `dim_a` Height was a ranking dim; (2) WORK DRIVER
 > `dim_b` Bore + (3) PLUG(A/B) `dim_c` Length had hard tolerance windows that excluded the
 > correct item (those secondary-dim formulas over-estimate) — made rank-only; (4) the D
 > `ceil`. Validated vs the factory process plan (`lpb.eng_r_pi_tool`, 618 CNs):
-> LOADING CHUTE top-2 79% → 96%. Re-run check: `db_migrations/20260610_validate_ks400b1.js`.
+> LOADING CHUTE top-2 79% → 96%. Re-run check: `api/engineer/mtc/db_migrations/20260610_validate_ks400b1.js`.
 
 ---
 
@@ -693,7 +693,7 @@ alternative), D=22.5, E=5
 ## KS-400B5 (Spherical Grind / 球研)
 
 > Source: `20241223_TOOLING LIST_KS-400B5.xlsx`. Seeded by
-> `db_migrations/20260610_seed_ks400b5_tooling_select.js` (machine id 10,
+> `api/engineer/mtc/db_migrations/20260610_seed_ks400b5_tooling_select.js` (machine id 10,
 > inventory `tooling_ks400b5`). The B5 machine type already exists in
 > `sds_machine_type_code` (code 906, `machine_type_name='KS-400B5'`, no group) —
 > the T-Select `machine_name` matches it exactly, so SDS PDF resolution works
@@ -754,7 +754,7 @@ ranks across the whole table and returns a row from the wrong tooling type.
 > 0001≈0007 share a≈10.38), so A/B/C are each reconstructed as step functions of
 > OD and matched together. 100% match on the answer key.
 
-### Validation (against DIMENSION AE–AQ answer key, 58 CNs — `db_migrations/20260610_validate_ks400b5.js`)
+### Validation (against DIMENSION AE–AQ answer key, 58 CNs — `api/engineer/mtc/db_migrations/20260610_validate_ks400b5.js`)
 
 Top-2 accuracy: WORK CHUCK 100%, SHAFT 93%, CHUCK JAW 88%, WORK CHUTE 86%,
 WORK HOLDER 86%, WORK CLAMP 74%, MASTER RING 73%, WORK LOADER 68%.
@@ -776,12 +776,12 @@ WORK HOLDER 86%, WORK CLAMP 74%, MASTER RING 73%, WORK LOADER 68%.
 
 > Source: `IDE製作中_20180828_TOOLING LIST_KS-500RD(SPHERICAL GRIND).xlsx`
 > (marked 製作中 / WIP). Seeded by
-> `db_migrations/20260610_seed_ks500rd_tooling_select.js` (machine id 14,
+> `api/engineer/mtc/db_migrations/20260610_seed_ks500rd_tooling_select.js` (machine id 14,
 > inventory `tooling_ks500rd`). Work envelope: ID φ14–38.125, OD φ26–59.531.
 > Machine already exists in `sds_machine_type_code` (code 033, `KS-500RD`, no
 > group) → T-Select `machine_name` matches; SDS resolves with no change.
 >
-> **Machine limit (fixed 2026-07-02, `db_migrations/20260702_fix_ks500rd_machine_limit.js`):**
+> **Machine limit (fixed 2026-07-02, `api/engineer/mtc/db_migrations/20260702_fix_ks500rd_machine_limit.js`):**
 > the live limit had drifted to the loose seed `OD 24–62` with **no ID limit**. Reset to the
 > DIMENSION-sheet envelope (対応ワークサイズ A2–A4): **ID 14–38.125, OD 26–59.531**. The seed
 > `LIMITS` array was corrected to match so a re-seed won't reintroduce the loose value.
@@ -813,7 +813,7 @@ Every search rule sets `inventory_tooling_filter=<tooling_name>` (shared table).
 > compute the band lower bound (= inventory dim_b boundaries) and match dim_a
 > exactly. If the band table changes, update this formula.
 
-### Validation (`db_migrations/20260610_validate_ks500rd.js`)
+### Validation (`api/engineer/mtc/db_migrations/20260610_validate_ks500rd.js`)
 No per-CN answer key in the source (`TOOLING LIST_旧` is a leftover KS-400B/4664
 sheet, unrelated). Validated by **inventory reconstruction** over 28 spec CNs —
 avg dim_a residual: FRONT SHOE 0.00, LOADING PINTLE 0.05, WORK DRIVER 0.14 → the
@@ -835,7 +835,7 @@ better, but confirm against current DWG.
 > cells**. V1's `KS400B6_PARAMS` was deleted with V1. So these formulas are
 > **reverse-engineered** from inventory dims + the MASTER assignment (used as an
 > answer key) — not transcribed. Seeded by
-> `db_migrations/20260610_seed_ks400b6_tooling_select.js` (machine id 15, inventory
+> `api/engineer/mtc/db_migrations/20260610_seed_ks400b6_tooling_select.js` (machine id 15, inventory
 > `tooling_ks400b6`). SDS: `sds_machine_type_code` already has 'KS-400B6' (code 931).
 
 ### MASTER input dims → spec var
@@ -891,7 +891,7 @@ OD = Workpiece OD before grind MAX (odBf_max); W = Workpiece Width after grind n
 `tooling_spec_process`, backfill for the ~14–21 ABR parts, expose in `buildSpecContext`
 (renaming the DWG Y to avoid the groove_y clash), then branch FRONT A=V, REAR A=X−1, B=Yface+1.
 
-### Validation (`db_migrations/20260610_validate_ks400b6.js`, vs MASTER answer key, 32 CNs)
+### Validation (`api/engineer/mtc/db_migrations/20260610_validate_ks400b6.js`, vs MASTER answer key, 32 CNs)
 WORK DRIVER 100%, LOADING CHUTE 100%, WORK PUSHER 100%, WORK GUIDE 94%, PLUG 88%,
 PILOT PIN 84%. SHOES (now isBallInner-branched DWG): Cat.2 exact; Cat.1 proxy-limited.
 
@@ -909,7 +909,7 @@ PILOT PIN 84%. SHOES (now isBallInner-branched DWG): Cat.2 exact; Cat.1 proxy-li
 ## PSG-64 (Surface Grinding, MSB races) — 2MSB-T series added; 3MSB/9MSB excluded
 
 > Source: `MSB_SURFACE-GRINDING_TOOLING(20150213yamamoto).xlsx`. **Added 2026-06-10**
-> (`db_migrations/20260610_seed_psg64_tooling_select.js`, machine id 19, inventory
+> (`api/engineer/mtc/db_migrations/20260610_seed_psg64_tooling_select.js`, machine id 19, inventory
 > `tooling_psg64`). Validated 12/12 family match; SDS already covered it too.
 
 ### What the source is
@@ -958,14 +958,14 @@ dimensional formula engine.
 | 0037 | 9MSB32-607/608 | no eng_race dims | ❌ SDS only |
 
 Components per family: BASE `-01` · COLLET `-05` (0024/0036 use `-02`) · ARBOR `-03` · COLLAR
-`-04` · ASSY `-99` (0029/0024). Re-validate: `db_migrations/20260610_seed_psg64_tooling_select.js`.
+`-04` · ASSY `-99` (0029/0024). Re-validate: `api/engineer/mtc/db_migrations/20260610_seed_psg64_tooling_select.js`.
 
 ---
 
 ## KL-20 (TRIM, bearing race/sleeve)
 
 > Source: `20241204_TOOLING LIST_KL-20(TRIM).xlsx` (data → `db_migrations/kl20_data.json`).
-> Added 2026-06-10 (`db_migrations/20260610_seed_kl20_tooling_select.js`, machine id 24,
+> Added 2026-06-10 (`api/engineer/mtc/db_migrations/20260610_seed_kl20_tooling_select.js`, machine id 24,
 > inventory `tooling_kl20`). SDS already has 'KL-20' (sds_machine_type_code 030).
 
 ### Selection model
@@ -1023,7 +1023,7 @@ not searchable until spec-synced (seeder UPDATE-only, to avoid cross-machine spe
 ## KVD-300CRII — FACE GRIND CARRIER (4036-01)
 
 **Source:** `20251202_TOOLING LIST_KVD300CR2(FACE GRIND).xlsx`, CARRIER sheet rows 11–24.
-**Seed:** `db_migrations/20260611_seed_kvd300cr2_tooling_select.js`
+**Seed:** `api/engineer/mtc/db_migrations/20260611_seed_kvd300cr2_tooling_select.js`
 **Inventory table:** `tooling_kvd300cr2` (14 rows, all CARRIER type)
 **Machine id:** 29 (machine limit: OD 9.5–46, W 6–29)
 
@@ -1082,7 +1082,7 @@ H and J are TEXT columns — setting tol_plus/minus=null and is_match_dim=false 
 ## OC-16A — CENTERLESS GRINDING JIGS (4560-18, 4560-21)
 
 **Source:** `20200212_TOOLING LIST_CENTERLESS-GRINDING-JIG.xlsx`
-**Seed:** `db_migrations/20260611_seed_oc16a_tooling_select.js`
+**Seed:** `api/engineer/mtc/db_migrations/20260611_seed_oc16a_tooling_select.js`
 **Inventory table:** `tooling_oc16a` (shared: 77 RACE PUSHER + 218 SET PIN = 295 rows)
 **Machine id:** 31 (machine limit: OD 3–85)
 
@@ -1190,7 +1190,7 @@ Pin dia B ≈ sleeve bore ID + flange dia. The 適用型式 sheet maps each 4577
 ## KN-312A / KN-312B — ARBOR-MOUNT OD GRIND (ARBOR 4828-01 + NUT 4828-02)
 
 > Source: DWG spec (provided 2026-06-12). **✅ SEEDED into T-Select 2026-06-12**
-> (`db_migrations/20260612_seed_kn312_tooling_select.js`, machines **KN-312A id 37 +
+> (`api/engineer/mtc/db_migrations/20260612_seed_kn312_tooling_select.js`, machines **KN-312A id 37 +
 > KN-312B id 38**, shared inventory `tooling_kn312`). Machine also in SDS
 > (`sds_machine_type_code` id 341 `KN-312A`, id 336 `KN-312B`; **id 332 `KN-312B,KN-312A`
 > code 828 is a combined/duplicate entry — leave it, the FK matches on exact name so the
@@ -1316,7 +1316,7 @@ D2≈40 →T3 (F=3, D4=D3−6, G=6, H=7.5, L3=15).
 ## KS-H70 — SUPER SPHERE FINISH (COLLET 4691-19 + BODY 4691-18 + STOPPER 4691-02)
 
 > Source: `Select_tool_backup/20210210_TOOLING LIST_SUPER SPHERE FINISH.xlsx`. **✅ SEEDED
-> 2026-06-12** (`db_migrations/20260612_seed_ksh70_tooling_select.js`, machine id 47,
+> 2026-06-12** (`api/engineer/mtc/db_migrations/20260612_seed_ksh70_tooling_select.js`, machine id 47,
 > inventory `tooling_ksh70`). SDS: `sds_machine_type_code` id 410 code 907 'KS-H70' →
 > FK links cleanly. Factory process_code = **1241** (SPH SUPER FINISH).
 
