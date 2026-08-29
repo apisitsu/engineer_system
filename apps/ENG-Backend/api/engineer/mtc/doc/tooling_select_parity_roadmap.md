@@ -150,6 +150,97 @@ DIMENSION-sheet data from *all* of them is dumped to TSV but **not loaded into t
 
 ---
 
+---
+
+## Layer 6 — Japanese → English in the UI, and SDS config re-check (2026-08-29)
+
+### Display labels anglicized
+
+`20260829j_anglicize_display_labels.js` + `20260829k_nsv1555fe_label.js` (applied, idempotent,
+`--revert`): 14 rows across `tooling_machine.label` (9) and `tooling_search_rule.label` (5).
+Examples — `その他 (4800 BONDING / 接着)` → `Other — misc bucket (4800 BONDING / adhesive)`,
+`測定用治具全般 (検査 · 9901 series)` → `Measuring jigs — general (inspection · 9901 series)`,
+`TM330 (BBS KINMEI 巾切削)` → `TM330 (BBS KINMEI · width cutting)`, `巾(大)` → `width (max)`,
+`STOPPER 外径 nearest` → `STOPPER OD (outer dia) nearest`.
+
+**Japanese join keys kept, English alias added via `machine_group`** — the sanctioned
+mechanism (`.claude/rules/sds-pipeline.md`):
+- `20260829m_` — the 3 Tooling-Select machines: `測定用治具全般` → "Measuring Jig (general)",
+  `TP-SW-03他` → "TP-SW-03 series", `その他` → "Other (misc)".
+- `20260829o_` — the other **19** Japanese-named `sds_machine_type_code` rows (バグマスター →
+  "Bug Master (deburring)", 超仕上げ機 → "Superfinishing machine", フラクチャー組立機 →
+  "Fracture-split assembly machine", 試作用ダミー番号 → "Prototype dummy number", …). These
+  appear in the SDS admin Machine Types / Configure Settings lists.
+
+Every Japanese machine name in the SDS registry now displays English in the UI. The
+`machine_type_name` / `machine_name` join keys are untouched (renaming the registry once
+destroyed 1,299 `sds_parameter` rows). Safe: 0 `sds_approval` / 0 `sds_parameter` rows for
+any aliased code; conformance keys on `machine_type_name`, not group → KPI unaffected.
+
+**Still Japanese, and correctly so:** `tooling_formula.description` (26 rows) — source
+citations that quote the origin workbook's sheet names and cell formulas
+(`A ピン外径 = ROUNDDOWN(ID - 0.01, 2)`). These are the audit trail the tooling-select rules
+doc requires; they are not names.
+- `tooling_formula.description` (26 rows) — provenance notes that quote the source workbook
+  sheet names and cell formulas (`A ピン外径 = ROUNDDOWN(ID - 0.01, 2)`). These are the audit
+  trail the tooling-select rules doc requires; translating them breaks traceability. Not names.
+
+### SDS Configure Settings — re-verified, still `unexplainedGaps = 0`
+
+`templateBConformance.build()`: `pairsInTemplateB 108 · full 99 · none 9 · pctFull 92% ·
+unexplainedGaps 0`. Visible-machine coverage per the `20260202` index (`治具選定=1`) is 100%
+(all 24 families → an `is_active` registry row). The 9 `none` pairs all carry one reason —
+the registry entry has no name — and map to **5 unnamed `sds_machine_type_code` codes**:
+
+| code | process(es) | missing families | C/N | name in a cited source |
+|---|---|---|---|---|
+| **571** | 2401 SWAGE | 4571-01/-02/-03 | **13,207** | `20260202` index `machine` col = `SWAGE` (process name); TEMPLATE_B `mach` blank → **process-named only, do not use** (see `20260815d_` precedent) |
+| 577 | 2201/3002/3041 INSTALL SPH / ASSEMBLY / LUB FITTING | 4577-01/-04/-20/-21 | ~246 | index lists **4 different** machines (`MECHA PARTS` / `ASRD` / `HAND PRESS` / `TKR`) → ambiguous |
+| 001 | 0331 DRILL INSPECT HOLE | 4001-01 | 138 | `20260202` index `machine` col = **`HX400iα`** (real Mazak HMC model) — source-backed |
+| 656 | 1081 SUPER FINISH | 4656-06/-10 | 38 | TEMPLATE_B `mach` col = **`TECH ONE`** — source-backed |
+| 713 | 2411/2412 RELEASE | 9713-10 | 63 | not in either source |
+
+**Why a name alone is not enough:** naming a code in `sds_machine_type_code` **without**
+also adding its `sds_machine_tool` whitelist rows flips that pair's conformance reason from
+"registry not named" to blank → `unexplainedGaps` 0 → 2+, i.e. it *regresses* the KPI. A
+pair is closed only by name + activate + whitelist (families = TEMPLATE_B ∪ the machine's
+own planned families) + a render check.
+
+- **`656` → `TECH ONE`: APPLIED (`20260829l_`, owner-confirmed).** T1 4656-06 CHUCK JAW,
+  T2 4656-10 QUILL, process 1081 — both families plan only at 1081 (34 / 4 C/N).
+  `TECH ONE / 1081` → `full`.
+- **`001` → `HX400iα`: APPLIED (`20260829n_`, owner-confirmed).** T1 4001-01, process 0331 —
+  the only family the plan uses there (138 C/N). The 12 distinct 4001-01 drawings a C/N may
+  carry all pass the family filter, so no planned tool is hidden. `HX400iα / 0331` → `full`.
+  (Naming 001 also surfaced `HX400iα / 3491` missing `0001-99` — 0 plan C/N, reason NO_PLAN,
+  a phantom family, nothing to configure.)
+- **`571` / `577` / `713`: owner input required** — `571` (SWAGE, 13,207 C/N) both sources
+  give only "SWAGE" (the process name); `577` (~250 C/N) the index lists 4 different
+  machines; `713` (9713-10, 63 C/N) appears in neither source.
+
+**Result: `none` 9 → 7, `full` 99 → 101, `pctFull` 92% → 94%, `unexplainedGaps` still 0.**
+
+### KS-450C ROLLER PIN — cannot onboard (2026-08-29)
+
+Asked whether the centreless KS-450C could be onboarded from `20160324_TOOLING
+LIST_KS-450C_ROLLER PIN`. Two independent blockers:
+
+1. **No real parts.** `lpb.eng_r_pi_tool` has 346 rows / 39 C/N for family 4029 (KS-450C) —
+   **`real_cns = 0`**: every one is a `C99-*` prototype dummy, none in `tooling_spec_process`.
+   A T-Select machine with zero real C/Ns to serve is dead config. (This is the standing
+   blocker the roadmap already recorded for 4029.)
+2. **The workbook is not vendored.** `tooling_calc_blocks/4029/` holds only the generic
+   KS-450C workbook (BLADE / CARRIER / GUIDE TUBE / LIFTER / SEPARATE …), no ROLLER PIN
+   sheet. The `20160324_…_ROLLER PIN` list is on `G:` only.
+
+"ROLLER PIN" in the factory data is `9901-14 ROLLER PIN SORTING JIG` — an **inspection
+sorting jig** under `測定用治具全般` (code 901), used at sorting/inspection processes
+(8011/8012/3101…) on 60+ real C/Ns — a different family on a different machine, not KS-450C
+grinder tooling. If that is what should be added, it is a new family under an existing
+machine and needs its selection rule (the 9901-14 workbook).
+
+---
+
 ## What is needed from the owner to finish
 
 1. **The ~30 per-machine workbooks** under
@@ -162,8 +253,11 @@ DIMENSION-sheet data from *all* of them is dumped to TSV but **not loaded into t
    the 9 TEMPLATE_B `none` machines.
 3. **A decision on the assembly side (gap #5):** do rod-end assembly C/Ns belong in
    `tooling_spec_process`? If yes, where do their dimensions come from.
-4. **Machine-type names** registered for the 9 TEMPLATE_B `none` rows that currently read
-   "(ยังไม่ตั้งชื่อเครื่อง)".
+4. **Machine-type names** for the 5 unnamed `sds_machine_type_code` codes behind the 9
+   TEMPLATE_B `none` rows (see Layer 6 table). Two have a source-backed candidate ready —
+   `001` → `HX400iα`, `656` → `TECH ONE` — and need only a yes/no + a render-check of the
+   whitelist. `571` (SWAGE, 13,207 C/N) and `577` (ambiguous) and `713` (no source) need the
+   real machine model from the floor.
 5. **Confirmation on 4800 BONDING** — is the bonding jig chosen by a dimensional rule, or is
    it a fixed/manual fixture? (decides whether it can be onboarded like the other 5).
 6. **Ongoing:** keep pointing at the columns / notes the way you did for the NOTE column and
