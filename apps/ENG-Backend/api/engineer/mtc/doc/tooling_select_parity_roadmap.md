@@ -46,7 +46,28 @@ at. This roadmap tracks the distance to parity.
 - Phase B (17 index families): 15 MATCH · 4907 sentinels-by-design · **4931 KS-400B6 not
   verifiable** (workbook has no calc block)
 - Phase C (11 non-index machines): 6 MATCH · LB15 inferred · MSB no block located
-- **Limits: only 16/35 machines** carry `tooling_machine_limit`
+- **`tooling_machine_limit`: 20/36 machines** carry a real work-size limit (was 16).
+
+**RE33xxx re-checked against config 2026-08-29** (the 2026-08-14 conformance pass predated
+7 of the vendored RE PDFs). Cited limits all match — KS-400B1 (RE33037 D), KS-B80
+(RE33041 B), KS-03A/B22RD (RE33038 F), KN-312 (RE33032 B), LNC45 (RE33024 D) — with the
+two deliberate KS-B22G deviations (`ID ≤ 19.7` vs std 16, `W ≥ 5` vs std ≥ 14, both
+plan-backed and documented). **Gaps found and fixed (`20260829i_`):** X-100 had NO limit
+(RE33039 A §7: OD ≤ φ60) · XD-8 none (RE33040 A §7: OD ≤ φ41.275, ballWidth ≤ 32.51) ·
+FTL-10(I) none (RE33026 A §7: OD ≤ φ50) · 1MP-H shankDia ≤ φ25 (RE33034 B §7). Verified:
+0 planned C/N exceed any of these OD bounds. NOT added — standard behind practice:
+X-100 ballWidth ≤ 32.51 (15 planned C/N over), TM330 shankDia ≤ 25 (9 over). Still open:
+`4649-03 SHANK HOLDER` (RE33025 B, LB15) not configured; KS-400B1 WORK DRIVER TYPE split
+(RE33037 D §8 SD 19.5 vs config SD 13.5 — drawing verified at 73 % top-2, drawing wins).
+
+**RM35xxx (grinding-condition manuals) NOT reconcilable as a config diff.** They are
+per-part-size × material lookup matrices (RM35061 F Table 2: conditions per ID size #4–#24
+per material); `sds_parameter` is a per-machine *display template* (3,560 default cells /
+25 machines), and the per-part values on a real SDS sheet come from the RM matrix by
+size+material or a `cn` override — so "in sync" is a per-sheet question, not a config-level
+one. Most RM PDFs are scanned images with no text layer (only RM35061 F, rev 2026-03-02,
+is born-digital). A proper RM audit needs OCR + a per-CN generated-sheet comparison — its
+own workstream.
 
 ### Layer 4 · Part & dimension data
 
