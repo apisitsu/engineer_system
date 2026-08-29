@@ -1,0 +1,860 @@
+﻿[
+    {
+        "family":  "4007",
+        "machine":  "QTN200",
+        "machineLabel":  null,
+        "detail":  "BODY COLLET",
+        "process":  "0091",
+        "workbookName":  "20200619_TOOLING LIST_BODY COLLET",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\切削_頭部切削_BODY COLLET(MPA)_MAZAK QTN200（百瀬）\\20200619_TOOLING LIST_BODY COLLET.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "BODY COLLET",
+                           "rows":  159,
+                           "cols":  45,
+                           "shapeCount":  3,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "図 1",
+                                                     "type":  13,
+                                                     "cell":  "R7C13"
+                                                 }
+                                             ],
+                           "pdf":  "BODY_COLLET.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "BODY_COLLET.tsv"
+                       },
+                       {
+                           "sheet":  "(工事中)DIMENSION",
+                           "rows":  2,
+                           "cols":  17,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  "_工事中_DIMENSION.pdf",
+                           "pdfReason":  "name-hint",
+                           "tsv":  "_工事中_DIMENSION.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4009",
+        "machine":  "TM330",
+        "machineLabel":  null,
+        "detail":  "MILL 巾切削",
+        "process":  "0311",
+        "workbookName":  "20200325_TOOLING LIST_BBS KINMEI",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\切削_巾切削_4009-XX_BBS金明（百瀬）\\20200325_TOOLING LIST_BBS KINMEI.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "01 BH(下部)",
+                           "rows":  999,
+                           "cols":  67,
+                           "shapeCount":  17,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "図 2",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 },
+                                                 {
+                                                     "name":  "図 3",
+                                                     "type":  13,
+                                                     "cell":  "R1C24"
+                                                 },
+                                                 {
+                                                     "name":  "図 5",
+                                                     "type":  13,
+                                                     "cell":  "R1C44"
+                                                 },
+                                                 {
+                                                     "name":  "図 8",
+                                                     "type":  13,
+                                                     "cell":  "R1C9"
+                                                 },
+                                                 {
+                                                     "name":  "図 9",
+                                                     "type":  13,
+                                                     "cell":  "R1C31"
+                                                 },
+                                                 {
+                                                     "name":  "図 10",
+                                                     "type":  13,
+                                                     "cell":  "R1C53"
+                                                 }
+                                             ],
+                           "pdf":  "01_BH_下部_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "01_BH_下部_.tsv"
+                       },
+                       {
+                           "sheet":  "02 BC(頭部)(材質 S45C)",
+                           "rows":  1017,
+                           "cols":  14,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "図 3",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "02_BC_頭部__材質_S45C_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "02_BC_頭部__材質_S45C_.tsv"
+                       },
+                       {
+                           "sheet":  "02 BC(頭部) (材質C1100)",
+                           "rows":  1015,
+                           "cols":  14,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "図 6",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "02_BC_頭部___材質C1100_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "02_BC_頭部___材質C1100_.tsv"
+                       },
+                       {
+                           "sheet":  "Sheet1",
+                           "rows":  1,
+                           "cols":  1,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Sheet1.tsv"
+                       },
+                       {
+                           "sheet":  "04 BC(スパナ)",
+                           "rows":  1000,
+                           "cols":  28,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "04_BC_スパナ_.tsv"
+                       },
+                       {
+                           "sheet":  "OLD_計算式",
+                           "rows":  1000,
+                           "cols":  1,
+                           "shapeCount":  3,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "image8.png",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 },
+                                                 {
+                                                     "name":  "image9.png",
+                                                     "type":  13,
+                                                     "cell":  "R1C5"
+                                                 },
+                                                 {
+                                                     "name":  "image10.png",
+                                                     "type":  13,
+                                                     "cell":  "R1C12"
+                                                 }
+                                             ],
+                           "pdf":  "OLD_計算式.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "OLD_計算式.tsv"
+                       },
+                       {
+                           "sheet":  "作成予定_DIMENSION_NO USE",
+                           "rows":  1,
+                           "cols":  1,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 3626",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 },
+                                                 {
+                                                     "name":  "Picture 3625",
+                                                     "type":  13,
+                                                     "cell":  "R34C2"
+                                                 }
+                                             ],
+                           "pdf":  "作成予定_DIMENSION_NO_USE.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "作成予定_DIMENSION_NO_USE.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4516",
+        "machine":  "1MP-H",
+        "machineLabel":  null,
+        "detail":  "HYDRA GRIP",
+        "process":  "0311",
+        "workbookName":  "20160530_TOOLING LIST_巾仕上用ハイドラグリップリスト",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\切削_巾切削_4516-01_ハイドラクリップ（磯貝）\\20160530_TOOLING LIST_巾仕上用ハイドラグリップリスト.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "HYDRA GRIP LIST",
+                           "rows":  269,
+                           "cols":  39,
+                           "shapeCount":  7,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 32",
+                                                     "type":  13,
+                                                     "cell":  "R7C30"
+                                                 },
+                                                 {
+                                                     "name":  "図 3",
+                                                     "type":  13,
+                                                     "cell":  "R1C9"
+                                                 },
+                                                 {
+                                                     "name":  "図 5",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 },
+                                                 {
+                                                     "name":  "図 6",
+                                                     "type":  13,
+                                                     "cell":  "R1C15"
+                                                 },
+                                                 {
+                                                     "name":  "図 7",
+                                                     "type":  13,
+                                                     "cell":  "R1C24"
+                                                 }
+                                             ],
+                           "pdf":  "HYDRA_GRIP_LIST.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "HYDRA_GRIP_LIST.tsv"
+                       },
+                       {
+                           "sheet":  "Sheet2",
+                           "rows":  148,
+                           "cols":  31,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Sheet2.tsv"
+                       },
+                       {
+                           "sheet":  "参考図面",
+                           "rows":  1,
+                           "cols":  1,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "参考図面.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "参考図面.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4691",
+        "machine":  "DTS-IS",
+        "machineLabel":  null,
+        "detail":  "SUPER SPHERE FINISH ALL",
+        "process":  "1241",
+        "workbookName":  "20210210_TOOLING LIST_SUPER SPHERE FINISH",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\超仕上げ_外球_4691・4907-XX_球面超仕上機(山本)\\20210210_TOOLING LIST_SUPER SPHERE FINISH.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "MASTER",
+                           "rows":  219,
+                           "cols":  28,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "MASTER.tsv"
+                       },
+                       {
+                           "sheet":  "COLEET\u0026組合せ検索",
+                           "rows":  78,
+                           "cols":  11,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "COLEET_組合せ検索.tsv"
+                       },
+                       {
+                           "sheet":  "COLLET BODY",
+                           "rows":  6,
+                           "cols":  8,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "COLLET_BODY.tsv"
+                       },
+                       {
+                           "sheet":  "STOPPER",
+                           "rows":  52,
+                           "cols":  10,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "STOPPER.tsv"
+                       },
+                       {
+                           "sheet":  "(工事中)COLLET対応表",
+                           "rows":  27,
+                           "cols":  7,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "_工事中_COLLET対応表.tsv"
+                       },
+                       {
+                           "sheet":  "STONE HOLDER PART",
+                           "rows":  66,
+                           "cols":  29,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "STONE_HOLDER_PART.tsv"
+                       },
+                       {
+                           "sheet":  "UKボール用真球度検査治具",
+                           "rows":  25,
+                           "cols":  14,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "UKボール用真球度検査治具.tsv"
+                       },
+                       {
+                           "sheet":  "4907-01_LOADER_END BLOCK ",
+                           "rows":  81,
+                           "cols":  9,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "4907-01_LOADER_END_BLOCK_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "4907-01_LOADER_END_BLOCK_.tsv"
+                       },
+                       {
+                           "sheet":  "4907-03_LOADER_FINGER CHUCK",
+                           "rows":  81,
+                           "cols":  11,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 7",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 },
+                                                 {
+                                                     "name":  "Picture 7",
+                                                     "type":  13,
+                                                     "cell":  "R10C6"
+                                                 }
+                                             ],
+                           "pdf":  "4907-03_LOADER_FINGER_CHUCK.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "4907-03_LOADER_FINGER_CHUCK.tsv"
+                       },
+                       {
+                           "sheet":  "JOINT計算式",
+                           "rows":  13,
+                           "cols":  3,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "JOINT計算式.tsv"
+                       },
+                       {
+                           "sheet":  "XXX_磯貝さん編集版MASTER",
+                           "rows":  47,
+                           "cols":  12,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "XXX_磯貝さん編集版MASTER.tsv"
+                       },
+                       {
+                           "sheet":  "AC\u0026STOPPER",
+                           "rows":  23,
+                           "cols":  15,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  "picture",
+                           "tsv":  "AC_STOPPER.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4863",
+        "machine":  "NSV-1555FE",
+        "machineLabel":  null,
+        "detail":  "SUGINO tap jig",
+        "process":  "1811",
+        "workbookName":  "20220824_スギノマシンタップ用治具",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\マシニング_タップ加工用治具_4863-XX_NSV1555FE（山本）\\20220824_スギノマシンタップ用治具.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "寸法算出",
+                           "rows":  1000,
+                           "cols":  36,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "寸法算出.tsv"
+                       },
+                       {
+                           "sheet":  "Vブロック",
+                           "rows":  1001,
+                           "cols":  26,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Vブロック.tsv"
+                       },
+                       {
+                           "sheet":  "《使用禁止》センタピン",
+                           "rows":  1000,
+                           "cols":  26,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "_使用禁止_センタピン.tsv"
+                       },
+                       {
+                           "sheet":  "寸法算出 (2)",
+                           "rows":  1000,
+                           "cols":  37,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "寸法算出__2_.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4029",
+        "machine":  "KS-450C",
+        "machineLabel":  null,
+        "detail":  "ROLLER PIN",
+        "process":  "1181",
+        "workbookName":  "20160324_TOOLING LIST_KS-450C_ROLLER PIN",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\センタレス_ローラーピン_4029-XX_KS-450C（山本）\\20160324_TOOLING LIST_KS-450C_ROLLER PIN.xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "DIMENSION",
+                           "rows":  58,
+                           "cols":  12,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  "DIMENSION.pdf",
+                           "pdfReason":  "name-hint",
+                           "tsv":  "DIMENSION.tsv"
+                       },
+                       {
+                           "sheet":  "PICTURE",
+                           "rows":  3,
+                           "cols":  1,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R4C1"
+                                                 }
+                                             ],
+                           "pdf":  "PICTURE.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "PICTURE.tsv"
+                       },
+                       {
+                           "sheet":  "TOOLING LIST",
+                           "rows":  26,
+                           "cols":  20,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "TOOLING_LIST.tsv"
+                       },
+                       {
+                           "sheet":  "BLADE",
+                           "rows":  46,
+                           "cols":  10,
+                           "shapeCount":  4,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R5C1"
+                                                 }
+                                             ],
+                           "pdf":  "BLADE.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "BLADE.tsv"
+                       },
+                       {
+                           "sheet":  "CARRIER(R),(F)",
+                           "rows":  52,
+                           "cols":  12,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R8C1"
+                                                 },
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R7C6"
+                                                 }
+                                             ],
+                           "pdf":  "CARRIER_R___F_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "CARRIER_R___F_.tsv"
+                       },
+                       {
+                           "sheet":  "SEPARATE BLOCK",
+                           "rows":  52,
+                           "cols":  14,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "SEPARATE_BLOCK.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "SEPARATE_BLOCK.tsv"
+                       },
+                       {
+                           "sheet":  "SEPARATE PLATE",
+                           "rows":  51,
+                           "cols":  10,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "SEPARATE_PLATE.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "SEPARATE_PLATE.tsv"
+                       },
+                       {
+                           "sheet":  "LIFTER GUIDE",
+                           "rows":  57,
+                           "cols":  11,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "LIFTER_GUIDE.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "LIFTER_GUIDE.tsv"
+                       },
+                       {
+                           "sheet":  "LIFTER",
+                           "rows":  50,
+                           "cols":  12,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 1",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "LIFTER.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "LIFTER.tsv"
+                       },
+                       {
+                           "sheet":  "GUIDE TUBE(1)",
+                           "rows":  45,
+                           "cols":  14,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "GUIDE_TUBE_1_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "GUIDE_TUBE_1_.tsv"
+                       },
+                       {
+                           "sheet":  "GUIDE TUBE(2)",
+                           "rows":  44,
+                           "cols":  14,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R7C1"
+                                                 }
+                                             ],
+                           "pdf":  "GUIDE_TUBE_2_.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "GUIDE_TUBE_2_.tsv"
+                       },
+                       {
+                           "sheet":  "設計不要R-SLIDE",
+                           "rows":  15,
+                           "cols":  8,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "設計不要R-SLIDE.tsv"
+                       },
+                       {
+                           "sheet":  "20150109_STOCK_LIST",
+                           "rows":  101,
+                           "cols":  5,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "20150109_STOCK_LIST.tsv"
+                       },
+                       {
+                           "sheet":  "ROTARY",
+                           "rows":  98,
+                           "cols":  22,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "ROTARY.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4800-bond",
+        "machine":  "BONDING",
+        "machineLabel":  null,
+        "detail":  "TFE BONDING flange-sleeve",
+        "process":  "2511",
+        "workbookName":  "20180119_TFE_BONDINGツーリングリスト(フランジスリーブ)",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\テフロン_フランジスリーブ用プレート・リング\\20180119_TFE_BONDINGツーリングリスト(フランジスリーブ).xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "DIMENSION",
+                           "rows":  547,
+                           "cols":  15,
+                           "shapeCount":  3,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 2",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "DIMENSION.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "DIMENSION.tsv"
+                       },
+                       {
+                           "sheet":  "BONDING PLATE",
+                           "rows":  191,
+                           "cols":  21,
+                           "shapeCount":  3,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "BONDING_PLATE.tsv"
+                       },
+                       {
+                           "sheet":  "GUIDE RING",
+                           "rows":  82,
+                           "cols":  13,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "図 2",
+                                                     "type":  13,
+                                                     "cell":  "R1C9"
+                                                 }
+                                             ],
+                           "pdf":  "GUIDE_RING.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "GUIDE_RING.tsv"
+                       },
+                       {
+                           "sheet":  "《参考》旧ボンディングプレート",
+                           "rows":  31,
+                           "cols":  20,
+                           "shapeCount":  1,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "_参考_旧ボンディングプレート.tsv"
+                       },
+                       {
+                           "sheet":  "《中断》(20180305原案)GUIDE RING",
+                           "rows":  294,
+                           "cols":  15,
+                           "shapeCount":  2,
+                           "pictureShapes":  [
+                                                 {
+                                                     "name":  "Picture 32",
+                                                     "type":  13,
+                                                     "cell":  "R1C1"
+                                                 }
+                                             ],
+                           "pdf":  "_中断__20180305原案_GUIDE_RING.pdf",
+                           "pdfReason":  "picture",
+                           "tsv":  "_中断__20180305原案_GUIDE_RING.tsv"
+                       }
+                   ]
+    },
+    {
+        "family":  "4547",
+        "machine":  "PSG-64",
+        "machineLabel":  null,
+        "detail":  "MSB surface grind",
+        "process":  "1101",
+        "workbookName":  "MSB_SURFACE-GRINDING_TOOLING(20150213yamamoto)",
+        "resolved":  "G:\\Shared drives\\RD Development Technology Review Request\\Tooling Select\\DesignStandards_Dimensions_InventoryData\\研磨_平研_4547-XX_岡本PSG-64(中澤)\\MSB_SURFACE-GRINDING_TOOLING(20150213yamamoto).xlsx",
+        "formulaToolings":  null,
+        "sheets":  [
+                       {
+                           "sheet":  "Sheet1",
+                           "rows":  32,
+                           "cols":  24,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Sheet1.tsv"
+                       },
+                       {
+                           "sheet":  "Sheet2",
+                           "rows":  29,
+                           "cols":  5,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Sheet2.tsv"
+                       },
+                       {
+                           "sheet":  "Sheet3",
+                           "rows":  1,
+                           "cols":  1,
+                           "shapeCount":  0,
+                           "pictureShapes":  [
+
+                                             ],
+                           "pdf":  null,
+                           "pdfReason":  null,
+                           "tsv":  "Sheet3.tsv"
+                       }
+                   ]
+    }
+]

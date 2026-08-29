@@ -948,7 +948,10 @@ async function _attachSimilarRefFromPartnoMap(results, machineByDisplay, spec, s
             AND m.is_forbidden = false
             AND left(s.cn, 2) = $6
             AND s.cn <> $7
-          ORDER BY m.tooling_name, dist ASC`,
+          -- Tie-break, for the same reason as the factory-plan query below: without one,
+          -- DISTINCT ON returns whichever equally-distant reference part Postgres reached
+          -- first, so the suggestion can change between renders of an unchanged sheet.
+          ORDER BY m.tooling_name, dist ASC, m.tool_dwg_no, s.cn`,
         [od, id, w, machineName, toolingNames, cls, String(spec.cn), W_DIST_WEIGHT]
       ));
     } catch (_) { return; }   // machine has no partno_map / query issue → no column
@@ -1064,7 +1067,13 @@ async function _attachSimilarRefFromFactoryPlan(results, spec, specCtx) {
         WHERE ${famExpr} = ANY($4)
           AND left(t.process_plan_no, 3) = $6
           AND t.process_plan_no <> $5
-        ORDER BY fam, dist ASC`,
+        -- TIE-BREAK, OR THE SAME SHEET PRINTS A DIFFERENT TOOL ON A RE-RENDER.
+        -- Equal distances are common (a family's reference parts share dimensions), and
+        -- DISTINCT ON with no tie-break lets Postgres return whichever row it reached
+        -- first. Live: X-100 4857-04 on C/N 414303 alternated between -0035 and -0013
+        -- across cache rebuilds, which also makes sds_print_log.pdf_sha256 differ for two
+        -- prints of a sheet nothing had changed.
+        ORDER BY fam, dist ASC, t.tool_dwg_no, t.process_plan_no`,
       [od, id, w, [...families], targetCn, cnPrefix, W_DIST_WEIGHT]
     ));
   } catch (_) { return; }   // maqdb unavailable / class table issue → no column

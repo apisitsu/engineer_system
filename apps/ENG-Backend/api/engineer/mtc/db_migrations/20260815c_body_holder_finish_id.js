@@ -10,10 +10,16 @@
  * ── The standard ─────────────────────────────────────────────────────────────
  * `RE33024 D` (2024.02.16, in `api/engineer/mtc/doc/`) classifies by head diameter:
  *
- *     BODY HOLDER 4651-20-XXXX          HD ≤ 55        (thin type; RE33033 merged in at rev D)
+ *     BODY HOLDER 4651-20-XXXX          HD ≤ 55        (thin type; RE33028 folded in at rev D)
  *     BODY HOLDER 4651-12-XXXX (BDXXXX) 55 < HD ≤ 68
  *     CLAMP PLATE 4651-13-XXXX (PEXXXX) TYPE1 / TYPE2
  *     対象ワークサイズ                   HD ≤ φ68
+ *
+ * (2026-08-28) TEMPLATE_B's `standard` column prints `RE33033` for these rows — that is a
+ * phantom number. The standard it means is `RE33028` "ボディ内研用治具 / Body ID-grind jig"
+ * (1998.2.24; BODY HOLDER 4652-12 / CLAMP PLATE 4652-11 / GUIDE PIN 4652-10, GI-20N), now
+ * vendored as `api/engineer/mtc/doc/RE33028_BodyIDGrind-Jig-design.pdf`. RE33024 D remains
+ * the authority for 4651-20's arithmetic below; RE33028 is the older family-level design std.
  *
  * It gives the classification and the STD-TYPE drawing names but not the arithmetic.
  * That is in `20210916_TOOLING LIST_薄型ボディホルダー.xls`, whose `DIMENSION` sheet is
@@ -50,7 +56,7 @@
  * ── Not in this migration ────────────────────────────────────────────────────
  * BODY HOLDER 4651-12 and CLAMP PLATE 4651-13 have no tooling list on the shared drive
  * under any name searched (`4651-1[23]`, `CLAMP`, `ボディホルダ`). Only 4651-20 (thin
- * type) and 4651-10 (guide pin) have one. Since rev D folded RE33033 in and made the thin
+ * type) and 4651-10 (guide pin) have one. Since rev D folded RE33028 in and made the thin
  * holder the standard design, 4651-20 is also the family still being drawn — but the
  * 55 < HD ≤ 68 band has no shelf here, so parts in it will find nothing rather than a
  * wrong holder.

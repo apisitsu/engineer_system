@@ -21,7 +21,7 @@ list produced wrong answers (see "Tooling that is documented but cannot be selec
 |---|---|---|---|
 | 1 | **`20260202_Tooling_Excel_List.xlsm`** | `G:\Shared drives\RD Development Technology Review Request\Tooling Select\` | **The index.** Every tooling list, per machine, with a 工程 (process) column. Start here — it is the only way to find a family no machine folder names, which is how 9901-09 was found under 工程 = 検査(CHECK). The per-machine workbooks it points at live under `DesignStandards_Dimensions_InventoryData\` and carry the `加工対象物寸法記入欄` calculation block that *is* the rule. |
 | 2 | **`TEMPLATE_B.xlsx`** | `api/engineer/mtc/doc/TEMPLATE_B.xlsx` (vendored) · also on the shared drive | **The process→machine→tooling map.** Col 1 process code, 2 its name, 3 machine, 5 tooling, 6 drawing family. Decides *what* should be covered and for which part families — including the grey-fill convention (grey = not selected for that family; white = selected). |
-| 3 | **RE33xxx design standards** | `api/engineer/mtc/doc/RE33*.pdf` — 12 files | **The design authority.** Work-size limits (`tooling_machine_limit`) and TYPE branch conditions come from here, cited by clause in each row's `description` (e.g. `RE33042 A §7: …`). |
+| 3 | **RE33xxx design standards** | `api/engineer/mtc/doc/RE33*.pdf` — 13 files | **The design authority.** Work-size limits (`tooling_machine_limit`) and TYPE branch conditions come from here, cited by clause in each row's `description` (e.g. `RE33042 A §7: …`). |
 
 Precedence when they disagree:
 
@@ -37,9 +37,12 @@ Precedence when they disagree:
   QUILL / WHEEL / the second plug pair are in TEMPLATE_B and in no standard — that is the
   standards lagging the worksheet, not a conformance failure.
 
-Which files exist is verified: 12 RE PDFs (`RE33024 D`, `RE33025 B`, `RE33026 A`, `RE33032 B`,
-`RE33034 B`, `RE33036 C`, `RE33037 D`, `RE33038 F`, `RE33039 A`, `RE33040 A`, `RE33041 B`,
-`RE33042 A`) plus `TEMPLATE_B.xlsx` sit in `api/engineer/mtc/doc/`. The index workbook is
+Which files exist is verified: 13 RE PDFs (`RE33024 D`, `RE33025 B`, `RE33026 A`, `RE33028`,
+`RE33032 B`, `RE33034 B`, `RE33036 C`, `RE33037 D`, `RE33038 F`, `RE33039 A`, `RE33040 A`,
+`RE33041 B`, `RE33042 A`) plus `TEMPLATE_B.xlsx` sit in `api/engineer/mtc/doc/`. `RE33028`
+("ボディ内研用治具", vendored 2026-08-28) is what TEMPLATE_B's `standard` column means where
+it prints the phantom number `RE33033` (BODY HOLDER 4651-20 rows on M/F/ABR/ROLLER BODY).
+The index workbook is
 **not** vendored — it is only on `G:`, which is Google Drive for Desktop and exists only
 inside a signed-in interactive session (→ `.claude/rules/backend-gotchas.md`).
 

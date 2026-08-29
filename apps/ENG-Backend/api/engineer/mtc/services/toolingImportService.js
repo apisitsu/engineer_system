@@ -247,7 +247,7 @@ async function writeCsv(dir, filename, columns, rows, { attempts = 5, backoffMs 
  * otherwise succeeded.
  *
  * Off unless `TI_CSV_GAS_URL` is set, so nothing changes for a host that has not been
- * configured for it. See docs/gas_ti_csv_doPost.gs for the script and how to deploy it.
+ * configured for it. See api/engineer/mtc/doc/gas_ti_csv_doPost.gs for the script and how to deploy it.
  */
 async function uploadCsvToDrive(filename, columns, rows, log) {
   const url = PATHS.TI_CSV_GAS_URL;

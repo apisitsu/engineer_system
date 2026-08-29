@@ -149,6 +149,13 @@ async function safeSearch(cn, opts = {}) {
   }
 }
 
+// '9901-09-0005' → '9901-09'. Anything that is not a two-segment DWG number yields '',
+// which the caller below rejects outright — so a malformed Tool No can never widen the gate.
+function familyOf(no) {
+  const m = String(no || '').trim().match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : '';
+}
+
 /**
  * Best Tooling Select tool per tooling for a given machine.
  *
@@ -163,6 +170,24 @@ async function safeSearch(cn, opts = {}) {
  *                        direction, so it must not satisfy an opposite-direction
  *                        process row. Missing/unknown direction → not gated
  *                        (additive: only removes provable false positives).
+ * @param opts.acceptFamilies (optional) Set of 2-segment DWG families ('9901-09')
+ *                        that THIS machine's Machine Tool Config whitelists. A
+ *                        result filed under a DIFFERENT machine name is admitted
+ *                        when its tool's family is in that set.
+ *
+ *                        Some tooling is used ON a machine but belongs to another
+ *                        machine's registry code, so T-Select files it elsewhere
+ *                        and the name gate above drops it. 9901-09 CONCENTRICITY
+ *                        MEASURING PIN is the worked case: TEMPLATE_B lists it as
+ *                        the first tool of every X-100 block, but its family
+ *                        resolves to registry code 901 = `測定用治具全般`, so on an
+ *                        X-100 sheet T-Select could never supply the Tool No and
+ *                        the slot printed name-only.
+ *
+ *                        The whitelist is what makes this safe: it is the sheet's
+ *                        own statement of what belongs on it, so a foreign-machine
+ *                        result can only enter through a family the config already
+ *                        reserves a slot for. Unrelated tooling stays out.
  * @returns [{ tooling_name, tooling_no }] — first (closest) match per tooling
  */
 function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
@@ -184,8 +209,12 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
 
   const out = [];
   const seen = new Set();
+  const acceptFamilies = opts.acceptFamilies instanceof Set ? opts.acceptFamilies : null;
   for (const r of tsResult.results) {
-    if (!acceptableNames.has(r.machine)) continue;
+    // A foreign-machine result is still a candidate when acceptFamilies is given —
+    // its DWG family decides, and that is only known once `no` is resolved below.
+    const machineOk = acceptableNames.has(r.machine);
+    if (!machineOk && !acceptFamilies) continue;
     // Similar-part suggestions (not a factory-confirmed selection). Two forms:
     //   1. overrideBy='similar_part' — a partno_map twin that FILLED an empty tooling
     //      (matches was replaced with the twin's tool).
@@ -207,6 +236,11 @@ function tselectToolsForMachine(tsResult, acceptableNames, opts = {}) {
       isSimilar = isOverrideSimilar;
     }
     if (!no) continue;
+    // An empty family is rejected here rather than trusted to be absent from the
+    // whitelist — a caller that let one through would otherwise admit every foreign
+    // tool whose number is not a DWG number at all.
+    const fam = machineOk ? null : familyOf(no);
+    if (!machineOk && (!fam || !acceptFamilies.has(fam))) continue;
     const key = `${r.tooling}||${no}`;
     if (seen.has(key)) continue;
     seen.add(key);

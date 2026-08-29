@@ -42,7 +42,7 @@
  * TEMPLATE_B. KS-400B1's search rules filter on `inventory_tooling_filter =
  * 'PILOT PIN'`; renaming the shelf without rewriting those filters would make the
  * family unfindable on both machines. The name difference is recorded in
- * docs/tooling_select_audit_findings.md (F-1) and left alone.
+ * api/engineer/mtc/doc/tooling_select_audit_findings.md (F-1) and left alone.
  *
  * Safety checked before writing: 18 rows, 18 distinct numbers, 18 distinct numbers
  * after appending, and no `4931-03%` rows in `tooling_partno_map` or any other

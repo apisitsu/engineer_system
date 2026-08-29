@@ -170,7 +170,10 @@ router.get('/sds/pdf', async (req, res) => {
     // per-caller field would only ever hold one value.
     sdsPrintLog.record({
       cn, machineTypeName: machine_type_name, processCode: process_code, lot,
-      source: 'public', pdfBuffer, tooling: _meta.tooling,
+      // The floor code the caller named, kept verbatim — `machine_type_name` cannot be
+      // narrowed back to it (KS-400B1 covers nine machines).
+      machineCode: String(req.query.machine || '').trim() || null,
+      source: 'public', pdfBuffer, tooling: _meta.tooling, req,
     });
   } catch (err) {
     res.status(500).json({ error: `SDS PDF render failed: ${err.message}` });
