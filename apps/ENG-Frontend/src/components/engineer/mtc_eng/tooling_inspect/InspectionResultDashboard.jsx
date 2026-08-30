@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Layout, Select, Spin, Typography, Row, Col, Tooltip, Table, Tag } from 'antd';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { useTheme } from '../../../../theme';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import axios from 'axios';
@@ -29,21 +30,64 @@ const { Content } = Layout;
 const { Text } = Typography;
 const { Option } = Select;
 
-// ── Dark theme palette ──────────────────────────────────────────────────────
-const C = {
-    bg:        '#041320',
-    card:      '#072035',
-    border:    '#0e3a5c',
-    blue:      '#1890ff',
-    cyan:      '#00d4ff',
-    green:     '#52c41a',
-    red:       '#ff4d4f',
-    yellow:    '#ffc53d',
-    orange:    '#fa8c16',
-    purple:    '#722ed1',
-    textPri:   '#e8f4ff',
-    textSec:   '#6fa3c7',
-    gridLine:  'rgba(14,58,92,0.8)',
+// ── Palette ─────────────────────────────────────────────────────────────────
+// Chrome (bg / card / border / text) follows the app theme. The DATA colours cannot
+// be one set: the theme ships 8 light surfaces and 1 dark one (rpg), and these hues
+// were picked against the old #041320 ground. Measured contrast vs #FFFFFF for the
+// dark set — cyan 1.77, yellow 1.58, green 2.27, orange 2.38 — is below the 3:1 floor,
+// so on a light theme they would be all but invisible. Each set is stated for the
+// surface it is read on, and the theme's own lightness picks between them.
+//
+// Hue IDENTITY is preserved across the pair: green still means On Time, red Delay,
+// yellow Accept, orange Reject. These are status encodings, not decoration.
+const SERIES_DARK = {
+    blue: '#1890ff', cyan: '#00d4ff', green: '#52c41a',
+    red: '#ff4d4f', yellow: '#ffc53d', orange: '#fa8c16',
+    purple: '#9254de',   // #722ed1 measures 2.51 on the rpg ground — the one dark-set failure
+};
+const SERIES_LIGHT = {
+    blue: '#0958d9', cyan: '#08979c', green: '#389e0d',
+    red: '#cf1322', yellow: '#ad6800', orange: '#d4380d',
+    purple: '#531dab',
+};
+
+const hexToRgba = (hex, a) => {
+    const h = String(hex || '').replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const n = parseInt(full, 16);
+    if (Number.isNaN(n)) return `rgba(111,163,199,${a})`;
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+// Classify by the theme's own background rather than by theme name, so a theme added
+// later lands in the right set without an edit here.
+const isDarkHex = (hex) => {
+    const h = String(hex || '').replace('#', '');
+    if (h.length !== 6) return true;
+    const n = parseInt(h, 16);
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return (0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)) < 0.4;
+};
+
+const useColors = () => {
+    const { theme } = useTheme();
+    return useMemo(() => {
+        const c = theme?.colors || {};
+        const dark = isDarkHex(c.background || '#041320');
+        return {
+            ...(dark ? SERIES_DARK : SERIES_LIGHT),
+            bg: c.background || '#041320',
+            card: c.surface || '#072035',
+            border: c.border || '#0e3a5c',
+            textPri: c.textPrimary || '#e8f4ff',
+            textSec: c.textSecondary || '#6fa3c7',
+            // Grid lines stay recessive on either ground by borrowing the theme's border.
+            gridLine: hexToRgba(c.border || '#0e3a5c', dark ? 0.8 : 0.55),
+            // Empty-donut ring: a flat neutral that reads as "no data" on either surface.
+            empty: dark ? '#1a3a5c' : (c.surfaceHover || '#e6e6e6'),
+            isDark: dark,
+        };
+    }, [theme]);
 };
 
 // FYE month order: Apr(4)…Dec(12), Jan(1)…Mar(3)
@@ -57,14 +101,14 @@ const calcCurrentFye = () => {
     return m >= 4 ? y - 1999 : y - 2000;
 };
 
-const cardStyle = {
+const cardStyleOf = (C) => ({
     background: C.card,
     border: `1px solid ${C.border}`,
     borderRadius: 8,
     padding: '14px 18px',
-};
+});
 
-const sectionTitle = (label) => (
+const sectionTitle = (label, C) => (
     <div style={{ color: C.cyan, fontWeight: 700, fontSize: 12, letterSpacing: '0.1em',
                   textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`,
                   paddingBottom: 6, marginBottom: 12 }}>
@@ -73,8 +117,8 @@ const sectionTitle = (label) => (
 );
 
 // ── KPI Card ────────────────────────────────────────────────────────────────
-const KpiCard = ({ label, value, color, sub }) => (
-    <div style={{ ...cardStyle, textAlign: 'center', borderTop: `3px solid ${color}` }}>
+const KpiCard = ({ label, value, color, sub, C }) => (
+    <div style={{ ...cardStyleOf(C), textAlign: 'center', borderTop: `3px solid ${color}` }}>
         <div style={{ color: C.textSec, fontSize: 11, textTransform: 'uppercase',
                       letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
         <div style={{ color, fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
@@ -85,13 +129,13 @@ const KpiCard = ({ label, value, color, sub }) => (
 );
 
 // ── Donut with center label ─────────────────────────────────────────────────
-const DonutChart = ({ data, colors, centerLabel, centerSub, size = 140 }) => {
+const DonutChart = ({ data, colors, centerLabel, centerSub, size = 140, C }) => {
     const total = data.reduce((s, d) => s + d.value, 0);
     const chartData = {
         labels: data.map(d => d.name),
         datasets: [{
             data: total > 0 ? data.map(d => d.value) : [1],
-            backgroundColor: total > 0 ? colors : ['#1a3a5c'],
+            backgroundColor: total > 0 ? colors : [C.empty],
             borderColor: C.card,
             borderWidth: 3,
             hoverOffset: 6,
@@ -124,6 +168,9 @@ const DonutChart = ({ data, colors, centerLabel, centerSub, size = 140 }) => {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function InspectionResultDashboard() {
+    // Every `C.*` below now reads the active theme; the series half flips with its lightness.
+    const C = useColors();
+    const cardStyle = cardStyleOf(C);
     const [fye,        setFye]        = useState(calcCurrentFye());
     const [month,      setMonth]      = useState(0);
     const [data,       setData]       = useState(null);
@@ -191,7 +238,7 @@ export default function InspectionResultDashboard() {
                     label: 'On Time',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.onTime ?? 0), prev?.onTime ?? null),
                     // muted green for the avg baseline bar, normal green for the FYE months
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => 'rgba(82,196,26,0.7)'), 'rgba(82,196,26,0.3)'),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.green, 0.7)), hexToRgba(C.green, 0.3)),
                     borderColor: C.green,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -202,7 +249,7 @@ export default function InspectionResultDashboard() {
                     type: 'bar',
                     label: 'Delay',
                     data: lead(FYE_MONTH_NUMS.map(num => byMonth[num]?.delay ?? 0), prev?.delay ?? null),
-                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => 'rgba(255,77,79,0.7)'), 'rgba(255,77,79,0.3)'),
+                    backgroundColor: lead(FYE_MONTH_NUMS.map(() => hexToRgba(C.red, 0.7)), hexToRgba(C.red, 0.3)),
                     borderColor: C.red,
                     borderWidth: 1,
                     stack: 'monthly',
@@ -214,7 +261,7 @@ export default function InspectionResultDashboard() {
                     label: '% On Time',
                     data: lead(ontimePctData, prev?.onTimePct ?? null),
                     borderColor: C.yellow,
-                    backgroundColor: 'rgba(255,197,61,0.15)',
+                    backgroundColor: hexToRgba(C.yellow, 0.15),
                     tension: 0.4,
                     fill: false,
                     pointRadius: 4,
@@ -236,7 +283,7 @@ export default function InspectionResultDashboard() {
                     type: 'line',
                     label: 'Target 90%',
                     data: labels.map(() => 90),
-                    borderColor: 'rgba(255,77,79,0.85)',
+                    borderColor: hexToRgba(C.red, 0.85),
                     borderWidth: 1.5,
                     borderDash: [6, 4],
                     pointRadius: 0,
@@ -331,7 +378,7 @@ export default function InspectionResultDashboard() {
                 label: 'Received (pcs)',
                 data: dailyArr.map(d => d.received),
                 borderColor: C.cyan,
-                backgroundColor: 'rgba(0,212,255,0.1)',
+                backgroundColor: hexToRgba(C.cyan, 0.1),
                 fill: true,
                 tension: 0.3,
                 pointRadius: 3,
@@ -363,7 +410,7 @@ export default function InspectionResultDashboard() {
         labels: delayArr.map(d => d.reason),
         datasets: [{
             data: delayArr.length ? delayArr.map(d => d.count) : [1],
-            backgroundColor: delayArr.length ? delayCauseColors : ['#1a3a5c'],
+            backgroundColor: delayArr.length ? delayCauseColors : [C.empty],
             borderColor: C.card,
             borderWidth: 2,
         }]
@@ -397,7 +444,7 @@ export default function InspectionResultDashboard() {
 
                         {/* ── Header ─────────────────────────────────────────── */}
                         <div style={{
-                            background: 'linear-gradient(90deg, #041c32 0%, #072035 100%)',
+                            background: `linear-gradient(90deg, ${C.bg} 0%, ${C.card} 100%)`,
                             border: `1px solid ${C.border}`, borderRadius: 8,
                             padding: '10px 20px', marginBottom: 12,
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between'
@@ -406,7 +453,7 @@ export default function InspectionResultDashboard() {
                                 <div style={{ color: C.cyan, fontWeight: 800, fontSize: 16,
                                               letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                                     Tooling Inspection Result Dashboard
-                                    <SystemVersionBadge system="tooling-result-dashboard" dark />
+                                    <SystemVersionBadge system="tooling-result-dashboard" dark={C.isDark} />
                                 </div>
                                 <div style={{ color: C.textSec, fontSize: 11 }}>{periodLabel}</div>
                             </div>
@@ -429,12 +476,12 @@ export default function InspectionResultDashboard() {
 
                         {/* ── KPI Row ─────────────────────────────────────────── */}
                         <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
-                            <Col flex="1"><KpiCard label="Total PO" value={kpi?.totalPO}  color={C.blue}   /></Col>
-                            <Col flex="1"><KpiCard label="Total Tooling Qty" value={kpi?.totalQty} color={C.cyan}   /></Col>
-                            <Col flex="1"><KpiCard label="On Time" value={kpi?.onTime}  color={C.green}  /></Col>
-                            <Col flex="1"><KpiCard label="Delay"   value={kpi?.delay}   color={C.red}    /></Col>
-                            <Col flex="1"><KpiCard label="Accept"  value={kpi?.accept}  color={C.yellow} /></Col>
-                            <Col flex="1"><KpiCard label="Reject"  value={kpi?.reject}  color={C.orange} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Total PO" value={kpi?.totalPO}  color={C.blue}   /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Total Tooling Qty" value={kpi?.totalQty} color={C.cyan}   /></Col>
+                            <Col flex="1"><KpiCard C={C} label="On Time" value={kpi?.onTime}  color={C.green}  /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Delay"   value={kpi?.delay}   color={C.red}    /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Accept"  value={kpi?.accept}  color={C.yellow} /></Col>
+                            <Col flex="1"><KpiCard C={C} label="Reject"  value={kpi?.reject}  color={C.orange} /></Col>
                         </Row>
 
                         {/* ── Charts Row 1 ────────────────────────────────────── */}
@@ -443,12 +490,12 @@ export default function InspectionResultDashboard() {
                             {/* Judgement Ratio */}
                             <Col xs={24} md={3}>
                                 <div style={{ ...cardStyle, height: 310 }}>
-                                    {sectionTitle('Judgement Ratio')}
+                                    {sectionTitle('Judgement Ratio', C)}
                                     {(() => {
                                         const judged = (kpi?.accept || 0) + (kpi?.reject || 0);
                                         const acceptPct = judged > 0 ? ((kpi.accept / judged) * 100).toFixed(1) : 0;
                                         return (<>
-                                            <DonutChart
+                                            <DonutChart C={C}
                                                 data={data?.judgementRatio || []}
                                                 colors={[C.green, C.red]}
                                                 centerLabel={judged > 0 ? `${acceptPct}%` : '-'}
@@ -463,8 +510,8 @@ export default function InspectionResultDashboard() {
                             {/* Status Ratio */}
                             <Col xs={24} md={3}>
                                 <div style={{ ...cardStyle, height: 310 }}>
-                                    {sectionTitle('Status Ratio')}
-                                    <DonutChart
+                                    {sectionTitle('Status Ratio', C)}
+                                    <DonutChart C={C}
                                         data={data?.statusRatio || []}
                                         colors={[C.blue, C.red]}
                                         centerLabel={kpi ? `${kpi.onTimePct}%` : '-'}
@@ -477,7 +524,7 @@ export default function InspectionResultDashboard() {
                             {/* Monthly Trend */}
                             <Col xs={24} md={14}>
                                 <div style={{ ...cardStyle, height: 310 }}>
-                                    {sectionTitle(`Monthly Trend — FYE${fye}`)}
+                                    {sectionTitle(`Monthly Trend — FYE${fye}`, C)}
                                     <div style={{ height: 255 }}>
                                         <Bar data={buildMonthlyChart()} options={monthlyChartOpts} />
                                     </div>
@@ -487,7 +534,7 @@ export default function InspectionResultDashboard() {
                             {/* Root Cause for Delay */}
                             <Col xs={24} md={4}>
                                 <div style={{ ...cardStyle, height: 310, overflow: 'hidden' }}>
-                                    {sectionTitle('Root Cause for Delay')}
+                                    {sectionTitle('Root Cause for Delay', C)}
                                     {delayArr.length === 0
                                         ? <div style={{ color: C.textSec, fontSize: 12, textAlign: 'center', paddingTop: 40 }}>No delay</div>
                                         : (() => {
@@ -516,7 +563,6 @@ export default function InspectionResultDashboard() {
                                                 </div>
                                             </>;
                                         })()}
-                                    }
                                 </div>
                             </Col>
                         </Row>
@@ -527,7 +573,7 @@ export default function InspectionResultDashboard() {
                             {/* WC / PIC Breakdown — md=6 (aligns under Judgement+Status) */}
                             <Col xs={24} md={6}>
                                 <div style={{ ...cardStyle, height: 360 }}>
-                                    {sectionTitle('Total PO Issue of Each W/C')}
+                                    {sectionTitle('Total PO Issue of Each W/C', C)}
                                     <div style={{ height: 305, overflowY: 'auto' }}>
                                         {wcData.length > 0
                                             ? <Bar data={wcChartData} options={wcChartOpts} />
@@ -540,7 +586,7 @@ export default function InspectionResultDashboard() {
                             {/* Daily Issued — md=14 (aligns under Monthly Trend) */}
                             <Col xs={24} md={14}>
                                 <div style={{ ...cardStyle, height: 360 }}>
-                                    {sectionTitle('Daily Tooling Issued')}
+                                    {sectionTitle('Daily Tooling Issued', C)}
                                     <div style={{ height: 305 }}>
                                         {dailyArr.length > 0
                                             ? <Line data={dailyChartData} options={dailyChartOpts} />
@@ -553,7 +599,7 @@ export default function InspectionResultDashboard() {
                             {/* Measuring Tools — md=4 (aligns under Root Cause) */}
                             <Col xs={24} md={4}>
                                 <div style={{ ...cardStyle, height: 360, overflowY: 'auto' }}>
-                                    {sectionTitle('Measuring Tools')}
+                                    {sectionTitle('Measuring Tools', C)}
                                     {(data?.measuringTools || []).length === 0
                                         ? <div style={{ color: C.textSec, fontSize: 12, textAlign: 'center', paddingTop: 40 }}>No data</div>
                                         : (data?.measuringTools || []).map((t, i) => (
@@ -583,7 +629,7 @@ export default function InspectionResultDashboard() {
 
                         {/* ── Detail Table ─────────────────────────────────────── */}
                         <div style={{ ...cardStyle, marginTop: 10 }}>
-                            {sectionTitle('Inspection Records')}
+                            {sectionTitle('Inspection Records', C)}
                             <Table
                                 className="dark-inspect-table"
                                 dataSource={data?.detailRows || []}
@@ -632,17 +678,17 @@ export default function InspectionResultDashboard() {
             </Layout>
 
             <style>{`
-                .dark-select .ant-select-item { background: #0d1f35; color: #e8f4ff; }
-                .dark-select .ant-select-item-option-selected { background: #1890ff22; }
-                .dark-select .ant-select-item-option-active { background: #0e3a5c; }
-                .dark-inspect-table .ant-table { background: #072035; color: #e8f4ff; }
-                .dark-inspect-table .ant-table-thead > tr > th { background: #041c32; color: #6fa3c7; border-bottom: 1px solid #0e3a5c; font-size: 11px; }
-                .dark-inspect-table .ant-table-tbody > tr > td { background: #072035; color: #e8f4ff; border-bottom: 1px solid #0a2a42; font-size: 12px; }
-                .dark-inspect-table .ant-table-tbody > tr:hover > td { background: #0e3a5c !important; }
-                .dark-inspect-table .ant-pagination { color: #6fa3c7; }
-                .dark-inspect-table .ant-pagination-item a { color: #6fa3c7; }
-                .dark-inspect-table .ant-pagination-item-active a { color: #1890ff; }
-                .dark-inspect-table .ant-table-column-sorter { color: #6fa3c7; }
+                .dark-select .ant-select-item { background: ${C.card}; color: ${C.textPri}; }
+                .dark-select .ant-select-item-option-selected { background: ${hexToRgba(C.blue, 0.13)}; }
+                .dark-select .ant-select-item-option-active { background: ${C.border}; }
+                .dark-inspect-table .ant-table { background: ${C.card}; color: ${C.textPri}; }
+                .dark-inspect-table .ant-table-thead > tr > th { background: ${C.bg}; color: ${C.textSec}; border-bottom: 1px solid ${C.border}; font-size: 11px; }
+                .dark-inspect-table .ant-table-tbody > tr > td { background: ${C.card}; color: ${C.textPri}; border-bottom: 1px solid ${hexToRgba(C.border, 0.6)}; font-size: 12px; }
+                .dark-inspect-table .ant-table-tbody > tr:hover > td { background: ${C.border} !important; }
+                .dark-inspect-table .ant-pagination { color: ${C.textSec}; }
+                .dark-inspect-table .ant-pagination-item a { color: ${C.textSec}; }
+                .dark-inspect-table .ant-pagination-item-active a { color: ${C.blue}; }
+                .dark-inspect-table .ant-table-column-sorter { color: ${C.textSec}; }
             `}</style>
         </Layout>
     );

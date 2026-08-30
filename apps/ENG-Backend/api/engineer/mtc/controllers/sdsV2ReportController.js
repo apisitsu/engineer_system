@@ -7,6 +7,8 @@ const tselectFallback = require('../services/tselectFallback');
 const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
 const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
+const templateBConformance = require('../services/templateBConformance');
+const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 // SDS coverage-report config is part of the SDS admin surface.
 const isAdmin = hasFeature('sds_admin');
@@ -1006,6 +1008,110 @@ router.get('/access-log', async (req, res) => {
   }
 });
 
+
+/**
+ * GET /api/sds/v2/report/print-log
+ * Paged history of SDS PDFs actually produced (`sds_print_log`).
+ *
+ * Distinct from /access-log, which records who OPENED a sheet. This records what was
+ * PRINTED — and is written by services/sdsPrintLog.js from both PDF paths, so it is the
+ * one place that shows the deep-link traffic from Ball_Grinding_Plan alongside in-app use.
+ *
+ * Filters are all optional and AND together: cn (either spelling), machine, process, lot,
+ * source ('app' | 'public'), and a from/to date window on printed_at. `lotState` narrows
+ * on the three-way `lot_verified` — 'verified' | 'unverified' | 'none' — which is the
+ * distinction the column exists to preserve (see the migration header).
+ *
+ * `tooling_snapshot` is returned as-is: it is the fixture list AS PRINTED, and the only
+ * field that can answer "was this sheet the same as that one" — `pdf_sha256` cannot,
+ * because Chrome stamps a generation timestamp into every PDF, so two renders of an
+ * identical sheet one second apart differ by exactly those bytes.
+ */
+router.get('/print-log', async (req, res) => {
+  const { cn, machine, process: processCode, lot, source, lotState, client, from, to } = req.query;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  const where = [];
+  const params = [];
+  const add = (sql, val) => { params.push(val); where.push(sql.replace('$?', `$${params.length}`)); };
+
+  if (cn && cn.trim()) {
+    // The table stores both spellings — `C35-00164` and `350164` — and a user types
+    // whichever they have in hand, often only the first digits of it. So all three arms
+    // are PARTIAL matches: an exact compare on item_no meant "35016" found nothing while
+    // "350164" worked, which reads as the search being broken. The canonical control-no is
+    // still derived so that typing the item number finds the row by its `cn` too.
+    const raw = cn.trim();
+    const ctrl = cnFormat.toControlNo(raw) || raw;
+    params.push(`%${raw}%`, `%${ctrl}%`);
+    where.push(`(cn ILIKE $${params.length - 1} OR item_no ILIKE $${params.length - 1} OR cn ILIKE $${params.length})`);
+  }
+  // One box searches both the model and the floor code — a user knows the sheet by one or
+  // the other, rarely by which of the two the row happens to store.
+  if (machine && machine.trim()) {
+    params.push(`%${machine.trim()}%`);
+    where.push(`(machine_type_name ILIKE $${params.length} OR machine_code ILIKE $${params.length})`);
+  }
+  if (processCode && processCode.trim()) add('process_code = $?', processCode.trim());
+  if (lot && lot.trim())              add('lot_no ILIKE $?', `%${lot.trim()}%`);
+  if (source && source.trim())        add('source = $?', source.trim());
+  // "which computer asked" — matched against the resolved name or the raw address, since
+  // a host with no PTR record is only ever identifiable by its IP.
+  if (client && client.trim()) {
+    params.push(`%${client.trim()}%`);
+    where.push(`(client_host ILIKE $${params.length} OR client_ip ILIKE $${params.length})`);
+  }
+  if (from && from.trim())            add('printed_at >= $?', from.trim());
+  if (to && to.trim())                add('printed_at < ($?::date + 1)', to.trim());
+
+  if (lotState === 'verified')        where.push('lot_verified IS TRUE');
+  else if (lotState === 'unverified') where.push('lot_verified IS FALSE');
+  else if (lotState === 'none')       where.push('lot_no IS NULL');
+
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  try {
+    const { rows: countRows } = await engPool.query(
+      `SELECT count(*)::int AS total FROM ${TABLES.SDS_PRINT_LOG} ${clause}`, params);
+
+    const { rows } = await engPool.query(
+      `SELECT id, cn, item_no, parts_no, parts_name, lot_no, lot_verified,
+              machine_type_name, machine_code, process_code, source, requested_by,
+              pdf_sha256, pdf_bytes, tooling_snapshot, client_ip, client_host, printed_at
+         FROM ${TABLES.SDS_PRINT_LOG} ${clause}
+        ORDER BY printed_at DESC, id DESC
+        LIMIT ${limit} OFFSET ${offset}`, params);
+
+    res.json({ success: true, total: countRows[0].total, page, limit, rows });
+  } catch (e) {
+    console.error('[print-log]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/** GET /api/sds/v2/report/print-log/facets — distinct values for the filter dropdowns. */
+router.get('/print-log/facets', async (_req, res) => {
+  try {
+    const { rows } = await engPool.query(
+      `SELECT
+         (SELECT array_agg(DISTINCT machine_type_name ORDER BY machine_type_name)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE machine_type_name IS NOT NULL) AS machines,
+         (SELECT array_agg(DISTINCT machine_code ORDER BY machine_code)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE machine_code IS NOT NULL) AS machine_codes,
+         (SELECT array_agg(DISTINCT process_code ORDER BY process_code)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE process_code IS NOT NULL) AS processes,
+         (SELECT array_agg(DISTINCT source ORDER BY source)
+            FROM ${TABLES.SDS_PRINT_LOG}) AS sources,
+         (SELECT array_agg(DISTINCT coalesce(client_host, client_ip) ORDER BY coalesce(client_host, client_ip))
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE client_ip IS NOT NULL) AS clients`);
+    res.json({ success: true, ...rows[0] });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 /**
  * POST /api/sds/v2/report/parameters/bulk-import
  * Bulk-upsert sds_parameter rows from CSV payload.
@@ -1068,6 +1174,117 @@ router.get('/config', async (req, res) => {
   try {
     res.json({ success: true, data: await getReportScope(), defaults: DEFAULT_REPORT_SCOPE });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── TEMPLATE_B conformance ───────────────────────────────────────────────────
+// Cheap enough (~1.5 s: one workbook parse plus four queries) that it needs none of the
+// coverage report's 202/poll machinery — a short TTL and a persisted copy are enough.
+// The persisted row is what makes a fresh process answer instantly instead of parsing
+// 31 sheets for the first caller.
+const CONFORMANCE_TTL_MS = 10 * 60 * 1000;
+let _conformanceCache = null;
+
+async function loadPersistedConformance() {
+  try {
+    await ensureCoverageTable();
+    const r = await engPool.query(
+      `SELECT data, built_at FROM sds_coverage_cache WHERE id = 'template_b_conformance' LIMIT 1`);
+    if (r.rows[0] && r.rows[0].data?.kpi?.pairsInTemplateB > 0) {
+      return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    }
+  } catch (e) { console.error('[SDS Report] load persisted conformance failed:', e.message); }
+  return null;
+}
+
+/**
+ * GET /api/sds/v2/report/template-b-conformance
+ *
+ * How much of TEMPLATE_B the live Machine Tool Config covers, per (machine, process).
+ * `?refresh=1` rebuilds instead of serving the cache — use it right after editing config,
+ * which is the whole reason this is a page rather than a static export.
+ */
+router.get('/template-b-conformance', async (req, res) => {
+  try {
+    if (!_conformanceCache && !req.query.refresh) {
+      const persisted = await loadPersistedConformance();
+      if (persisted) _conformanceCache = persisted;
+    }
+    const fresh = _conformanceCache && Date.now() - _conformanceCache.at < CONFORMANCE_TTL_MS;
+    if (!req.query.refresh && fresh) {
+      return res.json({ ..._conformanceCache.data, cached: true,
+                        cachedAt: new Date(_conformanceCache.at).toISOString() });
+    }
+
+    const data = await templateBConformance.build();
+    const at = Date.now();
+    _conformanceCache = { at, data };
+    // fire-and-forget: a persist failure must not fail the request
+    ensureCoverageTable()
+      .then(() => engPool.query(
+        `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('template_b_conformance', $1, $2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = EXCLUDED.built_at`,
+        [data, new Date(at)]))
+      .catch((e) => console.error('[SDS Report] persist conformance failed:', e.message));
+
+    res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[SDS Report] template-b-conformance:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Selection-condition conformance ─────────────────────────────────────────
+// Sibling of the TEMPLATE_B page: does every tooling the index workbook
+// (20260202_Tooling_Excel_List.xlsm) puts in Tooling Select scope actually have a
+// selection rule (formula + search_rule), a per-C/N pin, or a recorded reason it has
+// neither. Same cheap shape — a short TTL plus a persisted copy.
+let _selCondCache = null;
+
+async function loadPersistedSelCond() {
+  try {
+    await ensureCoverageTable();
+    const r = await engPool.query(
+      `SELECT data, built_at FROM sds_coverage_cache WHERE id = 'selection_condition_conformance' LIMIT 1`);
+    if (r.rows[0] && r.rows[0].data?.kpi?.scoped > 0) {
+      return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    }
+  } catch (e) { console.error('[SDS Report] load persisted selection-cond failed:', e.message); }
+  return null;
+}
+
+/**
+ * GET /api/sds/v2/report/selection-condition-conformance
+ *
+ * Per scoped tooling family: whether the live config can actually SELECT it.
+ * `?refresh=1` rebuilds instead of serving the 10-min cache.
+ */
+router.get('/selection-condition-conformance', async (req, res) => {
+  try {
+    if (!_selCondCache && !req.query.refresh) {
+      const persisted = await loadPersistedSelCond();
+      if (persisted) _selCondCache = persisted;
+    }
+    const fresh = _selCondCache && Date.now() - _selCondCache.at < CONFORMANCE_TTL_MS;
+    if (!req.query.refresh && fresh) {
+      return res.json({ ..._selCondCache.data, cached: true,
+                        cachedAt: new Date(_selCondCache.at).toISOString() });
+    }
+
+    const data = await selectionConditionConformance.build();
+    const at = Date.now();
+    _selCondCache = { at, data };
+    ensureCoverageTable()
+      .then(() => engPool.query(
+        `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('selection_condition_conformance', $1, $2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = EXCLUDED.built_at`,
+        [data, new Date(at)]))
+      .catch((e) => console.error('[SDS Report] persist selection-cond failed:', e.message));
+
+    res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[SDS Report] selection-condition-conformance:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

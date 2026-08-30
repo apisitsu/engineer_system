@@ -1,0 +1,868 @@
+<title>Tooling Workbook Anatomy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Palette: gauge-block steel. Cool neutrals biased green-grey,
+   a blueprint blue for keys and paths, an oxide amber for the
+   places a link or a key does not resolve, and a literal grey
+   swatch because TEMPLATE_B's grey fill is content.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --paper:      #F1F3F2;
+  --surface:    #FAFBFA;
+  --surface-2:  #E7EBE9;
+  --ink:        #151E1C;
+  --ink-2:      #3E4C49;
+  --ink-3:      #6C7B77;
+  --rule:       #CFD6D3;
+  --rule-soft:  #DFE4E2;
+
+  --blue:       #1D5B7E;
+  --blue-soft:  #DCE9F0;
+  --amber:      #9C5410;
+  --amber-soft: #F4E7D6;
+  --moss:       #3F6B4A;
+  --moss-soft:  #DDE9DF;
+  --swatch:     #C8CCCA;
+
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans Thai", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --measure: 68ch;
+  --step--1: clamp(.78rem, .76rem + .1vw, .84rem);
+  --step-0:  clamp(.95rem, .92rem + .15vw, 1.02rem);
+  --step-1:  clamp(1.15rem, 1.08rem + .3vw, 1.3rem);
+  --step-2:  clamp(1.45rem, 1.3rem + .6vw, 1.8rem);
+  --step-3:  clamp(1.9rem, 1.6rem + 1.2vw, 2.7rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#101615; --surface:#171F1D; --surface-2:#1F2A28;
+    --ink:#E6EBE9; --ink-2:#B3BFBB; --ink-3:#7E8D89;
+    --rule:#2C3A37; --rule-soft:#232F2D;
+    --blue:#7FB6D4; --blue-soft:#16303D;
+    --amber:#D9A465; --amber-soft:#33240F;
+    --moss:#8CBE99; --moss-soft:#17281B;
+    --swatch:#3A4442;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#101615; --surface:#171F1D; --surface-2:#1F2A28;
+  --ink:#E6EBE9; --ink-2:#B3BFBB; --ink-3:#7E8D89;
+  --rule:#2C3A37; --rule-soft:#232F2D;
+  --blue:#7FB6D4; --blue-soft:#16303D;
+  --amber:#D9A465; --amber-soft:#33240F;
+  --moss:#8CBE99; --moss-soft:#17281B;
+  --swatch:#3A4442;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--step-0);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 4vw, 2.5rem) 6rem;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.mast { display: flex; flex-direction: column; gap: 1.1rem; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: var(--step--1);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex; flex-wrap: wrap; gap: .5rem 1.1rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--step-3);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+
+.standfirst {
+  margin: 0; max-width: var(--measure);
+  font-size: var(--step-1); font-weight: 300; line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.scope {
+  border-left: 3px solid var(--blue);
+  background: var(--blue-soft);
+  padding: .95rem 1.15rem;
+  font-size: var(--step--1);
+  line-height: 1.6;
+  max-width: var(--measure);
+}
+
+.files {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: .6rem;
+}
+.file { background: var(--surface); padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: .35rem; }
+.file b { font-family: var(--mono); font-size: var(--step--1); font-weight: 600; color: var(--blue); word-break: break-all; }
+.file span { font-size: var(--step--1); color: var(--ink-3); }
+.file p { margin: .3rem 0 0; font-size: var(--step--1); color: var(--ink-2); line-height: 1.5; }
+
+section { display: flex; flex-direction: column; gap: 1.4rem; }
+
+h2 {
+  margin: 0; font-size: var(--step-2); font-weight: 600;
+  letter-spacing: -.015em; line-height: 1.2; text-wrap: balance;
+  padding-top: 1.4rem; border-top: 2px solid var(--ink);
+}
+h3 { margin: 1.2rem 0 0; font-size: var(--step-1); font-weight: 600; letter-spacing: -.01em; }
+h4 {
+  margin: 0; font-family: var(--mono); font-size: var(--step--1);
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+}
+p { margin: 0; max-width: var(--measure); }
+.lede { color: var(--ink-2); }
+
+code, .m { font-family: var(--mono); font-size: .92em; }
+code { background: var(--surface-2); padding: .1em .38em; border-radius: 2px; word-break: break-word; }
+.jp { font-family: "Noto Sans JP", var(--sans); }
+
+.flow {
+  display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+.stage {
+  background: var(--surface); padding: 1.25rem 1.15rem 1.4rem;
+  display: flex; flex-direction: column; gap: .8rem;
+}
+.stage-n { font-family: var(--mono); font-size: var(--step--1); font-weight: 600; color: var(--blue); letter-spacing: .1em; }
+.stage h5 { margin: 0; font-size: var(--step-0); font-weight: 600; line-height: 1.35; }
+.stage p { font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; }
+
+.node { border-left: 3px solid var(--rule); padding: .45rem 0 .45rem .7rem; font-size: var(--step--1); line-height: 1.45; }
+.node b { display: block; font-family: var(--mono); font-weight: 600; font-size: .95em; }
+.node span { color: var(--ink-3); }
+.node.src { border-left-color: var(--blue); }
+.node.ok  { border-left-color: var(--moss); }
+.node.gap { border-left-color: var(--amber); }
+
+.scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); min-width: 560px; }
+caption {
+  text-align: left; padding: .85rem 1rem; font-family: var(--mono); font-size: var(--step--1);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 1px solid var(--rule); background: var(--surface-2);
+}
+th, td { text-align: left; padding: .55rem .9rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; line-height: 1.5; }
+thead th { font-weight: 600; font-size: var(--step--1); color: var(--ink-3); border-bottom: 1px solid var(--rule); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+td.k, th.k { font-family: var(--mono); white-space: nowrap; color: var(--blue); font-weight: 500; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+td.jpc { font-family: "Noto Sans JP", var(--sans); white-space: nowrap; }
+
+.note {
+  border-left: 3px solid var(--blue); background: var(--blue-soft);
+  padding: .95rem 1.15rem; font-size: var(--step--1); line-height: 1.6;
+  max-width: var(--measure); display: flex; flex-direction: column; gap: .5rem;
+}
+.note.warn { border-left-color: var(--amber); background: var(--amber-soft); }
+.note.ok   { border-left-color: var(--moss); background: var(--moss-soft); }
+.note b { font-weight: 600; }
+.note p { max-width: none; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.4rem; align-items: start; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: .4em;
+  font-family: var(--mono); font-size: .82em; padding: .12em .5em;
+  border: 1px solid var(--rule); border-radius: 2px; white-space: nowrap;
+}
+.chip.grey  { background: var(--swatch); border-color: var(--swatch); }
+.chip.white { background: var(--surface); }
+
+pre {
+  margin: 0; overflow-x: auto; background: var(--surface); border: 1px solid var(--rule);
+  padding: 1rem 1.15rem; font-family: var(--mono); font-size: var(--step--1);
+  line-height: 1.7; color: var(--ink-2);
+}
+pre b { color: var(--ink); font-weight: 600; }
+pre i { color: var(--ink-3); font-style: normal; }
+pre .bad { color: var(--amber); font-weight: 600; }
+
+ul { margin: 0; padding-left: 1.15rem; max-width: var(--measure); display: flex; flex-direction: column; gap: .5rem; }
+li::marker { color: var(--ink-3); }
+
+/* Cross-check checklist */
+.checks { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.check { background: var(--surface); padding: 1rem 1.2rem; display: grid; grid-template-columns: 2.2rem 1fr; gap: .2rem 1rem; }
+.check .no { font-family: var(--mono); font-weight: 600; color: var(--blue); font-size: var(--step--1); padding-top: .15rem; }
+.check .q { font-weight: 600; font-size: var(--step-0); line-height: 1.4; }
+.check .a { grid-column: 2; font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; }
+
+footer {
+  border-top: 1px solid var(--rule); padding-top: 1.2rem;
+  font-size: var(--step--1); color: var(--ink-3);
+  display: flex; flex-direction: column; gap: .4rem;
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>MTC · แฟ้มต้นทาง</span>
+    <span>G:\ Shared drives \ RD Development Technology Review Request \ Tooling Select</span>
+    <span>อ่านจากไฟล์จริง 2026-08-21</span>
+  </div>
+  <h1>กายวิภาคของสองแฟ้ม Tooling</h1>
+  <p class="standfirst">
+    หน้านี้อธิบายเฉพาะสิ่งที่อยู่<b>ในสองไฟล์ Excel</b> — โครงสร้าง กลไก ข้อตกลงการอ่าน
+    และจุดที่ตัวไฟล์เองไม่สอดคล้องกัน ทุกตัวเลขนับจากไฟล์โดยตรง
+  </p>
+
+  <div class="scope">
+    <b>ขอบเขต</b> — ไม่มีเนื้อหาเกี่ยวกับระบบ Tooling Select เลย ไม่มีตารางฐานข้อมูล
+    ไม่มีสูตรที่ implement ไว้ ไม่มีรายชื่อเครื่องจากระบบ
+    เอกสารนี้ตั้งใจให้เป็น<b>ฝั่งอ้างอิงที่เป็นอิสระ</b> สำหรับเอาไปย้อนตรวจว่าระบบปัจจุบันตรงกับแฟ้มหรือไม่
+    หัวข้อสุดท้ายรวบรวมคำถามที่ควรถามระบบ โดยดึงมาจากตัวแฟ้มล้วน ๆ
+  </div>
+
+  <div class="files">
+    <div class="file">
+      <b>20260202_Tooling_Excel_List.xlsm</b>
+      <span>46,654 bytes · 1 ชีต · 135 แถว · แก้ล่าสุด 2026-08-21 07:58</span>
+      <p><b>ทะเบียนรายการ</b> — “มี tooling list ใบไหนอยู่บ้าง ของเครื่องอะไร กระบวนการอะไร ชื่อไฟล์ว่าอะไร”</p>
+    </div>
+    <div class="file">
+      <b>TEMPLATE_B.xlsx</b>
+      <span>412,238 bytes · 33 ชีต (ซ่อน 1) · แก้ล่าสุด 2026-08-04 07:42</span>
+      <p><b>ใบตรวจต่อตระกูลชิ้นงาน</b> — “ชิ้นงานตระกูลนี้ผ่านกระบวนการอะไรบ้าง แต่ละขั้นใช้จิ๊กเลขแบบไหน และตัวไหนไม่ต้องเลือก”</p>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>สองไฟล์ตอบคนละคำถาม และต้องใช้คู่กัน</h2>
+  <p class="lede">
+    ไม่มีไฟล์ไหนพาไปจาก “ชิ้นงานตัวนี้” ถึง “เปิดไฟล์รายการที่ไหน” ได้ลำพัง
+    ทะเบียนรู้ว่ามีใบไหนบ้างแต่เก็บแค่<b>ชื่อไฟล์</b> ส่วน TEMPLATE_B รู้<b>ที่อยู่เต็ม</b>
+    แต่ไม่รู้ว่าใบนั้นเป็นของเครื่องอะไร ตัวเชื่อมคือ<b>เลขแบบ</b>
+  </p>
+
+  <div class="flow">
+    <div class="stage">
+      <div class="stage-n">ทางเข้า A</div>
+      <h5>เริ่มจากเครื่อง หรือกระบวนการ</h5>
+      <p>ไปที่ทะเบียน กรองคอลัมน์ <span class="jp">工程</span> หรือ <span class="jp">マシン</span></p>
+      <div class="node src">
+        <b>คอลัมน์ A</b>
+        <span>ชื่อไฟล์ — <b>ไม่มี path</b></span>
+      </div>
+      <div class="node src">
+        <b>คอลัมน์ E + F/G/H</b>
+        <span>เลขแบบ + <span class="jp">分類コード</span></span>
+      </div>
+      <div class="node gap">
+        <b>ได้ชื่อไฟล์ ไม่ได้ที่อยู่</b>
+        <span>ต้องข้ามไป TEMPLATE_B ต่อ</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">ทางเข้า B</div>
+      <h5>เริ่มจากตระกูลชิ้นงาน</h5>
+      <p>เปิดชีตของตระกูลนั้นใน TEMPLATE_B อ่านจากบนลงล่างตามลำดับกระบวนการ</p>
+      <div class="node src">
+        <b>คอลัมน์ A–C</b>
+        <span>รหัสกระบวนการ · ชื่อ · เครื่อง</span>
+      </div>
+      <div class="node src">
+        <b>คอลัมน์ E + F</b>
+        <span>ชื่อจิ๊ก + เลขแบบ</span>
+      </div>
+      <div class="node ok">
+        <b>คอลัมน์ M + N</b>
+        <span>เลขมาตรฐาน RE33xxx + เงื่อนไขที่เขียนเป็นคำ</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">จุดบรรจบ</div>
+      <h5>เลขแบบคือกุญแจร่วม</h5>
+      <p>
+        คอลัมน์ F ของ TEMPLATE_B ยิง VLOOKUP เข้าชีตซ่อน <code>LINK LIST</code>
+        แล้วได้ path เต็มกลับมา — ที่อยู่ของไฟล์อยู่ที่นี่ที่เดียวในสองแฟ้ม
+      </p>
+      <div class="node ok">
+        <b>LINK LIST คอลัมน์ B</b>
+        <span>path บนไดรฟ์ U: (ฝั่งญี่ปุ่น)</span>
+      </div>
+      <div class="node ok">
+        <b>LINK LIST คอลัมน์ C</b>
+        <span>ชนิด — EXCEL · ACCESS · W/M · -</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-n">ข้อควรระวัง</div>
+      <h5>รูปแบบกุญแจไม่ตรงกัน</h5>
+      <p>
+        ทะเบียนแยกเลขแบบกับ <span class="jp">分類コード</span> เป็นคนละคอลัมน์
+        และ <b>58 จาก 131 แถวไม่ใส่ <span class="jp">分類コード</span> เลย</b>
+        ส่วน TEMPLATE_B เขียนรวมเป็นสตริงเดียว
+      </p>
+      <div class="node gap">
+        <b>4021 · (ว่าง)</b>
+        <span>ทะเบียน — ได้กุญแจแค่ 4 หลัก</span>
+      </div>
+      <div class="node gap">
+        <b>4021-01-</b>
+        <span>TEMPLATE_B — กุญแจเต็ม</span>
+      </div>
+      <div class="node gap">
+        <b>ผล</b>
+        <span>join ตรง ๆ จะได้ “ช่องว่าง” ปลอมจำนวนมาก</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>แฟ้มที่ 1 — ทะเบียนรายการ <span class="m">20260202_Tooling_Excel_List.xlsm</span></h2>
+  <p class="lede">
+    ชีตเดียวชื่อ <code>Sheet1</code> โครงประกาศไว้ถึง <code>Z153</code> แต่เซลล์จริงจบที่ <code>O136</code> —
+    135 แถวข้อมูล ในจำนวนนี้ <b>131 แถวมีเลขแบบ</b> อีก 4 แถวท้าย (133–136) กรอกไม่ครบ
+  </p>
+
+  <div class="scroll">
+    <table>
+      <caption>Sheet1 — แผนที่คอลัมน์</caption>
+      <thead><tr><th class="k">คอลัมน์</th><th>หัวตาราง</th><th>คืออะไร</th></tr></thead>
+      <tbody>
+        <tr><td class="k">A</td><td class="jpc">リスト Excelファイル名</td><td><b>ชื่อไฟล์เท่านั้น ไม่มี path</b> — เช่น <code>20241223_TOOLING LIST_KS-B80</code> บางแถวมีนามสกุล บางแถวไม่มี</td></tr>
+        <tr><td class="k">B</td><td class="jpc">工程(Process)</td><td>กลุ่มกระบวนการ — <span class="jp">研磨(GRIND)</span>, <span class="jp">組切削(TURN SPH)</span>, <span class="jp">検査(CHECK)</span>, <span class="jp">仕上げ(FINISH)</span>, <span class="jp">松井田(MTD)</span> ฯลฯ</td></tr>
+        <tr><td class="k">C</td><td class="jpc">マシン(Machine)</td><td>ชื่อเครื่องอย่างที่ทะเบียนเรียก — <code>KS-B80</code>, <code>TSG300(SEIBU)</code>, <code>KVD300CRⅡ</code>, <code>BRYANT</code></td></tr>
+        <tr><td class="k">D</td><td class="jpc">詳細(Detail)</td><td>ชนิดงานหรือจิ๊ก — <span class="jp">内研 (ID GRIND)</span>, <span class="jp">球研(OD GRIND)</span>, <span class="jp">溝研</span></td></tr>
+        <tr><td class="k">E</td><td class="jpc">図番(DWG/NO.)</td><td>เลขแบบ ปกติ 4 หลัก แต่มีรูปแบบอื่นปนด้วย — <code>4021・4853</code>, <code>Q-</code>, <code>X-52</code>, <code>CH・RD</code>, <code>GP</code>, <code>B-12</code></td></tr>
+        <tr><td class="k">F G H</td><td class="jpc">分類コード</td><td>รหัสหมวด สูงสุดสามช่อง ต่อกับ E เป็น <code>4664-03</code> · <b>58 จาก 131 แถวเว้นว่างทั้งสามช่อง</b></td></tr>
+        <tr><td class="k">I J</td><td>ACCESS · <span class="jp">←データベース</span></td><td>ธงว่ารายการอยู่ในฐาน Access ไม่ใช่ Excel — <b>8 แถว</b></td></tr>
+        <tr><td class="k">K</td><td class="jpc">治具選定</td><td><code>1</code> = แฟ้มถือว่าตระกูลนี้ทำเป็นระบบเลือกจิ๊กแล้ว — <b>26 แถว</b></td></tr>
+        <tr><td class="k">M</td><td>—</td><td>สูตรตรวจสอบ เทียบ A กับ O</td></tr>
+        <tr><td class="k">O</td><td>—</td><td>ช่องวางเนื้อหาไฟล์ที่พัง ตามคำสั่งในหัวตารางแถว 1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid2">
+    <div class="note">
+      <b>คอลัมน์ <span class="jp">工程</span> คือทางเดียวที่จะเจอจิ๊กบางกลุ่ม</b>
+      <p>
+        จิ๊ก<b>ตรวจสอบ</b>ไม่มีเครื่องเป็นเจ้าของ จึงไม่ปรากฏในโฟลเดอร์ของเครื่องไหนเลย
+        กรอง <span class="jp">工程 = 検査(CHECK)</span> จะได้ 6 แถวตระกูล <code>9901</code> รวมถึง
+        <code>9901-09</code> CONCENTRICITY MEASURING PIN ที่มีไฟล์รายการเป็นของตัวเอง
+        การไล่ดูทีละเครื่องจะไม่มีวันเจอกลุ่มนี้
+      </p>
+    </div>
+    <div class="note warn">
+      <b>สูตรตรวจสอบคอลัมน์ M สะกดผิด ใช้ไม่ได้ทั้งคอลัมน์</b>
+      <p>
+        หัวตารางแถว 1 สั่งไว้ว่า “วางเนื้อหาไฟล์ที่พังลงด้านล่าง แก้ส่วนที่คอลัมน์ M เป็น
+        <code>FALSE</code> แล้วย้ายกลับเข้า A–K”
+      </p>
+      <p>
+        แต่สูตรจริงเขียนว่า <code>=IF(A2=O2,TRUE,<span style="color:var(--amber)">FALESE</span>)</code>
+        Excel อ่าน <code>FALESE</code> เป็นชื่อที่ไม่มีอยู่ ทุกแถวที่ <code>A≠O</code> จึงคืน
+        <code>#NAME?</code> ไม่ใช่ <code>FALSE</code> — ขั้นตอนที่หัวตารางบรรยายไว้ทำตามไม่ได้
+      </p>
+    </div>
+  </div>
+
+  <h3>26 แถวที่แฟ้มติดธง <span class="jp">治具選定</span> = 1</h3>
+  <p class="lede">
+    นี่คือคำประกาศของตัวแฟ้มเองว่าตระกูลไหนถูกทำเป็นระบบเลือกจิ๊กแล้ว
+    เป็นรายการที่ตรงที่สุดสำหรับเอาไปเทียบกับระบบ
+  </p>
+  <div class="scroll">
+    <table>
+      <caption>คอลัมน์ K = 1 · เรียงตามลำดับแถวในชีต</caption>
+      <thead><tr><th class="num">แถว</th><th class="k">図番</th><th class="k">分類コード</th><th>工程</th><th>マシン</th></tr></thead>
+      <tbody>
+        <tr><td class="num">3</td><td class="k">4007</td><td class="k">04</td><td class="jpc">タイ(THAI)</td><td>MAZAK</td></tr>
+        <tr><td class="num">5</td><td class="k">4009</td><td class="k">—</td><td class="jpc">巾切削(MILL)</td><td>BBS KINMEI</td></tr>
+        <tr><td class="num">8</td><td class="k">4021</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>KS-B80</td></tr>
+        <tr><td class="num">11</td><td class="k">4027</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>KS-B22G</td></tr>
+        <tr><td class="num">12</td><td class="k">4029</td><td class="k">66 / 38</td><td class="jpc">研磨(GRIND)</td><td>KS-450C</td></tr>
+        <tr><td class="num">14</td><td class="k">4030</td><td class="k">01 / 02</td><td class="jpc">松井田(MTD)</td><td>KL20</td></tr>
+        <tr><td class="num">17</td><td class="k">4033</td><td class="k">08</td><td class="jpc">研磨(GRIND)</td><td>KS-500RD</td></tr>
+        <tr><td class="num">21</td><td class="k">4516</td><td class="k">01</td><td class="jpc">巾切削(MILL)</td><td>MILL</td></tr>
+        <tr><td class="num">27</td><td class="k">4556</td><td class="k">01 / 14</td><td class="jpc">研磨(GRIND)</td><td>TSG300(SEIBU)</td></tr>
+        <tr><td class="num">29</td><td class="k">4559</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>BRYANT</td></tr>
+        <tr><td class="num">52</td><td class="k">4651</td><td class="k">20</td><td class="jpc">内径仕上げ(FINISH ID)</td><td>FINISH ID</td></tr>
+        <tr><td class="num">58</td><td class="k">4664</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>KS-400B</td></tr>
+        <tr><td class="num">62</td><td class="k">4691</td><td class="k">—</td><td class="jpc">超仕上げ(SUPER FINISH)</td><td>SUPER FINISH</td></tr>
+        <tr><td class="num">72</td><td class="k">4800</td><td class="k">66 / 38</td><td class="jpc">松井田(MTD)</td><td>BONDING</td></tr>
+        <tr><td class="num">74</td><td class="k">4800</td><td class="k">22 / 57 / 61</td><td class="jpc">転造(ROLLING)</td><td>ROLLING</td></tr>
+        <tr><td class="num">87</td><td class="k">4857</td><td class="k">—</td><td class="jpc">組切削(TURN SPH)</td><td>X-100</td></tr>
+        <tr><td class="num">88</td><td class="k">4858</td><td class="k">22</td><td class="jpc">組切削(TURN SPH)</td><td>XD-8</td></tr>
+        <tr><td class="num">90</td><td class="k">4863</td><td class="k">1</td><td class="jpc">マシニング(MACHINING)</td><td class="jpc">スギノ</td></tr>
+        <tr><td class="num">92</td><td class="k">4866</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>TSG300(SEIBU)</td></tr>
+        <tr><td class="num">96</td><td class="k">4879</td><td class="k">—</td><td class="jpc">組切削(TURN SPH)</td><td>J-WAVE</td></tr>
+        <tr><td class="num">98</td><td class="k">4906</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>KS-400B5</td></tr>
+        <tr><td class="num">99</td><td class="k">4907</td><td class="k">01</td><td class="jpc">超仕上げ(SUPER FINISH)</td><td>SUPER FINISH</td></tr>
+        <tr><td class="num">104</td><td class="k">4918</td><td class="k">03 / 02</td><td class="jpc">仕上げ(FINISH)</td><td>MARKING</td></tr>
+        <tr><td class="num">107</td><td class="k">4931</td><td class="k">—</td><td class="jpc">研磨(GRIND)</td><td>KS-400B6(KS-400)</td></tr>
+        <tr><td class="num">131</td><td class="k">Q-</td><td class="k">68 / 51</td><td>RECESS</td><td>TURNING</td></tr>
+        <tr><td class="num">132</td><td class="k">X-52</td><td class="k">01</td><td class="jpc">マシニング(MACHINING)</td><td>KEYWAY</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>8 แถวที่รายการอยู่ในฐาน Access</h3>
+  <div class="scroll">
+    <table>
+      <caption>คอลัมน์ I = ACCESS · ปลายทาง <code>\\pk4473\rdengnr\製造技術\DATABASE\TOOL寸法.mdb</code></caption>
+      <thead><tr><th class="num">แถว</th><th class="k">図番</th><th>工程</th><th>マシン</th><th>รายการ</th></tr></thead>
+      <tbody>
+        <tr><td class="num">19</td><td class="k">4501</td><td class="jpc">組切削(TURN SPH)</td><td>FTL</td><td>COLLET CHUCK</td></tr>
+        <tr><td class="num">48</td><td class="k">4649</td><td>BLANK HEAD</td><td>TURNING</td><td>SHANK HOLDER</td></tr>
+        <tr><td class="num">49</td><td class="k">4651</td><td class="jpc">内径仕上げ</td><td>TURNING</td><td class="jpc">クランププレート</td></tr>
+        <tr><td class="num">50</td><td class="k">4651</td><td class="jpc">内径仕上げ</td><td>TURNING</td><td class="jpc">ボディーホルダー</td></tr>
+        <tr><td class="num">56</td><td class="k">4657</td><td class="jpc">松井田(MTD)</td><td>FO-1</td><td class="jpc">トリム(TRIM)</td></tr>
+        <tr><td class="num">107</td><td class="k">4931</td><td class="jpc">研磨(GRIND)</td><td>KS-400B6</td><td>PILOT PIN</td></tr>
+        <tr><td class="num">108</td><td class="k">9713</td><td class="jpc">検査(CHECK)</td><td>TORQUE</td><td class="jpc">揺動トルク</td></tr>
+        <tr><td class="num">109</td><td class="k">9732</td><td class="jpc">検査(CHECK)</td><td>AX</td><td class="jpc">抜け荷重</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note warn">
+    <b>แถว 107 ติดทั้งสองธงพร้อมกัน</b>
+    <p>
+      <code>4931 KS-400B6</code> เป็น <span class="jp">治具選定</span> = 1 <b>และ</b> ชี้ไป ACCESS
+      ชื่อไฟล์ในคอลัมน์ A ยังเขียนกำกับว่า
+      <span class="jp">（計算式追加予定_山本）</span> — “จะเพิ่มสูตรทีหลัง”
+      แถวเดียวที่บอกทั้งว่าทำแล้ว ยังทำไม่เสร็จ และข้อมูลอยู่นอก Excel
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>แฟ้มที่ 2 — ใบตรวจตระกูลชิ้นงาน <span class="m">TEMPLATE_B.xlsx</span></h2>
+  <p class="lede">
+    33 ชีต — <code>LINK LIST</code> (ซ่อน) + <code>TEMPLATE</code> (แม่แบบเปล่า) + <b>31 ชีตตระกูลชิ้นงาน</b>
+    หนึ่งชีตคือหนึ่งตระกูล ไม่ใช่หนึ่งเครื่อง
+  </p>
+
+  <div class="scroll">
+    <table>
+      <caption>31 ชีตตระกูล เรียงตามลำดับในสมุด</caption>
+      <thead><tr><th>กลุ่ม</th><th>ชีต</th></tr></thead>
+      <tbody>
+        <tr><td><b>Body</b></td><td class="k">M-BODY · F-BODY · ABR BODY · ROLLER BODY · <span class="jp">レシプロボディ</span></td></tr>
+        <tr><td><b>Race / Sleeve</b></td><td class="k">RACE · RACE2 · SLEEVE · SLEEVE IDG · BOEING SLEEVE</td></tr>
+        <tr><td><b>Ball</b></td><td class="k">BALL(1) · BALL(2) · BALL(3) · BALL(4) · BALL(<span class="jp">内径にTFE</span>) · BALL(5) · BALL(6) · INNER in BALL</td></tr>
+        <tr><td><b>SPH</b></td><td class="k">SPH(DT) · SPH(D→T) · SPH(D→DT) · SPH <span class="jp">中型</span> · JWAVE · <span class="jp">レシプロ－</span></td></tr>
+        <tr><td><b>Assembly / อื่น ๆ</b></td><td class="k">3PCS · <span class="jp">ボール入りRD</span> · S_ROLLER_ASSY · D_ROLLER_ASSY · ROLLER PIN · LOCK NUT · PB Ring</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>ชีตตระกูล — แผนที่คอลัมน์ (หัวตารางยกจาก M-BODY แถว 6)</caption>
+      <thead><tr><th class="k">คอลัมน์</th><th>หัวตาราง</th><th>คืออะไร</th></tr></thead>
+      <tbody>
+        <tr><td class="k">A</td><td>Process No,</td><td>รหัสกระบวนการ 4 หลัก — <code>0091</code>, <code>0311</code>, <code>1121</code> · หนึ่งเซลล์อาจมีสองรหัสคั่นบรรทัด</td></tr>
+        <tr><td class="k">B</td><td>Process</td><td>ชื่อกระบวนการ — <code>BLANK HEAD</code>, <code>MILL</code>, <code>ROUGH FINISH ID</code>, <code>ID SPH GRIND</code></td></tr>
+        <tr><td class="k">C</td><td>(รวมกับ B)</td><td>เครื่อง หรือเงื่อนไขแตกแขนง — <code>OKK</code> / <code>KINMEI</code>, <span class="jp">※Male screw おねじ</span></td></tr>
+        <tr><td class="k">D</td><td>New DWG</td><td>ช่องกรอกเลขแบบใหม่ ปกติว่าง</td></tr>
+        <tr><td class="k">E</td><td>Name</td><td>ชื่อจิ๊ก — <code>BODY COLLET</code>, <code>HYDRA GRIP</code>, <code>QUILL</code>, <code>ROTARY DREESER</code></td></tr>
+        <tr><td class="k">F</td><td>DWG/No.</td><td><b>กุญแจของทั้งไฟล์</b> — <code>4007-04-</code>, <code>4651-20-</code>, <code>Q-51-</code> ปกติลงท้ายด้วยขีด</td></tr>
+        <tr><td class="k">I</td><td>Rev</td><td>ส่วนต่อท้าย — <code>-99</code> (ASSY), <code>-01</code>…<code>-04</code> (ชิ้นส่วน)</td></tr>
+        <tr><td class="k">J K L</td><td>T.D.S. · CHECK T.D.S · ASSY Confirm</td><td>ช่องเซ็นยืนยัน ว่างทั้งหมดในไฟล์แม่แบบ</td></tr>
+        <tr><td class="k">M</td><td>standard</td><td>เลขมาตรฐานการออกแบบ — <code>RE33024</code> <code>RE33025</code> <code>RE33026</code> <code>RE33028</code> <code>RE33034</code> <code>RE33036</code> <code>RE33039</code> <code>RE33040</code> <code>RE33041</code> <code>RE33042</code> <span class="jp">(ในแฟ้มพิมพ์ <code>RE33033</code> ซึ่งเป็นเลขผี — ที่ถูกคือ <code>RE33028</code>)</span></td></tr>
+        <tr><td class="k">N</td><td>NOTE</td><td>เงื่อนไขจริงเป็นภาษาอังกฤษ — วัสดุ ขนาดสูงสุด เหตุผลที่ต้องย้ายเครื่อง</td></tr>
+        <tr><td class="k">O</td><td>DATA</td><td>สูตรลิงก์ <code>=HYPERLINK(VLOOKUP(F8,LINK,2,FALSE),VLOOKUP(F8,LINK,3,FALSE))</code></td></tr>
+        <tr><td class="k">P</td><td>memo</td><td>บันทึกภาษาญี่ปุ่น มีวันที่และชื่อผู้แก้ — <code>20220215 furuta→20260602Yamamoto</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>กลไก VLOOKUP ตัวเดียวที่ผูกทั้งสมุด</h3>
+  <p>
+    <code>LINK LIST</code> ถูกตั้ง <b>hidden</b> ในสมุดงาน และถูกตั้งเป็น named range ชื่อ
+    <code>LINK</code> ครอบ <code>$A$2:$C$197</code> ทุกเซลล์ DATA ของ 31 ชีตยิงเข้าที่นี่ที่เดียว
+  </p>
+
+<pre><b>ชีตตระกูล</b> คอลัมน์ F         <b>LINK LIST</b>  (ซ่อน · named range = LINK · $A$2:$C$197)
+
+  <b>4651-20-</b> ───VLOOKUP(…,2)──►  B  U:\<i>製造技術\yamamoto\…\20150714_TOOLING LIST_薄型ボディホルダー.xls</i>
+             └──VLOOKUP(…,3)──►  C  <b>EXCEL</b>
+                                     ↓                    ↓
+                                  ปลายทางลิงก์          ข้อความที่แสดงในเซลล์
+
+<b>ชนิดในคอลัมน์ C — 191 แถว</b>
+  <b>EXCEL</b>   120   มีไฟล์รายการบนไดรฟ์ U: ฝั่งญี่ปุ่น
+  <b>W/M</b>      48   Working Method — ไม่มีตารางขนาด และ<i>ทุกแถวไม่มี path</i>
+  <b>-</b>        11   ไม่มีอะไรเลย
+  <b>ACCESS</b>    4   อยู่ใน \\pk4473\rdengnr\製造技術\DATABASE\TOOL寸法.mdb
+  <i>(ว่าง)</i>     8   ไม่มีทั้งชนิดและ path ── <span class="bad">แถว 185–192</span></pre>
+
+  <div class="note ok">
+    <b>ลิงก์ 233 จาก 241 เซลล์ทำงานถูกต้อง</b>
+    <p>
+      นับเฉพาะเซลล์ที่มีสูตร <code>HYPERLINK(VLOOKUP(...))</code> จริง มี <b>241 เซลล์</b>
+      ในนั้น <b>233 เซลล์</b> ได้ path จริงกลับมา · <b>1 เซลล์</b> เจอกุญแจแต่ path ว่าง
+      (<code>ROLLER PIN!F39 = NT</code> ชนิด <code>-</code>) · และ <b>7 เซลล์</b> คืน <code>#N/A</code>
+    </p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>7 เซลล์ที่คืน #N/A — กุญแจไม่มีใน LINK LIST</caption>
+      <thead><tr><th class="k">เซลล์</th><th class="k">ค่าในคอลัมน์ F</th><th>สาเหตุ</th></tr></thead>
+      <tbody>
+        <tr><td class="k">F-BODY!F189</td><td class="k">4009-05</td><td>LINK LIST มีแต่ <code>4009-01-</code> และ <code>4009-02-</code></td></tr>
+        <tr><td class="k">D_ROLLER_ASSY!F43</td><td class="k">4561-05</td><td>ตระกูล <code>4561</code> ไม่มีใน LINK LIST เลย</td></tr>
+        <tr><td class="k">PB Ring!F7</td><td class="k">4036-01</td><td>ตระกูล <code>4036</code> ไม่มีใน LINK LIST เลย</td></tr>
+        <tr><td class="k">PB Ring!F8</td><td class="k">4036-02</td><td>เช่นเดียวกัน</td></tr>
+        <tr><td class="k">BALL(4)!F7</td><td class="k">(ว่าง)</td><td>มีสูตรแต่ไม่มีกุญแจ — คัดลอกสูตรลงมาเกินแถวข้อมูล</td></tr>
+        <tr><td class="k">BALL(6)!F7</td><td class="k">(ว่าง)</td><td>เช่นเดียวกัน</td></tr>
+        <tr><td class="k">D_ROLLER_ASSY!F9</td><td class="k">(ว่าง)</td><td>เช่นเดียวกัน</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <b>แปดแถวท้าย LINK LIST ยังกรอกไม่เสร็จ และหลุดจาก autofilter ด้วย</b>
+    <p>
+      แถว 185–192 คือ <code>4931-02-</code> <code>4931-03-</code> <code>4931-06-</code>
+      <code>4931-09-</code> <code>4931-11-</code> <code>4931-12-</code> <code>4931-14-</code>
+      <code>4664-34-</code> — มีแต่เลขแบบ ไม่มีทั้ง path และชนิด
+    </p>
+    <p>
+      ทั้งแปดยังอยู่นอกช่วง autofilter ที่สมุดจำไว้ (<code>$A$1:$C$184</code>)
+      แต่<b>อยู่ในช่วง named range <code>LINK</code></b> (<code>$A$2:$C$197</code>)
+      VLOOKUP จึงเจอกุญแจ แต่ได้ค่าว่างกลับมา — ไม่ error และไม่มีลิงก์
+      ตอนนี้ยังไม่มีชีตไหนอ้างถึงแปดตัวนี้ จึงยังไม่แสดงอาการ
+    </p>
+  </div>
+
+  <h3>สีเทา = ตระกูลนี้ไม่ต้องเลือกจิ๊กตัวนั้น</h3>
+  <p>
+    แถวที่ระบายเทา (<code>theme 0, tint −0.15</code>) หมายถึงจิ๊กตัวนั้น<b>ไม่ถูกเลือกสำหรับตระกูลชิ้นงานนี้</b>
+    ขาวคือเลือก — ยืนยันได้จากตัวไฟล์เอง: ใน <code>ABR BODY</code> แถวเทาคือ
+    <code>QUILL 4853-05</code> กับ <code>WHEEL 4853-14</code> และช่อง NOTE ของทั้งคู่เขียนว่า
+    <em>“Selection not required, Confirmation to RECIPRO member”</em>
+  </p>
+  <p style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+    <span class="chip white">ขาว — เลือกให้ตระกูลนี้</span>
+    <span class="chip grey">เทา — ไม่เลือกให้ตระกูลนี้</span>
+  </p>
+  <div class="note">
+    <b>ตัวควบคุมที่พิสูจน์ว่าอ่านถูก</b>
+    <p>
+      <code>4664-06</code> PLUG(A) เป็น<b>เทา</b>บน BALL(1)(2)(3) แต่เป็น<b>ขาว</b>บน
+      BALL(<span class="jp">内径にTFE</span>) และ S_ROLLER_ASSY
+      จิ๊กตัวเดียวกันเปลี่ยนสีตามตระกูล — แปลว่าเทาหมายถึง “ไม่ใช่สำหรับตระกูลนี้”
+      ไม่ได้แปลว่า “ยังไม่ได้ทำ”
+    </p>
+  </div>
+  <div class="scroll">
+    <table>
+      <caption>จำนวนแถวเทา — เฉพาะชีตที่มี</caption>
+      <thead><tr><th>ชีต</th><th class="num">แถวจิ๊ก</th><th class="num">เทา</th><th class="k">มาตรฐานที่อ้าง</th></tr></thead>
+      <tbody>
+        <tr><td class="k">F-BODY</td><td class="num">208</td><td class="num">12</td><td class="k">RE33024 · 25 · 33 · 36</td></tr>
+        <tr><td class="k">D_ROLLER_ASSY</td><td class="num">45</td><td class="num">9</td><td>—</td></tr>
+        <tr><td class="k">ABR BODY</td><td class="num">129</td><td class="num">8</td><td class="k">RE33024 · 25 · 33 · 34 · 36</td></tr>
+        <tr><td class="k">RACE2</td><td class="num">30</td><td class="num">7</td><td class="k">RE33041 · 42</td></tr>
+        <tr><td class="k">SLEEVE IDG</td><td class="num">32</td><td class="num">6</td><td class="k">RE33041 · 42</td></tr>
+        <tr><td class="k">S_ROLLER_ASSY</td><td class="num">42</td><td class="num">4</td><td>—</td></tr>
+        <tr><td class="k">M-BODY</td><td class="num">39</td><td class="num">2</td><td class="k">RE33024 · 33 · 34 · 36</td></tr>
+        <tr><td class="k">SLEEVE</td><td class="num">83</td><td class="num">2</td><td>—</td></tr>
+        <tr><td class="k"><span class="jp">ボール入りRD</span></td><td class="num">27</td><td class="num">2</td><td>—</td></tr>
+        <tr><td class="k">BALL(<span class="jp">内径にTFE</span>)</td><td class="num">114</td><td class="num">2</td><td>—</td></tr>
+        <tr><td class="k">BALL(1)…(6)</td><td class="num">254</td><td class="num">6</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>สี่ชีตซ้อนหลายฉบับไว้ในชีตเดียว</h3>
+  <p>
+    หัวตารางในเซลล์คือ <code>"Process⏎No,"</code> — <b>มีตัวขึ้นบรรทัดคั่นอยู่ข้างใน</b>
+    ค้นด้วยข้อความ <code>Process No</code> ตรง ๆ จะไม่เจอสักชีต นับหัวตารางได้ดังนี้
+  </p>
+  <div class="scroll">
+    <table>
+      <caption>ชีตที่มีหัวตารางมากกว่าหนึ่งชุด</caption>
+      <thead><tr><th>ชีต</th><th class="num">ฉบับ</th><th class="k">หัวตารางที่แถว</th><th class="k">Print Area</th><th>อ่านว่า</th></tr></thead>
+      <tbody>
+        <tr><td class="k">F-BODY</td><td class="num">6</td><td class="k">6 / 51 / 92 / 115 / 133 / 184</td><td class="k">$A$180:$O$220</td><td>ครอบฉบับที่ 6 — 179 แถวข้างบนเป็นของเก่า</td></tr>
+        <tr><td class="k">ABR BODY</td><td class="num">4</td><td class="k">7 / 45 / 82 / 112</td><td class="k">$A$108:$O$136</td><td>ครอบฉบับที่ 4</td></tr>
+        <tr><td class="k">BALL(<span class="jp">内径にTFE</span>)</td><td class="num">3</td><td class="k">6 / 51 / 92</td><td class="k">$A$88:$O$120</td><td>ครอบฉบับที่ 3</td></tr>
+        <tr><td class="k">SLEEVE IDG</td><td class="num">2</td><td class="k">6 / 23</td><td class="k">$A$1:$O$35</td><td><b>ครอบทั้งสองฉบับ</b> — ไม่ได้ชี้ฉบับใดฉบับหนึ่ง</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <b>“Print Area = ฉบับปัจจุบัน” ใช้ได้กับสามชีต ไม่ใช่กฎสากล</b>
+    <p>
+      <code>SLEEVE IDG</code> มีสองฉบับแต่ Print Area ครอบทั้งแผ่น — ตัดสินจาก Print Area ไม่ได้
+      และในทางกลับกัน มีหลายชีตที่ Print Area <b>สั้นกว่า</b>ข้อมูลทั้งที่มีหัวตารางชุดเดียว:
+      <code>SLEEVE</code> มี 83 แถวจิ๊กแต่ Print Area ครอบถึงแถว 21 เท่านั้น ·
+      <code>S_ROLLER_ASSY</code> 42 แถว ครอบถึง 36 · <code>INNER in BALL</code> 36 แถว ครอบถึง 31 ·
+      <code>レシプロボディ</code> 39 แถว ครอบถึง 28
+    </p>
+    <p>
+      แปลว่า Print Area บอกแค่ “ส่วนที่ตั้งใจพิมพ์” ไม่ได้แปลว่าส่วนที่เหลือเป็นของเก่าเสมอไป
+      <b>ยืนยันด้วยหัวตารางเสมอ</b> ถ้ามีชุดเดียวก็คือฉบับเดียว ไม่ว่า Print Area จะครอบแค่ไหน
+    </p>
+  </div>
+
+  <p>
+    <code>ROLLER PIN</code> เป็นอีกข้อยกเว้น — หัวตารางอยู่ที่<b>แถว 21</b> ไม่ใช่แถว 6 เหมือนชีตอื่น
+    ส่วน <code>TEMPLATE</code> (แม่แบบเปล่า) ไม่ใช้หัวตารางรูปแบบนี้เลย
+  </p>
+  <div class="note warn">
+    <b>เทียบฉบับแรกกับฉบับสุดท้ายของ ABR BODY แล้วต่างกันจริง</b>
+    <p>
+      ฉบับที่ 4 <b>เพิ่ม</b> <code>THREAD ROLL</code> · <code>MILL KEYWAY</code> · <code>ID SPH TURN</code> ที่ฉบับแรกไม่มี
+      และหมายเหตุ HYDRA GRIP ถูกแทนที่ทั้งย่อหน้า จากฉบับ 2022 เป็นฉบับ
+      <code>20260602 Yamamoto</code> ที่ระบุ insert R0.8–5.0 กับวัสดุ 15-5PH / 17-4PH / PH13-8Mo เจาะจง
+    </p>
+    <p>
+      <b>อ่านบล็อกบนสุดคืออ่านของที่เลิกใช้แล้ว</b> — ให้เช็ก Print Area ก่อนเสมอ
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>สองแฟ้มตรงกันแค่ไหน</h2>
+  <p class="lede">
+    เทียบที่ระดับเลขแบบ 4 หลัก ซึ่งเป็นระดับเดียวที่ทั้งสองไฟล์ใช้รูปแบบเดียวกัน
+  </p>
+
+  <div class="scroll">
+    <table>
+      <caption>ตระกูล 4 หลัก — ปรากฏที่ไหนบ้าง</caption>
+      <thead><tr><th>อยู่ใน</th><th class="num">จำนวนตระกูล</th><th>หมายเหตุ</th></tr></thead>
+      <tbody>
+        <tr><td>ทะเบียน</td><td class="num">75</td><td>จาก 131 แถวที่มีเลขแบบ</td></tr>
+        <tr><td>ชีตตระกูลของ TEMPLATE_B</td><td class="num">55</td><td>จาก 31 ชีต</td></tr>
+        <tr><td>LINK LIST</td><td class="num">50</td><td>จาก 191 แถว</td></tr>
+        <tr><td><b>ทั้งทะเบียนและชีต</b></td><td class="num"><b>48</b></td><td>ส่วนที่สองแฟ้มเห็นตรงกัน</td></tr>
+        <tr><td>ทะเบียนอย่างเดียว</td><td class="num">27</td><td>มีรายการอยู่ แต่ไม่มีตระกูลชิ้นงานไหนเรียกใช้ในแฟ้มนี้</td></tr>
+        <tr><td><b>ชีตอย่างเดียว</b></td><td class="num"><b>7</b></td><td><b>ทะเบียนไม่มีแถวสำหรับตระกูลเหล่านี้เลย</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid2">
+    <div class="note warn">
+      <b>7 ตระกูลที่ชีตเรียกใช้ แต่ทะเบียนไม่รู้จัก</b>
+      <p style="font-family:var(--mono);font-size:1.05em;letter-spacing:.03em">
+        4574 · 4591 · 4645 · 4667 · 4815 · 4908 · 7559
+      </p>
+      <p>
+        TEMPLATE_B ระบุว่าตระกูลชิ้นงานบางตระกูลต้องใช้จิ๊กเหล่านี้
+        แต่ทะเบียนไม่มีแถวบอกว่ารายการของมันคือไฟล์อะไร ของเครื่องไหน
+      </p>
+      <p>
+        ทั้งเจ็ดอยู่ใน LINK LIST — <b>ห้าตัว</b> (<code>4574 · 4591 · 4645 · 4667 · 4815</code>)
+        เป็นชนิด <code>W/M</code> จึงไม่มีตารางขนาดอยู่แล้ว ไม่น่าห่วง
+        แต่ <b><code>4908</code> และ <code>7559</code> เป็นชนิด <code>EXCEL</code></b> —
+        มีไฟล์รายการจริงอยู่บนไดรฟ์ แต่ทะเบียนไม่ได้บันทึกไว้ สองตัวนี้คือช่องว่างของทะเบียนจริง ๆ
+      </p>
+    </div>
+    <div class="note">
+      <b>27 ตระกูลที่ทะเบียนมี แต่ไม่มีชีตไหนเรียกใช้</b>
+      <p style="font-family:var(--mono);font-size:.95em;line-height:1.8">
+        4008 4011 4012 4505 4520 4547 4568 4657 4659 4674 4808 4817 4819 4831
+        4832 4840 4864 4870 4874 4894 4909 4916 4928 9734 9735 9738 9764
+      </p>
+      <p>
+        อ่านเป็น “ช่องว่าง” ไม่ได้ — TEMPLATE_B ครอบเฉพาะ 31 ตระกูลชิ้นงานที่ทำเป็นใบตรวจไว้
+        ตระกูลจิ๊กที่ไม่เกี่ยวกับ 31 ตระกูลนั้นก็ไม่ควรอยู่ในนั้นตั้งแต่แรก
+      </p>
+    </div>
+  </div>
+
+  <div class="note warn">
+    <b>อย่า join สองไฟล์ด้วยกุญแจเต็ม — จะได้ช่องว่างปลอม</b>
+    <p>
+      ทะเบียนแยก <span class="jp">図番</span> (คอลัมน์ E) กับ <span class="jp">分類コード</span>
+      (F/G/H) และ <b>58 จาก 131 แถวไม่ใส่ <span class="jp">分類コード</span> เลย</b> —
+      กุญแจที่ประกอบได้จึงเป็นแค่ <code>4021</code> ขณะที่ TEMPLATE_B เขียน <code>4021-01-</code>
+    </p>
+    <p>
+      ในบรรดา 73 แถวที่<em>มี</em> <span class="jp">分類コード</span> ประกอบเป็นกุญแจย่อยได้
+      แต่จับคู่กับชีตได้เพียง <b>36 กุญแจ</b> ส่วนอีก 56 ไม่ตรง — ส่วนใหญ่เพราะรูปแบบเอง
+      เช่น <code>4021・4853-05</code>, <code>4652・4674-01・03</code>, <code>4577-0４</code>
+      (เลข 4 เป็นอักษรเต็มความกว้าง), <code>N--19</code>, <code>Q--51</code>
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>คำถามสำหรับย้อนตรวจระบบ</h2>
+  <p class="lede">
+    ทุกข้อดึงมาจากตัวแฟ้มล้วน ๆ เป็นข้อความที่แฟ้มยืนยัน แล้วให้ไปตรวจว่าระบบทำตามหรือไม่
+    ทั้งสองทิศทางมีความหมาย — ระบบทำน้อยกว่าแฟ้ม กับระบบทำมากกว่าแฟ้ม เป็นคนละเรื่องกัน
+  </p>
+
+  <div class="checks">
+    <div class="check">
+      <div class="no">01</div>
+      <div class="q">26 ตระกูลที่แฟ้มติดธง <span class="jp">治具選定</span> = 1 อยู่ในระบบครบไหม</div>
+      <div class="a">
+        ใช้ตารางในหัวข้อแฟ้มที่ 1 ทีละแถว จับคู่ด้วยเลขแบบ ไม่ใช่ชื่อเครื่อง
+        ถ้าขาด แปลว่าแฟ้มอ้างเกินจริง หรือระบบยังตามไม่ทัน — ต้องแยกให้ออกว่าเป็นอันไหน
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">02</div>
+      <div class="q">ระบบมีตระกูลไหนที่แฟ้ม<em>ไม่</em>ติดธงบ้าง</div>
+      <div class="a">
+        ทิศทางกลับกัน ถ้าระบบทำไปแล้วแต่คอลัมน์ K ยังว่าง แปลว่า<b>แฟ้มล้าหลัง</b> ควรอัปเดตแฟ้ม
+        ไม่ใช่ถอดของออกจากระบบ
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">03</div>
+      <div class="q">8 แถวที่ธง ACCESS ระบบจัดการอย่างไร</div>
+      <div class="a">
+        ข้อมูลอยู่ใน <code>TOOL寸法.mdb</code> ซึ่งไม่ใช่ Excel
+        ตระกูลเหล่านี้ไม่มีทางมีสูตรจากชีตได้ ต้องดูว่าระบบใช้วิธีอื่นแทน หรือปล่อยว่างไว้
+        <b>แถว 107 (<code>4931</code> KS-400B6) ติดทั้งธง ACCESS และธง <span class="jp">治具選定</span></b> ควรตรวจก่อนแถวอื่น
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">04</div>
+      <div class="q">แถวเทาในแต่ละชีต ระบบเลือกให้หรือเปล่า</div>
+      <div class="a">
+        เทาแปลว่า “ไม่ต้องเลือกสำหรับตระกูลนี้” ถ้าระบบยังคืนจิ๊กตัวนั้นสำหรับชิ้นงานในตระกูลนั้น
+        แสดงว่าเงื่อนไขหายไป เริ่มที่ <code>QUILL 4853-05</code> และ <code>WHEEL 4853-14</code>
+        ซึ่งเป็นเทาพร้อมเหตุผลเขียนกำกับไว้
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">05</div>
+      <div class="q">เลขมาตรฐานในคอลัมน์ M มีเอกสารครบทั้ง 10 ฉบับไหม</div>
+      <div class="a">
+        แฟ้มอ้าง <code>RE33024 · 25 · 26 · 33 · 34 · 36 · 39 · 40 · 41 · 42</code>
+        เงื่อนไขและลิมิตทุกข้อควรสืบย้อนไปถึงข้อในเอกสารได้ ถ้าฉบับไหนไม่มีตัวจริง
+        ข้อกำหนดที่อ้างฉบับนั้นก็ตรวจย้อนไม่ได้
+        <span style="color:var(--moss)"><b>RE33033 เป็นเลขผี (2026-08-28) — ที่ถูกคือ RE33028 "ボディ内研用治具" vendored ไว้ที่ <code>doc/RE33028_BodyIDGrind-Jig-design.pdf</code> ครบทั้ง 10 ฉบับแล้ว</b></span>
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">06</div>
+      <div class="q">ระบบอ่านจากฉบับไหนของสี่ชีตที่ซ้อนหลายฉบับ</div>
+      <div class="a">
+        <code>F-BODY</code> (6 ฉบับ) · <code>ABR BODY</code> (4) ·
+        <code>BALL(<span class="jp">内径にTFE</span>)</code> (3) · <code>SLEEVE IDG</code> (2)
+        ถ้าเงื่อนไขในระบบตรงกับฉบับบนสุดแทนฉบับล่างสุด แปลว่าอ่านผิดฉบับ —
+        ตรวจง่ายที่สุดจากหมายเหตุ HYDRA GRIP ว่าเป็นฉบับ 2022 หรือ 20260602
+        <b>SLEEVE IDG ต้องดูด้วยตา</b> เพราะ Print Area ครอบทั้งสองฉบับ
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">07</div>
+      <div class="q">ชื่อเครื่องที่ระบบใช้ ตรงกับทะเบียนกลางหรือกับแฟ้มนี้</div>
+      <div class="a">
+        ทะเบียนเขียน <code>TSG300(SEIBU)</code> · <code>KL20</code> · <code>KS-400B</code> ·
+        <code>KVD300CRⅡ</code> · <code>KS-450C</code> · <code>BRYANT</code>
+        ซึ่ง<b>ไม่ใช่</b>ชื่อที่ควรใช้ในระบบ — ใช้เป็นตัวช่วยหาว่าแถวไหนคือเครื่องอะไรได้
+        แต่ห้ามคัดลอกเป็นค่าในฐานข้อมูล
+      </div>
+    </div>
+    <div class="check">
+      <div class="no">08</div>
+      <div class="q">4 ตระกูลที่ลิงก์ใน TEMPLATE_B พังอยู่ ระบบครอบคลุมหรือยัง</div>
+      <div class="a">
+        <code>4009-05</code> · <code>4561-05</code> · <code>4036-01</code> · <code>4036-02</code>
+        คืน <code>#N/A</code> เพราะไม่มีใน LINK LIST — คนที่ทำงานจากแฟ้มจะหาไฟล์รายการไม่เจอ
+        ถ้าระบบมีข้อมูลของสี่ตัวนี้อยู่แล้ว แปลว่าได้มาจากทางอื่น ควรบันทึกว่าทางไหน
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section>
+  <h2>สรุปสิ่งที่ควรแก้ในตัวแฟ้มเอง</h2>
+  <div class="scroll">
+    <table>
+      <caption>ทั้งหมดเป็นเรื่องภายในสองไฟล์ ไม่เกี่ยวกับระบบ</caption>
+      <thead><tr><th>เรื่อง</th><th>ที่ไหน</th><th>ผล</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>สูตรตรวจสอบสะกด <code>FALESE</code></b></td>
+          <td>ทะเบียน คอลัมน์ M ทุกแถว</td>
+          <td>คืน <code>#NAME?</code> แทน <code>FALSE</code> — ขั้นตอนซ่อมไฟล์พังที่หัวตารางบรรยายไว้ ทำตามไม่ได้</td>
+        </tr>
+        <tr>
+          <td><b>LINK LIST แถว 185–192 กรอกไม่เสร็จ</b></td>
+          <td><code>4931-02-</code>…<code>4931-14-</code> และ <code>4664-34-</code></td>
+          <td>อยู่ในช่วง <code>LINK</code> แต่ไม่มี path และชนิด · ยังไม่มีชีตอ้างถึง จึงยังไม่แสดงอาการ</td>
+        </tr>
+        <tr>
+          <td><b>autofilter ล้าหลังกว่าข้อมูล</b></td>
+          <td>ช่วงที่จำไว้ <code>$A$1:$C$184</code> · ข้อมูลถึงแถว 192</td>
+          <td>กรอง LINK LIST จะไม่เห็นแปดแถวท้าย</td>
+        </tr>
+        <tr>
+          <td><b>7 เซลล์ DATA คืน <code>#N/A</code></b></td>
+          <td>F-BODY · D_ROLLER_ASSY ×2 · PB Ring ×2 · BALL(4) · BALL(6)</td>
+          <td>4 เซลล์เป็นตระกูลที่หายจริง · 3 เซลล์เกิดจากคัดลอกสูตรลงเกินแถวข้อมูล</td>
+        </tr>
+        <tr>
+          <td><b>7 ตระกูลที่ชีตใช้แต่ทะเบียนไม่มี</b></td>
+          <td><code>4574 4591 4645 4667 4815 4908 7559</code></td>
+          <td>5 ตัวเป็น <code>W/M</code> ไม่มีตารางขนาดอยู่แล้ว · <b><code>4908</code> และ <code>7559</code> เป็น <code>EXCEL</code></b> — มีไฟล์จริงแต่ทะเบียนไม่บันทึก</td>
+        </tr>
+        <tr>
+          <td><b>รูปแบบเลขแบบไม่สม่ำเสมอ</b></td>
+          <td>ทะเบียน คอลัมน์ E–H</td>
+          <td><code>4021・4853</code>, <code>4577-0４</code> (ตัวเลขเต็มความกว้าง), <code>N-</code>, <code>Q-</code>, <code>CH・RD</code> — join อัตโนมัติทำไม่ได้</td>
+        </tr>
+        <tr>
+          <td><b>58 จาก 131 แถวไม่มี <span class="jp">分類コード</span></b></td>
+          <td>ทะเบียน คอลัมน์ F/G/H</td>
+          <td>แถวเหล่านั้นชี้ได้แค่ระดับตระกูล ไม่ถึงระดับจิ๊ก</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div>อ่านจาก <code>G:\Shared drives\RD Development Technology Review Request\Tooling Select\</code> เมื่อ 2026-08-21</div>
+  <div>ทุกตัวเลขนับจากเซลล์ในไฟล์โดยตรง ไม่ได้อ้างอิงเอกสารอื่นหรือฐานข้อมูลใด</div>
+</footer>
+
+</div>

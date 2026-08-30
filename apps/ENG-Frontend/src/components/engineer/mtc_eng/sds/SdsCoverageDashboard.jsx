@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
 import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { useTheme } from '../../../../theme';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
@@ -23,32 +24,67 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 const { Content } = Layout;
 const { Text } = Typography;
 
-const C = {
-  bg:       '#041320',
-  card:     '#072035',
-  border:   '#0e3a5c',
-  blue:     '#1890ff',
-  cyan:     '#00d4ff',
-  green:    '#52c41a',
-  greenSoft:'#95de64',   // THAI Complete (T-Select #1 boost) — softer than the KZW green
-  red:      '#ff4d4f',
-  yellow:   '#ffc53d',
-  orange:   '#fa8c16',
-  purple:   '#722ed1',
-  textPri:  '#e8f4ff',
-  textSec:  '#6fa3c7',
-  gridLine: 'rgba(14,58,92,0.8)',
+// ── Palette ────────────────────────────────────────────────────────────────────
+// Chrome (bg / card / border / text) follows the app theme. The DATA colours cannot:
+// the theme supplies 8 light surfaces and 1 dark one (rpg), and this page's series
+// hues were picked against the old #041320 ground. Measured contrast vs #FFFFFF for
+// the dark set: cyan 1.77, greenSoft 1.63, yellow 1.58, green 2.27, orange 2.38 —
+// five of eight below the 3:1 floor, i.e. invisible on a light theme. So each set is
+// stated for the surface it is read on and picked by the theme's own lightness.
+//
+// Hue IDENTITY is preserved across the pair (green stays green, red stays red) —
+// these are status encodings the operator reads as meaning, not decoration.
+const SERIES_DARK = {
+  blue: '#1890ff', cyan: '#00d4ff', green: '#52c41a', greenSoft: '#95de64',
+  red: '#ff4d4f', yellow: '#ffc53d', orange: '#fa8c16',
+  purple: '#9254de',   // #722ed1 was 2.51 on the rpg ground — the one dark-set failure
+  magenta: '#eb2f96',
+};
+const SERIES_LIGHT = {
+  blue: '#0958d9', cyan: '#08979c', green: '#389e0d', greenSoft: '#5b8c00',
+  red: '#cf1322', yellow: '#ad6800', orange: '#d4380d',
+  purple: '#531dab', magenta: '#c41d7f',
 };
 
-const PART_TYPE_COLOR = {
-  ball: '#1890ff',
-  race: '#52c41a',
-  body: '#fa8c16',
-  sleeve: '#722ed1',
-  spherical: '#ff4d4f',
-  mecha: '#eb2f96',
-  other: '#6fa3c7',
+// The theme's own background decides which set is read — not a hardcoded theme name,
+// so a theme added later is classified correctly without touching this file.
+const isDarkHex = (hex) => {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return true;
+  const n = parseInt(h, 16);
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return (0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)) < 0.4;
 };
+
+const useColors = () => {
+  const { theme } = useTheme();
+  return useMemo(() => {
+    const c = theme?.colors || {};
+    const dark = isDarkHex(c.background || '#041320');
+    return {
+      ...(dark ? SERIES_DARK : SERIES_LIGHT),
+      bg: c.background || '#041320',
+      card: c.surface || '#072035',
+      border: c.border || '#0e3a5c',
+      textPri: c.textPrimary || '#e8f4ff',
+      textSec: c.textSecondary || '#6fa3c7',
+      // Grid lines must recede against whichever ground they sit on; borrowing the
+      // theme's border at low alpha keeps them recessive in both.
+      gridLine: hexToRgba(c.border || '#0e3a5c', dark ? 0.8 : 0.55),
+      isDark: dark,
+    };
+  }, [theme]);
+};
+
+const partTypeColors = (C) => ({
+  ball: C.blue,
+  race: C.green,
+  body: C.orange,
+  sleeve: C.purple,
+  spherical: C.red,
+  mecha: C.magenta,
+  other: C.textSec,
+});
 
 // Canonical display order for part-type series/cards. Types in scope but not listed
 // here fall to the end (still shown). Keep in sync with the backend cnPartType taxonomy.
@@ -71,16 +107,16 @@ const hexToRgba = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-const LEVEL_CFG = {
+const levelCfg = (C) => ({
   COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
-};
+});
 
-const cardStyle = {
+const cardStyleOf = (C) => ({
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 18px',
-};
+});
 
-const sectionTitle = (label) => (
+const sectionTitle = (label, C) => (
   <div style={{
     color: C.cyan, fontWeight: 700, fontSize: 12, letterSpacing: '0.1em',
     textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`,
@@ -91,8 +127,9 @@ const sectionTitle = (label) => (
 );
 
 // ── Part Type Card ─────────────────────────────────────────────────────────────
-const PartTypeCard = ({ pt }) => {
-  const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
+const PartTypeCard = ({ pt, C }) => {
+  const cardStyle = cardStyleOf(C);
+  const color = partTypeColors(C)[pt.part_type] || C.cyan;
   const pct = pt.complete_pct || 0;                       // with T-Select #1
   const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
   const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
@@ -148,7 +185,7 @@ const PartTypeCard = ({ pt }) => {
         <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
         {boost > 0 && (
           <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
+            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
           </Tooltip>
         )}
       </div>
@@ -173,6 +210,12 @@ const LIMIT_ANOMALY = '__LIMIT_ANOMALY__';
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
+  // Shadows nothing — the module-level `C` is gone. Every `C.*` below now reads the
+  // active theme, and the series half of it flips with the theme's own lightness.
+  const C = useColors();
+  const cardStyle = cardStyleOf(C);
+  const LEVEL_CFG = levelCfg(C);
+  const PART_TYPE_COLOR = partTypeColors(C);
   const { message } = App.useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -337,7 +380,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(82,196,26,0.30)' : 'rgba(82,196,26,0.75)'),
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.green, 0.30) : hexToRgba(C.green, 0.75)),
         borderColor: C.green,
         borderWidth: 1,
         stack: 'status',
@@ -347,7 +390,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(149,222,100,0.30)' : 'rgba(149,222,100,0.70)'),
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.greenSoft, 0.30) : hexToRgba(C.greenSoft, 0.70)),
         borderColor: C.greenSoft,
         borderWidth: 1,
         stack: 'status',
@@ -357,7 +400,7 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'Pending',
         data: monthlyStatus.map(r => r.pending),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(255,197,61,0.28)' : 'rgba(255,197,61,0.65)'),
+        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.yellow, 0.28) : hexToRgba(C.yellow, 0.65)),
         borderColor: C.yellow,
         borderWidth: 1,
         stack: 'status',
@@ -372,7 +415,7 @@ export default function SdsCoverageDashboard() {
         data: monthlyStatus.map(r => ((r.complete || 0) + (r.pending || 0)) > 0 ? r.complete_pct : null),
         spanGaps: true,
         borderColor: C.orange,
-        backgroundColor: 'rgba(250,140,22,0.15)',
+        backgroundColor: hexToRgba(C.orange, 0.15),
         borderWidth: 2,
         pointRadius: 3,
         pointBackgroundColor: C.orange,
@@ -397,7 +440,7 @@ export default function SdsCoverageDashboard() {
         type: 'line',
         label: 'Target 90%',
         data: monthlyStatus.map(() => 90),
-        borderColor: 'rgba(255,77,79,0.85)',
+        borderColor: hexToRgba(C.red, 0.85),
         borderWidth: 1.5,
         borderDash: [6, 4],
         pointRadius: 0,
@@ -577,7 +620,7 @@ export default function SdsCoverageDashboard() {
               <div>
                 <div style={{ color: C.cyan, fontSize: 18, fontWeight: 800, letterSpacing: '0.05em' }}>
                   Setup Data Sheet Dashboard
-                  <SystemVersionBadge system="sds-coverage-report" dark />
+                  <SystemVersionBadge system="sds-coverage-report" dark={C.isDark} />
                 </div>
                 {totalCns > 0 && (
                   <div style={{ color: C.textSec, fontSize: 12, marginTop: 2 }}>
@@ -669,7 +712,7 @@ export default function SdsCoverageDashboard() {
                       <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
                       {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
                         <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
+                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
                     </div>
@@ -677,7 +720,7 @@ export default function SdsCoverageDashboard() {
                 </Col>
                 {byPartType.map(pt => (
                   <Col key={pt.part_type} span={4}>
-                    <PartTypeCard pt={pt} />
+                    <PartTypeCard pt={pt} C={C} />
                   </Col>
                 ))}
               </Row>
@@ -687,7 +730,7 @@ export default function SdsCoverageDashboard() {
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
               <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('New Parts per Month')}
+                  {sectionTitle('New Parts per Month', C)}
                   <div style={{ height: 240 }}>
                     {monthlyNewParts.length > 0
                       ? <Bar data={newPartsChartData} options={newPartsChartOpts} />
@@ -698,7 +741,7 @@ export default function SdsCoverageDashboard() {
               </Col>
               <Col span={16}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('Cumulative Coverage Status')}
+                  {sectionTitle('Cumulative Coverage Status', C)}
                   <div style={{ height: 240 }}>
                     <Bar data={statusChartData} options={statusChartOpts} />
                   </div>
@@ -709,7 +752,7 @@ export default function SdsCoverageDashboard() {
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
             <div style={cardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                {sectionTitle('CNs Requiring Action')}
+                {sectionTitle('CNs Requiring Action', C)}
                 <Space>
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}
                     options={partTypeOptions} popupMatchSelectWidth={false} />
@@ -739,8 +782,8 @@ export default function SdsCoverageDashboard() {
       <style>{`
         .sds-report-row td { background: ${C.bg} !important; color: ${C.textPri}; }
         .sds-report-row:hover td { background: ${C.card} !important; }
-        .sds-limit-excluded td { background: rgba(255,77,79,0.12) !important; box-shadow: inset 3px 0 0 #ff4d4f; }
-        .sds-limit-excluded:hover td { background: rgba(255,77,79,0.20) !important; }
+        .sds-limit-excluded td { background: ${hexToRgba(C.red, 0.12)} !important; box-shadow: inset 3px 0 0 ${C.red}; }
+        .sds-limit-excluded:hover td { background: ${hexToRgba(C.red, 0.20)} !important; }
         .ant-table-thead > tr > th { background: ${C.card} !important; color: ${C.textSec} !important; border-bottom: 1px solid ${C.border} !important; font-size: 11px; }
         .ant-table { background: ${C.bg} !important; }
         .ant-table-tbody > tr > td { border-bottom: 1px solid ${C.border} !important; }

@@ -28,6 +28,9 @@
  *     --machine NAME   only report this display machine (still searches all)
  *     --by-tooling     break the report down per (machine, tooling)
  *     --save-baseline  write results to the baseline file for future diffs
+ *     --persist-db     upsert machine + per-(machine,tooling) top-1/top-2 into
+ *                      sds_coverage_cache id 'tooling_accuracy' — the Selection-
+ *                      Condition Conformance page reads it to show accuracy per family
  *     --json           print machine-level results as JSON (for CI/dashboards)
  *
  * EXIT CODES
@@ -60,7 +63,8 @@ const BASELINE_PATH = path.join(__dirname, 'eval_tooling_accuracy.baseline.json'
 // ── args ─────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
   const a = { limit: 1000, offset: 0, machine: null, byTooling: false,
-              saveBaseline: false, json: false, tolerance: 3, pmReport: null };
+              saveBaseline: false, json: false, tolerance: 3, pmReport: null,
+              persistDb: false };
   for (let i = 2; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--limit') a.limit = parseInt(argv[++i], 10);
@@ -69,13 +73,17 @@ function parseArgs(argv) {
     else if (t === '--tolerance') a.tolerance = parseFloat(argv[++i]);
     else if (t === '--by-tooling') a.byTooling = true;
     else if (t === '--save-baseline') a.saveBaseline = true;
+    // --persist-db: upsert machine + per-(machine,tooling) scores into
+    // sds_coverage_cache id 'tooling_accuracy', so the Selection-Condition
+    // Conformance page can show a live top-1/top-2 beside each family.
+    else if (t === '--persist-db') a.persistDb = true;
     else if (t === '--json') a.json = true;
     // --pm-report [path]: write an executive RAG portfolio markdown from the LIVE
-    // numbers. Optional path; defaults to docs/mtc_tooling_portfolio_live.md.
+    // numbers. Optional path; defaults to api/engineer/mtc/doc/mtc_tooling_portfolio_live.md.
     else if (t === '--pm-report') {
       const next = argv[i + 1];
       a.pmReport = (next && !next.startsWith('--')) ? argv[++i]
-        : path.join(__dirname, '..', '..', '..', 'docs', 'mtc_tooling_portfolio_live.md');
+        : path.join(__dirname, '..', 'api', 'engineer', 'mtc', 'doc', 'mtc_tooling_portfolio_live.md');
     }
   }
   return a;
@@ -151,12 +159,29 @@ function scoreRecords(records, toolingFamily) {
   return byKey;
 }
 
+// A transient network / pool error — worth a retry rather than killing a 3-hour run.
+const isNetErr = (e) => e && (
+  ['ENOTFOUND', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN'].includes(e.code) ||
+  /Connection terminated|connection timeout|timeout expired|server closed the connection/i.test(e.message || ''));
+
+// Run fn; on a transient net error wait `ms` and try once more. A second failure
+// throws (caller decides whether to skip the CN or abort).
+async function withNetRetry(fn, ms = 4000) {
+  try { return await fn(); }
+  catch (e) {
+    if (!isNetErr(e)) throw e;
+    console.warn(`[eval] transient DB error (${e.code || e.message}) — retrying in ${ms}ms`);
+    await new Promise((r) => setTimeout(r, ms));
+    return fn();
+  }
+}
+
 // Ground-truth factory tools for a control-no, grouped by DWG family.
 async function gtFamiliesFor(controlNo) {
-  const { rows } = await maqPool.query(
+  const { rows } = await withNetRetry(() => maqPool.query(
     `SELECT DISTINCT tool_dwg_no FROM lpb.eng_r_pi_tool WHERE process_plan_no = $1`,
     [controlNo]
-  );
+  ));
   const byFam = new Map(); // family -> Set(tool_dwg_no)
   for (const r of rows) {
     const fam = familyOf(r.tool_dwg_no);
@@ -255,21 +280,45 @@ async function main() {
   // that tooling's family.
   const records = [];                 // { machine, tooling, pred0, pred1, gtByFam }
   const familyVotes = new Map();      // "machine||tooling" -> Map(family -> count)
-  let scanned = 0, withPlan = 0, noSpec = 0;
+  let scanned = 0, withPlan = 0, noSpec = 0, netSkip = 0;
+
+  // Persist a partial result to sds_coverage_cache every CHECKPOINT CNs so a mid-run
+  // crash (a DNS blip on this link killed a 3-hour run once) leaves a usable snapshot
+  // and the page fills progressively. Only when --persist-db is set.
+  const CHECKPOINT = 1000;
+  const checkpoint = async (n) => {
+    if (!args.persistDb) return;
+    try {
+      const { toolingFamily } = resolveToolingFamilies(familyVotes);
+      const bk = scoreRecords(records, toolingFamily);
+      const bm = new Map();
+      for (const [key, s] of bk) {
+        const machine = key.split('||')[0];
+        if (!bm.has(machine)) bm.set(machine, { n: 0, hit1: 0, hit2: 0, none: 0 });
+        const m = bm.get(machine);
+        m.n += s.n; m.hit1 += s.hit1; m.hit2 += s.hit2; m.none += s.none;
+      }
+      await persistDb(bm, bk, toolingFamily, n);
+      console.log(`\n[eval] checkpoint persisted at ${n} CNs`);
+    } catch (e) { console.warn(`[eval] checkpoint persist failed: ${e.message}`); }
+  };
 
   for (const { cn } of specRows) {
     const controlNo = cnFormat.itemNoToControlNo(String(cn));
     if (!controlNo) continue;
 
     // Cheap indexed GT lookup first — only pay for the (expensive) search when
-    // the factory actually produced this CN.
-    const gtByFam = await gtFamiliesFor(controlNo);
+    // the factory actually produced this CN. A transient DB error skips the CN
+    // (counted) rather than aborting the whole run.
+    let gtByFam;
+    try { gtByFam = await gtFamiliesFor(controlNo); }
+    catch (err) { netSkip++; console.warn(`[eval] gt(${cn}) skipped: ${err.message}`); continue; }
     scanned++;
     if (gtByFam.size === 0) continue;
     withPlan++;
 
     let res;
-    try { res = await search(String(cn)); }
+    try { res = await withNetRetry(() => search(String(cn))); }
     catch (err) { console.warn(`[eval] search(${cn}) failed: ${err.message}`); continue; }
     if (!res?.success) { noSpec++; continue; }
 
@@ -289,9 +338,10 @@ async function main() {
     }
 
     if (withPlan % 100 === 0) process.stdout.write(`\r[eval] searched ${withPlan} CNs…`);
+    if (withPlan > 0 && withPlan % CHECKPOINT === 0) await checkpoint(withPlan);
   }
   process.stdout.write('\r');
-  console.log(`[eval] scanned ${scanned} CNs · ${withPlan} had a factory plan · ${noSpec} missing spec`);
+  console.log(`[eval] scanned ${scanned} CNs · ${withPlan} had a factory plan · ${noSpec} missing spec · ${netSkip} net-skipped`);
 
   // Resolve canonical family per (machine,tooling), flag ambiguity, then score.
   const { toolingFamily, ambiguous } = resolveToolingFamilies(familyVotes);
@@ -308,6 +358,8 @@ async function main() {
   }
 
   report(args, byMachine, byKey, ambiguous);
+
+  if (args.persistDb) await persistDb(byMachine, byKey, toolingFamily, withPlan);
 
   if (args.pmReport) {
     const md = buildPmReport(byMachine, byKey, { sampleN: withPlan });
@@ -394,6 +446,39 @@ function handleBaseline(args, byMachine) {
   }
   console.log('  (no regression beyond tolerance)');
   return 0;
+}
+
+// ── persist to DB (for the Selection-Condition Conformance page) ─────────────
+async function persistDb(byMachine, byKey, toolingFamily, sampleN) {
+  const machines = {};
+  for (const [name, s] of byMachine) {
+    machines[name] = { n: s.n, top1: +pct(s.hit1, s.n).toFixed(1), top2: +pct(s.hit2, s.n).toFixed(1), none: s.none };
+  }
+  const toolings = [];
+  for (const [key, s] of byKey) {
+    const [machine, tooling] = key.split('||');
+    toolings.push({
+      machine, tooling,
+      family: toolingFamily.get(key) || null,
+      n: s.n, top1: +pct(s.hit1, s.n).toFixed(1), top2: +pct(s.hit2, s.n).toFixed(1), none: s.none,
+    });
+  }
+  const payload = { savedAt: new Date().toISOString(), sampleN, machines, toolings };
+  try {
+    await engPool.query(`
+      CREATE TABLE IF NOT EXISTS sds_coverage_cache (
+        id TEXT PRIMARY KEY, data JSONB NOT NULL,
+        built_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+    await engPool.query(
+      `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('tooling_accuracy', $1, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = NOW()`,
+      [payload]
+    );
+    console.log(`\n[eval] persisted tooling_accuracy → sds_coverage_cache (${toolings.length} tooling keys, sampleN ${sampleN})`);
+  } catch (e) {
+    console.error(`[eval] persist to DB failed: ${e.message}`);
+  }
 }
 
 async function closePools() {

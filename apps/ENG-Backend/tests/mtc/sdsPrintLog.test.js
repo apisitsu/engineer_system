@@ -18,6 +18,15 @@ const { engPool } = require('../../instance/eng_db');
 const { maqPool } = require('../../instance/maq_db');
 const printLog = require('../../api/engineer/mtc/services/sdsPrintLog');
 
+// The INSERT is positional, and every column added to the table shifts every index after
+// it — which broke this file twice. Read the column order out of the SQL instead, so a new
+// column is a non-event here and the assertions keep saying what they mean.
+const paramsByName = (call) => {
+  const [sql, values] = call;
+  const cols = sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').map((c) => c.trim());
+  return Object.fromEntries(cols.map((c, i) => [c, values[i]]));
+};
+
 const rows = (r) => ({ rows: r });
 
 beforeEach(() => {
@@ -120,14 +129,14 @@ describe('record — a logging failure never fails a print', () => {
       ],
     });
 
-    const params = engPool.query.mock.calls[0][1];
     const sql = engPool.query.mock.calls[0][0];
+    const p = paramsByName(engPool.query.mock.calls[0]);
     expect(sql).not.toMatch(/pdf_data|pdf_blob|bytea/i);      // the file itself is never stored
-    expect(params[0]).toBe('C31-04050');                       // cn  — control form
-    expect(params[1]).toBe('314050');                          // item_no
-    expect(params[10]).toMatch(/^[0-9a-f]{64}$/);              // pdf_sha256
-    expect(params[11]).toBe(8);                                // pdf_bytes
-    expect(JSON.parse(params[12])).toEqual([
+    expect(p.cn).toBe('C31-04050');                            // control form
+    expect(p.item_no).toBe('314050');
+    expect(p.pdf_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(p.pdf_bytes).toBe(8);
+    expect(JSON.parse(p.tooling_snapshot)).toEqual([
       { slot: 'T01', name: 'WORK DRIVER', dwg: '4664-01-0012' },
     ]);
   });
@@ -136,7 +145,8 @@ describe('record — a logging failure never fails a print', () => {
     maqPool.query.mockResolvedValue(rows([]));
     engPool.query.mockResolvedValueOnce(rows([{ id: 8, printed_at: 'now' }]));
     await printLog.record(args);
-    expect(engPool.query.mock.calls[0][1][5]).toBeNull();      // lot_verified
-    expect(engPool.query.mock.calls[0][1][4]).toBeNull();      // lot_no
+    const p = paramsByName(engPool.query.mock.calls[0]);
+    expect(p.lot_verified).toBeNull();
+    expect(p.lot_no).toBeNull();
   });
 });

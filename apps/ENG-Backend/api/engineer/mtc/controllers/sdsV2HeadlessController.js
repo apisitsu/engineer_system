@@ -29,12 +29,24 @@ const OUTPUT_DIR    = path.resolve('./output/sds-pdf');
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 function safeUnlink(p) { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {} }
 
-// A tooling image whose tool_dwg_no equals NAME_IMG_KEY(name) is matched by TOOL NAME
-// instead of DWG number — one image shared by every slot of that fixture across all
-// dwg variants (e.g. the MSB BASE/COLLET/COLLET ARBOR/COLLAR jigs, whose full dwgs
-// differ per bore-ID band). Upper-cased + whitespace-collapsed so 'Collet  Arbor'
-// and 'COLLET ARBOR' key the same. The frontend builds the same key on upload.
-const NAME_IMG_KEY = (name) => 'NAME:' + String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+// A tooling image whose tool_dwg_no equals NAME_IMG_KEY(family, name) is matched by TOOL
+// NAME instead of DWG number — one image shared by every slot of that fixture across all
+// dwg variants (the MSB BASE/COLLET/COLLET ARBOR/COLLAR jigs, whose full dwgs differ per
+// bore-ID band: 4547-01-{band}-{comp}). Upper-cased + whitespace-collapsed so
+// 'Collet  Arbor' and 'COLLET ARBOR' key the same. The frontend builds the same key.
+//
+// THE FAMILY IS PART OF THE KEY, AND THAT IS THE WHOLE POINT.
+// "Wrong band" means a different suffix of ONE family, so the family is the scope the
+// mechanism was always meant to have. Keyed on the bare name it matched any tool called
+// COLLET anywhere: the MSB picture printed on KL-20's 4030-02, XD-8's 4858-22, KS-H70's
+// 4691-19, KN-312A, J-WAVE, LNC45/C200 and 40 more config families — reported from the
+// floor on 2026-08-26 as "KL-20 T02 shows a COLLET image nobody configured". Only the
+// 4547-01 families were ever intended.
+//
+// Legacy bare `NAME:<TOOL>` rows no longer match anything; `20260826e_` renames the five
+// that exist onto their real family.
+const NAME_IMG_KEY = (family, name) =>
+  `NAME:${String(family || '').trim()}:` + String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
 
 // Cache the HTML template in memory — it never changes at runtime, so reading it
 // from disk on every render was pure per-request I/O.
@@ -128,6 +140,218 @@ function canonFixtureName(name) {
 function dwgPrefixOf(no) {
   const p = String(no || '').split('-');
   return p.length >= 2 ? `${p[0]}-${p[1]}` : (no || '');
+}
+
+// Name for a Machine-Tool-Config slot the part has NO tool for: the sheet still lists the
+// fixture, so it needs the family's name out of `lpb.eng_tooling`. A DWG family holds
+// SEVERAL drawings with DIFFERENT names, so something has to choose between them.
+//
+// THE SHOP'S OWN USAGE CHOOSES: among the family's ASCII names, the one the factory plan
+// names most often. `planned` maps a full DWG no to how many `lpb.eng_r_pi_tool` rows use it.
+//
+// Two rules this replaced, both measured against the plan across all 266 whitelist families:
+//   • "first ASCII name the DB returns" — the original. It is arbitrary (no ORDER BY) and
+//     agrees with the plan on 46%. It printed `WORK STOPPER BASE` for XD-8's 4858-11, a
+//     drawing the plan has NEVER used, over `WORK STOPPER` which it uses 224 times; and
+//     `PALLET` for MD-V9910WA's 4918-01 (16 rows) over `UNIVERSAL PALLET ASSY` (132), which
+//     put the same word on two different slots of one sheet. Both reported from the floor.
+//   • `ORDER BY tool_dwg_no` — 35%, WORSE. Sorting is not evidence.
+//
+// ASCII IS A HARD GATE, NOT A TIE-BREAK. The sheet is printed in English, and letting the
+// plan count win outright trades `COLLET` for `コレット` and `COLLAR` for `球研アーバー用カラー`
+// wherever a family's Japanese drawings are the busier ones. Only ASCII names compete; if the
+// family has none the plan uses, the first-ASCII answer stands.
+//
+// `planned` empty (the count query failed, or maqdb is down) ⇒ first-ASCII, unchanged.
+const MIN_PLANNED = 10;
+// "Reads as English", tested by SCRIPT rather than by byte range. A name is English when it
+// has Latin letters and no kana / CJK / Thai — symbols inside an English name (Φ, ～, ×, °)
+// do not make it Japanese. A plain ASCII test disqualified `LOADER CHUCK(Φ12～Φ30)` (planned
+// 381 times on X-100's 4857-06) and printed `LOADER JAW BASE` instead, a drawing the plan has
+// never used. Measured across all 305 whitelist families: exactly 2 change, both onto a name
+// the plan uses far more (4857-06 0→381, 4858-12 1→164), none the other way.
+const READS_AS_ENGLISH = (s) =>
+  /[A-Za-z]/.test(s) && !/[぀-ヿ㐀-䶿一-鿿฀-๿]/.test(s);
+function pickFamilyName(list, planned = {}) {
+  const isAscii = READS_AS_ENGLISH;
+  const add = (m, k, n) => m.set(k, (m.get(k) || 0) + n);
+  const best = (m) => {
+    let name = null, top = 0;
+    for (const [k, n] of m) if (n > top) { name = k; top = n; }
+    return name;
+  };
+  let first = null, anyAscii = false;
+  const ascii = new Map(), all = new Map();
+  for (const r of list) {
+    if (!r || !r.tool_name) continue;
+    const n = planned[r.tool_dwg_no] || 0;
+    if (!first || (!isAscii(first) && isAscii(r.tool_name))) first = r.tool_name;
+    add(all, r.tool_name, n);
+    if (isAscii(r.tool_name)) { anyAscii = true; add(ascii, r.tool_name, n); }
+  }
+  if (!first) return '';
+  // An ASCII name the plan uses wins outright. An ASCII name it does not use still beats
+  // any Japanese one — that is the gate. Only a family with NO ASCII name at all falls
+  // through to the plan's pick among the Japanese ones, which is what keeps a retired
+  // 使用禁止 drawing off the sheet when every name in the family is Japanese (4586-04).
+  const pool = anyAscii ? ascii : all;
+  const winner = best(pool);
+  if (!winner) return first;
+  // EVIDENCE FLOOR. Replacing the incumbent on ONE plan row is not evidence, it is noise —
+  // it flipped `V RAIL BASE`→`NUT` and `ID GRIND JIG`→`ID GRIND YATOI (CAM LOCK)` on a
+  // single row each. Switch only when the winner is genuinely used (>= MIN_PLANNED) or the
+  // incumbent is a drawing the plan has NEVER used, which is the 4858-11 WORK STOPPER BASE
+  // case this started from: there any real usage beats none.
+  const incumbent = pool.get(first) || 0;
+  if ((pool.get(winner) || 0) >= MIN_PLANNED || incumbent === 0) return winner;
+  return first;
+}
+
+// AN ALTERNATIVE THAT WAS NOT CHOSEN MUST NOT BE LISTED.
+// Two config slots can hold MUTUALLY EXCLUSIVE families for ONE fixture: KL-20 grips with
+// COLLET 4030-01 OR 4030-02 and never both; MD-V9910WA marks on PALLET 4918-01 OR 4918-02.
+// The name-only fill printed every configured family, so the option this part does NOT use
+// appeared as a named row with no drawing and sent the operator looking for a fixture that
+// is nowhere on the sheet. Reported from the floor twice.
+//
+// WHICH SLOTS ARE ALTERNATIVES IS MEASURED, NOT GUESSED — and the first two rules tried
+// were both wrong. "Same fixture name" looked obvious and over-fired: KS-400B1 has a second
+// PLUG(A)/PLUG(B) pair whose families 4664-06 and 4664-21 the plan puts on the SAME C/N
+// 15 times out of 15, so they are complements that happen to share a name. What separates
+// them is whether the factory plan ever puts the two families on ONE C/N at this process:
+//
+//     KL-20      4030-01 + 4030-02   720 / 655 C/N,   5 together   1%   alternatives
+//     MD-V9910WA 4918-01 + 4918-02   145 / 138 C/N,   0 together   0%   alternatives
+//     GI-20N     4652-10 + 4652-12    84 /  57 C/N,  21 together  37%   unclear -> keep
+//     KS-400B1   4664-06 + 4664-21    15 /  15 C/N,  15 together 100%   complements
+//     XD-8       every 4858 pair                              85-100%   complements
+//
+// The population is bimodal — of 984 judged pairs, 690 sit at >=80% and 72 at 0% — so the
+// threshold lands in an empty gap (1% to 85%) rather than on a slope.
+//
+// FAILS TOWARD SHOWING. Too little evidence (either family under MIN_ALT_CNS C/Ns at this
+// process, or the query failed) means the pair is NOT treated as alternatives and the name
+// still prints. Hiding a complement loses a fixture the setup needs; showing an unused
+// alternative is only noise.
+//
+// Only a slot with NO Tool No is ever dropped, so nothing carrying data is removed, and a
+// machine that genuinely mounts both has them filled from the plan and is untouched.
+const ALT_MAX_TOGETHER_PCT = 5;   // observed gap is 1% -> 85%
+const MIN_ALT_CNS = 5;            // below this the plan has not said anything yet
+
+// solo: family -> C/Ns planning it at this process. together: "famA|famB" (sorted) -> C/Ns
+// planning BOTH. Returns the set of pairs that behave as alternatives.
+function alternativeFamilies(solo, together) {
+  const alt = new Set();
+  const fams = Object.keys(solo);
+  for (let i = 0; i < fams.length; i++) {
+    for (let j = i + 1; j < fams.length; j++) {
+      const [a, b] = [fams[i], fams[j]].sort();
+      // SAME DRAWING SERIES, or "never planned together" catches unrelated fixtures.
+      // A fixture's alternatives are variants of it and share the 4-digit series by
+      // construction (4030-01/-02, 4918-01/-02). Without this, GI-20N's CLAMP PLATE
+      // 4652-12 and its ROTARY DRESSER 4800-42 co-occur 0 times — they serve different
+      // jobs — and every sheet carrying the dresser dropped the clamp plate's name.
+      if (a.split('-')[0] !== b.split('-')[0]) continue;
+      const lo = Math.min(solo[a], solo[b]);
+      if (lo < MIN_ALT_CNS) continue;
+      const both = together[`${a}|${b}`] || 0;
+      if ((100 * both) / lo <= ALT_MAX_TOGETHER_PCT) alt.add(`${a}|${b}`);
+    }
+  }
+  return alt;
+}
+
+// AN ALTERNATIVE GROUP OCCUPIES ONE SLOT — THE FIRST THE CONFIG RESERVES FOR IT.
+// `altPairs` says which families are mutually exclusive (see alternativeFamilies), and
+// `famBySlot` says which family the WHITELIST reserves each slot for. A part uses exactly
+// one member of a group, so the sheet should carry exactly one row for it: clearing the
+// others but leaving their slot numbers empty prints the chosen pallet at T02 with a hole
+// at T01, which reads as missing data. Reported on MD-V9910WA @3491, where 4918-01 and
+// 4918-02 are alternatives and only the second was selected.
+//
+//   • exactly one member carries a Tool No  -> it MOVES to the group's earliest slot
+//   • no member carries one                 -> the earliest keeps its name, rest cleared
+//   • more than one carries one             -> LEFT ALONE. The plan overrules the
+//     statistic: if the shop fitted both, both belong, each at its own slot.
+//
+// GROUP MEMBERSHIP COMES FROM `famBySlot`, NOT FROM WHAT LANDED IN THE SLOT. A slot filled
+// by the factory plan or by a T-Select ` *` suggestion still belongs to the family the
+// config reserved it for — deriving the group from the payload missed exactly the case this
+// was reported for, where the chosen pallet was a T-Select fill and so looked like it had
+// no group at all.
+function dropUnchosenAlternatives(slotData, altPairs, famBySlot = []) {
+  if (!altPairs || !altPairs.size) return slotData;
+
+  // connected components over altPairs, across the slots the whitelist reserves
+  const idx = famBySlot.map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
+  const groupOf = new Map();
+  let next = 0;
+  for (const i of idx) for (const j of idx) {
+    if (i >= j) continue;
+    const [a, b] = [famBySlot[i], famBySlot[j]].sort();
+    if (a === b || !altPairs.has(a + '|' + b)) continue;
+    const gi = groupOf.get(i), gj = groupOf.get(j);
+    if (gi === undefined && gj === undefined) { groupOf.set(i, next); groupOf.set(j, next); next++; }
+    else if (gi === undefined) groupOf.set(i, gj);
+    else if (gj === undefined) groupOf.set(j, gi);
+    else if (gi !== gj) for (const [k, g] of groupOf) if (g === gj) groupOf.set(k, gi);
+  }
+  if (!groupOf.size) return slotData;
+
+  const groups = new Map();
+  for (const [i, g] of groupOf) { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(i); }
+  for (const slots of groups.values()) {
+    slots.sort((a, b) => a - b);
+    const filled = slots.filter((i) => slotData[i] && slotData[i].tool_dwg_no);
+    if (filled.length > 1) continue;                        // the shop fitted both — leave them
+    const keep = filled.length ? slotData[filled[0]] : slotData[slots[0]];
+    if (!keep) continue;                                    // nothing to show at all
+    for (const i of slots) slotData[i] = null;
+    slotData[slots[0]] = keep;
+  }
+  return slotData;
+}
+
+// Tracks which fixtures a sheet has already placed, so a T-Select fallback tool for a
+// fixture the factory plan already supplied is suppressed rather than printed beside it as
+// a wrong-band ` *` duplicate (factory COLLET 4547-01-0031-07 in T2 → drop T-Select's
+// COLLET 4547-01-0017-05).
+//
+// KEYED BY (canon fixture, DWG FAMILY), NOT BY CANON ALONE. "Wrong band" means a different
+// SUFFIX of the same family — 4547-01-0017-05 vs 4547-01-0031-07 — so the family is what
+// makes two tools the same fixture. canonFixtureName matches on a SUBSTRING, and substrings
+// collide across families that are genuinely DIFFERENT fixtures: X-100's ARBOR (4857-01) and
+// ARBOR PIN (4857-02) both canonicalize to COLLET_ARBOR, so keying on canon alone dropped the
+// PIN from every X-100 sheet — CN 414303 printed T02 with a blank Tool No and no image.
+// Four of the five colliding groups in the live config are the same shape: KL-20
+// (4030-01_COLLET / 4030-02_COLLET), J-WAVE (COLLET OP1 4879-04 / OP2 4879-05) and KS-H70
+// (COLLET 4691-19 / COLLET (A) 4691-03 / COLLET BODY 4691-18). The family separates all of
+// them while leaving the MSB case this was written for untouched — there BASE / COLLET /
+// COLLET ARBOR / COLLAR all share family 4547-01 and are told apart by canon, which holds.
+//
+// FTL-10(I)'s COLLET OP1 / COLLET OP2 are the residual: both are 4501-01, so they are one
+// fixture by this key. They are also one slot to the config resolver, which keys on the same
+// family — separating them needs config work, not a different dedup key.
+function makeFixtureTracker() {
+  const seen = new Map();   // canon fixture → Set(DWG family)
+  const keyOf = (name, dwgNo) => {
+    const canon = canonFixtureName(name);
+    const family = dwgPrefixOf(dwgNo);
+    return canon && family ? { canon, family } : null;
+  };
+  return {
+    note(name, dwgNo) {
+      const k = keyOf(name, dwgNo);
+      if (!k) return;
+      if (!seen.has(k.canon)) seen.set(k.canon, new Set());
+      seen.get(k.canon).add(k.family);
+    },
+    placed(name, dwgNo) {
+      const k = keyOf(name, dwgNo);
+      return !!(k && seen.get(k.canon)?.has(k.family));
+    },
+  };
 }
 
 // Build the canonical-fixture → { slot, family } map for the fixture-NAME slot tier.
@@ -393,7 +617,15 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     // only available pick is the factory's choice for the most dimensionally-
     // similar part (similar-part fallback). These come through fromTs → ' *'
     // marker (= "supplied by Tooling Select, not the part's factory data").
-    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess, includeSimilar: true });
+    // acceptFamilies: this machine's own whitelist, so T-Select tooling filed under
+    // ANOTHER machine's name can still reach the slot the config reserves for it.
+    // 9901-09 CONCENTRICITY MEASURING PIN is the case: TEMPLATE_B puts it first in
+    // every X-100 block, but its family resolves to registry code 901 = `測定用治具全般`,
+    // so the machine-name gate dropped it and X-100's T01 printed name-only.
+    // The whitelist is what keeps this tight — a foreign result enters only through a
+    // family the config already reserves a slot for.
+    const acceptFamilies = new Set(mtRows.map(r => dwgPrefix(r.tool_drawing_no)).filter(Boolean));
+    const tsTools = tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: process_code, partHasProcess, includeSimilar: true, acceptFamilies });
     // Order the fallback tools by the T-Select machine's tooling DEFINITION order
     // (tooling_formula sort_order, then id) rather than searchService's alphabetical
     // sort. For MSB grinders this yields the assembly order WORK FIXED BASE → COLLET →
@@ -432,11 +664,8 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     const multiFam = new Set(Object.keys(famSets).filter(p => famSets[p].size > 1));
     const dedupKey = (no) => (multiFam.has(dwgPrefix(no)) ? toDwg(no) : dwgPrefix(no));
     const existingKeys = new Set(slotData.filter(Boolean).map(s => dedupKey(s.tool_dwg_no)).filter(Boolean));
-    // Fixture types the FACTORY plan already placed (by name). A T-Select fallback tool
-    // for the SAME fixture is a wrong-band duplicate (e.g. factory COLLET 4547-01-0031-07
-    // already in T2 → suppress T-Select's COLLET 4547-01-0017-05 ` *`). MSB-scoped:
-    // canonFixtureName is null for non-grinder tools, so this never suppresses elsewhere.
-    const existingFixtures = new Set(slotData.filter(Boolean).map(s => canonFixtureName(s.tool_name)).filter(Boolean));
+    const { note: noteFixture, placed: fixturePlaced } = makeFixtureTracker();
+    slotData.filter(Boolean).forEach(s => noteFixture(s.tool_name, s.tool_dwg_no));
     // The ' *' marker means "supplied by Tooling Select, not in the part's factory data".
     // But a fallback tool is often ALSO listed verbatim in the factory process plan — it only
     // came through the fallback because its DWG isn't in the (static, band-specific) Machine
@@ -454,8 +683,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       // Skip a T-Select tool whose fixture the factory plan already supplied (factory-first):
       // its DWG differs (different bore band) but it's the same fixture → would otherwise add
       // a misleading wrong-band ` *` duplicate beside the real factory tool.
-      const canonTs = canonFixtureName(tt.tooling_name);
-      if (canonTs && existingFixtures.has(canonTs) && !planByDwg.has(toDwg(tt.tooling_no))) continue;
+      if (fixturePlaced(tt.tooling_name, tt.tooling_no) && !planByDwg.has(toDwg(tt.tooling_no))) continue;
       const planHit = planByDwg.get(toDwg(tt.tooling_no));
       // A T-Select tool also maps to its Machine Tool Config slot via DWG prefix, so it
       // lands in the SAME T-slot the config reserves for that tool family (not just the
@@ -468,13 +696,14 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       // gate they squatted in slots T4/T5 (reserved for 4691-03/4691-10) and displaced the
       // configured fixtures. No whitelist (mtRows empty) → legacy free-fill still applies.
       if (mtRows.length > 0 && cfgSlot === null) continue;
+      const placedName = (planHit && planHit.tool_name) || tt.tooling_name || '';
       if (!placeTool(cfgSlot, {
-        tool_name: (planHit && planHit.tool_name) || tt.tooling_name || '',
+        tool_name: placedName,
         tool_dwg_no: tt.tooling_no,
         fromTs: !planHit,
       })) break;
       if (key) existingKeys.add(key);
-      if (canonTs) existingFixtures.add(canonTs);
+      noteFixture(placedName, tt.tooling_no);
     }
   }
 
@@ -529,22 +758,52 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
 
       const families = [...new Set(emptyCfg.map(r => r.tool_drawing_no))];
       const nameByFamily = {};
+      let altPairs = new Set();
       try {
-        const nr = await maqPool.query(
-          `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING}
-           WHERE ${families.map((_, i) => `tool_dwg_no LIKE $${i + 1}`).join(' OR ')}`,
-          families.map(f => `${f}%`)
-        );
-        const isAscii = (s) => /^[\x00-\x7F]+$/.test(s);
+        const likeArgs = families.map(f => `${f}%`);
+        const likeSql = (n) => families.map((_, i) => `tool_dwg_no LIKE $${i + n}`).join(' OR ');
+        // How often the shop actually plans each drawing in these families. Used ONLY to
+        // rescue the pick below; scoped to the families of the empty slots on this one
+        // sheet, so it is ~50 ms and never runs when every slot already has a tool.
+        // Co-occurrence needs EVERY family the whitelist reserves, not just the empty ones —
+        // the question is whether an empty slot excludes one that IS filled.
+        const allFams = [...new Set(mtRows.map((r) => r.tool_drawing_no).filter(Boolean))];
+        const allLike = allFams.map((f) => `${f}%`);
+        const allSql = (n) => allFams.map((_, i) => `tool_dwg_no LIKE $${i + n}`).join(' OR ');
+        const [nr, pr, cr] = await Promise.all([
+          maqPool.query(
+            `SELECT tool_dwg_no, tool_name FROM ${TABLES.LPB_ENG_TOOLING} WHERE ${likeSql(1)}`, likeArgs),
+          maqPool.query(
+            `SELECT tool_dwg_no, count(*)::int AS n FROM ${TABLES.LPB_ENG_R_PI_TOOL}
+              WHERE ${likeSql(1)} GROUP BY 1`, likeArgs).catch(() => ({ rows: [] })),
+          maqPool.query(
+            `WITH f AS (
+               SELECT process_plan_no,
+                      split_part(tool_dwg_no, '-', 1) || '-' || split_part(tool_dwg_no, '-', 2) AS fam
+                 FROM ${TABLES.LPB_ENG_R_PI_TOOL}
+                WHERE process_code = $1 AND (${allSql(2)})
+                GROUP BY 1, 2)
+             SELECT a.fam AS fam_a, b.fam AS fam_b, count(*)::int AS n
+               FROM f a JOIN f b ON a.process_plan_no = b.process_plan_no AND a.fam < b.fam
+              GROUP BY 1, 2
+             UNION ALL
+             SELECT fam, NULL, count(*)::int FROM f GROUP BY 1`,
+            [String(process_code), ...allLike]).catch(() => ({ rows: [] })),
+        ]);
+        const solo = {}, together = {};
+        for (const r of cr.rows) {
+          if (r.fam_b === null) solo[r.fam_a] = r.n;
+          else together[`${r.fam_a}|${r.fam_b}`] = r.n;
+        }
+        altPairs = alternativeFamilies(solo, together);
+        const planned = Object.fromEntries(pr.rows.map(r => [r.tool_dwg_no, r.n]));
+        const byFam = {};
         for (const row of nr.rows) {
           if (!row.tool_name) continue;
           const fam = families.find(f => row.tool_dwg_no === f || row.tool_dwg_no.startsWith(`${f}-`));
-          if (!fam) continue;
-          // Prefer an ASCII/English name over a Japanese one when both exist for the family.
-          if (!nameByFamily[fam] || (!isAscii(nameByFamily[fam]) && isAscii(row.tool_name))) {
-            nameByFamily[fam] = row.tool_name;
-          }
+          if (fam) (byFam[fam] = byFam[fam] || []).push(row);
         }
+        for (const [fam, list] of Object.entries(byFam)) nameByFamily[fam] = pickFamilyName(list, planned);
       } catch (_) { /* name resolution is best-effort — slot still lists the fixture */ }
       for (const r of emptyCfg) {
         const slot = parseInt(r.tool_number.slice(1), 10);
@@ -558,10 +817,22 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
         slotData[slot - 1] = {
           tool_name: name,
           tool_dwg_no: dwg,          // '' only when neither map nor plan has this fixture for the part
+          // The whitelist's own family, kept because `dwg` may be '' — a NAME-keyed image
+          // still has to know WHICH family this slot is, or it matches by name alone.
+          cfg_family: r.tool_drawing_no,
           fromTs: false,
           fromConfig: true,
         };
       }
+
+      // The whitelist family per slot — config, not payload. See the function header.
+      const famBySlot = [];
+      for (const r of mtRows) {
+        const n = parseInt(r.tool_number.slice(1), 10);
+        if (n >= 1 && n <= 20 && r.tool_drawing_no) famBySlot[n - 1] = dwgPrefix(r.tool_drawing_no);
+      }
+      dropUnchosenAlternatives(slotData, altPairs, famBySlot);
+
     }
   }
 
@@ -574,11 +845,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
     // sheet is consistent. toDD is a no-op for every other tool. cleanDwg keeps the full
     // 4800-42 form for the tooling-image lookup.
     const printDwg = s ? toDD(s.tool_dwg_no) : '';
+    const cleanDwg = s ? toDwg(s.tool_dwg_no) : null;
     finalTools.push({
       slot,
       name: s ? s.tool_name : '',
       dwg: s ? (s.fromTs ? `${printDwg} *` : printDwg) : '',
-      cleanDwg: s ? toDwg(s.tool_dwg_no) : null
+      cleanDwg,
+      // Scope for the NAME-keyed image: the tool's own DWG family, or the whitelist's
+      // when the slot carries no Tool No. Both go through dwgPrefixOf — an MSB whitelist
+      // row is the 4-segment `4547-01-0031-02`, and the image is keyed on `4547-01`.
+      family: dwgPrefixOf(cleanDwg || (s && s.cfg_family) || '') || null,
     });
   }
   // A part needing no fixture must SAY so. Twenty blank tool rows read as "the data
@@ -623,10 +899,12 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   // Images — only fetch the rows we might match (stored tool_dwg_no can be a
   // prefix of the full dwg, so include every cumulative prefix as a candidate)
   // instead of loading the entire image-BLOB table on every render.
-  // A DWG-specific image always wins; a NAME-keyed image (tool_dwg_no = 'NAME:<TOOL>')
-  // is a fallback shared by every slot with that tool name regardless of band/dwg —
-  // so MSB fixtures (BASE / COLLET / COLLET ARBOR / COLLAR) need ONE image each, not
-  // one per bore-ID band (their full dwgs differ per band: 4547-01-{band}-{comp}).
+  // A DWG-specific image always wins; a NAME-keyed image
+  // (tool_dwg_no = 'NAME:<family>:<TOOL>') is a fallback shared by every band of THAT
+  // FAMILY — so MSB fixtures (BASE / COLLET / COLLET ARBOR / COLLAR) need ONE image each,
+  // not one per bore-ID band (their full dwgs differ per band: 4547-01-{band}-{comp}).
+  // The family is in the key: without it the MSB picture printed on every tool named
+  // COLLET on every machine (see NAME_IMG_KEY).
   const dwgNos = slotData.slice(0, 20).map(s => s?.tool_dwg_no).filter(Boolean);
   const slotNames = map.tooling.map(t => t.name).filter(Boolean);
   if (dwgNos.length || slotNames.length) {
@@ -636,7 +914,16 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
       const parts = String(d).split('-');
       for (let i = 1; i < parts.length; i++) candidates.add(parts.slice(0, i).join('-'));
     }
-    for (const n of slotNames) candidates.add(NAME_IMG_KEY(n));
+    for (const t of map.tooling) {
+      if (!t.family) continue;
+      // The CONFIG family is a candidate in its own right. A slot the part has no Tool No
+      // for still knows which family the whitelist reserved it for, and images are keyed at
+      // exactly that level — so `4918-01` should print MD-V9910WA's pallet picture whether or
+      // not this particular part plans a 4918-01. Before this the DWG branch was gated on the
+      // tool having a Tool No, so a named-but-empty slot could never show a picture.
+      candidates.add(t.family);
+      if (t.name) candidates.add(NAME_IMG_KEY(t.family, t.name));
+    }
     const allImgRows = await engPool.query(
       `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
       [[...candidates]]
@@ -645,9 +932,9 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
         // 1) DWG-specific image (exact or family-prefix). 2) name-keyed fallback.
         let img = tool.cleanDwg
           ? allImgRows.rows.find(i => tool.cleanDwg === i.tool_dwg_no || tool.cleanDwg.startsWith(i.tool_dwg_no + '-'))
-          : null;
-        if (!img && tool.name) {
-          const nk = NAME_IMG_KEY(tool.name);
+          : (tool.family ? allImgRows.rows.find(i => i.tool_dwg_no === tool.family) : null);
+        if (!img && tool.name && tool.family) {
+          const nk = NAME_IMG_KEY(tool.family, tool.name);
           img = allImgRows.rows.find(i => i.tool_dwg_no === nk);
         }
         if (img) tool.image = `data:${img.mime_type};base64,${img.image_data.toString('base64')}`;
@@ -886,6 +1173,40 @@ function buildGridPdfHtml(grid) {
 
   const colgroup = colW.map(w => `<col style="width:${(w * scale).toFixed(3)}mm">`).join('');
 
+  // Excel lets a long unwrapped value spill across its neighbours — but only while those
+  // neighbours are EMPTY; the first occupied cell clips it. The renderer only had the
+  // first half of that rule (`overflow:visible` on every non-wrap cell), so a long fixture
+  // name ran straight over the next slot's T-badge and its name. Reported from the floor:
+  // X-100 T01 `CONCENTRICITY MEASURING PIN(FOR SPH)` printed on top of `T02 ARBOR`.
+  //
+  // `hasInk` is what "occupied" means, and a merged cell counts through its base cell —
+  // a covered cell carries no data of its own but is not free space.
+  const baseOf = (r, c) => (covered.has(`${r},${c}`)
+    ? (Object.keys(spanAt).find((k) => {
+        const s = spanAt[k]; const [br, bc] = k.split(',').map(Number);
+        return r >= br && r <= s.r2 && c >= bc && c <= s.c2;
+      }) || `${r},${c}`)
+    : `${r},${c}`);
+  const hasInk = (r, c) => {
+    if (c < 0 || c >= cols) return true;              // past the sheet edge — clip
+    const d = cells[baseOf(r, c)];
+    return !!(d && (d.img || (d.v != null && String(d.v).trim() !== '')));
+  };
+  // How far the text may run before the first occupied cell stops it, in mm — the cell's
+  // own width plus every CONSECUTIVE empty neighbour in the direction its alignment sends
+  // it. Bounding this is the whole fix: "the next cell is empty" is not a licence to run
+  // the length of the row, which is what `overflow:visible` alone granted.
+  const wMm = (c) => (colW[c] || 0) * scale;
+  const spillWidthMm = (r, c, span, align) => {
+    const c1 = c;
+    const c2 = span ? span.c2 : c;
+    let avail = 0;
+    for (let i = c1; i <= c2; i++) avail += wMm(i);
+    if (align !== 'right') for (let i = c2 + 1; i < cols && !hasInk(r, i); i++) avail += wMm(i);
+    if (align !== 'left') for (let i = c1 - 1; i >= 0 && !hasInk(r, i); i--) avail += wMm(i);
+    return avail;
+  };
+
   let body = '';
   for (let r = 0; r < rows; r++) {
     body += `<tr style="height:${(rowH[r] * scale).toFixed(3)}mm">`;
@@ -912,7 +1233,8 @@ function buildGridPdfHtml(grid) {
         `text-align:${(a && a.h) || 'left'}`,
         `vertical-align:${(a && a.v) || 'middle'}`,
         a && a.wrap ? 'white-space:normal' : 'white-space:nowrap',
-        // let injected text overflow over empty neighbours (Excel behaviour)
+        // Kept visible so a bounded spill can still show OUTSIDE the td (Excel behaviour);
+        // the inline-block below is what stops it at the first occupied neighbour.
         a && a.wrap ? 'overflow:hidden' : 'overflow:visible',
       ].filter(Boolean).join(';');
       const sp = span ? `${span.cs > 1 ? ` colspan="${span.cs}"` : ''}${span.rs > 1 ? ` rowspan="${span.rs}"` : ''}` : '';
@@ -931,6 +1253,16 @@ function buildGridPdfHtml(grid) {
           + `<img src="${cd.img}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"></div>`;
       } else {
         content = escHtml(cd && cd.v);
+        // Cap an unwrapped value at the room Excel would give it, and mark the cut with an
+        // ellipsis. Without this a long fixture name printed straight over the next slot's
+        // T-badge and name (reported: X-100 T01 `CONCENTRICITY MEASURING PIN(FOR SPH)` over
+        // `T02 ARBOR`). The td stays overflow:visible so a name that DOES fit the empty
+        // neighbours still spills into them exactly as before.
+        if (content && !(a && a.wrap)) {
+          const mm = spillWidthMm(r, c, span, (a && a.h) || 'left');
+          content = `<span style="display:inline-block;max-width:${mm.toFixed(3)}mm;`
+            + `overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;">${content}</span>`;
+        }
       }
       body += `<td${sp} style="${st}">${content}</td>`;
     }
@@ -1285,7 +1617,7 @@ router.get('/pdf-chrome/grid', async (req, res) => {
     if (cn && machine_type_name) {
       sdsPrintLog.record({
         cn, machineTypeName: machine_type_name, processCode: process_code, lot,
-        source: 'app', requestedBy: req.user?.empno, pdfBuffer, tooling: _meta.tooling,
+        source: 'app', requestedBy: req.user?.empno, pdfBuffer, tooling: _meta.tooling, req,
       });
     }
   } catch (err) {
@@ -1519,9 +1851,17 @@ module.exports.renderPdf = renderPdf;
 // Exported for unit testing the fixture-NAME slot-matching tier (the riskiest, highest
 // blast-radius logic in this controller). See tests/mtc/sdsFixtureSlot.test.js.
 module.exports.canonFixtureName = canonFixtureName;
+module.exports.makeFixtureTracker = makeFixtureTracker;
+module.exports.pickFamilyName = pickFamilyName;
+module.exports.dropUnchosenAlternatives = dropUnchosenAlternatives;
+module.exports.alternativeFamilies = alternativeFamilies;
 module.exports.buildSlotByFixture = buildSlotByFixture;
 module.exports.makeConfigSlotResolver = makeConfigSlotResolver;
 // Exported to test {{dim.*}} token resolution — a token that silently fails would put a
 // blank (or worse, a stale) dimension on an operator's setup sheet.
 // See tests/mtc/sdsDimTokens.test.js.
 module.exports.applyDataToGrid = applyDataToGrid;
+// Exported to test the Excel spill rule: an unwrapped value may run over EMPTY neighbours
+// but must stop at the first occupied one. Unbounded, a long fixture name printed over the
+// next slot's T-badge. See tests/mtc/sdsGridOverflow.test.js.
+module.exports.buildGridPdfHtml = buildGridPdfHtml;

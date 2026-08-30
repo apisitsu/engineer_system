@@ -344,7 +344,11 @@ export default function ToolingSelectV2Page() {
     setResult(null);
     setError(null);
     try {
-      const res = await axios.post(server.TSV2_SEARCH, { cn: cn.trim() }, { headers });
+      // A heavy C/N (many processes → many eligible machines) runs the full
+      // formula + inventory + similar-ref + fallback passes and legitimately takes
+      // 8–15 s over the factory DB link — well past HttpClient's 10 s default, which
+      // showed up as "Search failed" on parts like 414303. 45 s covers the tail.
+      const res = await axios.post(server.TSV2_SEARCH, { cn: cn.trim() }, { headers, timeout: 45000 });
       setResult(res.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Search failed');
