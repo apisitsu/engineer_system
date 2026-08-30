@@ -388,7 +388,10 @@ export default function ToolingSelectV2Page() {
   const groupPlanPcs = (g) => [...new Set(g.toolings.flatMap(t => t.planProcessCodes || []))].sort();
   const inPlanGroups = machineGroups.filter(groupInPlan);
   const sizeOnlyGroups = machineGroups.filter(g => !groupInPlan(g));
-  const splitPlan = planApplied && inPlanGroups.length > 0;
+  // Split whenever the route resolved — even with 0 in-plan machines (a part whose
+  // route touches no Tooling Select machine, e.g. a turned/heat-treated race): the
+  // page then shows just the collapsed size-only list rather than a flat wall.
+  const splitPlan = planApplied;
 
   const buildItems = (groups) => groups.map(group => {
     const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
@@ -604,21 +607,33 @@ export default function ToolingSelectV2Page() {
 
                     return (
                       <div style={{ marginBottom: 16 }}>
-                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                          ตาม process plan ของชิ้นงาน
-                          <Tag color="cyan" style={{ marginLeft: 8 }}>{inPlanGroups.length} เครื่อง</Tag>
-                          {result.planProcess.processCodes?.length > 0 && (
-                            <Text type="secondary" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
-                              process: {result.planProcess.processCodes.join(' · ')}
+                        {inPlanGroups.length > 0 ? (
+                          <>
+                            <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                              ตาม process plan ของชิ้นงาน
+                              <Tag color="cyan" style={{ marginLeft: 8 }}>{inPlanGroups.length} เครื่อง</Tag>
+                              {result.planProcess.processCodes?.length > 0 && (
+                                <Text type="secondary" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+                                  process: {result.planProcess.processCodes.join(' · ')}
+                                </Text>
+                              )}
                             </Text>
-                          )}
-                        </Text>
-                        <Collapse
-                          key={`${result?.cn}-plan`}
-                          defaultActiveKey={openKeys(inPlanGroups)}
-                          items={buildItems(inPlanGroups)}
-                          style={{ marginBottom: 16 }}
-                        />
+                            <Collapse
+                              key={`${result?.cn}-plan`}
+                              defaultActiveKey={openKeys(inPlanGroups)}
+                              items={buildItems(inPlanGroups)}
+                              style={{ marginBottom: 16 }}
+                            />
+                          </>
+                        ) : (
+                          <Alert
+                            type="info"
+                            showIcon
+                            style={{ marginBottom: 12 }}
+                            message="ไม่มีเครื่องใน Tooling Select ที่อยู่ใน process plan ของชิ้นงานนี้"
+                            description={`process route: ${(result.planProcess.routeCodes || []).join(' · ') || '—'} — เครื่องด้านล่างเลือกได้ตามขนาดเท่านั้น`}
+                          />
+                        )}
                         {sizeOnlyGroups.length > 0 && (
                           <>
                             <Text strong style={{ display: 'block', marginBottom: 8, color: '#8c8c8c' }}>
@@ -627,6 +642,7 @@ export default function ToolingSelectV2Page() {
                             </Text>
                             <Collapse
                               key={`${result?.cn}-size`}
+                              defaultActiveKey={inPlanGroups.length === 0 ? openKeys(sizeOnlyGroups) : []}
                               items={buildItems(sizeOnlyGroups)}
                               style={{ marginBottom: 16 }}
                             />
