@@ -32,6 +32,57 @@ const cnFormat = require('../utils/cnFormat');
 
 const TABLE = 'sds_print_log';
 
+/**
+ * Caller address, preferring X-Forwarded-For when something upstream sets it.
+ *
+ * `server.js` sets no `trust proxy` and `nginx.conf` does not forward XFF, and production
+ * calls :2005 directly anyway — so today this is the socket address. The header is read
+ * first so that adding a proxy later does not silently turn every row into the proxy's
+ * own address. IPv4-mapped IPv6 (`::ffff:10.1.2.3`) is unwrapped: it is the same machine
+ * written two ways, and two spellings of one host would split every report by address.
+ */
+function clientIp(req) {
+  if (!req) return null;
+  const xff = req.headers && req.headers['x-forwarded-for'];
+  const raw = (typeof xff === 'string' && xff.split(',')[0].trim())
+    || (req.socket && req.socket.remoteAddress)
+    || req.ip
+    || '';
+  const ip = String(raw).replace(/^::ffff:/i, '').trim();
+  return ip ? ip.slice(0, 64) : null;
+}
+
+// Reverse DNS is a network round trip, and the log runs after the response is already
+// sent — but it is still per-print, and the same few machines call over and over. Cached
+// for an hour, with a hard timeout, because an internal host with no PTR record makes the
+// resolver wait rather than fail fast. A miss is cached too: re-asking DNS every print for
+// a name that does not exist is the expensive case, not the rare one.
+const HOST_TTL_MS = 60 * 60 * 1000;
+const HOST_TIMEOUT_MS = 700;
+const _hostCache = new Map();
+
+async function clientHost(ip) {
+  if (!ip) return null;
+  const hit = _hostCache.get(ip);
+  if (hit && Date.now() - hit.at < HOST_TTL_MS) return hit.name;
+
+  let name = null;
+  try {
+    const dns = require('dns').promises;
+    name = await Promise.race([
+      dns.reverse(ip).then((names) => (names && names[0]) || null),
+      new Promise((resolve) => setTimeout(() => resolve(null), HOST_TIMEOUT_MS)),
+    ]);
+  } catch (_) {
+    name = null;                       // NXDOMAIN / no PTR / resolver down — all "unknown"
+  }
+  // Keep the short name: `plb018.lb.minebea.local` reads as `plb018` to everyone here,
+  // and the domain is the same on every row.
+  if (name) name = String(name).split('.')[0].slice(0, 128);
+  _hostCache.set(ip, { name, at: Date.now() });
+  return name;
+}
+
 /** Both key forms for one CN, whichever way it was written. */
 function cnForms(raw) {
   const s = String(raw || '').trim();
@@ -117,24 +168,28 @@ async function verifyLot({ cn, processCode, lot }) {
  * @param {object}  a
  * @param {string}  a.cn                 CN in either form
  * @param {string}  a.machineTypeName
+ * @param {string=} a.machineCode        factory floor code as sent (e.g. CGM-10); not derivable back
  * @param {string=} a.processCode
  * @param {string=} a.lot                as supplied by the caller; not guessed
  * @param {'app'|'public'} a.source
  * @param {string=} a.requestedBy
  * @param {Buffer=} a.pdfBuffer          hashed, not stored
  * @param {Array=}  a.tooling            valueMap.tooling — the T01..Tn slots as rendered
+ * @param {object=} a.req                the Express request, for caller address/hostname
  * @returns {Promise<object|null>} the inserted row, or null if logging failed
  */
 async function record({
-  cn, machineTypeName, processCode, lot, source, requestedBy, pdfBuffer, tooling,
+  cn, machineTypeName, machineCode, processCode, lot, source, requestedBy, pdfBuffer, tooling, req,
 }) {
   try {
     const { control, item } = cnForms(cn);
     if (!control || !machineTypeName) return null;
 
-    const [part, lotVerified] = await Promise.all([
+    const ip = clientIp(req);
+    const [part, lotVerified, host] = await Promise.all([
       resolvePartInfo(control),
       verifyLot({ cn: control, processCode, lot }),
+      clientHost(ip),
     ]);
 
     const sha = pdfBuffer ? crypto.createHash('sha256').update(pdfBuffer).digest('hex') : null;
@@ -149,9 +204,9 @@ async function record({
     const { rows } = await engPool.query(
       `INSERT INTO ${TABLE}
          (cn, item_no, parts_no, parts_name, lot_no, lot_verified,
-          machine_type_name, process_code, source, requested_by,
-          pdf_sha256, pdf_bytes, tooling_snapshot)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          machine_type_name, machine_code, process_code, source, requested_by,
+          pdf_sha256, pdf_bytes, tooling_snapshot, client_ip, client_host)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id, printed_at`,
       [
         control,
@@ -161,18 +216,23 @@ async function record({
         String(lot || '').trim() || null,
         lotVerified,
         String(machineTypeName).trim(),
+        String(machineCode || '').trim() || null,
         String(processCode || '').trim() || null,
         source,
         String(requestedBy || '').trim() || null,
         sha,
         pdfBuffer ? pdfBuffer.length : null,
         snapshot ? JSON.stringify(snapshot) : null,
+        ip,
+        host,
       ]);
 
     const flag = lotVerified === false ? ' lot=UNVERIFIED' : '';
-    console.log(`[sds-print-log] #${rows[0].id} ${control} ${machineTypeName}` +
+    const from = host || ip ? ` from ${host || ip}` : '';
+    const mc = String(machineCode || '').trim();
+    console.log(`[sds-print-log] #${rows[0].id} ${control} ${machineTypeName}${mc ? `(${mc})` : ''}` +
                 `${processCode ? ` p${processCode}` : ''}${lot ? ` lot=${lot}` : ''}` +
-                `${flag} via ${source}`);
+                `${flag} via ${source}${from}`);
     return rows[0];
   } catch (e) {
     // Deliberately swallowed — a print must never fail because of its own audit row.
@@ -181,4 +241,4 @@ async function record({
   }
 }
 
-module.exports = { record, verifyLot, listLots, resolvePartInfo, cnForms };
+module.exports = { record, verifyLot, listLots, resolvePartInfo, cnForms, clientIp, clientHost };

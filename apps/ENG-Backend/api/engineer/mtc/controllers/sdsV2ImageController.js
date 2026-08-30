@@ -8,18 +8,49 @@ const router = express.Router();
 
 // ── Tooling Images ──────────────────────────────────────────────────────────
 
-/** GET /api/sds/v2/images/tooling/search?q= — search tool_dwg_no from lpb.eng_tooling */
+/** GET /api/sds/v2/images/tooling/search?q= — search tool_dwg_no from lpb.eng_tooling
+ *
+ * ONE ROW PER DWG FAMILY, not per drawing. A tooling image is keyed on the 2-segment
+ * family (`4918-02`) — that is what the PDF matches on — and the picker groups whatever
+ * comes back down to families anyway. Returning raw drawings meant `LIMIT 20` was spent
+ * inside the FIRST family: typing `4918` returned twenty `4918-01-xxxx` rows, so
+ * **4918-02, -03 and -10 could not be selected at all**, and `4858` offered only 4858-01
+ * out of that series' twenty-two families. An image for a family the picker cannot reach
+ * never gets uploaded — reported from the floor for 4918-02 PALLET on 2026-08-26.
+ *
+ * `tool_name` is the family's most-planned ASCII name, matching what the SDS sheet prints
+ * for a slot with no Tool No (see pickFamilyName), so the picker's label and the sheet
+ * agree. A family whose drawings are all Japanese-named keeps its first name.
+ *
+ * The search also matches the NAME now, so "PALLET" finds 4918-02 — before this the
+ * clause was `tool_dwg_no ILIKE` only and a name search silently returned nothing.
+ */
 router.get('/tooling/search', async (req, res) => {
   const { q } = req.query;
   if (!q?.trim()) return res.json([]);
   try {
+    const term = `%${q.trim()}%`;
+    // The plan count is a JOINed aggregate, not a per-row subquery: as a correlated
+    // subquery this took 2-3 s, which an autocomplete firing per keystroke cannot wear.
     const result = await maqPool.query(
-      `SELECT tool_dwg_no, tool_name, machine_type
-       FROM ${TABLES.LPB_ENG_TOOLING}
-       WHERE tool_dwg_no ILIKE $1
-       ORDER BY tool_dwg_no
-       LIMIT 20`,
-      [`%${q.trim()}%`]
+      `WITH fam AS (
+         SELECT split_part(tool_dwg_no, '-', 1) || '-' || split_part(tool_dwg_no, '-', 2) AS family,
+                tool_dwg_no, tool_name, machine_type
+           FROM ${TABLES.LPB_ENG_TOOLING}
+          WHERE tool_name IS NOT NULL AND tool_name <> ''
+            AND (tool_dwg_no ILIKE $1 OR tool_name ILIKE $1)
+       ), cnt AS (
+         SELECT p.tool_dwg_no, count(*)::int AS n
+           FROM ${TABLES.LPB_ENG_R_PI_TOOL} p
+           JOIN fam f ON f.tool_dwg_no = p.tool_dwg_no
+          GROUP BY 1
+       )
+       SELECT DISTINCT ON (f.family) f.family AS tool_dwg_no, f.tool_name, f.machine_type
+         FROM fam f
+         LEFT JOIN cnt c ON c.tool_dwg_no = f.tool_dwg_no
+        ORDER BY f.family, (f.tool_name ~ '^[[:ascii:]]+$') DESC, COALESCE(c.n, 0) DESC, f.tool_name
+        LIMIT 40`,
+      [term]
     );
     res.json(result.rows);
   } catch (err) {

@@ -47,6 +47,7 @@ const TABLES = {
   SDS_V2_MACHINE_TOOL:    'sds_machine_tool',    // tool ordering per (machine_type, process_code)
   SDS_MACHINE_CODE:       'sds_machine_code',    // factory floor code → machine type mapping
   SDS_ACCESS_LOG:         'sds_access_log',      // VIEW/PDF/ADMIN access tracking
+  SDS_PRINT_LOG:          'sds_print_log',       // evidentiary record of every SDS PDF produced (services/sdsPrintLog.js)
   SDS_TEMPLATE_CSS_CONFIG: 'sds_template_css_config', // CSS variable overrides for Chrome PDF template
   SDS_GRID_TEMPLATE:      'sds_grid_template',      // named grid layouts (multi-template); one is_default
   SDS_APPROVAL:           'sds_approval',          // Prepared/Checked/Approved sign records per (cn, machine_type, process_code, sds_rev)
@@ -136,7 +137,7 @@ const PATHS = {
 
   // Optional: mirror the two CSVs to Drive through an Apps Script web app instead of
   // relying on a Drive-for-Desktop letter. Unset means "don't", so a host that has not
-  // been configured behaves exactly as before. docs/gas_ti_csv_doPost.gs is the script,
+  // been configured behaves exactly as before. api/engineer/mtc/doc/gas_ti_csv_doPost.gs is the script,
   // and explains why this exists rather than the Drive API (the OAuth token this project
   // holds carries only `gmail.send`).
   TI_CSV_GAS_URL: envPath('TI_CSV_GAS_URL'),

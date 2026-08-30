@@ -64,6 +64,68 @@ describe('tselectToolsForMachine', () => {
     expect(fallback.tselectToolsForMachine({ success: false }, new Set(['X']))).toEqual([]);
   });
 
+  // Tooling used ON a machine but filed under ANOTHER machine's registry code.
+  // 9901-09 CONCENTRICITY MEASURING PIN is the live case: TEMPLATE_B lists it first in
+  // every X-100 block, but family 9901 resolves to code 901 = `測定用治具全般`, so the
+  // machine-name gate dropped it and X-100's T01 printed a name with no Tool No.
+  describe('acceptFamilies (the machine whitelist admits a foreign-machine result)', () => {
+    const PIN = {
+      success: true,
+      spec: { process: 'OD->ID' },
+      results: [
+        { machine: 'X-100', tooling: 'ARBOR', matches: [{ tooling_no: '4857-01-0014' }] },
+        { machine: '測定用治具全般', tooling: 'CONCENTRICITY MEASURING PIN', matches: [{ tooling_no: '9901-09-0005' }] },
+        { machine: '測定用治具全般', tooling: 'SPHERICITY MEASURING JIG ASSY', matches: [{ tooling_no: '9901-21-0003' }] },
+      ],
+    };
+
+    it('admits a foreign-machine tool whose family the config whitelists', () => {
+      const out = fallback.tselectToolsForMachine(PIN, new Set(['X-100']), {
+        acceptFamilies: new Set(['4857-01', '9901-09']),
+      });
+      expect(out.map(t => t.tooling_no)).toEqual(['4857-01-0014', '9901-09-0005']);
+    });
+
+    it('does NOT admit a foreign-machine tool the config does not whitelist', () => {
+      const out = fallback.tselectToolsForMachine(PIN, new Set(['X-100']), {
+        acceptFamilies: new Set(['4857-01', '9901-09']),
+      });
+      // 9901-21 sits on the same foreign machine but is not in this machine's whitelist
+      expect(out.map(t => t.tooling_no)).not.toContain('9901-21-0003');
+    });
+
+    it('is inert when omitted — the machine-name gate alone still applies', () => {
+      const out = fallback.tselectToolsForMachine(PIN, new Set(['X-100']));
+      expect(out.map(t => t.tooling_no)).toEqual(['4857-01-0014']);
+    });
+
+    it('ignores a non-Set value rather than widening the gate', () => {
+      const out = fallback.tselectToolsForMachine(PIN, new Set(['X-100']), {
+        acceptFamilies: ['9901-09'],
+      });
+      expect(out.map(t => t.tooling_no)).toEqual(['4857-01-0014']);
+    });
+
+    it('never admits a foreign tool whose number is not a DWG family', () => {
+      const odd = {
+        success: true,
+        spec: { process: 'OD->ID' },
+        results: [{ machine: 'OTHER', tooling: 'X', matches: [{ tooling_no: 'MISC-PART' }] }],
+      };
+      const out = fallback.tselectToolsForMachine(odd, new Set(['X-100']), {
+        acceptFamilies: new Set(['4857-01', '']),
+      });
+      expect(out).toEqual([]);
+    });
+
+    it('still admits the machine\'s OWN tools when acceptFamilies is empty', () => {
+      const out = fallback.tselectToolsForMachine(PIN, new Set(['X-100']), {
+        acceptFamilies: new Set(),
+      });
+      expect(out.map(t => t.tooling_no)).toEqual(['4857-01-0014']);
+    });
+  });
+
   describe('similar_part fallback handling', () => {
     const SIMILAR = {
       success: true,
