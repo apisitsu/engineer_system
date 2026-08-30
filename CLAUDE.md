@@ -27,7 +27,7 @@ npm test             # Jest unit tests (tests in tests/**/*.test.js; coverage co
 npm run test:watch   # Jest watch mode
 npm run test:coverage
 npx jest --testPathPattern="formulaService"   # single test file
-npx jest --testPathPattern="mtcv2"            # V2 tests only
+npx jest tests/mtc                            # all MTC tests
 ```
 
 ### Frontend (`apps/ENG-Frontend`)
@@ -62,7 +62,7 @@ npm run cypress:run  # Cypress E2E headless
   - `maqQcPool` in `.env` (`PG_RODQC_*`) but **no instance file exists** — env vars declared but unused
 - **Auth middleware:**
   - `middleware/auth.js` — `verifyToken` (JWT), `generateToken`
-  - `middleware/mtcAuth.js` — `authorize(roles[])` factory, `isAdmin` (dept/role 'AD'), `isEngineer` ('AD' or 'Engineering'). All MTC admin controllers (e.g. `api/engineer/mtcv2/controllers/specController.js`) import `isAdmin` from here — do not redefine locally.
+  - `middleware/mtcAuth.js` — `authorize(roles[])` factory, `isAdmin` (dept/role 'AD'), `isEngineer` ('AD' or 'Engineering'). All MTC admin controllers (e.g. `api/engineer/mtc/controllers/specController.js`) import `isAdmin` from here — do not redefine locally.
   - **Inline guards in `server.js`:** `requireSuperAdminOrEmergency` and `requireSystemEngineer` — not in middleware files
 - **JWT payload:** `{ empno, name, department, group, role }` — in Kanban routes `empno` is mapped to `id`
 - **Constants:** MTC table names in `api/engineer/mtc/mtcConstants.js` → `TABLES`; never hardcode table names

@@ -6,7 +6,8 @@
  * HTML file (mtc-docs.html) with a sticky table of contents, embedded CSS, and no
  * external/network dependencies. Pure Node, no npm packages.
  *
- *   node build-mtc-docs.js        -> writes ./mtc-docs.html
+ *   node apps/ENG-Backend/api/engineer/mtc/doc/build-mtc-docs.js
+ *        -> writes mtc-docs.html next to this script
  *
  * Re-run any time the source markdown changes.
  */
@@ -14,7 +15,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = __dirname;
+// Sources are repo-root-relative; this script lives 6 levels deep under doc/.
+const ROOT = path.resolve(__dirname, '../../../../../..');
 
 // Source docs in reading order. { file, title }.
 const SOURCES = [
@@ -27,7 +29,6 @@ const SOURCES = [
   { file: '.claude/rules/sds-reference.md',     title: 'SDS v2 API Reference' },
   { file: '.claude/rules/db-patterns.md',       title: 'DB / Bulk / PDF Patterns' },
   { file: '.claude/rules/backend-gotchas.md',   title: 'Backend Gotchas' },
-  { file: '.claude/rules/agent-alignment.md',   title: 'Multi-Agent Coordination' },
 ];
 
 // -- Minimal, pragmatic Markdown -> HTML --------------------------------------
@@ -277,6 +278,6 @@ const HTML = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\
 + '  });\n});}\n'
 + '</script>\n</body>\n</html>\n';
 
-const outPath = path.join(ROOT, 'mtc-docs.html');
+const outPath = path.join(__dirname, 'mtc-docs.html');
 fs.writeFileSync(outPath, HTML, 'utf8');
 console.log('Wrote ' + outPath + ' (' + (HTML.length / 1024).toFixed(0) + ' KB, ' + sections.length + ' docs)');
