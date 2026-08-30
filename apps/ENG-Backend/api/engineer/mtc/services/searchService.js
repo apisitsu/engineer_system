@@ -7,6 +7,7 @@ const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
 const noJigRule = require('./noJigRule');
+const { resolveKubun } = require('../utils/cnKubun');
 
 // Cap on concurrent inventory queries per search (pg pool max is 20).
 const SEARCH_CONCURRENCY = 8;
@@ -259,6 +260,31 @@ function buildSpecContext(spec) {
     // grip mode from this (N-chuck classes 23/25/26/41/42/61/63 → 4030-01; ID-chuck
     // classes 62/64/69 → 4030-02) instead of the manually-set `type` column.
     cnPrefix: parseInt(String(spec.cn ?? '').slice(0, 2), 10) || 0,
+
+    // RE21000H §4-3(2) work-type decode of that same class code (utils/cnKubun.js —
+    // an in-memory table, no I/O). A formula can now branch on material / lube / unit
+    // system / thread side without a hand-kept `cnPrefix == 23 or 25 or …` list, and
+    // without the manual `type` column. All '' for a class the standard does not list
+    // (7x assemblies etc.) — a formula that references one just sees an empty string.
+    ...(function () {
+      const k = resolveKubun(spec.cn) || {};
+      const s = (v) => (v && v !== '-' ? v : '');
+      return {
+        partFamily: s(k.family),
+        materialClass: s(k.material),
+        lubeType: s(k.lube),
+        unitSystem: s(k.unit),
+        threadSide: s(k.thread),
+        assemblyType: s(k.assembly),
+        cnShape: s(k.shape),
+        isMM: flag(k.lube === 'M/M'),
+        isTFE: flag(k.lube === 'TFE'),
+        isInch: flag(k.unit === 'inch'),
+        isMetric: flag(k.unit === 'metric'),
+        isExternalThread: flag(k.thread === 'external'),
+        isInternalThread: flag(k.thread === 'internal'),
+      };
+    })(),
 
     // MSB surface-grinder COLLET variant: the 2MSB48-605~607-T races take a THAI-plant
     // COLLET (4547-01-0039-01) while sharing the 0030 base/arbor/collar (per

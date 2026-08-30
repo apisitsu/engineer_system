@@ -3,6 +3,7 @@ const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
+const { NON_GRIND_KUBUN } = require('../utils/cnKubun');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 // SDS admin mutations: full 'AD' admin OR a user holding the 'sds_admin'
 // feature permission (granular, non-AD). See hasFeature().
@@ -951,11 +952,21 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     const subClassWhere    = `(${buildWhere('i')})`;   // for queries with alias i
     const subClassWhereRaw = `(${buildWhere('')})`;    // for simple single-table queries
 
+    // Keep the classes that never get a grinding setup sheet — tooling, raw blanks,
+    // paint specs, purchased parts (RE21000H §4-3(2), see utils/cnKubun.js) — out of
+    // the audit entirely. A broad sub_class config (C9%, C99% …) otherwise pulls tens
+    // of thousands of these rows, which is what made this endpoint time out. The
+    // filter is one extra param, appended after the sub_class patterns.
+    const ngIdx = subClassPatterns.length + 1;
+    const nonGrind = (alias) => `substring(${alias ? alias + '.' : ''}sub_class from 2 for 2) <> ALL($${ngIdx}::text[])`;
+    const ngFrag    = ` AND ${nonGrind('i')}`;
+    const ngFragRaw = ` AND ${nonGrind('')}`;
+
     // 1. Count Enabled Items by sub_class — COUNT(DISTINCT control_no) so the
     //    figure is genuinely "unique CNs" (one part counted once) rather than rows.
     const countsResult = await maqPool.query(
-      `SELECT sub_class, COUNT(DISTINCT control_no) AS count FROM lpb.eng_item WHERE ${subClassWhereRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
-      subClassPatterns
+      `SELECT sub_class, COUNT(DISTINCT control_no) AS count FROM lpb.eng_item WHERE ${subClassWhereRaw}${ngFragRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
+      [...subClassPatterns, NON_GRIND_KUBUN]
     );
 
     const itemCounts = countsResult.rows.map(r => ({ sub_class: r.sub_class, count: parseInt(r.count) }));
@@ -967,26 +978,26 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     const noProcessPlanResult = await maqPool.query(
       `SELECT i.control_no, i.sub_class
        FROM lpb.eng_item i
-       WHERE ${subClassWhere} AND i.condition = 'Enable'
+       WHERE ${subClassWhere}${ngFrag} AND i.condition = 'Enable'
          AND NOT EXISTS (SELECT 1 FROM lpb.eng_process_info pi WHERE pi.process_plan_no = i.control_no)
        ORDER BY i.control_no`,
-      subClassPatterns
+      [...subClassPatterns, NON_GRIND_KUBUN]
     );
 
     // 3. Warning: Missing Tooling in configured Process Codes
     let missingRows = [];
     if (targetProcessCodes.length > 0) {
-      const pcOffset = subClassPatterns.length + 1;
+      const pcOffset = subClassPatterns.length + 2;   // patterns, then NON_GRIND, then process codes
       const missingToolingResult = await maqPool.query(
         `SELECT i.control_no, i.sub_class, pi.process_code, pi.wc
          FROM lpb.eng_item i
          JOIN lpb.eng_process_info pi ON pi.process_plan_no = i.control_no
          LEFT JOIN lpb.eng_r_pi_tool rpt ON (rpt.process_plan_no = pi.process_plan_no AND rpt.process_code = pi.process_code)
-         WHERE ${subClassWhere} AND i.condition = 'Enable'
+         WHERE ${subClassWhere}${ngFrag} AND i.condition = 'Enable'
            AND pi.process_code = ANY($${pcOffset})
            AND rpt.tool_dwg_no IS NULL
          ORDER BY i.control_no, pi.seq_no`,
-        [...subClassPatterns, targetProcessCodes]
+        [...subClassPatterns, NON_GRIND_KUBUN, targetProcessCodes]
       );
       missingRows = missingToolingResult.rows;
     }
