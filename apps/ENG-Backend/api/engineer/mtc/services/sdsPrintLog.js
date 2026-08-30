@@ -201,6 +201,32 @@ async function record({
           .map((t) => ({ slot: t.slot, name: t.name, dwg: t.dwg }))
       : null;
 
+    const proc = String(processCode || '').trim() || null;
+    const bytes = pdfBuffer ? pdfBuffer.length : null;
+
+    // One deep-link open re-fetches the PDF — Chrome's inline viewer issues the
+    // request twice and `Cache-Control: no-store` re-renders each time — so the
+    // public path logged every print twice, ~1.5 s apart: same CN/machine/process,
+    // different sha because each render's bytes carry a fresh timestamp. Collapse a
+    // repeat of the same (cn, machine, process, source) at the same byte length
+    // inside a 20 s window. A genuine reprint on another day differs in lot, tooling
+    // or byte count and is never in this window; `pdf_sha256` still proves drift
+    // between real prints, which is the point of the table.
+    const dup = await engPool.query(
+      `SELECT id FROM ${TABLE}
+        WHERE cn = $1 AND machine_type_name = $2
+          AND process_code IS NOT DISTINCT FROM $3
+          AND source = $4
+          AND pdf_bytes IS NOT DISTINCT FROM $5
+          AND printed_at > now() - interval '20 seconds'
+        LIMIT 1`,
+      [control, String(machineTypeName).trim(), proc, source, bytes]);
+    if (dup.rows.length) {
+      console.log(`[sds-print-log] skip re-fetch ${control} ${machineTypeName}` +
+                  `${proc ? ` p${proc}` : ''} via ${source} (dup of #${dup.rows[0].id})`);
+      return null;
+    }
+
     const { rows } = await engPool.query(
       `INSERT INTO ${TABLE}
          (cn, item_no, parts_no, parts_name, lot_no, lot_verified,
@@ -217,11 +243,11 @@ async function record({
         lotVerified,
         String(machineTypeName).trim(),
         String(machineCode || '').trim() || null,
-        String(processCode || '').trim() || null,
+        proc,
         source,
         String(requestedBy || '').trim() || null,
         sha,
-        pdfBuffer ? pdfBuffer.length : null,
+        bytes,
         snapshot ? JSON.stringify(snapshot) : null,
         ip,
         host,
