@@ -379,17 +379,32 @@ export default function ToolingSelectV2Page() {
     machineToolingCounts[g.machine] = { found, total: g.toolings.length + errCount };
   }
 
-  const collapseItems = machineGroups.map(group => {
+  // A machine group is "in the part's process plan" when any of its toolings was
+  // flagged by the backend (searchController.annotatePlanProcess). planApplied is
+  // false when the plan has no tooled steps / the CN is unparseable / maqdb is
+  // down — then we render the single flat list exactly as before.
+  const planApplied = result?.planProcess?.applied === true;
+  const groupInPlan = (g) => g.toolings.some(t => t.planInPlan);
+  const groupPlanPcs = (g) => [...new Set(g.toolings.flatMap(t => t.planProcessCodes || []))].sort();
+  const inPlanGroups = machineGroups.filter(groupInPlan);
+  const sizeOnlyGroups = machineGroups.filter(g => !groupInPlan(g));
+  const splitPlan = planApplied && inPlanGroups.length > 0;
+
+  const buildItems = (groups) => groups.map(group => {
     const { found, total } = machineToolingCounts[group.machine] || { found: 0, total: 0 };
     const similarCount = group.toolings.filter(t => t.overrideBy === 'similar_part').length;
     const noHistory = group.producedHistory === false;
+    const planPcs = groupPlanPcs(group);
     return {
       key: group.machine,
       label: (
-        <Space>
+        <Space wrap>
           <Text strong style={noHistory ? { color: '#8c8c8c' } : undefined}>{group.machine}</Text>
           {group.machineLabel && group.machineLabel !== group.machine && (
             <Tag color="default">{group.machineLabel}</Tag>
+          )}
+          {planPcs.length > 0 && (
+            <Tag color="cyan">Process {planPcs.join(' / ')}</Tag>
           )}
           <Tag color={found < total ? 'orange' : 'geekblue'}>{found} / {total} Tooling</Tag>
           {similarCount > 0 && (
@@ -563,27 +578,63 @@ export default function ToolingSelectV2Page() {
                     <Empty description="No matching tooling found for any machine" />
                   )}
 
-                  {hasResults && (
-                    <Collapse
-                      // Remount per search so the default expansion re-applies.
-                      key={result?.cn}
-                      // Auto-expand machines that have at least one match (incl.
-                      // similar-part suggestions) so results aren't hidden behind
-                      // a collapsed panel.
-                      defaultActiveKey={machineGroups
-                        // Auto-expand machines that found a match. When SOME machine has
-                        // production history, expand only those (no-history machines stay
-                        // collapsed to reduce clutter). But for a BRAND-NEW model (no
-                        // machine has any history) that rule would collapse EVERYTHING —
-                        // contradicting the "showing all machines" alert — so expand every
-                        // matched machine instead.
-                        .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0
-                          && (result.productionFilter?.hadProduction === false || g.producedHistory !== false))
-                        .map(g => g.machine)}
-                      items={collapseItems}
-                      style={{ marginBottom: 16 }}
-                    />
-                  )}
+                  {hasResults && (() => {
+                    // Auto-expand machines that found a match. When SOME machine has
+                    // production history, expand only those (no-history machines stay
+                    // collapsed to reduce clutter). For a BRAND-NEW model (no machine
+                    // has any history) that rule would collapse EVERYTHING, so expand
+                    // every matched machine instead.
+                    const openKeys = (groups) => groups
+                      .filter(g => (machineToolingCounts[g.machine]?.found || 0) > 0
+                        && (result.productionFilter?.hadProduction === false || g.producedHistory !== false))
+                      .map(g => g.machine);
+
+                    // planProcess.applied === false (no plan tooling / CN unparseable /
+                    // maqdb down) OR nothing landed in the plan → the flat list, unchanged.
+                    if (!splitPlan) {
+                      return (
+                        <Collapse
+                          key={result?.cn}
+                          defaultActiveKey={openKeys(machineGroups)}
+                          items={buildItems(machineGroups)}
+                          style={{ marginBottom: 16 }}
+                        />
+                      );
+                    }
+
+                    return (
+                      <div style={{ marginBottom: 16 }}>
+                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                          ตาม process plan ของชิ้นงาน
+                          <Tag color="cyan" style={{ marginLeft: 8 }}>{inPlanGroups.length} เครื่อง</Tag>
+                          {result.planProcess.processCodes?.length > 0 && (
+                            <Text type="secondary" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+                              process: {result.planProcess.processCodes.join(' · ')}
+                            </Text>
+                          )}
+                        </Text>
+                        <Collapse
+                          key={`${result?.cn}-plan`}
+                          defaultActiveKey={openKeys(inPlanGroups)}
+                          items={buildItems(inPlanGroups)}
+                          style={{ marginBottom: 16 }}
+                        />
+                        {sizeOnlyGroups.length > 0 && (
+                          <>
+                            <Text strong style={{ display: 'block', marginBottom: 8, color: '#8c8c8c' }}>
+                              เลือกได้ตามขนาด · ไม่อยู่ใน process plan
+                              <Tag color="default" style={{ marginLeft: 8 }}>{sizeOnlyGroups.length} เครื่อง</Tag>
+                            </Text>
+                            <Collapse
+                              key={`${result?.cn}-size`}
+                              items={buildItems(sizeOnlyGroups)}
+                              style={{ marginBottom: 16 }}
+                            />
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 !loading && <div style={{ textAlign: 'center', marginTop: 80, opacity: 0.5 }} />
