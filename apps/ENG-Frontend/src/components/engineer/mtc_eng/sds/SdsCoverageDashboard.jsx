@@ -205,10 +205,13 @@ const PartTypeCard = ({ pt, C }) => {
       </Tooltip>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
         <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>
-          {pctSaved}%
+          {pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text>
         </Text>
         {boost > 0 && (
-          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>
+          <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>
+        )}
+        {boost > 0 && (
+          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>
         )}
       </div>
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
@@ -723,8 +726,9 @@ export default function SdsCoverageDashboard() {
                           </div>
                         </Tooltip>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}%</Text>
-                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>}
+                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text></Text>
+                          {boost > 0 && <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>}
+                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>}
                         </div>
                       </>);
                     })()}

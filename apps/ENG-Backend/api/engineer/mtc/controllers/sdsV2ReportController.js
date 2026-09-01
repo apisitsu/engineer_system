@@ -127,6 +127,57 @@ async function loadPersistedCoverage() {
   return null;
 }
 
+// ── Monthly-status freeze — one immutable row per CLOSED calendar month ───────
+// The coverage report recomputes monthlyStatus from scratch every build, so a
+// config edit or a back-dated approval for an old part reshapes the WHOLE
+// historical curve (every cumulative bar from that part's production month on).
+// Freezing fixes that: the first build in a new month writes each now-closed
+// month's bar and it is served verbatim forever after. Only the CURRENT
+// (still-open) month stays live.
+//
+// NOTE: freezing captures whatever the numbers are the first time a month closes
+// after this shipped — it locks in TODAY's history, it does not reconstruct an
+// earlier state. To deliberately re-freeze a month after a real correction:
+//   DELETE FROM sds_coverage_monthly WHERE month = '2026-07';   -- next build re-freezes it
+let _covMonthlyTableReady = null;
+function ensureCoverageMonthlyTable() {
+  if (!_covMonthlyTableReady) {
+    _covMonthlyTableReady = engPool.query(`
+      CREATE TABLE IF NOT EXISTS sds_coverage_monthly (
+        month     TEXT PRIMARY KEY,
+        data      JSONB NOT NULL,
+        frozen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => { _covMonthlyTableReady = null; throw e; });
+  }
+  return _covMonthlyTableReady;
+}
+async function freezeMonthlyStatus(live) {
+  const curMonth = new Date().toISOString().slice(0, 7);
+  try {
+    await ensureCoverageMonthlyTable();
+    const { rows } = await engPool.query(`SELECT month, data FROM sds_coverage_monthly`);
+    const frozen = new Map(rows.map((r) => [r.month, r.data]));
+
+    const toFreeze = live.filter((m) => m.month < curMonth && !frozen.has(m.month));
+    if (toFreeze.length) {
+      const ph = toFreeze.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(',');
+      await engPool.query(
+        `INSERT INTO sds_coverage_monthly (month, data) VALUES ${ph}
+         ON CONFLICT (month) DO NOTHING`,
+        toFreeze.flatMap((m) => [m.month, JSON.stringify(m)])
+      );
+      for (const m of toFreeze) frozen.set(m.month, m);
+      console.log(`[SDS Report] froze ${toFreeze.length} monthlyStatus month(s): ${toFreeze.map((m) => m.month).join(', ')}`);
+    }
+    // Serve frozen for closed months, live for the current (open) month.
+    return live.map((m) => (m.month < curMonth && frozen.has(m.month) ? frozen.get(m.month) : m));
+  } catch (e) {
+    console.warn('[SDS Report] freezeMonthlyStatus failed, serving live curve:', e.message);
+    return live;   // fail open — a live curve beats a broken report
+  }
+}
+
 // ── Report scope config (admin-editable) ─────────────────────────────────────
 // The operational "dials" of the coverage scope, externalized from hardcode so
 // admins can change them without a deploy. Defaults == the original hardcoded
@@ -883,60 +934,48 @@ async function buildCoverage() {
     // Query 10 returns the last 24 months newest-first; restore chronological order.
     const monthlyTrend = sdsParamMonthRes.rows.slice().reverse();
 
-    // ── Monthly coverage status — cumulative, two-axis bucketing ──────────────
+    // ── Monthly coverage status — cumulative "% PDF-complete" by production month ─
     //
-    // DELIBERATE: `complete_pct` here is `complete / (complete + pending)` — MISSING rows
-    // (part not yet in SDS scope: no process plan at all) are NOT in the denominator, so
-    // this line tracks "of the sheets we could work on, how many are done" over time.
-    // The headline `kpi.completePct` is `complete / total` and DOES include MISSING, so it
-    // reads lower. The two answer different questions on purpose; keep them separate.
+    // `complete` = a sheet that is TOOL + EXCEL ready AND fully approval-stamped
+    // (`coverage_level === 'COMPLETE'`); `complete_saved` is the same via a factory-plan
+    // tool only (the KZW baseline; the gap up to `complete` is the T-Select #1 boost).
+    // Both numerator and denominator bucket on the sheet's FIRST-PRODUCED month, and
+    // MISSING rows (no process plan at all) are excluded — so `complete_pct` reads
+    // "of the sheets we could work on, how many are done" per production cohort.
     //
-    // Numerator and denominator are bucketed on DIFFERENT dates so a past month's bar
-    // is NOT retroactively rewritten when work is done later:
-    //   • denominator (workable) → the sheet's FIRST-PRODUCED month. Grows as new CNs
-    //     appear, so the % can dip when unconfigured parts enter.
-    //   • numerator (complete)   → max(first-produced month, FULLY-STAMPED month). A part
-    //     produced in May but signed in Aug counts as backlog from May and as done only
-    //     from Aug — it drags May–Jul down and lifts Aug, instead of lifting every month.
-    // A bulk approval backfill (stamps dated in one month) therefore moves only that
-    // month's bar and later, not the whole history. Reverting it is just as local.
+    // A closed month is served from `sds_coverage_monthly` (frozen the first build in
+    // the next month) so a later config edit or a back-dated approval never rewrites a
+    // bar already reported. Only the current month is recomputed live. See
+    // `freezeMonthlyStatus`.
     const ym = (d) => new Date(d).toISOString().slice(0, 7);
-    const workByMonth = new Map();   // first-produced 'YYYY-MM' → count of workable sheets
-    const doneByMonth = new Map();   // completion    'YYYY-MM' → { complete, completeSaved }
-    const bumpDone = (m, saved) => {
-      const e = doneByMonth.get(m) || { complete: 0, completeSaved: 0 };
-      e.complete += 1; if (saved) e.completeSaved += 1;
-      doneByMonth.set(m, e);
-    };
+    const stMon = new Map();   // first-produced 'YYYY-MM' → { workable, complete, completeSaved }
     for (const r of evaluated) {
       if (r.coverage_level === 'MISSING' || !r.first_prod_date) continue;
-      const prodMonth = ym(r.first_prod_date);
-      workByMonth.set(prodMonth, (workByMonth.get(prodMonth) || 0) + 1);
-      if (r.coverage_level === 'COMPLETE') {
-        // completion attributed to when it was fully stamped, but never before it existed
-        const doneMonth = r.stamped_full_at ? ym(r.stamped_full_at) : prodMonth;
-        bumpDone(doneMonth > prodMonth ? doneMonth : prodMonth, r.coverage_level_saved === 'COMPLETE');
-      }
+      const m = ym(r.first_prod_date);
+      const e = stMon.get(m) || { workable: 0, complete: 0, completeSaved: 0 };
+      e.workable += 1;
+      if (r.coverage_level === 'COMPLETE')       e.complete += 1;
+      if (r.coverage_level_saved === 'COMPLETE') e.completeSaved += 1;
+      stMon.set(m, e);
     }
-    const allStatusMonths = [...new Set([...workByMonth.keys(), ...doneByMonth.keys()])].sort();
-    let cumComplete = 0;
-    let cumCompleteSaved = 0;
-    let cumWorkable = 0;
-    const monthlyStatus = allStatusMonths.map((month) => {
-      const d = doneByMonth.get(month) || { complete: 0, completeSaved: 0 };
-      cumWorkable      += workByMonth.get(month) || 0;
+    let cumWorkable = 0, cumComplete = 0, cumCompleteSaved = 0;
+    const monthlyStatusLive = [...stMon.keys()].sort().map((month) => {
+      const d = stMon.get(month);
+      cumWorkable      += d.workable;
       cumComplete      += d.complete;
       cumCompleteSaved += d.completeSaved;
-      const pending = Math.max(0, cumWorkable - cumComplete);   // backlog not yet done at M
+      const pct = (n) => (cumWorkable > 0 ? parseFloat(((n / cumWorkable) * 100).toFixed(1)) : 0);
       return {
         month,
-        complete:       cumComplete,         // with T-Select #1
-        complete_saved: cumCompleteSaved,    // baseline (saved only)
-        pending,
-        complete_pct: cumWorkable > 0 ? parseFloat(((cumComplete / cumWorkable) * 100).toFixed(1)) : 0,
-        complete_saved_pct: cumWorkable > 0 ? parseFloat(((cumCompleteSaved / cumWorkable) * 100).toFixed(1)) : 0,
+        complete:       cumComplete,         // tool + Excel + stamped, incl. T-Select #1
+        complete_saved: cumCompleteSaved,    // same via factory-plan tool only (KZW)
+        pending:        Math.max(0, cumWorkable - cumComplete),
+        complete_pct:       pct(cumComplete),
+        complete_saved_pct: pct(cumCompleteSaved),
       };
     });
+    // Past months are served from the freeze table; only the current month is live.
+    const monthlyStatus = await freezeMonthlyStatus(monthlyStatusLive);
 
     // NOTE: the dedicated "Stamp Tracking" page (and the `stamp` payload section it
     // consumed) was removed 2026-06-28. Once COMPLETE was redefined to require a
