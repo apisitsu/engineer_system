@@ -136,6 +136,24 @@ describe('record — a logging failure never fails a print', () => {
     expect(vals).toEqual(['C31-04050', 'KS-400B1', '1041', 'public', 8]);
   });
 
+  it('the dedup SELECT runs BEFORE the slow plan/DNS lookups (closes the race)', async () => {
+    maqPool.query.mockResolvedValue(rows([]));
+    engPool.query.mockResolvedValueOnce(rows([{ id: 42 }]));   // dedup hit → early return
+    await printLog.record(args);
+    // maqPool (resolvePartInfo / verifyLot) must not have been touched — the check
+    // that used to run after ~1-3 s of that work now runs first.
+    expect(maqPool.query).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the INSERT is a no-op via ON CONFLICT (concurrent dup won the race)', async () => {
+    maqPool.query.mockResolvedValue(rows([]));
+    engPool.query
+      .mockResolvedValueOnce(rows([]))   // dedup: clear
+      .mockResolvedValueOnce(rows([]));  // INSERT ... ON CONFLICT DO NOTHING → 0 rows
+    await expect(printLog.record(args)).resolves.toBeNull();
+    expect(insertCall()[0]).toMatch(/ON CONFLICT DO NOTHING/i);
+  });
+
   it('hashes the PDF, stores no bytes, and keeps only slots carrying a fixture', async () => {
     maqPool.query.mockResolvedValue(rows([]));
     okInsert(7);

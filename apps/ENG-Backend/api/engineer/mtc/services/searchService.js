@@ -7,6 +7,7 @@ const formulaService = require('./FormulaService');
 const configCache = require('./tsv2ConfigCache');
 const cnFormat = require('../utils/cnFormat');
 const noJigRule = require('./noJigRule');
+const machineHistory = require('./machineHistory');
 const { resolveKubun } = require('../utils/cnKubun');
 
 // Cap on concurrent inventory queries per search (pg pool max is 20).
@@ -318,14 +319,25 @@ async function checkMachineLimits(machineId, ctx) {
 }
 
 /**
- * Machines a CN is size-limit EXCLUDED from (tooling_machine_limit fails) — i.e.
- * the part physically can't run on them. Lightweight: reuses the same spec context
- * + limit check as search() but SKIPS all inventory searches. Grouped machines are
- * deduped to the group name (mirrors search()'s displayName), so the returned Set
- * matches the `warnings[].machine` values the user-facing search emits.
+ * Split a CN's over-limit machines (tooling_machine_limit fails) by whether the
+ * factory floor has SUSTAINED production history on them:
+ *   • `excluded`  — over the limit AND no real history → a genuine anomaly, the part
+ *                   cannot run there and the floor has never said otherwise. This is
+ *                   what search() reports as `type:'limit'` (machine not searched).
+ *   • `softened`  — over the limit BUT the plan has genuinely run this CN here, so
+ *                   search() searches it normally and flags `type:'limit_note'`.
  *
- * @returns Set<displayName> of excluded machines, or null when the CN has no spec
- *          row (caller fails open — eligibility is unknowable without dimensions).
+ * Keeping both in step with search() is the point: the SDS red anomaly badge / the
+ * coverage `limit_excluded` flag come from `excluded`; `softened` is the worklist of
+ * (machine) bounds a surgical `tooling_machine_limit` fix should look at next.
+ *
+ * Lightweight: reuses the same spec context + limit check as search() but SKIPS all
+ * inventory searches. Grouped machines are deduped to the group name (mirrors
+ * search()'s displayName), so the Sets match `warnings[].machine`.
+ *
+ * @returns {{excluded:Map<string,string>, softened:Map<string,string>}} — displayName
+ *          → the failing-limit reason ("ID=12.7 > max 12"). null when the CN has no
+ *          spec row (caller fails open — eligibility is unknowable without dims).
  */
 async function limitExcludedMachines(cn) {
   const specCn = normalizeSpecCn(cn);
@@ -337,7 +349,7 @@ async function limitExcludedMachines(cn) {
   const specCtx = buildSpecContext(specRes.rows[0]);
   const machines = await configCache.getMachines();
   const seenGroups = new Set();
-  const excluded = new Set();
+  const overLimit = new Map();   // displayName → reason
   for (const m of machines) {
     // one check per group (first member holds the shared limits — matches search())
     if (m.machine_group) {
@@ -347,10 +359,16 @@ async function limitExcludedMachines(cn) {
     const displayName = m.machine_group || m.machine_name;
     try {
       const lc = await checkMachineLimits(m.id, specCtx);
-      if (!lc.ok) excluded.add(displayName);
+      if (!lc.ok) overLimit.set(displayName, lc.reason);
     } catch (_) { /* per-machine fail-open */ }
   }
-  return excluded;
+  if (!overLimit.size) return { excluded: new Map(), softened: new Map() };
+  const produced = await machineHistory.producedMachineNames(specCn);
+  const excluded = new Map(), softened = new Map();
+  for (const [name, reason] of overLimit) {
+    (produced.has(name) ? softened : excluded).set(name, reason);
+  }
+  return { excluded, softened };
 }
 
 // ── Inventory Table Validation ───────────────────────────────────────────────
@@ -1165,6 +1183,14 @@ async function search(cn, opts = {}) {
   // is resolved once here and skipped entirely for everything else.
   const factoryPlansJig = noJigRule.exceedsSize(specCtx) ? await _factoryPlansJig(specCn) : false;
 
+  // Size-limit softening: an over-limit machine the factory floor has ACTUALLY run
+  // this CN on is downgraded from EXCLUDED to an advisory (searched normally). Lazy +
+  // memoised — resolved only if some machine fails its limit, and once per search.
+  // Empty set (incl. on any DB failure) ⇒ every over-limit machine stays hard-excluded
+  // (fail closed — a design rule is not softened on missing evidence).
+  let _producedNamesP = null;
+  const producedMachineNames = () => (_producedNamesP ||= machineHistory.producedMachineNames(specCn));
+
   // Phase 1 — eligibility check (limits/tooling names come from the in-memory
   // config cache, so this is cheap) → flatten to (machine, tooling) tasks.
   const tasks = [];
@@ -1176,11 +1202,20 @@ async function search(cn, opts = {}) {
     try {
       const limitCheck = await checkMachineLimits(machine.id, specCtx);
       if (!limitCheck.ok) {
-        // type:'limit' distinguishes a size-limit exclusion (part can't run on this
-        // machine) from formula/error warnings — consumers (SDS Production-History
-        // red badge, coverage report anomaly filter) key on it.
-        warnings.push({ machine: displayName, reason: limitCheck.reason, type: 'limit' });
-        return;
+        // Over the RE330 design limit — but if the factory plan has genuinely run
+        // this CN here, trust the floor: search the machine normally and carry the
+        // discrepancy as an advisory NOTE rather than excluding it.
+        if ((await producedMachineNames()).has(displayName)) {
+          warnings.push({ machine: displayName, reason: limitCheck.reason, type: 'limit_note', producedHere: true });
+          // fall through — machine is searched like any eligible one
+        } else {
+          // type:'limit' distinguishes a HARD size-limit exclusion (part can't run on
+          // this machine, no production evidence) from formula/error warnings —
+          // consumers (SDS Production-History red badge, coverage report anomaly
+          // filter) key on it. A softened machine is 'limit_note', not 'limit'.
+          warnings.push({ machine: displayName, reason: limitCheck.reason, type: 'limit' });
+          return;
+        }
       }
       // "No jig required" — a large part on a surface grinder holds on the magnetic
       // chuck and no fixture is designed for it. Distinct from a limit exclusion (the
@@ -1290,6 +1325,7 @@ function _clearCaches() {
   _validatedTables.clear();
   _columnCache.clear();
   configCache.flush();
+  machineHistory._clearCache();
 }
 
 module.exports = { search, limitExcludedMachines, _searchInventory: searchInventory, _clearCaches, _buildSpecContext: buildSpecContext };

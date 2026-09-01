@@ -32,6 +32,46 @@ const cnFormat = require('../utils/cnFormat');
 
 const TABLE = 'sds_print_log';
 
+// A repeat print of the SAME sheet is collapsed if it lands within this window:
+// Chrome's inline PDF viewer double-fetches a `no-store` URL, and a slow render can
+// put the two fetches 20-30 s apart. A DELIBERATE reprint of an unchanged sheet is
+// minutes+ apart (or differs in bytes / tooling) and never falls in here.
+const DEDUP_WINDOW_S = 45;
+const DEDUP_BUCKET_MS = DEDUP_WINDOW_S * 1000;
+
+// `dedup_key` + its partial unique index are the RACE-PROOF backstop: the rolling
+// pre-SELECT below is check-then-act and two near-simultaneous deep-link fetches can
+// both pass it, but they compute the SAME bucketed key and the second INSERT is a
+// no-op via ON CONFLICT. Self-heals a DB where the migration (20260831e_) hasn't run;
+// tolerates failure — the pre-SELECT still catches the common case. The index is
+// PARTIAL (`WHERE dedup_key IS NOT NULL`) so it can be created while historical rows
+// (all NULL key) still contain duplicates.
+let _dedupReady = false;
+let _dedupSchemaP = null;
+async function ensureDedupKey() {
+  if (_dedupReady) return true;
+  if (!_dedupSchemaP) {
+    _dedupSchemaP = (async () => {
+      try {
+        await engPool.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS dedup_key TEXT`);
+        await engPool.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS uq_${TABLE}_dedup ON ${TABLE} (dedup_key) WHERE dedup_key IS NOT NULL`);
+        _dedupReady = true;
+      } catch (e) {
+        console.warn(`[sds-print-log] dedup_key schema not ready (using time-window guard only): ${e.message}`);
+        _dedupSchemaP = null;   // allow a later retry
+      }
+    })();
+  }
+  await _dedupSchemaP;
+  return _dedupReady;
+}
+
+// Warm the schema once at startup so the first print does not pay for the DDL and
+// record()'s guard below is a cheap flag check. Fire-and-forget — record() re-runs
+// it if this raced or failed.
+ensureDedupKey().catch(() => {});
+
 /**
  * Caller address, preferring X-Forwarded-For when something upstream sets it.
  *
@@ -185,6 +225,38 @@ async function record({
     const { control, item } = cnForms(cn);
     if (!control || !machineTypeName) return null;
 
+    const mt    = String(machineTypeName).trim();
+    const proc  = String(processCode || '').trim() || null;
+    const bytes = pdfBuffer ? pdfBuffer.length : null;
+
+    // ── De-dup FIRST, before the slow part / lot / reverse-DNS lookups ─────────
+    // Chrome's inline PDF viewer double-fetches a `no-store` URL, so the public
+    // path logs every print twice ~1-2 s apart (same cn/machine/process/bytes,
+    // only pdf_sha256 differing — each render stamps a fresh timestamp). This
+    // check used to run AFTER ~1-3 s of maqPool + DNS work in the Promise.all
+    // below, so the second fetch's check ran before the first fetch's INSERT
+    // committed and both rows landed. Running it up-front closes almost all of
+    // that gap; the ON CONFLICT (dedup_key) on the INSERT closes the rest.
+    try {
+      const dup = await engPool.query(
+        // DEDUP_WINDOW_S is a module constant, not user input — safe to interpolate.
+        `SELECT id FROM ${TABLE}
+          WHERE cn = $1 AND machine_type_name = $2
+            AND process_code IS NOT DISTINCT FROM $3
+            AND source = $4
+            AND pdf_bytes IS NOT DISTINCT FROM $5
+            AND printed_at > now() - interval '${DEDUP_WINDOW_S} seconds'
+          LIMIT 1`,
+        [control, mt, proc, source, bytes]);
+      if (dup.rows.length) {
+        console.log(`[sds-print-log] skip re-fetch ${control} ${mt}` +
+                    `${proc ? ` p${proc}` : ''} via ${source} (dup of #${dup.rows[0].id})`);
+        return null;
+      }
+    } catch (_) { /* best-effort — the ON CONFLICT guard below still applies */ }
+
+    const haveDedup = await ensureDedupKey();
+
     const ip = clientIp(req);
     const [part, lotVerified, host] = await Promise.all([
       resolvePartInfo(control),
@@ -201,57 +273,36 @@ async function record({
           .map((t) => ({ slot: t.slot, name: t.name, dwg: t.dwg }))
       : null;
 
-    const proc = String(processCode || '').trim() || null;
-    const bytes = pdfBuffer ? pdfBuffer.length : null;
+    // Bucketed logical key — two fetches in the same DEDUP_WINDOW compute the same
+    // key, so the second INSERT is a no-op. A genuine reprint differs in bytes /
+    // tooling (different key) or lands in a later bucket.
+    const dedupKey = haveDedup
+      ? [control, mt, proc || '', source, bytes ?? '', Math.floor(Date.now() / DEDUP_BUCKET_MS)].join('|')
+      : null;
 
-    // One deep-link open re-fetches the PDF — Chrome's inline viewer issues the
-    // request twice and `Cache-Control: no-store` re-renders each time — so the
-    // public path logged every print twice, ~1.5 s apart: same CN/machine/process,
-    // different sha because each render's bytes carry a fresh timestamp. Collapse a
-    // repeat of the same (cn, machine, process, source) at the same byte length
-    // inside a 20 s window. A genuine reprint on another day differs in lot, tooling
-    // or byte count and is never in this window; `pdf_sha256` still proves drift
-    // between real prints, which is the point of the table.
-    const dup = await engPool.query(
-      `SELECT id FROM ${TABLE}
-        WHERE cn = $1 AND machine_type_name = $2
-          AND process_code IS NOT DISTINCT FROM $3
-          AND source = $4
-          AND pdf_bytes IS NOT DISTINCT FROM $5
-          AND printed_at > now() - interval '20 seconds'
-        LIMIT 1`,
-      [control, String(machineTypeName).trim(), proc, source, bytes]);
-    if (dup.rows.length) {
-      console.log(`[sds-print-log] skip re-fetch ${control} ${machineTypeName}` +
-                  `${proc ? ` p${proc}` : ''} via ${source} (dup of #${dup.rows[0].id})`);
-      return null;
-    }
+    const cols = ['cn', 'item_no', 'parts_no', 'parts_name', 'lot_no', 'lot_verified',
+      'machine_type_name', 'machine_code', 'process_code', 'source', 'requested_by',
+      'pdf_sha256', 'pdf_bytes', 'tooling_snapshot', 'client_ip', 'client_host'];
+    const vals = [
+      control, item, part.parts_no || null, part.parts_name || null,
+      String(lot || '').trim() || null, lotVerified,
+      mt, String(machineCode || '').trim() || null, proc, source,
+      String(requestedBy || '').trim() || null,
+      sha, bytes, snapshot ? JSON.stringify(snapshot) : null, ip, host,
+    ];
+    if (dedupKey != null) { cols.push('dedup_key'); vals.push(dedupKey); }
 
     const { rows } = await engPool.query(
-      `INSERT INTO ${TABLE}
-         (cn, item_no, parts_no, parts_name, lot_no, lot_verified,
-          machine_type_name, machine_code, process_code, source, requested_by,
-          pdf_sha256, pdf_bytes, tooling_snapshot, client_ip, client_host)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      `INSERT INTO ${TABLE} (${cols.join(', ')})
+       VALUES (${vals.map((_, i) => `$${i + 1}`).join(',')})
+       ${dedupKey != null ? 'ON CONFLICT DO NOTHING' : ''}
        RETURNING id, printed_at`,
-      [
-        control,
-        item,
-        part.parts_no || null,
-        part.parts_name || null,
-        String(lot || '').trim() || null,
-        lotVerified,
-        String(machineTypeName).trim(),
-        String(machineCode || '').trim() || null,
-        proc,
-        source,
-        String(requestedBy || '').trim() || null,
-        sha,
-        bytes,
-        snapshot ? JSON.stringify(snapshot) : null,
-        ip,
-        host,
-      ]);
+      vals);
+    if (!rows.length) {
+      console.log(`[sds-print-log] skip concurrent dup ${control} ${mt}` +
+                  `${proc ? ` p${proc}` : ''} via ${source}`);
+      return null;
+    }
 
     const flag = lotVerified === false ? ' lot=UNVERIFIED' : '';
     const from = host || ip ? ` from ${host || ip}` : '';

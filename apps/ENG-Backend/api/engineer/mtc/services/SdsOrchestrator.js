@@ -3,9 +3,15 @@
 const SdsAgent = require('./agents/SdsAgent');
 const cache    = require('./agents/CacheAgent');
 const monitor  = require('./agents/MonitorAgent');
+const cnFormat = require('../utils/cnFormat');
 
+// Key on the CANONICAL control-no so the same sheet requested as '310368' and as
+// 'C31-00368' shares one cache entry (the headless PDF route passes the raw query
+// string, sdsPublicController passes a normalised control-no) and invalidate(cn)
+// can actually find it whichever spelling it is handed.
 function cacheKey(cn) {
-  return `sds:${cn.trim().toUpperCase()}`;
+  const raw = String(cn).trim().toUpperCase();
+  return `sds:${cnFormat.toControlNo(raw) || raw}`;
 }
 
 async function search(cn, maqPool, rodpcPool) {
