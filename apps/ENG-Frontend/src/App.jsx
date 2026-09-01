@@ -59,8 +59,6 @@ import ToolManagementPage from './components/engineer/mtc_eng/tooling_select/V2A
 import SpecProcessManager from './components/engineer/mtc_eng/tooling_select/SpecProcessManager';
 import CnEnablePage from './components/engineer/mtc_eng/sds/CnEnablePage';
 import SdsHistoryPage from './components/engineer/mtc_eng/sds/SdsHistoryPage';
-import TemplateBConformancePage from './components/engineer/mtc_eng/sds/TemplateBConformancePage';
-import SelectionConditionConformancePage from './components/engineer/mtc_eng/sds/SelectionConditionConformancePage';
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
@@ -353,8 +351,9 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />
                   <Route path={MTC_PATHS.SDS_COVERAGE_REPORT} element={<SdsCoverageDashboard />} />
                   <Route path={MTC_PATHS.SDS_HISTORY} element={<SdsHistoryPage />} />
-                  <Route path={MTC_PATHS.SDS_TEMPLATE_B} element={<TemplateBConformancePage />} />
-                  <Route path={MTC_PATHS.SDS_SELECTION_COND} element={<SelectionConditionConformancePage />} />
+                  {/* Merged into the Tooling Select page (tabs); keep the old paths as redirects */}
+                  <Route path={MTC_PATHS.SDS_TEMPLATE_B} element={<Navigate to={MTC_PATHS.TOOLING_SELECT} replace />} />
+                  <Route path={MTC_PATHS.SDS_SELECTION_COND} element={<Navigate to={MTC_PATHS.TOOLING_SELECT} replace />} />
                   <Route path="/eng/mtc/email-config" element={<EmailConfigManager />} />
 
                   {/* ------ New Product Engineer ------ */}

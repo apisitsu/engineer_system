@@ -882,7 +882,7 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   //   machine default → CN (any process) → CN + this process.
   // cn-specificity is the PRIMARY sort so a per-CN value beats a process-specific one.
   const paramRows = await engPool.query(
-    `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+    `SELECT param_key, param_value, cn, process_code FROM ${TABLES.SDS_PARAMETER}
      WHERE machine_type_name = $3 AND (cn IS NULL OR cn = $1 OR cn = $2)
        AND (process_code IS NULL OR process_code = $4)
      ORDER BY (cn IS NULL) DESC, (process_code IS NULL) DESC`,
@@ -890,6 +890,18 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   );
   const rawParams = {};
   paramRows.rows.forEach(r => { rawParams[r.param_key] = r.param_value || ''; });
+  // `sds_rev` is per-(cn, machine) and NEVER per-process — resolve it from the
+  // process-agnostic rows only, exactly as sdsApprovalController.resolveSdsRev does.
+  // Otherwise a stray per-process `sds_rev` override in sds_parameter would win here
+  // (the flatten above is last-write-wins), making the printed rev and the
+  // approval-seal lookup (getApprovalSeals) disagree with the rev the sheet was
+  // signed under — the seals then silently vanish and GET /approval reads unsigned.
+  {
+    const revRows = paramRows.rows
+      .filter(r => r.param_key === 'sds_rev' && r.process_code == null)
+      .sort((a, b) => (a.cn == null ? 0 : 1) - (b.cn == null ? 0 : 1)); // cn-specific last (wins)
+    rawParams['sds_rev'] = (revRows.length ? revRows[revRows.length - 1].param_value : '') || 'NC';
+  }
   map['params'] = rawParams;
   map['sds_rev'] = rawParams['sds_rev'] || 'NC';
 
@@ -1834,6 +1846,15 @@ router.get('/pdf-chrome', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.send(pdfBuffer);
+
+    // Evidentiary record, AFTER the response (never awaited, never fails the print).
+    // This HTML-template path is superseded by /pdf-chrome/grid but still renders a real
+    // per-CN sheet — it must land in sds_print_log too, or a print through it is invisible
+    // to the one table that answers "which sheet was printed, for which part, when".
+    sdsPrintLog.record({
+      cn, machineTypeName: machine_type_name, processCode: process_code, lot: req.query.lot,
+      source: 'app', requestedBy: req.user?.empno, pdfBuffer, tooling: valueMap.tooling, req,
+    });
 
   } catch (err) {
     console.error('[SDS PDF Chrome] FATAL ERROR:', err);

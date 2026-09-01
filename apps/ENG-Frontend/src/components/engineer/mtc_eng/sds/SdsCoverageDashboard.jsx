@@ -107,6 +107,36 @@ const hexToRgba = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
+// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000). The backend now
+// sends this as `data.fye`; this is the fallback so an older cached payload still
+// windows the FY-scoped charts on the right period instead of a stale hardcoded one.
+const computeFyeWindow = (ref = new Date()) => {
+  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+  const sy = num + 1999;
+  const pad = (v) => String(v).padStart(2, '0');
+  return {
+    num,
+    start: `${sy}-04`, end: `${sy + 1}-03`,
+    prevStart: `${sy - 1}-04`, prevEnd: `${sy}-03`,
+    label: `FYE${pad(num)}`, prevLabel: `FYE${pad(num - 1)}`,
+  };
+};
+
+// The FY's calendar months as 'YYYY-MM', Apr → Mar (local-time safe — no toISOString,
+// which shifts to the previous month in negative-offset zones).
+const fyMonths = (fy) => {
+  const out = [];
+  const [sy, sm] = fy.start.split('-').map(Number);
+  const [ey, em] = fy.end.split('-').map(Number);
+  let d = new Date(sy, sm - 1, 1);
+  const last = new Date(ey, em - 1, 1);
+  while (d <= last) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+};
+
 const levelCfg = (C) => ({
   COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
@@ -201,12 +231,12 @@ const REASON_LABELS = {
   NO_TOOL_NO_EXCEL: 'No tool + no Excel config',
 };
 
-// Extra reason-filter entry that is NOT a pending_reason. A limit anomaly is a
-// separate flag (`limit_excluded` — produced on a machine its T-Select size LIMIT
-// says it cannot run) that rides along on a row which still classifies under one of
-// the reasons above, so it can never be a REASON_LABELS key. The sentinel keeps it
-// selectable in the same dropdown; filteredAttention special-cases it.
-const LIMIT_ANOMALY = '__LIMIT_ANOMALY__';
+// A limit anomaly (`limit_excluded` — produced on a machine whose T-Select size LIMIT
+// says it cannot run) rests on contradictory data, not a config gap. The backend
+// pulls these rows OUT of `needsAttention`, so they no longer appear in the table
+// below; they are surfaced by the "Limit Anomaly — reconcile data" worklist card
+// (`kpi.limitExcludedByMachine`). The row-level red tag/highlight further down stays
+// as a defensive no-op in case such a row is ever present.
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
@@ -298,32 +328,30 @@ export default function SdsCoverageDashboard() {
     return new Date(+y, +mo - 1, 1).toLocaleString('en', { month: 'short' }) + ' ' + y.slice(2);
   };
 
+  // The FY window for the FY-scoped charts: the backend's `data.fye`, or a client-side
+  // fallback so an older cached payload still renders the current FY (not a stale one).
+  const fyeWin = useMemo(() => data?.fye || computeFyeWindow(), [data]);
+
   // ── Monthly New Parts chart ───────────────────────────────────────────────────
   const monthlyNewParts = useMemo(() => {
     const all = data?.monthlyNewParts || [];
     const raw = Object.fromEntries(
-      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
+      all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = [];
-    let d = new Date('2026-04-01');
-    while (d <= new Date('2027-03-01')) {
-      const key = d.toISOString().slice(0, 7);
-      // Missing part-type keys default to 0 at read time (r[t] || 0), so an empty
-      // { month } row is enough here — no need to pre-seed every scope type.
-      months.push(raw[key] || { month: key });
-      d.setMonth(d.getMonth() + 1);
-    }
-    // Prepend a baseline bar = previous FYE monthly average (Apr 2025 – Mar 2026),
-    // averaged over the months that had new parts. Sits before Apr as a muted reference.
-    const prev = all.filter(r => r.month >= '2025-04' && r.month <= '2026-03');
+    // Missing part-type keys default to 0 at read time (r[t] || 0), so an empty
+    // { month } row is enough here — no need to pre-seed every scope type.
+    const months = fyMonths(fyeWin).map(key => raw[key] || { month: key });
+    // Prepend a baseline bar = previous FY monthly average, over the months that had
+    // new parts. Sits before Apr as a muted reference.
+    const prev = all.filter(r => r.month >= fyeWin.prevStart && r.month <= fyeWin.prevEnd);
     if (prev.length) {
       const avg = k => Math.round(prev.reduce((s, r) => s + (r[k] || 0), 0) / prev.length);
-      const avgRow = { label: 'FYE26 avg', isAvg: true };
+      const avgRow = { label: `${fyeWin.prevLabel} avg`, isAvg: true };
       activePartTypes.forEach(t => { avgRow[t] = avg(t); });
       months.unshift(avgRow);
     }
     return months;
-  }, [data, activePartTypes]);
+  }, [data, activePartTypes, fyeWin]);
   // One stacked dataset per configured part type — derived from activePartTypes so the
   // chart tracks the scope config instead of a fixed Ball/Race/Mecha triple.
   const newPartsChartData = useMemo(() => ({
@@ -355,26 +383,24 @@ export default function SdsCoverageDashboard() {
   const monthlyStatus = useMemo(() => {
     const all = data?.monthlyStatus || [];
     const raw = Object.fromEntries(
-      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
+      all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = [];
-    let d = new Date('2026-04-01');
-    while (d <= new Date('2027-03-01')) {
-      const key = d.toISOString().slice(0, 7);
-      months.push(raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
-      d.setMonth(d.getMonth() + 1);
-    }
-    // Prepend the previous FYE's final cumulative bar (latest month ≤ Mar 2026) so the
+    const months = fyMonths(fyeWin).map(key => raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
+    // Prepend the previous FY's final cumulative bar (latest month ≤ prevEnd) so the
     // current-FY running total starts from a visible carry-over baseline. `all` is sorted
-    // ascending by month, so the last matching row is the FYE-end value.
-    const prevRows = all.filter(r => r.month <= '2026-03');
+    // ascending by month, so the last matching row is the FY-end value.
+    const prevRows = all.filter(r => r.month <= fyeWin.prevEnd);
     const prevLast = prevRows.length ? prevRows[prevRows.length - 1] : null;
-    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true });
+    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true, prevLabel: `${fyeWin.prevLabel} end` });
     return months;
-  }, [data]);
+  }, [data, fyeWin]);
 
+  // Bars are stamp-GATED complete (KZW baseline + THAI T-Select #1) vs pending. Stable
+  // against a later bulk sign because the BACKEND now buckets each completion by the
+  // month it was fully stamped (max sign date), not the part's first-produced month —
+  // so signing work in August lifts only the August bar, not every historical bar.
   const statusChartData = useMemo(() => ({
-    labels: monthlyStatus.map(r => r.isPrevLast ? 'FYE26 end' : fmtMonth(r.month)),
+    labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
     datasets: [
       {
         type: 'bar',
@@ -510,11 +536,7 @@ export default function SdsCoverageDashboard() {
   const reasonOptions = useMemo(() => {
     const rows = data?.needsAttention || [];
     const reasons = [...new Set(rows.map(r => r.pending_reason).filter(Boolean))].sort();
-    const anomalyCount = rows.filter(r => r.limit_excluded).length;
     return [{ value: '', label: 'All Reasons' },
-      // Listed only when such rows exist, so picking it always yields rows (same
-      // rule as the other two dropdowns).
-      ...(anomalyCount ? [{ value: LIMIT_ANOMALY, label: `⚠ Limit Anomaly (${anomalyCount})` }] : []),
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r }))];
   }, [data]);
 
@@ -523,9 +545,7 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
-      // The anomaly entry filters on the limit_excluded flag, not pending_reason.
-      if (filterReason === LIMIT_ANOMALY) { if (!r.limit_excluded) return false; }
-      else if (filterReason && r.pending_reason !== filterReason) return false;
+      if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
   }, [data, filterPt, filterMc, filterReason]);
@@ -748,6 +768,61 @@ export default function SdsCoverageDashboard() {
                 </div>
               </Col>
             </Row>
+
+            {/* ── Limit-softening worklist ────────────────────────────────────── */}
+            {/* (machine, process) pairs where a part over the T-Select design work-size
+                limit is treated as usable because the factory floor has genuinely run it
+                there. Each line is a tooling_machine_limit bound to measure against the
+                plan and fix surgically — the standard is what needs revising, not the run. */}
+            {(data?.kpi?.limitSoftenedByMachine?.length > 0) && (
+              <div style={{ ...cardStyle, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                  {sectionTitle('Limit Softening — surgical-fix worklist', C)}
+                  <Text style={{ color: C.textSec, fontSize: 11 }}>
+                    {(data?.kpi?.limitSoftened ?? 0).toLocaleString()} sheet(s) across{' '}
+                    {data.kpi.limitSoftenedByMachine.length} (machine · process)
+                  </Text>
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {data.kpi.limitSoftenedByMachine.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textPri }}>{g.machine}</Tag>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
+                      <Text style={{ color: C.orange, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
+                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Limit-anomaly reconcile worklist ────────────────────────────── */}
+            {/* (machine, process) pairs where a part was PRODUCED but the T-Select
+                work-size limit says it cannot run there, and the floor has no sustained
+                history to soften it. The limit and the production record disagree —
+                one of them is wrong. Pulled out of "CNs Requiring Action" (not a config
+                gap); listed here so the contradiction still gets reconciled. */}
+            {(data?.kpi?.limitExcludedByMachine?.length > 0) && (
+              <div style={{ ...cardStyle, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                  {sectionTitle('Limit Anomaly — reconcile data', C)}
+                  <Text style={{ color: C.textSec, fontSize: 11 }}>
+                    {(data?.kpi?.limitExcluded ?? 0).toLocaleString()} sheet(s) across{' '}
+                    {data.kpi.limitExcludedByMachine.length} (machine · process) — hidden from the table below
+                  </Text>
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {data.kpi.limitExcludedByMachine.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
+                      <Tag icon={<WarningOutlined />} color="error" style={{ fontFamily: 'monospace', fontSize: 11, margin: 0 }}>{g.machine}</Tag>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
+                      <Text style={{ color: C.red, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
+                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
             <div style={cardStyle}>
