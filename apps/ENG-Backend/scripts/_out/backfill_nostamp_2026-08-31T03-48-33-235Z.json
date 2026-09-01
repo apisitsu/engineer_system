@@ -1,0 +1,2513 @@
+{
+  "created_at": "2026-08-31T03:48:33.235Z",
+  "db": "plbmp130:6543/eng_system",
+  "coverage_source": "cache",
+  "coverage_built_at": "2026-08-31T03:46:58.526Z",
+  "signers": {
+    "prepared": "LE485",
+    "checked": "T1460",
+    "approved": "T1460"
+  },
+  "window_days": 5,
+  "off_days": {
+    "prepared": 1,
+    "checked": 3,
+    "approved": 5
+  },
+  "counts": {
+    "sheets": 96,
+    "roles_written": 276,
+    "prepared": 90,
+    "checked": 90,
+    "approved": 96,
+    "skipped_no_date": 0,
+    "skipped_no_process": 0,
+    "already_full": 0
+  },
+  "roles": [
+    {
+      "cn": "C25-00241",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-05-19T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00241",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-05-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00241",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-05-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00913",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00913",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00913",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00917",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00917",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00917",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00918",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00918",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00918",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00942",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00942",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-06T02:00:00.000Z"
+    },
+    {
+      "cn": "C25-00942",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-08T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00205",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2025-12-03T00:00:00.000Z"
+    },
+    {
+      "cn": "C29-00427",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00452",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2025-12-03T00:00:00.000Z"
+    },
+    {
+      "cn": "C29-00723",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00725",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-09T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00725",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-11T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00725",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-13T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00795",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00795",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00795",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00931",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00936",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-18T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00936",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00936",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00983",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00983",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-00983",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-04071",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-02-09T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-04073",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-04073",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C29-04073",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00016",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00016",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00016",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00084",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00084",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00084",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00097",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00097",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-18T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00097",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00123",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2024-05-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00123",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2024-05-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00123",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2024-06-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00368",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00368",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00368",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00408",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2025-06-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00408",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2025-06-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00408",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2025-06-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00729",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-05-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00729",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-05-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00729",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-05-06T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00752",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00752",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00752",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00766",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00766",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00766",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00778",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1031",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-08T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00778",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1031",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-10T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00778",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1031",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-12T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00779",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00779",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00779",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00780",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00780",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00780",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00812",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00812",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00812",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00832",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00839",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00839",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00839",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00891",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00891",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00891",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00896",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00896",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-00896",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01051",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01051",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01051",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01083",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-12T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01083",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-14T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01083",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01091",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01091",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01091",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01096",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01096",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01096",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01097",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01097",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-01097",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04012",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04012",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04012",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04023",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04023",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04023",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04072",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-06T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04072",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-08T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04072",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-10T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04095",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-06-18T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04095",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-06-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C31-04095",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-06-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00135",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00135",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-18T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00135",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00160",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00160",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00160",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00195",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00195",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00195",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00196",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00196",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00196",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00219",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00219",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00219",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00615",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00615",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00615",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00617",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00617",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00617",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00619",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-01-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00619",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-01-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00619",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-01-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00641",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2024-12-12T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00641",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2024-12-14T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00641",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2024-12-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00643",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00643",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00643",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00655",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00655",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00655",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00691",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00772",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00772",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00772",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1022",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1022",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-00783",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1022",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04042",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04042",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04042",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C32-04055",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00334",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00334",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00334",
+      "machine_type_name": "HAMAI 5B",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00445",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00445",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00445",
+      "machine_type_name": "KS-400B1",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00482",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00482",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00482",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00488",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00488",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00488",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00489",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00489",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00489",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00491",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-01-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00491",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-01-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00491",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-01-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00548",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00548",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00548",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00549",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00549",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00549",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00565",
+      "machine_type_name": "KN-312A",
+      "process_code": "1161",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00565",
+      "machine_type_name": "KN-312A",
+      "process_code": "1161",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00565",
+      "machine_type_name": "KN-312A",
+      "process_code": "1161",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00602",
+      "machine_type_name": "KS-500RD",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00602",
+      "machine_type_name": "KS-500RD",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00602",
+      "machine_type_name": "KS-500RD",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-28T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00617",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00617",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00617",
+      "machine_type_name": "TSG-300W",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00668",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-19T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00668",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00668",
+      "machine_type_name": "PSG-64",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00669",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-30T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00669",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-01T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-00669",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-03T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-04059",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-12T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-04059",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-14T02:00:00.000Z"
+    },
+    {
+      "cn": "C35-04059",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00175",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-19T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00175",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00175",
+      "machine_type_name": "KS-03A",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00400",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00400",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00400",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00815",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-20T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00815",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00815",
+      "machine_type_name": "MSG-410",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00821",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-04T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00821",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-06T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00821",
+      "machine_type_name": "PSG-64",
+      "process_code": "1101",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-08T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00872",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00872",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00872",
+      "machine_type_name": "KS-B22RD",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "GS-64PFII",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-00905",
+      "machine_type_name": "MSG-410",
+      "process_code": "1021",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-22T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-24T02:00:00.000Z"
+    },
+    {
+      "cn": "C39-04048",
+      "machine_type_name": "KN-312A",
+      "process_code": "1041",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-26T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04031",
+      "machine_type_name": "OC-16A",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-15T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04031",
+      "machine_type_name": "OC-16A",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-17T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04031",
+      "machine_type_name": "OC-16A",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-19T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04032",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-14T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04032",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04032",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-18T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04033",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-27T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04033",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-29T02:00:00.000Z"
+    },
+    {
+      "cn": "C61-04033",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-00095",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-05T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-00095",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-07T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-00095",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-09T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-01057",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-21T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-01057",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-23T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-01057",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-25T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04151",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-07-12T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04151",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-07-14T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04151",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-07-16T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04163",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-15T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04163",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-08-17T02:00:00.000Z"
+    },
+    {
+      "cn": "C63-04163",
+      "machine_type_name": "OC-18BR-150",
+      "process_code": "1011",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-08-19T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-00281",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2024-12-07T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-00281",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2024-12-09T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-00281",
+      "machine_type_name": "KS-B22G",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2024-12-11T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-04088",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "prepared",
+      "em_id": "LE485",
+      "at": "2026-08-31T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-04088",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "checked",
+      "em_id": "T1460",
+      "at": "2026-09-02T02:00:00.000Z"
+    },
+    {
+      "cn": "C69-04088",
+      "machine_type_name": "KS-B80",
+      "process_code": "1061",
+      "sds_rev": "NC",
+      "role": "approved",
+      "em_id": "T1460",
+      "at": "2026-09-04T02:00:00.000Z"
+    }
+  ]
+}

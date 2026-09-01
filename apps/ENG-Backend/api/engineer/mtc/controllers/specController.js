@@ -11,6 +11,7 @@ const { hasFeature } = require('../../../../middleware/mtcAuth');
 // Part-spec management is part of the Tooling Select admin surface.
 const isAdmin = hasFeature('tooling_admin');
 const { searchByCn } = require('../services/sdsV2SearchService');
+const { resolveKubun } = require('../utils/cnKubun');
 
 // ── Body-specific column list ─────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ async function fetchBodySpecFromFactory(cxx) {
 
 const ID_GRIND_PROCESS_CODES = new Set(['1061', '1062']);
 const OD_GRIND_PROCESS_CODES = new Set(['1041', '1042']);
+// Retained for the test that pins the fold below; the live path is resolveKubun().
 const YBALL_Y_CLASSES = new Set(['35']);
 
 function deriveProcess(processInfo) {
@@ -84,10 +86,11 @@ function deriveProcess(processInfo) {
   return null;
 }
 
+// Y-BALL is RE21000H §4-3(2) class 35 — folded into the one work-type decode
+// (utils/cnKubun.js). Identical output to the old `{'35'}` set: shape 'Y-BALL'
+// exists only for class 35, and an unknown class resolves to null → 'N'.
 function deriveYBall(cn) {
-  const s = String(cn || '').trim().toUpperCase();
-  const classCode = /^\d{6}$/.test(s) ? s.slice(0, 2) : s.slice(1, 3);
-  return YBALL_Y_CLASSES.has(classCode) ? 'Y' : 'N';
+  return resolveKubun(cn)?.shape === 'Y-BALL' ? 'Y' : 'N';
 }
 
 function mapFactoryDimToSpec(dim) {

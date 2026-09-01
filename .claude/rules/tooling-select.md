@@ -393,6 +393,38 @@ Two shapes recur and are worth recognising on sight:
   only the length is stored. Adding `dim_f` to that table is the fix if the diameter is
   ever needed for ranking.
 
+### C/N work-type decode — `cnKubun.js` / `cn_kubun` (RE21000H §4-3(2), 2026-08-30)
+
+The first two digits of a control number are a factory-authoritative work-type code
+(RE21000H rev H "CONTROL NUMBER 区分一覧") carrying **part family, material class,
+lube type (M/M vs TFE vs DU), unit system, thread side, assembly count and shape**.
+Before this the system only decoded `{'35'}` → Y-BALL and scattered
+`cnPrefix == 23 or 25 or …` lists.
+
+- **`api/engineer/mtc/utils/cnKubun.js`** — the live decode. A frozen in-memory
+  table (**no I/O**, `resolveKubun()` is ~0.2 µs); called once per search in
+  `buildSpecContext`. Covers 61 component classes (11–19, 21–29, 31–39, 41–49,
+  51–69, 81–99) = 86 % of enabled C/Ns. The 7x assembled rod-ends and a handful of
+  strays (20, 27, 37, 45/46, 65/66) are **not** in §4-3(2) — `resolveKubun` returns
+  `null`, and every kubun context var is then `''` / `0`.
+- **`cn_kubun` table** (migration `20260830b_`) — the identical rows for report
+  JOINs; `tests/mtc/cnKubun.test.js` pins the two copies together. Read-only, nothing
+  on the search path touches it.
+- **`buildSpecContext` vars**: `partFamily`, `materialClass`, `lubeType`,
+  `unitSystem`, `threadSide`, `assemblyType`, `cnShape`, plus flags `isMM` / `isTFE`
+  / `isInch` / `isMetric` / `isExternalThread` / `isInternalThread`. `deriveYBall`
+  (specController) now routes through this — byte-identical to the old set.
+- **`NON_GRIND_KUBUN`** = `[49, 90, 92, 96, 97, 98, 99]` (kit / blanks / tooling /
+  paint-spec / purchased). The SDS **CN Enable audit** (`/audit/data-integrity`)
+  excludes these classes. Small effect at today's `sub_class` config (which pulls
+  mostly real components) — it is the principled guard for when the config broadens.
+- **Deliberately NOT done**: auto-deriving `tooling_spec_process.type` from the
+  kubun. `type` feeds KS-400B6 / KN-312 TYPE branches that change which *drawings*
+  are reported; it needs measuring against `lpb.eng_r_pi_tool` first and stays a
+  separate gated step. `materialClass` is exposed but not yet wired to any rule (that
+  is the RM grinding-condition audit's job).
+- Re-validate the decode against live data with `node scripts/validate_cn_kubun.js`.
+
 ### Coverage by process code (audited 2026-08-15)
 
 TEMPLATE_B's first column is the **process code**, the second its name, the third the

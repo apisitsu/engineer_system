@@ -255,7 +255,14 @@ async function build() {
       state = 'none';
       reason = known ? known.reason : 'เครื่องมีในระบบ แต่ตระกูลนี้ไม่มี shelf / formula / rule / pin เลย';
     }
-    if (known && known.na) { state = 'na'; reason = known.reason; }
+    // A KNOWN-`na` family (catalogue tool — Q-51 bite, X-52 keyway cutter) is out of
+    // scope by design. But if the live config genuinely HAS a formula+rule or a
+    // per-C/N pin for it, that is the more accurate answer — don't overwrite a real
+    // 'rule' / 'lookup' with 'na'.
+    if (known && known.na && state !== 'rule' && state !== 'lookup') {
+      state = 'na';
+      reason = known.reason;
+    }
 
     // Live top-1/top-2 vs the factory plan for this (machine, family), if an
     // eval_tooling_accuracy.js --persist-db run has populated it.

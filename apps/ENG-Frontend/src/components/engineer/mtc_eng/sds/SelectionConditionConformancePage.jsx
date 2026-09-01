@@ -44,7 +44,7 @@ const nf = (n) => Number(n || 0).toLocaleString('en-US');
 // same RAG thresholds as scripts/eval_tooling_accuracy.js pmRag()
 const ragColor = (t) => (t == null ? '#7d8794' : t >= 85 ? '#3f9e5f' : t >= 60 ? '#c08a1e' : '#c14f4f');
 
-export default function SelectionConditionConformancePage() {
+export default function SelectionConditionConformancePage({ embedded = false }) {
   const C = useColors();
   const { message } = App.useApp();
   const [data, setData] = useState(null);
@@ -170,13 +170,8 @@ export default function SelectionConditionConformancePage() {
 
   const box = { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6 };
 
-  return (
-    <Layout style={{ height: '100%', background: C.bg }}>
-      <MenuTemplate type="MTC" defaultSelectedKeys="sds-selection-cond" />
-      <Layout style={{ background: C.bg }}>
-        <Content className="kb-vscroll"
-                 style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '12px 16px' }}>
-
+  const bodyContent = (
+    <>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                         gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
             <div>
@@ -301,6 +296,18 @@ export default function SelectionConditionConformancePage() {
               {data?.cached ? ' · จากแคช' : ''}
             </Text>
           </div>
+    </>
+  );
+
+  if (embedded) return bodyContent;
+
+  return (
+    <Layout style={{ height: '100%', background: C.bg }}>
+      <MenuTemplate type="MTC" defaultSelectedKeys="sds-selection-cond" />
+      <Layout style={{ background: C.bg }}>
+        <Content className="kb-vscroll"
+                 style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '12px 16px' }}>
+          {bodyContent}
         </Content>
       </Layout>
     </Layout>

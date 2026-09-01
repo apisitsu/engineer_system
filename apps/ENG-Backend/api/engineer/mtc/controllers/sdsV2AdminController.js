@@ -3,12 +3,17 @@ const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { pool: rodpcPool } = require('../../../../instance/instance');
 const { TABLES } = require('../mtcConstants');
+const { NON_GRIND_KUBUN } = require('../utils/cnKubun');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
 // SDS admin mutations: full 'AD' admin OR a user holding the 'sds_admin'
 // feature permission (granular, non-AD). See hasFeature().
 const isAdmin = hasFeature('sds_admin');
 const cache = require('../services/agents/CacheAgent');
 const { invalidateCoverageCache } = require('./sdsV2ReportController');
+const sdsBoardRef = require('../utils/sdsBoardRef');
+// sds_approval is created lazily on first hit of /api/sds/v2/approval; a machine rename
+// cascades into it (below) and may run first on a fresh deploy, so make sure it exists.
+const { ensureApprovalTables } = require('./sdsApprovalController');
 
 const router = express.Router();
 const headlessController = require('./sdsV2HeadlessController');
@@ -210,6 +215,11 @@ router.put('/machine-types/:id', isAdmin, async (req, res) => {
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
     vals.push(req.params.id);
 
+    // Ensure sds_approval exists before the cascade UPDATE below can reference it.
+    if (machine_type_name !== undefined) {
+      try { await ensureApprovalTables(); } catch (_) { /* cascade will surface a real error */ }
+    }
+
     const client = await engPool.connect();
     try {
       await client.query('BEGIN');
@@ -229,16 +239,40 @@ router.put('/machine-types/:id', isAdmin, async (req, res) => {
         vals
       );
 
-      if (machine_type_name !== undefined && machine_type_name !== oldName) {
+      const didRename = machine_type_name !== undefined && machine_type_name !== oldName;
+      if (didRename) {
         await Promise.all([
           client.query(`UPDATE ${TABLES.SDS_PARAMETER}      SET machine_type_name=$1 WHERE machine_type_name=$2`, [machine_type_name, oldName]),
           client.query(`UPDATE ${TABLES.SDS_V2_MACHINE_TOOL} SET machine_type=$1       WHERE machine_type=$2`,       [machine_type_name, oldName]),
           client.query(`UPDATE ${TABLES.SDS_EXCEL_MAPPING}  SET machine_type_name=$1 WHERE machine_type_name=$2`, [machine_type_name, oldName]),
+          // sds_approval rows are keyed by the machine_type_name STRING (getSheet /
+          // resolveSdsRev / /board / /history all `WHERE machine_type_name = $`), so a
+          // rename that skips this table strands every existing signature for the machine —
+          // a fully-signed sheet then reads as unsigned and its seals drop from the PDF.
+          client.query(`UPDATE ${TABLES.SDS_APPROVAL}       SET machine_type_name=$1 WHERE machine_type_name=$2`, [machine_type_name, oldName]),
         ]);
         cache.invalidatePrefix('sds:');
+        // The name→group map is now stale (a key changed); drop it so board-ref
+        // normalisation doesn't key new cards under the bare new name for the TTL window.
+        sdsBoardRef.invalidate();
       }
 
       await client.query('COMMIT');
+
+      // Board-card links for a NON-grouped SDS machine carry the bare name in the middle
+      // segment of source_ref (`<cn>||<machine>||<process>`); re-key them so signing from
+      // the board still resolves. Grouped machines store the group label there instead —
+      // the LIKE guard makes this a no-op. Done AFTER commit and best-effort: an optional
+      // board table missing (or empty) must not roll back a completed machine rename.
+      if (didRename) {
+        engPool.query(
+          `UPDATE mtc_board_card_link
+              SET source_ref = replace(source_ref, $1, $2)
+            WHERE source_type = 'sds_approval' AND source_ref LIKE $3`,
+          [`||${oldName}||`, `||${machine_type_name}||`, `%||${oldName}||%`]
+        ).catch((e) => console.warn('[sds machine-types] board-link re-key skipped:', e.message));
+      }
+
       res.json(result.rows[0]);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -951,11 +985,21 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     const subClassWhere    = `(${buildWhere('i')})`;   // for queries with alias i
     const subClassWhereRaw = `(${buildWhere('')})`;    // for simple single-table queries
 
+    // Keep the classes that never get a grinding setup sheet — tooling, raw blanks,
+    // paint specs, purchased parts (RE21000H §4-3(2), see utils/cnKubun.js) — out of
+    // the audit entirely. A broad sub_class config (C9%, C99% …) otherwise pulls tens
+    // of thousands of these rows, which is what made this endpoint time out. The
+    // filter is one extra param, appended after the sub_class patterns.
+    const ngIdx = subClassPatterns.length + 1;
+    const nonGrind = (alias) => `substring(${alias ? alias + '.' : ''}sub_class from 2 for 2) <> ALL($${ngIdx}::text[])`;
+    const ngFrag    = ` AND ${nonGrind('i')}`;
+    const ngFragRaw = ` AND ${nonGrind('')}`;
+
     // 1. Count Enabled Items by sub_class — COUNT(DISTINCT control_no) so the
     //    figure is genuinely "unique CNs" (one part counted once) rather than rows.
     const countsResult = await maqPool.query(
-      `SELECT sub_class, COUNT(DISTINCT control_no) AS count FROM lpb.eng_item WHERE ${subClassWhereRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
-      subClassPatterns
+      `SELECT sub_class, COUNT(DISTINCT control_no) AS count FROM lpb.eng_item WHERE ${subClassWhereRaw}${ngFragRaw} AND condition = 'Enable' GROUP BY sub_class ORDER BY sub_class`,
+      [...subClassPatterns, NON_GRIND_KUBUN]
     );
 
     const itemCounts = countsResult.rows.map(r => ({ sub_class: r.sub_class, count: parseInt(r.count) }));
@@ -967,26 +1011,26 @@ router.get('/audit/data-integrity', isAdmin, async (req, res) => {
     const noProcessPlanResult = await maqPool.query(
       `SELECT i.control_no, i.sub_class
        FROM lpb.eng_item i
-       WHERE ${subClassWhere} AND i.condition = 'Enable'
+       WHERE ${subClassWhere}${ngFrag} AND i.condition = 'Enable'
          AND NOT EXISTS (SELECT 1 FROM lpb.eng_process_info pi WHERE pi.process_plan_no = i.control_no)
        ORDER BY i.control_no`,
-      subClassPatterns
+      [...subClassPatterns, NON_GRIND_KUBUN]
     );
 
     // 3. Warning: Missing Tooling in configured Process Codes
     let missingRows = [];
     if (targetProcessCodes.length > 0) {
-      const pcOffset = subClassPatterns.length + 1;
+      const pcOffset = subClassPatterns.length + 2;   // patterns, then NON_GRIND, then process codes
       const missingToolingResult = await maqPool.query(
         `SELECT i.control_no, i.sub_class, pi.process_code, pi.wc
          FROM lpb.eng_item i
          JOIN lpb.eng_process_info pi ON pi.process_plan_no = i.control_no
          LEFT JOIN lpb.eng_r_pi_tool rpt ON (rpt.process_plan_no = pi.process_plan_no AND rpt.process_code = pi.process_code)
-         WHERE ${subClassWhere} AND i.condition = 'Enable'
+         WHERE ${subClassWhere}${ngFrag} AND i.condition = 'Enable'
            AND pi.process_code = ANY($${pcOffset})
            AND rpt.tool_dwg_no IS NULL
          ORDER BY i.control_no, pi.seq_no`,
-        [...subClassPatterns, targetProcessCodes]
+        [...subClassPatterns, NON_GRIND_KUBUN, targetProcessCodes]
       );
       missingRows = missingToolingResult.rows;
     }
@@ -1352,9 +1396,11 @@ router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
 
 /** PUT /api/sds/v2/admin/template-grid
  *  Body: { grid: { rows, cols, borders, fills, ... } }
- *  Upserts the grid layout JSON. Stored in sds_template_css_config.
+ *  Upserts the DEFAULT grid template's layout JSON. Carries flushSds like the
+ *  multi-template PUT /template-grids/:id it is the legacy singular of, so the
+ *  coverage cache and any grid-derived SDS cache pick up the edit immediately.
  */
-router.put('/template-grid', isAdmin, async (req, res) => {
+router.put('/template-grid', isAdmin, flushSds, async (req, res) => {
   const { grid } = req.body;
   if (!grid || typeof grid !== 'object' || Array.isArray(grid)) {
     return res.status(400).json({ error: 'grid object required' });

@@ -2,7 +2,15 @@ const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { TABLES } = require('../mtcConstants');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
 const { normalizeTarget, prefixLevel, cnMatchKeys, shapeFamiliesFor } = require('../utils/grindingPrefix');
+
+// SDS image mutations are part of the SDS admin surface — same guard as every other
+// SDS config write (sdsV2AdminController): full 'AD' admin OR the 'sds_admin' feature
+// permission. Reads (GET) stay open to any authenticated user. Without this, an
+// ENG/QA user (the SDS admin page is reachable by those roles) could upload, replace
+// or delete tooling / grinding images that print onto operator setup sheets.
+const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
 
@@ -100,7 +108,7 @@ router.get('/tooling/:tool_dwg_no', async (req, res) => {
 });
 
 /** POST /api/sds/v2/images/tooling — upload (multipart: tool_dwg_no, file, description) */
-router.post('/tooling', async (req, res) => {
+router.post('/tooling', isAdmin, async (req, res) => {
   const { tool_dwg_no, description } = req.body;
   if (!tool_dwg_no?.trim()) return res.status(400).json({ error: 'tool_dwg_no is required' });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
@@ -132,7 +140,7 @@ router.post('/tooling', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/images/tooling/:tool_dwg_no */
-router.delete('/tooling/:tool_dwg_no', async (req, res) => {
+router.delete('/tooling/:tool_dwg_no', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = $1 RETURNING id`,
@@ -430,7 +438,7 @@ function parseGrindingTargets(body) {
 }
 
 /** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_codes JSON array, file) */
-router.post('/grinding', async (req, res) => {
+router.post('/grinding', isAdmin, async (req, res) => {
   const parsed = parseGrindingTargets(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
@@ -487,7 +495,7 @@ router.post('/grinding', async (req, res) => {
  * Unlike POST this does NOT delete overlapping records: an edit is aimed at one row the
  * operator picked, and silently removing its neighbours is not what "save" should mean.
  */
-router.put('/grinding/:id', async (req, res) => {
+router.put('/grinding/:id', isAdmin, async (req, res) => {
   const parsed = parseGrindingTargets(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const { prefixes, process_codes, label } = parsed;
@@ -533,7 +541,7 @@ router.put('/grinding/:id', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/images/grinding/:id */
-router.delete('/grinding/:id', async (req, res) => {
+router.delete('/grinding/:id', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_V2_GRINDING_IMAGE} WHERE id = $1 RETURNING id`,

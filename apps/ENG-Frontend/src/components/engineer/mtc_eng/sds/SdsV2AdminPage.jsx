@@ -2307,7 +2307,12 @@ export const AuditTab = ({ theme }) => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT);
+      // This audit scans lpb.eng_item ⋈ eng_process_info ⋈ eng_r_pi_tool across every
+      // sub_class pattern and process code in sds_audit_config. A broad config
+      // (currently 8 patterns × 43 codes) returns tens of thousands of rows / several
+      // MB, which comfortably exceeds HttpClient's 10s default and shows as
+      // "Load audit data failed" even though the request eventually succeeds.
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT, { timeout: 60000 });
       setData(res.data);
     } catch (err) {
       message.error('Load audit data failed');

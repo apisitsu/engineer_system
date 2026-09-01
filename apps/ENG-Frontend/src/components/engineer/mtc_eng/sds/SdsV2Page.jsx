@@ -752,16 +752,53 @@ const SdsV2Page = () => {
       toolCandidatesMap[prefix].add(c.machine_type);
     });
 
+    // Production-history machines for THIS process, collapsed to the group label.
+    // Defined here (not just at the hard-filter below) because tool assignment must
+    // prefer them: several sibling machines share a DWG family in sds_machine_tool
+    // (OC-16A / OC-18BR-150 / OC-20BR-200 / HI-GRIND-1-D all whitelist 4560-*), and a
+    // tool assigned to a sibling that did NOT run this CN is then silently dropped by
+    // the production-history hard-filter — the whole tool table renders empty.
+    const memberToGroup = {};
+    for (const m of allMachineTypes) if (m.machine_group) memberToGroup[m.machine_type_name] = m.machine_group;
+    const canonMachine = (name) => memberToGroup[name] || name;
+    const producedCanon = new Set(
+      (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
+        .filter(h => h.machine_type_code)
+        .map(h => canonMachine((h.machine_name || '').trim()))
+        .filter(Boolean)
+    );
+    const cnEverProduced = Object.values(machineHistoryByProcess)
+      .some(arr => arr.some(h => h.machine_type_code));
+
+    // DWG-family prefix → a production-history machine whose sds_machine_tool whitelist
+    // reserves that family. Used to re-home a T-Select suggestion that T-Select filed
+    // under a sibling in its own registry (OC-16A) onto the machine that actually ran
+    // this process (OC-20BR-200) — otherwise the production-history hard-filter drops it
+    // and the sheet shows no T-Select #1/#2 at all for that machine.
+    const producedFamilyOwner = {};
+    for (const c of configForProcess) {
+      const owner = c.machine_type?.trim();
+      if (!owner || !producedCanon.has(canonMachine(owner))) continue;
+      const p = dwgPrefix(c.tool_drawing_no);
+      if (p && !producedFamilyOwner[p]) producedFamilyOwner[p] = owner;
+    }
+
     // Assign each row from dataSource to exactly one group
     dataSource.forEach(row => {
       let assignedMachine = null;
-      
+
       if (row._isExtra) {
         assignedMachine = resolveMachine(row.tool_name.split(' · ')[0]);
+        // T-Select filed it under a sibling that did NOT run this process → re-home to
+        // the production-history machine that whitelists the suggested tool's family.
+        if (assignedMachine && !producedCanon.has(canonMachine(assignedMachine))) {
+          const fam = dwgPrefix(row._tsM1) || dwgPrefix(row._tsM2);
+          if (fam && producedFamilyOwner[fam]) assignedMachine = producedFamilyOwner[fam];
+        }
       } else {
         const prefix = dwgPrefix(row.tool_dwg_no);
         const toolCode = row.tool_dwg_no?.substring(1, 4);
-        
+
         // Find all possible machine names for this tool
         const candidates = new Set(toolCandidatesMap[prefix] || []);
         allMachineTypes.forEach(m => {
@@ -773,11 +810,17 @@ const SdsV2Page = () => {
         if (candidateList.length === 1) {
           assignedMachine = candidateList[0];
         } else if (candidateList.length > 1) {
-          // Priority 1: Pick machine that is ELIGIBLE in Tooling Select V2
+          // Priority 1: the machine that ACTUALLY ran this process for this CN. The
+          // hard-filter below keeps only production-history machines, so a tool sent
+          // anywhere else vanishes from the table.
+          const historyOne = candidateList.find(m => producedCanon.has(canonMachine(m)));
+          // Priority 2: Pick machine that is ELIGIBLE in Tooling Select V2
           const eligibleOnes = candidateList.filter(m => eligibleMachines?.has(m));
-          
-          if (eligibleOnes.length > 0) {
-            // Priority 2: Tie-break with Production Model if exists
+
+          if (historyOne) {
+            assignedMachine = historyOne;
+          } else if (eligibleOnes.length > 0) {
+            // Priority 3: Tie-break with Production Model if exists
             const prodModel = data?.production?.model;
             assignedMachine = eligibleOnes.find(m => m === prodModel) || eligibleOnes[0];
           } else {
@@ -841,17 +884,8 @@ const SdsV2Page = () => {
     // for the first time. This mirrors the Tooling Select page, which shows all
     // size-eligible machines when the CN has no production history. The per-process
     // hard-filter still applies normally once the CN HAS been produced somewhere.
-    const memberToGroup = {};
-    for (const m of allMachineTypes) if (m.machine_group) memberToGroup[m.machine_type_name] = m.machine_group;
-    const canonMachine = (name) => memberToGroup[name] || name;
-    const producedCanon = new Set(
-      (machineHistoryByProcess[String(processRow.process_code || '').trim()] || [])
-        .filter(h => h.machine_type_code)
-        .map(h => canonMachine((h.machine_name || '').trim()))
-        .filter(Boolean)
-    );
-    const cnEverProduced = Object.values(machineHistoryByProcess)
-      .some(arr => arr.some(h => h.machine_type_code));
+    // (memberToGroup / canonMachine / producedCanon / cnEverProduced are defined
+    // above, before tool assignment, which now also honours producedCanon.)
     if (historyLoaded && cnEverProduced) {
       for (const machineName of Object.keys(machineStatus)) {
         if (!producedCanon.has(canonMachine(machineName))) delete machineStatus[machineName];

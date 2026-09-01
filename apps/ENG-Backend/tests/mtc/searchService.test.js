@@ -200,6 +200,40 @@ describe('buildSpecContext groove Y + isABR (CPX SHOE V)', () => {
   });
 });
 
+describe('buildSpecContext RE21000H work-type (cnKubun)', () => {
+  const ctx = (spec) => searchService._buildSpecContext(spec);
+
+  it('decodes a 17-4PH TFE race class into branch flags', () => {
+    const c = ctx({ cn: '250769', od_aft: 20, w_aft: 8 });
+    expect(c.partFamily).toBe('RACE');
+    expect(c.materialClass).toBe('17-4PH');
+    expect(c.lubeType).toBe('TFE');
+    expect(c.isTFE).toBe(1);
+    expect(c.isMM).toBe(0);
+  });
+
+  it('decodes body unit / thread side', () => {
+    const c = ctx({ cn: 'C13-00602', od_aft: 12, w_aft: 10 });
+    expect(c.unitSystem).toBe('metric');
+    expect(c.isMetric).toBe(1);
+    expect(c.isExternalThread).toBe(1);
+    expect(c.threadSide).toBe('external');
+  });
+
+  it('an unknown class leaves every kubun field empty and throws nothing', () => {
+    const c = ctx({ cn: 'C79-00001', od_aft: 12, w_aft: 10 });
+    expect(c.partFamily).toBe('');
+    expect(c.materialClass).toBe('');
+    expect(c.isMM).toBe(0);
+    expect(c.isInch).toBe(0);
+  });
+
+  it('spec with no cn at all still builds (existing fixtures pass none)', () => {
+    const c = ctx({ od_aft: 12, w_aft: 10 });
+    expect(c.partFamily).toBe('');
+  });
+});
+
 // ── buildSpecContext: SPH component dimensions ───────────────────────────────
 
 describe('buildSpecContext とば口径 (TB / TBrace)', () => {

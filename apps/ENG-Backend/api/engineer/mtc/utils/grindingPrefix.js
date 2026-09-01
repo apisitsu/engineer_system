@@ -60,6 +60,11 @@ function prefixLevel(p) {
 function normalizeTarget(p) {
   const s = normalizePrefix(p);
   if (/^\d{6}$/.test(s)) return toControlNo(s) || s;
+  // A control-no the user typed with a SHORT (4-digit) suffix — 'C39-4137' — must be
+  // padded to the canonical 5-digit form the renderer compares against ('C39-04137').
+  // Stored raw it passes prefixLevel() as a valid 'cn' target and then matches nothing
+  // for ever — the same dead-config trap as the 6-digit item-no above, different spelling.
+  if (/^[A-Z]\d{2}-\d{4}$/.test(s)) return toControlNo(s) || s;
   return s;
 }
 
@@ -89,6 +94,11 @@ function cnMatchKeys(cn) {
     exact.push(ctrl);
     if (item && item !== ctrl) exact.push(item);
     if (s !== ctrl && s !== item) exact.push(s);   // keep an odd-but-given spelling
+    // Also emit the short (unpadded) 4-digit-suffix spelling — 'C39-04137' → 'C39-4137' —
+    // so a target stored that way BEFORE normalizeTarget padded it still matches at
+    // render time, no data migration needed (same tolerance the 6-digit item-no gets).
+    const short = ctrl.match(/^([A-Z]\d{2})-0+(\d{4})$/);
+    if (short) exact.push(`${short[1]}-${short[2]}`);
   }
   // Family/class are read off the control-no shape, so a 6-digit input still resolves
   // ('290774' → base 'C29-00774' → family 'C29', class 'C2').

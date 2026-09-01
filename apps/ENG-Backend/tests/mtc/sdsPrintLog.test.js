@@ -29,6 +29,15 @@ const paramsByName = (call) => {
 
 const rows = (r) => ({ rows: r });
 
+// `record()` fires a short-window dedup SELECT before the INSERT, so the INSERT is no
+// longer call[0]. Find it by its SQL rather than by index.
+const insertCall = () => engPool.query.mock.calls.find((c) => /INSERT INTO/i.test(c[0]));
+// Queue the two engPool calls a successful record() makes: dedup SELECT finds nothing,
+// then the INSERT returns its row.
+const okInsert = (id = 1) => engPool.query
+  .mockResolvedValueOnce(rows([]))
+  .mockResolvedValueOnce(rows([{ id, printed_at: 'now' }]));
+
 beforeEach(() => {
   jest.clearAllMocks();
   jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -99,13 +108,15 @@ describe('record — a logging failure never fails a print', () => {
 
   it('returns null instead of throwing when the insert fails', async () => {
     maqPool.query.mockResolvedValue(rows([]));
-    engPool.query.mockRejectedValueOnce(new Error('relation does not exist'));
+    engPool.query
+      .mockResolvedValueOnce(rows([]))                                  // dedup: clear
+      .mockRejectedValueOnce(new Error('relation does not exist'));     // the INSERT
     await expect(printLog.record(args)).resolves.toBeNull();
   });
 
   it('returns null instead of throwing when the plan lookup fails outright', async () => {
     maqPool.query.mockRejectedValue(new Error('maqdb down'));
-    engPool.query.mockResolvedValueOnce(rows([{ id: 1, printed_at: 'now' }]));
+    okInsert(1);
     await expect(printLog.record(args)).resolves.not.toBeUndefined();
   });
 
@@ -115,9 +126,37 @@ describe('record — a logging failure never fails a print', () => {
     expect(engPool.query).not.toHaveBeenCalled();
   });
 
+  it('skips the INSERT when the same sheet was logged seconds ago (deep-link re-fetch)', async () => {
+    maqPool.query.mockResolvedValue(rows([]));
+    engPool.query.mockResolvedValueOnce(rows([{ id: 42 }]));   // dedup: a recent row exists
+    await expect(printLog.record(args)).resolves.toBeNull();
+    expect(insertCall()).toBeUndefined();                      // nothing inserted
+    const [sql, vals] = engPool.query.mock.calls[0];
+    expect(sql).toMatch(/printed_at > now\(\) - interval/i);
+    expect(vals).toEqual(['C31-04050', 'KS-400B1', '1041', 'public', 8]);
+  });
+
+  it('the dedup SELECT runs BEFORE the slow plan/DNS lookups (closes the race)', async () => {
+    maqPool.query.mockResolvedValue(rows([]));
+    engPool.query.mockResolvedValueOnce(rows([{ id: 42 }]));   // dedup hit → early return
+    await printLog.record(args);
+    // maqPool (resolvePartInfo / verifyLot) must not have been touched — the check
+    // that used to run after ~1-3 s of that work now runs first.
+    expect(maqPool.query).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the INSERT is a no-op via ON CONFLICT (concurrent dup won the race)', async () => {
+    maqPool.query.mockResolvedValue(rows([]));
+    engPool.query
+      .mockResolvedValueOnce(rows([]))   // dedup: clear
+      .mockResolvedValueOnce(rows([]));  // INSERT ... ON CONFLICT DO NOTHING → 0 rows
+    await expect(printLog.record(args)).resolves.toBeNull();
+    expect(insertCall()[0]).toMatch(/ON CONFLICT DO NOTHING/i);
+  });
+
   it('hashes the PDF, stores no bytes, and keeps only slots carrying a fixture', async () => {
     maqPool.query.mockResolvedValue(rows([]));
-    engPool.query.mockResolvedValueOnce(rows([{ id: 7, printed_at: 'now' }]));
+    okInsert(7);
 
     await printLog.record({
       ...args,
@@ -129,9 +168,9 @@ describe('record — a logging failure never fails a print', () => {
       ],
     });
 
-    const sql = engPool.query.mock.calls[0][0];
-    const p = paramsByName(engPool.query.mock.calls[0]);
-    expect(sql).not.toMatch(/pdf_data|pdf_blob|bytea/i);      // the file itself is never stored
+    const call = insertCall();
+    const p = paramsByName(call);
+    expect(call[0]).not.toMatch(/pdf_data|pdf_blob|bytea/i);   // the file itself is never stored
     expect(p.cn).toBe('C31-04050');                            // control form
     expect(p.item_no).toBe('314050');
     expect(p.pdf_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -143,9 +182,9 @@ describe('record — a logging failure never fails a print', () => {
 
   it('writes lot_verified = null when no lot was supplied', async () => {
     maqPool.query.mockResolvedValue(rows([]));
-    engPool.query.mockResolvedValueOnce(rows([{ id: 8, printed_at: 'now' }]));
+    okInsert(8);
     await printLog.record(args);
-    const p = paramsByName(engPool.query.mock.calls[0]);
+    const p = paramsByName(insertCall());
     expect(p.lot_verified).toBeNull();
     expect(p.lot_no).toBeNull();
   });
