@@ -10,10 +10,26 @@ const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
 const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
+const cache = require('../services/agents/CacheAgent');
 // SDS coverage-report config is part of the SDS admin surface.
 const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
+
+// Flush the SDS search/PDF cache (sds:* keys) + the coverage cache after a config
+// mutation on this router, so edits reflect on the very next search & PDF instead of
+// waiting out the 10-min / 15-min TTLs. Mirrors sdsV2AdminController.flushSds — kept
+// as a local copy because that controller already requires THIS module
+// (invalidateCoverageCache), so importing it back would be circular.
+const flushSds = (req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      cache.invalidatePrefix('sds:');
+      invalidateCoverageCache();
+    }
+  });
+  next();
+};
 
 // The coverage build runs in the background with no request in hand, so the
 // socket.io instance is captured from request traffic instead. Only used to push
@@ -189,6 +205,26 @@ function cnPartType(cn) {
   return 'other';
 }
 
+// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000), matching
+// legacyMtcController's currentFye/fyeToRange. Emitted in the coverage payload as
+// `fye` so the "New Parts per Month" / "Cumulative Coverage Status" charts window on
+// the CURRENT FY plus one leading prior-FY bar — WITHOUT the frontend hardcoding the
+// month strings (which silently break every April).
+function currentFyeWindow(ref = new Date()) {
+  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+  const sy = num + 1999;                       // FY start calendar year
+  const pad = (v) => String(v).padStart(2, '0');
+  return {
+    num,
+    start:     `${sy}-04`,       // 'YYYY-MM', inclusive
+    end:       `${sy + 1}-03`,   // inclusive
+    prevStart: `${sy - 1}-04`,
+    prevEnd:   `${sy}-03`,
+    label:     `FYE${pad(num)}`,
+    prevLabel: `FYE${pad(num - 1)}`,
+  };
+}
+
 /**
  * GET /api/sds/v2/report/coverage
  *
@@ -294,7 +330,10 @@ async function buildCoverage() {
       // 9. Machine code → machine_name mapping (machine_name = machine_type_name in sds_parameter)
       engPool.query(`SELECT machine_code, machine_name FROM ${TABLES.SDS_MACHINE_CODE}`),
 
-      // 10. Monthly sds_parameter additions
+      // 10. Monthly sds_parameter additions — the LAST 24 months. ORDER BY DESC so the
+      //     LIMIT keeps the most RECENT window (ascending + LIMIT kept the OLDEST 24 and
+      //     hid every recent month once history passed 24 months); re-sorted chronological
+      //     in JS below (see `monthlyTrend`).
       engPool.query(`
         SELECT TO_CHAR(DATE_TRUNC('month', first_seen), 'YYYY-MM') AS month,
                COUNT(*) AS configs_added
@@ -305,7 +344,7 @@ async function buildCoverage() {
           GROUP BY cn
         ) sub
         GROUP BY DATE_TRUNC('month', first_seen)
-        ORDER BY DATE_TRUNC('month', first_seen)
+        ORDER BY DATE_TRUNC('month', first_seen) DESC
         LIMIT 24
       `),
 
@@ -577,55 +616,100 @@ async function buildCoverage() {
       // with both ID grind 1061 and spherical grind 1041) stores only ONE spec.process
       // direction, so the gate would otherwise wrongly drop a valid spherical machine's
       // tooling on the 1041 row — undercounting coverage. Matches the SDS PDF behaviour.
-      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code, partHasProcess: true }).length > 0) {
+      //
+      // acceptFamilies: this machine's own sds_machine_tool whitelist. It lets a T-Select
+      // result filed under a SIBLING that IS in the T-Select registry (e.g. OC-16A's
+      // centreless COLLAR/PIN/RACE PUSHER on 4560-*) count for machines that are not —
+      // OC-18BR-150 / OC-20BR-200 / HI-GRIND-1-D share the identical config + whitelist.
+      // Same widening the SDS PDF renderer already applies, so report and sheet agree.
+      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, {
+            processCode: r.process_code, partHasProcess: true,
+            acceptFamilies: machineToolMap.get(`${r.machine_type_name}||${r.process_code}`),
+          }).length > 0) {
         r.has_tooling_match = true;
         r.tooling_source = 'tselect';
       }
     }
 
-    // ── Limit-excluded-but-produced anomalies ─────────────────────────────────
+    // ── Limit-excluded / limit-softened rows ──────────────────────────────────
     // A CN may appear in production on a machine whose Tooling Select size LIMIT
-    // (tooling_machine_limit) says the part cannot physically run there — a data
-    // anomaly (wrong limit, or an odd production record). Such (CN × machine)
-    // rows must NOT be counted in coverage. Uses the same limit check as T-Select
-    // (searchService.limitExcludedMachines) — cheap: spec context + in-memory
-    // limit cache, no inventory search. Runs for EVERY spec'd CN (not just the
-    // unmatched ones searched above) since a produced-there part is often matched.
+    // (tooling_machine_limit) says the part cannot physically run there. T-Select
+    // now splits those two ways (searchService.limitExcludedMachines):
+    //   • excluded — over the limit AND no sustained production history → a genuine
+    //     data anomaly (wrong limit, or an odd production record). Flagged red.
+    //   • softened — over the limit BUT the floor has genuinely run this CN here →
+    //     T-Select searches it normally ('limit_note'). NOT an anomaly; it is the
+    //     worklist of bounds a surgical tooling_machine_limit fix should look at.
+    // Cheap: spec context + in-memory limit cache, no inventory search. Runs for
+    // EVERY spec'd CN since a produced-there part is often matched.
     const needLimit = new Map(); // report cn → spec cn
     for (const r of evaluated) {
       if (!r.machine_type_name) continue;
       const sc = toSpecCn(r.cn);
       if (sc && specCnSet.has(sc)) needLimit.set(r.cn, sc);
     }
-    const limitExcludedByCn = new Map(); // report cn → Set<displayName>
+    const limitExcludedByCn = new Map(); // report cn → Map<displayName, reason>
+    const limitSoftenedByCn = new Map(); // report cn → Map<displayName, reason>
     const limitEntries = [...needLimit.entries()];
     for (let i = 0; i < limitEntries.length; i += TS_CONCURRENCY) {
       const batch = limitEntries.slice(i, i + TS_CONCURRENCY);
       await Promise.all(batch.map(async ([cn, sc]) => {
         try {
-          const ex = await searchService.limitExcludedMachines(sc);
-          if (ex && ex.size) limitExcludedByCn.set(cn, ex);
-        } catch (_) { /* fail-open: cannot judge → keep the row */ }
+          const r = await searchService.limitExcludedMachines(sc);
+          if (r?.excluded?.size) limitExcludedByCn.set(cn, r.excluded);
+          if (r?.softened?.size) limitSoftenedByCn.set(cn, r.softened);
+        } catch (_) { /* fail-open: cannot judge → keep the row, no flag */ }
       }));
     }
-    // A row is a limit anomaly when its machine (rep name OR its group label — the
-    // form searchService emits) is in the CN's excluded set. Fail-open otherwise.
-    const isLimitExcluded = (r) => {
-      const ex = limitExcludedByCn.get(r.cn);
-      if (!ex || !r.machine_type_name) return false;
-      if (ex.has(r.machine_type_name)) return true;
+    // A row matches when its machine (rep name OR its group label — the form
+    // searchService emits) is in the CN's set. Fail-open otherwise.
+    const inSet = (byCn) => (r) => {
+      const s = byCn.get(r.cn);
+      if (!s || !r.machine_type_name) return false;
+      if (s.has(r.machine_type_name)) return true;
       const g = nameToGroup[r.machine_type_name];
-      return g ? ex.has(g) : false;
+      return g ? s.has(g) : false;
     };
-    // COUNT-BACK (2026-07-02): previously these produced-but-limit-excluded rows were
-    // SPLICED OUT of `evaluated` (dropped from every count). They are now KEPT in the
-    // count and instead FLAGGED (`limit_excluded`) so the UI can highlight them red —
-    // matching the SDS page's red anomaly badge. limitExcludedCount stays as an
-    // informational KPI. The row still classifies normally (usually PENDING) and so
-    // shows up in `needsAttention` with the red flag riding along.
+    const isLimitExcluded = inSet(limitExcludedByCn);
+    const isLimitSoftened = inSet(limitSoftenedByCn);
+    // COUNT-BACK (2026-07-02, revised 2026-08-31): produced-but-limit-excluded rows
+    // rest on contradictory data (the T-Select size limit and a real production record
+    // disagree), so they are NOT an actionable "needs a signature / needs config" task.
+    // They are FLAGGED (`limit_excluded`) and pulled OUT of `needsAttention` below;
+    // `limitExcludedByMachine` is the reconcile worklist that replaces them — each line
+    // is a (machine, process) whose `tooling_machine_limit` bound or production log
+    // needs checking. Mirrors `limitSoftenedByMachine`.
     const limitExcludedRows = evaluated.filter(isLimitExcluded);
     for (const r of limitExcludedRows) r.limit_excluded = true;
     const limitExcludedCount = limitExcludedRows.length;
+    // `limit_softened` rows classify normally (they get tooling — often COMPLETE), so
+    // they are not a worklist row-by-row; the (machine, process) breakdown IS — each
+    // line is a `tooling_machine_limit` bound a surgical fix should measure next.
+    const limitSoftenedRows = evaluated.filter(isLimitSoftened);
+    for (const r of limitSoftenedRows) r.limit_softened = true;
+    const limitSoftenedCount = limitSoftenedRows.length;
+    // (machine, process) → { machine, process, reason, cn_count }, sorted by cn_count DESC.
+    // `reasonByCn` maps report cn → Map<displayName, reason> (the failing-limit text).
+    const byMachineWorklist = (rows, reasonByCn) => {
+      const m = new Map();   // "machine||process" → { machine, process, reason, cns:Set }
+      for (const r of rows) {
+        const machine = displayGroup(r.machine_type_name);
+        const key = `${machine}||${r.process_code || '-'}`;
+        if (!m.has(key)) {
+          const s = reasonByCn.get(r.cn);
+          const reason = (s && (s.get(machine) || s.get(r.machine_type_name)))
+            || (nameToGroup[r.machine_type_name] && s && s.get(nameToGroup[r.machine_type_name]))
+            || null;
+          m.set(key, { machine, process: r.process_code || '-', reason, cns: new Set() });
+        }
+        m.get(key).cns.add(r.cn);
+      }
+      return [...m.values()]
+        .map(({ cns, ...rest }) => ({ ...rest, cn_count: cns.size }))
+        .sort((a, b) => b.cn_count - a.cn_count);
+    };
+    const limitSoftenedByMachine = byMachineWorklist(limitSoftenedRows, limitSoftenedByCn);
+    const limitExcludedByMachine = byMachineWorklist(limitExcludedRows, limitExcludedByCn);
 
     // ── Stamp (approval) status — computed BEFORE coverage so COMPLETE can require
     // a FULL stamp (prepared+checked+approved). A stamp is keyed (cn, machine,
@@ -640,19 +724,24 @@ async function buildCoverage() {
       stampSrc = await engPool.query(`
         SELECT cn, machine_type_name, process_code,
                (prepared_em_id IS NOT NULL AND checked_em_id IS NOT NULL AND approved_em_id IS NOT NULL
-                AND approved_em_id <> prepared_em_id) AS full
+                AND approved_em_id <> prepared_em_id) AS full,
+               GREATEST(prepared_at, checked_at, approved_at) AS full_at
         FROM ${TABLES.SDS_APPROVAL}`);
     } catch (e) { /* table may not exist yet → every sheet reads as un-stamped */ }
-    const anyStamp = new Set(), fullStamp = new Set();
+    const anyStamp = new Set(), fullStamp = new Set(), fullStampAt = new Map();
     for (const s of stampSrc.rows) {
       const k = `${s.cn}||${repOf(s.machine_type_name)}||${s.process_code}`;
       anyStamp.add(k);
-      if (s.full) fullStamp.add(k);
+      if (s.full) { fullStamp.add(k); if (s.full_at) fullStampAt.set(k, s.full_at); }
     }
     for (const r of evaluated) {
       const k = `${r.cn}||${r.machine_type_name}||${r.process_code}`;
-      r.stamped      = anyStamp.has(k);
-      r.stamped_full = fullStamp.has(k);
+      r.stamped         = anyStamp.has(k);
+      r.stamped_full    = fullStamp.has(k);
+      // When the sheet became fully stamped (max of the three sign timestamps). Used
+      // by monthlyStatus to attribute a completion to the month the WORK happened,
+      // not the month the part was first produced.
+      r.stamped_full_at = fullStampAt.get(k) || null;
     }
 
     // Finalize coverage level (after T-Select augmentation).
@@ -676,10 +765,14 @@ async function buildCoverage() {
     // (informational — explains part of the tooling-gate pass rate).
     const toolingNotRequired = evaluated.filter(r => r.tooling_not_required).length;
     const excelConfig   = evaluated.filter(r => r.has_machine_template).length;
-    // PDF-ready = tool + Excel config, regardless of approval stamp. Since COMPLETE
-    // now also requires a full stamp, this is the only metric that answers "what %
-    // can actually be printed". pdfReady − complete = the NO_STAMP backlog.
-    const pdfReadyRows  = evaluated.filter(r => r.has_tooling_match && r.has_machine_template);
+    // PDF-ready = tooling gate satisfied + Excel config, regardless of approval stamp.
+    // Since COMPLETE now also requires a full stamp, this is the only metric that answers
+    // "what % can actually be printed". pdfReady − complete = the NO_STAMP backlog.
+    // The tooling gate must match classifyCoverage's — `tooling_not_required` (a real
+    // no-fixture surface-grind sheet) prints fine and IS COMPLETE-eligible, so counting
+    // only `has_tooling_match` here made pdfReady < complete possible and broke the
+    // "pdfReady − complete = NO_STAMP" identity.
+    const pdfReadyRows  = evaluated.filter(r => (r.has_tooling_match || r.tooling_not_required) && r.has_machine_template);
     const pdfReady      = pdfReadyRows.length;
     const pdfReadyPct   = total > 0 ? parseFloat(((pdfReady / total) * 100).toFixed(1)) : 0;
 
@@ -709,6 +802,10 @@ async function buildCoverage() {
     const cnMachineMap = new Map();
     for (const r of evaluated) {
       if (r.coverage_level !== 'PENDING') continue;
+      // Limit-anomaly rows are excluded from the worklist — they rest on contradictory
+      // data, not a missing piece of config. They stay flagged on the row and are
+      // surfaced by `limitExcludedByMachine` / `kpi.limitExcluded` instead.
+      if (r.limit_excluded) continue;
       cnMachineMap.set(cnMachineProcessKey(r), r);
     }
     const needsAttention = [...cnMachineMap.values()]
@@ -783,38 +880,63 @@ async function buildCoverage() {
       .map(([month, counts]) => ({ month, ...counts }));
 
     // ── Monthly trend (from sds_parameter activity — when manual config was done) ──
-    const monthlyTrend = sdsParamMonthRes.rows;
+    // Query 10 returns the last 24 months newest-first; restore chronological order.
+    const monthlyTrend = sdsParamMonthRes.rows.slice().reverse();
 
-    // ── Monthly coverage status — cumulative running total by first-seen month ──
-    const monthlyStatusMap = new Map();
+    // ── Monthly coverage status — cumulative, two-axis bucketing ──────────────
+    //
+    // DELIBERATE: `complete_pct` here is `complete / (complete + pending)` — MISSING rows
+    // (part not yet in SDS scope: no process plan at all) are NOT in the denominator, so
+    // this line tracks "of the sheets we could work on, how many are done" over time.
+    // The headline `kpi.completePct` is `complete / total` and DOES include MISSING, so it
+    // reads lower. The two answer different questions on purpose; keep them separate.
+    //
+    // Numerator and denominator are bucketed on DIFFERENT dates so a past month's bar
+    // is NOT retroactively rewritten when work is done later:
+    //   • denominator (workable) → the sheet's FIRST-PRODUCED month. Grows as new CNs
+    //     appear, so the % can dip when unconfigured parts enter.
+    //   • numerator (complete)   → max(first-produced month, FULLY-STAMPED month). A part
+    //     produced in May but signed in Aug counts as backlog from May and as done only
+    //     from Aug — it drags May–Jul down and lifts Aug, instead of lifting every month.
+    // A bulk approval backfill (stamps dated in one month) therefore moves only that
+    // month's bar and later, not the whole history. Reverting it is just as local.
+    const ym = (d) => new Date(d).toISOString().slice(0, 7);
+    const workByMonth = new Map();   // first-produced 'YYYY-MM' → count of workable sheets
+    const doneByMonth = new Map();   // completion    'YYYY-MM' → { complete, completeSaved }
+    const bumpDone = (m, saved) => {
+      const e = doneByMonth.get(m) || { complete: 0, completeSaved: 0 };
+      e.complete += 1; if (saved) e.completeSaved += 1;
+      doneByMonth.set(m, e);
+    };
     for (const r of evaluated) {
-      if (!r.first_prod_date) continue;
-      const month = new Date(r.first_prod_date).toISOString().slice(0, 7);
-      if (!monthlyStatusMap.has(month)) monthlyStatusMap.set(month, { complete: 0, completeSaved: 0, pending: 0 });
-      const entry = monthlyStatusMap.get(month);
-      if (r.coverage_level === 'COMPLETE') entry.complete += 1;
-      else if (r.coverage_level === 'PENDING') entry.pending += 1;
-      if (r.coverage_level_saved === 'COMPLETE') entry.completeSaved += 1;
+      if (r.coverage_level === 'MISSING' || !r.first_prod_date) continue;
+      const prodMonth = ym(r.first_prod_date);
+      workByMonth.set(prodMonth, (workByMonth.get(prodMonth) || 0) + 1);
+      if (r.coverage_level === 'COMPLETE') {
+        // completion attributed to when it was fully stamped, but never before it existed
+        const doneMonth = r.stamped_full_at ? ym(r.stamped_full_at) : prodMonth;
+        bumpDone(doneMonth > prodMonth ? doneMonth : prodMonth, r.coverage_level_saved === 'COMPLETE');
+      }
     }
+    const allStatusMonths = [...new Set([...workByMonth.keys(), ...doneByMonth.keys()])].sort();
     let cumComplete = 0;
     let cumCompleteSaved = 0;
-    let cumAutoPending = 0;
-    const monthlyStatus = [...monthlyStatusMap.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, c]) => {
-        cumComplete      += c.complete;
-        cumCompleteSaved += c.completeSaved;
-        cumAutoPending   += c.pending;
-        const total = cumComplete + cumAutoPending;
-        return {
-          month,
-          complete:       cumComplete,         // with T-Select #1
-          complete_saved: cumCompleteSaved,    // baseline (saved only)
-          pending: cumAutoPending,
-          complete_pct: total > 0 ? parseFloat(((cumComplete / total) * 100).toFixed(1)) : 0,
-          complete_saved_pct: total > 0 ? parseFloat(((cumCompleteSaved / total) * 100).toFixed(1)) : 0,
-        };
-      });
+    let cumWorkable = 0;
+    const monthlyStatus = allStatusMonths.map((month) => {
+      const d = doneByMonth.get(month) || { complete: 0, completeSaved: 0 };
+      cumWorkable      += workByMonth.get(month) || 0;
+      cumComplete      += d.complete;
+      cumCompleteSaved += d.completeSaved;
+      const pending = Math.max(0, cumWorkable - cumComplete);   // backlog not yet done at M
+      return {
+        month,
+        complete:       cumComplete,         // with T-Select #1
+        complete_saved: cumCompleteSaved,    // baseline (saved only)
+        pending,
+        complete_pct: cumWorkable > 0 ? parseFloat(((cumComplete / cumWorkable) * 100).toFixed(1)) : 0,
+        complete_saved_pct: cumWorkable > 0 ? parseFloat(((cumCompleteSaved / cumWorkable) * 100).toFixed(1)) : 0,
+      };
+    });
 
     // NOTE: the dedicated "Stamp Tracking" page (and the `stamp` payload section it
     // consumed) was removed 2026-06-28. Once COMPLETE was redefined to require a
@@ -848,15 +970,29 @@ async function buildCoverage() {
         toolImageCount:     toolImagesRes.rows.length,
         grindingImageCount: parseInt(grindingImagesRes.rows[0].cnt, 10),
         machineCodeMapped:  machineCodesRes.rows.length,
-        // Produced-but-size-limit-excluded (CN × machine) rows. Now COUNTED IN the
-        // totals (flagged limit_excluded for the red UI highlight), not dropped.
+        // Produced-but-size-limit-excluded (CN × machine) rows — over the limit AND no
+        // sustained history. Still counted in `total`, but PULLED OUT of `needsAttention`
+        // (they rest on contradictory data, not a config gap). `limitExcludedByMachine`
+        // is the reconcile worklist — each (machine, process) has a tooling_machine_limit
+        // bound or a production record that needs checking.
         limitExcluded:      limitExcludedCount,
+        limitExcludedByMachine,
+        // Over the limit BUT the floor has genuinely run the CN there → T-Select
+        // softens it ('limit_note') instead of excluding. `limitSoftenedByMachine` is
+        // the worklist: each (machine, process) here is a tooling_machine_limit bound
+        // to measure against the plan and fix surgically.
+        limitSoftened:          limitSoftenedCount,
+        limitSoftenedByMachine,
       },
       // The configured part-type set (scope.part_types), in config order. Exposed so the
       // frontend charts (esp. "New Parts per Month") build their series from the scope
       // instead of a hardcoded ball/race/mecha list — add/remove a type in the report
       // config and the charts follow.
       partTypes,
+      // Current fiscal year (Apr–Mar) + the previous-FY window, so the New Parts /
+      // Cumulative Status charts window on this FY plus one leading prior-FY bar
+      // without the frontend hardcoding month strings that break every April.
+      fye: currentFyeWindow(),
       byPartType,
       monthlyTrend,
       monthlyNewParts,
@@ -995,7 +1131,16 @@ router.get('/access-log', async (req, res) => {
   try {
     const params = [];
     let where = '';
-    if (cn?.trim()) { params.push(cn.trim()); where = 'WHERE cn = $1'; }
+    // The log stores whatever CN form the viewer's page held (usually control-no); the
+    // searcher may type either spelling or only a prefix. Match partial + both forms —
+    // an exact `cn = $1` made "search by item-no" silently return nothing (mirrors the
+    // /print-log filter).
+    if (cn?.trim()) {
+      const raw = cn.trim();
+      const ctrl = cnFormat.toControlNo(raw) || raw;
+      params.push(`%${raw}%`, `%${ctrl}%`);
+      where = 'WHERE (cn ILIKE $1 OR cn ILIKE $2)';
+    }
     const result = await engPool.query(
       `SELECT id, cn, machine_type_name, access_type, accessed_by, accessed_at
        FROM sds_access_log ${where}
@@ -1116,16 +1261,28 @@ router.get('/print-log/facets', async (_req, res) => {
  * POST /api/sds/v2/report/parameters/bulk-import
  * Bulk-upsert sds_parameter rows from CSV payload.
  * Body: { rows: [{ cn, machine_type_name, param_key, param_value }], updated_by }
+ *
+ * Writes the same table as sdsV2AdminController's PUT /parameters — so it carries the
+ * identical guard (isAdmin = 'AD' or 'sds_admin' feature) and cache flush (flushSds).
  */
-router.post('/parameters/bulk-import', async (req, res) => {
+router.post('/parameters/bulk-import', isAdmin, flushSds, async (req, res) => {
   const { rows, updated_by } = req.body;
   if (!Array.isArray(rows) || !rows.length) {
     return res.status(400).json({ error: 'rows array is required' });
   }
-  const REQUIRED = ['cn', 'machine_type_name', 'param_key', 'param_value'];
+  // Identity columns must be present AND non-blank: a blank `cn` is not NULL, so
+  // COALESCE(cn, '__machine_config__') would treat '' as a real key and write a row
+  // that matches nothing on read. `param_value` may legitimately be '' (clearing a
+  // value), so it is only checked for presence.
+  const KEY_FIELDS = ['cn', 'machine_type_name', 'param_key'];
   for (let i = 0; i < rows.length; i++) {
-    for (const f of REQUIRED) {
-      if (rows[i][f] == null) return res.status(400).json({ error: `Row ${i}: missing '${f}'` });
+    for (const f of KEY_FIELDS) {
+      if (rows[i][f] == null || !String(rows[i][f]).trim()) {
+        return res.status(400).json({ error: `Row ${i}: '${f}' is required and must not be blank` });
+      }
+    }
+    if (rows[i].param_value == null) {
+      return res.status(400).json({ error: `Row ${i}: missing 'param_value'` });
     }
   }
   const CHUNK = 200;
@@ -1140,7 +1297,8 @@ router.post('/parameters/bulk-import', async (req, res) => {
         `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
       ).join(',');
       const vals = chunk.flatMap(r => [
-        r.cn, r.machine_type_name, r.param_key, String(r.param_value), updated_by || null,
+        String(r.cn).trim(), String(r.machine_type_name).trim(), String(r.param_key).trim(),
+        String(r.param_value), updated_by || null,
       ]);
       await client.query(
         // process_code omitted → defaults NULL (process-agnostic); the ON CONFLICT target
