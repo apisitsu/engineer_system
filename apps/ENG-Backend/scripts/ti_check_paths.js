@@ -8,6 +8,9 @@
  * mounts. The same commit therefore behaves differently on plbmp118 and plbmp130, and the
  * 500 body says only which step failed. This says which PATH failed, and for whom.
  *
+ * It also GETs TI_CSV_GAS_URL (the Apps Script upload endpoint) when one is set — the
+ * way the CSVs reach Drive on a host where the backend account cannot see G:.
+ *
  * Read-only apart from a byte written and deleted in the output folder — it touches no
  * database and changes no data, so it is safe to run on production at any time.
  *
@@ -47,6 +50,7 @@ require('dotenv').config();
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const axios = require('axios');
 const XLSX = require('xlsx');
 const { PATHS } = require('../api/engineer/mtc/mtcConstants');
 
@@ -108,9 +112,55 @@ function listWorkbooks(dir) {
   return out;
 }
 
+// One health probe of the Apps Script upload endpoint. GET only — `doGet` takes no
+// secret and writes nothing — so the script stays safe to run on production. It
+// proves the /exec URL is live, is shared to the org (no login redirect) and parses;
+// the secret and the folder write are exercised by the real "Update data" run.
+async function checkGasUpload() {
+  console.log('\n--- Drive upload (TI_CSV_GAS_URL) ---');
+  if (!PATHS.TI_CSV_GAS_URL) {
+    console.log('  not configured — the CSVs are written only to TI_CSV_OUTPUT_DIR above.');
+    if (/^[A-Za-z]:/.test(PATHS.TI_CSV_OUTPUT_DIR)) {
+      console.log('  TI_CSV_OUTPUT_DIR is a drive letter, and a service login often cannot see one.');
+      console.log('  Set TI_CSV_GAS_URL / TI_CSV_GAS_SECRET to upload to Drive instead of writing G:.');
+    }
+    return;
+  }
+  const t = Date.now();
+  try {
+    const res = await axios.get(PATHS.TI_CSV_GAS_URL, { proxy: false, maxRedirects: 5, timeout: 30000 });
+    const body = res.data;
+    if (body && body.success && body.ready) {
+      console.log(`  OK    deployment answered { ready: true } in ${since(t)}`);
+      console.log(`        ${PATHS.TI_CSV_GAS_URL}`);
+      if (PATHS.TI_CSV_GAS_SECRET) {
+        console.log('        TI_CSV_GAS_SECRET is set');
+      } else {
+        console.log('  PROBLEM  TI_CSV_GAS_SECRET is not set — the script rejects every upload as "Bad secret"');
+        problems.push('TI_CSV_GAS_URL is set but TI_CSV_GAS_SECRET is not');
+      }
+    } else if (typeof body === 'string') {
+      console.log('  FAIL  the URL returned HTML, not JSON — the /exec URL is stale (a re-deploy mints a new one)');
+      problems.push('TI_CSV_GAS_URL returned HTML — stale deployment URL');
+    } else {
+      console.log(`  FAIL  unexpected response: ${JSON.stringify(body).slice(0, 200)}`);
+      problems.push('TI_CSV_GAS_URL gave an unexpected response');
+    }
+  } catch (err) {
+    const status = err.response && err.response.status;
+    console.log(`  FAIL  ${status ? `HTTP ${status}` : err.code || err.message} after ${since(t)}`);
+    console.log(`        ${PATHS.TI_CSV_GAS_URL}`);
+    if (status === 302 || status === 401 || status === 403) {
+      console.log('        redirected to / refused by a Google login — the deployment is not "Anyone within the org".');
+    }
+    problems.push(`TI_CSV_GAS_URL unreachable: ${status ? `HTTP ${status}` : err.code || err.message}`);
+  }
+}
+
+async function main() {
 console.log(`host ${os.hostname()} · running as ${os.userInfo().username} · node ${process.version}`);
 console.log('\n--- configuration ---');
-for (const key of ['TI_INSP_REC_DIR', 'TI_DWG_PRINT_FILE', 'TI_CSV_OUTPUT_DIR']) {
+for (const key of ['TI_INSP_REC_DIR', 'TI_DWG_PRINT_FILE', 'TI_CSV_OUTPUT_DIR', 'TI_CSV_GAS_URL']) {
   console.log(`  ${key.padEnd(19)} ${process.env[key] ? 'from .env' : 'DEFAULT (not set in .env)'}`);
 }
 
@@ -134,6 +184,8 @@ if (path.resolve(PATHS.TI_CSV_OUTPUT_DIR).startsWith(repoRoot)) {
   console.log('           mid-import and the request never returns.');
   problems.push('TI_CSV_OUTPUT_DIR is inside the repo — nodemon will restart mid-import');
 }
+
+await checkGasUpload();
 
 if (srcOk) {
   console.log('\n--- step 1: importPcTooling sources ---');
@@ -182,3 +234,9 @@ if (!problems.length) {
 } else {
   for (const p of problems) console.log(`  · ${p}`);
 }
+}
+
+main().catch((err) => {
+  console.error('\nti_check_paths crashed:', err && err.stack ? err.stack : err);
+  process.exit(1);
+});

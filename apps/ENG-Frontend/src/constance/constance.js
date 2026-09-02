@@ -121,6 +121,10 @@ export const server = {
   MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS: `${apiUrl}api/sds/v2/admin/template-grids`,
   MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
 
+  // Lot Status Tracker
+  MTC_LOT_TRACK: `${apiUrl}api/mtc/lot-track`,                 // append /:lotNo?control_no=&source=
+  MTC_LOT_TRACK_SEARCH: `${apiUrl}api/mtc/lot-track/search`,   // ?q=
+
   // Template Tool (APQP Forms)
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
   TT_STAMPS: `${apiUrl}api/engineer/new_prod/stamps`,
