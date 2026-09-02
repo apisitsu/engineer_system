@@ -723,13 +723,17 @@ async function buildCoverage() {
     };
     const isLimitExcluded = inSet(limitExcludedByCn);
     const isLimitSoftened = inSet(limitSoftenedByCn);
-    // COUNT-BACK (2026-07-02, revised 2026-08-31): produced-but-limit-excluded rows
-    // rest on contradictory data (the T-Select size limit and a real production record
-    // disagree), so they are NOT an actionable "needs a signature / needs config" task.
-    // They are FLAGGED (`limit_excluded`) and pulled OUT of `needsAttention` below;
-    // `limitExcludedByMachine` is the reconcile worklist that replaces them — each line
-    // is a (machine, process) whose `tooling_machine_limit` bound or production log
-    // needs checking. Mirrors `limitSoftenedByMachine`.
+    // COUNT-BACK (2026-07-02, revised 2026-08-31, revised 2026-09-02): produced-but-
+    // limit-excluded rows rest on contradictory data (the T-Select size limit and a
+    // real production record disagree). They are still PENDING sheets, so they STAY in
+    // `needsAttention` — otherwise `pending` (= needsAttention.length) understates the
+    // true PENDING total and `total = complete + pending + missing` stops reconciling
+    // on the dashboard. They carry `limit_excluded: true`, the table flags them with a
+    // red "Limit Anomaly" badge, and the Kanban backlog feed re-filters them out in
+    // `selectNoStampRows` so no contradictory-data sheet is ever seeded as a sign task.
+    // `limitExcludedByMachine` is the (machine, process) reconcile worklist — each line
+    // is a `tooling_machine_limit` bound or production log that needs checking.
+    // Mirrors `limitSoftenedByMachine`.
     const limitExcludedRows = evaluated.filter(isLimitExcluded);
     for (const r of limitExcludedRows) r.limit_excluded = true;
     const limitExcludedCount = limitExcludedRows.length;
@@ -853,10 +857,9 @@ async function buildCoverage() {
     const cnMachineMap = new Map();
     for (const r of evaluated) {
       if (r.coverage_level !== 'PENDING') continue;
-      // Limit-anomaly rows are excluded from the worklist — they rest on contradictory
-      // data, not a missing piece of config. They stay flagged on the row and are
-      // surfaced by `limitExcludedByMachine` / `kpi.limitExcluded` instead.
-      if (r.limit_excluded) continue;
+      // Limit-anomaly rows (`limit_excluded`) stay IN the worklist so `pending`
+      // reconciles with `total - complete - missing`; they keep the flag, the table
+      // shows them with a red "Limit Anomaly" badge, and the backlog feed drops them.
       cnMachineMap.set(cnMachineProcessKey(r), r);
     }
     const needsAttention = [...cnMachineMap.values()]
@@ -1010,10 +1013,11 @@ async function buildCoverage() {
         grindingImageCount: parseInt(grindingImagesRes.rows[0].cnt, 10),
         machineCodeMapped:  machineCodesRes.rows.length,
         // Produced-but-size-limit-excluded (CN × machine) rows — over the limit AND no
-        // sustained history. Still counted in `total`, but PULLED OUT of `needsAttention`
-        // (they rest on contradictory data, not a config gap). `limitExcludedByMachine`
-        // is the reconcile worklist — each (machine, process) has a tooling_machine_limit
-        // bound or a production record that needs checking.
+        // sustained history. Counted in `total` and, when PENDING, kept in `needsAttention`
+        // (flagged `limit_excluded`) so `pending` reconciles; they rest on contradictory
+        // data, not a config gap, so `limitExcludedByMachine` is the reconcile worklist —
+        // each (machine, process) has a tooling_machine_limit bound or a production record
+        // that needs checking. This count spans COMPLETE + PENDING limit-anomaly rows.
         limitExcluded:      limitExcludedCount,
         limitExcludedByMachine,
         // Over the limit BUT the floor has genuinely run the CN there → T-Select

@@ -81,6 +81,7 @@ Writing into a Drive-for-Desktop folder fails intermittently with `UNKNOWN` / -4
 - Only the **authoritative** exports are mirrored — not the backup copy `importPcTooling` writes before its DB round trip, which would upload the same filename twice per run.
 - Set `TI_CSV_GAS_SECRET` to match the script, or anyone in the org who finds the URL can overwrite the files.
 - **Re-deploying the script mints a new `/exec` URL.** Uploads that silently stop after someone "fixed" the script are almost always that; the warning says so when the response is HTML rather than JSON.
+- `scripts/ti_check_paths.js` GETs `TI_CSV_GAS_URL` and reports whether the deployment is live, shared to the org, and paired with a secret — run it on the target host as the backend's account. Step-by-step deploy + plbmp130 `.env` runbook: `api/engineer/mtc/doc/ti_csv_drive_upload_runbook.md`.
 
 ### Uploading to Drive through the official API is blocked on a credential
 

@@ -232,14 +232,15 @@ const REASON_LABELS = {
   NO_EXCEL: 'Tool ✓ — needs Excel config',
   NO_TOOL: 'No tool match',
   NO_TOOL_NO_EXCEL: 'No tool + no Excel config',
+  NO_STAMP: 'PDF ready — needs signature',
 };
 
 // A limit anomaly (`limit_excluded` — produced on a machine whose T-Select size LIMIT
-// says it cannot run) rests on contradictory data, not a config gap. The backend
-// pulls these rows OUT of `needsAttention`, so they no longer appear in the table
-// below; they are surfaced by the "Limit Anomaly — reconcile data" worklist card
-// (`kpi.limitExcludedByMachine`). The row-level red tag/highlight further down stays
-// as a defensive no-op in case such a row is ever present.
+// says it cannot run) rests on contradictory data, not a config gap. These rows STAY
+// in `needsAttention` (so `pending` reconciles with total − complete − missing) and
+// appear in the table below with the red "Limit Anomaly" tag/row highlight; the
+// "Limit Anomaly — reconcile data" worklist card (`kpi.limitExcludedByMachine`) is
+// the (machine · process) reconcile list.
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
@@ -804,15 +805,15 @@ export default function SdsCoverageDashboard() {
             {/* (machine, process) pairs where a part was PRODUCED but the T-Select
                 work-size limit says it cannot run there, and the floor has no sustained
                 history to soften it. The limit and the production record disagree —
-                one of them is wrong. Pulled out of "CNs Requiring Action" (not a config
-                gap); listed here so the contradiction still gets reconciled. */}
+                one of them is wrong. These rows are flagged "Limit Anomaly" in the
+                table below; this card is the (machine · process) reconcile list. */}
             {(data?.kpi?.limitExcludedByMachine?.length > 0) && (
               <div style={{ ...cardStyle, marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
                   {sectionTitle('Limit Anomaly — reconcile data', C)}
                   <Text style={{ color: C.textSec, fontSize: 11 }}>
                     {(data?.kpi?.limitExcluded ?? 0).toLocaleString()} sheet(s) across{' '}
-                    {data.kpi.limitExcludedByMachine.length} (machine · process) — hidden from the table below
+                    {data.kpi.limitExcludedByMachine.length} (machine · process) — flagged in the table below
                   </Text>
                 </div>
                 <div style={{ maxHeight: 200, overflowY: 'auto' }}>
