@@ -270,26 +270,21 @@ export default function LotStatusTracker() {
                 </Row>
               </Card>
 
-              <Row gutter={[16, 16]}>
-                <Col xs={24} xl={10}>
-                  <Card size="small" title="Roadmap" styles={{ body: { maxHeight: 620, overflowY: 'auto' } }}>
-                    <Roadmap steps={data.steps} />
-                  </Card>
-                </Col>
-                <Col xs={24} xl={14}>
-                  <Card size="small" title="Process detail">
-                    <Table
-                      size="small"
-                      rowKey="order"
-                      columns={columns}
-                      dataSource={data.steps}
-                      pagination={false}
-                      scroll={{ x: 1120 }}
-                      rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
-                    />
-                  </Card>
-                </Col>
-              </Row>
+              <Card size="small" title="Roadmap" styles={{ body: { maxHeight: 620, overflowY: 'auto' } }}>
+                <Roadmap steps={data.steps} />
+              </Card>
+
+              <Card size="small" title="Process detail">
+                <Table
+                  size="small"
+                  rowKey="order"
+                  columns={columns}
+                  dataSource={data.steps}
+                  pagination={false}
+                  scroll={{ x: 1120 }}
+                  rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
+                />
+              </Card>
             </Space>
           ) : null}
 
