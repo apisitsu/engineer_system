@@ -25,6 +25,11 @@ const fmtMinutes = (m) => {
 };
 const fmtDays = (d) => (d == null ? '—' : d === 0 ? 'same day' : `${d} d`);
 const fmtDateTime = (s) => (s ? String(s).replace('T', ' ') : '—');
+const hoursBetween = (a, b) => {
+  if (!a || !b) return null;
+  const d = (new Date(b) - new Date(a)) / 3600000;
+  return Number.isFinite(d) ? d : null;
+};
 
 const STATUS_META = {
   done: { step: 'finish', tag: 'success', label: 'Done' },
@@ -221,12 +226,30 @@ export default function LotStatusTracker() {
           {/* result */}
           {!loading && data ? (
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <Alert
-                type={header.isCancelled ? 'error' : 'warning'}
-                showIcon
-                message={header.isCancelled ? 'This lot has been cancelled / closed' : `Data as of ${fmtDateTime(data.dataAsOf)} — not real-time`}
-                description={data.syncNote}
-              />
+              {(() => {
+                const idleH = hoursBetween(data.lotUpdatedAt, data.syncAsOf);
+                const isIdle = !header.isCancelled && summary.hasCurrent && idleH != null && idleH > 26;
+                return (
+                  <Alert
+                    type={header.isCancelled ? 'error' : (isIdle ? 'info' : 'warning')}
+                    showIcon
+                    message={header.isCancelled
+                      ? 'This lot has been cancelled / closed'
+                      : `Production DB synced ${fmtDateTime(data.syncAsOf)} — not real-time`}
+                    description={(
+                      <>
+                        <div>{data.syncNote}</div>
+                        <div style={{ marginTop: 4 }}>
+                          This lot last moved <b>{fmtDateTime(data.lotUpdatedAt)}</b>
+                          {isIdle
+                            ? ` — it has been sitting at step ${summary.currentOrder} (${summary.currentStepName}) for ~${Math.round(idleH / 24)} day(s); the feed is current, the lot is not.`
+                            : '.'}
+                        </div>
+                      </>
+                    )}
+                  />
+                );
+              })()}
 
               <Descriptions
                 bordered size="small" column={{ xs: 1, sm: 2, md: 3 }}

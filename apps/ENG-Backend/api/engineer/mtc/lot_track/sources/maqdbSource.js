@@ -93,8 +93,8 @@ async function fetchLot(lotNo, opts = {}) {
   }
   const H = lots[0];
 
-  // 2 & 3 — planned route + actual production, in parallel
-  const [{ rows: route }, { rows: prod }] = await Promise.all([
+  // 2, 3 & 4 — planned route, actual production, and the GLOBAL sync clock, in parallel
+  const [{ rows: route }, { rows: prod }, { rows: syncRows }] = await Promise.all([
     maqPool.query(
       `SELECT seq, process, proc_name
          FROM lpb.pc_lot_process
@@ -114,7 +114,13 @@ async function fetchLot(lotNo, opts = {}) {
         WHERE lot_no = $1 AND control_no = $2`,
       [H.lot_no, H.control_no],
     ),
+    // When the maqdb mirror itself was last refreshed from the shop floor — the
+    // newest write anywhere in pc_production (~3×/day). Distinct from a lot's own
+    // last-move time: a lot parked in a queue legitimately has an old per-lot stamp
+    // while the feed is current. ~0.2 s, whole-table max.
+    maqPool.query(`SELECT to_char(max(update_time), 'YYYY-MM-DD"T"HH24:MI:SS') AS sync_at FROM lpb.pc_production`),
   ]);
+  const syncAsOf = syncRows[0]?.sync_at || null;
 
   // 4 — step names
   const codes = [...new Set([...route, ...prod].map((r) => String(r.process || '').trim()).filter(Boolean))];
@@ -243,7 +249,11 @@ async function fetchLot(lotNo, opts = {}) {
   const firstComp = doneSteps.map((s) => s.firstCompDate).filter(Boolean).sort()[0] || null;
   const lastComp = doneSteps.map((s) => s.compDate).filter(Boolean).sort().slice(-1)[0] || null;
 
-  const dataAsOf = [...prodBySeq.values()].map((a) => a.lastUpdate).filter(Boolean).sort().slice(-1)[0]
+  // `dataAsOf` is THIS LOT's last movement — newest pc_production write for the lot,
+  // or the lot header's own update_time if it has no production rows yet. A lot
+  // sitting in a queue has an old value here even though the feed (`syncAsOf`) is
+  // current. The two are shown separately so "stale" is not misread as a broken sync.
+  const lotUpdatedAt = [...prodBySeq.values()].map((a) => a.lastUpdate).filter(Boolean).sort().slice(-1)[0]
     || H.update_time || null;
 
   return {
@@ -251,7 +261,9 @@ async function fetchLot(lotNo, opts = {}) {
     ambiguous: false,
     source: name,
     isRealtime,
-    dataAsOf,
+    dataAsOf: lotUpdatedAt,   // kept for compatibility — same as lotUpdatedAt
+    lotUpdatedAt,
+    syncAsOf,
     syncNote: SYNC_NOTE,
     header: {
       lotNo: H.lot_no,
