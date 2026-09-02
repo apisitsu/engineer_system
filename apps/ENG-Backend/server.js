@@ -277,6 +277,10 @@ app.use('/api/engineer/cam', verifyToken, camRoutes);
 const { router: toolingSelectRoutes, syncNewCns } = require('./api/engineer/mtc/tsv2Routes');
 app.use('/api/tooling-select', verifyToken, toolingSelectRoutes);
 
+// Lot Status Tracker — self-contained MTC sub-module, read-only (maqdb / lpb.pc_*)
+const lotTrackRoutes = require('./api/engineer/mtc/lot_track/lotTrackRoutes');
+app.use('/api/mtc/lot-track', verifyToken, lotTrackRoutes);
+
 // ── Auto sync: insert new factory CNs into tooling_spec_process every day at 08:00 ──
 const cron = require('node-cron');
 cron.schedule('0 8 * * *', async () => {
