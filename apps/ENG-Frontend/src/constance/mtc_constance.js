@@ -21,6 +21,7 @@ export const MTC_PATHS = {
   SDS_HISTORY: '/eng/mtc_eng/sds-v2/history',
   SDS_TEMPLATE_B: '/eng/mtc_eng/sds-v2/template-b',
   SDS_SELECTION_COND: '/eng/mtc_eng/sds-v2/selection-condition',
+  LOT_TRACK: '/eng/mtc_eng/lot-track',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
@@ -39,6 +40,7 @@ export const MTC_VERSIONS = {
   'sds-template-b':           { version: '1.0', updated: '2026-08-27' },
   'sds-selection-cond':       { version: '1.0', updated: '2026-08-28' },
   'cam':                      { version: '1.0', updated: '2026-08-05' },
+  'lot-track':                { version: '1.0', updated: '2026-09-01' },
 };
 
 export const WORKFLOW_STATUS = {

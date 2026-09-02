@@ -106,6 +106,7 @@ export const mtc = createMenu([
             { label: "Inspection Dashboard", path: MTC_PATHS.TOOLING_RESULT_DASHBOARD, key: "tooling-result-dashboard" },
             { label: "SDS Coverage Report", path: MTC_PATHS.SDS_COVERAGE_REPORT, key: "sds-coverage-report" },
             { label: "SDS History", path: MTC_PATHS.SDS_HISTORY, key: "sds-history" },
+            { label: "Lot Status Tracker", path: MTC_PATHS.LOT_TRACK, key: "lot-track" },
         ]
     },
 ]);
