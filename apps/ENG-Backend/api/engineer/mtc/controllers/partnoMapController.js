@@ -10,7 +10,7 @@
  *              on KS-400B5/B6, the KS-H70 grindstone set.
  *   cn       — a fixture chosen per CONTROL NUMBER: FTL-10(I) PUSHER OP1, whose selection
  *              exists only as the shop's per-part record (seeded from lpb.eng_r_pi_tool by
- *              db_migrations/20260817_pusher_op1_cn_map.js).
+ *              api/engineer/mtc/db_migrations/20260817_pusher_op1_cn_map.js).
  *
  * A cn-keyed row leaves parts_no NULL and vice versa — never both, never neither. NULL is
  * required rather than a placeholder: the table's UNIQUE covers parts_no, and many C/Ns

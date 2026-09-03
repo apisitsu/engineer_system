@@ -15,6 +15,7 @@ const cnFormat = require('../utils/cnFormat');
 const { resolvePartDims, SPHERICAL_DESIGN } = require('../utils/partDimAlias');
 const { cnMatchKeys } = require('../utils/grindingPrefix');
 const { getApprovalSeals } = require('./sdsApprovalController');
+const sdsPrintLog = require('../services/sdsPrintLog');
 
 // Approval-stamp param keys → role. The seal image comes from the sds_approval
 // sign records (see getApprovalSeals), keyed per CN by (cn, machine_type, process_code, sds_rev).
@@ -1212,7 +1213,12 @@ async function loadGridForMachine(machine_type_name) {
 // Core of the grid SDS PDF: builds the print-ready HTML for a given CN/machine/process
 // (or the blank/override design preview). Shared by the authenticated route below and
 // the public cross-system link endpoint (sdsPublicController) so both render identically.
-async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id }) {
+// `_meta`, when passed, is an out-param the caller owns: the rendered T01–Tn fixture
+// list is copied into it so the print log can snapshot what the sheet actually said
+// without re-rendering it against a later configuration. Each request passes its own
+// object, so this stays safe under concurrency; callers that don't pass one are
+// unaffected.
+async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id, _meta }) {
   let grid = null;
   if (gridOverride) { try { grid = JSON.parse(gridOverride); } catch (_) {} }
   // Editor preview of one specific template (no machine context) — load it by id.
@@ -1247,15 +1253,17 @@ async function buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, pr
     // identical source, so the sign endpoints and this renderer always agree.
     valueMap._approvalSeals = await getApprovalSeals(valueMap._cn_control || valueMap.cn, machine_type_name.trim(), process_code?.trim() || null, valueMap.sds_rev);
     grid = applyDataToGrid(grid, valueMap, mappings);
+    if (_meta) _meta.tooling = valueMap.tooling || null;
   }
 
   return buildGridPdfHtml(grid);
 }
 
 router.get('/pdf-chrome/grid', async (req, res) => {
-  const { gridOverride, debug, cn, machine_type_name, process_code, display_name, template_id } = req.query;
+  const { gridOverride, debug, cn, machine_type_name, process_code, display_name, template_id, lot } = req.query;
   try {
-    const html = await buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id });
+    const _meta = {};
+    const html = await buildGridHtmlForRequest({ gridOverride, cn, machine_type_name, process_code, display_name, template_id, _meta });
     if (debug === 'html') return res.send(html);
 
     const pdfBuffer = await renderPdf(html, { margin: { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' } });
@@ -1264,6 +1272,22 @@ router.get('/pdf-chrome/grid', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.send(pdfBuffer);
+
+    // Evidentiary record, AFTER the response — a print must never wait on, or fail
+    // because of, its own audit row. `record()` swallows its own errors. Skipped for
+    // the blank/preview renders, which have no CN to be evidence of.
+    //
+    // `lot` is accepted but NOTHING SENDS IT TODAY: the in-app button has no lot picker,
+    // by decision (2026-08-25) — the lot is knowledge the production-planning side has and
+    // an operator at the SDS screen does not, so asking here would only invite a typo.
+    // These rows therefore carry lot_no = NULL / lot_verified = NULL, which is the correct
+    // record of "no lot was stated", not a gap. Only the public deep link supplies one.
+    if (cn && machine_type_name) {
+      sdsPrintLog.record({
+        cn, machineTypeName: machine_type_name, processCode: process_code, lot,
+        source: 'app', requestedBy: req.user?.empno, pdfBuffer, tooling: _meta.tooling,
+      });
+    }
   } catch (err) {
     res.status(500).json({ error: `Grid PDF render failed: ${err.message}` });
   }
