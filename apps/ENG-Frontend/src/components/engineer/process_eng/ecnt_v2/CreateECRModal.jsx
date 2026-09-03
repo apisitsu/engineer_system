@@ -3,8 +3,6 @@ import { Modal, Form, Input, Select, Checkbox, Row, Col } from 'antd';
 import { App } from 'antd';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -123,10 +121,10 @@ export default function CreateECRModal({ open, onClose, onSuccess }) {
                     
                     <Col span={24}>
                         <Form.Item name="title_of_change" label="Title of Change" rules={[{ required: true }]}>
-                            <ReactQuill theme="snow" />
+                            <TextArea rows={3} placeholder="Enter title of change..." />
                         </Form.Item>
                         <Form.Item name="reason_of_change" label="Reason of Change" rules={[{ required: true }]}>
-                            <ReactQuill theme="snow" />
+                            <TextArea rows={4} placeholder="Enter reason of change..." />
                         </Form.Item>
                     </Col>
                 </Row>
