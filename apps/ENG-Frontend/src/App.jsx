@@ -40,6 +40,7 @@ import EcntDashboard from './components/engineer/process_eng/ecnt/Dashboard';
 import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
+import EcntV2Dashboard from './components/engineer/process_eng/ecnt_v2/Dashboard';
 
 import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
 
@@ -323,6 +324,7 @@ const AppContent = () => {
                     <Route path="history" element={<EcntHistory />} />
                     <Route path="close/:id" element={<EcntClose />} />
                   </Route>
+                  <Route path="/eng/process_eng/ecnt_v2" element={<EcntV2Dashboard />} />
                   <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
 
                   {/* ------ Materials Engineer ------ */}

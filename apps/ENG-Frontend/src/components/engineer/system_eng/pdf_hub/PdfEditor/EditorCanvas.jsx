@@ -8,6 +8,14 @@ import ToolPreview from './canvas/ToolPreview';
 import useFabricTools from './canvas/hooks/useFabricTools';
 import useHighlightTools from './canvas/hooks/useHighlightTools';
 
+// Ensure Fabric v6 serializes custom metadata and multi-line wrapping data
+if (fabric.FabricObject && !fabric.FabricObject.customProperties?.includes('textLines')) {
+    fabric.FabricObject.customProperties = Array.from(new Set([
+        ...(fabric.FabricObject.customProperties || []),
+        'customData', 'textLines', 'id'
+    ]));
+}
+
 /**
  * EditorCanvas — Multi-Layer rendering engine.
  *
