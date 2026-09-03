@@ -124,6 +124,7 @@ const PdfEditorTool = () => {
     // ── Overlay/Compare ──
     const [overlayPdfDoc, setOverlayPdfDoc] = useState(null);
     const [overlayFile, setOverlayFile] = useState(null);
+    const [mergeRotations, setMergeRotations] = useState({});
 
     // ── Continuous Scroll Observer ──
     useEffect(() => {
@@ -470,8 +471,7 @@ const PdfEditorTool = () => {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
+    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -483,9 +483,10 @@ const PdfEditorTool = () => {
         }
         setMergeLoading(true);
         try {
-            const mergedBytes = await mergePdfFiles(mergeFiles);
+            const mergedBytes = await mergePdfFiles(mergeFiles, mergeRotations);
             await loadPdfFromBytes(mergedBytes, `merged_${Date.now()}.pdf`);
             setMergeFiles([]);
+            setMergeRotations({});
             store.setActiveMode('view');
             logPdfUsage('merge');
             message.success('PDFs merged! You can now annotate, sign, or export.');
@@ -495,7 +496,7 @@ const PdfEditorTool = () => {
         } finally {
             setMergeLoading(false);
         }
-    }, [mergeFiles, loadPdfFromBytes, setMergeFiles, store, logPdfUsage]);
+    }, [mergeFiles, mergeRotations, loadPdfFromBytes, setMergeFiles, store, logPdfUsage]);
 
     const handleMergeFilesAdd = useCallback((files) => {
         setMergeFiles(prev => {
@@ -869,7 +870,7 @@ const PdfEditorTool = () => {
                         style={{ background: theme.colors.background }}
                     >
                         {store.activeMode === 'merge' ? (
-                            <MergePreview mergeFiles={mergeFiles} />
+                            <MergePreview mergeFiles={mergeFiles} onRotationsChange={setMergeRotations} />
                         ) : pdfDoc ? (
                             store.viewMode === 'continuous' ? (
                                 <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', minWidth: 'fit-content', margin: '0 auto' }}>

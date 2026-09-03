@@ -196,7 +196,8 @@ const EditorCanvas = ({
         });
 
         // ── Modification tracking for undo ──
-        canvas.on('object:modified', () => {
+        // Capture snapshot before transform (drag/scale/rotate) starts so Undo restores the prior position
+        canvas.on('before:transform', () => {
             if (pushHistory) pushHistory(pageNum);
         });
 

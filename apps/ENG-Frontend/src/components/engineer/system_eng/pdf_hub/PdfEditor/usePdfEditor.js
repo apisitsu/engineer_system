@@ -31,8 +31,16 @@ export default function usePdfEditor() {
 
     // ── 3. History State ──
     const { 
-        pushHistory: _pushHistory, saveCurrentPageState, undo: _undo, redo: _redo, clearHistory, canUndo, canRedo, historyVersion 
+        pushHistory: _pushHistory, saveCurrentPageState: _saveCurrentPageState, undo: _undo, redo: _redo, clearHistory, canUndo, canRedo, historyVersion 
     } = useHistory(setPageAnnotations, setPageHighlights);
+
+    const deepCloneHighlights = (hls) => {
+        const out = {};
+        Object.entries(hls || {}).forEach(([pNum, arr]) => {
+            out[pNum] = Array.isArray(arr) ? arr.map(h => ({ ...h })) : [];
+        });
+        return out;
+    };
 
     const getCanvasSnapshot = (fc) => {
         if (!fc) return null;
@@ -43,6 +51,16 @@ export default function usePdfEditor() {
         json._canvasHeight = fc.height;
         return json;
     };
+
+    // Resilient saveCurrentPageState that defaults to currentPage and its active canvas
+    const saveCurrentPageState = useCallback((pageNum, canvas, highlightsState) => {
+        const targetPage = pageNum || currentPage;
+        const targetCanvas = canvas || fabricCanvasRefs.current?.[targetPage];
+        const targetHighlights = highlightsState !== undefined ? highlightsState : pageHighlights[targetPage];
+        if (targetCanvas) {
+            return _saveCurrentPageState(targetPage, targetCanvas, targetHighlights);
+        }
+    }, [currentPage, fabricCanvasRefs, pageHighlights, _saveCurrentPageState]);
 
     // Wrapper for pushHistory to capture current state
     const pushHistoryRef = useRef();
@@ -56,7 +74,7 @@ export default function usePdfEditor() {
         });
         _pushHistory({
             annotations: currentAnnotations,
-            highlights: { ...pageHighlights }
+            highlights: deepCloneHighlights(pageHighlights)
         });
     };
 
@@ -85,7 +103,7 @@ export default function usePdfEditor() {
                 currentAnnotations[pNum] = json;
             }
         });
-        const restoredState = _undo(currentAnnotations, { ...pageHighlights });
+        const restoredState = _undo(currentAnnotations, deepCloneHighlights(pageHighlights));
         _applyStateToCanvases(restoredState);
     };
 
@@ -97,7 +115,7 @@ export default function usePdfEditor() {
                 currentAnnotations[pNum] = json;
             }
         });
-        const restoredState = _redo(currentAnnotations, { ...pageHighlights });
+        const restoredState = _redo(currentAnnotations, deepCloneHighlights(pageHighlights));
         _applyStateToCanvases(restoredState);
     };
 

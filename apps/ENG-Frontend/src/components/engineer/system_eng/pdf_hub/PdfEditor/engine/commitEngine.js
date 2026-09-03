@@ -37,14 +37,11 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
         const rotation = page.getRotation().angle || 0;
         const normalizedRotation = ((rotation % 360) + 360) % 360;
 
-        if (normalizedRotation !== 0) {
-            const { width, height } = page.getSize(); // Raw MediaBox
-
-            if (normalizedRotation === 90 || normalizedRotation === 270) {
-                // Swap MediaBox dimensions to match the visual layout
-                page.setSize(height, width);
-            }
-            // Remove rotation — the MediaBox now represents the visual layout directly
+        // Only normalize dimensions and reset rotation for 90/270 degree pages
+        // to match the visual aspect ratio without corrupting 180 degree upside-down orientation
+        if (normalizedRotation === 90 || normalizedRotation === 270) {
+            const { width, height } = page.getSize();
+            page.setSize(height, width);
             page.setRotation(degrees(0));
         }
     }
@@ -419,14 +416,27 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                 const finalY = yPdf - alignOffsetPdf * Math.sin(rad);
 
                 if (lineText) {
-                    page.drawText(lineText, {
-                        x: finalX, 
-                        y: finalY,
-                        size, font,
-                        color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                        opacity: obj.opacity ?? 1,
-                        rotate: obj.angle ? degrees(-obj.angle) : undefined,
-                    });
+                    try {
+                        page.drawText(lineText, {
+                            x: finalX, 
+                            y: finalY,
+                            size, font,
+                            color: hexToRgb(obj.fill) || rgb(0, 0, 0),
+                            opacity: obj.opacity ?? 1,
+                            rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                        });
+                    } catch (fontErr) {
+                        console.warn('drawText encoding error, attempting sanitized fallback:', fontErr);
+                        const sanitized = lineText.replace(/[^\x00-\x7F]/g, '?');
+                        page.drawText(sanitized, {
+                            x: finalX, 
+                            y: finalY,
+                            size, font,
+                            color: hexToRgb(obj.fill) || rgb(0, 0, 0),
+                            opacity: obj.opacity ?? 1,
+                            rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                        });
+                    }
                 }
 
                 if (obj.underline) {
