@@ -34,15 +34,23 @@ export default function usePdfEditor() {
         pushHistory: _pushHistory, saveCurrentPageState, undo: _undo, redo: _redo, clearHistory, canUndo, canRedo, historyVersion 
     } = useHistory(setPageAnnotations, setPageHighlights);
 
+    const getCanvasSnapshot = (fc) => {
+        if (!fc) return null;
+        // Do not call discardActiveObject here, as doing so during an active transform
+        // causes Fabric to recursively re-invoke endCurrentTransform and crash the call stack.
+        const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
+        json._canvasWidth = fc.width;
+        json._canvasHeight = fc.height;
+        return json;
+    };
+
     // Wrapper for pushHistory to capture current state
     const pushHistoryRef = useRef();
     pushHistoryRef.current = () => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
-            if (fc) {
-                const json = fc.toJSON(['customData', 'textLines']);
-                json._canvasWidth = fc.width;
-                json._canvasHeight = fc.height;
+            const json = getCanvasSnapshot(fc);
+            if (json) {
                 currentAnnotations[pNum] = json;
             }
         });
@@ -72,10 +80,8 @@ export default function usePdfEditor() {
     const undo = () => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
-            if (fc) {
-                const json = fc.toJSON(['customData', 'textLines']);
-                json._canvasWidth = fc.width;
-                json._canvasHeight = fc.height;
+            const json = getCanvasSnapshot(fc);
+            if (json) {
                 currentAnnotations[pNum] = json;
             }
         });
@@ -86,10 +92,8 @@ export default function usePdfEditor() {
     const redo = () => {
         const currentAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs.current || {}).forEach(([pNum, fc]) => {
-            if (fc) {
-                const json = fc.toJSON(['customData', 'textLines']);
-                json._canvasWidth = fc.width;
-                json._canvasHeight = fc.height;
+            const json = getCanvasSnapshot(fc);
+            if (json) {
                 currentAnnotations[pNum] = json;
             }
         });

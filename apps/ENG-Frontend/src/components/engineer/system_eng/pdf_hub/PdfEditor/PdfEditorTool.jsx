@@ -365,7 +365,11 @@ const PdfEditorTool = () => {
         const finalAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData', 'textLines']);
+                if (fc.discardActiveObject) {
+                    fc.discardActiveObject();
+                    fc.renderAll?.();
+                }
+                const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 finalAnnotations[pageNumStr] = json;
@@ -438,7 +442,11 @@ const PdfEditorTool = () => {
             // Include all active canvases
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData', 'textLines']);
+                    if (fc.discardActiveObject) {
+                        fc.discardActiveObject();
+                        fc.renderAll?.();
+                    }
+                    const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     finalAnnotations[pageNumStr] = json;
@@ -515,7 +523,11 @@ const PdfEditorTool = () => {
             const allAnnotations = { ...pageAnnotations };
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData', 'textLines']);
+                    if (fc.discardActiveObject) {
+                        fc.discardActiveObject();
+                        fc.renderAll?.();
+                    }
+                    const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     allAnnotations[pageNumStr] = json;

@@ -136,6 +136,92 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
 }
 
 /**
+ * Wrap text to fit within a given maximum width using font metrics.
+ * Handles existing newlines, space-delimited words, and grapheme/character overflow.
+ */
+export function wrapTextToWidth(text, font, fontSize, maxWidth) {
+    if (!text || maxWidth <= 0) return [text || ''];
+
+    const paragraphs = String(text).split('\n');
+    const allLines = [];
+
+    for (const para of paragraphs) {
+        if (!para) {
+            allLines.push('');
+            continue;
+        }
+
+        let paraWidth = 0;
+        try {
+            paraWidth = font.widthOfTextAtSize(para, fontSize);
+        } catch {
+            paraWidth = para.length * fontSize * 0.6;
+        }
+        if (paraWidth <= maxWidth) {
+            allLines.push(para);
+            continue;
+        }
+
+        const words = para.split(' ');
+        let currentLine = '';
+
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            let testWidth = 0;
+            try {
+                testWidth = font.widthOfTextAtSize(testLine, fontSize);
+            } catch {
+                testWidth = testLine.length * fontSize * 0.6;
+            }
+
+            if (testWidth <= maxWidth) {
+                currentLine = testLine;
+            } else {
+                if (currentLine) {
+                    allLines.push(currentLine);
+                    currentLine = '';
+                }
+
+                let wordWidth = 0;
+                try {
+                    wordWidth = font.widthOfTextAtSize(word, fontSize);
+                } catch {
+                    wordWidth = word.length * fontSize * 0.6;
+                }
+
+                if (wordWidth > maxWidth) {
+                    let charLine = '';
+                    const chars = Array.from(word);
+                    for (const ch of chars) {
+                        let charLineWidth = 0;
+                        try {
+                            charLineWidth = font.widthOfTextAtSize(charLine + ch, fontSize);
+                        } catch {
+                            charLineWidth = (charLine.length + 1) * fontSize * 0.6;
+                        }
+                        if (charLineWidth <= maxWidth) {
+                            charLine += ch;
+                        } else {
+                            if (charLine) allLines.push(charLine);
+                            charLine = ch;
+                        }
+                    }
+                    currentLine = charLine;
+                } else {
+                    currentLine = word;
+                }
+            }
+        }
+        if (currentLine) {
+            allLines.push(currentLine);
+        }
+    }
+
+    return allLines.length > 0 ? allLines : [text];
+}
+
+/**
  * Commit a single Fabric.js object into a PDF page.
  */
 async function commitObject(doc, page, obj, cW, cH, pW, pH) {
@@ -284,17 +370,37 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             
             const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle);
             const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
-            
+            const boxWidthPdf = toPdf(objW, cW, pW);
+
             const lines = [];
             if (obj.textLines && Array.isArray(obj.textLines) && obj.textLines.length > 0) {
-                obj.textLines.forEach(l => lines.push(typeof l === 'string' ? l : (l.text || '')));
+                obj.textLines.forEach(l => {
+                    const str = typeof l === 'string' ? l : (l?.text || '');
+                    let w = 0;
+                    try { w = font.widthOfTextAtSize(str, size); } catch { w = 0; }
+                    if (boxWidthPdf > 0 && w > boxWidthPdf * 1.05) {
+                        lines.push(...wrapTextToWidth(str, font, size, boxWidthPdf));
+                    } else {
+                        lines.push(str);
+                    }
+                });
             } else if (obj.text) {
-                lines.push(...obj.text.split('\n'));
+                if ((fabricType === 'textbox' || fabricType === 'text') && boxWidthPdf > 0) {
+                    lines.push(...wrapTextToWidth(obj.text, font, size, boxWidthPdf));
+                } else {
+                    lines.push(...obj.text.split('\n'));
+                }
             }
-            
+
+            const lineSpacingMult = (obj.lineHeight && obj.lineHeight > 0) ? obj.lineHeight : 1.2;
+
             lines.forEach((lineText, i) => {
-                const textWidthPdf = font.widthOfTextAtSize(lineText, size);
-                const boxWidthPdf = toPdf(objW, cW, pW);
+                let textWidthPdf = 0;
+                try {
+                    textWidthPdf = font.widthOfTextAtSize(lineText, size);
+                } catch {
+                    textWidthPdf = lineText.length * size * 0.6;
+                }
 
                 let alignOffsetPdf = 0;
                 if (obj.textAlign === 'center') {
@@ -303,7 +409,7 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                     alignOffsetPdf = boxWidthPdf - textWidthPdf;
                 }
 
-                const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * 1.2));
+                const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * lineSpacingMult));
                 const bl = rotatePoint(leftEdge, lineBaseY);
                 const xPdf = toPdf(bl.x, cW, pW);
                 const yPdf = toPdfY(bl.y, cH, pH);
@@ -312,14 +418,16 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                 const finalX = xPdf + alignOffsetPdf * Math.cos(rad);
                 const finalY = yPdf - alignOffsetPdf * Math.sin(rad);
 
-                page.drawText(lineText, {
-                    x: finalX, 
-                    y: finalY,
-                    size, font,
-                    color: hexToRgb(obj.fill) || rgb(0, 0, 0),
-                    opacity: obj.opacity ?? 1,
-                    rotate: obj.angle ? degrees(-obj.angle) : undefined,
-                });
+                if (lineText) {
+                    page.drawText(lineText, {
+                        x: finalX, 
+                        y: finalY,
+                        size, font,
+                        color: hexToRgb(obj.fill) || rgb(0, 0, 0),
+                        opacity: obj.opacity ?? 1,
+                        rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                    });
+                }
 
                 if (obj.underline) {
                     const lineThick = Math.max(1, size * 0.08);
