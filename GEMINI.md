@@ -18,12 +18,13 @@ This project utilizes Gemini CLI, Claude Code, and thClaws in a unified terminal
   - `gemini update project status`: Triggers an automated sync where Gemini summarizes recent work, updates the "Current Status" in this file, and notifies all agents via shared context.
 
 ## Current Project Status
-- **Last Update:** 2026-05-25
+- **Last Update:** 2026-09-03
 - **Recent Changes:**
+  - **ECNT V2 Approval Workflow Overhaul:** Completed full 11-block workflow implementation. Added `CreateECNModal` for Block 5 with full 8-area Impact Assessment, eliminated action deadlocks in Blocks 9-11, resolved React state race conditions in `WorkflowActionCard`, added visual Kanban Task Board and "My Action Items" queue in `Dashboard`, restructured `ECNDetailModal` to Vertical Accordion layout, added local server file upload in `AttachmentManager`, added offline Thai font embedding in `pdfGenerator`, and added ECNT V2 to sidebar menu.
   - **SDS V2 Logic Overhaul:** Implemented "Strict Unique Ownership" and "Eligibility-Aware Grouping" to ensure tools are assigned only to machines physically capable of running the part (syncing with Tooling Select V2 limits).
   - **UI/UX Optimization:** Enabled column sorting in Part Management and Tool Inventory. Added auto-hiding for empty columns in the Tool Inventory table to reduce clutter.
   - **Dashboard Reliability:** Fixed auto-sync bug in Tooling Inspection Dashboard; stats now refresh immediately after data updates (Sync CSV, Record Update, etc.).
-- **Active Goal:** Maintaining multi-agent alignment and monitoring system stability after logic synchronization.
+- **Active Goal:** System stability and validation of the new ECNT V2 11-block workflow by process engineering stakeholders.
 
 ## Commands
 

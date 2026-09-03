@@ -68,8 +68,9 @@ export const system = createMenu([
 
 export const process = createMenu([
     { label: "Home", path: "/eng/process_eng" },
+    { label: "ECNT V2 (11-Block)", path: "/eng/process_eng/ecnt_v2", key: "ecnt_v2" },
     {
-        label: "ECNT",
+        label: "ECNT (Legacy V1)",
         key: "ecnt",
         children: [
             { label: "Dashboard", path: "/eng/process_eng/ecnt/dashboard" },

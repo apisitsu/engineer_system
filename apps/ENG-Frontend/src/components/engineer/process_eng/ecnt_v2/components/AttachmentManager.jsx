@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Button, List, message, Typography, Popconfirm, Spin } from 'antd';
-import { UploadOutlined, DeleteOutlined, PaperClipOutlined } from '@ant-design/icons';
+import { Upload, Button, List, message, Typography, Popconfirm, Spin, Tag, Space } from 'antd';
+import { UploadOutlined, DeleteOutlined, PaperClipOutlined, DownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 
 const { Text, Link } = Typography;
 
-export default function AttachmentManager({ documentId, documentType }) {
+export default function AttachmentManager({ documentId, documentType, blockNumber = null, fieldName = null }) {
     const [fileList, setFileList] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -14,68 +14,56 @@ export default function AttachmentManager({ documentId, documentType }) {
         if (documentId) {
             fetchAttachments();
         }
-    }, [documentId]);
+    }, [documentId, documentType]);
 
     const fetchAttachments = async () => {
         try {
             setLoading(true);
             const res = await axios.get(`${server.URL}/api/ecnt/attachment/${documentType}/${documentId}`, { withCredentials: true });
-            setFileList(res.data.data);
+            setFileList(res.data.data || []);
         } catch (err) {
+            console.error("Fetch Attachments Error:", err);
             message.error("Failed to load attachments.");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleUpload = async (file) => {
-        // Step 1: Upload to Google Apps Script Bridge
-        const GAS_URL = process.env.REACT_APP_GAS_DRIVE_URL || 'https://script.google.com/macros/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec'; // Fallback to provided URL
-        
+    const handleUpload = async ({ file }) => {
         try {
-            message.loading({ content: 'Uploading to Google Drive...', key: 'uploading' });
+            message.loading({ content: 'Uploading file...', key: 'uploading' });
             
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const base64Data = reader.result.split(',')[1];
-                
-                // Construct GAS Payload
-                const payload = {
-                    file: base64Data,
-                    mimeType: file.type,
-                    filename: file.name,
-                    folderId: 'root' // Ideally configured per project in GAS
-                };
+            const formData = new FormData();
+            formData.append('file', file);
 
-                // Due to CORS/Proxy, we might need a traditional form POST or let the proxy handle it
-                // Using standard axios POST (assuming proxy handles CORS or GAS is configured)
-                const gasRes = await axios.post(GAS_URL, JSON.stringify(payload), {
-                    headers: { 'Content-Type': 'text/plain' } // GAS avoids CORS preflight with text/plain
-                });
+            // Step 1: Upload to local server storage
+            const uploadRes = await axios.post(`${server.URL}/api/upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                withCredentials: true
+            });
 
-                if (gasRes.data && gasRes.data.fileId) {
-                    // Step 2: Save metadata to our database
-                    await axios.post(`${server.URL}/api/ecnt/attachment`, {
-                        document_id: documentId,
-                        document_type: documentType,
-                        file_name: file.name,
-                        drive_file_id: gasRes.data.fileId,
-                        mime_type: file.type
-                    }, { withCredentials: true });
+            if (uploadRes.data && uploadRes.data.success) {
+                // Step 2: Save record in ecnt2_attachment
+                await axios.post(`${server.URL}/api/ecnt/attachment`, {
+                    document_id: documentId,
+                    document_type: documentType,
+                    block_number: blockNumber,
+                    field_name: fieldName,
+                    file_name: uploadRes.data.file_name,
+                    file_url: uploadRes.data.file_url,
+                    file_type: file.type,
+                    file_size: file.size
+                }, { withCredentials: true });
 
-                    message.success({ content: 'Upload complete!', key: 'uploading' });
-                    fetchAttachments();
-                } else {
-                    throw new Error("Invalid response from Google Drive");
-                }
-            };
+                message.success({ content: 'Upload completed!', key: 'uploading' });
+                fetchAttachments();
+            } else {
+                throw new Error(uploadRes.data?.error || "Upload failed");
+            }
         } catch (err) {
-            console.error(err);
-            message.error({ content: 'Upload failed.', key: 'uploading' });
+            console.error("Upload error:", err);
+            message.error({ content: err.message || 'Upload failed.', key: 'uploading' });
         }
-        
-        return false; // Prevent AntD default upload behavior
     };
 
     const handleDelete = async (id) => {
@@ -88,43 +76,70 @@ export default function AttachmentManager({ documentId, documentType }) {
         }
     };
 
+    const getFileUrl = (item) => {
+        if (item.file_url && item.file_url.startsWith('http')) return item.file_url;
+        return `${server.URL}${item.file_url}`;
+    };
+
     return (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 12 }}>
             <Upload 
-                beforeUpload={handleUpload} 
+                customRequest={handleUpload} 
                 showUploadList={false}
                 disabled={!documentId}
             >
-                <Button icon={<UploadOutlined />} disabled={!documentId}>Attach File (Google Drive)</Button>
-                {!documentId && <Text type="secondary" style={{marginLeft: 8}}>Save document first to attach files.</Text>}
+                <Button icon={<UploadOutlined />} disabled={!documentId}>
+                    Attach File / Image
+                </Button>
+                {!documentId && (
+                    <Text type="secondary" style={{ marginLeft: 8 }}>
+                        Save document first to attach files.
+                    </Text>
+                )}
             </Upload>
             
             <Spin spinning={loading}>
-                <List
-                    size="small"
-                    style={{ marginTop: 16 }}
-                    bordered
-                    dataSource={fileList}
-                    renderItem={item => (
-                        <List.Item
-                            actions={[
-                                <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id)}>
-                                    <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                                </Popconfirm>
-                            ]}
-                        >
-                            <List.Item.Meta
-                                avatar={<PaperClipOutlined />}
-                                title={
-                                    <Link href={`https://drive.google.com/file/d/${item.drive_file_id}/view`} target="_blank">
-                                        {item.file_name}
-                                    </Link>
-                                }
-                                description={`Uploaded by ${item.uploaded_by}`}
-                            />
-                        </List.Item>
-                    )}
-                />
+                {fileList.length > 0 ? (
+                    <List
+                        size="small"
+                        style={{ marginTop: 12, background: '#fafafa', borderRadius: 6 }}
+                        bordered
+                        dataSource={fileList}
+                        renderItem={item => (
+                            <List.Item
+                                actions={[
+                                    <Link href={getFileUrl(item)} target="_blank" key="download">
+                                        <Button type="text" icon={<DownloadOutlined />} size="small" />
+                                    </Link>,
+                                    <Popconfirm title="Delete this file?" onConfirm={() => handleDelete(item.id)} key="del">
+                                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                                    </Popconfirm>
+                                ]}
+                            >
+                                <List.Item.Meta
+                                    avatar={<PaperClipOutlined style={{ fontSize: 18, color: '#1890ff' }} />}
+                                    title={
+                                        <Space>
+                                            <Link href={getFileUrl(item)} target="_blank">
+                                                {item.file_name}
+                                            </Link>
+                                            {item.block_number && <Tag color="cyan">Block {item.block_number}</Tag>}
+                                        </Space>
+                                    }
+                                    description={
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            Uploaded by {item.uploaded_by} | Size: {item.file_size ? `${(item.file_size / 1024).toFixed(1)} KB` : 'N/A'}
+                                        </Text>
+                                    }
+                                />
+                            </List.Item>
+                        )}
+                    />
+                ) : (
+                    <div style={{ marginTop: 8 }}>
+                        <Text type="secondary" style={{ fontSize: 13 }}>No attachments uploaded yet.</Text>
+                    </div>
+                )}
             </Spin>
         </div>
     );

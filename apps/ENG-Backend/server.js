@@ -219,14 +219,16 @@ const engEcntV2 = require('./api/engineer/process/eng_ecnt_v2');
 app.route('/api/ecnt/ecr').get(verifyToken, engEcntV2.getEcrList).post(verifyToken, engEcntV2.createEcr);
 app.route('/api/ecnt/ecr/:id').get(verifyToken, engEcntV2.getEcrById);
 app.route('/api/ecnt/ecr/:id/action').put(verifyToken, engEcntV2.actionEcr);
+app.route('/api/ecnt/ecr/:id/resubmit').put(verifyToken, engEcntV2.resubmitEcr);
 
 // ECN (Blocks 5-11)
 app.route('/api/ecnt/ecn').get(verifyToken, engEcntV2.getEcnList).post(verifyToken, engEcntV2.createEcn);
 app.route('/api/ecnt/ecn/:id').get(verifyToken, engEcntV2.getEcnById);
 app.route('/api/ecnt/ecn/:id/action').put(verifyToken, engEcntV2.actionEcn);
 
-// Master PIC
+// Master PIC & Task Queues
 app.route('/api/ecnt/master-pic').get(verifyToken, engEcntV2.getMasterPic);
+app.route('/api/ecnt/my-tasks').get(verifyToken, engEcntV2.getMyTasks);
 
 // Attachments
 app.route('/api/ecnt/attachment').post(verifyToken, engEcntV2.saveAttachment);
