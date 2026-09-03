@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Spin, Table, Button, Tooltip, Tabs, Segmented, Card, Tag, Badge, Row, Col, Typography, Space } from 'antd';
+import { Layout, Spin, Table, Button, Tooltip, Tabs, Segmented, Card, Tag, Badge, Row, Col, Typography, Space, Result } from 'antd';
 import { EyeOutlined, PlusOutlined, AppstoreOutlined, TableOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import axios from "axios";
 import moment from "moment";
@@ -43,7 +43,8 @@ export default function Dashboard() {
     const [selectedDocId, setSelectedDocId] = useState(null);
     const [selectedDocType, setSelectedDocType] = useState('ECR');
 
-    const { userName } = useAuthStore();
+    const { userName, userRole, userDepartment } = useAuthStore();
+    const isAdmin = userRole === 'AD' || userDepartment === 'AD';
 
     const fetchData = async () => {
         setLoading(true);
@@ -64,8 +65,23 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        if (isAdmin) {
+            fetchData();
+        }
+    }, [isAdmin]);
+
+    if (!isAdmin) {
+        return (
+            <div style={{ padding: 40, textAlign: 'center' }}>
+                <Result
+                    status="403"
+                    title="403 - Access Denied"
+                    subTitle="ระบบ ECNT V2 (11-Block) เปิดให้เข้าถึงได้เฉพาะผู้ดูแลระบบ (AD) เท่านั้นในขณะนี้"
+                    extra={<Button type="primary" onClick={() => window.location.href = '/eng/home'}>กลับสู่หน้าหลัก</Button>}
+                />
+            </div>
+        );
+    }
 
     const openDetail = (id, type) => {
         setSelectedDocId(id);

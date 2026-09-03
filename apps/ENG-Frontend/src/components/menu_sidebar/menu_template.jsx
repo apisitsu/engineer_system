@@ -23,9 +23,12 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys }) => 
     const baseItems = menuItemsMap[type];
     if (!baseItems) return null;
 
-    const currentItems = type === 'MTC' && !isAdmin
-        ? baseItems.filter(item => item.key !== 'admin-config')
-        : baseItems;
+    let currentItems = baseItems;
+    if (type === 'MTC' && !isAdmin) {
+        currentItems = baseItems.filter(item => item.key !== 'admin-config');
+    } else if (type === 'Process' && !isAdmin) {
+        currentItems = baseItems.filter(item => item.key !== 'ecnt_v2' && item.key !== 'ecnt');
+    }
 
     return (
         <Sider
