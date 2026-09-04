@@ -41,22 +41,19 @@ const daysUntil = (dateStr) => {
 };
 const DUE_SOON_DAYS = 3;
 
-// Tag shown next to "Plan finish": done / overdue / due-soon / on-track
-const dueTag = (planDate, compDate) => {
+// Due-date badge shown beside the progress dial: {color, text} vs the plan-finish date.
+const dueInfo = (planDate, compDate) => {
   if (!planDate) return null;
   if (compDate) {
-    const slip = daysUntil(compDate) - daysUntil(planDate); // <0 finished early
+    const slip = daysUntil(compDate) - daysUntil(planDate); // <0 = finished early
     const late = compDate > planDate;
-    return <Tag color={late ? 'warning' : 'success'} style={{ marginLeft: 8 }}>
-      done {compDate}{slip ? ` (${Math.abs(slip)}d ${late ? 'late' : 'early'})` : ''}
-    </Tag>;
+    return { color: late ? 'warning' : 'success', text: `Finished${slip ? ` ${Math.abs(slip)} days ${late ? 'late' : 'early'}` : ' on plan'}` };
   }
   const dl = daysUntil(planDate);
   if (dl == null) return null;
-  if (dl < 0) return <Tag color="error" style={{ marginLeft: 8 }}>overdue {-dl} d</Tag>;
-  if (dl === 0) return <Tag color="warning" style={{ marginLeft: 8 }}>due today</Tag>;
-  if (dl <= DUE_SOON_DAYS) return <Tag color="warning" style={{ marginLeft: 8 }}>{dl} d left</Tag>;
-  return <Tag color="green" style={{ marginLeft: 8 }}>{dl} d left</Tag>;
+  if (dl < 0) return { color: 'error', text: `${-dl} Days overdue` };
+  if (dl === 0) return { color: 'warning', text: 'Due today' };
+  return { color: dl <= DUE_SOON_DAYS ? 'warning' : 'green', text: `${dl} Days left` };
 };
 
 const STATUS_META = {
@@ -307,17 +304,24 @@ export default function LotStatusTracker() {
                   {data.steps.filter((s) => s.status === 'done').slice(-1)[0]?.goodQty ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Entered">{header.entryDate || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Plan finish">
-                  {header.compPlanDate || '—'}
-                  {dueTag(header.compPlanDate, header.compDate)}
-                </Descriptions.Item>
+                <Descriptions.Item label="Plan finish">{header.compPlanDate || '—'}</Descriptions.Item>
                 {header.remark ? <Descriptions.Item label="Remark" span={3}>{header.remark}</Descriptions.Item> : null}
               </Descriptions>
 
               <Card size="small">
                 <Row gutter={[16, 12]} align="middle">
-                  <Col xs={24} md={8}>
+                  <Col xs={24} md={8} style={{ textAlign: 'center' }}>
                     <Progress type="dashboard" percent={summary.pctComplete} size={140} />
+                    {(() => {
+                      const di = dueInfo(header.compPlanDate, header.compDate);
+                      if (!di) return null;
+                      return (
+                        <div style={{ marginTop: 6 }}>
+                          <Tag color={di.color} style={{ fontSize: 13, padding: '2px 12px', margin: 0 }}>{di.text}</Tag>
+                          <div><Text type="secondary" style={{ fontSize: 11 }}>Plan finish {header.compPlanDate}</Text></div>
+                        </div>
+                      );
+                    })()}
                   </Col>
                   <Col xs={24} md={16}>
                     <Space direction="vertical" size={6} style={{ width: '100%' }}>
