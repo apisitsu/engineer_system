@@ -30,6 +30,34 @@ const hoursBetween = (a, b) => {
   const d = (new Date(b) - new Date(a)) / 3600000;
   return Number.isFinite(d) ? d : null;
 };
+// whole days from local midnight today to the given YYYY-MM-DD (negative = in the past)
+const daysUntil = (dateStr) => {
+  if (!dateStr) return null;
+  const target = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / 86400000);
+};
+const DUE_SOON_DAYS = 3;
+
+// Tag shown next to "Plan finish": done / overdue / due-soon / on-track
+const dueTag = (planDate, compDate) => {
+  if (!planDate) return null;
+  if (compDate) {
+    const slip = daysUntil(compDate) - daysUntil(planDate); // <0 finished early
+    const late = compDate > planDate;
+    return <Tag color={late ? 'warning' : 'success'} style={{ marginLeft: 8 }}>
+      done {compDate}{slip ? ` (${Math.abs(slip)}d ${late ? 'late' : 'early'})` : ''}
+    </Tag>;
+  }
+  const dl = daysUntil(planDate);
+  if (dl == null) return null;
+  if (dl < 0) return <Tag color="error" style={{ marginLeft: 8 }}>overdue {-dl} d</Tag>;
+  if (dl === 0) return <Tag color="warning" style={{ marginLeft: 8 }}>due today</Tag>;
+  if (dl <= DUE_SOON_DAYS) return <Tag color="warning" style={{ marginLeft: 8 }}>{dl} d left</Tag>;
+  return <Tag color="green" style={{ marginLeft: 8 }}>{dl} d left</Tag>;
+};
 
 const STATUS_META = {
   done: { step: 'finish', tag: 'success', label: 'Done' },
@@ -251,6 +279,22 @@ export default function LotStatusTracker() {
                 );
               })()}
 
+              {(() => {
+                if (header.isCancelled || header.compDate || !header.compPlanDate) return null;
+                const dl = daysUntil(header.compPlanDate);
+                if (dl == null || dl > DUE_SOON_DAYS) return null;
+                const tail = `${summary.remainingSteps} step(s) still to go` + (summary.currentStepName ? ` — now at ${summary.currentStepName}.` : '.');
+                return dl < 0 ? (
+                  <Alert type="error" showIcon
+                    message={`Behind plan — finish date ${header.compPlanDate} was ${-dl} day(s) ago`}
+                    description={tail} />
+                ) : (
+                  <Alert type="warning" showIcon
+                    message={`Due ${dl === 0 ? 'today' : `in ${dl} day(s)`} — plan finish ${header.compPlanDate}`}
+                    description={tail} />
+                );
+              })()}
+
               <Descriptions
                 bordered size="small" column={{ xs: 1, sm: 2, md: 3 }}
                 title={<Space wrap><Text strong style={{ fontSize: 16 }}>{header.lotNo}</Text><Tag color="blue">{header.controlNo}</Tag><Text>{header.partsNo}</Text></Space>}
@@ -263,7 +307,10 @@ export default function LotStatusTracker() {
                   {data.steps.filter((s) => s.status === 'done').slice(-1)[0]?.goodQty ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Entered">{header.entryDate || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Plan finish">{header.compPlanDate || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Plan finish">
+                  {header.compPlanDate || '—'}
+                  {dueTag(header.compPlanDate, header.compDate)}
+                </Descriptions.Item>
                 {header.remark ? <Descriptions.Item label="Remark" span={3}>{header.remark}</Descriptions.Item> : null}
               </Descriptions>
 
