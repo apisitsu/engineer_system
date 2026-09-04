@@ -34,6 +34,9 @@ apps/ENG-Backend/files/template/
 apps/ENG-Backend/api/engineer/mtc/images/
 apps/ENG-Backend/api/engineer/mtc/templates/Select_tool_backup/
 apps/run.ps1
+# Personal Claude Code launcher — holds a per-developer proxy password.
+/run.ps1
+/run.ps1.local
 
 # --- AI & Tool Configurations ---
 # .claude/* (not .claude/) — git will not descend into an excluded dir,
