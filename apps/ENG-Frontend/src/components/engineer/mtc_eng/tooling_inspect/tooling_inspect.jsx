@@ -10,7 +10,8 @@ import moment from "moment";
 import Swal from 'sweetalert2';
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
-import { server } from '../../../../constance/constance';
+import { server, GAS_TI_CSV_URL } from '../../../../constance/constance';
+import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
 import { useTheme } from '../../../../theme';
 import ScrollbarStyle from '../../../common/scrollbar';
 
@@ -23,6 +24,23 @@ import UpdateFormModal from "./tooling_update_form";
 const { Content } = Layout;
 const { Title, Text } = Typography;
 const { Option } = Select;
+
+const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// Renders the GAS upload result ({ success, results:[{fileName, ok, action, bytes, error}] })
+// or a thrown Error. `title` distinguishes the "Update data" upload from the probe.
+function renderGasResult(res, { title = 'Drive upload', error } = {}) {
+  const lines = error
+    ? [String(error.message || error)]
+    : (res?.results || []).map((r) =>
+        r.ok ? `${r.fileName}: OK (${r.action}, ${r.bytes} bytes)` : `${r.fileName}: FAIL — ${r.error || '?'}`);
+  const ok = !error && res?.success;
+  Swal.fire({
+    icon: ok ? 'success' : 'error',
+    title: ok ? `${title} — done` : `${title} — failed`,
+    html: `<pre style="text-align:left;white-space:pre-wrap;font-size:12px;margin:0">${escHtml(lines.join('\n') || '(no detail)')}</pre>`,
+  });
+}
 
 function InspectionReport() {
   const { theme } = useTheme();
@@ -93,6 +111,28 @@ function InspectionReport() {
     }
   }, [currentPage, pageSize, searchText, filterType, selectedDate]);
 
+  // The backend returns the CSVs (it cannot reach the GAS web app — anonymous
+  // access is blocked); the browser POSTs them from the signed-in session.
+  const uploadCsvsToDrive = useCallback(async (csvs) => {
+    if (!csvs?.length) return;
+    if (!GAS_TI_CSV_URL) {
+      message.warning({ content: 'Data synced, but Drive upload is not configured (GAS_TI_CSV_URL).', duration: 8 });
+      return;
+    }
+    const close = message.loading('Uploading CSVs to Drive...', 0);
+    try {
+      const res = await uploadTiCsvViaGas(csvs, { timeout: 3 * 60 * 1000 });
+      const bad = (res.results || []).filter(r => !r.ok);
+      if (bad.length) renderGasResult(res, { title: 'Drive upload' });
+      else message.success(`Uploaded ${res.results.length} file(s) to Drive`);
+    } catch (err) {
+      console.error('TI CSV Drive upload failed:', err);
+      message.warning({ content: `Data synced, but Drive upload failed: ${err.message}`, duration: 10 });
+    } finally {
+      close();
+    }
+  }, []);
+
   const handleSyncCSV = useCallback(async () => {
     setLoading(true);
     // The run takes minutes, so keep a persistent hint up instead of leaving the
@@ -105,10 +145,11 @@ function InspectionReport() {
       // which always takes longer. Without an explicit timeout axios aborts
       // client-side while the backend keeps going — the imports succeed but the
       // UI reports a connection failure.
-      await axios.post(server.TOOLING_SYNC_CSV, null, { timeout: 15 * 60 * 1000 });
+      const { data } = await axios.post(server.TOOLING_SYNC_CSV, null, { timeout: 15 * 60 * 1000 });
       message.success('Data updated successfully');
       fetchToolingInspectData();
       fetchDashboardData(selectedMonth);
+      await uploadCsvsToDrive(data?.csvs);
     } catch (e) {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       // Surface the real backend failure (network share unreachable, CSV target
@@ -123,6 +164,7 @@ function InspectionReport() {
         message.warning({ content: `Partly updated (${okSteps.join(', ')} OK). ${detail}`, duration: 10 });
         fetchToolingInspectData();
         fetchDashboardData(selectedMonth);
+        await uploadCsvsToDrive(d.csvs);
       } else if (!e.response) {
         // No response at all is a DIFFERENT failure from a 500 and needs saying so: the
         // request never reached a reply, so the import is probably still running on the
@@ -152,7 +194,7 @@ function InspectionReport() {
       closeHint();
       setLoading(false);
     }
-  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth]);
+  }, [fetchToolingInspectData, fetchDashboardData, selectedMonth, uploadCsvsToDrive]);
 
   const handleUpdateRecord = useCallback((record) => {
     setSelectedData(record);

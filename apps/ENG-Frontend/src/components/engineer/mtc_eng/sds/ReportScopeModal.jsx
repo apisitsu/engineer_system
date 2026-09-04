@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Checkbox, Select, Input, Row, Col, Typography, Space, Button, Spin, Divider, App } from 'antd';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
+import AutoStampSection from './AutoStampSection';
 
 const { Text } = Typography;
 
@@ -169,6 +170,10 @@ export default function ReportScopeModal({ open, onClose, onSaved }) {
             </Row>
           </>
         )}
+
+        {/* Auto Stamp settings — separate config (own endpoint + own Save), admin only. */}
+        <Divider style={{ margin: '16px 0 12px' }} />
+        <AutoStampSection />
       </Spin>
     </Modal>
   );

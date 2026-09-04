@@ -30,6 +30,31 @@ const hoursBetween = (a, b) => {
   const d = (new Date(b) - new Date(a)) / 3600000;
   return Number.isFinite(d) ? d : null;
 };
+// whole days from local midnight today to the given YYYY-MM-DD (negative = in the past)
+const daysUntil = (dateStr) => {
+  if (!dateStr) return null;
+  const target = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / 86400000);
+};
+const DUE_SOON_DAYS = 3;
+
+// Due-date badge shown beside the progress dial: {color, text} vs the plan-finish date.
+const dueInfo = (planDate, compDate) => {
+  if (!planDate) return null;
+  if (compDate) {
+    const slip = daysUntil(compDate) - daysUntil(planDate); // <0 = finished early
+    const late = compDate > planDate;
+    return { color: late ? 'warning' : 'success', text: `Finished${slip ? ` ${Math.abs(slip)} days ${late ? 'late' : 'early'}` : ' on plan'}` };
+  }
+  const dl = daysUntil(planDate);
+  if (dl == null) return null;
+  if (dl < 0) return { color: 'error', text: `${-dl} Days overdue` };
+  if (dl === 0) return { color: 'warning', text: 'Due today' };
+  return { color: dl <= DUE_SOON_DAYS ? 'warning' : 'green', text: `${dl} Days left` };
+};
 
 const STATUS_META = {
   done: { step: 'finish', tag: 'success', label: 'Done' },
@@ -56,7 +81,6 @@ function Roadmap({ steps }) {
         <Space size={8} wrap>
           <Text strong>{s.order}. {s.nameEn}</Text>
           <Tag>{s.processCode}</Tag>
-          {s.nameJp ? <Text type="secondary" style={{ fontSize: 12 }}>{s.nameJp}</Text> : null}
           <Tag color={meta.tag}>{meta.label}</Tag>
           {s.offPlan ? <Tag color="warning">off-plan</Tag> : null}
         </Space>
@@ -75,7 +99,6 @@ const columns = [
   { title: 'Process', dataIndex: 'nameEn', width: 180, render: (v, r) => (
     <span style={{ whiteSpace: 'nowrap' }}>
       <Text strong>{v}</Text> <Tag>{r.processCode}</Tag>
-      {r.nameJp ? <><br /><Text type="secondary" style={{ fontSize: 12 }}>{r.nameJp}</Text></> : null}
     </span>
   ) },
   { title: 'Status', dataIndex: 'status', width: 110, render: (v) => {
@@ -251,6 +274,22 @@ export default function LotStatusTracker() {
                 );
               })()}
 
+              {(() => {
+                if (header.isCancelled || header.compDate || !header.compPlanDate) return null;
+                const dl = daysUntil(header.compPlanDate);
+                if (dl == null || dl > DUE_SOON_DAYS) return null;
+                const tail = `${summary.remainingSteps} step(s) still to go` + (summary.currentStepName ? ` — now at ${summary.currentStepName}.` : '.');
+                return dl < 0 ? (
+                  <Alert type="error" showIcon
+                    message={`Behind plan — finish date ${header.compPlanDate} was ${-dl} day(s) ago`}
+                    description={tail} />
+                ) : (
+                  <Alert type="warning" showIcon
+                    message={`Due ${dl === 0 ? 'today' : `in ${dl} day(s)`} — plan finish ${header.compPlanDate}`}
+                    description={tail} />
+                );
+              })()}
+
               <Descriptions
                 bordered size="small" column={{ xs: 1, sm: 2, md: 3 }}
                 title={<Space wrap><Text strong style={{ fontSize: 16 }}>{header.lotNo}</Text><Tag color="blue">{header.controlNo}</Tag><Text>{header.partsNo}</Text></Space>}
@@ -269,8 +308,18 @@ export default function LotStatusTracker() {
 
               <Card size="small">
                 <Row gutter={[16, 12]} align="middle">
-                  <Col xs={24} md={8}>
+                  <Col xs={24} md={8} style={{ textAlign: 'center' }}>
                     <Progress type="dashboard" percent={summary.pctComplete} size={140} />
+                    {(() => {
+                      const di = dueInfo(header.compPlanDate, header.compDate);
+                      if (!di) return null;
+                      return (
+                        <div style={{ marginTop: 6 }}>
+                          <Tag color={di.color} style={{ fontSize: 13, padding: '2px 12px', margin: 0 }}>{di.text}</Tag>
+                          <div><Text type="secondary" style={{ fontSize: 11 }}>Plan finish {header.compPlanDate}</Text></div>
+                        </div>
+                      );
+                    })()}
                   </Col>
                   <Col xs={24} md={16}>
                     <Space direction="vertical" size={6} style={{ width: '100%' }}>

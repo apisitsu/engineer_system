@@ -356,6 +356,42 @@ or role `AD` bypasses everything; otherwise a role with **no enabled row denies 
 `match_type` ∈ `any | department | role | feature_perm | em_id`. Sequential gating applies
 to live signs only (`prepared` → `checked` → `approved`); `/backfill` skips it.
 
+### Auto Stamp (2026-09-04)
+
+`services/sdsAutoStamp.js` — after **every** coverage build, `kickCoverageBuild` runs
+`runAutoStamp(payload.needsAttention)` **before** `syncNoStampBacklog`. It signs the same
+rows the backlog seeds (`selectNoStampRows` — `pending_reason === 'NO_STAMP'`, not
+`limit_excluded`, has a machine) with a **configured responsible person per role**, writing
+through `sdsApprovalController.signUpsert` tagged `<role>_source = 'auto'` — i.e. a
+programmatic `/backfill`. Then it moves the sheet's board card like a live sign.
+
+- **One global toggle**, `sds_auto_stamp_config.enabled` (single row, id = 1; migration
+  `20260904_sds_auto_stamp_config.js`, applied to plbmp130 2026-09-04; the engine also
+  `CREATE`s it lazily). Default **false**. No per-machine / per-role toggle by decision.
+- **Signer per role = `resolveConfig()`**: the explicit `<role>_em_id` in
+  `sds_auto_stamp_config` if set, **else the single enabled `match_type='em_id'` row in
+  `sds_approval_role_config`** for that role (name looked up from `m_user_profile`). Zero
+  or >1 such rows → the role is **unresolved** and the engine stops there. Live at time of
+  writing: `checked`/`approved` resolve to `T1460` from the role config; `prepared` has two
+  permitted em_ids (`LE485`, `LE403`) so it needs an explicit pick before the toggle can go on.
+- **Order is kept, never skipped.** For each sheet it writes prepared → checked → approved,
+  skipping a role already signed (any source) and **stopping** at the first role with no
+  configured signer — so a two-signer config auto-stamps prepared+checked and waits for a
+  human approver.
+- **`MAX_SHEETS_PER_RUN` / `max_per_run` (200)** aborts the run rather than mass-stamp a
+  shape-changed report. Never throws — a failure here must not break the coverage build or
+  block the backlog intake in its `.finally`.
+- Routes on the report controller: `GET/PUT /api/sds/v2/report/auto-stamp/config`
+  (PUT is `sds_admin`), `POST /api/sds/v2/report/auto-stamp[?dryRun=1]` (`sds_admin`,
+  reads the cached payload only). UI: `sds/AutoStampSection.jsx`, rendered inside the
+  **Report Scope** modal (the "Scope" button on `SdsCoverageDashboard.jsx`) — admin only,
+  and it saves through its own endpoint independently of the modal's "Save & Rebuild".
+  `SdsSignBadge.jsx` renders a `source='auto'` chip amber with `⚡`, distinct from a hand
+  `✓` and a backfill `(recorded)`.
+- **Governance:** the seal carries the real person's name though they did not press Sign —
+  the responsible person is accountable for having enabled it. Revoke via the existing
+  `DELETE /api/sds/v2/approval?…&role=`.
+
 ## Tool Request Workflow (`/api/engineer/mtc/tool-requests/*`)
 
 Multi-stage approval workflow in `toolRequestController.js` + `toolRequestAuth.js`. Auth uses `mtcVerifyToken` (alias for `verifyToken`, different import path).

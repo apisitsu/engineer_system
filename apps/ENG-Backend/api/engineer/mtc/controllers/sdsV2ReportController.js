@@ -7,6 +7,7 @@ const tselectFallback = require('../services/tselectFallback');
 const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
 const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
+const sdsAutoStamp = require('../services/sdsAutoStamp');
 const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
@@ -226,7 +227,18 @@ async function getReportScope() {
 }
 
 // Force the next /coverage request to rebuild (called when scope config changes).
-function invalidateCoverageCache() { _coverageCache = null; _coverageBuilding = null; }
+// Clearing the in-memory cache alone is NOT enough: the next GET re-hydrates
+// `_coverageCache` from the persisted `sds_coverage_cache` row (see /coverage
+// handler) and, finding it younger than COVERAGE_TTL_MS, serves the pre-change
+// scope as "fresh" with no rebuild — for up to 15 min. So also stamp the
+// persisted row stale (fire-and-forget; if it fails the TTL still bounds it).
+function invalidateCoverageCache() {
+  _coverageCache = null;
+  _coverageBuilding = null;
+  ensureCoverageTable()
+    .then(() => engPool.query(`UPDATE sds_coverage_cache SET built_at = 'epoch' WHERE id = 'coverage'`))
+    .catch(() => {});
+}
 
 // Convert pc_production.control_no (item number format) to standard CN format
 // e.g. "350528" → "C35-00528", "350528-C" → "C35-00528", "C35-00528" → "C35-00528"
@@ -1061,12 +1073,19 @@ function kickCoverageBuild() {
       const at = Date.now();
       _coverageCache = { at, data: payload };
       persistCoverage(payload, at); // fire-and-forget → survives restarts
-      // Seed the board with the sheets that are printable but unsigned. Gated on
-      // the same total>0 check: a degraded build reports everything as pending,
-      // which would be a false backlog. Fire-and-forget and fail-open — the
-      // report must never fail because a board is misconfigured.
-      syncNoStampBacklog(payload.needsAttention, { io: _io })
-        .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message));
+      // Post-build board sync, gated on the same total>0 check (a degraded build
+      // reports everything as pending → false backlog). Both steps are
+      // fire-and-forget and fail-open — the report must never fail because a
+      // board or the approval table is misconfigured.
+      //   1. Auto Stamp: sign the signature-only sheets with the configured
+      //      responsible person per role (no-op unless the global toggle is on).
+      //   2. Backlog intake: seed a card for whatever still needs a human.
+      // Auto Stamp runs FIRST so a sheet it completes already has its card moved
+      // to Done before the backlog's createOnly pass would seed it into To Do.
+      sdsAutoStamp.runAutoStamp(payload.needsAttention, { io: _io })
+        .catch(e => console.warn('[SDS Report] auto-stamp failed:', e.message))
+        .finally(() => syncNoStampBacklog(payload.needsAttention, { io: _io })
+          .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message)));
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
@@ -1094,10 +1113,14 @@ router.get('/coverage', async (req, res) => {
       return res.json({ ..._coverageCache.data, cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
-    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate)
+    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
+    // Signal `building` while that rebuild is in flight so the dashboard's poll keeps
+    // going and picks up the fresh payload — without it the poll sees a 200 here,
+    // stops, and shows the pre-change scope until a manual reload (this is what made
+    // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ..._coverageCache.data, cached: true, stale: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      return res.json({ ..._coverageCache.data, cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -1140,6 +1163,58 @@ router.post('/backlog-to-board', isAdmin, async (req, res) => {
     res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
   } catch (err) {
     console.error('[SDS Report] backlog-to-board:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Auto Stamp — global toggle + per-role responsible signer ──────────────────
+/**
+ * GET  /api/sds/v2/report/auto-stamp/config        — read (any authed user)
+ * PUT  /api/sds/v2/report/auto-stamp/config        — write (sds_admin)
+ *        body: { enabled?, prepared_em_id?, prepared_name?, checked_em_id?,
+ *                checked_name?, approved_em_id?, approved_name?, max_per_run? }
+ *        Only the keys sent are changed; '' / null on a signer field clears it.
+ * POST /api/sds/v2/report/auto-stamp[?dryRun=1]    — run now (sds_admin)
+ *
+ * Auto Stamp also runs automatically after every coverage build; the POST is the
+ * manual trigger and preview. Like /backlog-to-board it reads the CACHED coverage
+ * payload only — it never kicks an expensive cold build.
+ */
+router.get('/auto-stamp/config', async (_req, res) => {
+  try {
+    res.json({ success: true, config: await sdsAutoStamp.resolveConfig() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config get:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/auto-stamp/config', isAdmin, async (req, res) => {
+  try {
+    const config = await sdsAutoStamp.setConfig(req.body || {}, req.user?.empno || null);
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config put:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/auto-stamp', isAdmin, async (req, res) => {
+  try {
+    if (!_coverageCache) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+    if (!_coverageCache) {
+      return res.status(409).json({ error: 'No coverage build available yet — open the coverage report first' });
+    }
+    const result = await sdsAutoStamp.runAutoStamp(_coverageCache.data.needsAttention, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp run:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1522,6 +1597,9 @@ router.put('/config', isAdmin, async (req, res) => {
       );
     }
     invalidateCoverageCache();
+    // Start the rebuild now rather than on the next visitor's GET — the modal tells
+    // the admin "Saving rebuilds the report", and the cold build is ~3 min.
+    kickCoverageBuild();
     res.json({ success: true, data: await getReportScope() });
   } catch (err) {
     console.error('[report-config PUT]', err.message);

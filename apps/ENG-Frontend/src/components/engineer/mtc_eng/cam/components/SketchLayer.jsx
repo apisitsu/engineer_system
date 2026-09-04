@@ -61,6 +61,35 @@ function ScreenRing({ x, y, color, pixels = 10 }) {
     </group>
   );
 }
+
+// Vertex marker radius in *screen pixels*, so a dot reads about as heavy as a
+// line (drei `<Line lineWidth>` is pixels too) at any zoom. The dots used to be
+// a fixed model-space sphere — 0.8 mm radius — which on a ~15 mm profile drew a
+// blob that buried the geometry. `pixels / zoom` world units, rescaled per frame
+// like ScreenRing, keeps them constant on screen. Emphasised (selected / hover /
+// pending / origin) a bit larger so a point stays easy to grab for a drag.
+const VERTEX_PX = 2.2;
+const VERTEX_PX_EMPH = 3.6;
+
+/** A sketch vertex dot at a constant on-screen size (see VERTEX_PX). */
+function Vertex({ x, y, color, pixels, pickable, onPointerDown, onClick }) {
+  const ref = useRef();
+  useFrame(({ camera }) => {
+    if (ref.current) ref.current.scale.setScalar(pixels / (camera.zoom || 1));
+  });
+  return (
+    <mesh
+      ref={ref}
+      position={[x, y, Z]}
+      raycast={pickable ? undefined : noRaycast}
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+    >
+      <sphereGeometry args={[1, 16, 16]} />
+      <meshBasicMaterial color={color} />
+    </mesh>
+  );
+}
 const CONSTRUCTION = CAD.skConstruction; // slate — construction (reference) geometry, drawn dashed
 const HOVER = CAD.skHover; // amber pre-select highlight (the entity a click will pick)
 const SELECTED = CAD.skSelected; // green selected highlight (SolidWorks' own)
@@ -595,18 +624,18 @@ export default function SketchLayer() {
         // so you can dimension/constrain from it. Precedence: pending → selected →
         // hover (amber "lock") → origin → plain vertex.
         const color = isPending ? CAD.skPreview : isSel ? SELECTED : isHover ? HOVER : p.origin ? CAD.feed : CAD.text;
-        const radius = p.origin ? 1.3 : isSel || isPending || isHover ? 1.3 : 0.8;
+        const pixels = p.origin || isSel || isPending || isHover ? VERTEX_PX_EMPH : VERTEX_PX;
         return (
-          <mesh
+          <Vertex
             key={p.id}
-            position={[p.x, p.y, Z]}
-            raycast={picking ? undefined : noRaycast}
+            x={p.x}
+            y={p.y}
+            color={color}
+            pixels={pixels}
+            pickable={picking}
             onPointerDown={onDown}
             onClick={onClk}
-          >
-            <sphereGeometry args={[radius, 16, 16]} />
-            <meshBasicMaterial color={color} />
-          </mesh>
+          />
         );
       })}
     </group>

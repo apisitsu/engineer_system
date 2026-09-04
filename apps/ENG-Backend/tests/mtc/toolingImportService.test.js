@@ -267,6 +267,42 @@ describe('runToolingImports', () => {
   });
 });
 
+describe('publishCsv — local backup + base64 body for the browser upload', () => {
+  const COLS = ['a', 'b'];
+  const ROWS = [{ a: '1', b: '2' }];
+  const PROBE = path.join(OUT_DIR, 'probe.csv');
+
+  afterEach(() => { jest.restoreAllMocks(); fs.rmSync(PROBE, { force: true }); delete process.env.TI_CSV_SKIP_LOCAL; });
+
+  it('writes the local backup and returns the CSV base64-encoded', async () => {
+    const log = new svc.StepLog();
+    const res = await svc.publishCsv('probe.csv', COLS, ROWS, log);
+    expect(res.localOk).toBe(true);
+    expect(res.csv.fileName).toBe('probe.csv');
+    expect(Buffer.from(res.csv.base64Data, 'base64').toString('utf8')).toContain('1,2');
+    expect(fs.readFileSync(PROBE, 'utf8')).toContain('1,2');
+  });
+
+  it('skips the local write when TI_CSV_SKIP_LOCAL=1 but still returns the body', async () => {
+    process.env.TI_CSV_SKIP_LOCAL = '1';
+    const mkdir = jest.spyOn(fs.promises, 'mkdir');
+    const res = await svc.publishCsv('probe.csv', COLS, ROWS, new svc.StepLog());
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(res.localOk).toBe(false);
+    expect(Buffer.from(res.csv.base64Data, 'base64').toString('utf8')).toContain('1,2');
+    expect(fs.existsSync(PROBE)).toBe(false);
+  });
+
+  it('never throws when the local write fails — warns and returns the body', async () => {
+    const log = new svc.StepLog();
+    jest.spyOn(fs.promises, 'mkdir').mockRejectedValue(new Error('G: not mapped'));
+    const res = await svc.publishCsv('probe.csv', COLS, ROWS, log, { required: true });
+    expect(res.localOk).toBe(false);
+    expect(Buffer.from(res.csv.base64Data, 'base64').toString('utf8')).toContain('1,2');
+    expect(log.warnings.join('\n')).toMatch(/G: not mapped/);
+  });
+});
+
 describe('writeCsv — surviving a filesystem that will not be overwritten', () => {
   const OUT = path.join(ROOT, 'writecsv');
   const FILE = 'probe.csv';

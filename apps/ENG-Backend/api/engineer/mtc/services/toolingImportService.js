@@ -20,7 +20,6 @@
 
 const fs = require('fs/promises');
 const path = require('path');
-const axios = require('axios');
 const { engPool } = require('../../../../instance/eng_db');
 const { PATHS } = require('../mtcConstants');
 const {
@@ -234,55 +233,53 @@ async function writeCsv(dir, filename, columns, rows, { attempts = 5, backoffMs 
 }
 
 /**
- * Push a CSV to Google Drive through the Apps Script web app, when one is configured.
+ * Whether to write a local CSV copy.
  *
- * Writing into a Drive for Desktop folder is what produced the `UNKNOWN` / -4094
- * failures: Drive holds the file while it syncs, asynchronously, long after whatever
- * triggered the sync. Uploading removes the contended file entirely — there is nothing
- * on the local disk for Drive to be busy with.
+ * The CSV is always returned to the caller (`publishCsv` → the "Update data"
+ * response → the browser uploads it to Drive). The local write is now just an
+ * on-disk backup, so it is **on by default** and turned off with
+ * `TI_CSV_SKIP_LOCAL=1` on a host whose service account cannot see the
+ * `TI_CSV_OUTPUT_DIR` default (`G:` — Drive for Desktop, per-session) and where
+ * it would only warn on every run. Read live so a test can flip it.
  *
- * Deliberately additive. The local write in `writeCsv` still happens and is still the
- * step's real output; this only mirrors it. So a Drive outage, an expired deployment
- * URL or a network blip degrades to a warning instead of failing an import that
- * otherwise succeeded.
- *
- * Off unless `TI_CSV_GAS_URL` is set, so nothing changes for a host that has not been
- * configured for it. See api/engineer/mtc/doc/gas_ti_csv_doPost.gs for the script and how to deploy it.
+ * Why the browser does the upload: the minebea Workspace blocks anonymous access
+ * to Apps Script web apps, so a server POST gets a login page, not JSON. A POST
+ * from the signed-in browser satisfies "Anyone within minebea.co.th". Same
+ * pattern as Kanban's Drive attachments (`api/kanban/gas/Code.gs`).
  */
-async function uploadCsvToDrive(filename, columns, rows, log) {
-  const url = PATHS.TI_CSV_GAS_URL;
-  if (!url) return { skipped: true };
+function localCsvEnabled() {
+  const v = String(process.env.TI_CSV_SKIP_LOCAL || '').toLowerCase();
+  return v !== '1' && v !== 'true';
+}
 
+/**
+ * Build one CSV, write a local backup copy when enabled, and return the body
+ * base64-encoded so the caller can hand it to the browser for the Drive upload.
+ *
+ * Never throws: a failed local write is a warning (the browser upload is the real
+ * delivery, and step 1's real output is the `ti_list` sync anyway). `required` is
+ * accepted for call-site readability but only changes the log wording.
+ */
+async function publishCsv(filename, columns, rows, log, { required = false } = {}) {
+  const dir = PATHS.TI_CSV_OUTPUT_DIR;
   const body = toCsv(columns, rows);
-  const started = Date.now();
-  try {
-    // `proxy: false` matches emailService's call to the other GAS endpoint — this
-    // shell exports HTTP_PROXY globally and routing an internal request through the
-    // corporate gateway returns a McAfee page with HTTP 200 rather than an error.
-    const response = await axios.post(url, {
-      secret: PATHS.TI_CSV_GAS_SECRET,
-      fileName: filename,
-      base64Data: Buffer.from(body, 'utf8').toString('base64'),
-    }, {
-      proxy: false,
-      maxRedirects: 5,
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 120000,
-    });
+  let localOk = false;
 
-    const data = response.data || {};
-    if (!data.success) throw new Error(data.error || 'Apps Script reported no success flag');
-    log.log(`=== Uploaded ${filename} to Drive (${data.action}, ${data.bytes} bytes) in ${((Date.now() - started) / 1000).toFixed(1)}s ===`);
-    return data;
-  } catch (err) {
-    // A 302 to a Google login page means the deployment is not "Anyone within the
-    // organisation", and an HTML body means the URL is stale — both are worth naming.
-    const detail = err.response?.data && typeof err.response.data === 'string'
-      ? 'the URL returned HTML, not JSON — the deployment URL is probably stale'
-      : (err.response?.data?.error || err.message);
-    log.warn(`Cannot upload ${filename} to Drive: ${detail}`);
-    return { error: detail };
+  if (localCsvEnabled()) {
+    try {
+      await writeCsv(dir, filename, columns, rows);
+      localOk = true;
+      log.log(`=== Wrote ${filename} to ${dir} ===`);
+    } catch (err) {
+      const how = required ? 'Cannot write' : 'Could not write backup';
+      log.warn(`${how} ${filename} to ${dir}: ${err.message} (the browser still uploads it to Drive)`);
+    }
   }
+
+  return {
+    localOk,
+    csv: { fileName: filename, base64Data: Buffer.from(body, 'utf8').toString('base64') },
+  };
 }
 
 /** Every .xlsx under the share, minus the ~$ lock files Excel leaves behind. */
@@ -382,13 +379,15 @@ async function importPcTooling(log = new StepLog()) {
   log.log(`=== Merge complete! Total ${rows.length} rows ===`);
 
   // Backup copy of the merged sheet, written before the database round trip so a
-  // DB outage still leaves the team something to look at. Step 5 overwrites it
-  // with the authoritative export.
-  try {
-    await writeCsv(outputDir, TI_CSV_NAME, csvColumns, rows);
-    log.log(`=== Backup CSV saved to ${outputDir} ===`);
-  } catch (err) {
-    log.warn(`Cannot save backup CSV to ${outputDir}: ${err.message}`);
+  // DB outage still leaves the team something to look at. The authoritative export
+  // below overwrites it. Local-only, and skipped where there is no local folder.
+  if (localCsvEnabled()) {
+    try {
+      await writeCsv(outputDir, TI_CSV_NAME, csvColumns, rows);
+      log.log(`=== Backup CSV saved to ${outputDir} ===`);
+    } catch (err) {
+      log.warn(`Cannot save backup CSV to ${outputDir}: ${err.message}`);
+    }
   }
 
   // Only the last two full months are reconciled.
@@ -487,18 +486,13 @@ async function importPcTooling(log = new StepLog()) {
     return out;
   });
 
-  try {
-    await writeCsv(outputDir, TI_CSV_NAME, exportColumns, exportRows);
-    log.log(`=== Successfully exported ${exportRows.length} rows from Database to ${outputDir} ===`);
-    // Only the authoritative export is mirrored, not the backup written earlier in this
-    // step — the backup exists for the case where the DB round trip fails, and pushing
-    // both would upload the same filename twice a run for no gain.
-    await uploadCsvToDrive(TI_CSV_NAME, exportColumns, exportRows, log);
-  } catch (err) {
-    log.warn(`Cannot export from Database to ${outputDir}: ${err.message}`);
-  }
+  // Only the authoritative export is published, not the backup written earlier in
+  // this step. The real output of step 1 is the `ti_list` sync above; the CSV is
+  // returned for the browser to upload to Drive.
+  log.log(`=== Exporting ${exportRows.length} rows from Database as ${TI_CSV_NAME} ===`);
+  const { csv } = await publishCsv(TI_CSV_NAME, exportColumns, exportRows, log);
 
-  return { inserted: newRows.length, scanned: dbRows.length, exported: exportRows.length };
+  return { inserted: newRows.length, scanned: dbRows.length, exported: exportRows.length, csv };
 }
 
 // ---------------------------------------------------------------------------
@@ -507,8 +501,7 @@ async function importPcTooling(log = new StepLog()) {
 
 /**
  * Converts the drawing-print log to CSV. There is no database side to this one —
- * the CSV *is* the deliverable, so a failed write is a failed step rather than a
- * warning the way it is above.
+ * the CSV *is* the deliverable, returned for the browser to upload to Drive.
  */
 async function importDwgPrint(log = new StepLog()) {
   const sourceFile = PATHS.TI_DWG_PRINT_FILE;
@@ -536,24 +529,25 @@ async function importDwgPrint(log = new StepLog()) {
 
   log.log(`=== Loading complete. Total current Excel rows: ${rows.length} ===`);
 
-  // Row-count delta against the previous export. Purely informational, but it is
-  // how the team notices the source workbook was truncated or replaced.
-  try {
-    const previous = await fs.readFile(outputPath, 'utf8');
-    const previousRows = previous.split(/\r?\n/).filter((l) => l.trim() !== '').length - 1;
-    const delta = rows.length - previousRows;
-    if (delta > 0) log.log(`=== Found ${delta} NEW records! ===`);
-    else if (delta === 0) log.log('=== No new records. Data count is the same as backup ===');
-    else log.warn(`Current Excel has ${Math.abs(delta)} FEWER rows than the backup`);
-  } catch {
-    log.log(`=== First time saving. All ${rows.length} records are new! ===`);
+  // Row-count delta against the previous export. Purely informational — how the
+  // team notices the source workbook was truncated or replaced — and only
+  // meaningful when a local copy exists to compare against.
+  if (localCsvEnabled()) {
+    try {
+      const previous = await fs.readFile(outputPath, 'utf8');
+      const previousRows = previous.split(/\r?\n/).filter((l) => l.trim() !== '').length - 1;
+      const delta = rows.length - previousRows;
+      if (delta > 0) log.log(`=== Found ${delta} NEW records! ===`);
+      else if (delta === 0) log.log('=== No new records. Data count is the same as backup ===');
+      else log.warn(`Current Excel has ${Math.abs(delta)} FEWER rows than the backup`);
+    } catch {
+      log.log(`=== First time saving. All ${rows.length} records are new! ===`);
+    }
   }
 
-  await writeCsv(outputDir, DWG_CSV_NAME, columns, rows);
-  log.log(`=== Complete csv to ${outputDir}! File name: ${DWG_CSV_NAME} ===`);
-  await uploadCsvToDrive(DWG_CSV_NAME, columns, rows, log);
+  const { csv } = await publishCsv(DWG_CSV_NAME, columns, rows, log, { required: true });
 
-  return { rows: rows.length };
+  return { rows: rows.length, csv };
 }
 
 // ---------------------------------------------------------------------------
@@ -607,5 +601,6 @@ module.exports = {
   formatWorkCenter,
   StepLog,
   writeCsv,
-  uploadCsvToDrive,
+  publishCsv,
+  localCsvEnabled,
 };

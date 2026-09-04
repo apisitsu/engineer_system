@@ -113,19 +113,17 @@ const PATHS = {
   // Tooling Inspection import sources / output, used by services/toolingImportService.js.
   // All three are host-specific and none can be carried by git, so each is env-overridable:
   //  - the two sources are UNC shares the running account must have credentials for;
-  //  - the output default is G:, which is GOOGLE DRIVE FOR DESKTOP, not a mapped network
-  //    drive. Win32_LogicalDisk reports it DriveType 3 with an empty ProviderName, so
-  //    **it has no UNC equivalent**. Drive is installed on all these machines, so G: is
-  //    normally there — but it mounts per signed-in session, not per machine, and a write
-  //    to it is a cloud sync rather than a disk write. Where the account running the
-  //    backend cannot see it, point TI_CSV_OUTPUT_DIR at an ordinary folder — a real UNC
-  //    share or local disk — and get the file to Drive some other way.
-  //    (M: and N: on these machines ARE network drives, \\10.121.34.19\data_rod and
-  //    \\sanlb01\MPA-DIV, which is why the two sources below are written as UNC.)
-  //    Never point it inside apps/ENG-Backend: `npm run dev` is nodemon and its
-  //    nodemonConfig.ignore covers only output/* and files/*, so a CSV written anywhere
-  //    else here restarts the server mid-import and the request never returns.
-  //    scripts/ti_check_paths.js reports all of this per host and per account.
+  //  - TI_CSV_OUTPUT_DIR is now just an on-disk BACKUP location. The CSVs reach the
+  //    Google Sheet by the browser uploading them to Drive after "Update data"
+  //    (frontend GAS_TI_CSV_URL + api/engineer/mtc/doc/gas_ti_csv_doPost.gs — the
+  //    minebea Workspace blocks anonymous access to Apps Script web apps, so the
+  //    backend cannot POST them itself). Its default is G:, which is GOOGLE DRIVE
+  //    FOR DESKTOP (DriveType 3, empty ProviderName, no UNC form) and mounts per
+  //    signed-in session — so on a host whose service account cannot see it, set
+  //    TI_CSV_SKIP_LOCAL=1 and the backup write is skipped. Never point it inside
+  //    apps/ENG-Backend: nodemonConfig.ignore covers only output/* and files/*, so a
+  //    CSV elsewhere here restarts the server mid-import. scripts/ti_check_paths.js
+  //    reports all of this per host and per account.
   // The trailing "2026" in the source paths is the folder name on the share, not a computed
   // fiscal year (the Python originals hardcoded it the same way) — override on rollover.
   TI_INSP_REC_DIR: envPath('TI_INSP_REC_DIR')
@@ -134,14 +132,6 @@ const PATHS = {
     || String.raw`\\10.121.34.19\data_rod\08-Engineer\14. Share file Back up\KUNPREAW\PC - Engineer\2026\2026 Record for drawing printed.xlsm`,
   TI_CSV_OUTPUT_DIR: envPath('TI_CSV_OUTPUT_DIR')
     || String.raw`G:\Shared drives\ROD-Engineer\ToolingInspection`,
-
-  // Optional: mirror the two CSVs to Drive through an Apps Script web app instead of
-  // relying on a Drive-for-Desktop letter. Unset means "don't", so a host that has not
-  // been configured behaves exactly as before. api/engineer/mtc/doc/gas_ti_csv_doPost.gs is the script,
-  // and explains why this exists rather than the Drive API (the OAuth token this project
-  // holds carries only `gmail.send`).
-  TI_CSV_GAS_URL: envPath('TI_CSV_GAS_URL'),
-  TI_CSV_GAS_SECRET: envPath('TI_CSV_GAS_SECRET'),
 };
 
 const WORKFLOW_STATUS = {
