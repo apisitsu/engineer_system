@@ -398,7 +398,36 @@ const UpdateLogView = () => {
                         {staleUpdate && (
                             <Alert
                                 message={<span style={{ fontWeight: 'bold', fontSize: 16 }}>Update May Have Stalled</span>}
-                                description="A previous update trigger was detected but did not complete within the expected time. The update script may not have executed properly, or it completed while the server was restarting. Check the server console for details."
+                                description={
+                                    <div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            A previous update trigger was detected but did not complete within the expected time (5 minutes). 
+                                            The update script may have encountered a lock, paused in the console, or failed to execute.
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 10 }}>
+                                            <Button 
+                                                type="primary" 
+                                                danger 
+                                                size="small" 
+                                                icon={<CodeOutlined />}
+                                                onClick={() => setShowLogModal(true)}
+                                            >
+                                                View Live Progress Log
+                                            </Button>
+                                            <Button 
+                                                size="small" 
+                                                icon={<SyncOutlined />}
+                                                onClick={() => {
+                                                    setStaleUpdate(false);
+                                                    fetchLogs();
+                                                    checkForUpdates();
+                                                }}
+                                            >
+                                                Refresh Status
+                                            </Button>
+                                        </div>
+                                    </div>
+                                }
                                 type="error"
                                 showIcon
                                 icon={<ExclamationCircleOutlined />}

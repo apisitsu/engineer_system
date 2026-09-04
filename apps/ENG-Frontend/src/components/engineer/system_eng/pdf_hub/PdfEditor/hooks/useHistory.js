@@ -19,7 +19,7 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
 
     const saveCurrentPageState = useCallback((pageNum, canvas, highlightsState) => {
         if (!canvas) return;
-        const json = canvas.toJSON(['id', 'customData', 'textLines']);
+        const json = canvas.toObject ? canvas.toObject(['id', 'customData', 'textLines']) : canvas.toJSON(['id', 'customData', 'textLines']);
         json._canvasWidth = canvas.width;
         json._canvasHeight = canvas.height;
 
@@ -34,17 +34,25 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
         return json;
     }, [setPageAnnotations]);
 
+    const deepCloneHighlights = (hls) => {
+        const out = {};
+        Object.entries(hls || {}).forEach(([pNum, arr]) => {
+            out[pNum] = Array.isArray(arr) ? arr.map(h => ({ ...h })) : [];
+        });
+        return out;
+    };
+
     const undo = useCallback((currentAnnotations, currentHighlights) => {
         if (historyRef.current.past.length === 0) return;
         
         const previous = historyRef.current.past.pop();
         historyRef.current.future.push({
             annotations: { ...currentAnnotations },
-            highlights: { ...currentHighlights }
+            highlights: deepCloneHighlights(currentHighlights)
         });
         
         setPageAnnotations(previous.annotations || {});
-        setPageHighlights(previous.highlights || {});
+        setPageHighlights(deepCloneHighlights(previous.highlights || {}));
         setHistoryVersion(v => v + 1);
         return previous;
     }, [setPageAnnotations, setPageHighlights]);
@@ -55,11 +63,11 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
         const next = historyRef.current.future.pop();
         historyRef.current.past.push({
             annotations: { ...currentAnnotations },
-            highlights: { ...currentHighlights }
+            highlights: deepCloneHighlights(currentHighlights)
         });
         
         setPageAnnotations(next.annotations || {});
-        setPageHighlights(next.highlights || {});
+        setPageHighlights(deepCloneHighlights(next.highlights || {}));
         setHistoryVersion(v => v + 1);
         return next;
     }, [setPageAnnotations, setPageHighlights]);

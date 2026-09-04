@@ -73,11 +73,25 @@ export async function getFont(doc, fontFamily, fontWeight, fontStyle) {
 
     try {
         if (!fontCache[cacheKey]) {
-            const fontUrl = `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sarabun/${fontName}`;
-            fontCache[cacheKey] = await fetch(fontUrl).then(res => {
-                if (!res.ok) throw new Error('Font fetch failed');
-                return res.arrayBuffer();
-            });
+            let res = null;
+            // 1. Try local/intranet static assets first
+            try {
+                if (typeof window !== 'undefined' && window.location?.origin) {
+                    const localRes = await fetch(`/fonts/sarabun/${fontName}`);
+                    if (localRes.ok) res = localRes;
+                }
+            } catch {
+                // Ignore local fetch error, try CDN fallback
+            }
+
+            // 2. Fallback to public CDN
+            if (!res) {
+                const fontUrl = `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sarabun/${fontName}`;
+                res = await fetch(fontUrl);
+            }
+
+            if (!res || !res.ok) throw new Error('Font fetch failed');
+            fontCache[cacheKey] = await res.arrayBuffer();
         }
         return await doc.embedFont(fontCache[cacheKey]);
     } catch (e) {
@@ -87,10 +101,25 @@ export async function getFont(doc, fontFamily, fontWeight, fontStyle) {
     }
 }
 
-// ── Embed image (try PNG first, fallback to JPG) ──
-export async function embedImage(doc, base64Data) {
-    const raw = base64Data.replace(/^data:image\/\w+;base64,/, '');
-    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+// ── Embed image (handles data URLs, blob URLs, and HTTP URLs; tries PNG first, then JPG) ──
+export async function embedImage(doc, imageSrc) {
+    if (!imageSrc) throw new Error('No image source provided');
+    let bytes;
+
+    if (typeof imageSrc === 'string' && imageSrc.startsWith('data:')) {
+        const raw = imageSrc.replace(/^data:image\/\w+;base64,/, '');
+        bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    } else if (typeof imageSrc === 'string' && (imageSrc.startsWith('blob:') || imageSrc.startsWith('http') || imageSrc.startsWith('/'))) {
+        const res = await fetch(imageSrc);
+        const buf = await res.arrayBuffer();
+        bytes = new Uint8Array(buf);
+    } else if (imageSrc instanceof Uint8Array) {
+        bytes = imageSrc;
+    } else {
+        const raw = String(imageSrc).replace(/^data:image\/\w+;base64,/, '');
+        bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    }
+
     try {
         return await doc.embedPng(bytes);
     } catch {

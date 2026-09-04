@@ -1,4 +1,5 @@
 const { engPool } = require('../../instance/eng_db');
+const { pool } = require('../../instance/instance');
 const format = require('pg-format');
 const bcrypt = require('bcryptjs');
 
@@ -247,6 +248,53 @@ const deleteUserRecord = async (req, res) => {
     }
 };
 
+// 8. Search / Get users from External Factory Database (RODPC `m_user`)
+const searchExternalUsers = async (req, res) => {
+    try {
+        const { search = '', limit = 30 } = req.query;
+        let query = `
+            SELECT u_code, u_name, u_authority, u_role, u_status
+            FROM m_user
+        `;
+        const params = [];
+        if (search && search.trim()) {
+            query += ` WHERE u_code ILIKE $1 OR u_name ILIKE $1`;
+            params.push(`%${search.trim()}%`);
+            query += ` ORDER BY u_code ASC LIMIT $2`;
+            params.push(Math.min(parseInt(limit, 10) || 30, 100));
+        } else {
+            query += ` ORDER BY u_code ASC LIMIT $1`;
+            params.push(Math.min(parseInt(limit, 10) || 30, 100));
+        }
+
+        const result = await pool.query(query, params);
+
+        // Check which users already exist in m_user_profile
+        const codes = result.rows.map(r => r.u_code);
+        let existingCodes = new Set();
+        if (codes.length > 0) {
+            const existing = await engPool.query(
+                `SELECT u_code FROM m_user_profile WHERE u_code = ANY($1)`,
+                [codes]
+            );
+            existingCodes = new Set(existing.rows.map(r => r.u_code));
+        }
+
+        const formatted = result.rows.map(row => ({
+            u_code: row.u_code,
+            u_name: row.u_name,
+            u_authority: row.u_authority,
+            u_role: row.u_role,
+            is_already_imported: existingCodes.has(row.u_code)
+        }));
+
+        res.json({ result: 'true', data: formatted });
+    } catch (error) {
+        console.error("Error searching external users from m_user:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
 module.exports = {
-    getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord
+    getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers
 };

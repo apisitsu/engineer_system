@@ -16,14 +16,14 @@ const { Text } = Typography;
  * Each page can be rotated 90° in either direction.
  * Files are separated by visual dividers showing file name.
  */
-const MergePreview = ({ mergeFiles }) => {
+const MergePreview = ({ mergeFiles, onRotationsChange }) => {
     const { theme } = useTheme();
     const [pages, setPages] = useState([]); // [{ fileIdx, fileUid, fileName, pageNum, totalPages, dataUrl, rotation }]
     const [loading, setLoading] = useState(false);
     const containerRef = useRef(null);
 
     // ── Render all pages from all files ──
-    const renderAllPages = useCallback(async () => {
+    const renderAllPages = useCallback(async (isCancelled) => {
         if (!mergeFiles || mergeFiles.length === 0) {
             setPages([]);
             return;
@@ -42,12 +42,19 @@ const MergePreview = ({ mergeFiles }) => {
 
         try {
             for (let fileIdx = 0; fileIdx < mergeFiles.length; fileIdx++) {
+                if (isCancelled()) break;
                 const file = mergeFiles[fileIdx];
+                let doc = null;
                 try {
                     const arrayBuffer = await file.arrayBuffer();
-                    const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    if (isCancelled()) {
+                        doc.destroy();
+                        break;
+                    }
 
                     for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+                        if (isCancelled()) break;
                         const page = await doc.getPage(pageNum);
                         // Get native page dimensions (1:1 scale)
                         const nativeVp = page.getViewport({ scale: 1.0 });
@@ -85,26 +92,42 @@ const MergePreview = ({ mergeFiles }) => {
                         rotation: 0,
                         error: true,
                     });
+                } finally {
+                    if (doc) doc.destroy();
                 }
             }
         } finally {
-            setPages(allPages);
-            setLoading(false);
+            if (!isCancelled()) {
+                setPages(allPages);
+                setLoading(false);
+            }
         }
     }, [mergeFiles]);
 
     useEffect(() => {
-        renderAllPages();
+        let cancelled = false;
+        renderAllPages(() => cancelled);
+        return () => { cancelled = true; };
     }, [renderAllPages]);
 
     // ── Rotate a page ──
     const rotatePage = useCallback((pageId, direction) => {
-        setPages(prev => prev.map(p => {
-            if (p.id !== pageId) return p;
-            const newRotation = (p.rotation + (direction === 'cw' ? 90 : -90) + 360) % 360;
-            return { ...p, rotation: newRotation };
-        }));
-    }, []);
+        setPages(prev => {
+            const nextPages = prev.map(p => {
+                if (p.id !== pageId) return p;
+                const newRotation = (p.rotation + (direction === 'cw' ? 90 : -90) + 360) % 360;
+                return { ...p, rotation: newRotation };
+            });
+            if (onRotationsChange) {
+                const rotMap = {};
+                nextPages.forEach(p => {
+                    if (p.rotation) rotMap[p.id] = p.rotation;
+                });
+                onRotationsChange(rotMap);
+            }
+            return nextPages;
+        });
+    }, [onRotationsChange]);
 
     if (!mergeFiles || mergeFiles.length === 0) {
         return (

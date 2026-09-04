@@ -212,6 +212,29 @@ app.post('/api/ecr/:id/tasks', verifyToken, engProcess.ecrSetTasks);
 app.get('/api/ecr/:id/tasks', verifyToken, engProcess.ecrGetTasks);
 app.put('/api/ecr/tasks/:taskId/ack', verifyToken, engProcess.ecrAckTask);
 
+// --------- ECNT V2 (11-Block System) ---------
+const engEcntV2 = require('./api/engineer/process/eng_ecnt_v2');
+
+// ECR (Blocks 1-4)
+app.route('/api/ecnt/ecr').get(verifyToken, engEcntV2.getEcrList).post(verifyToken, engEcntV2.createEcr);
+app.route('/api/ecnt/ecr/:id').get(verifyToken, engEcntV2.getEcrById);
+app.route('/api/ecnt/ecr/:id/action').put(verifyToken, engEcntV2.actionEcr);
+app.route('/api/ecnt/ecr/:id/resubmit').put(verifyToken, engEcntV2.resubmitEcr);
+
+// ECN (Blocks 5-11)
+app.route('/api/ecnt/ecn').get(verifyToken, engEcntV2.getEcnList).post(verifyToken, engEcntV2.createEcn);
+app.route('/api/ecnt/ecn/:id').get(verifyToken, engEcntV2.getEcnById);
+app.route('/api/ecnt/ecn/:id/action').put(verifyToken, engEcntV2.actionEcn);
+
+// Master PIC & Task Queues
+app.route('/api/ecnt/master-pic').get(verifyToken, engEcntV2.getMasterPic);
+app.route('/api/ecnt/my-tasks').get(verifyToken, engEcntV2.getMyTasks);
+
+// Attachments
+app.route('/api/ecnt/attachment').post(verifyToken, engEcntV2.saveAttachment);
+app.route('/api/ecnt/attachment/:type/:id').get(verifyToken, engEcntV2.getAttachments);
+app.route('/api/ecnt/attachment/:id').delete(verifyToken, engEcntV2.deleteAttachment);
+
 // --------- Tumble System API ---------
 // Tumble Model
 app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);
@@ -465,6 +488,7 @@ const requireSuperAdminOrEmergency = (req, res, next) => {
 
 app.get('/api/system/user-management/schema', userManagement.getSchema);
 app.get('/api/system/user-management/users', userManagement.getUsers);
+app.get('/api/system/user-management/external-users', userManagement.searchExternalUsers);
 app.post('/api/system/user-management/users', userManagement.createUser);
 app.put('/api/system/user-management/users/:u_code', userManagement.updateUser);
 app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUserRecord);

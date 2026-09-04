@@ -39,6 +39,58 @@ describe('PdfCommitEngine', () => {
             expect(pages.length).toBeGreaterThan(0);
         });
 
+        it('should wrap long text when textLines is missing in Textbox', async () => {
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 800,
+                    _canvasHeight: 600,
+                    objects: [
+                        {
+                            type: 'Textbox',
+                            left: 50,
+                            top: 50,
+                            width: 150,
+                            height: 80,
+                            text: 'This is a long sentence that should automatically wrap into multiple lines when committed to PDF',
+                            fontSize: 14,
+                            fill: '#333333'
+                        }
+                    ]
+                }
+            };
+
+            const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
+            expect(resultBytes).toBeInstanceOf(Uint8Array);
+            expect(resultBytes.length).toBeGreaterThan(0);
+        });
+
+        it('should correctly render multi-line Textbox with pre-computed textLines', async () => {
+            const pageAnnotations = {
+                '1': {
+                    _canvasWidth: 800,
+                    _canvasHeight: 600,
+                    objects: [
+                        {
+                            type: 'Textbox',
+                            left: 50,
+                            top: 50,
+                            width: 150,
+                            height: 60,
+                            text: 'Line 1 Line 2 Line 3',
+                            textLines: ['Line 1', 'Line 2', 'Line 3'],
+                            fontSize: 14,
+                            fill: '#000000'
+                        }
+                    ]
+                }
+            };
+
+            const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
+            expect(resultBytes).toBeInstanceOf(Uint8Array);
+            const doc = await PDFDocument.load(resultBytes);
+            expect(doc.getPageCount()).toBe(1);
+        });
+
         it('should safely handle missing objects or unknown types', async () => {
             const pageAnnotations = {
                 '1': {
@@ -55,6 +107,23 @@ describe('PdfCommitEngine', () => {
 
             const resultBytes = await commitAllToPdf(mockPdfBytes, pageAnnotations);
             expect(resultBytes).toBeInstanceOf(Uint8Array);
+        });
+    });
+
+    describe('wrapTextToWidth', () => {
+        it('should wrap text according to measured width', async () => {
+            const { wrapTextToWidth } = await import('./PdfCommitEngine');
+            const mockFont = {
+                widthOfTextAtSize: (str, size) => str.length * (size * 0.5)
+            };
+
+            const text = 'Quick brown fox jumps over the lazy dog';
+            // Each char is 5 units wide with size 10. Max width 60 means ~12 chars max per line.
+            const lines = wrapTextToWidth(text, mockFont, 10, 60);
+            expect(lines.length).toBeGreaterThan(1);
+            lines.forEach(l => {
+                expect(mockFont.widthOfTextAtSize(l, 10)).toBeLessThanOrEqual(60);
+            });
         });
     });
 

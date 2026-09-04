@@ -319,6 +319,26 @@ const LogoutUser = async (req, res) => {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict'
     });
+
+    try {
+        const empno = req.user?.empno || req.body?.empno;
+        const sessionId = req.body?.sessionId;
+
+        if (sessionId) {
+            await engPool.query(
+                `UPDATE user_session_log SET logout_at = NOW(), last_active_at = NOW() WHERE session_id = $1 AND logout_at IS NULL`,
+                [sessionId]
+            );
+        } else if (empno) {
+            await engPool.query(
+                `UPDATE user_session_log SET logout_at = NOW(), last_active_at = NOW() WHERE empno = $1 AND logout_at IS NULL`,
+                [empno]
+            );
+        }
+    } catch (err) {
+        console.warn('[LogoutUser] Error terminating user session:', err.message);
+    }
+
     return res.json({ result: 'true', message: 'Logged out successfully' });
 };
 
