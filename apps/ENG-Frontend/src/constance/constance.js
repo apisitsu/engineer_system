@@ -4,12 +4,12 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 
@@ -200,6 +200,8 @@ export const server = {
   ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
   ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
   ACTIVITY_USER: `${apiUrl}api/activity/user`,
+  ACTIVITY_USERS_PRESENCE: `${apiUrl}api/activity/users-presence`,
+  ACTIVITY_USER_TIMELINE: `${apiUrl}api/activity/user-timeline`,
 
 };
 

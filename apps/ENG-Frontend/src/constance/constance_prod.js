@@ -227,6 +227,8 @@ export const server = {
   ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
   ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
   ACTIVITY_USER: `${apiUrl}api/activity/user`,
+  ACTIVITY_USERS_PRESENCE: `${apiUrl}api/activity/users-presence`,
+  ACTIVITY_USER_TIMELINE: `${apiUrl}api/activity/user-timeline`,
 
 };
 
