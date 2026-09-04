@@ -99,7 +99,6 @@ const columns = [
   { title: 'Process', dataIndex: 'nameEn', width: 180, render: (v, r) => (
     <span style={{ whiteSpace: 'nowrap' }}>
       <Text strong>{v}</Text> <Tag>{r.processCode}</Tag>
-      {r.nameJp ? <><br /><Text type="secondary" style={{ fontSize: 12 }}>{r.nameJp}</Text></> : null}
     </span>
   ) },
   { title: 'Status', dataIndex: 'status', width: 110, render: (v) => {
