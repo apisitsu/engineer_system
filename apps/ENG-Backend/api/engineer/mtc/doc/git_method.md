@@ -17,7 +17,7 @@ git pull origin dev
 git merge mtc
 
 // 6. push to origin dev
-git push origin dev
+// git push origin dev
 
 // 7. pull from origin dev
 git checkout main
@@ -28,6 +28,26 @@ git merge dev
 
 // 9. push to origin dev
 // git push origin main
+
+// steps 6 and 9 are commented ON PURPOSE: merge mtc into dev/main locally,
+// inspect, but hold the push — "origin main" is what actually deploys plbmp130.
+// Push them only when ready to release:
+//   git checkout dev  && git push origin dev
+//   git checkout main && git push origin main
+// To throw the local merge away instead and go back to matching the server:
+//   git checkout dev  && git reset --hard origin/dev
+//   git checkout main && git reset --hard origin/main
+
+// apiUrl WILL conflict on the dev/main merge — mtc has plbmp118 uncommented,
+// dev/main must keep plbmp130 uncommented (apps/ENG-Frontend/src/constance/constance.js).
+// Resolve toward plbmp130, or run scripts/fix_constance_prod.ps1 after merging.
+
+// before merging, see how far dev/main have drifted from mtc:
+//   git fetch origin
+//   git log --oneline origin/dev..mtc     (commits mtc has that dev doesn't)
+//   git log --oneline mtc..origin/dev     (commits dev has that mtc doesn't)
+//   git log --oneline origin/main..mtc
+//   git log --oneline mtc..origin/main
 
 // ============================== //
 
