@@ -516,12 +516,18 @@ const ToolingStatusPreview = async (req, res) => {
 // "Update data" on the Tooling Inspection page. Runs BOTH imports in sequence
 // (they touch different sources — the INSP REC share + ti_list, and the
 // drawing-print record) and reports each step independently.
+//
+// The CSVs come back in `csvs` (base64). The backend cannot upload them to Drive
+// itself — the minebea Workspace blocks anonymous access to Apps Script web apps —
+// so the frontend POSTs them from the signed-in browser (GAS_TI_CSV_URL), the way
+// Kanban uploads attachments.
 const ToolingSyncCSV = async (req, res) => {
     try {
         const steps = await runToolingImports();
 
         const failed = steps.filter(s => !s.ok);
         const output = steps.map(s => `=== ${s.name} ===\n${s.output || ''}`).join('\n');
+        const csvs = steps.map(s => s.detail && s.detail.csv).filter(Boolean);
 
         if (failed.length) {
             return res.status(500).json({
@@ -531,6 +537,7 @@ const ToolingSyncCSV = async (req, res) => {
                 stderr: failed.map(s => s.stderr).filter(Boolean).join('\n'),
                 steps,
                 output,
+                csvs, // whatever a partially-succeeding run did build
             });
         }
 
@@ -539,6 +546,7 @@ const ToolingSyncCSV = async (req, res) => {
             message: "CSV Synced Successfully",
             steps,
             output,
+            csvs,
         });
     } catch (error) {
         console.error("ToolingSyncCSV Error:", error);

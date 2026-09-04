@@ -270,3 +270,10 @@ export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/
 export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
 // By me
 // export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwJzagUw233ty6O8pMBAUtmRXLYXqdkdpQcrog5Wr_d5ERjPZEk4WK0pG5_OaXGLb7a/exec';
+
+// Google Apps Script Web App URL for the Tooling Inspection CSV upload (doPost).
+// The "Update data" flow returns the 2 CSVs and the browser POSTs them here — the
+// minebea Workspace blocks anonymous access, so the backend cannot upload them.
+// Deploy api/engineer/mtc/doc/gas_ti_csv_doPost.gs (Execute as: Me / Anyone within
+// minebea.co.th) and paste the /exec URL below. Empty ⇒ the upload step is skipped.
+export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbw5kxOm4FqqJZaikM-xXr2MH9m46LkbLnpXmx2t4vtMHMPlehyrZpwhD63vhSn077eG/exec';
