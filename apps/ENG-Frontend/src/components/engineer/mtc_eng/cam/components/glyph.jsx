@@ -43,6 +43,15 @@ export const PartIcon = glyph(
   </>,
 );
 
+/** A plain isometric billet — the raw stock block, drawn or hidden. */
+export const StockIcon = glyph(
+  <>
+    <path d="M4 8l8-4 8 4-8 4z" />
+    <path d="M4 8v8l8 4 8-4V8" />
+    <path d="M12 12v8" opacity="0.6" />
+  </>,
+);
+
 /** A block with a step cut out of it — material removed, the height-field sim. */
 export const StockCutIcon = glyph(
   <>

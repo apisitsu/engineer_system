@@ -19,7 +19,7 @@ import {
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
-  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
+  PartIcon, StockIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
   CUTTER_ICONS,
 } from './components/glyph.jsx';
 import {
@@ -1414,10 +1414,8 @@ export default function App() {
                   )}
                   {sim && (
                     <Space size="large" wrap>
-                      <Space>
-                        <span style={{ color: CAD.label }}>Show stock</span>
-                        <Switch checked={showStock} onChange={toggleStock} size="small" />
-                      </Space>
+                      {/* Show stock is a view toggle now — on the bottom rail
+                          beside Show part / Show toolpath, not here. */}
                       <Space>
                         <Tooltip title="Turn the bar down progressively as the playhead moves">
                           <span style={{ color: CAD.label }}>Cut with playback</span>
@@ -1612,10 +1610,8 @@ export default function App() {
                     <Space size="large" align="center" wrap>
                       <Statistic title="Removed (mm³)" value={sim.removedVolume} precision={0} />
                       <Space direction="vertical" size={2}>
-                        <Space>
-                          <span style={{ color: CAD.label }}>Show stock</span>
-                          <Switch checked={showStock} onChange={toggleStock} size="small" />
-                        </Space>
+                        {/* Show stock moved to the bottom rail, with the other
+                            view toggles. */}
                         <Space>
                           <Tooltip title="Carve the stock progressively as the playhead moves">
                             <span style={{ color: CAD.label }}>Cut with playback</span>
@@ -1769,6 +1765,18 @@ export default function App() {
                   type={showPart ? 'primary' : 'default'}
                   icon={<PartIcon />}
                   onClick={() => setShowPart(!showPart)}
+                />
+              )}
+              {/* Show/hide the billet and the carved block — a view toggle like
+                  the part and toolpath ones, so it belongs here beside them
+                  rather than as a lone switch in the Setup drawer. Offered only
+                  when there is stock on screen: a preview billet, or a sim. */}
+              {!sketching && (sim || stockSolid) && (
+                <CommandButton
+                  id="showStock" size="small"
+                  type={showStock ? 'primary' : 'default'}
+                  icon={<StockIcon />}
+                  onClick={toggleStock}
                 />
               )}
               {/* The arbor is the widest part of the marker, so it is what hides
