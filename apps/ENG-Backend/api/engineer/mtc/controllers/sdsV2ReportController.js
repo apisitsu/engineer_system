@@ -227,7 +227,18 @@ async function getReportScope() {
 }
 
 // Force the next /coverage request to rebuild (called when scope config changes).
-function invalidateCoverageCache() { _coverageCache = null; _coverageBuilding = null; }
+// Clearing the in-memory cache alone is NOT enough: the next GET re-hydrates
+// `_coverageCache` from the persisted `sds_coverage_cache` row (see /coverage
+// handler) and, finding it younger than COVERAGE_TTL_MS, serves the pre-change
+// scope as "fresh" with no rebuild — for up to 15 min. So also stamp the
+// persisted row stale (fire-and-forget; if it fails the TTL still bounds it).
+function invalidateCoverageCache() {
+  _coverageCache = null;
+  _coverageBuilding = null;
+  ensureCoverageTable()
+    .then(() => engPool.query(`UPDATE sds_coverage_cache SET built_at = 'epoch' WHERE id = 'coverage'`))
+    .catch(() => {});
+}
 
 // Convert pc_production.control_no (item number format) to standard CN format
 // e.g. "350528" → "C35-00528", "350528-C" → "C35-00528", "C35-00528" → "C35-00528"
@@ -1102,10 +1113,14 @@ router.get('/coverage', async (req, res) => {
       return res.json({ ..._coverageCache.data, cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
-    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate)
+    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
+    // Signal `building` while that rebuild is in flight so the dashboard's poll keeps
+    // going and picks up the fresh payload — without it the poll sees a 200 here,
+    // stops, and shows the pre-change scope until a manual reload (this is what made
+    // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ..._coverageCache.data, cached: true, stale: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      return res.json({ ..._coverageCache.data, cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -1582,6 +1597,9 @@ router.put('/config', isAdmin, async (req, res) => {
       );
     }
     invalidateCoverageCache();
+    // Start the rebuild now rather than on the next visitor's GET — the modal tells
+    // the admin "Saving rebuilds the report", and the cold build is ~3 min.
+    kickCoverageBuild();
     res.json({ success: true, data: await getReportScope() });
   } catch (err) {
     console.error('[report-config PUT]', err.message);

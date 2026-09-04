@@ -403,15 +403,21 @@ export default function SdsCoverageDashboard() {
   // against a later bulk sign because the BACKEND now buckets each completion by the
   // month it was fully stamped (max sign date), not the part's first-produced month —
   // so signing work in August lifts only the August bar, not every historical bar.
-  const statusChartData = useMemo(() => ({
+  const statusChartData = useMemo(() => {
+    // The current month is still open — the backend keeps its bar moving until the
+    // month closes and freezes (see freezeMonthlyStatus). Render it faded, like the
+    // prev-FY carry-over bar, so it reads as provisional rather than settled.
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const faint = (r) => r.isPrevLast || r.month === curMonth;
+    return {
     labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
     datasets: [
       {
         type: 'bar',
         label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.green, 0.30) : hexToRgba(C.green, 0.75)),
-        borderColor: C.green,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.30 : 0.75)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -420,8 +426,8 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.greenSoft, 0.30) : hexToRgba(C.greenSoft, 0.70)),
-        borderColor: C.greenSoft,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.30 : 0.70)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -430,8 +436,8 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'Pending',
         data: monthlyStatus.map(r => r.pending),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? hexToRgba(C.yellow, 0.28) : hexToRgba(C.yellow, 0.65)),
-        borderColor: C.yellow,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.28 : 0.65)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -447,8 +453,9 @@ export default function SdsCoverageDashboard() {
         borderColor: C.orange,
         backgroundColor: hexToRgba(C.orange, 0.15),
         borderWidth: 2,
-        pointRadius: 3,
-        pointBackgroundColor: C.orange,
+        pointRadius: monthlyStatus.map(r => r.month === curMonth ? 4 : 3),
+        pointBackgroundColor: monthlyStatus.map(r => r.month === curMonth ? hexToRgba(C.orange, 0.25) : C.orange),
+        pointBorderColor: C.orange,
         tension: 0.3,
         yAxisID: 'y1',
         datalabels: {
@@ -478,7 +485,8 @@ export default function SdsCoverageDashboard() {
         yAxisID: 'y1',
       },
     ],
-  }), [monthlyStatus]);
+    };
+  }, [monthlyStatus]);
 
   const statusChartOpts = {
     responsive: true, animation: false,
