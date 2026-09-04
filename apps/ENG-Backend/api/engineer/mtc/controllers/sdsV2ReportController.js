@@ -7,6 +7,7 @@ const tselectFallback = require('../services/tselectFallback');
 const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
 const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
+const sdsAutoStamp = require('../services/sdsAutoStamp');
 const templateBConformance = require('../services/templateBConformance');
 const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
@@ -1061,12 +1062,19 @@ function kickCoverageBuild() {
       const at = Date.now();
       _coverageCache = { at, data: payload };
       persistCoverage(payload, at); // fire-and-forget → survives restarts
-      // Seed the board with the sheets that are printable but unsigned. Gated on
-      // the same total>0 check: a degraded build reports everything as pending,
-      // which would be a false backlog. Fire-and-forget and fail-open — the
-      // report must never fail because a board is misconfigured.
-      syncNoStampBacklog(payload.needsAttention, { io: _io })
-        .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message));
+      // Post-build board sync, gated on the same total>0 check (a degraded build
+      // reports everything as pending → false backlog). Both steps are
+      // fire-and-forget and fail-open — the report must never fail because a
+      // board or the approval table is misconfigured.
+      //   1. Auto Stamp: sign the signature-only sheets with the configured
+      //      responsible person per role (no-op unless the global toggle is on).
+      //   2. Backlog intake: seed a card for whatever still needs a human.
+      // Auto Stamp runs FIRST so a sheet it completes already has its card moved
+      // to Done before the backlog's createOnly pass would seed it into To Do.
+      sdsAutoStamp.runAutoStamp(payload.needsAttention, { io: _io })
+        .catch(e => console.warn('[SDS Report] auto-stamp failed:', e.message))
+        .finally(() => syncNoStampBacklog(payload.needsAttention, { io: _io })
+          .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message)));
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
@@ -1140,6 +1148,58 @@ router.post('/backlog-to-board', isAdmin, async (req, res) => {
     res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
   } catch (err) {
     console.error('[SDS Report] backlog-to-board:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Auto Stamp — global toggle + per-role responsible signer ──────────────────
+/**
+ * GET  /api/sds/v2/report/auto-stamp/config        — read (any authed user)
+ * PUT  /api/sds/v2/report/auto-stamp/config        — write (sds_admin)
+ *        body: { enabled?, prepared_em_id?, prepared_name?, checked_em_id?,
+ *                checked_name?, approved_em_id?, approved_name?, max_per_run? }
+ *        Only the keys sent are changed; '' / null on a signer field clears it.
+ * POST /api/sds/v2/report/auto-stamp[?dryRun=1]    — run now (sds_admin)
+ *
+ * Auto Stamp also runs automatically after every coverage build; the POST is the
+ * manual trigger and preview. Like /backlog-to-board it reads the CACHED coverage
+ * payload only — it never kicks an expensive cold build.
+ */
+router.get('/auto-stamp/config', async (_req, res) => {
+  try {
+    res.json({ success: true, config: await sdsAutoStamp.resolveConfig() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config get:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/auto-stamp/config', isAdmin, async (req, res) => {
+  try {
+    const config = await sdsAutoStamp.setConfig(req.body || {}, req.user?.empno || null);
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config put:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/auto-stamp', isAdmin, async (req, res) => {
+  try {
+    if (!_coverageCache) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+    if (!_coverageCache) {
+      return res.status(409).json({ error: 'No coverage build available yet — open the coverage report first' });
+    }
+    const result = await sdsAutoStamp.runAutoStamp(_coverageCache.data.needsAttention, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp run:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

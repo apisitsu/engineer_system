@@ -760,3 +760,10 @@ module.exports.userCanSign = userCanSign;
 module.exports.getApprovalSeals = getApprovalSeals;
 module.exports._ROLE_ORDER = ROLE_ORDER;
 module.exports.signPageUrl = signPageUrl;
+// Programmatic sign primitives — reused by services/sdsAutoStamp.js so Auto Stamp
+// writes signatures exactly the way POST /backfill does (custom signer + source tag,
+// no HTTP layer). Kept internal to the controller; nothing here is a route.
+module.exports.signUpsert = signUpsert;
+module.exports.resolveSdsRev = resolveSdsRev;
+module.exports.getSheet = getSheet;
+module.exports.roleRec = roleRec;
