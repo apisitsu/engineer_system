@@ -484,6 +484,7 @@ const requireSuperAdminOrEmergency = (req, res, next) => {
 
 app.get('/api/system/user-management/schema', userManagement.getSchema);
 app.get('/api/system/user-management/users', userManagement.getUsers);
+app.get('/api/system/user-management/external-users', userManagement.searchExternalUsers);
 app.post('/api/system/user-management/users', userManagement.createUser);
 app.put('/api/system/user-management/users/:u_code', userManagement.updateUser);
 app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUserRecord);

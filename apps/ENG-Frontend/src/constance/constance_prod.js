@@ -193,6 +193,11 @@ export const server = {
   UPDATE_USER_THEME: `${apiUrl}api/update-user-theme`,
   UPDATE_USER_PROFILE: `${apiUrl}api/update-user-profile`,
   GET_USER_INFO: `${apiUrl}api/get-user-info`,
+  USER_MANAGEMENT_SCHEMA: `${apiUrl}api/system/user-management/schema`,
+  USER_MANAGEMENT_USERS: `${apiUrl}api/system/user-management/users`,
+  USER_MANAGEMENT_EXTERNAL_USERS: `${apiUrl}api/system/user-management/external-users`,
+  USER_MANAGEMENT_ADD_COLUMN: `${apiUrl}api/system/user-management/schema/add-column`,
+  USER_MANAGEMENT_DROP_COLUMN: `${apiUrl}api/system/user-management/schema/drop-column`,
 
   // -------------------- Kanban --------------------
   KANBAN_USERS: `${apiUrl}api/kanban/users`,
