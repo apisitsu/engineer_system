@@ -543,7 +543,9 @@ export const useCamStore = create((set, get) => ({
       set({
         bufVer: get().bufVer + 1,
         simStatus: 'done',
-        showStock: true,
+        // `showStock` is the operator's view toggle, not ours to set. Forcing it
+        // on here meant auto-simulate — which fires on every program edit and
+        // every Parse — silently re-opened it after a deliberate "off".
         simReady: true,
         removedVolume: full.removedVolume ?? 0,
         removalNote: removalDiagnosis({
@@ -613,7 +615,7 @@ export const useCamStore = create((set, get) => ({
       set({
         bufVer: get().bufVer + 1,
         simStatus: 'done',
-        showStock: true,
+        // Left to the operator's toggle — see the note in `simulate`.
         simReady: true,          // scrub-able, like the height field
         // The one-shot voxel run turned this OFF, and nothing ever turned it
         // back on — so anyone who had used it got a playhead that carved
@@ -664,7 +666,7 @@ export const useCamStore = create((set, get) => ({
       set({
         bufVer: get().bufVer + 1,
         simStatus: 'done',
-        showStock: true,
+        // Left to the operator's toggle — see the note in `simulate`.
         simReady: true,        // enables cut-with-playback
         totalFeeds: init.totalFeeds,
         simMethod: 'turning',

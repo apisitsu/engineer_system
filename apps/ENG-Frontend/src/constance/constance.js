@@ -4,14 +4,14 @@ export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was u
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-// export const apiUrl = "http://plbmp130:2005/";
+export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -114,6 +114,9 @@ export const server = {
   MTC_SDS_V2_APPROVAL_HISTORY: `${apiUrl}api/sds/v2/approval/history`,
   MTC_SDS_V2_APPROVAL_HISTORY_FACETS: `${apiUrl}api/sds/v2/approval/history/facets`,
   MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
+  MTC_SDS_V2_REPORT_BACKLOG_TO_BOARD: `${apiUrl}api/sds/v2/report/backlog-to-board`,
+  MTC_SDS_V2_AUTO_STAMP: `${apiUrl}api/sds/v2/report/auto-stamp`,
+  MTC_SDS_V2_AUTO_STAMP_CONFIG: `${apiUrl}api/sds/v2/report/auto-stamp/config`,
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG: `${apiUrl}api/sds/v2/admin/template-config`,
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
@@ -267,3 +270,10 @@ export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/
 export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
 // By me
 // export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwJzagUw233ty6O8pMBAUtmRXLYXqdkdpQcrog5Wr_d5ERjPZEk4WK0pG5_OaXGLb7a/exec';
+
+// Google Apps Script Web App URL for the Tooling Inspection CSV upload (doPost).
+// The "Update data" flow returns the 2 CSVs and the browser POSTs them here — the
+// minebea Workspace blocks anonymous access, so the backend cannot upload them.
+// Deploy api/engineer/mtc/doc/gas_ti_csv_doPost.gs (Execute as: Me / Anyone within
+// minebea.co.th) and paste the /exec URL below. Empty ⇒ the upload step is skipped.
+export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbw5kxOm4FqqJZaikM-xXr2MH9m46LkbLnpXmx2t4vtMHMPlehyrZpwhD63vhSn077eG/exec';

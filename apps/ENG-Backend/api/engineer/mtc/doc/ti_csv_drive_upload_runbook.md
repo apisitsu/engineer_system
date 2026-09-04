@@ -1,94 +1,66 @@
-# Runbook — get Tooling Inspection "Update data" writing to Drive from plbmp130
+# Runbook — Tooling Inspection CSVs to Drive (browser upload, "like Kanban")
 
-## Symptom
+## Why the browser does it
 
-"Update data" (Tooling Inspection page) only refreshes the two CSVs on
-`G:\Shared drives\ROD-Engineer\ToolingInspection` when it is pressed on **plbmp118**.
-Pressing it on **plbmp130** (production) does not update the Drive files.
+The minebea Google Workspace **blocks anonymous access** to Apps Script web apps.
+A request from the backend carries no Google session, so it is redirected to a
+login page and gets HTML, not JSON — verified against all three GAS URLs in the
+codebase, including the two `GAS_EMAIL_URL` deployments.
 
-## Cause
+A POST from the **signed-in browser** satisfies "Anyone within minebea.co.th".
+So the flow is the one Kanban uses for Drive attachments
+(`api/kanban/gas/Code.gs` + `src/utils/uploadFileToDrive.js`):
 
-The backend writes the CSVs straight to the `G:` drive letter. `G:` is **Google Drive
-for Desktop**, which mounts per signed-in interactive session, not per machine. On
-plbmp118 an interactive user is logged in with Drive running, so the write reaches
-Drive. On plbmp130 the backend runs under the PM2 **service account**, which either
-cannot see `G:` at all or hits Drive's async-sync lock (`UNKNOWN` / errno -4094).
+| step | who | what |
+|---|---|---|
+| 1 | Backend | "Update data" runs the two imports and returns the 2 CSVs (base64) in `csvs[]`. `TI_CSV_OUTPUT_DIR` is written only as a local backup (skip with `TI_CSV_SKIP_LOCAL=1`). |
+| 2 | Frontend | `uploadTiCsvViaGas(csvs)` — a hidden `<form>` POST per run to the GAS web app, from the user's session. |
+| 3 | GAS | `doPost` writes each file into the Drive folder (updating in place), replies with an HTML page that `postMessage`s the result back. |
+| 4 | Frontend | folds the result into the toast. |
 
-`toolingImportService.js` already has the fix — `uploadCsvToDrive()` POSTs each CSV to
-an Apps Script web app when `TI_CSV_GAS_URL` is set — but that variable has never been
-configured, so the upload path is inert.
+No GCP project, no service account, no key files.
 
-## Fix — deploy the Apps Script uploader, point plbmp130 at it
+## Deploy
 
-The backend uploads the CSVs over HTTPS (server-to-server, using the deploying
-account's own Drive rights). No drive letter, nothing on local disk for Drive to lock.
-The change is **additive**: the local `writeCsv` still runs, and an upload failure
-degrades to a warning.
-
-### 1. Confirm the diagnosis on plbmp130
-
-Run **as the account PM2 runs the backend as** (not your own shell):
-
-```
-cd <backend dir> && node scripts/ti_check_paths.js
-```
-
-Expect the `TI_CSV_OUTPUT_DIR` line to show `FAIL` / `NOT WRITABLE` (or a very slow
-write) and the `Drive upload (TI_CSV_GAS_URL)` section to say "not configured".
-
-### 2. Deploy the GAS web app
-
-1. Open the `ToolingInspection` folder in Drive in a browser; copy the folder ID (last
-   URL segment) — this is `FOLDER_ID`.
+1. Open the `ToolingInspection` folder in Drive in a browser; copy the folder ID
+   (last URL segment).
 2. <https://script.google.com> → **New Project**, name it `TI CSV Upload`.
-3. Paste `api/engineer/mtc/doc/gas_ti_csv_doPost.gs` into `Code.gs`.
-4. Set `FOLDER_ID` and `SHARED_SECRET` (a long random string — e.g.
-   `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`).
-5. **Deploy → New Deployment → Web App**
-   - **Execute as: Me** — must be an @minebea account with write access to that Shared
-     Drive folder.
-   - **Who has access: Anyone within minebea.co.th**
-6. Copy the `/exec` URL.
+3. Paste `api/engineer/mtc/doc/gas_ti_csv_doPost.gs` into `Code.gs`; set `FOLDER_ID`.
+4. **Deploy → New Deployment → Web App**
+   - **Execute as: Me** — an @minebea account with write access to that folder.
+   - **Who has access: Anyone within minebea.co.th.**
+   - On the first deploy Google prompts to authorize the Drive scope — do it.
+5. Copy the `/exec` URL into `apps/ENG-Frontend/src/constance/constance.js` as
+   `GAS_TI_CSV_URL` (rebuild / redeploy the frontend).
 
-### 3. Configure plbmp130
+> Editing an existing deployment (Manage deployments → pencil → Deploy) keeps the
+> `/exec` URL; only a brand-new deployment mints a new one.
 
-Add to `apps/ENG-Backend/.env` on plbmp130 (leave plbmp118 unchanged):
+## Configure the backend
 
-```
-TI_CSV_GAS_URL=https://script.google.com/a/macros/minebea.co.th/s/XXXX/exec
-TI_CSV_GAS_SECRET=<the same SHARED_SECRET>
-TI_CSV_OUTPUT_DIR=D:\ToolingInspectionCSV
-```
+- **plbmp130** `apps/ENG-Backend/.env`: add `TI_CSV_SKIP_LOCAL=1` (the PM2 service
+  account cannot see the `G:` default, and the browser upload is the real delivery).
+- **plbmp118**: leave it unset — the `G:` backup write works there.
 
-`TI_CSV_OUTPUT_DIR` here is just a local backup the service account can actually
-write; the GAS upload is what reaches Drive. Create the folder first.
+Nothing else. There is no `TI_CSV_GAS_*` on the backend any more.
 
-### 4. Restart and verify
+## Verify
 
-```
-pm2 restart <backend process>
-node scripts/ti_check_paths.js      # as the service account
-```
+1. `node scripts/ti_check_paths.js` (as the backend's account) — confirms the two
+   source shares are reachable and reports whether the local backup is on/off.
+2. On the **Tooling Inspection page**, press **Update data**. After the imports
+   finish the toast goes `Data updated successfully` → `Uploading CSVs to Drive...`
+   → `Uploaded 2 file(s) to Drive`; check `ToolingInspection.csv` and
+   `RecordForDrawingPrinted.csv` "last modified" in the Drive folder.
 
-The `Drive upload (TI_CSV_GAS_URL)` section should now report
-`OK  deployment answered { ready: true }` and `TI_CSV_GAS_SECRET is set`.
+> To test the exact prod path on plbmp118 first, set `TI_CSV_SKIP_LOCAL=1` there
+> too and restart — then the browser upload is the only delivery, as on plbmp130.
 
-Then press **Update data** on plbmp130. The backend console should log:
+## Notes
 
-```
-=== Uploaded ToolingInspection.csv to Drive (updated, N bytes) in X.Xs ===
-=== Uploaded RecordForDrawingPrinted.csv to Drive (updated, N bytes) in X.Xs ===
-```
-
-Check the two files' "last modified" in Drive.
-
-## Gotchas
-
-- **Re-deploying the script mints a new `/exec` URL.** If uploads stop after someone
-  edits the script, the stale URL is almost always why — `ti_check_paths.js` reports
-  "returned HTML, not JSON" in that case.
-- **Secret mismatch** → every upload fails with `Bad secret` and the step logs a
-  warning (the DB sync still succeeds). `ti_check_paths.js` flags a set URL with no
-  secret.
-- The frontend already sends a 15-minute timeout for this endpoint, so the extra
-  upload time (2 × up to 120 s) will not trip a client timeout.
+- The upload needs a browser signed into Google (minebea). It cannot run headless
+  or on a schedule. "Update data" is always a button click, so this is fine.
+- `GAS_TI_CSV_URL` empty ⇒ the upload step is skipped and the toast says so; the
+  DB sync and the local backup still happen.
+- A re-deploy that mints a new `/exec` URL means updating `constance.js` and
+  redeploying the frontend.

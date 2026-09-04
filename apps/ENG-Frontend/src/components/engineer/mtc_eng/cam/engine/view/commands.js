@@ -219,6 +219,10 @@ export const COMMANDS = [
     hint: 'Draw the imported model — hide it to see a toolpath that runs inside it',
   },
   {
+    id: 'showStock', group: 'view', label: 'Show stock',
+    hint: 'Draw the billet and the carved block — hide it to watch the toolpath alone',
+  },
+  {
     id: 'showArbor', group: 'view', label: 'Show holder',
     hint: 'Draw the collet above the cutter — hide it to see the cut it covers',
   },
