@@ -81,7 +81,6 @@ function Roadmap({ steps }) {
         <Space size={8} wrap>
           <Text strong>{s.order}. {s.nameEn}</Text>
           <Tag>{s.processCode}</Tag>
-          {s.nameJp ? <Text type="secondary" style={{ fontSize: 12 }}>{s.nameJp}</Text> : null}
           <Tag color={meta.tag}>{meta.label}</Tag>
           {s.offPlan ? <Tag color="warning">off-plan</Tag> : null}
         </Space>
