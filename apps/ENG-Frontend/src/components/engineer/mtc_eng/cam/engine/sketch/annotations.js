@@ -14,7 +14,7 @@
 // Hoisted above the file body. It sits next to its re-export further down in
 // cam-web, which vite accepts; CRA's eslint config makes `import/first` a build
 // error. The re-export stays where it is, with the prose explaining it.
-import { axisDimensionGeometry } from './edit.js';
+import { axisDimensionGeometry, dimensionLockDir, projectOnto } from './edit.js';
 
 const TWO_PI = Math.PI * 2;
 const normAngle = (a) => ((a % TWO_PI) + TWO_PI) % TWO_PI;
@@ -48,11 +48,16 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
 
     // The operator can drag a placed dimension to a clearer spot; the offset is
     // stored on the constraint (in sketch units) and round-trips through the
-    // project file for free (`model.serialize` spreads the constraint). It moves
-    // the *dimension line and the value together* — witness lines still start on
-    // the geometry and stretch out to meet the line, SolidWorks-style — so the
-    // whole thing reads as one object that was slid aside.
-    const [ox, oy] = Array.isArray(c.labelOffset) ? c.labelOffset : [0, 0];
+    // project file for free (`model.serialize` spreads the constraint). It is
+    // **locked to the dimension's own axis** (`dimensionLockDir`) — a horizontal
+    // dimension only slides its standoff up and down, a radius only in and out
+    // along its leader — so the line and the value move as one and the value
+    // stays centred on the line. Witness lines still start on the geometry and
+    // stretch out to meet it, SolidWorks-style.
+    const [ox, oy] = projectOnto(
+      Array.isArray(c.labelOffset) ? c.labelOffset : [0, 0],
+      dimensionLockDir(sk, c.kind, c.refs),
+    );
 
     if (c.kind === 'distance') {
       const a = P(c.refs[0]);

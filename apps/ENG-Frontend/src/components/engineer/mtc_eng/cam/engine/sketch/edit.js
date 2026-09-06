@@ -1744,3 +1744,81 @@ export function offsetChain(sk, ids, dist) {
   }
   return created;
 }
+
+/**
+ * The unit direction a placed dimension of `kind` may be slid along — its
+ * "axis". A drag offset is projected onto this (`projectOnto`, used by
+ * `sketchStore.setDimensionOffset` and `annotations.js`), so the dimension
+ * line moves as one along a single direction with its value staying centred on
+ * it, instead of floating free. `null` when the kind has no natural axis.
+ */
+export function dimensionLockDir(sk, kind, refs = []) {
+  const P = (id) => sk?.entities?.get(id);
+  switch (kind) {
+    case 'distanceX': // line runs along X → it slides in Y (the standoff)
+    case 'lockY':
+      return [0, 1];
+    case 'distanceY':
+    case 'lockX':
+      return [1, 0];
+    case 'radius':
+    case 'diameter': // along the 45° leader
+      return [Math.SQRT1_2, Math.SQRT1_2];
+    case 'distance': {
+      const a = P(refs[0]);
+      const b = P(refs[1]);
+      if (!a || !b) return null;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return [-dy / len, dx / len]; // perpendicular to the measured pair
+    }
+    case 'pointLineDistance': {
+      const l = P(refs[1]);
+      const a = l && P(l.p1);
+      const b = l && P(l.p2);
+      if (!a || !b) return null;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return [dx / len, dy / len]; // along the measured line
+    }
+    case 'arcRadius': {
+      const arc = P(refs[0]);
+      const ctr = arc && P(arc.center);
+      const s = arc && P(arc.start);
+      const en = arc && P(arc.end);
+      if (!ctr || !s || !en) return null;
+      const a0 = Math.atan2(s.y - ctr.y, s.x - ctr.x);
+      const mid = a0 + (normAngle(Math.atan2(en.y - ctr.y, en.x - ctr.x) - a0) || TAU) / 2;
+      return [Math.cos(mid), Math.sin(mid)]; // along the spoke
+    }
+    case 'angle': {
+      const l1 = P(refs[0]);
+      const l2 = P(refs[1]);
+      if (!l1 || !l2) return null;
+      const sharedId = [l1.p1, l1.p2].find((id) => id === l2.p1 || id === l2.p2);
+      const vId = sharedId != null ? sharedId : l1.p1;
+      const v = P(vId);
+      const f1 = P(l1.p1 === vId ? l1.p2 : l1.p1);
+      const f2 = P(l2.p1 === vId ? l2.p2 : l2.p1);
+      if (!v || !f1 || !f2) return null;
+      const a1 = Math.atan2(f1.y - v.y, f1.x - v.x);
+      let d = Math.atan2(f2.y - v.y, f2.x - v.x) - a1;
+      while (d > Math.PI) d -= TAU;
+      while (d < -Math.PI) d += TAU;
+      const mid = a1 + d / 2;
+      return [Math.cos(mid), Math.sin(mid)]; // along the bisector
+    }
+    default:
+      return null;
+  }
+}
+
+/** Project a 2D `offset` onto unit `dir`; returns it unchanged when `dir` is null. */
+export function projectOnto(offset, dir) {
+  if (!dir) return [offset[0], offset[1]];
+  const t = offset[0] * dir[0] + offset[1] * dir[1];
+  // `+ 0` folds a `-0` (from a zero component of `dir`) back to plain `0`.
+  return [t * dir[0] + 0, t * dir[1] + 0];
+}

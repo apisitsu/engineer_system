@@ -25,7 +25,7 @@ import {
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
-  axisFromPlacement,
+  axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
 import {
   DEFAULT_PLANE, parsePlane, planeFromFace, planeLabel,
@@ -1362,9 +1362,12 @@ export const useSketchStore = create((set, get) => ({
 
   /**
    * Slide a placed dimension (its line and value together) to `offset`, in
-   * sketch units, from where the annotation would otherwise draw it. Purely how
-   * the dimension is *shown* — it removes no DOF and needs no solve — but it
-   * lives on the constraint so it is saved and undoable like any other edit.
+   * sketch units, from where the annotation would otherwise draw it. The offset
+   * is **projected onto the dimension's own axis** (`dimensionLockDir`), so a
+   * horizontal dimension can only move its standoff, a radius only along its
+   * leader, etc. — the caller passes the raw pointer delta and this constrains
+   * it. Purely how the dimension is *shown* — no DOF, no solve — but it lives on
+   * the constraint so it is saved and undoable like any other edit.
    *
    * The drag emits one call per pointer move; `snapshot` is true only on the
    * first of a gesture, so a whole drag collapses to one undo step (the same
@@ -1375,7 +1378,7 @@ export const useSketchStore = create((set, get) => ({
     const c = sk.constraints[index];
     if (!c || c.value == null) return;
     if (snapshot) get()._snapshot();
-    c.labelOffset = [offset[0], offset[1]];
+    c.labelOffset = projectOnto(offset, dimensionLockDir(sk, c.kind, c.refs));
     get()._bump();
   },
 

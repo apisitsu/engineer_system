@@ -259,20 +259,21 @@ describe('setDimensionOffset — dragging a placed dimension', () => {
     return { sk, ci };
   };
 
-  it('stores the offset on the constraint and bumps the version', () => {
-    const { sk, ci } = withDim();
+  it('locks a raw pointer offset to the dimension axis, and bumps the version', () => {
+    const { sk, ci } = withDim(); // a distance measured along X → locked to Y
     useSketchStore.getState().setDimensionOffset(ci, [3, -4]);
-    expect(sk.constraints[ci].labelOffset).toEqual([3, -4]);
+    expect(sk.constraints[ci].labelOffset).toEqual([0, -4]); // X component dropped
     expect(useSketchStore.getState().version).toBeGreaterThan(0);
   });
 
   it('collapses a whole drag to one undo step', () => {
     const { ci } = withDim();
     const s = useSketchStore.getState();
-    s.setDimensionOffset(ci, [1, 0]);                      // first move — snapshots
-    s.setDimensionOffset(ci, [2, 0], { snapshot: false }); // ...the rest of the drag
-    s.setDimensionOffset(ci, [5, 1], { snapshot: false });
+    s.setDimensionOffset(ci, [0, 1]);                      // first move — snapshots
+    s.setDimensionOffset(ci, [0, 2], { snapshot: false }); // ...the rest of the drag
+    s.setDimensionOffset(ci, [1, 5], { snapshot: false });
     expect(useSketchStore.getState().past.length).toBe(1);
+    expect(useSketchStore.getState().sk.constraints[ci].labelOffset).toEqual([0, 5]);
   });
 
   it('undo puts the dimension back where it was', () => {
