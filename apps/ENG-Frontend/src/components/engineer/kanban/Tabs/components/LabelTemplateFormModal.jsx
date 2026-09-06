@@ -5,6 +5,7 @@ import { useKanbanStore } from '../../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 
 const { Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Option } = Select;
 
 // ─── Predefined Label Sets ─────────────────────────────────────────

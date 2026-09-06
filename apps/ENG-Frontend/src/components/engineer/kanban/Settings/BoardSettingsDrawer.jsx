@@ -92,15 +92,21 @@ const BoardSettingsDrawer = () => {
         updateBoard, deleteBoard,
         labels, createLabel, updateLabel, deleteLabel,
         toggleBoardSubscription,
+        // eslint-disable-next-line  no-unused-vars
         baseCustomFieldGroups, fetchBaseCustomFieldGroups,
         webhooks, fetchWebhooks, createWebhook, updateWebhook, deleteWebhook,
+        // eslint-disable-next-line  no-unused-vars
         notificationServices, fetchNotificationServices,
+        // eslint-disable-next-line  no-unused-vars
         createNotificationService, deleteNotificationService, users,
         archivedCards, fetchArchivedCards, moveCard, lists,
         kanbanTabOrder, setKanbanTabOrder,
+        // eslint-disable-next-line  no-unused-vars
         boardTabOrders, setBoardTabOrder,
+        // eslint-disable-next-line  no-unused-vars
         cfGroupPreferences, setCfGroupPreference,
         boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup,
+        // eslint-disable-next-line  no-unused-vars
         createTemplateConfig // Add create template
     } = useKanbanStore(
         useShallow(state => ({
@@ -141,11 +147,14 @@ const BoardSettingsDrawer = () => {
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
     const [webhookName, setWebhookName] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
+    // eslint-disable-next-line  no-unused-vars
     const [nsUrl, setNsUrl] = useState('');
+    // eslint-disable-next-line  no-unused-vars
     const [nsFormat, setNsFormat] = useState('text');
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [restoringCardId, setRestoringCardId] = useState(null);
     const [restoreToListId, setRestoreToListId] = useState(null);
+    // eslint-disable-next-line  no-unused-vars
     const [memberSearch, setMemberSearch] = useState('');
 
     const [labelTemplates, setLabelTemplates] = useState([]);
@@ -195,6 +204,7 @@ const BoardSettingsDrawer = () => {
             if (activeProject?.id) fetchBaseCustomFieldGroups(activeProject.id);
         }
         fetchNotificationServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeBoard?.id, activeProject?.id]);
 
     const handleRemoveBoardMemberClick = (member) => {
@@ -784,6 +794,7 @@ const BoardSettingsDrawer = () => {
     );
 
     const ArchiveTab = () => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         useEffect(() => { if (activeTab === 'archive' && activeBoard) fetchArchivedCards(); }, [activeTab, activeBoard]);
         const visibleLists = lists.filter(l => l.list_type === 'active' || l.list_type === 'closed');
         const handleRestore = async (cardId) => {

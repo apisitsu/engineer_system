@@ -15,6 +15,7 @@ const PROCESS_COLOR = {
   '1181': 'geekblue',
 };
 
+// eslint-disable-next-line no-unused-vars
 const PART_TYPE_OPTIONS = [
   { value: '', label: 'All Part Types' },
   { value: 'ball',      label: 'Ball (C3x)' },
@@ -102,6 +103,7 @@ const CnProductionHistory = () => {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
   const wcOptions = useMemo(() => {

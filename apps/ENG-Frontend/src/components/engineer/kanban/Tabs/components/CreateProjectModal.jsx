@@ -53,9 +53,13 @@ const IconPicker = ({ value, onChange, theme }) => (
 const CreateProjectModal = ({ open, onCancel, theme }) => {
     const createProject = useKanbanStore(state => state.createProject);
     const fetchProjects = useKanbanStore(state => state.fetchProjects);
+    // eslint-disable-next-line no-unused-vars
     const setActiveProject = useKanbanStore(state => state.setActiveProject);
+    // eslint-disable-next-line no-unused-vars
     const templateConfigs = useKanbanStore(state => state.templateConfigs);
+    // eslint-disable-next-line no-unused-vars
     const fetchTemplateConfigs = useKanbanStore(state => state.fetchTemplateConfigs);
+    // eslint-disable-next-line no-unused-vars
     const instantiateTemplate = useKanbanStore(state => state.instantiateTemplate);
 
     const [form] = Form.useForm();

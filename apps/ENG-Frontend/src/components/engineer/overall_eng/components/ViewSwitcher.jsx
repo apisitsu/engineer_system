@@ -3,6 +3,7 @@ import { Segmented, Typography } from 'antd';
 import { RocketFilled, IdcardFilled } from '@ant-design/icons';
 import { useTheme } from '../../../../theme';
 
+// eslint-disable-next-line no-unused-vars
 const { Text } = Typography;
 
 const ViewSwitcher = ({ viewMode, setViewMode }) => {

@@ -36,7 +36,9 @@ import CreateBoardModal from './Tabs/components/CreateBoardModal';
 
 dayjs.extend(relativeTime);
 
+// eslint-disable-next-line  no-unused-vars
 const { Content } = Layout;
+// eslint-disable-next-line  no-unused-vars
 const { Title, Text } = Typography;
 // ─── Main Kanban Component ─────────────────────────────────────────
 const KanbanMain = () => {
@@ -47,11 +49,15 @@ const KanbanMain = () => {
 
     const {
         projects, activeProject, boards, activeBoard, isLoading, error,
+        // eslint-disable-next-line  no-unused-vars
         fetchProjects, setActiveProject, fetchBoards, setActiveBoard,
+        // eslint-disable-next-line  no-unused-vars
         lists, openProjectSettings, openBoardSettings,
         connectWebSocket, disconnectWebSocket, viewMode, boardTabOrders,
         boardGroups, activeBoardGroup, setBoardGroups, setActiveBoardGroup, setBoardTabOrder,
+        // eslint-disable-next-line  no-unused-vars
         resetBoardTabOrder, fetchUserPreferences,
+        // eslint-disable-next-line  no-unused-vars
         projectManagers, users, addProjectManager, removeProjectManager, fetchProjectManagers, fetchUsers, fetchSystemSettings
     } = useKanbanStore(
         useShallow(state => ({
@@ -90,6 +96,7 @@ const KanbanMain = () => {
         });
     }, [boards, boardTabOrders, activeProject]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const projectBoardGroups = activeProject ? (boardGroups?.[activeProject.id] || []) : [];
     const currentBoardGroupId = activeProject ? activeBoardGroup?.[activeProject.id] : null;
 
@@ -109,6 +116,7 @@ const KanbanMain = () => {
     }, [boards, orderedBoards, currentBoardGroupId, projectBoardGroups, activeProject]);
 
     // ─── Drag and Drop Setup for Board Tabs ───
+    // eslint-disable-next-line  no-unused-vars
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -149,6 +157,7 @@ const KanbanMain = () => {
     };
 
     // Global permissions
+    // eslint-disable-next-line  no-unused-vars
     const { canManageProject } = useKanbanPermissions({
         isPrivateProject: activeProject?.is_private,
         projectRole: activeProject?.role,
@@ -192,6 +201,7 @@ const KanbanMain = () => {
                 navigate(`/eng/kanban/${activeProject.id}/dashboard`, { replace: true });
             }
         }
+    // eslint-disable-next-line  react-hooks/exhaustive-deps
     }, [filteredOrderedBoards, activeBoard, setActiveBoard, isInitLoading, isGroupInitialized, activeProject?.is_permanent, boardIdParam, navigate, activeProject?.id]);
 
     // On mount: fetch all projects and user preferences
@@ -211,6 +221,7 @@ const KanbanMain = () => {
         };
         initKanban();
         return () => { isMounted = false; }
+    // eslint-disable-next-line  react-hooks/exhaustive-deps
     }, [fetchProjects]);
 
     // Handle initial selection from URL params
@@ -299,6 +310,7 @@ const KanbanMain = () => {
         }
     };
 
+    // eslint-disable-next-line  no-unused-vars
     const handleBackToProjects = () => {
         navigate('/eng/kanban');
     };

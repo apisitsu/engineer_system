@@ -45,6 +45,7 @@ const PropertiesPanel = ({
 
     // If an object is selected, determine the best panel for it
     if (store.selectedObjectId && store.selectedObjectProps) {
+        // eslint-disable-next-line no-unused-vars
         const type = store.selectedObjectProps.type;
         const customType = store.selectedObjectProps.customData?.type;
         
@@ -63,6 +64,11 @@ const PropertiesPanel = ({
                     onPlaceStamp={onPlaceStamp}
                 />
             );
+        }
+
+        const imageTypes = ['addImage'];
+        if (imageTypes.includes(customType)) {
+            return <ShapesPanel fabricCanvasRefs={fabricCanvasRefs} currentPage={currentPage} />;
         }
         
         // Default for rect, circle, arrow, line, freehand, ruler

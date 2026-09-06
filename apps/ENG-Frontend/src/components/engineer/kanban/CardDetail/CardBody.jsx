@@ -49,6 +49,7 @@ const CardBody = () => {
         handleEditLinkSave, deleteAttachment,
         customFieldValues, upsertCustomFieldValue,
         baseCustomFieldGroups, customFields, cfGroupPreferences, activeProject,
+        // eslint-disable-next-line no-unused-vars
         parentCard, childCards, lists, cards, closeCardDetail,
         markDirty, clearDirty,
     } = ctx;

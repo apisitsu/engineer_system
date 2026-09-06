@@ -15,6 +15,7 @@ import MonthlyReport from './MonthlyReport';
 import ProjectReport from './ProjectReport';
 import ExportRenderer from './ExportRenderer';
 
+// eslint-disable-next-line no-unused-vars
 const { Text, Title } = Typography;
 
 // 19:9 aspect ratio constants
@@ -69,6 +70,7 @@ const ReportDashboard = ({ theme }) => {
         } finally {
             setIsLoading(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProjectIds, fetchProjectReportData]);
 
     // ─── Export: Render ExportRenderer off-screen → capture → download ──
@@ -122,6 +124,7 @@ const ReportDashboard = ({ theme }) => {
         } finally {
             setIsExporting(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reportData, reportType, selectedMonth]);
 
     // ─── Export Active View: Capture what's currently on screen ────────

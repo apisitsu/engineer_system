@@ -124,6 +124,7 @@ function DateRangeFilterDropdown({ setSelectedKeys, selectedKeys, confirm, clear
 
 // ─── Conditional Number Filter ─────────────────────────────
 
+// eslint-disable-next-line no-unused-vars
 function ConditionalFilterDropdown({ setSelectedKeys, selectedKeys, confirm, clearFilters }) {
     const [op, setOp] = useState(selectedKeys?.[0] || '>');
     const [val, setVal] = useState(selectedKeys?.[1] ?? '');

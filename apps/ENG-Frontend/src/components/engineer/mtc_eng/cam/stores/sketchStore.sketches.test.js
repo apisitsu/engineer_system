@@ -338,6 +338,7 @@ describe('slot and polygon survive the pick tolerance the zoom hands them', () =
     for (const pickTol of [1.5, 9]) {
       drawSlot(pickTol, 5);
       const { loops } = sketchRegionsOf();
+      // eslint-disable-next-line jest/valid-expect
       expect(loops, `pickTol=${pickTol}`).toHaveLength(1);
       expect(Math.round(loops[0].area)).toBe(378); // 30×10 plus a circle of r=5
     }

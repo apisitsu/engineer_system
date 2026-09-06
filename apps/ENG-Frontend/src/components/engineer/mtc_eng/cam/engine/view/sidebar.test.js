@@ -30,6 +30,7 @@ describe('sidebarSections while running', () => {
   it('hides every setup section — that is the point', () => {
     const s = sidebarSections({ playing: true });
     for (const name of ['files', 'project', 'cam', 'machine', 'warnings', 'tools', 'removal']) {
+      // eslint-disable-next-line jest/valid-expect
       expect(s[name], name).toBe(false);
     }
   });
@@ -62,6 +63,7 @@ describe('the names App actually asks for', () => {
     const src = readFileSync(APP_JSX, 'utf8');
     const used = [...src.matchAll(/\bshow\.([a-zA-Z]+)/g)].map((m) => m[1]);
     expect(used.length).toBeGreaterThan(0);
+    // eslint-disable-next-line jest/valid-expect
     for (const name of used) expect(SECTIONS, `show.${name}`).toContain(name);
   });
 
@@ -72,6 +74,7 @@ describe('the names App actually asks for', () => {
     const used = new Set([...src.matchAll(/\bshow\.([a-zA-Z]+)/g)].map((m) => m[1]));
     for (const name of SECTIONS) {
       if (RUN_SECTIONS.includes(name)) continue;
+      // eslint-disable-next-line jest/valid-expect
       expect(used, `show.${name} is missing from App.jsx`).toContain(name);
     }
   });

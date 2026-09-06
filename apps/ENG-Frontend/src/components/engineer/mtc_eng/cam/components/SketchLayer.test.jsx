@@ -78,6 +78,7 @@ afterEach(async () => {
 
 describe('SketchLayer renders the sketch', () => {
   it('mounts an empty sketch without throwing', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     expect(r.scene).toBeTruthy();
   });
@@ -87,11 +88,13 @@ describe('SketchLayer renders the sketch', () => {
     addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0));
     addLine(sk, addPoint(sk, 0, 5), addPoint(sk, 10, 5));
     setSketch(sk);
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     expect(countOf(r.scene, UNDER)).toBeGreaterThanOrEqual(2);
   });
 
   it('picks up geometry added after mount', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     const before = countOf(r.scene, UNDER);
     const sk = createSketch();
@@ -104,6 +107,7 @@ describe('SketchLayer renders the sketch', () => {
     const sk = createSketch();
     addCircle(sk, addPoint(sk, 0, 0), 10);
     setSketch(sk);
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     expect(countOf(r.scene, UNDER)).toBeGreaterThanOrEqual(1);
   });
@@ -112,6 +116,7 @@ describe('SketchLayer renders the sketch', () => {
 describe('SketchLayer — dimensions are drawn on canvas', () => {
   it('draws the witness and dimension lines for a placed dimension', async () => {
     setSketch(dimensionedLine());
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     // Two witness lines plus the dimension line itself.
     expect(countOf(r.scene, DIM)).toBe(3);
@@ -124,6 +129,7 @@ describe('SketchLayer — dimensions are drawn on canvas', () => {
     addLine(sk, a, b);
     addConstraint(sk, 'horizontal', [a, b]);
     setSketch(sk);
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     expect(countOf(r.scene, DIM)).toBe(0);
   });
@@ -131,6 +137,7 @@ describe('SketchLayer — dimensions are drawn on canvas', () => {
   it('removes the annotation when the dimension is deleted', async () => {
     const sk = dimensionedLine();
     setSketch(sk);
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await render(<SketchLayer />);
     expect(countOf(r.scene, DIM)).toBe(3);
     sk.constraints.length = 0;
@@ -150,18 +157,21 @@ describe('SketchLayer — solve-state colouring (SolidWorks blue → black)', ()
   };
 
   it('is blue while under-defined', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await withState({ dofState: { state: 'under' } });
     expect(countOf(r.scene, UNDER)).toBeGreaterThan(0);
     expect(countOf(r.scene, FULL)).toBe(0);
   });
 
   it('goes black once fully defined', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await withState({ dofState: { state: 'full' } });
     expect(countOf(r.scene, FULL)).toBeGreaterThan(0);
     expect(countOf(r.scene, UNDER)).toBe(0);
   });
 
   it('turns red when the solver reports a conflict', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await withState({
       dofState: { state: 'over' },
       solveResult: { success: false, conflicting: [0] },
@@ -170,6 +180,7 @@ describe('SketchLayer — solve-state colouring (SolidWorks blue → black)', ()
   });
 
   it('re-colours in place when the sketch becomes fully defined', async () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention
     const r = await withState({ dofState: { state: 'under' } });
     expect(countOf(r.scene, UNDER)).toBeGreaterThan(0);
     await update(() => useSketchStore.setState({
@@ -187,8 +198,9 @@ describe('SketchLayer — tool modes', () => {
       const sk = createSketch();
       addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0));
       setSketch(sk, { tool });
-      // eslint-disable-next-line no-await-in-loop
+      // eslint-disable-next-line no-await-in-loop, testing-library/render-result-naming-convention
       const r = await render(<SketchLayer />);
+      // eslint-disable-next-line jest/valid-expect
       expect(r.scene, tool).toBeTruthy();
       // eslint-disable-next-line no-await-in-loop
       await renderer.unmount();
@@ -208,6 +220,7 @@ describe('what is drawn is what is built', () => {
       const pts = tessellateArc(0, 0, r, 0, Math.PI * 2);
       const n = pts.length / 2 - 1;
       const sagitta = r * (1 - Math.cos(Math.PI / n));
+      // eslint-disable-next-line jest/valid-expect
       expect(sagitta, `R${r} strays past the chord tolerance`).toBeLessThanOrEqual(CHORD_TOL * 1.001);
     }
   });
@@ -292,6 +305,7 @@ describe('every half-finished draw the mouse can produce', () => {
           });
           // eslint-disable-next-line no-await-in-loop
           const r = await ReactThreeTestRenderer.create(<SketchLayer />);
+          // eslint-disable-next-line jest/valid-expect
           expect(r.scene, `${tool}/${stage} at ${cursor.x},${cursor.y}`).toBeTruthy();
           // eslint-disable-next-line no-await-in-loop
           await r.unmount();

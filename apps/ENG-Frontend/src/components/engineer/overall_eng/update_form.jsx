@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Button, Form, Input, DatePicker, Select, Row, Col, Typography, Alert, Table, Tag, Radio, Space } from 'antd';
 import { InfoCircleFilled, FileProtectOutlined } from '@ant-design/icons';
 import { MEASURING_TOOL_OPTIONS } from './options_measuring';
+// eslint-disable-next-line no-unused-vars
 import moment from 'moment';
 import dayjs from 'dayjs';
 import { server } from '../../../constance/constance';
@@ -29,6 +30,7 @@ const UpdateFormModal = ({ open, initialData, onCancel, onSuccess }) => {
 
   const [conflictList, setConflictList] = useState([]);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [pendingValues, setPendingValues] = useState(null); 
   const [resolutions, setResolutions] = useState({});
 

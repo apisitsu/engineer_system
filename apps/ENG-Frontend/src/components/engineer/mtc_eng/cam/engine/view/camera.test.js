@@ -70,7 +70,9 @@ describe('viewBasis — the degenerate case that broke the lathe views', () => {
         const { right, up, forward } = viewBasis(mode, view);
         for (const [name, v] of [['right', right], ['up', up], ['forward', forward]]) {
           const len = Math.hypot(...v);
+          // eslint-disable-next-line jest/valid-expect
           expect(Number.isFinite(len), `${mode}/${view} ${name} is finite`).toBe(true);
+          // eslint-disable-next-line jest/valid-expect
           expect(near(len, 1, 1e-9), `${mode}/${view} ${name} is unit (got ${len})`).toBe(true);
         }
       }
@@ -96,6 +98,7 @@ describe('viewBasis — the degenerate case that broke the lathe views', () => {
       for (const view of Object.keys(VIEW_DIRS)) {
         const { up, forward } = viewBasis(mode, view);
         const cos = Math.abs(up[0] * forward[0] + up[1] * forward[1] + up[2] * forward[2]);
+        // eslint-disable-next-line jest/valid-expect
         expect(cos, `${mode}/${view}`).toBeLessThan(0.99);
       }
     }
@@ -241,9 +244,13 @@ describe('framing — fitting around the floating chrome', () => {
         for (const zi of [0, 1]) {
           const p = [xi ? BOX.max[0] : BOX.min[0], yi ? BOX.max[1] : BOX.min[1], zi ? BOX.max[2] : BOX.min[2]];
           const s = screen(f, p);
+          // eslint-disable-next-line jest/valid-expect
           expect(s.x, `corner x ${s.x}`).toBeGreaterThanOrEqual(limit.left - 1e-6);
+          // eslint-disable-next-line jest/valid-expect
           expect(s.x, `corner x ${s.x}`).toBeLessThanOrEqual(limit.right + 1e-6);
+          // eslint-disable-next-line jest/valid-expect
           expect(s.y, `corner y ${s.y}`).toBeGreaterThanOrEqual(limit.down - 1e-6);
+          // eslint-disable-next-line jest/valid-expect
           expect(s.y, `corner y ${s.y}`).toBeLessThanOrEqual(limit.up + 1e-6);
         }
       }

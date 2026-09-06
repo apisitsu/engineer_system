@@ -1,17 +1,17 @@
-﻿export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
+export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
 export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please try again.";
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-// export const apiUrl = "http://plbmp130:2005/";
+export const apiUrl = "http://plbmp130:2005/";
 
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
 // export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
-export const apiUrl = "http://plbmp118:2005/";
+// export const apiUrl = "http://plbmp118:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
@@ -60,7 +60,7 @@ export const server = {
   TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
   TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,         // append /:table (GET) or /:table/:id (PUT/DELETE)
-  TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`, // ?machine=&tooling_no= เนยโ€ dim row (SDS compare)
+  TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`, // ?machine=&tooling_no= เน€เธยเธขยเนโฌย dim row (SDS compare)
   TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
   TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,         // append /:id/limits
   TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,         // append /:id/formulas
@@ -69,7 +69,7 @@ export const server = {
   TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,           // append /:id
   TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,         // append /:id/search-rules
   TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,     // append /:id
-  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No เนยโ€ tool map; /meta for filters, /:id for PUT/DELETE
+  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,      // Part No เน€เธยเธขยเนโฌย tool map; /meta for filters, /:id for PUT/DELETE
   TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
   TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
@@ -176,6 +176,11 @@ export const server = {
   UPDATE_USER_THEME: `${apiUrl}api/update-user-theme`,
   UPDATE_USER_PROFILE: `${apiUrl}api/update-user-profile`,
   GET_USER_INFO: `${apiUrl}api/get-user-info`,
+  USER_MANAGEMENT_SCHEMA: `${apiUrl}api/system/user-management/schema`,
+  USER_MANAGEMENT_USERS: `${apiUrl}api/system/user-management/users`,
+  USER_MANAGEMENT_EXTERNAL_USERS: `${apiUrl}api/system/user-management/external-users`,
+  USER_MANAGEMENT_ADD_COLUMN: `${apiUrl}api/system/user-management/schema/add-column`,
+  USER_MANAGEMENT_DROP_COLUMN: `${apiUrl}api/system/user-management/schema/drop-column`,
 
   //--------------------Kanban--------------------//
   KANBAN_USERS: `${apiUrl}api/kanban/users`,
@@ -213,6 +218,8 @@ export const server = {
   ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
   ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
   ACTIVITY_USER: `${apiUrl}api/activity/user`,
+  ACTIVITY_USERS_PRESENCE: `${apiUrl}api/activity/users-presence`,
+  ACTIVITY_USER_TIMELINE: `${apiUrl}api/activity/user-timeline`,
 
 };
 
@@ -264,7 +271,7 @@ export const mm_safety = {
 export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbxvX4smuNCm8k5x-fkAcurKRG2OfXB0wID0OKzATCreHHIn1BZu0kQDZzFvSfaYoHjCvw/exec';
 
 // Google Apps Script Web App URL (doPost endpoint for Kanban Drive file attachments)
-// เนยย เนเธย Paste your deployed GAS URL here after deploying Code.gs
+// เน€เธยเธขยเธขย เน€เธยเน€เธยเธขย Paste your deployed GAS URL here after deploying Code.gs
 
 // By Everyone
 export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';

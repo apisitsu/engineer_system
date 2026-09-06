@@ -20,6 +20,7 @@ export function useCalculations(params, materialKey) {
       console.warn('Surface area calculation error:', e);
       return { total: 0, outerSpherical: 0, outerCylindrical: 0, innerBore: 0, bottomFace: 0, holes: 0, chamfers: 0, totalOuter: 0, totalInner: 0 };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     params.width, params.outerSphereDia, params.innerBoreDia,
     params.bodyOuterDia, params.holeCount, params.holeDia, params.chamfer,
@@ -32,6 +33,7 @@ export function useCalculations(params, materialKey) {
       console.warn('Volume calculation error:', e);
       return { total: 0, cylinderBody: 0, sphericalCap: 0, holesRemoved: 0 };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     params.width, params.outerSphereDia, params.innerBoreDia,
     params.bodyOuterDia, params.holeCount, params.holeDia,

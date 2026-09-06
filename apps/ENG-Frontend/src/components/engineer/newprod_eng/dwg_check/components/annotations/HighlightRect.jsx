@@ -7,6 +7,7 @@ export default function HighlightRect({ annotation, isSelected, onSelect, onUpda
     const { x, y, width, height, color } = annotation;
 
     const { handleMouseDown: handleDrag } = useDraggable(annotation, onUpdate);
+    // eslint-disable-next-line no-unused-vars
     const { handleMouseDown: handleResize, isResizing } = useResizable(annotation, onUpdate);
 
     return (

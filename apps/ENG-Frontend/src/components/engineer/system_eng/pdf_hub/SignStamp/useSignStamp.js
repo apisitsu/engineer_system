@@ -52,6 +52,7 @@ export default function useSignStamp() {
     // ── PDF State ──
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfDoc, setPdfDoc] = useState(null);         // pdfjs-dist document
+    // eslint-disable-next-line no-unused-vars
     const [pdfLibDoc, setPdfLibDoc] = useState(null);    // pdf-lib document (for manipulation)
     const [pdfBytes, setPdfBytes] = useState(null);      // Raw ArrayBuffer
     const [totalPages, setTotalPages] = useState(0);
@@ -241,11 +242,9 @@ export default function useSignStamp() {
             for (const page of pages) {
                 const rotation = page.getRotation().angle || 0;
                 const normalizedRotation = ((rotation % 360) + 360) % 360;
-                if (normalizedRotation !== 0) {
+                if (normalizedRotation === 90 || normalizedRotation === 270) {
                     const { width, height } = page.getSize();
-                    if (normalizedRotation === 90 || normalizedRotation === 270) {
-                        page.setSize(height, width);
-                    }
+                    page.setSize(height, width);
                     page.setRotation(degrees(0));
                 }
             }
@@ -255,7 +254,8 @@ export default function useSignStamp() {
             let sigImg = null;
 
             if (stampData.stamp_image) {
-                const stampBytes = Uint8Array.from(atob(stampData.stamp_image), c => c.charCodeAt(0));
+                const raw = String(stampData.stamp_image).replace(/^data:image\/\w+;base64,/, '');
+                const stampBytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
                 try {
                     stampImg = await doc.embedPng(stampBytes);
                 } catch {
@@ -264,7 +264,8 @@ export default function useSignStamp() {
             }
 
             if (stampData.signature_image) {
-                const sigBytes = Uint8Array.from(atob(stampData.signature_image), c => c.charCodeAt(0));
+                const raw = String(stampData.signature_image).replace(/^data:image\/\w+;base64,/, '');
+                const sigBytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
                 try {
                     sigImg = await doc.embedPng(sigBytes);
                 } catch {

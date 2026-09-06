@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import React, { useEffect } from 'react';
 import { usePdf } from '../context/PdfContext';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -14,6 +15,7 @@ function formatUserName(fullName) {
 export default function SettingsModal() {
     const { state, dispatch } = usePdf();
     const { userName: authUserName } = useAuthStore();
+    // eslint-disable-next-line no-unused-vars
     const { isSettingsOpen, defaultFontSize, defaultStampSize, defaultLineThickness, defaultUserName, defaultDepartment } = state;
 
 

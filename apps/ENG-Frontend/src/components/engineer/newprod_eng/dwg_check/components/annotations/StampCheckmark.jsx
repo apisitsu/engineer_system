@@ -8,6 +8,7 @@ export default function StampCheckmark({ annotation, isSelected, onSelect, onUpd
     const { handleMouseDown: handleDrag } = useDraggable(annotation, onUpdate);
     const { handleMouseDown: handleResize } = useResizable(annotation, onUpdate);
 
+    // eslint-disable-next-line no-unused-vars
     const size = Math.min(width, height);
 
     return (

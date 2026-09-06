@@ -57,6 +57,7 @@ function setSketch(sk, plane = { preset: 'XY', offset: 0 }) {
 
 /** Render `el` and open its popover by clicking the trigger. */
 async function open(el) {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => { root.render(el); });
   const trigger = container.querySelector('button');
   await act(async () => {

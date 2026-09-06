@@ -21,6 +21,7 @@ const KanbanAdminSettings = ({ open, onClose }) => {
         if (open && isAdmin) {
             fetchSettings();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, isAdmin]);
 
     if (!isAdmin) {

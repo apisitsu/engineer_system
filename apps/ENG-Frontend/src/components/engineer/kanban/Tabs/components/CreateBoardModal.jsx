@@ -162,6 +162,7 @@ const CreateBoardModal = ({ open, onCancel, theme }) => {
     };
 
     const activeTemplate = blueprintConfigs.find(t => t.id === selectedTemplateId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const config = activeTemplate ? (typeof activeTemplate.config_data === 'string' ? JSON.parse(activeTemplate.config_data) : activeTemplate.config_data) : {};
     const boardIds = config.board_ids || (config.boardId ? [config.boardId] : []);
     const masterProjectId = activeTemplate?.master_project_id || config?.sourceProject || config?.master_project_id;

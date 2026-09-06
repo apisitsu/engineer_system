@@ -11,8 +11,9 @@ export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // ── Environment Detection ────────────────────────────────────────────────────
 // Detect if running on production server (plbmp129)
-const isProduction = window.location.hostname === 'plbmp129' || 
-                     window.location.hostname === 'localhost' === false;
+// eslint-disable-next-line no-unused-vars
+const isProduction = window.location.hostname === 'plbmp129' ||
+  window.location.hostname === 'localhost' === false;
 
 // ── API URL Configuration ────────────────────────────────────────────────────
 // DEV: Local development
@@ -31,7 +32,7 @@ export const server = {
   API_URL: `${apiUrl}`,
 
   // -------------------- Master --------------------
-  
+
   // -------------------- Tooling --------------------
   // Tooling Inspect (Legacy System)
   TOOLING_INSPECT_GETLIST: `${apiUrl}api/tooling_inspect/getlist`,
@@ -44,7 +45,7 @@ export const server = {
   // Legacy DWG Request (Old System - for tooling_dwg_require.jsx only)
   TOOLING_DWG_REQUEST_GETLIST: `${apiUrl}api/tooling_inspect/dwg_require_getlist`,
   TOOLING_DWG_REQUEST_ADD: `${apiUrl}api/tooling_inspect/dwg_require_add`,
-  
+
   // General DWG Request (New System - tr_request)
   MTC_TOOL_REQUESTS: `${apiUrl}api/engineer/mtc/tool-requests`,
   MTC_TOOL_REQUEST_DETAIL: `${apiUrl}api/engineer/mtc/tool-requests`,
@@ -64,33 +65,42 @@ export const server = {
   HTML_TO_PDF_DELETE_JOB: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
   HTML_TO_PDF_DELETE_ALL: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/all`,
   HTML_TO_PDF_REWORK: `${apiUrl}api/engineer/new_prod/html-to-pdf/jobs/`,
+  // PDF Hub (Sign & Stamp)
+  PDF_HUB_STAMPS: `${apiUrl}api/engineer/pdf-hub/stamps`,
+  PDF_USAGE_LOG: `${apiUrl}api/engineer/pdf-hub/usage-log`,
+  PDF_USAGE_STATS: `${apiUrl}api/engineer/pdf-hub/usage-stats`,
+  PDF_USAGE_HISTORY: `${apiUrl}api/engineer/pdf-hub/usage-history`,
+  PDF_WATERMARKS: `${apiUrl}api/engineer/pdf-hub/watermarks`,
+  PDF_UNLOCK: `${apiUrl}api/engineer/pdf-hub/unlock`,
   PDF_REPAIR: `${apiUrl}api/engineer/pdf-hub/repair`,
+  PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
+  PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
   PDF_TO_IMAGE: `${apiUrl}api/engineer/pdf-hub/pdf-to-image`,
 
   // Tooling Select
-  TSV2_MACHINES:      `${apiUrl}api/tooling-select/machines`,
+  TSV2_MACHINES: `${apiUrl}api/tooling-select/machines`,
   TSV2_INVENTORY_TABLES: `${apiUrl}api/tooling-select/inventory-tables`,
-  TSV2_INVENTORY:       `${apiUrl}api/tooling-select/inventory`,
+  TSV2_INVENTORY: `${apiUrl}api/tooling-select/inventory`,
   TSV2_INVENTORY_LOOKUP: `${apiUrl}api/tooling-select/inventory-lookup`,
-  TSV2_COLUMNS:       `${apiUrl}api/tooling-select/columns`,
-  TSV2_LIMITS:        `${apiUrl}api/tooling-select/machines`,
-  TSV2_FORMULAS:      `${apiUrl}api/tooling-select/machines`,
-  TSV2_TOOLINGS:      `${apiUrl}api/tooling-select/machines`,
-  TSV2_FORMULA_ITEM:  `${apiUrl}api/tooling-select/formulas`,
-  TSV2_LIMIT_ITEM:    `${apiUrl}api/tooling-select/limits`,
-  TSV2_SEARCH_RULES:  `${apiUrl}api/tooling-select/machines`,
-  TSV2_RULE_ITEM:     `${apiUrl}api/tooling-select/search-rules`,
-  TSV2_PARTNO_MAP:    `${apiUrl}api/tooling-select/partno-map`,
-  TSV2_FORMULA_TEST:  `${apiUrl}api/tooling-select/formula/test`,
+  TSV2_COLUMNS: `${apiUrl}api/tooling-select/columns`,
+  TSV2_LIMITS: `${apiUrl}api/tooling-select/machines`,
+  TSV2_FORMULAS: `${apiUrl}api/tooling-select/machines`,
+  TSV2_TOOLINGS: `${apiUrl}api/tooling-select/machines`,
+  TSV2_FORMULA_ITEM: `${apiUrl}api/tooling-select/formulas`,
+  TSV2_LIMIT_ITEM: `${apiUrl}api/tooling-select/limits`,
+  TSV2_SEARCH_RULES: `${apiUrl}api/tooling-select/machines`,
+  TSV2_RULE_ITEM: `${apiUrl}api/tooling-select/search-rules`,
+  TSV2_PARTNO_MAP: `${apiUrl}api/tooling-select/partno-map`,
+  TSV2_FORMULA_TEST: `${apiUrl}api/tooling-select/formula/test`,
   TSV2_FORMULA_ERRORS: `${apiUrl}api/tooling-select/formula/errors`,
-  TSV2_SEARCH:        `${apiUrl}api/tooling-select/search`,
+  TSV2_SEARCH: `${apiUrl}api/tooling-select/search`,
   MTC_TOOLING_SPEC: `${apiUrl}api/tooling-select/spec`,
   MTC_TOOLING_SPEC_COUNTS: `${apiUrl}api/tooling-select/spec/counts`,
   MTC_TOOLING_SPEC_FACTORY_PREVIEW: `${apiUrl}api/tooling-select/spec/factory-preview`,
   MTC_TOOLING_SPEC_SYNC: `${apiUrl}api/tooling-select/spec/sync`,
   MTC_TOOLING_SPEC_SYNC_NEW: `${apiUrl}api/tooling-select/spec/sync-new`,
   MTC_SDS_V2_SEARCH: `${apiUrl}api/sds/v2/search`,
-  MTC_SDS_V2_PDF:    `${apiUrl}api/sds/v2/pdf`,
+  MTC_SDS_V2_PDF: `${apiUrl}api/sds/v2/pdf`,
   MTC_SDS_V2_PDF_CHROME: `${apiUrl}api/sds/v2-headless/pdf-chrome`,
   MTC_SDS_V2_PDF_CHROME_BLANK: `${apiUrl}api/sds/v2-headless/pdf-chrome/blank`,
   MTC_SDS_V2_ADMIN_MACHINE_TYPES: `${apiUrl}api/sds/v2/admin/machine-types`,
@@ -183,6 +193,11 @@ export const server = {
   UPDATE_USER_THEME: `${apiUrl}api/update-user-theme`,
   UPDATE_USER_PROFILE: `${apiUrl}api/update-user-profile`,
   GET_USER_INFO: `${apiUrl}api/get-user-info`,
+  USER_MANAGEMENT_SCHEMA: `${apiUrl}api/system/user-management/schema`,
+  USER_MANAGEMENT_USERS: `${apiUrl}api/system/user-management/users`,
+  USER_MANAGEMENT_EXTERNAL_USERS: `${apiUrl}api/system/user-management/external-users`,
+  USER_MANAGEMENT_ADD_COLUMN: `${apiUrl}api/system/user-management/schema/add-column`,
+  USER_MANAGEMENT_DROP_COLUMN: `${apiUrl}api/system/user-management/schema/drop-column`,
 
   // -------------------- Kanban --------------------
   KANBAN_USERS: `${apiUrl}api/kanban/users`,
@@ -217,6 +232,8 @@ export const server = {
   ACTIVITY_SESSIONS: `${apiUrl}api/activity/sessions`,
   ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
   ACTIVITY_USER: `${apiUrl}api/activity/user`,
+  ACTIVITY_USERS_PRESENCE: `${apiUrl}api/activity/users-presence`,
+  ACTIVITY_USER_TIMELINE: `${apiUrl}api/activity/user-timeline`,
 
 };
 

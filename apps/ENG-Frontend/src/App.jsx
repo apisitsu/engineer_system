@@ -40,6 +40,7 @@ import EcntDashboard from './components/engineer/process_eng/ecnt/Dashboard';
 import EcntMyTasks from './components/engineer/process_eng/ecnt/MyTasks';
 import EcntHistory from './components/engineer/process_eng/ecnt/History';
 import EcntClose from './components/engineer/process_eng/ecnt/CloseECN';
+import EcntV2Dashboard from './components/engineer/process_eng/ecnt_v2/Dashboard';
 
 import TumbleSystem from './components/engineer/process_eng/tumble/TumbleSystem';
 
@@ -100,7 +101,7 @@ const CamPage = React.lazy(() => import('./components/engineer/mtc_eng/cam/CamPa
 
 // --- Protected Route Component ---
 const ProtectedRoute = ({ allowedRoles }) => {
-  const { isAuthenticated, userDepartment } = useAuthStore();
+  const { isAuthenticated, userDepartment, userRole } = useAuthStore();
   const location = useLocation();
 
   if (!isAuthenticated) {
@@ -112,18 +113,19 @@ const ProtectedRoute = ({ allowedRoles }) => {
     }
   }
 
-  if (allowedRoles && !allowedRoles.includes(userDepartment)) {
-
-    Swal.fire({
-      icon: 'error',
-      title: 'ไม่มีสิทธิ์เข้าถึง',
-      text: `สิทธิ์ของคุณคือ "${userDepartment}" ไม่สามารถเข้าใช้งานหน้านี้ได้`,
-      confirmButtonText: 'ตกลง',
-      timer: 3000
-    });
-    let page = userDepartment === 'ENG' || userDepartment === 'SYSTEM_ENG' ? '/eng/home' : '/home';
-
-    return <Navigate to={page} replace />;
+  if (allowedRoles) {
+    const isAllowed = allowedRoles.includes(userDepartment) || allowedRoles.includes(userRole);
+    if (!isAllowed) {
+      Swal.fire({
+        icon: 'error',
+        title: 'ไม่มีสิทธิ์เข้าถึง',
+        text: `หน้านี้เปิดให้เฉพาะ Admin (AD) เท่านั้น (สิทธิ์ของคุณคือ "${userDepartment || userRole}")`,
+        confirmButtonText: 'ตกลง',
+        timer: 3000
+      });
+      let page = userDepartment === 'ENG' || userDepartment === 'SYSTEM_ENG' || userRole === 'AD' ? '/eng/home' : '/home';
+      return <Navigate to={page} replace />;
+    }
   }
 
   return <Outlet />;
@@ -205,7 +207,7 @@ const AppContent = () => {
             localStorage.removeItem("tokenExpiresAt");
 
             if (!isPublicPath) {
-              // window.location.href = "/sign_in";
+              window.location.href = "/sign_in";
             }
             return;
           }
@@ -317,15 +319,20 @@ const AppContent = () => {
 
                   {/* ------ Process Engineer ------ */}
                   <Route path="/eng/process_eng" element={<HomeProcessEng />} />
-                  <Route path="/eng/process_eng/ecnt" element={<EcntLayout />}>
-                    <Route index element={<Navigate to="dashboard" replace />} />
-                    <Route path="dashboard" element={<EcntDashboard />} />
-                    <Route path="tasks" element={<EcntMyTasks />} />
-                    <Route path="create" element={<Navigate to="dashboard" replace />} />
-                    <Route path="history" element={<EcntHistory />} />
-                    <Route path="close/:id" element={<EcntClose />} />
-                  </Route>
                   <Route path="/eng/process_eng/tumble" element={<TumbleSystem />} />
+
+                  {/* Restrict ECNT (V1) & ECNT V2 to AD only */}
+                  <Route element={<ProtectedRoute allowedRoles={['AD']} />}>
+                    <Route path="/eng/process_eng/ecnt" element={<EcntLayout />}>
+                      <Route index element={<Navigate to="dashboard" replace />} />
+                      <Route path="dashboard" element={<EcntDashboard />} />
+                      <Route path="tasks" element={<EcntMyTasks />} />
+                      <Route path="create" element={<Navigate to="dashboard" replace />} />
+                      <Route path="history" element={<EcntHistory />} />
+                      <Route path="close/:id" element={<EcntClose />} />
+                    </Route>
+                    <Route path="/eng/process_eng/ecnt_v2" element={<EcntV2Dashboard />} />
+                  </Route>
 
                   {/* ------ Materials Engineer ------ */}
                   <Route path="/eng/materials_eng" element={<HomeMaterialsEng />} />

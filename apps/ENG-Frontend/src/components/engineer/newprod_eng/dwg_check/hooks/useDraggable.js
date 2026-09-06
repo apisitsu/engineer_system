@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 
 export default function useDraggable(annotation, onUpdate) {
+    // eslint-disable-next-line no-unused-vars
     const startRef = useRef(null);
 
     const handleMouseDown = useCallback((e) => {

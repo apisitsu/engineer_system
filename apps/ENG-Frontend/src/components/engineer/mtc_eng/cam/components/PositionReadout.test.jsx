@@ -17,6 +17,7 @@ let root;
 
 /** Render the readout with a set of props and hand back the container. */
 async function render(props) {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => {
     root.render(React.createElement(PositionReadout, props));
   });

@@ -41,6 +41,7 @@ let container;
 let root;
 
 async function mount({ setup = true } = {}) {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => {
     root.render(React.createElement(App));
   });
@@ -173,6 +174,7 @@ describe('the sidebar while setting up', () => {
     // unusable by anyone not already fluent in the glyph.
     await mount();
     for (const b of sider().querySelectorAll('button[data-cmd]')) {
+      // eslint-disable-next-line jest/valid-expect
       expect(b.getAttribute('aria-label'), b.dataset.cmd).toBeTruthy();
     }
   });
@@ -410,6 +412,7 @@ describe('the program figures float over the viewport', () => {
     await loadProgram();
     const text = panel().textContent;
     for (const label of ['Cycle time', 'Cutting length', 'Rapid', 'Segments']) {
+      // eslint-disable-next-line jest/valid-expect
       expect(text, label).toContain(label);
     }
   });
@@ -549,6 +552,7 @@ describe('the Material removal panel', () => {
     for (const id of ['endmill', 'shoulder', 'face', 'slot', 'ball', 'chamfer']) {
       expect(
         q(`button[data-cutter="${id}"][data-cutter-scope="fallback"]`),
+        // eslint-disable-next-line jest/valid-expect
         id,
       ).not.toBeNull();
     }

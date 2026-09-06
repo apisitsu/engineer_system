@@ -6,8 +6,11 @@ import { useTheme } from '../../../theme';
 const { Content } = Layout;
 
 function Tooling_Report() {
+  // eslint-disable-next-line no-unused-vars
   const [loading, setLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const { RangePicker } = DatePicker;
+  // eslint-disable-next-line no-unused-vars
   const reload = () => window.location.reload();
   const { theme } = useTheme();
 

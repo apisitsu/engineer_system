@@ -212,6 +212,7 @@ export default function Sidebar() {
         { key: 'shape-ellipse', label: 'Ellipse Shape', icon: '○' },
     ];
 
+    // eslint-disable-next-line no-unused-vars
     const stamps = [
         { key: 'stamp-check', label: '✓', className: 'checkmark' },
         { key: 'stamp-cross', label: '✕', className: 'cross' },

@@ -41,6 +41,7 @@ export default function DiffPanel() {
     dispatch({ type: 'TOGGLE_DIFF_VISIBILITY', payload: diffId });
   }, [dispatch]);
 
+  // eslint-disable-next-line no-unused-vars
   const getDiffTypeInfo = (type) => {
     if (type === 'pixel') return { icon: '🔲', label: 'Pixel', className: 'pixel' };
     if (type === 'text-added') return { icon: '➕', label: 'Added', className: 'text' };

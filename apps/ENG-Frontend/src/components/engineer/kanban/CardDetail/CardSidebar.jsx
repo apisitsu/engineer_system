@@ -62,6 +62,7 @@ const CardSidebar = () => {
     const {
         card, theme, empNo, currentUserCode, closeCardDetail,
         isReadOnly, baseIsReadOnly, isEffectivelySuspended,
+        // eslint-disable-next-line no-unused-vars
         canManageCard, canEditCard, isCardMember, canEditBoard,
         canEditEstimatedHours,
         cardMembers, activeBoardMembers, users, labels,

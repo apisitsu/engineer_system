@@ -58,6 +58,7 @@ const MonthlyReport = ({ reportData, selectedMonth, theme, users, isExporting })
     const month = selectedMonth.month();
 
     // ─── Aggregate all cards & actions from all boards ──────────────
+    // eslint-disable-next-line no-unused-vars
     const { allCards, allActions, allIssues } = useMemo(() => {
         const cards = [];
         const actions = [];

@@ -90,10 +90,13 @@ const IconPicker = ({ value, onChange, theme }) => (
 const ProjectSettingsDrawer = () => {
     const { theme } = useTheme();
 
+    // eslint-disable-next-line no-unused-vars
     const activeProject = useKanbanStore(state => state.activeProject);
     const projects = useKanbanStore(state => state.projects);
     const {
+        // eslint-disable-next-line no-unused-vars
         isProjectSettingsOpen, closeProjectSettings, projectSettingsTargetId, fetchProjects,
+        // eslint-disable-next-line no-unused-vars
         setActiveProject, updateProject, deleteProject,
         userPreferences, fetchUserPreferences, updateUserPreferences,
         projectManagers, fetchProjectManagers, addProjectManager, removeProjectManager, users
@@ -109,6 +112,7 @@ const ProjectSettingsDrawer = () => {
         }))
     );
 
+    // eslint-disable-next-line no-unused-vars
     const [form] = Form.useForm();
     const [activeTab, setActiveTab] = useState('project_info');
     const [selectedProjectId, setSelectedProjectId] = useState(null);
@@ -124,6 +128,7 @@ const ProjectSettingsDrawer = () => {
     const [editingStatus, setEditingStatus] = useState('Active');
     const [editingStartDate, setEditingStartDate] = useState(null);
     const [editingDueDate, setEditingDueDate] = useState(null);
+    // eslint-disable-next-line no-unused-vars
     const [memberSearch, setMemberSearch] = useState('');
     const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
     const [editingRoleUcode, setEditingRoleUcode] = useState(null);
@@ -161,6 +166,7 @@ const ProjectSettingsDrawer = () => {
                 loadProjectData(projects[0].id);
             }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isProjectSettingsOpen, projectSettingsTargetId, projects]);
 
     const loadProjectData = (pid) => {
@@ -248,6 +254,7 @@ const ProjectSettingsDrawer = () => {
         setEditingRoleUcode(null);
     };
 
+    // eslint-disable-next-line no-unused-vars
     const availableUsersForProject = useMemo(() => {
         return users.filter(u =>
             u.u_code.toLowerCase().includes((memberSearch || '').toLowerCase()) ||

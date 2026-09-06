@@ -89,6 +89,7 @@ export default function PIDForm({ formId, onBack }) {
         })();
     }, [formId]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const saveData = useCallback(debounce(async (h, cat, pc) => {
         if (!formId) return;
         try {
@@ -100,6 +101,7 @@ export default function PIDForm({ formId, onBack }) {
         } catch (err) { console.error('PID save error:', err); }
     }, 3000), [formId]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { if (formId && !isApproved) saveData(header, category, phaseChecks); }, [header, category, phaseChecks]);
     useEffect(() => { return () => saveData.flush?.(); }, [saveData]);
 

@@ -8,6 +8,14 @@ import ToolPreview from './canvas/ToolPreview';
 import useFabricTools from './canvas/hooks/useFabricTools';
 import useHighlightTools from './canvas/hooks/useHighlightTools';
 
+// Ensure Fabric v6 serializes custom metadata and multi-line wrapping data
+if (fabric.FabricObject && !fabric.FabricObject.customProperties?.includes('textLines')) {
+    fabric.FabricObject.customProperties = Array.from(new Set([
+        ...(fabric.FabricObject.customProperties || []),
+        'customData', 'textLines', 'id'
+    ]));
+}
+
 /**
  * EditorCanvas — Multi-Layer rendering engine.
  *
@@ -188,7 +196,8 @@ const EditorCanvas = ({
         });
 
         // ── Modification tracking for undo ──
-        canvas.on('object:modified', () => {
+        // Capture snapshot before transform (drag/scale/rotate) starts so Undo restores the prior position
+        canvas.on('before:transform', () => {
             if (pushHistory) pushHistory(pageNum);
         });
 
@@ -451,6 +460,7 @@ const EditorCanvas = ({
             case 'maskReplace':
             case 'sticky':
             case 'stamp':
+            case 'addImage':
             case 'stampCheckmark':
             case 'stampCross':
             case 'stampCircle':

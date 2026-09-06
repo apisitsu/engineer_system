@@ -5,12 +5,13 @@ import { CiMemoPad } from "react-icons/ci";
 import { useKanbanStore } from '../store/kanbanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../../../theme';
-import SdsSignBadge from './SdsSignBadge';
+import SdsSignBadge from './SdsSignBadge.jsx';
 
 const { Text } = Typography;
 
 // ─── KanbanCard Component ──────────────────────────────────────────
 const KanbanCard = ({ card, isOverlay }) => {
+    // eslint-disable-next-line no-unused-vars
     const { openCardDetail, labels: boardLabels, users, lists, cards } = useKanbanStore(
         useShallow(state => ({
             openCardDetail: state.openCardDetail,

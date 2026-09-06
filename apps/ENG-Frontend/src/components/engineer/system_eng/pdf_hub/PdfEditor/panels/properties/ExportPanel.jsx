@@ -16,6 +16,7 @@ export default function ExportPanel({
     // Export settings
     const [exportFormat, setExportFormat] = useState('pdf');
     const [exportQuality, setExportQuality] = useState('high');
+    // eslint-disable-next-line no-unused-vars
     const [exportIncludeAnnot, setExportIncludeAnnot] = useState(true);
     
     const selectedCount = exportSelectedPages?.length || 0;

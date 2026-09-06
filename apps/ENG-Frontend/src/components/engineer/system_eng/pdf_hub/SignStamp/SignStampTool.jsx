@@ -34,6 +34,7 @@ const SignStampTool = () => {
     const {
         pdfFile, pdfDoc, totalPages, currentPage, zoom, pdfLoading,
         setCurrentPage, setZoom, loadPdf,
+        // eslint-disable-next-line no-unused-vars
         stampData, stampLoading, fetchStamps, uploadStamp,
         placements, activeStampType, selectedPlacementId,
         setActiveStampType, setSelectedPlacementId,

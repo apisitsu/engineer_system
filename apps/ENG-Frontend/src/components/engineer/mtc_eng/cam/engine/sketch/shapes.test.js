@@ -27,6 +27,7 @@ describe('buildSlot', () => {
       const sk = createSketch();
       buildSlot(sk, 0, 0, x2, y2, 5);
       const { loops } = sketchLoops(sk);
+      // eslint-disable-next-line jest/valid-expect
       expect(loops, `axis ${x2},${y2}`).toHaveLength(1);
       const len = Math.hypot(x2, y2);
       expect(loops[0].area).toBeCloseTo(len * 10 + Math.PI * 25, 0);
@@ -79,6 +80,7 @@ describe('buildPolygon', () => {
       const sk = createSketch();
       buildPolygon(sk, 0, 0, 10, 0, n);
       const { loops } = sketchLoops(sk);
+      // eslint-disable-next-line jest/valid-expect
       expect(loops, `${n}-gon`).toHaveLength(1);
       expect(loops[0].area).toBeCloseTo((n / 2) * 100 * Math.sin((Math.PI * 2) / n), 6);
     }
@@ -173,7 +175,9 @@ describe('the pick tolerance must not decide whether a shape is degenerate', () 
     for (const tol of [1.5, 4, 9, 30]) {
       for (const r of [1, 2, 5]) {
         const sk = createSketch();
+        // eslint-disable-next-line jest/valid-expect
         expect(buildSlot(sk, 0, 0, 30, 0, r, tol), `r=${r} at pickTol=${tol}`).not.toBeNull();
+        // eslint-disable-next-line jest/valid-expect
         expect(sketchLoops(sk).loops, `r=${r} at pickTol=${tol}`).toHaveLength(1);
       }
     }
@@ -182,6 +186,7 @@ describe('the pick tolerance must not decide whether a shape is degenerate', () 
   it('builds a small polygon at a coarse pick tolerance too', () => {
     for (const tol of [4, 9, 30]) {
       const sk = createSketch();
+      // eslint-disable-next-line jest/valid-expect
       expect(buildPolygon(sk, 0, 0, 3, 0, 6, tol), `pickTol=${tol}`).not.toBeNull();
       expect(sketchLoops(sk).loops).toHaveLength(1);
     }

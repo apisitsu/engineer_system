@@ -11,6 +11,7 @@ import StatusBadge from './components/StatusBadge';
 import ECRDetailModal from './ECRDetailModal';
 
 const { Content } = Layout;
+// eslint-disable-next-line no-unused-vars
 const { Option } = Select;
 
 export default function MyTasks() {
@@ -43,6 +44,7 @@ export default function MyTasks() {
         );
     }, [allData, userName]);
 
+    // eslint-disable-next-line no-unused-vars
     const dashboardStats = useMemo(() => {
         const totalJobs = dataSource.length;
         const onTimeCount = dataSource.filter(item => {

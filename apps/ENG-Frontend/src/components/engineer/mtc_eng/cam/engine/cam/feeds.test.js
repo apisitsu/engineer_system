@@ -15,6 +15,7 @@ describe('library', () => {
   it('every material carries the fields the formulas read', () => {
     for (const m of MATERIALS) {
       for (const k of ['vcMill', 'vcTurn', 'fzBase', 'fnTurn', 'apFactor', 'aeFactor']) {
+        // eslint-disable-next-line jest/valid-expect
         expect(typeof m[k], `${m.id}.${k}`).toBe('number');
         expect(m[k]).toBeGreaterThan(0);
       }

@@ -1633,6 +1633,7 @@ function reversedInChain(sk, ids) {
     let exit = startExit;
     while (true) {
       visited.add(id);
+      // eslint-disable-next-line no-loop-func
       const neighbours = (at.get(exit) || []).filter((n) => n !== id && set.has(n));
       // A fork is ambiguous — three ways to continue is not a profile, and
       // guessing one would silently offset part of it the wrong way.

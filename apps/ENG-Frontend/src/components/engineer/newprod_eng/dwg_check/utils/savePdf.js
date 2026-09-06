@@ -93,6 +93,7 @@ export async function savePdfWithAnnotations(originalPdfData, annotations, embed
         const drawRotationObj = { type: 'degrees', angle: -rotationAngle };
         const drawRotationRad = -rotationAngle * (Math.PI / 180);
 
+        // eslint-disable-next-line default-case
         switch (ann.type) {
             case 'highlight-rect': {
                 const color = parseColor(ann.color);

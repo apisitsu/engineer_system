@@ -30,6 +30,7 @@ describe('formatDuration', () => {
   it('refuses to render nonsense as a time', () => {
     // A program that failed to parse has no times; '0:00' is honest, 'NaN:aN' is not.
     for (const v of [0, -1, NaN, Infinity, undefined, null]) {
+      // eslint-disable-next-line jest/valid-expect
       expect(formatDuration(v), String(v)).toBe('0:00');
     }
   });

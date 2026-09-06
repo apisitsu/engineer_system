@@ -37,6 +37,7 @@ function rectSketch(x0, y0, x1, y1) {
 
 /** Render the docked tree; returns its text. */
 async function open() {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => { root.render(React.createElement(FeatureTree)); });
   return document.body.textContent;
 }

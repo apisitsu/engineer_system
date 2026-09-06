@@ -261,6 +261,7 @@ describe('the kind tables stay coherent', () => {
   it('gives every entity kind a ref count matching its refTypes', () => {
     for (const [kind, spec] of Object.entries(ENTITY_KINDS)) {
       const refTypes = spec.refTypes ?? [];
+      // eslint-disable-next-line jest/valid-expect
       expect(refTypes.length, `${kind} refs`).toBe(spec.refs);
     }
   });
@@ -268,10 +269,13 @@ describe('the kind tables stay coherent', () => {
   it('gives every constraint kind a positive DOF cost and real ref types', () => {
     const known = new Set(Object.keys(ENTITY_KINDS));
     for (const [kind, spec] of Object.entries(CONSTRAINT_KINDS)) {
+      // eslint-disable-next-line jest/valid-expect
       expect(spec.dof, `${kind} dof`).toBeGreaterThan(0);
+      // eslint-disable-next-line jest/valid-expect
       expect(spec.refTypes.length, `${kind} refs`).toBeGreaterThan(0);
       for (const t of spec.refTypes) {
         for (const one of Array.isArray(t) ? t : [t]) {
+          // eslint-disable-next-line jest/valid-expect
           expect(known.has(one), `${kind} references unknown type ${one}`).toBe(true);
         }
       }

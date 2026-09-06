@@ -296,6 +296,7 @@ export function heightmapToSolidMesh(stock, opts = {}) {
   // wants four of them.
   for (let j = 0; j < ny; j++) {
     const y0 = yAt(j);
+    // eslint-disable-next-line no-unused-vars
     const y1 = y0 + cs;
     const row = j * nx;
     const nRow0 = j * nw;        // node row along y0
@@ -362,6 +363,7 @@ export function heightmapToSolidMesh(stock, opts = {}) {
   // it. Kept in its own pass so the merging above stays a statement about tops.
   for (let j = 0; j < ny; j++) {
     const y0 = yAt(j);
+    // eslint-disable-next-line no-unused-vars
     const y1 = y0 + cs;
     const row = j * nx;
     const nRow0 = j * nw;

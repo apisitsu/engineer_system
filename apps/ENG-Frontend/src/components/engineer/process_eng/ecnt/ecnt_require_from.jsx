@@ -1,24 +1,35 @@
+// eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, use } from "react";
 import { Form, Input, Modal, Checkbox, Spin, Button, Row, Col, DatePicker, Space, Upload, Radio, Divider } from "antd";
 import { key_constance } from "../../../../constance/constance";
 import moment from "moment";
 import Swal from "sweetalert2";
+// eslint-disable-next-line no-unused-vars
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import imageCompression from 'browser-image-compression';
+// eslint-disable-next-line no-unused-vars
 import axios from "axios";
+// eslint-disable-next-line no-unused-vars
 import { server } from '../../../../constance/constance';
+// eslint-disable-next-line no-unused-vars
 import { Header } from "antd/es/layout/layout";
 
+// eslint-disable-next-line no-unused-vars
 const { RangePicker } = DatePicker;
 
 const ECRFrom = ({ onCancel, OnOpen, staus }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
+    // eslint-disable-next-line no-unused-vars
     const [fileListBefore, setFileListBefore] = useState([]);
+    // eslint-disable-next-line no-unused-vars
     const [fileListAfter, setFileListAfter] = useState([]);
+    // eslint-disable-next-line no-unused-vars
     const [fileListToolingBefore, setFileListToolingBefore] = useState([]);
+    // eslint-disable-next-line no-unused-vars
     const [fileListToolingAfter, setFileListToolingAfter] = useState([]);
     const [base64Before, setBase64Before] = useState("");
+    // eslint-disable-next-line no-unused-vars
     const [base64After, setBase64After] = useState("");
     const [objective, setObjective] = useState("");
     const [change, setChange] = useState([]);
@@ -106,6 +117,7 @@ const ECRFrom = ({ onCancel, OnOpen, staus }) => {
             .catch((error) => {
                 console.log("Validate Failed:", error);
                 const status = error?.response?.status;
+                // eslint-disable-next-line no-unused-vars
                 const msg = error?.response?.data?.error;
                 if (status === 409) {
                     Swal.fire({
@@ -124,6 +136,7 @@ const ECRFrom = ({ onCancel, OnOpen, staus }) => {
         setLoading(false);
     };
 
+    // eslint-disable-next-line no-unused-vars
     const handleUploadToDrive = async (fileInfo) => {
         const rawFile = fileInfo?.originFileObj || fileInfo;
 

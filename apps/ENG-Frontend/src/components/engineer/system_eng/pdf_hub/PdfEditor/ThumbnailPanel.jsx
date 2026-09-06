@@ -13,10 +13,11 @@ import { CSS } from '@dnd-kit/utilities';
 import * as pdfjsLib from 'pdfjs-dist';
 
 const { Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Dragger } = Upload;
 
 // ── Sortable merge file item with preview ──
-const SortableMergeItem = ({ id, file, preview, onRemove, theme }) => {
+const SortableMergeItem = ({ id, file, preview, pageCount, onRemove, theme }) => {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -43,7 +44,7 @@ const SortableMergeItem = ({ id, file, preview, onRemove, theme }) => {
                     {file.name}
                 </Text>
                 <Text style={{ fontSize: 10, color: theme.colors.textSecondary }}>
-                    {sizeMB} MB {file._pageCount ? `• ${file._pageCount} pages` : ''}
+                    {sizeMB} MB {pageCount ? `• ${pageCount} pages` : ''}
                 </Text>
             </div>
             <Button type="text" size="small" danger onClick={() => onRemove(id)}
@@ -84,6 +85,7 @@ const ThumbnailPanel = ({
 
     // Merge file previews (first page thumbnail of each file)
     const [mergePreviews, setMergePreviews] = useState({});
+    const [filePageCounts, setFilePageCounts] = useState({});
 
     const sensors = useSensors(useSensor(PointerSensor));
 
@@ -145,14 +147,21 @@ const ThumbnailPanel = ({
     useEffect(() => {
         if (store.activeMode !== 'merge') return;
 
+        let cancelled = false;
+
         const generatePreviews = async () => {
             for (const file of mergeFiles) {
+                if (cancelled) break;
                 if (mergePreviews[file.uid]) continue;
+                let doc = null;
                 try {
                     const arrayBuffer = await file.arrayBuffer();
-                    const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                    // Store page count on the file object for display
-                    file._pageCount = doc.numPages;
+                    doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    if (cancelled) {
+                        doc.destroy();
+                        break;
+                    }
+                    setFilePageCounts(prev => ({ ...prev, [file.uid]: doc.numPages }));
                     const page = await doc.getPage(1);
                     const nativeVp = page.getViewport({ scale: 1.0 });
                     const panelW = panelRef.current
@@ -166,14 +175,19 @@ const ThumbnailPanel = ({
                     const ctx = canvas.getContext('2d');
                     await page.render({ canvasContext: ctx, viewport }).promise;
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                    setMergePreviews(prev => ({ ...prev, [file.uid]: dataUrl }));
+                    if (!cancelled) {
+                        setMergePreviews(prev => ({ ...prev, [file.uid]: dataUrl }));
+                    }
                 } catch (err) {
                     console.error(`Preview error for ${file.name}:`, err);
+                } finally {
+                    if (doc) doc.destroy();
                 }
             }
         };
 
         generatePreviews();
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mergeFiles, store.activeMode]);
 
@@ -186,6 +200,7 @@ const ThumbnailPanel = ({
         setMergeFiles((items) => {
             const oldIdx = items.findIndex(i => i.uid === active.id);
             const newIdx = items.findIndex(i => i.uid === over.id);
+            if (oldIdx === -1 || newIdx === -1) return items;
             return arrayMove(items, oldIdx, newIdx);
         });
     };
@@ -193,6 +208,11 @@ const ThumbnailPanel = ({
     const handleMergeFileRemove = (uid) => {
         setMergeFiles(prev => prev.filter(f => f.uid !== uid));
         setMergePreviews(prev => {
+            const next = { ...prev };
+            delete next[uid];
+            return next;
+        });
+        setFilePageCounts(prev => {
             const next = { ...prev };
             delete next[uid];
             return next;
@@ -258,6 +278,7 @@ const ThumbnailPanel = ({
                                             id={file.uid}
                                             file={file}
                                             preview={mergePreviews[file.uid]}
+                                            pageCount={filePageCounts[file.uid]}
                                             onRemove={handleMergeFileRemove}
                                             theme={theme}
                                         />

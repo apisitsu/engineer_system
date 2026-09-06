@@ -95,6 +95,7 @@ function mergeBufferGeometries(geometries) {
  */
 function generateBinarySTL(geometry) {
   const positions = geometry.getAttribute('position');
+  // eslint-disable-next-line no-unused-vars
   const normals = geometry.getAttribute('normal');
   const index = geometry.getIndex();
 

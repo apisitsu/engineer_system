@@ -4,6 +4,7 @@ import { Form, Input, Button, Typography, Layout, Card, Spin } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, SettingFilled, ToolOutlined, BuildOutlined, ExperimentOutlined } from '@ant-design/icons';
 import axios from "axios";
 import Swal from "sweetalert2";
+// eslint-disable-next-line no-unused-vars
 import { server, key_constance } from "../../../constance/constance";
 import { useTheme } from '../../../theme';
 import '../../common/ThemeSwitcher';
@@ -42,6 +43,7 @@ function Sign_in() {
 
     // Trigger animation
     setTimeout(() => setIsVisible(true), 100);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveSession = (data, empno) => {
@@ -85,8 +87,6 @@ function Sign_in() {
       });
 
       if (res.data.result === "true") {
-        saveSession(res.data, values.empno);
-        
         // Get the page to redirect to (from state or default based on department)
         const from = location.state?.from?.pathname || null;
         const isEngineer = res.data.userInfo?.u_department === "ENG" || res.data.userInfo?.u_department === "AD" || res.data.userInfo?.u_department === "SYSTEM_ENG" || res.data.userInfo?.u_department === "QA";
@@ -95,6 +95,8 @@ function Sign_in() {
         const destination = from || defaultPath;
         
         await Toast.fire({ icon: "success", title: "เข้าสู่ระบบสำเร็จ" });
+        
+        saveSession(res.data, values.empno);
         navigate(destination, { replace: true });
       } else {
         Toast.fire({

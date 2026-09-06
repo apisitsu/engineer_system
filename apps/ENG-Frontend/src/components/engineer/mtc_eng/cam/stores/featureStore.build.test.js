@@ -212,6 +212,7 @@ describe('sketch → solid — what it refuses, and what it says', () => {
     addLine(sk, sk.entities.keys().next().value + 1, stray); // off an existing corner
     sketch()._bump();
     const res = await build({ depth: 5 });
+    // eslint-disable-next-line jest/no-conditional-expect
     if (res === null) expect(sketch().error).toMatch(/ambiguous|not closed|Draw a closed/i);
   });
 

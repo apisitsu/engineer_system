@@ -90,6 +90,7 @@ const ITEMS = [...MINE, THEIRS];
 
 /** Open the panel and hand back the portal-rendered body. */
 async function openPanel(props = {}) {
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => {
     root.render(React.createElement(LibraryPanel, {
       trigger: React.createElement('button', { 'data-cmd': 'openLibrary' }, 'Library'),
@@ -119,6 +120,7 @@ afterEach(async () => {
 
 describe('LibraryPanel — what is on screen', () => {
   it('stays shut until the trigger is pressed', async () => {
+    // eslint-disable-next-line testing-library/no-unnecessary-act
     await act(async () => {
       root.render(React.createElement(LibraryPanel, {
         trigger: React.createElement('button', { 'data-cmd': 'openLibrary' }, 'Library'),
@@ -219,6 +221,7 @@ async function beginSave(body, kind) {
     body.querySelector(`[data-library-save="${kind}"]`).click();
   });
   // The suggested name is fetched, so it arrives a microtask after the click.
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => {});
   return body;
 }

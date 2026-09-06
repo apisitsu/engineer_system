@@ -16,6 +16,7 @@ import { CiMemoPad } from 'react-icons/ci';
 import { getSectionCardStyle, getSandboxStyle, SandboxDot, SectionTitle, SectionLabel, StepRow, Callout } from './guideStyles';
 import { MOCK_CARDS, MOCK_USERS, MOCK_LABELS, MOCK_TASK_LISTS, MOCK_COMMENTS, MOCK_ATTACHMENTS, MOCK_ISSUES } from './mockData';
 
+// eslint-disable-next-line no-unused-vars
 const { Text, Paragraph } = Typography;
 
 // Sidebar button mock
@@ -51,11 +52,15 @@ const CardGuide = ({ theme }) => {
     const [suspendReason, setSuspendReason] = useState('');
     const [isPrivate, setIsPrivate] = useState(false);
     const [isJoined, setIsJoined] = useState(true);
+    // eslint-disable-next-line no-unused-vars
     const [newTaskName, setNewTaskName] = useState('');
     const [newComment, setNewComment] = useState('');
     const [comments, setComments] = useState(MOCK_COMMENTS.map(c => ({ ...c })));
+    // eslint-disable-next-line no-unused-vars
     const [memo, setMemo] = useState(card.memo || '');
+    // eslint-disable-next-line no-unused-vars
     const [cardLabels, setCardLabels] = useState([1]);
+    // eslint-disable-next-line no-unused-vars
     const [estHours, setEstHours] = useState(card.estimated_hours || 0);
 
     const toggleTask = (tlId, tId) => {

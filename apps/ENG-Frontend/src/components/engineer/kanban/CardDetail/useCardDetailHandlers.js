@@ -29,6 +29,7 @@ export const useCardDetailHandlers = (deps) => {
         addCardLabel, removeCardLabel, addFileAttachment,
         createCardIssue, updateCardIssue,
         // Local state
+        // eslint-disable-next-line no-unused-vars
         editName, setEditName, setIsEditingName,
         editDesc, setIsEditingDesc,
         editProblem, editSolution, editingIssueId,

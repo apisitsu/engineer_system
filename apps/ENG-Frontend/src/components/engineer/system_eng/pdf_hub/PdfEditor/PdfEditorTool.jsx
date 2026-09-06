@@ -57,7 +57,9 @@ const LazyPageWrapper = ({ children, estimatedHeight }) => {
     );
 };
 
+// eslint-disable-next-line no-unused-vars
 const { Title, Text } = Typography;
+// eslint-disable-next-line no-unused-vars
 const { Dragger } = Upload;
 
 
@@ -77,10 +79,12 @@ const PdfEditorTool = () => {
     const {
         pdfFile, pdfDoc, pdfBytes, totalPages, currentPage, zoom,
         pdfLoading, loadPdf, loadPdfFromBytes, closePdf,
+        // eslint-disable-next-line no-unused-vars
         goToPage, nextPage, prevPage, zoomIn, zoomOut, zoomTo, setZoom,
         pageAnnotations, setPageAnnotations, saveCurrentPageState,
         getAnnotationCount, totalAnnotations,
         pageHighlights, setPageHighlights,
+        // eslint-disable-next-line no-unused-vars
         pushHistory, undo, redo, canUndo, canRedo, historyVersion,
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
@@ -120,6 +124,7 @@ const PdfEditorTool = () => {
     // ── Overlay/Compare ──
     const [overlayPdfDoc, setOverlayPdfDoc] = useState(null);
     const [overlayFile, setOverlayFile] = useState(null);
+    const [mergeRotations, setMergeRotations] = useState({});
 
     // ── Continuous Scroll Observer ──
     useEffect(() => {
@@ -361,7 +366,11 @@ const PdfEditorTool = () => {
         const finalAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
             if (fc) {
-                const json = fc.toJSON(['customData', 'textLines']);
+                if (fc.discardActiveObject) {
+                    fc.discardActiveObject();
+                    fc.renderAll?.();
+                }
+                const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 finalAnnotations[pageNumStr] = json;
@@ -434,7 +443,11 @@ const PdfEditorTool = () => {
             // Include all active canvases
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData', 'textLines']);
+                    if (fc.discardActiveObject) {
+                        fc.discardActiveObject();
+                        fc.renderAll?.();
+                    }
+                    const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     finalAnnotations[pageNumStr] = json;
@@ -458,7 +471,7 @@ const PdfEditorTool = () => {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
-    }, [pdfBytes, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
+    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -470,9 +483,10 @@ const PdfEditorTool = () => {
         }
         setMergeLoading(true);
         try {
-            const mergedBytes = await mergePdfFiles(mergeFiles);
+            const mergedBytes = await mergePdfFiles(mergeFiles, mergeRotations);
             await loadPdfFromBytes(mergedBytes, `merged_${Date.now()}.pdf`);
             setMergeFiles([]);
+            setMergeRotations({});
             store.setActiveMode('view');
             logPdfUsage('merge');
             message.success('PDFs merged! You can now annotate, sign, or export.');
@@ -482,7 +496,7 @@ const PdfEditorTool = () => {
         } finally {
             setMergeLoading(false);
         }
-    }, [mergeFiles, loadPdfFromBytes, setMergeFiles, store, logPdfUsage]);
+    }, [mergeFiles, mergeRotations, loadPdfFromBytes, setMergeFiles, store, logPdfUsage]);
 
     const handleMergeFilesAdd = useCallback((files) => {
         setMergeFiles(prev => {
@@ -510,7 +524,11 @@ const PdfEditorTool = () => {
             const allAnnotations = { ...pageAnnotations };
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc) {
-                    const json = fc.toJSON(['customData', 'textLines']);
+                    if (fc.discardActiveObject) {
+                        fc.discardActiveObject();
+                        fc.renderAll?.();
+                    }
+                    const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     allAnnotations[pageNumStr] = json;
@@ -570,6 +588,7 @@ const PdfEditorTool = () => {
         } finally {
             setExportLoading(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pdfDoc, exportSelectedPages, pageAnnotations, fabricCanvasRefs, pdfFile, saveCurrentPageState, setExportedImages, logPdfUsage]);
 
     // ══════════════════════════════════════════════════════════════════
@@ -851,7 +870,7 @@ const PdfEditorTool = () => {
                         style={{ background: theme.colors.background }}
                     >
                         {store.activeMode === 'merge' ? (
-                            <MergePreview mergeFiles={mergeFiles} />
+                            <MergePreview mergeFiles={mergeFiles} onRotationsChange={setMergeRotations} />
                         ) : pdfDoc ? (
                             store.viewMode === 'continuous' ? (
                                 <div className="pdf-ws-continuous-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px 0', minWidth: 'fit-content', margin: '0 auto' }}>

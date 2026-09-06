@@ -49,7 +49,7 @@ exports.getUpdateLogs = async (req, res) => {
 
 exports.triggerUpdate = async (req, res) => {
     try {
-        const scriptPath = path.resolve(__dirname, '../../../../auto_update_and_run.cmd');
+        const scriptPath = path.resolve(__dirname, '../../../../auto_update_and_run.ps1');
         const cwdPath = path.resolve(__dirname, '../../../../');
 
         // Validate script exists
@@ -74,12 +74,10 @@ exports.triggerUpdate = async (req, res) => {
             console.error('[UpdateLog] Failed to pre-log trigger:', logErr.message);
         }
 
-        // Spawn the batch file in a fully detached window.
-        // Uses PowerShell Start-Process to create a new independent window 
-        // that survives when the batch file kills port 2005 (this Node.js server).
-        const child = spawn('powershell.exe', [
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-            `Start-Process -FilePath '${scriptPath}' -WorkingDirectory '${cwdPath}'`
+        // Uses cmd.exe /c start to reliably create a new independent window 
+        // that survives when the script kills port 2005 (this Node.js server).
+        const child = spawn('cmd.exe', [
+            '/c', 'start', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath
         ], {
             detached: true,
             stdio: 'ignore',
@@ -149,5 +147,20 @@ exports.checkUpdates = async (req, res) => {
     } catch (err) {
         console.error('[ERROR] Error checking updates:', err);
         res.status(500).json({ success: false, message: 'Failed to check updates' });
+    }
+};
+
+exports.getUpdateProgress = async (req, res) => {
+    try {
+        const logPath = path.resolve(__dirname, '../../../../update_progress_live.log');
+        if (fs.existsSync(logPath)) {
+            const content = fs.readFileSync(logPath, 'utf8');
+            res.json({ success: true, log: content });
+        } else {
+            res.json({ success: true, log: 'Waiting for log file to be created...' });
+        }
+    } catch (err) {
+        console.error('[ERROR] Error reading update log:', err);
+        res.status(500).json({ success: false, message: 'Failed to read update log' });
     }
 };

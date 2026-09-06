@@ -22,6 +22,7 @@ const PdfCanvas = ({
     const { theme } = useTheme();
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
+    const renderTaskRef = useRef(null);
     const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
     const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
     const [dragState, setDragState] = useState(null); // { id, startX, startY, offsetX, offsetY }
@@ -34,10 +35,18 @@ const PdfCanvas = ({
 
         const renderPage = async () => {
             try {
+                if (renderTaskRef.current) {
+                    renderTaskRef.current.cancel();
+                    renderTaskRef.current = null;
+                }
+
                 const page = await pdfDoc.getPage(currentPage);
+                if (cancelled) return;
+
                 const viewport = page.getViewport({ scale: zoom * 1.5 }); // Higher render for sharpness
 
                 const canvas = canvasRef.current;
+                if (!canvas) return;
                 const ctx = canvas.getContext('2d');
 
                 canvas.width = viewport.width;
@@ -57,14 +66,23 @@ const PdfCanvas = ({
                     setPageSize({ width: baseViewport.width, height: baseViewport.height });
                 }
 
-                await page.render({ canvasContext: ctx, viewport }).promise;
+                const renderTask = page.render({ canvasContext: ctx, viewport });
+                renderTaskRef.current = renderTask;
+                await renderTask.promise;
             } catch (err) {
-                if (!cancelled) console.error('Page render error:', err);
+                if (!cancelled && err?.name !== 'RenderingCancelledException') {
+                    console.error('Page render error:', err);
+                }
             }
         };
 
         renderPage();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            if (renderTaskRef.current) {
+                renderTaskRef.current.cancel();
+            }
+        };
     }, [pdfDoc, currentPage, zoom]);
 
     // ── Compute stamp display size in CSS pixels ──
@@ -98,6 +116,7 @@ const PdfCanvas = ({
         e.stopPropagation();
         onPlacementSelect(placementId);
 
+        // eslint-disable-next-line no-unused-vars
         const rect = containerRef.current.getBoundingClientRect();
         const placement = placements.find(p => p.id === placementId);
         if (!placement) return;
@@ -127,16 +146,20 @@ const PdfCanvas = ({
 
     const handleMouseUp = useCallback((e) => {
         if (!dragState) return;
+        if (!canvasSize.width || !canvasSize.height) {
+            setDragState(null);
+            return;
+        }
 
         const dx = e.clientX - dragState.startX;
         const dy = e.clientY - dragState.startY;
 
-        const newX = dragState.origX + dx;
-        const newY = dragState.origY + dy;
+        const newX = Math.max(0, Math.min(canvasSize.width, dragState.origX + dx));
+        const newY = Math.max(0, Math.min(canvasSize.height, dragState.origY + dy));
 
         onPlacementDragEnd(dragState.id, newX / canvasSize.width, newY / canvasSize.height);
         setDragState(null);
-    }, [dragState, onPlacementDragEnd]);
+    }, [dragState, canvasSize, onPlacementDragEnd]);
 
     useEffect(() => {
         if (dragState) {
