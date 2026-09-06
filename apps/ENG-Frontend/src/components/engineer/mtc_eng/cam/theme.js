@@ -79,6 +79,7 @@ export const CAD = {
   skTangent: '#0f9d58',
   skSnap: '#c026d3',
   skIntersect: '#ca8a04',  // snap to where two curves cross
+  skQuadrant: '#7c3aed',   // snap to a circle/arc quadrant (top/bottom/left/right)
   skPreview: '#c2410c',    // rubber band while drawing
 };
 

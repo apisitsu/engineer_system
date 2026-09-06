@@ -35,6 +35,7 @@ const PREVIEW = CAD.skPreview; // amber rubber-band while drawing
 const SNAP_COLOR = CAD.skSnap; // magenta snap indicator (vertex / rim)
 const TANGENT_COLOR = CAD.skTangent; // green — tangent snap indicator
 const INTERSECT_COLOR = CAD.skIntersect; // gold — two curves crossing
+const QUADRANT_COLOR = CAD.skQuadrant; // violet — circle/arc quadrant (high point)
 const AXIS_COLOR = CAD.skAxis; // cyan — angle-lock guide axis
 
 // Unit circle in the XY plane (local coords), for the screen-scaled snap ring.
@@ -582,30 +583,32 @@ export default function SketchLayer() {
 
       {/* Snap indicator: a constant-screen-size ring on the point a click will
           snap to. Magenta for a vertex / rim landing; green for a tangent target
-          (drawing a line); gold for two curves crossing — each with a small tag
-          so it's unmistakable. */}
-      {(drawing || picking) && snap && (
-        <>
-          <ScreenRing
-            x={snap.x}
-            y={snap.y}
-            color={snap.tangent ? TANGENT_COLOR : snap.intersection ? INTERSECT_COLOR : SNAP_COLOR}
-          />
-          {(snap.tangent || snap.intersection) && (
-            <Html position={[snap.x, snap.y, Z]} zIndexRange={[3, 0]}>
-              <div style={{
-                color: CAD.surface,
-                background: snap.tangent ? TANGENT_COLOR : INTERSECT_COLOR,
-                borderRadius: 4,
-                font: '600 10px monospace', padding: '0 4px', whiteSpace: 'nowrap',
-                userSelect: 'none', pointerEvents: 'none', transform: 'translate(10px, 6px)',
-              }}>
-                {snap.tangent ? 'Tangent' : 'Intersection'}
-              </div>
-            </Html>
-          )}
-        </>
-      )}
+          (drawing a line); gold for two curves crossing; violet for a circle
+          quadrant — each with a small tag so it's unmistakable. */}
+      {(drawing || picking) && snap && (() => {
+        const kind = snap.tangent ? 'Tangent'
+          : snap.intersection ? 'Intersection'
+            : snap.quadrant ? 'Quadrant' : null;
+        const color = snap.tangent ? TANGENT_COLOR
+          : snap.intersection ? INTERSECT_COLOR
+            : snap.quadrant ? QUADRANT_COLOR : SNAP_COLOR;
+        return (
+          <>
+            <ScreenRing x={snap.x} y={snap.y} color={color} />
+            {kind && (
+              <Html position={[snap.x, snap.y, Z]} zIndexRange={[3, 0]}>
+                <div style={{
+                  color: CAD.surface, background: color, borderRadius: 4,
+                  font: '600 10px monospace', padding: '0 4px', whiteSpace: 'nowrap',
+                  userSelect: 'none', pointerEvents: 'none', transform: 'translate(10px, 6px)',
+                }}>
+                  {kind}
+                </div>
+              </Html>
+            )}
+          </>
+        );
+      })()}
 
       {lines.map((l) => {
         const isBase = l.id === angleBase;

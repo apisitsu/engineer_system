@@ -24,7 +24,7 @@ import {
   filletCircleCircle as filletCircleCircleEdit,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
-  nearestIntersection, entitiesInBox,
+  nearestIntersection, nearestQuadrant, entitiesInBox,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
@@ -418,6 +418,17 @@ export const useSketchStore = create((set, get) => ({
       const xn = nearestIntersection(sk, x, y, tol);
       if (xn) snap = { x: xn.x, y: xn.y, intersection: true, of: xn.ids };
     }
+    if (!snap && placing) {
+      // A circle/arc quadrant (top/bottom/left/right on the axes) — the "high
+      // points". More specific than a plain rim landing, so it comes first.
+      const q = nearestQuadrant(sk, x, y, tol);
+      if (q) {
+        snap = {
+          x: q.x, y: q.y, quadrant: true, onCurve: q.id, curveType: q.curveType,
+          quadCenter: q.center, quadAxis: q.axis,
+        };
+      }
+    }
     if (!snap) {
       const rim = nearestRimPoint(sk, x, y, tol);
       if (rim) snap = { x: rim.x, y: rim.y, onCurve: rim.id, curveType: rim.type };
@@ -468,6 +479,18 @@ export const useSketchStore = create((set, get) => ({
     if (xn) {
       const id = addPoint(sk, xn.x, xn.y);
       for (const entId of xn.ids) pinPointOn(sk, id, entId);
+      return id;
+    }
+    // A circle/arc quadrant: place it on the rim and lock it to the quadrant with
+    // a horizontal / vertical relation to the centre, so it stays a "high point"
+    // through solves.
+    const q = nearestQuadrant(sk, x, y, tol);
+    if (q) {
+      const id = addPoint(sk, q.x, q.y);
+      pinPointOn(sk, id, q.id);
+      try {
+        addConstraint(sk, q.axis === 'v' ? 'vertical' : 'horizontal', [id, q.center]);
+      } catch { /* a redundant relation is fine — the point is already placed */ }
       return id;
     }
     const rim = nearestRimPoint(sk, x, y, tol);
@@ -571,6 +594,11 @@ export const useSketchStore = create((set, get) => ({
           tangentKind = { kind: snap.curveType === 'arc' ? 'tangentArc' : 'tangent', curve: snap.tangentOf };
         } else if (snap?.id != null) {
           p = snap.id;
+        } else if (snap?.quadrant) {
+          // A quadrant needs its horizontal/vertical-to-centre lock too, which
+          // only `_pointAt` adds — so route it there rather than the plain
+          // on-curve branch below.
+          p = get()._pointAt(x, y);
         } else if (snap?.onCurve != null) {
           p = addPoint(sk, snap.x, snap.y);
           const onKind = snap.curveType === 'arc' ? 'pointOnArc' : 'pointOnCircle';

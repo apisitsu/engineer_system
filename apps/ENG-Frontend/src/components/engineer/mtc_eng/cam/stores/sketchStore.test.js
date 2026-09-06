@@ -512,6 +512,40 @@ describe('intersection snap (hover + click)', () => {
   });
 });
 
+describe('quadrant snap (circle high points)', () => {
+  const withCircle = () => {
+    const sk = createSketch();
+    const ctr = addPoint(sk, 5, 5);
+    const circle = addCircle(sk, ctr, 10); // right quadrant at (15, 5)
+    useSketchStore.setState({
+      sk, tool: 'point', pickTol: 1.5, snap: null, past: [], future: [],
+    });
+    return { sk, ctr, circle };
+  };
+
+  it('reports a violet quadrant snap near a circle high point', () => {
+    withCircle();
+    useSketchStore.getState().hover(14.7, 5.2);
+    const { snap } = useSketchStore.getState();
+    expect(snap.quadrant).toBe(true);
+    expect(near(snap.x, 15) && near(snap.y, 5)).toBe(true);
+    expect(snap.quadAxis).toBe('h');
+  });
+
+  it('a click there pins the point on the circle and level with its centre', () => {
+    const { sk, ctr, circle } = withCircle();
+    useSketchStore.getState().clickAt(14.7, 5.2);
+    const placed = [...sk.entities.values()].filter((e) => e.type === 'point').pop();
+    expect(near(placed.x, 15) && near(placed.y, 5)).toBe(true);
+    const kinds = sk.constraints.filter((c) => c.refs.includes(placed.id)).map((c) => c.kind).sort();
+    expect(kinds).toEqual(['horizontal', 'pointOnCircle']); // right quadrant → horizontal to centre
+    const hz = sk.constraints.find((c) => c.kind === 'horizontal' && c.refs.includes(placed.id));
+    expect(hz.refs).toContain(ctr);
+    const on = sk.constraints.find((c) => c.kind === 'pointOnCircle');
+    expect(on.refs).toContain(circle);
+  });
+});
+
 describe('marquee (box) selection', () => {
   const scene = () => {
     const sk = createSketch();

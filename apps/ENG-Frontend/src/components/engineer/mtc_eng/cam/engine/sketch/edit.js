@@ -1311,6 +1311,41 @@ export function nearestIntersection(sk, x, y, tol, skipId = null) {
   return best ? { x: best.x, y: best.y, ids: best.ids } : null;
 }
 
+/**
+ * The nearest **quadrant** point of a circle or arc to (x, y), within `tol`, or
+ * null. Quadrants are the four cardinal points on the sketch axes — top, bottom,
+ * left, right — the "high points" a machinist works to. An arc reports only the
+ * quadrants that fall inside its swept span.
+ *
+ * `axis` is `'v'` for the top/bottom pair (a point that sits on the centre's
+ * vertical) and `'h'` for left/right, so the caller can pin the point there with
+ * a vertical / horizontal relation to the centre.
+ */
+export function nearestQuadrant(sk, x, y, tol, skipId = null) {
+  let best = null;
+  for (const e of sk.entities.values()) {
+    if ((e.type !== 'circle' && e.type !== 'arc') || e.id === skipId) continue;
+    const c = sk.entities.get(e.center);
+    if (!c) continue;
+    const quads = [
+      { x: c.x + e.r, y: c.y, axis: 'h' },
+      { x: c.x - e.r, y: c.y, axis: 'h' },
+      { x: c.x, y: c.y + e.r, axis: 'v' },
+      { x: c.x, y: c.y - e.r, axis: 'v' },
+    ];
+    for (const q of quads) {
+      if (e.type === 'arc' && !arcSpanContains(sk, e, q.x, q.y)) continue;
+      const d = Math.hypot(q.x - x, q.y - y);
+      if (d <= tol && (!best || d < best.d)) {
+        best = { x: q.x, y: q.y, id: e.id, center: e.center, axis: q.axis, curveType: e.type, d };
+      }
+    }
+  }
+  return best
+    ? { x: best.x, y: best.y, id: best.id, center: best.center, axis: best.axis, curveType: best.curveType }
+    : null;
+}
+
 /** Crossing angles of `pts` about (cx, cy), sorted CCW and de-duplicated. */
 function sortedCutAngles(pts, cx, cy) {
   const angs = pts

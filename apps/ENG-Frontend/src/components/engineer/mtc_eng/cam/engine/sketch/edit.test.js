@@ -8,6 +8,7 @@ import {
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
   filletCircleCircle, entityIntersections, nearestIntersection, entitiesInBox,
+  nearestQuadrant,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -139,6 +140,39 @@ describe('entitiesInBox — marquee selection', () => {
     const sk = createSketch();
     const l = addLine(sk, addPoint(sk, 2, 2), addPoint(sk, 4, 4));
     expect(box(sk, 10, 10, 0, 0, false)).toContain(l);
+  });
+});
+
+describe('nearestQuadrant — a circle/arc high point', () => {
+  it('snaps to the right quadrant of a circle, tagged as a horizontal one', () => {
+    const sk = createSketch();
+    const circle = addCircle(sk, addPoint(sk, 5, 5), 10); // quadrants at (15,5) (−5,5) (5,15) (5,−5)
+    const q = nearestQuadrant(sk, 14.6, 5.3, 1.5);
+    expect(near(q.x, 15) && near(q.y, 5)).toBe(true);
+    expect(q.axis).toBe('h');
+    expect(q.id).toBe(circle);
+  });
+
+  it('snaps to the top quadrant, tagged vertical', () => {
+    const sk = createSketch();
+    addCircle(sk, addPoint(sk, 0, 0), 8);
+    const q = nearestQuadrant(sk, 0.4, 7.7, 1.5);
+    expect(near(q.x, 0) && near(q.y, 8)).toBe(true);
+    expect(q.axis).toBe('v');
+  });
+
+  it('is null when the cursor is nowhere near a quadrant', () => {
+    const sk = createSketch();
+    addCircle(sk, addPoint(sk, 0, 0), 10);
+    expect(nearestQuadrant(sk, 7, 7, 1.5)).toBeNull(); // on the rim, but at 45°
+  });
+
+  it('only offers an arc quadrant that lies within its span', () => {
+    const sk = createSketch();
+    // Quarter arc centre (0,0) r10, (10,0) CCW to (0,10) — first quadrant only.
+    addArc(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0), addPoint(sk, 0, 10), 10);
+    expect(near(nearestQuadrant(sk, 10.2, 0.1, 1.5).y, 0)).toBe(true);  // (10,0) is in span
+    expect(nearestQuadrant(sk, -10.2, 0.1, 1.5)).toBeNull();            // (−10,0) is not
   });
 });
 
