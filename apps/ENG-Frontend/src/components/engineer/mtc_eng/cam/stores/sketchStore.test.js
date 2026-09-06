@@ -512,6 +512,58 @@ describe('intersection snap (hover + click)', () => {
   });
 });
 
+describe('marquee (box) selection', () => {
+  const scene = () => {
+    const sk = createSketch();
+    const inside = addLine(sk, addPoint(sk, 1, 1), addPoint(sk, 4, 4));
+    const straddle = addLine(sk, addPoint(sk, 3, 3), addPoint(sk, 20, 20));
+    useSketchStore.setState({
+      sk, tool: 'select', selection: [], boxSelect: null, _boxStart: null, pickTol: 0.5,
+    });
+    return { sk, inside, straddle };
+  };
+
+  it('a left→right drag encloses; a bare press never touches the selection', () => {
+    const { inside, straddle } = scene();
+    const s = useSketchStore.getState();
+    s.beginBoxSelect(0, 0);
+    s.updateBoxSelect(10, 10); // grows past the click slop → marquee appears
+    expect(useSketchStore.getState().boxSelect).not.toBeNull();
+    expect(s.endBoxSelect()).toBe(true);
+    expect(useSketchStore.getState().selection).toEqual([inside]);
+    expect(useSketchStore.getState().selection).not.toContain(straddle);
+  });
+
+  it('a right→left drag also grabs what the box touches', () => {
+    const { inside, straddle } = scene();
+    const s = useSketchStore.getState();
+    s.beginBoxSelect(10, 10);
+    s.updateBoxSelect(0, 0);
+    s.endBoxSelect();
+    const sel = useSketchStore.getState().selection;
+    expect(sel).toContain(inside);
+    expect(sel).toContain(straddle);
+  });
+
+  it('a press that never grows past the slop commits nothing', () => {
+    scene();
+    useSketchStore.setState({ selection: [99] });
+    const s = useSketchStore.getState();
+    s.beginBoxSelect(5, 5);
+    s.updateBoxSelect(5.1, 5.1);
+    expect(useSketchStore.getState().boxSelect).toBeNull();
+    expect(s.endBoxSelect()).toBe(false);
+    expect(useSketchStore.getState().selection).toEqual([99]);
+  });
+
+  it('does not arm outside the Select tool', () => {
+    scene();
+    useSketchStore.setState({ tool: 'line' });
+    useSketchStore.getState().beginBoxSelect(0, 0);
+    expect(useSketchStore.getState()._boxStart).toBeNull();
+  });
+});
+
 describe('swapDimensionRefs', () => {
   it('flips the ref order but keeps the interior corner angle', () => {
     const { sk, base, up } = corner(); // 90° corner sharing the origin

@@ -7,7 +7,7 @@ import {
   chamfer, fillet, filletLineArc, filletArcArc, tangentPoint, nearestTangent,
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
-  filletCircleCircle, entityIntersections, nearestIntersection,
+  filletCircleCircle, entityIntersections, nearestIntersection, entitiesInBox,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -93,6 +93,52 @@ describe('entityIntersections / nearestIntersection', () => {
     const h = addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
     addLine(sk, addPoint(sk, 0, -10), addPoint(sk, 0, 10));
     expect(nearestIntersection(sk, 0, 0, 1.5, h)).toBeNull();
+  });
+});
+
+describe('entitiesInBox — marquee selection', () => {
+  const box = (sk, x0, y0, x1, y1, crossing) => entitiesInBox(sk, x0, y0, x1, y1, { crossing });
+
+  it('takes only fully enclosed entities without crossing', () => {
+    const sk = createSketch();
+    const inside = addLine(sk, addPoint(sk, 1, 1), addPoint(sk, 4, 4));
+    const straddle = addLine(sk, addPoint(sk, 3, 3), addPoint(sk, 20, 20));
+    const got = box(sk, 0, 0, 10, 10, false);
+    expect(got).toContain(inside);
+    expect(got).not.toContain(straddle);
+  });
+
+  it('crossing also takes anything the box touches, but nothing outside it', () => {
+    const sk = createSketch();
+    const straddle = addLine(sk, addPoint(sk, 3, 3), addPoint(sk, 20, 20));
+    const away = addLine(sk, addPoint(sk, 50, 50), addPoint(sk, 60, 60));
+    const got = box(sk, 0, 0, 10, 10, true);
+    expect(got).toContain(straddle);
+    expect(got).not.toContain(away);
+  });
+
+  it('encloses a circle only when its whole bbox fits, but touches count when crossing', () => {
+    const sk = createSketch();
+    const c = addCircle(sk, addPoint(sk, 5, 5), 3); // bbox [2,2]–[8,8]
+    expect(box(sk, 0, 0, 10, 10, false)).toContain(c);
+    expect(box(sk, 0, 0, 6, 10, false)).not.toContain(c); // clips the right side
+    expect(box(sk, 0, 0, 6, 10, true)).toContain(c);
+  });
+
+  it('takes a bare point in the box but never the origin', () => {
+    const sk = createSketch();
+    const o = addPoint(sk, 0, 0, true);
+    sk.entities.get(o).origin = true;
+    const p = addPoint(sk, 2, 2);
+    const got = box(sk, -1, -1, 5, 5, false);
+    expect(got).toContain(p);
+    expect(got).not.toContain(o);
+  });
+
+  it('normalises a box dragged up-and-left', () => {
+    const sk = createSketch();
+    const l = addLine(sk, addPoint(sk, 2, 2), addPoint(sk, 4, 4));
+    expect(box(sk, 10, 10, 0, 0, false)).toContain(l);
   });
 });
 

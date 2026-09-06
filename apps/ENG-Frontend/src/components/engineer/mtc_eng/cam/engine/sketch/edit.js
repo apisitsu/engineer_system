@@ -1224,6 +1224,67 @@ export function entityIntersections(sk, e1, e2) {
   return out;
 }
 
+/** Does segment a–b cross the axis-aligned box [xmin,ymin]–[xmax,ymax]? (Endpoints inside count.) */
+function segCrossesBox(a, b, xmin, ymin, xmax, ymax) {
+  const inBox = (p) => p.x >= xmin && p.x <= xmax && p.y >= ymin && p.y <= ymax;
+  if (inBox(a) || inBox(b)) return true;
+  const c = [
+    { x: xmin, y: ymin }, { x: xmax, y: ymin }, { x: xmax, y: ymax }, { x: xmin, y: ymax },
+  ];
+  for (let i = 0; i < 4; i += 1) {
+    if (segIntersect(a, b, c[i], c[(i + 1) % 4])) return true;
+  }
+  return false;
+}
+
+/**
+ * Ids of the entities a rubber-band box picks. `crossing` false (a left→right
+ * drag) takes only entities **fully enclosed**; true (right→left) also takes
+ * anything the box merely touches — the SolidWorks window / crossing rule.
+ *
+ * A point that anchors a curve (an endpoint, a centre) is structural, not free
+ * geometry — picking it alongside its curve is noise — so only a genuinely
+ * loose point is marquee-picked, and never the origin or a construction sharp.
+ */
+export function entitiesInBox(sk, x0, y0, x1, y1, { crossing = false } = {}) {
+  const xmin = Math.min(x0, x1);
+  const xmax = Math.max(x0, x1);
+  const ymin = Math.min(y0, y1);
+  const ymax = Math.max(y0, y1);
+  const inBox = (px, py) => px >= xmin && px <= xmax && py >= ymin && py <= ymax;
+  const P = (id) => sk.entities.get(id);
+  const anchored = new Set();
+  for (const e of sk.entities.values()) {
+    if (e.type === 'line') { anchored.add(e.p1); anchored.add(e.p2); }
+    else if (e.type === 'circle') anchored.add(e.center);
+    else if (e.type === 'arc') { anchored.add(e.center); anchored.add(e.start); anchored.add(e.end); }
+  }
+  const out = [];
+  for (const e of sk.entities.values()) {
+    if (e.type === 'point') {
+      if (e.origin || e.construction || anchored.has(e.id)) continue;
+      if (inBox(e.x, e.y)) out.push(e.id);
+    } else if (e.type === 'line') {
+      const a = P(e.p1);
+      const b = P(e.p2);
+      if (!a || !b) continue;
+      const enclosed = inBox(a.x, a.y) && inBox(b.x, b.y);
+      if (enclosed || (crossing && segCrossesBox(a, b, xmin, ymin, xmax, ymax))) out.push(e.id);
+    } else if (e.type === 'circle' || e.type === 'arc') {
+      const c = P(e.center);
+      if (!c) continue;
+      const bx0 = c.x - e.r;
+      const bx1 = c.x + e.r;
+      const by0 = c.y - e.r;
+      const by1 = c.y + e.r;
+      const enclosed = bx0 >= xmin && bx1 <= xmax && by0 >= ymin && by1 <= ymax;
+      const touches = bx0 <= xmax && bx1 >= xmin && by0 <= ymax && by1 >= ymin;
+      if (enclosed || (crossing && touches)) out.push(e.id);
+    }
+  }
+  return out;
+}
+
 /**
  * The crossing point of two distinct entities nearest to (x, y), within `tol`,
  * or null — the "intersection snap". A click on it lands exactly on the

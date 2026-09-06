@@ -281,6 +281,11 @@ export default function SketchLayer() {
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
   const undo = useSketchStore((s) => s.undo);
   const redo = useSketchStore((s) => s.redo);
+  const boxSelect = useSketchStore((s) => s.boxSelect);
+  const beginBoxSelect = useSketchStore((s) => s.beginBoxSelect);
+  const updateBoxSelect = useSketchStore((s) => s.updateBoxSelect);
+  const endBoxSelect = useSketchStore((s) => s.endBoxSelect);
+  const cancelBoxSelect = useSketchStore((s) => s.cancelBoxSelect);
 
   const { points, lines, circles, arcs } = useMemo(() => {
     const pts = [];
@@ -316,7 +321,7 @@ export default function SketchLayer() {
   // Redraw on geometry change and on every pointer move (rubber-band + hover).
   useEffect(() => {
     invalidate();
-  }, [version, cursor, snap, axisSnap, lineAngle, hoverId]);
+  }, [version, cursor, snap, axisSnap, lineAngle, hoverId, boxSelect]);
 
   // Keep the pick/snap tolerance a constant ~9 px on screen (SolidWorks picks by
   // pixels, not model units): world tol = pixels / zoom, updated when zoom shifts.
@@ -336,14 +341,23 @@ export default function SketchLayer() {
   const swallowClick = useRef(false); // eat the synthetic click after a no-move grab
   useEffect(() => {
     const onUp = () => {
-      if (dragId.current == null) return;
-      const moved = endDrag();
-      if (!moved) { toggleSelect(dragId.current); swallowClick.current = true; }
-      dragId.current = null;
+      if (dragId.current != null) {
+        const moved = endDrag();
+        if (!moved) { toggleSelect(dragId.current); swallowClick.current = true; }
+        dragId.current = null;
+        return;
+      }
+      // A marquee release lands here (the drag was on the pick plane, so it never
+      // set `dragId`). `endBoxSelect` commits the selection and reports whether a
+      // real box happened, so we can eat the trailing click.
+      const st = useSketchStore.getState();
+      if (st._boxStart || st.boxSelect) {
+        if (endBoxSelect()) swallowClick.current = true;
+      }
     };
     window.addEventListener('pointerup', onUp);
     return () => window.removeEventListener('pointerup', onUp);
-  }, [endDrag, toggleSelect]);
+  }, [endDrag, toggleSelect, endBoxSelect]);
 
   // Keyboard: Esc cancels a pending draw, Delete removes the selection,
   // Ctrl/Cmd+Z undoes and Ctrl/Cmd+Y (or Shift+Z) redoes. Ignore while typing.
@@ -353,6 +367,7 @@ export default function SketchLayer() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'Escape') {
         cancelPending();
+        cancelBoxSelect();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteSelected();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -365,7 +380,7 @@ export default function SketchLayer() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cancelPending, deleteSelected, undo, redo]);
+  }, [cancelPending, cancelBoxSelect, deleteSelected, undo, redo]);
 
   const drawing = tool === 'point' || tool === 'line' || tool === 'rectangle'
     || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
@@ -450,26 +465,38 @@ export default function SketchLayer() {
       <DimensionAnnotations sk={sk} version={version} />
 
       {/* Pick plane. In draw mode it takes pointer-downs immediately and tracks
-          moves for the rubber-band. In pick mode (select/dimension) it handles
-          `onClick` only — a tap, not a drag — so OrbitControls still rotates the
-          view, while a tap routes through `clickAt`'s tolerant hit-tests
-          (point → line → circle within SNAP) instead of the razor-thin line ray. */}
+          moves for the rubber-band. In pick mode a tap routes through `clickAt`'s
+          tolerant hit-tests (point → line → circle within SNAP) instead of the
+          razor-thin line ray; in the Select tool a *drag* on empty space is a
+          marquee (`Viewport` turns OrbitControls' left-drag rotate off while
+          Select is active so the drag is ours). */}
       {(drawing || picking) && (
         <mesh
           onPointerDown={(e) => {
-            if (!drawing) return;
-            e.stopPropagation();
-            const p = localPoint(e);
-            clickAt(p.x, p.y);
+            if (drawing) {
+              e.stopPropagation();
+              const p = localPoint(e);
+              clickAt(p.x, p.y);
+              return;
+            }
+            // Arm a marquee. No stopPropagation: a bare press must still reach
+            // `onClick` for a tap-select.
+            if (tool === 'select') {
+              const p = localPoint(e);
+              beginBoxSelect(p.x, p.y);
+            }
           }}
           onPointerMove={(e) => {
             const p = localPoint(e);
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
             if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
-            // Track the cursor for the rubber-band (draw) and the snap indicator
-            // (both). In pick modes don't stopPropagation, so OrbitControls still
-            // rotates the view while snapping shows which point a click will grab.
+            // A marquee in progress grows to the cursor and owns the drag.
+            if (useSketchStore.getState()._boxStart != null) {
+              e.stopPropagation();
+              updateBoxSelect(p.x, p.y);
+              return;
+            }
             if (drawing) {
               e.stopPropagation();
               hover(p.x, p.y);
@@ -495,6 +522,31 @@ export default function SketchLayer() {
       {preview && (
         <Line points={preview} color={PREVIEW} lineWidth={1.5} dashed dashSize={0.8} gapSize={0.5} raycast={noRaycast} />
       )}
+
+      {/* Marquee: solid cyan for a left→right (enclose) drag, dashed green for a
+          right→left (crossing) drag — the SolidWorks convention. */}
+      {boxSelect && (() => {
+        const cross = boxSelect.x1 < boxSelect.x0;
+        return (
+          <Line
+            points={[
+              [boxSelect.x0, boxSelect.y0, Z],
+              [boxSelect.x1, boxSelect.y0, Z],
+              [boxSelect.x1, boxSelect.y1, Z],
+              [boxSelect.x0, boxSelect.y1, Z],
+              [boxSelect.x0, boxSelect.y0, Z],
+            ]}
+            color={cross ? TANGENT_COLOR : AXIS_COLOR}
+            lineWidth={1}
+            dashed={cross}
+            dashSize={1.2}
+            gapSize={0.8}
+            transparent
+            opacity={0.9}
+            raycast={noRaycast}
+          />
+        );
+      })()}
 
       {/* Angle-lock guide: a cyan axis through the anchor along the locked
           standard direction, so it's obvious the line snapped to 0/45/90/…°. */}

@@ -24,7 +24,7 @@ import {
   filletCircleCircle as filletCircleCircleEdit,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
-  nearestIntersection,
+  nearestIntersection, entitiesInBox,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
@@ -117,6 +117,8 @@ export const useSketchStore = create((set, get) => ({
   pending: null, // first click while drawing (line/rect/circle centre, arc centre)
   pending2: null, // second click for a 3-click tool — the arc's start point
   cursor: null, // { x, y } live pointer on the plane — drives rubber-band preview
+  boxSelect: null, // { x0, y0, x1, y1 } while a marquee drag is on screen (select tool)
+  _boxStart: null, // { x, y } armed marquee origin, before it grows past the click slop
   snap: null, // positional snap target: { x, y, id? (vertex) | onCurve+curveType (rim) | tangent+tangentOf+curveType }
   axisSnap: null, // { x, y, deg } line-tool angle lock to the nearest 45° axis, or null
   lineAngle: null, // ° the line rubber-band currently points at (readout while drawing a line)
@@ -334,7 +336,7 @@ export const useSketchStore = create((set, get) => ({
   },
 
   setTool(tool) {
-    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false });
+    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, boxSelect: null, _boxStart: null });
   },
 
   /** Show a message on the sketcher's error line (used by save/open failures). */
@@ -501,6 +503,45 @@ export const useSketchStore = create((set, get) => ({
     if (i >= 0) sel.splice(i, 1);
     else sel.push(id);
     set({ selection: sel });
+  },
+
+  // ---- Rubber-band (marquee) selection --------------------------------------
+  //
+  // Only the Select tool, and only from empty space (a point pointer-down starts
+  // a drag-to-modify, which stops the event before it reaches the pick plane).
+  // Left→right encloses; right→left also grabs anything the box touches —
+  // SolidWorks' window / crossing rule. `Viewport` turns OrbitControls' left-drag
+  // rotate off while the Select tool is active so the drag is ours to use.
+
+  /** Arm a marquee at (x, y). Nothing shows until it grows past the click slop. */
+  beginBoxSelect(x, y) {
+    if (get().tool === 'select') set({ _boxStart: { x, y } });
+  },
+
+  /** Grow the armed marquee to (x, y); reveals it once it is bigger than a click. */
+  updateBoxSelect(x, y) {
+    const s = get()._boxStart;
+    if (!s) return;
+    if (!get().boxSelect && Math.hypot(x - s.x, y - s.y) < (get().pickTol || SNAP)) return;
+    set({ boxSelect: { x0: s.x, y0: s.y, x1: x, y1: y } });
+  },
+
+  /**
+   * Finish a marquee: replace the selection with what the box caught. Returns
+   * true when a real box was committed (so the caller can eat the trailing
+   * click), false for a bare press that never grew into one.
+   */
+  endBoxSelect() {
+    const box = get().boxSelect;
+    set({ boxSelect: null, _boxStart: null });
+    if (!box) return false;
+    const crossing = box.x1 < box.x0;
+    set({ selection: entitiesInBox(get().sk, box.x0, box.y0, box.x1, box.y1, { crossing }) });
+    return true;
+  },
+
+  cancelBoxSelect() {
+    if (get().boxSelect || get()._boxStart) set({ boxSelect: null, _boxStart: null });
   },
 
   /** A pointer-down on the sketch plane at sketch coords (x, y). */

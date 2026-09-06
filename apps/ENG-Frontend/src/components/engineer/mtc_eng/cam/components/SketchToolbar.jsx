@@ -55,7 +55,7 @@ const PlanesIcon = glyph(<><path d="M3 8.5l8-3.5 10 3-8 3.5z" /><path d="M3 8.5v
 const ExtrudeIcon = glyph(<><rect x="3.5" y="9.5" width="10" height="8" /><path d="M3.5 9.5l6-5h10l-6 5" /><path d="M19.5 4.5v8l-6 5" /></>);
 
 const TOOLS = [
-  { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select points, lines, circles or arcs · drag a point to move it (the sketch re-solves) · double-click a dimension to edit it' },
+  { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select · drag empty space for a box (left→right encloses, right→left also grabs what it touches) · drag a point to move it · double-click a dimension to edit it' },
   { value: 'point', label: 'Point', Icon: PointIcon, hint: 'Click on the plane to add points · snaps to vertices, curve rims and where two curves cross' },
   { value: 'line', label: 'Line', Icon: LineIcon, hint: 'Click to start, click to finish · locks to 0/45/90…°, snaps tangent to circles/arcs and to curve intersections · Esc cancels' },
   { value: 'rectangle', label: 'Rectangle', Icon: RectIcon, hint: 'Click two opposite corners' },
