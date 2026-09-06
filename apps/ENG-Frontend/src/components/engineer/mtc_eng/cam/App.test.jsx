@@ -1144,6 +1144,27 @@ describe('simulating on its own, once the setup says what to simulate', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('holds off until milling has all three axes touched off', async () => {
+    const spy = spySimulate();
+    await mount();
+    await setStore({ stockEnabled: true, stockSize: { x: 100, y: 60, z: 20 } });
+    // X and Y only — Z is still on the model's native zero, so the carve would
+    // be against a half-set datum.
+    await act(async () => {
+      useCamPlanStore.setState({
+        datum: { planeNormal: null, point: [0, 0, 0], rotaryCenter: null, rotaryZero: null, reverseX: false, axesSet: [true, true, false] },
+      });
+    });
+    expect(spy).not.toHaveBeenCalled();
+    // The last axis lands.
+    await act(async () => {
+      useCamPlanStore.setState({
+        datum: { planeNormal: null, point: [0, 0, 0], rotaryCenter: null, rotaryZero: null, reverseX: false, axesSet: [true, true, true] },
+      });
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
   it('runs once per setup, not once per render', async () => {
     const spy = spySimulate();
     await mount();

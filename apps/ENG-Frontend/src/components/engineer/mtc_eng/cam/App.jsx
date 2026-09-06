@@ -655,7 +655,7 @@ export default function App() {
   // a string so the run happens once per setup rather than once per render —
   // see `engine/view/autoSim.js`.
   const autoKey = autoSimKey({
-    gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex,
+    gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex, mode,
   });
   const lastAutoKey = useRef(null);
   useEffect(() => {
@@ -669,6 +669,21 @@ export default function App() {
     lastAutoKey.current = autoKey;
     simulate();
   }, [autoKey, playing, simStatus, sketching, simulate]);
+
+  // A separately loaded .nc's indexed (A-word) moves pivot about camPlanStore's
+  // rotary centre, which only reaches the interpreter through
+  // `camStore.machineOpts()` at parse time. That store must not import the plan
+  // store back (see camStore.js), so the re-parse when the centre moves is wired
+  // here — the same shape as the auto-simulate effect above. Only the centre
+  // needs it: `reverseX` and the A0-face pick move the model, not the toolpath,
+  // and the viewport already redraws the model for those.
+  const rotaryCenterKey = JSON.stringify(partDatum.rotaryCenter ?? null);
+  const lastRotaryCenterKey = useRef(rotaryCenterKey);
+  useEffect(() => {
+    if (rotaryCenterKey === lastRotaryCenterKey.current) return;
+    lastRotaryCenterKey.current = rotaryCenterKey;
+    if (gcode) parse();
+  }, [rotaryCenterKey, gcode, parse]);
 
   // Let a save confirmation fade rather than linger.
   useEffect(() => {
