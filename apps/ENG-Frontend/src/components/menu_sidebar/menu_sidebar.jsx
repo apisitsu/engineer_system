@@ -45,7 +45,11 @@ const createMenu = (items) => {
         return {
             key: item.key || `${index + 1}`,
             icon: numberIcons[index] || numberIcons[0],
-            label: <Link to={item.path}>{item.label}</Link>
+            // `newTab` items (CAD/CAM) open a standalone full-window workspace,
+            // so they get their own browser tab and leave this one where it is.
+            label: item.newTab
+                ? <Link to={item.path} target="_blank" rel="noopener noreferrer">{item.label}</Link>
+                : <Link to={item.path}>{item.label}</Link>
         };
     });
 };
@@ -93,7 +97,7 @@ export const mtc = createMenu([
     { label: "Tooling Inspection", path: MTC_PATHS.TOOLING_INSPECT, key: "tooling-inspect" },
     { label: "Tooling Select", path: MTC_PATHS.TOOLING_SELECT, key: "tooling-select" },
     { label: "Setup Data Sheet", path: MTC_PATHS.SDS_V2, key: "sds-v2" },
-    { label: "CAD/CAM", path: MTC_PATHS.CAM, key: "cam" },
+    { label: "CAD/CAM", path: MTC_PATHS.CAM, key: "cam", newTab: true },
     {
         label: "Master Data", key: "master-data",
         children: [

@@ -578,6 +578,11 @@ export default function Viewport({
   // Disable orbit while dragging a sketch point so the drag moves the point,
   // not the camera (SolidWorks drags geometry, not the view).
   const sketchDragging = useSketchStore((s) => s.dragging);
+  // And turn off left-drag *rotate* whenever the sketch Select tool is active, so
+  // a drag on empty space is free for a marquee (SketchLayer) rather than
+  // tumbling the view. Pan (right-drag) and zoom (wheel) are untouched; other
+  // sketch tools get orbit back.
+  const sketchTool = useSketchStore((s) => s.tool);
 
   // Resolve which rapids/feeds to draw (full backplot, or the sliced sub-path
   // during playback) and stash them in the module view-cache. Children read
@@ -656,7 +661,14 @@ export default function Viewport({
         controlsRef={controlsRef}
         mode={mode}
       />
-      <OrbitControls ref={controlsRef} makeDefault enabled={!(sketching && sketchDragging)} minZoom={0.05} maxZoom={2000} />
+      <OrbitControls
+        ref={controlsRef}
+        makeDefault
+        enabled={!(sketching && sketchDragging)}
+        enableRotate={!(sketching && sketchTool === 'select')}
+        minZoom={0.05}
+        maxZoom={2000}
+      />
     </Canvas>
   );
 }

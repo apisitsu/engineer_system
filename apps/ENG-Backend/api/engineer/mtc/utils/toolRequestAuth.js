@@ -49,55 +49,17 @@ const optionalAuth = (req, res, next) => {
   next();
 };
 
-/**
- * Check if user has permission for specific stage
- * Must be used after verifyToken or optionalAuth
- */
-const checkStagePermission = (stage) => {
-  const EMAIL_CONFIG = {
-    eng_check: (process.env.EMAIL_MTC_ENG_CHECK || '').split(',').map(e => e.trim()).filter(Boolean),
-    draft_man: (process.env.EMAIL_MTC_DRAFTMAN || '').split(',').map(e => e.trim()).filter(Boolean),
-    dwg_check: (process.env.EMAIL_MTC_DWG_CHECK || '').split(',').map(e => e.trim()).filter(Boolean),
-    eng_review: (process.env.EMAIL_MTC_ENG_REVIEW || '').split(',').map(e => e.trim()).filter(Boolean),
-    eng_approve: (process.env.EMAIL_MTC_ENG_APPROVE || '').split(',').map(e => e.trim()).filter(Boolean),
-    eng_inform: (process.env.EMAIL_MTC_ENG_INFORM || '').split(',').map(e => e.trim()).filter(Boolean),
-  };
-
-  return (req, res, next) => {
-    const allowedEmails = EMAIL_CONFIG[stage] || [];
-    const userDept = (req.user?.department || req.body?.user_department || '').toUpperCase();
-    
-    // AD department bypass
-    if (userDept === 'AD') {
-      return next();
-    }
-
-    // If no allowed emails configured, allow access
-    if (allowedEmails.length === 0) {
-      return next();
-    }
-
-    const allowedCodes = allowedEmails.map(e => e.split('@')[0].toLowerCase());
-    const userCode = (req.user?.u_code || req.body?.user_code || '').toLowerCase();
-    const userEmail = (req.user?.gmail_email || req.body?.action_by_email || '').toLowerCase();
-
-    const isAllowed = allowedCodes.includes(userCode) 
-      || allowedEmails.map(e => e.toLowerCase()).includes(userEmail);
-
-    if (!isAllowed) {
-      console.warn(`⚠️ Permission denied for user ${req.user?.userName || 'unknown'} on stage ${stage}`);
-      return res.status(403).json({ 
-        error: 'Permission denied',
-        message: `You do not have permission to perform actions on stage: ${stage}` 
-      });
-    }
-
-    next();
-  };
-};
+// NOTE: stage-permission checking for tool-request actions lives inline in
+// toolRequestController.js's submitAction() (DB-driven via tr_email_config,
+// matched against req.user.empno/req.user.department from the verified JWT).
+// A checkStagePermission() middleware used to be defined here as well, reading
+// from EMAIL_MTC_* env vars and falling back to unverified req.body fields when
+// req.user lacked u_code/gmail_email (fields this JWT never actually carries) -
+// it was never wired into any route, and its silent req.body fallback was the
+// same bypass the inline check had. Removed rather than fixed-and-left-unused,
+// so there is only one place this logic can drift out of sync again.
 
 module.exports = {
   verifyToken,
   optionalAuth,
-  checkStagePermission
 };

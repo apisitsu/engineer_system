@@ -23,22 +23,21 @@
  * and the difference is most of why a toolbar reads as a tool rail rather than
  * as a web page.
  *
- * The MTC sidebar renders expanded, like every other MTC page. Starting it
- * collapsed to give the viewport 250px back was tried and reverted: the menu's
- * icons are plain numbers (`LooksOne`…), so collapsed it says nothing about
- * where you are or where you can go. Operators who want the room can collapse
- * it themselves with the control antd already puts at its foot.
+ * No MTC sidebar: CAD/CAM opens in its own browser tab (the menu entry is
+ * `target="_blank"`), so there is nowhere in-app to navigate to from here and a
+ * rail of plain-number icons would only take room off a viewport that wants all
+ * of it. Earlier this page kept the sidebar because it was one tab among many;
+ * once it is a tab of its own, the workspace is the whole window.
  */
 import React from 'react';
-import { Layout, ConfigProvider, theme } from 'antd';
-import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { Layout, ConfigProvider, theme, App as AntdApp } from 'antd';
 import CamApp from './App.jsx';
 import { CAD } from './theme.js';
 
 const CamPage = () => (
-  <Layout style={{ height: '100%' }}>
-    <MenuTemplate type="MTC" defaultSelectedKeys="cam" defaultOpenKeys="sub1" />
-    <Layout style={{ background: CAD.appBg, overflow: 'hidden' }}>
+  // Full viewport height: this route renders outside MainLayout, so there is no
+  // `calc(100vh - 64px)` container above it to fill.
+  <Layout style={{ height: '100vh', overflow: 'hidden', background: CAD.appBg }}>
       <ConfigProvider
         theme={{
           algorithm: theme.defaultAlgorithm,
@@ -95,9 +94,13 @@ const CamPage = () => (
           },
         }}
       >
-        <CamApp />
+        {/* Own antd App context so CamApp's own `App.useApp()` (auto-save
+            restore prompt, etc.) is themed by the CAD provider above, not the
+            host's. */}
+        <AntdApp style={{ height: '100%' }}>
+          <CamApp />
+        </AntdApp>
       </ConfigProvider>
-    </Layout>
   </Layout>
 );
 

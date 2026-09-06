@@ -54,6 +54,7 @@ tmp/
 ./apps/uploads
 
 git_sync_mtc.ps1
+system_update.log
 # --- MTC design-standard PDFs & calc-block extraction (reference only; no code reads bytes) ---
 # TEMPLATE_B.xlsx + 20260202_Tooling_Excel_List.xlsm ARE read at runtime — keep those.
 apps/ENG-Backend/api/engineer/mtc/doc/RE*.pdf

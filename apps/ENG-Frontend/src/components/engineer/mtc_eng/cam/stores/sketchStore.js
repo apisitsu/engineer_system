@@ -24,8 +24,9 @@ import {
   filletCircleCircle as filletCircleCircleEdit,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
+  nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
-  axisFromPlacement,
+  axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
 import {
   DEFAULT_PLANE, parsePlane, planeFromFace, planeLabel,
@@ -41,6 +42,12 @@ const DEG = Math.PI / 180;
 const SNAP = 1.5; // mm — click snap / pick tolerance
 const ANGLE_SNAP_DEG = 5; // ° — lock the line rubber-band to the nearest 45° axis within this
 const HISTORY = 50; // max undo depth
+
+/** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
+function pinPointOn(sk, pointId, entId) {
+  const kind = { line: 'pointOnLine', circle: 'pointOnCircle', arc: 'pointOnArc' }[sk.entities.get(entId)?.type];
+  if (kind) { try { addConstraint(sk, kind, [pointId, entId]); } catch { /* leave that side free */ } }
+}
 
 let sketchApi = null;
 function worker() {
@@ -110,6 +117,8 @@ export const useSketchStore = create((set, get) => ({
   pending: null, // first click while drawing (line/rect/circle centre, arc centre)
   pending2: null, // second click for a 3-click tool — the arc's start point
   cursor: null, // { x, y } live pointer on the plane — drives rubber-band preview
+  boxSelect: null, // { x0, y0, x1, y1 } while a marquee drag is on screen (select tool)
+  _boxStart: null, // { x, y } armed marquee origin, before it grows past the click slop
   snap: null, // positional snap target: { x, y, id? (vertex) | onCurve+curveType (rim) | tangent+tangentOf+curveType }
   axisSnap: null, // { x, y, deg } line-tool angle lock to the nearest 45° axis, or null
   lineAngle: null, // ° the line rubber-band currently points at (readout while drawing a line)
@@ -327,7 +336,7 @@ export const useSketchStore = create((set, get) => ({
   },
 
   setTool(tool) {
-    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false });
+    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, boxSelect: null, _boxStart: null });
   },
 
   /** Show a message on the sketcher's error line (used by save/open failures). */
@@ -399,6 +408,31 @@ export const useSketchStore = create((set, get) => ({
       const tan = nearestTangent(sk, anchor.x, anchor.y, x, y, tol);
       if (tan) snap = { x: tan.x, y: tan.y, tangent: true, tangentOf: tan.id, curveType: tan.type };
     }
+    // Where two curves cross — more specific than a plain rim landing, so it
+    // wins over it. A click here lands on the crossing and pins the new point to
+    // both curves (see `_pointAt`). Only while a point-placing tool is active:
+    // the pairwise scan is O(n²) and means nothing to select / dimension / trim.
+    const placing = tool === 'point' || tool === 'line' || tool === 'rectangle'
+      || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
+    if (!snap && placing) {
+      const xn = nearestIntersection(sk, x, y, tol);
+      if (xn) snap = { x: xn.x, y: xn.y, intersection: true, of: xn.ids };
+    }
+    if (!snap && placing) {
+      // A circle/arc quadrant (top/bottom/left/right on the axes) — the "high
+      // points". More specific than a plain rim landing, so it comes first.
+      const q = nearestQuadrant(sk, x, y, tol);
+      if (q) {
+        snap = {
+          x: q.x, y: q.y, quadrant: true, onCurve: q.id, curveType: q.curveType,
+          quadCenter: q.center, quadAxis: q.axis,
+        };
+      }
+    }
+    if (!snap && placing) {
+      const mid = nearestMidpoint(sk, x, y, tol);
+      if (mid) snap = { x: mid.x, y: mid.y, midpoint: true, midOf: mid.id };
+    }
     if (!snap) {
       const rim = nearestRimPoint(sk, x, y, tol);
       if (rim) snap = { x: rim.x, y: rim.y, onCurve: rim.id, curveType: rim.type };
@@ -442,6 +476,35 @@ export const useSketchStore = create((set, get) => ({
     const tol = get().pickTol || SNAP;
     const hit = hitTestPoint(sk, x, y, tol);
     if (hit != null) return hit;
+    // Where two curves cross: place the point exactly on it and pin it to both,
+    // so it tracks the intersection through solves. Checked before the plain rim
+    // landing because it is the more specific target.
+    const xn = nearestIntersection(sk, x, y, tol);
+    if (xn) {
+      const id = addPoint(sk, xn.x, xn.y);
+      for (const entId of xn.ids) pinPointOn(sk, id, entId);
+      return id;
+    }
+    // A circle/arc quadrant: place it on the rim and lock it to the quadrant with
+    // a horizontal / vertical relation to the centre, so it stays a "high point"
+    // through solves.
+    const q = nearestQuadrant(sk, x, y, tol);
+    if (q) {
+      const id = addPoint(sk, q.x, q.y);
+      pinPointOn(sk, id, q.id);
+      try {
+        addConstraint(sk, q.axis === 'v' ? 'vertical' : 'horizontal', [id, q.center]);
+      } catch { /* a redundant relation is fine — the point is already placed */ }
+      return id;
+    }
+    // A line-segment midpoint: pin it there with a `midpoint` relation so it
+    // stays centred as the line changes.
+    const mid = nearestMidpoint(sk, x, y, tol);
+    if (mid) {
+      const id = addPoint(sk, mid.x, mid.y);
+      try { addConstraint(sk, 'midpoint', [id, mid.id]); } catch { /* leave it a plain point on the line */ }
+      return id;
+    }
     const rim = nearestRimPoint(sk, x, y, tol);
     if (rim) {
       const id = addPoint(sk, rim.x, rim.y);
@@ -477,6 +540,45 @@ export const useSketchStore = create((set, get) => ({
     set({ selection: sel });
   },
 
+  // ---- Rubber-band (marquee) selection --------------------------------------
+  //
+  // Only the Select tool, and only from empty space (a point pointer-down starts
+  // a drag-to-modify, which stops the event before it reaches the pick plane).
+  // Left→right encloses; right→left also grabs anything the box touches —
+  // SolidWorks' window / crossing rule. `Viewport` turns OrbitControls' left-drag
+  // rotate off while the Select tool is active so the drag is ours to use.
+
+  /** Arm a marquee at (x, y). Nothing shows until it grows past the click slop. */
+  beginBoxSelect(x, y) {
+    if (get().tool === 'select') set({ _boxStart: { x, y } });
+  },
+
+  /** Grow the armed marquee to (x, y); reveals it once it is bigger than a click. */
+  updateBoxSelect(x, y) {
+    const s = get()._boxStart;
+    if (!s) return;
+    if (!get().boxSelect && Math.hypot(x - s.x, y - s.y) < (get().pickTol || SNAP)) return;
+    set({ boxSelect: { x0: s.x, y0: s.y, x1: x, y1: y } });
+  },
+
+  /**
+   * Finish a marquee: replace the selection with what the box caught. Returns
+   * true when a real box was committed (so the caller can eat the trailing
+   * click), false for a bare press that never grew into one.
+   */
+  endBoxSelect() {
+    const box = get().boxSelect;
+    set({ boxSelect: null, _boxStart: null });
+    if (!box) return false;
+    const crossing = box.x1 < box.x0;
+    set({ selection: entitiesInBox(get().sk, box.x0, box.y0, box.x1, box.y1, { crossing }) });
+    return true;
+  },
+
+  cancelBoxSelect() {
+    if (get().boxSelect || get()._boxStart) set({ boxSelect: null, _boxStart: null });
+  },
+
   /** A pointer-down on the sketch plane at sketch coords (x, y). */
   clickAt(x, y) {
     const { sk, tool } = get();
@@ -504,6 +606,11 @@ export const useSketchStore = create((set, get) => ({
           tangentKind = { kind: snap.curveType === 'arc' ? 'tangentArc' : 'tangent', curve: snap.tangentOf };
         } else if (snap?.id != null) {
           p = snap.id;
+        } else if (snap?.quadrant) {
+          // A quadrant needs its horizontal/vertical-to-centre lock too, which
+          // only `_pointAt` adds — so route it there rather than the plain
+          // on-curve branch below.
+          p = get()._pointAt(x, y);
         } else if (snap?.onCurve != null) {
           p = addPoint(sk, snap.x, snap.y);
           const onKind = snap.curveType === 'arc' ? 'pointOnArc' : 'pointOnCircle';
@@ -1358,6 +1465,28 @@ export const useSketchStore = create((set, get) => ({
     set({ error: null });
     get()._bump();
     get().solve();
+  },
+
+  /**
+   * Slide a placed dimension (its line and value together) to `offset`, in
+   * sketch units, from where the annotation would otherwise draw it. The offset
+   * is **projected onto the dimension's own axis** (`dimensionLockDir`), so a
+   * horizontal dimension can only move its standoff, a radius only along its
+   * leader, etc. — the caller passes the raw pointer delta and this constrains
+   * it. Purely how the dimension is *shown* — no DOF, no solve — but it lives on
+   * the constraint so it is saved and undoable like any other edit.
+   *
+   * The drag emits one call per pointer move; `snapshot` is true only on the
+   * first of a gesture, so a whole drag collapses to one undo step (the same
+   * trick the point drag uses).
+   */
+  setDimensionOffset(index, offset, { snapshot = true } = {}) {
+    const { sk } = get();
+    const c = sk.constraints[index];
+    if (!c || c.value == null) return;
+    if (snapshot) get()._snapshot();
+    c.labelOffset = projectOnto(offset, dimensionLockDir(sk, c.kind, c.refs));
+    get()._bump();
   },
 
   loadDemo() {

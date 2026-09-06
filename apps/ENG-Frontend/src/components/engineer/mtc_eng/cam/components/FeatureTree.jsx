@@ -27,7 +27,7 @@ import {
   EyeOutlined, EyeInvisibleOutlined, ReloadOutlined,
   RightOutlined, DownOutlined, MenuOutlined,
 } from '@ant-design/icons';
-import { useFeatureStore } from '../stores/featureStore.js';
+import { useFeatureStore, TREE_W_DEFAULT } from '../stores/featureStore.js';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { describeFeature } from '../engine/solid/featureTree.js';
 import { planeLabel } from '../engine/sketch/plane.js';
@@ -43,11 +43,13 @@ const MERGE_OPTIONS = [
 ];
 
 /**
- * The panel's two widths, exported because the sketch rail sits beside it and
- * has to know where it ends. A repeated literal in the other file is exactly the
- * kind of thing that drifts the first time this one is resized.
+ * The panel's widths, exported because the sketch rail sits beside it and has to
+ * know where it ends. `TREE_W` is only the **default** open width now — the live
+ * one is `useFeatureStore.treeWidth`, which the operator drags (the column also
+ * holds the Program listing, and a line of G-code wants more room than the
+ * tree). `TREE_STRIP` is the fixed collapsed strip.
  */
-export const TREE_SIZE = { TREE_W: 268, TREE_STRIP: 36 };
+export const TREE_SIZE = { TREE_W: TREE_W_DEFAULT, TREE_STRIP: 36 };
 
 /**
  * The tree fills the column it is given rather than floating over the viewport.
