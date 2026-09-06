@@ -92,6 +92,49 @@ describe('dimensionAnnotations — distance', () => {
   });
 });
 
+describe('dimensionAnnotations — a dragged dimension carries a labelOffset', () => {
+  it('slides a distance dimension line and value by the offset, witness roots staying on the geometry', () => {
+    const s = createSketch();
+    const a = addPoint(s, 0, 0);
+    const b = addPoint(s, 10, 0);
+    const ci = addConstraint(s, 'distance', [a, b], 10);
+    const base = dimensionAnnotations(s);
+    s.constraints[ci].labelOffset = [3, 7];
+    const moved = dimensionAnnotations(s);
+
+    for (const i of [0, 1]) {
+      expect(moved.segs[2].pts[i][0]).toBeCloseTo(base.segs[2].pts[i][0] + 3, 9);
+      expect(moved.segs[2].pts[i][1]).toBeCloseTo(base.segs[2].pts[i][1] + 7, 9);
+    }
+    expect(moved.labels[0].pos[0]).toBeCloseTo(base.labels[0].pos[0] + 3, 9);
+    expect(moved.labels[0].pos[1]).toBeCloseTo(base.labels[0].pos[1] + 7, 9);
+    // Witness lines still start on the two measured points.
+    expect(moved.segs[0].pts[0]).toEqual([0, 0, 0]);
+    expect(moved.segs[1].pts[0]).toEqual([10, 0, 0]);
+  });
+
+  it('moves a radius label by the offset', () => {
+    const sk = createSketch();
+    const c = addCircle(sk, addPoint(sk, 0, 0), 10);
+    const ci = addConstraint(sk, 'radius', [c], 10);
+    const before = dimensionAnnotations(sk).labels[0].pos;
+    sk.constraints[ci].labelOffset = [-5, 2];
+    const after = dimensionAnnotations(sk).labels[0].pos;
+    expect(after[0]).toBeCloseTo(before[0] - 5, 9);
+    expect(after[1]).toBeCloseTo(before[1] + 2, 9);
+  });
+
+  it('is inert when the offset is absent or zero', () => {
+    const s = createSketch();
+    const a = addPoint(s, 0, 0);
+    const b = addPoint(s, 10, 0);
+    const ci = addConstraint(s, 'distance', [a, b], 10);
+    const base = JSON.stringify(dimensionAnnotations(s));
+    s.constraints[ci].labelOffset = [0, 0];
+    expect(JSON.stringify(dimensionAnnotations(s))).toBe(base);
+  });
+});
+
 describe('dimensionAnnotations — axis-locked dX / dY', () => {
   const build = (kind) => {
     const s = createSketch();

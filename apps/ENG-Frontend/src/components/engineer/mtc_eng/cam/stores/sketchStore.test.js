@@ -249,6 +249,51 @@ describe('editing a placed dimension (double-click)', () => {
   });
 });
 
+describe('setDimensionOffset — dragging a placed dimension', () => {
+  const withDim = () => {
+    const sk = createSketch();
+    const a = addPoint(sk, 0, 0);
+    const b = addPoint(sk, 10, 0);
+    const ci = addConstraint(sk, 'distance', [a, b], 10);
+    useSketchStore.setState({ sk, past: [], future: [], version: 0 });
+    return { sk, ci };
+  };
+
+  it('stores the offset on the constraint and bumps the version', () => {
+    const { sk, ci } = withDim();
+    useSketchStore.getState().setDimensionOffset(ci, [3, -4]);
+    expect(sk.constraints[ci].labelOffset).toEqual([3, -4]);
+    expect(useSketchStore.getState().version).toBeGreaterThan(0);
+  });
+
+  it('collapses a whole drag to one undo step', () => {
+    const { ci } = withDim();
+    const s = useSketchStore.getState();
+    s.setDimensionOffset(ci, [1, 0]);                      // first move — snapshots
+    s.setDimensionOffset(ci, [2, 0], { snapshot: false }); // ...the rest of the drag
+    s.setDimensionOffset(ci, [5, 1], { snapshot: false });
+    expect(useSketchStore.getState().past.length).toBe(1);
+  });
+
+  it('undo puts the dimension back where it was', () => {
+    const { ci } = withDim();
+    useSketchStore.getState().setDimensionOffset(ci, [8, 8]);
+    useSketchStore.getState().undo();
+    expect(useSketchStore.getState().sk.constraints[ci].labelOffset).toBeUndefined();
+  });
+
+  it('does nothing for a non-dimensional constraint', () => {
+    const sk = createSketch();
+    const a = addPoint(sk, 0, 0);
+    const b = addPoint(sk, 10, 0);
+    addConstraint(sk, 'horizontal', [a, b]);
+    useSketchStore.setState({ sk, past: [] });
+    useSketchStore.getState().setDimensionOffset(0, [3, 3]);
+    expect(sk.constraints[0].labelOffset).toBeUndefined();
+    expect(useSketchStore.getState().past.length).toBe(0);
+  });
+});
+
 describe('construction geometry & driven dimensions', () => {
   it('toggleConstruction flips the flag on selected geometry only', () => {
     const sk = createSketch();

@@ -46,6 +46,14 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
   sk.constraints.forEach((c, ci) => {
     if (c.value == null) return;
 
+    // The operator can drag a placed dimension to a clearer spot; the offset is
+    // stored on the constraint (in sketch units) and round-trips through the
+    // project file for free (`model.serialize` spreads the constraint). It moves
+    // the *dimension line and the value together* — witness lines still start on
+    // the geometry and stretch out to meet the line, SolidWorks-style — so the
+    // whole thing reads as one object that was slid aside.
+    const [ox, oy] = Array.isArray(c.labelOffset) ? c.labelOffset : [0, 0];
+
     if (c.kind === 'distance') {
       const a = P(c.refs[0]);
       const b = P(c.refs[1]);
@@ -56,8 +64,8 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       const px = -dy / len;
       const py = dx / len;
       const off = Math.max(len * 0.14, 4); // stand the dimension line off the geometry
-      const a2 = [a.x + px * off, a.y + py * off, Z];
-      const b2 = [b.x + px * off, b.y + py * off, Z];
+      const a2 = [a.x + px * off + ox, a.y + py * off + oy, Z];
+      const b2 = [b.x + px * off + ox, b.y + py * off + oy, Z];
       segs.push({ key: `s${k++}`, pts: [[a.x, a.y, Z], a2] }); // witness lines
       segs.push({ key: `s${k++}`, pts: [[b.x, b.y, Z], b2] });
       segs.push({ key: `s${k++}`, pts: [a2, b2] }); // dimension line
@@ -68,12 +76,15 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
     } else if (c.kind === 'distanceX' || c.kind === 'distanceY') {
       const g = axisDimensionGeometry(sk, c.kind, c.refs);
       if (!g) return;
-      const xyz = (p) => [p.x, p.y, Z];
-      for (const w of g.witness) segs.push({ key: `s${k++}`, pts: w.map(xyz) });
-      segs.push({ key: `s${k++}`, pts: g.line.map(xyz) }); // dimension line, on-axis
+      const onGeom = (p) => [p.x, p.y, Z];
+      const moved = (p) => [p.x + ox, p.y + oy, Z];
+      // Each witness runs from its point on the geometry (fixed) to the moved
+      // dimension line.
+      for (const w of g.witness) segs.push({ key: `s${k++}`, pts: [onGeom(w[0]), moved(w[1])] });
+      segs.push({ key: `s${k++}`, pts: g.line.map(moved) }); // dimension line, on-axis
       // The stored value is signed (planegcs `difference`); a dimension reads as
       // a magnitude.
-      labels.push({ key: `b${k++}`, ci, pos: xyz(g.label), text: fmtDim(Math.abs(c.value)) });
+      labels.push({ key: `b${k++}`, ci, pos: moved(g.label), text: fmtDim(Math.abs(c.value)) });
     } else if (c.kind === 'pointLineDistance') {
       // The actual perpendicular: point → its foot on the line, with a witness
       // along the line when the foot lands past the drawn segment (the common
@@ -89,14 +100,17 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       const t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
       const fx = a.x + abx * t;
       const fy = a.y + aby * t;
-      segs.push({ key: `s${k++}`, pts: [[p.x, p.y, Z], [fx, fy, Z]] });
+      segs.push({ key: `s${k++}`, pts: [[p.x + ox, p.y + oy, Z], [fx + ox, fy + oy, Z]] });
       if (t < 0 || t > 1) {
         const nearEnd = t < 0 ? a : b;
-        segs.push({ key: `s${k++}`, pts: [[nearEnd.x, nearEnd.y, Z], [fx, fy, Z]] });
+        segs.push({ key: `s${k++}`, pts: [[nearEnd.x, nearEnd.y, Z], [fx + ox, fy + oy, Z]] });
       }
+      // A short tie from the measured point out to the moved line, so it still
+      // reads as a dimension *of that point* once it has been dragged clear.
+      if (ox || oy) segs.push({ key: `s${k++}`, pts: [[p.x, p.y, Z], [p.x + ox, p.y + oy, Z]] });
       labels.push({
         key: `b${k++}`, ci, text: fmtDim(c.value),
-        pos: [(p.x + fx) / 2, (p.y + fy) / 2, Z],
+        pos: [(p.x + fx) / 2 + ox, (p.y + fy) / 2 + oy, Z],
       });
     } else if (c.kind === 'radius') {
       const circ = P(c.refs[0]);
@@ -104,7 +118,7 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       if (!ctr) return;
       labels.push({
         key: `b${k++}`, ci, text: `R${fmtDim(c.value)}`,
-        pos: [ctr.x + circ.r * 0.7, ctr.y + circ.r * 0.7, Z],
+        pos: [ctr.x + circ.r * 0.7 + ox, ctr.y + circ.r * 0.7 + oy, Z],
       });
     } else if (c.kind === 'diameter') {
       const circ = P(c.refs[0]);
@@ -116,13 +130,13 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       segs.push({
         key: `s${k++}`,
         pts: [
-          [ctr.x - u * circ.r, ctr.y - u * circ.r, Z],
-          [ctr.x + u * circ.r, ctr.y + u * circ.r, Z],
+          [ctr.x - u * circ.r + ox, ctr.y - u * circ.r + oy, Z],
+          [ctr.x + u * circ.r + ox, ctr.y + u * circ.r + oy, Z],
         ],
       });
       labels.push({
         key: `b${k++}`, ci, text: `Ø${fmtDim(c.value)}`,
-        pos: [ctr.x + u * circ.r * 0.5, ctr.y + u * circ.r * 0.5, Z],
+        pos: [ctr.x + u * circ.r * 0.5 + ox, ctr.y + u * circ.r * 0.5 + oy, Z],
       });
     } else if (c.kind === 'arcRadius') {
       // A spoke from the centre to the arc's midpoint plus an R label at the rim,
@@ -136,10 +150,11 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       const mid = a0 + (normAngle(Math.atan2(en.y - ctr.y, en.x - ctr.x) - a0) || TWO_PI) / 2;
       const rx = ctr.x + arc.r * Math.cos(mid);
       const ry = ctr.y + arc.r * Math.sin(mid);
-      segs.push({ key: `s${k++}`, pts: [[ctr.x, ctr.y, Z], [rx, ry, Z]] });
+      // The spoke stays rooted at the centre and stretches out to the moved rim.
+      segs.push({ key: `s${k++}`, pts: [[ctr.x, ctr.y, Z], [rx + ox, ry + oy, Z]] });
       labels.push({
         key: `b${k++}`, ci, text: `R${fmtDim(c.value)}`,
-        pos: [(ctr.x + rx) / 2, (ctr.y + ry) / 2, Z],
+        pos: [(ctr.x + rx) / 2 + ox, (ctr.y + ry) / 2 + oy, Z],
       });
     } else if (c.kind === 'angle') {
       // An arc swept between the two legs around their shared vertex, so a 2-line
@@ -167,15 +182,15 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       const pts = [];
       for (let i = 0; i <= N; i++) {
         const a = a1 + (d * i) / N;
-        pts.push([v.x + r * Math.cos(a), v.y + r * Math.sin(a), Z]);
+        pts.push([v.x + r * Math.cos(a) + ox, v.y + r * Math.sin(a) + oy, Z]);
       }
-      segs.push({ key: `s${k++}`, pts });
+      segs.push({ key: `s${k++}`, pts }); // the whole arc slides out as one
       const mid = a1 + d / 2;
       // Label the *interior* corner angle actually swept, so a 60° corner reads
       // 60° and not the 120° directed angle planegcs stores.
       labels.push({
         key: `b${k++}`, ci, text: `${fmtDim((Math.abs(d) * 180) / Math.PI)}°`,
-        pos: [v.x + (r + 2) * Math.cos(mid), v.y + (r + 2) * Math.sin(mid), Z],
+        pos: [v.x + (r + 2) * Math.cos(mid) + ox, v.y + (r + 2) * Math.sin(mid) + oy, Z],
       });
     } else if (c.kind === 'lockX' || c.kind === 'lockY') {
       const p = P(c.refs[0]);
@@ -183,7 +198,7 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       const dyOff = c.kind === 'lockY' ? 2 : -2;
       labels.push({
         key: `b${k++}`, ci, text: `${c.kind === 'lockX' ? 'X' : 'Y'}${fmtDim(c.value)}`,
-        pos: [p.x + 1.6, p.y + dyOff, Z],
+        pos: [p.x + 1.6 + ox, p.y + dyOff + oy, Z],
       });
     }
   });

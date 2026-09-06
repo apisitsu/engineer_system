@@ -1360,6 +1360,25 @@ export const useSketchStore = create((set, get) => ({
     get().solve();
   },
 
+  /**
+   * Slide a placed dimension (its line and value together) to `offset`, in
+   * sketch units, from where the annotation would otherwise draw it. Purely how
+   * the dimension is *shown* — it removes no DOF and needs no solve — but it
+   * lives on the constraint so it is saved and undoable like any other edit.
+   *
+   * The drag emits one call per pointer move; `snapshot` is true only on the
+   * first of a gesture, so a whole drag collapses to one undo step (the same
+   * trick the point drag uses).
+   */
+  setDimensionOffset(index, offset, { snapshot = true } = {}) {
+    const { sk } = get();
+    const c = sk.constraints[index];
+    if (!c || c.value == null) return;
+    if (snapshot) get()._snapshot();
+    c.labelOffset = [offset[0], offset[1]];
+    get()._bump();
+  },
+
   loadDemo() {
     get()._snapshot();
     const doc = demoSketch();

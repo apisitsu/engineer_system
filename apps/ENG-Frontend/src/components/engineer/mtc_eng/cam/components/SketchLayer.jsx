@@ -9,7 +9,7 @@
  */
 import { useMemo, useEffect, useRef } from 'react';
 import { Line, Html } from '@react-three/drei';
-import { invalidate, useFrame } from '@react-three/fiber';
+import { invalidate, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSketchStore } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
@@ -122,9 +122,10 @@ const dimLabelStyle = {
   color: CAD.skDim, background: CAD.glassSolid, border: `1px solid ${CAD.border}`,
   borderRadius: 4, font: '600 11px monospace', padding: '0 4px',
   whiteSpace: 'nowrap', userSelect: 'none',
-  // Pointer events on so a dimension label is double-clickable to edit its value;
-  // the label is small and stood off from the geometry, so picking is unaffected.
-  pointerEvents: 'auto', cursor: 'pointer',
+  // Pointer events on so a dimension label is double-clickable to edit its value
+  // and can be dragged to reposition the whole dimension; the label is small and
+  // stood off from the geometry, so picking the sketch under it is unaffected.
+  pointerEvents: 'auto', cursor: 'move',
 };
 
 /** Live angle/length readout shown at the line rubber-band's tip while drawing. */
@@ -148,12 +149,15 @@ const angleReadoutStyle = (locked) => ({
  *   - angle             → an arc swept between the two legs + the degree value;
  *   - radius / lockX / lockY → a value tag on the geometry.
  * Non-dimensional constraints (horizontal, coincident, …) are not drawn here —
- * they remove DOF but aren't "sizes". Purely visual: labels use
- * `pointerEvents:none` and the lines opt out of raycasting, so picking is
- * unaffected.
+ * they remove DOF but aren't "sizes". The dimension *lines* opt out of
+ * raycasting so they never intercept a sketch pick; the *labels* do take pointer
+ * events — double-click edits the value, drag slides the whole dimension — but
+ * they are small and stood off the geometry, so picking under them still works.
  */
 function DimensionAnnotations({ sk, version }) {
   const beginEditConstraint = useSketchStore((s) => s.beginEditConstraint);
+  const setDimensionOffset = useSketchStore((s) => s.setDimensionOffset);
+  const camera = useThree((s) => s.camera);
   // The geometry is built by a pure module (`engine/sketch/annotations.js`) so
   // it can be tested without a renderer; this component only maps it to drei.
   const { segs, labels } = useMemo(
@@ -161,6 +165,43 @@ function DimensionAnnotations({ sk, version }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sk, version],
   );
+
+  // Drag a dimension label to slide the whole dimension (line + value) clear of
+  // the geometry. The pointer delta is in CSS pixels; for the orthographic
+  // sketch camera, world units = pixels / zoom (the same factor `ScreenRing`
+  // uses), and screen-Y is inverted. This holds while the sketch is viewed
+  // face-on, which is when dimensions are placed. `snapshot` only on the first
+  // move so the whole drag is one undo step; a sub-3px twitch is a mis-click and
+  // ignored, leaving the double-click-to-edit behaviour intact.
+  const drag = useRef(null);
+  const onLabelDown = (e, ci) => {
+    e.stopPropagation();
+    const base = sk.constraints[ci]?.labelOffset;
+    drag.current = {
+      ci, x: e.clientX, y: e.clientY,
+      base: Array.isArray(base) ? base : [0, 0],
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onLabelMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dxPx = e.clientX - d.x;
+    const dyPx = e.clientY - d.y;
+    if (!d.moved && Math.hypot(dxPx, dyPx) < 3) return;
+    const z = camera?.zoom || 1;
+    setDimensionOffset(
+      d.ci,
+      [d.base[0] + dxPx / z, d.base[1] - dyPx / z],
+      { snapshot: !d.moved },
+    );
+    d.moved = true;
+  };
+  const onLabelUp = (e) => {
+    if (drag.current) e.currentTarget.releasePointerCapture?.(e.pointerId);
+    drag.current = null;
+  };
 
 
   return (
@@ -178,7 +219,11 @@ function DimensionAnnotations({ sk, version }) {
               style={driven
                 ? { ...dimLabelStyle, color: CAD.skDriven, borderColor: CAD.skDriven, fontStyle: 'italic' }
                 : dimLabelStyle}
-              title={driven ? 'Driven (reference) — double-click to edit' : 'Double-click to edit'}
+              title={driven ? 'Driven (reference) — drag to move, double-click to edit' : 'Drag to move · double-click to edit'}
+              onPointerDown={(e) => onLabelDown(e, b.ci)}
+              onPointerMove={onLabelMove}
+              onPointerUp={onLabelUp}
+              onPointerCancel={onLabelUp}
               onDoubleClick={(e) => { e.stopPropagation(); beginEditConstraint(b.ci); }}
             >
               {driven ? `(${b.text})` : b.text}
