@@ -47,7 +47,11 @@ const MERGE_OPTIONS = [
  * has to know where it ends. A repeated literal in the other file is exactly the
  * kind of thing that drifts the first time this one is resized.
  */
-export const TREE_SIZE = { TREE_W: 268, TREE_STRIP: 36 };
+// TREE_W also sizes the Program listing (LeftColumn shares this column). A line
+// of G-code — block number, three axis words to four decimals, a feed — is
+// ~40 monospace chars, and 268 wrapped or clipped most of them; 360 fits a
+// typical line with the line-number gutter and still leaves the viewport wide.
+export const TREE_SIZE = { TREE_W: 360, TREE_STRIP: 36 };
 
 /**
  * The tree fills the column it is given rather than floating over the viewport.
