@@ -3,7 +3,7 @@
  * Exports all engine functions from their new modular files.
  */
 
-export { commitAllToPdf } from './commitEngine';
+export { commitAllToPdf, wrapTextToWidth } from './commitEngine';
 export { exportPageToImage, exportSelectedPagesToPdf } from './exportEngine';
 export { mergePdfFiles } from './mergeEngine';
 export * from './commitHelpers';

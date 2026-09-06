@@ -70,6 +70,7 @@ const PdfMergerWrapper = () => {
             setFileList((items) => {
                 const oldIndex = items.findIndex((item) => item.uid === active.id);
                 const newIndex = items.findIndex((item) => item.uid === over.id);
+                if (oldIndex === -1 || newIndex === -1) return items;
                 return arrayMove(items, oldIndex, newIndex);
             });
         }
@@ -81,7 +82,7 @@ const PdfMergerWrapper = () => {
         accept: '.pdf,application/pdf',
         showUploadList: false,
         beforeUpload: (file) => {
-            if (file.type !== 'application/pdf') {
+            if (file.type !== 'application/pdf' && !file.name?.endsWith('.pdf')) {
                 message.error(`${file.name} is not a PDF file`);
                 return Upload.LIST_IGNORE;
             }
@@ -90,16 +91,19 @@ const PdfMergerWrapper = () => {
         onChange(info) {
             const { fileList: newFileList } = info;
             const pdfFiles = newFileList
-                .filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
+                .filter(f => f.type === 'application/pdf' || f.name?.endsWith('.pdf'))
                 .map(f => f.originFileObj || f);
             setFileList(prev => {
-                const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified}`;
-                const existingKeys = new Set(prev.map(getFileKey));
+                const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified || 0}`;
+                const existingKeys = new Set(prev.map(item => getFileKey(item.rawFile || item)));
                 const newItems = pdfFiles.filter(f => !existingKeys.has(getFileKey(f)));
-                const withUid = newItems.map(f => {
-                    f.uid = f.uid || Math.random().toString(36).substring(2, 9);
-                    return f;
-                });
+                const withUid = newItems.map(f => ({
+                    uid: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                    name: f.name,
+                    size: f.size || 0,
+                    rawFile: f,
+                    arrayBuffer: () => (typeof f.arrayBuffer === 'function' ? f.arrayBuffer() : f.originFileObj?.arrayBuffer()),
+                }));
                 return [...prev, ...withUid];
             });
         },
@@ -120,8 +124,9 @@ const PdfMergerWrapper = () => {
         setLoading(true);
         try {
             const mergedPdf = await PDFDocument.create();
-            for (const file of fileList) {
-                const arrayBuffer = await file.arrayBuffer();
+            for (const item of fileList) {
+                const raw = item.rawFile || item;
+                const arrayBuffer = await (typeof raw.arrayBuffer === 'function' ? raw.arrayBuffer() : raw.originFileObj.arrayBuffer());
                 const pdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
                 const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
                 copiedPages.forEach((page) => mergedPdf.addPage(page));

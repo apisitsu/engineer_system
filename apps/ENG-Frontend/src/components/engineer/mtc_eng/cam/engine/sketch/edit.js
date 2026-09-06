@@ -1170,6 +1170,202 @@ export function circleIntersections(sk, cx, cy, r, selfId) {
   return out;
 }
 
+/** The curve a line/circle/arc entity traces, in a form the intersection maths wants. */
+function curveOf(sk, e) {
+  if (!e) return null;
+  if (e.type === 'line') {
+    const a = sk.entities.get(e.p1);
+    const b = sk.entities.get(e.p2);
+    return a && b ? { kind: 'seg', a, b } : null;
+  }
+  const c = sk.entities.get(e.center);
+  if (!c) return null;
+  if (e.type === 'circle') return { kind: 'circle', cx: c.x, cy: c.y, r: e.r };
+  if (e.type === 'arc') return { kind: 'arc', cx: c.x, cy: c.y, r: e.r, ent: e };
+  return null;
+}
+
+/**
+ * Every point where two entities (lines, circles, arcs) actually cross —
+ * segments respect their endpoints, arcs their swept span. 0–2 points.
+ */
+export function entityIntersections(sk, e1, e2) {
+  const c1 = curveOf(sk, e1);
+  const c2 = curveOf(sk, e2);
+  if (!c1 || !c2) return [];
+
+  if (c1.kind === 'seg' && c2.kind === 'seg') {
+    const p = segIntersect(c1.a, c1.b, c2.a, c2.b);
+    return p ? [{ x: p.x, y: p.y }] : [];
+  }
+
+  // seg × (circle | arc)
+  const seg = c1.kind === 'seg' ? c1 : c2.kind === 'seg' ? c2 : null;
+  if (seg) {
+    const cir = seg === c1 ? c2 : c1;
+    const out = [];
+    for (const t of lineCircleParams(seg.a, seg.b, cir.cx, cir.cy, cir.r)) {
+      if (t < -1e-9 || t > 1 + 1e-9) continue;
+      const x = seg.a.x + (seg.b.x - seg.a.x) * t;
+      const y = seg.a.y + (seg.b.y - seg.a.y) * t;
+      if (cir.kind === 'arc' && !arcSpanContains(sk, cir.ent, x, y)) continue;
+      out.push({ x, y });
+    }
+    return out;
+  }
+
+  // (circle | arc) × (circle | arc)
+  const out = [];
+  for (const p of circleCircleInts(c1.cx, c1.cy, c1.r, c2.cx, c2.cy, c2.r)) {
+    if (c1.kind === 'arc' && !arcSpanContains(sk, c1.ent, p.x, p.y)) continue;
+    if (c2.kind === 'arc' && !arcSpanContains(sk, c2.ent, p.x, p.y)) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/** Does segment a–b cross the axis-aligned box [xmin,ymin]–[xmax,ymax]? (Endpoints inside count.) */
+function segCrossesBox(a, b, xmin, ymin, xmax, ymax) {
+  const inBox = (p) => p.x >= xmin && p.x <= xmax && p.y >= ymin && p.y <= ymax;
+  if (inBox(a) || inBox(b)) return true;
+  const c = [
+    { x: xmin, y: ymin }, { x: xmax, y: ymin }, { x: xmax, y: ymax }, { x: xmin, y: ymax },
+  ];
+  for (let i = 0; i < 4; i += 1) {
+    if (segIntersect(a, b, c[i], c[(i + 1) % 4])) return true;
+  }
+  return false;
+}
+
+/**
+ * Ids of the entities a rubber-band box picks. `crossing` false (a left→right
+ * drag) takes only entities **fully enclosed**; true (right→left) also takes
+ * anything the box merely touches — the SolidWorks window / crossing rule.
+ *
+ * A point that anchors a curve (an endpoint, a centre) is structural, not free
+ * geometry — picking it alongside its curve is noise — so only a genuinely
+ * loose point is marquee-picked, and never the origin or a construction sharp.
+ */
+export function entitiesInBox(sk, x0, y0, x1, y1, { crossing = false } = {}) {
+  const xmin = Math.min(x0, x1);
+  const xmax = Math.max(x0, x1);
+  const ymin = Math.min(y0, y1);
+  const ymax = Math.max(y0, y1);
+  const inBox = (px, py) => px >= xmin && px <= xmax && py >= ymin && py <= ymax;
+  const P = (id) => sk.entities.get(id);
+  const anchored = new Set();
+  for (const e of sk.entities.values()) {
+    if (e.type === 'line') { anchored.add(e.p1); anchored.add(e.p2); }
+    else if (e.type === 'circle') anchored.add(e.center);
+    else if (e.type === 'arc') { anchored.add(e.center); anchored.add(e.start); anchored.add(e.end); }
+  }
+  const out = [];
+  for (const e of sk.entities.values()) {
+    if (e.type === 'point') {
+      if (e.origin || e.construction || anchored.has(e.id)) continue;
+      if (inBox(e.x, e.y)) out.push(e.id);
+    } else if (e.type === 'line') {
+      const a = P(e.p1);
+      const b = P(e.p2);
+      if (!a || !b) continue;
+      const enclosed = inBox(a.x, a.y) && inBox(b.x, b.y);
+      if (enclosed || (crossing && segCrossesBox(a, b, xmin, ymin, xmax, ymax))) out.push(e.id);
+    } else if (e.type === 'circle' || e.type === 'arc') {
+      const c = P(e.center);
+      if (!c) continue;
+      const bx0 = c.x - e.r;
+      const bx1 = c.x + e.r;
+      const by0 = c.y - e.r;
+      const by1 = c.y + e.r;
+      const enclosed = bx0 >= xmin && bx1 <= xmax && by0 >= ymin && by1 <= ymax;
+      const touches = bx0 <= xmax && bx1 >= xmin && by0 <= ymax && by1 >= ymin;
+      if (enclosed || (crossing && touches)) out.push(e.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * The crossing point of two distinct entities nearest to (x, y), within `tol`,
+ * or null — the "intersection snap". A click on it lands exactly on the
+ * crossing; unlike the vertex / rim / tangent snaps it is where two *different*
+ * curves meet, whether or not a point was ever placed there.
+ *
+ * `skipId` drops one entity from the search (e.g. the one being drawn).
+ */
+export function nearestIntersection(sk, x, y, tol, skipId = null) {
+  const ents = [...sk.entities.values()].filter(
+    (e) => (e.type === 'line' || e.type === 'circle' || e.type === 'arc') && e.id !== skipId,
+  );
+  let best = null;
+  for (let i = 0; i < ents.length; i += 1) {
+    for (let j = i + 1; j < ents.length; j += 1) {
+      for (const p of entityIntersections(sk, ents[i], ents[j])) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (d <= tol && (!best || d < best.d)) {
+          best = { x: p.x, y: p.y, ids: [ents[i].id, ents[j].id], d };
+        }
+      }
+    }
+  }
+  return best ? { x: best.x, y: best.y, ids: best.ids } : null;
+}
+
+/**
+ * The nearest **quadrant** point of a circle or arc to (x, y), within `tol`, or
+ * null. Quadrants are the four cardinal points on the sketch axes — top, bottom,
+ * left, right — the "high points" a machinist works to. An arc reports only the
+ * quadrants that fall inside its swept span.
+ *
+ * `axis` is `'v'` for the top/bottom pair (a point that sits on the centre's
+ * vertical) and `'h'` for left/right, so the caller can pin the point there with
+ * a vertical / horizontal relation to the centre.
+ */
+export function nearestQuadrant(sk, x, y, tol, skipId = null) {
+  let best = null;
+  for (const e of sk.entities.values()) {
+    if ((e.type !== 'circle' && e.type !== 'arc') || e.id === skipId) continue;
+    const c = sk.entities.get(e.center);
+    if (!c) continue;
+    const quads = [
+      { x: c.x + e.r, y: c.y, axis: 'h' },
+      { x: c.x - e.r, y: c.y, axis: 'h' },
+      { x: c.x, y: c.y + e.r, axis: 'v' },
+      { x: c.x, y: c.y - e.r, axis: 'v' },
+    ];
+    for (const q of quads) {
+      if (e.type === 'arc' && !arcSpanContains(sk, e, q.x, q.y)) continue;
+      const d = Math.hypot(q.x - x, q.y - y);
+      if (d <= tol && (!best || d < best.d)) {
+        best = { x: q.x, y: q.y, id: e.id, center: e.center, axis: q.axis, curveType: e.type, d };
+      }
+    }
+  }
+  return best
+    ? { x: best.x, y: best.y, id: best.id, center: best.center, axis: best.axis, curveType: best.curveType }
+    : null;
+}
+
+/**
+ * The nearest **line-segment midpoint** to (x, y), within `tol`, or null. A
+ * click on it pins the new point there with a `midpoint` relation, so it stays
+ * centred as the line changes.
+ */
+export function nearestMidpoint(sk, x, y, tol, skipId = null) {
+  let best = null;
+  for (const e of sk.entities.values()) {
+    if (e.type !== 'line' || e.id === skipId) continue;
+    const a = sk.entities.get(e.p1);
+    const b = sk.entities.get(e.p2);
+    if (!a || !b) continue;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const d = Math.hypot(mx - x, my - y);
+    if (d <= tol && (!best || d < best.d)) best = { x: mx, y: my, id: e.id, d };
+  }
+  return best ? { x: best.x, y: best.y, id: best.id } : null;
+}
+
 /** Crossing angles of `pts` about (cx, cy), sorted CCW and de-duplicated. */
 function sortedCutAngles(pts, cx, cy) {
   const angs = pts
@@ -1743,4 +1939,82 @@ export function offsetChain(sk, ids, dist) {
     }
   }
   return created;
+}
+
+/**
+ * The unit direction a placed dimension of `kind` may be slid along — its
+ * "axis". A drag offset is projected onto this (`projectOnto`, used by
+ * `sketchStore.setDimensionOffset` and `annotations.js`), so the dimension
+ * line moves as one along a single direction with its value staying centred on
+ * it, instead of floating free. `null` when the kind has no natural axis.
+ */
+export function dimensionLockDir(sk, kind, refs = []) {
+  const P = (id) => sk?.entities?.get(id);
+  switch (kind) {
+    case 'distanceX': // line runs along X → it slides in Y (the standoff)
+    case 'lockY':
+      return [0, 1];
+    case 'distanceY':
+    case 'lockX':
+      return [1, 0];
+    case 'radius':
+    case 'diameter': // along the 45° leader
+      return [Math.SQRT1_2, Math.SQRT1_2];
+    case 'distance': {
+      const a = P(refs[0]);
+      const b = P(refs[1]);
+      if (!a || !b) return null;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return [-dy / len, dx / len]; // perpendicular to the measured pair
+    }
+    case 'pointLineDistance': {
+      const l = P(refs[1]);
+      const a = l && P(l.p1);
+      const b = l && P(l.p2);
+      if (!a || !b) return null;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return [dx / len, dy / len]; // along the measured line
+    }
+    case 'arcRadius': {
+      const arc = P(refs[0]);
+      const ctr = arc && P(arc.center);
+      const s = arc && P(arc.start);
+      const en = arc && P(arc.end);
+      if (!ctr || !s || !en) return null;
+      const a0 = Math.atan2(s.y - ctr.y, s.x - ctr.x);
+      const mid = a0 + (normAngle(Math.atan2(en.y - ctr.y, en.x - ctr.x) - a0) || TAU) / 2;
+      return [Math.cos(mid), Math.sin(mid)]; // along the spoke
+    }
+    case 'angle': {
+      const l1 = P(refs[0]);
+      const l2 = P(refs[1]);
+      if (!l1 || !l2) return null;
+      const sharedId = [l1.p1, l1.p2].find((id) => id === l2.p1 || id === l2.p2);
+      const vId = sharedId != null ? sharedId : l1.p1;
+      const v = P(vId);
+      const f1 = P(l1.p1 === vId ? l1.p2 : l1.p1);
+      const f2 = P(l2.p1 === vId ? l2.p2 : l2.p1);
+      if (!v || !f1 || !f2) return null;
+      const a1 = Math.atan2(f1.y - v.y, f1.x - v.x);
+      let d = Math.atan2(f2.y - v.y, f2.x - v.x) - a1;
+      while (d > Math.PI) d -= TAU;
+      while (d < -Math.PI) d += TAU;
+      const mid = a1 + d / 2;
+      return [Math.cos(mid), Math.sin(mid)]; // along the bisector
+    }
+    default:
+      return null;
+  }
+}
+
+/** Project a 2D `offset` onto unit `dir`; returns it unchanged when `dir` is null. */
+export function projectOnto(offset, dir) {
+  if (!dir) return [offset[0], offset[1]];
+  const t = offset[0] * dir[0] + offset[1] * dir[1];
+  // `+ 0` folds a `-0` (from a zero component of `dir`) back to plain `0`.
+  return [t * dir[0] + 0, t * dir[1] + 0];
 }

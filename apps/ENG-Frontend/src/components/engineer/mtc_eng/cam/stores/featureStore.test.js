@@ -1,7 +1,9 @@
 import {
   describe, it, expect, beforeEach, vi,
 } from 'vitest';
-import { useFeatureStore } from './featureStore.js';
+import {
+  useFeatureStore, TREE_W_DEFAULT, TREE_W_MIN, TREE_W_MAX,
+} from './featureStore.js';
 import { useSketchStore } from './sketchStore.js';
 import { useCamPlanStore, getMesh } from './camPlanStore.js';
 import { addPoint, addLine, createSketch } from '../engine/sketch/model.js';
@@ -46,6 +48,26 @@ function withSketches(specs) {
 beforeEach(() => {
   features().clear();
   withSketches([[0, 0, 40, 40]]);
+});
+
+describe('the docked column width', () => {
+  beforeEach(() => { useFeatureStore.setState({ treeWidth: TREE_W_DEFAULT }); });
+
+  it('starts at the default', () => {
+    expect(features().treeWidth).toBe(TREE_W_DEFAULT);
+  });
+
+  it('clamps a drag past either end', () => {
+    features().setTreeWidth(10000);
+    expect(features().treeWidth).toBe(TREE_W_MAX);
+    features().setTreeWidth(-50);
+    expect(features().treeWidth).toBe(TREE_W_MIN);
+  });
+
+  it('rounds to a whole pixel', () => {
+    features().setTreeWidth(457.6);
+    expect(features().treeWidth).toBe(458);
+  });
 });
 
 describe('editing the tree', () => {
