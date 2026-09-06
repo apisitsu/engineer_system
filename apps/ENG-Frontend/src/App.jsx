@@ -310,6 +310,19 @@ const AppContent = () => {
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG', 'QA']} />}>
+                {/* CAD/CAM is a standalone workspace opened in its own tab
+                    (the sidebar entry is target="_blank"), so it renders
+                    outside MainLayout — no app header, no sidebar, the whole
+                    window is the viewport. */}
+                <Route
+                  path={MTC_PATHS.CAM}
+                  element={(
+                    <React.Suspense fallback={<Spin size="large" style={{ display: 'block', margin: '80px auto' }} />}>
+                      <CamPage />
+                    </React.Suspense>
+                  )}
+                />
+
                 <Route element={<MainLayout />}>
                   {/* ------------ User Settings ------------ */}
                   <Route path="/user/settings" element={<UserSetting />} />
@@ -346,14 +359,7 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.TOOLING_MANAGEMENT} element={<ToolManagementPage />} />
                   <Route path={MTC_PATHS.PART_MANAGEMENT} element={<SpecProcessManager />} />
                   <Route path={MTC_PATHS.CN_ENABLE} element={<CnEnablePage />} />
-                  <Route
-                    path={MTC_PATHS.CAM}
-                    element={(
-                      <React.Suspense fallback={<Spin size="large" style={{ display: 'block', margin: '80px auto' }} />}>
-                        <CamPage />
-                      </React.Suspense>
-                    )}
-                  />
+                  {/* CAD/CAM route is above, outside MainLayout — see the note there. */}
                   <Route path={MTC_PATHS.SDS_V2} element={<SdsV2Page />} />
                   <Route path={MTC_PATHS.SDS_V2_ADMIN} element={<SdsV2AdminPage />} />
                   <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />
