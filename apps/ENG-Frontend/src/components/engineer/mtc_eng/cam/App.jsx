@@ -526,6 +526,8 @@ export default function App() {
   const showArbor = useCamStore((s) => s.showArbor);
   const showToolpath = useCamStore((s) => s.showToolpath);
   const cutFollowsPlayback = useCamStore((s) => s.cutFollowsPlayback);
+  const autoSimEnabled = useCamStore((s) => s.autoSimEnabled);
+  const toggleAutoSim = useCamStore((s) => s.toggleAutoSim);
   const simReady  = useCamStore((s) => s.simReady);
   const removalNote = useCamStore((s) => s.removalNote);
   const aIndex    = useCamStore((s) => s.aIndex);
@@ -668,15 +670,16 @@ export default function App() {
   // ---- Simulate on its own, once the setup says what to simulate ----------
   //
   // A program, a stated billet and an origin are the three things that make
-  // "what will this make?" answerable, and the moment they are all there the
-  // operator has already asked the question. `autoSimKey` describes the setup as
-  // a string so the run happens once per setup rather than once per render —
-  // see `engine/view/autoSim.js`.
+  // "what will this make?" answerable. Opt-in via `autoSimEnabled` (off by
+  // default) so a session that only wants the backplot never carves; when on,
+  // `autoSimKey` describes the setup as a string so the run happens once per
+  // setup rather than once per render — see `engine/view/autoSim.js`.
   const autoKey = autoSimKey({
     gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex, mode,
   });
   const lastAutoKey = useRef(null);
   useEffect(() => {
+    if (!autoSimEnabled) return;
     if (!shouldAutoSimulate({
       key: autoKey,
       last: lastAutoKey.current,
@@ -686,7 +689,7 @@ export default function App() {
     })) return;
     lastAutoKey.current = autoKey;
     simulate();
-  }, [autoKey, playing, simStatus, sketching, simulate]);
+  }, [autoSimEnabled, autoKey, playing, simStatus, sketching, simulate]);
 
   // A separately loaded .nc's indexed (A-word) moves pivot about camPlanStore's
   // rotary centre, which only reaches the interpreter through
@@ -1429,6 +1432,13 @@ export default function App() {
               <Divider style={{ margin: '4px 0', borderColor: CAD.border }}>
                 <Text style={{ color: CAD.muted }}>Material removal</Text>
               </Divider>
+
+              <Space size={6} align="center">
+                <Switch size="small" checked={autoSimEnabled} onChange={toggleAutoSim} />
+                <Tooltip title="Carve the program on its own whenever the setup (program, billet, origin) is complete or changes. Off by default — leave it off if you only want the backplot, and press Simulate by hand when you need a cut.">
+                  <span style={{ color: CAD.label, fontSize: 12 }}>Auto-simulate</span>
+                </Tooltip>
+              </Space>
 
               {turning ? (
                 <>

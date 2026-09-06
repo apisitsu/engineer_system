@@ -1114,6 +1114,9 @@ describe('simulating on its own, once the setup says what to simulate', () => {
       datum: { planeNormal: null, point: null, rotaryCenter: null, rotaryZero: null, reverseX: false, axesSet: [false, false, false] },
     });
     useCamStore.setState({
+      // The whole suite is about when it DOES run; the toggle that gates it is
+      // off by default and has its own test below.
+      autoSimEnabled: true,
       stockEnabled: false, stockSize: { x: null, y: null, z: null },
       stockOrigin: { x: null, y: null, z: null }, simStatus: 'idle',
     });
@@ -1123,6 +1126,23 @@ describe('simulating on its own, once the setup says what to simulate', () => {
     const spy = spySimulate();
     await mount();
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('does nothing at all while the Auto-simulate toggle is off', async () => {
+    const spy = spySimulate();
+    useCamStore.setState({ autoSimEnabled: false });
+    await mount();
+    // A complete setup that would otherwise carve immediately.
+    await setStore({ stockEnabled: true, stockSize: { x: 100, y: 60, z: 20 } });
+    await act(async () => {
+      useCamPlanStore.setState({
+        datum: { planeNormal: null, point: [0, 0, 0], rotaryCenter: null, rotaryZero: null, reverseX: false, axesSet: [true, true, true] },
+      });
+    });
+    expect(spy).not.toHaveBeenCalled();
+    // Flipping it on picks up the setup already in place.
+    await setStore({ autoSimEnabled: true });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it('does not run on a stated billet with no origin', async () => {

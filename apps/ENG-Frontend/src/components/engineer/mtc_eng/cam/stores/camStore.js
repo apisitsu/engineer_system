@@ -149,6 +149,12 @@ export const useCamStore = create((set, get) => ({
   removedVolume: 0,
   totalFeeds: 0,
   cutFollowsPlayback: true, // watch the stock carve as playback runs, by default
+  // Opt-in: when on, the sim re-runs itself the moment the setup (program +
+  // billet + origin) is complete or changes. Off by default so a session that
+  // only wants the backplot never spends a worker carving. Not a saved setting —
+  // it is how you are working right now, like the view toggles below.
+  autoSimEnabled: false,
+  toggleAutoSim: () => set((s) => ({ autoSimEnabled: !s.autoSimEnabled })),
   showStock: true,
   // The arbor is the widest thing on the tool marker, so it is what hides the cut
   // being made — worth being able to drop without losing the cutter itself.
