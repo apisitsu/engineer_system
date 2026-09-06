@@ -583,6 +583,24 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Drives the feature-tree column's width; the tree itself owns the toggle.
   const treeOpen = useFeatureStore((s) => s.treeOpen);
+  const treeWidth = useFeatureStore((s) => s.treeWidth);
+  // While the edge handle is dragged, drop the width transition so the column
+  // tracks the pointer instead of easing behind it.
+  const [treeResizing, setTreeResizing] = useState(false);
+  const startTreeResize = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = useFeatureStore.getState().treeWidth;
+    setTreeResizing(true);
+    const onMove = (ev) => useFeatureStore.getState().setTreeWidth(startW + (ev.clientX - startX));
+    const onUp = () => {
+      setTreeResizing(false);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, []);
   const sketching = page === 'sketch';
   const turning = page === 'turn';
 
@@ -1039,14 +1057,29 @@ export default function App() {
               is a *setup* job, not something you watch while you work, so it
               moved into the drawer below and opens from the toolbar. */}
           <Sider
-            width={treeOpen ? TREE_SIZE.TREE_W : TREE_SIZE.TREE_STRIP + 8}
+            width={treeOpen ? treeWidth : TREE_SIZE.TREE_STRIP + 8}
             style={{
               background: CAD.panelBg,
               borderRight: `1px solid ${CAD.border}`,
-              transition: 'width 120ms ease',
+              transition: treeResizing ? 'none' : 'width 120ms ease',
+              position: 'relative',
             }}
           >
             <LeftColumn activeLine={activeLine} />
+            {treeOpen && (
+              // Drag the column edge to trade viewport for program/tree width.
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize"
+                data-tree-resize
+                onPointerDown={startTreeResize}
+                style={{
+                  position: 'absolute', top: 0, right: -3, width: 7, height: '100%',
+                  cursor: 'col-resize', zIndex: 3, touchAction: 'none',
+                }}
+              />
+            )}
           </Sider>
 
           <Drawer

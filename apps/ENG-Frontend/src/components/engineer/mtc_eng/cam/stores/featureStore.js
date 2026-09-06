@@ -43,6 +43,33 @@ import { useCamPlanStore, getMesh } from './camPlanStore.js';
  */
 const _imports = new Map();
 
+/**
+ * The docked left column's open width, in px.
+ *
+ * It carries both the feature tree and the Program listing (`LeftColumn`), and
+ * those want different room — a line of G-code is ~40 monospace chars. So the
+ * edge is draggable (`App.jsx` puts the handle on it) rather than a fixed
+ * number, `TREE_W_DEFAULT` is only the starting point, and the last size is
+ * mirrored to localStorage. Every localStorage access is wrapped: a browser in
+ * private mode can throw on the property itself, not just on read/write.
+ */
+export const TREE_W_DEFAULT = 420;
+export const TREE_W_MIN = 280;
+export const TREE_W_MAX = 760;
+const TREE_W_KEY = 'cam.treeWidth';
+
+function clampTreeWidth(px) {
+  return Math.round(Math.min(TREE_W_MAX, Math.max(TREE_W_MIN, px)));
+}
+
+function readStoredTreeWidth() {
+  try {
+    const v = Number(window.localStorage.getItem(TREE_W_KEY));
+    if (Number.isFinite(v) && v > 0) return clampTreeWidth(v);
+  } catch { /* private mode, or no window */ }
+  return TREE_W_DEFAULT;
+}
+
 export const useFeatureStore = create((set, get) => ({
   features: [],
   /** The tree has changed, or a sketch under it has, since the last rebuild. */
@@ -62,6 +89,15 @@ export const useFeatureStore = create((set, get) => ({
    */
   treeOpen: true,
   setTreeOpen(treeOpen) { set({ treeOpen }); },
+
+  /** The open column's width in px — see the notes on `TREE_W_DEFAULT`. */
+  treeWidth: readStoredTreeWidth(),
+  setTreeWidth(px) {
+    const treeWidth = clampTreeWidth(px);
+    if (treeWidth === get().treeWidth) return;
+    set({ treeWidth });
+    try { window.localStorage.setItem(TREE_W_KEY, String(treeWidth)); } catch { /* private mode */ }
+  },
 
   markDirty() {
     if (!get().dirty) set({ dirty: true });
