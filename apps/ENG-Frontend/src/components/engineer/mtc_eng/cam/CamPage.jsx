@@ -30,7 +30,7 @@
  * once it is a tab of its own, the workspace is the whole window.
  */
 import React from 'react';
-import { Layout, ConfigProvider, theme } from 'antd';
+import { Layout, ConfigProvider, theme, App as AntdApp } from 'antd';
 import CamApp from './App.jsx';
 import { CAD } from './theme.js';
 
@@ -94,7 +94,12 @@ const CamPage = () => (
           },
         }}
       >
-        <CamApp />
+        {/* Own antd App context so CamApp's own `App.useApp()` (auto-save
+            restore prompt, etc.) is themed by the CAD provider above, not the
+            host's. */}
+        <AntdApp style={{ height: '100%' }}>
+          <CamApp />
+        </AntdApp>
       </ConfigProvider>
   </Layout>
 );

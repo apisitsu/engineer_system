@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
   InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip, Drawer,
+  App as AntdApp,
 } from 'antd';
 import {
   ThunderboltOutlined, BulbOutlined,
@@ -32,7 +33,8 @@ import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
-import { exportGcode, openProjectFile } from './lib/projectIO.js';
+import { exportGcode, openProjectFile, applyProject } from './lib/projectIO.js';
+import { readDraft, clearDraft, startAutosave, suspendAutosave } from './lib/autosave.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
@@ -486,6 +488,7 @@ function BilletBox({
 
 export default function App() {
   const { token } = theme.useToken();
+  const { notification } = AntdApp.useApp();
   // Small scalar state from Zustand — large buffers live in bufferCache.
   const gcode = useCamStore((s) => s.gcode);
   const fileName = useCamStore((s) => s.fileName);
@@ -705,6 +708,41 @@ export default function App() {
     lastRotaryCenterKey.current = rotaryCenterKey;
     if (gcode) parse();
   }, [rotaryCenterKey, gcode, parse]);
+
+  // Auto-save draft: mirror the drawing (sketches, feature tree, program) to
+  // localStorage on a debounce, and on load offer back whatever a previous
+  // session left. Cleared on an explicit Save (library or file) or New project.
+  useEffect(() => {
+    const draft = readDraft();
+    if (draft) {
+      const key = 'cam-autosave-draft';
+      notification.info({
+        key,
+        message: 'Unsaved work from a previous session',
+        description: `Last change ${new Date(draft.at).toLocaleString()}.`,
+        duration: 0,
+        btn: (
+          <Space>
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => {
+                notification.destroy(key);
+                suspendAutosave(() => applyProject(draft.project)).catch(() => {});
+              }}
+            >
+              Restore
+            </Button>
+            <Button size="small" onClick={() => { clearDraft(); notification.destroy(key); }}>
+              Discard
+            </Button>
+          </Space>
+        ),
+      });
+    }
+    return startAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Let a save confirmation fade rather than linger.
   useEffect(() => {

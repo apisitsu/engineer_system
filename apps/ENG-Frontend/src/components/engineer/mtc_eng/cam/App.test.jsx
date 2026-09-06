@@ -137,6 +137,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  try { window.localStorage.clear(); } catch { /* no localStorage in this env */ }
 });
 
 describe('the sidebar while setting up', () => {

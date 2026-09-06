@@ -34,6 +34,7 @@ import {
   putRecord, listMeta, getData, deleteRecord, clearAll, shareRecord, unshareRecord,
 } from '../lib/workApi.js';
 import { currentProject, applyProject, newProject as startNewProject } from '../lib/projectIO.js';
+import { clearDraft } from '../lib/autosave.js';
 import { useCamStore } from './camStore.js';
 
 export const useLibraryStore = create((set, get) => ({
@@ -176,6 +177,7 @@ export const useLibraryStore = create((set, get) => ({
     try {
       const record = build();
       const saved = await putRecord(record);
+      clearDraft(); // the work is filed under a name now — the draft is redundant
       await get().refresh();
       // Saving files the work under a name, which is exactly what "open" means
       // for everything after it — so the next save can go straight back here.
