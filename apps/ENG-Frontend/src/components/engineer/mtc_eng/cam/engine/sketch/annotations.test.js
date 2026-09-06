@@ -152,6 +152,24 @@ describe('dimensionAnnotations — a dragged dimension is locked to its axis', (
     expect(after[1]).toBeCloseTo(before[1] - 1.5, 9);
   });
 
+  it('keeps the diameter line on the circle and runs a leader out to the value', () => {
+    const sk = createSketch();
+    const c = addCircle(sk, addPoint(sk, 0, 0), 10);
+    const ci = addConstraint(sk, 'diameter', [c], 20);
+    const base = dimensionAnnotations(sk);
+    sk.constraints[ci].labelOffset = [8, 8]; // dragged well outside the circle
+    const moved = dimensionAnnotations(sk);
+
+    // The diameter chord is untouched — still a 20-long line through the centre.
+    expect(moved.segs[0].pts).toEqual(base.segs[0].pts);
+    const [p, q] = moved.segs[0].pts;
+    expect(Math.hypot(q[0] - p[0], q[1] - p[1])).toBeCloseTo(20, 6);
+    // A leader now joins the rim to the moved value.
+    const leader = moved.segs[1];
+    expect(leader.pts[0]).toEqual(q);                 // starts at the rim
+    expect(moved.labels[0].pos).toEqual(leader.pts[1]); // ends at the label
+  });
+
   it('is inert when the offset is absent or zero', () => {
     const s = createSketch();
     const a = addPoint(s, 0, 0);

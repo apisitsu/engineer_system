@@ -131,18 +131,18 @@ export function dimensionAnnotations(sk, { z: Z = 0 } = {}) {
       if (!ctr) return;
       // 45° diameter line, tidy and unambiguous. SQRT1_2 rather than a truncated
       // 0.7071, which drew the line a fifth of a micron short of the diameter.
+      // The line stays a true chord **through the centre** — dragging must not
+      // pull it off the circle. What moves is a leader from the rim out to the
+      // value (SolidWorks' diameter-with-leader), locked to the 45° direction.
       const u = Math.SQRT1_2;
+      const rim = [ctr.x + u * circ.r, ctr.y + u * circ.r, Z];
       segs.push({
         key: `s${k++}`,
-        pts: [
-          [ctr.x - u * circ.r + ox, ctr.y - u * circ.r + oy, Z],
-          [ctr.x + u * circ.r + ox, ctr.y + u * circ.r + oy, Z],
-        ],
+        pts: [[ctr.x - u * circ.r, ctr.y - u * circ.r, Z], rim],
       });
-      labels.push({
-        key: `b${k++}`, ci, text: `Ø${fmtDim(c.value)}`,
-        pos: [ctr.x + u * circ.r * 0.5 + ox, ctr.y + u * circ.r * 0.5 + oy, Z],
-      });
+      const at = [rim[0] + ox, rim[1] + oy, Z];
+      if (ox || oy) segs.push({ key: `s${k++}`, pts: [rim, at] });
+      labels.push({ key: `b${k++}`, ci, text: `Ø${fmtDim(c.value)}`, pos: at });
     } else if (c.kind === 'arcRadius') {
       // A spoke from the centre to the arc's midpoint plus an R label at the rim,
       // so it reads as a radius rather than a diameter.
