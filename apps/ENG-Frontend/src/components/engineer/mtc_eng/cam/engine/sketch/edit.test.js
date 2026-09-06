@@ -8,7 +8,7 @@ import {
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
   filletCircleCircle, entityIntersections, nearestIntersection, entitiesInBox,
-  nearestQuadrant,
+  nearestQuadrant, nearestMidpoint,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -173,6 +173,29 @@ describe('nearestQuadrant — a circle/arc high point', () => {
     addArc(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0), addPoint(sk, 0, 10), 10);
     expect(near(nearestQuadrant(sk, 10.2, 0.1, 1.5).y, 0)).toBe(true);  // (10,0) is in span
     expect(nearestQuadrant(sk, -10.2, 0.1, 1.5)).toBeNull();            // (−10,0) is not
+  });
+});
+
+describe('nearestMidpoint — a line-segment midpoint', () => {
+  it('finds the midpoint of the nearest segment', () => {
+    const sk = createSketch();
+    const l = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 20, 0)); // midpoint (10, 0)
+    const m = nearestMidpoint(sk, 10.3, -0.4, 1.5);
+    expect(near(m.x, 10) && near(m.y, 0)).toBe(true);
+    expect(m.id).toBe(l);
+  });
+
+  it('is null away from any midpoint, and near an endpoint', () => {
+    const sk = createSketch();
+    addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 20, 0));
+    expect(nearestMidpoint(sk, 5, 0, 1.5)).toBeNull();   // quarter-way, not the middle
+    expect(nearestMidpoint(sk, 0.2, 0.1, 1.5)).toBeNull(); // that's an endpoint's job
+  });
+
+  it('skips the excluded segment', () => {
+    const sk = createSketch();
+    const l = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 20, 0));
+    expect(nearestMidpoint(sk, 10, 0, 1.5, l)).toBeNull();
   });
 });
 

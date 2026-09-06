@@ -546,6 +546,33 @@ describe('quadrant snap (circle high points)', () => {
   });
 });
 
+describe('midpoint snap (line centre)', () => {
+  const withLine = () => {
+    const sk = createSketch();
+    const l = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 20, 0)); // midpoint (10, 0)
+    useSketchStore.setState({ sk, tool: 'point', pickTol: 1.5, snap: null, past: [], future: [] });
+    return { sk, l };
+  };
+
+  it('reports a midpoint snap near the centre of a segment', () => {
+    withLine();
+    useSketchStore.getState().hover(10.2, 0.3);
+    const { snap } = useSketchStore.getState();
+    expect(snap.midpoint).toBe(true);
+    expect(near(snap.x, 10) && near(snap.y, 0)).toBe(true);
+  });
+
+  it('a click there pins the point with a midpoint relation to the line', () => {
+    const { sk, l } = withLine();
+    useSketchStore.getState().clickAt(10.2, 0.3);
+    const placed = [...sk.entities.values()].filter((e) => e.type === 'point').pop();
+    expect(near(placed.x, 10) && near(placed.y, 0)).toBe(true);
+    const c = sk.constraints.find((k) => k.kind === 'midpoint' && k.refs.includes(placed.id));
+    expect(c).toBeTruthy();
+    expect(c.refs).toContain(l);
+  });
+});
+
 describe('marquee (box) selection', () => {
   const scene = () => {
     const sk = createSketch();

@@ -1346,6 +1346,26 @@ export function nearestQuadrant(sk, x, y, tol, skipId = null) {
     : null;
 }
 
+/**
+ * The nearest **line-segment midpoint** to (x, y), within `tol`, or null. A
+ * click on it pins the new point there with a `midpoint` relation, so it stays
+ * centred as the line changes.
+ */
+export function nearestMidpoint(sk, x, y, tol, skipId = null) {
+  let best = null;
+  for (const e of sk.entities.values()) {
+    if (e.type !== 'line' || e.id === skipId) continue;
+    const a = sk.entities.get(e.p1);
+    const b = sk.entities.get(e.p2);
+    if (!a || !b) continue;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const d = Math.hypot(mx - x, my - y);
+    if (d <= tol && (!best || d < best.d)) best = { x: mx, y: my, id: e.id, d };
+  }
+  return best ? { x: best.x, y: best.y, id: best.id } : null;
+}
+
 /** Crossing angles of `pts` about (cx, cy), sorted CCW and de-duplicated. */
 function sortedCutAngles(pts, cx, cy) {
   const angs = pts

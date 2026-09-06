@@ -36,6 +36,7 @@ const SNAP_COLOR = CAD.skSnap; // magenta snap indicator (vertex / rim)
 const TANGENT_COLOR = CAD.skTangent; // green — tangent snap indicator
 const INTERSECT_COLOR = CAD.skIntersect; // gold — two curves crossing
 const QUADRANT_COLOR = CAD.skQuadrant; // violet — circle/arc quadrant (high point)
+const MIDPOINT_COLOR = CAD.skMidpoint; // blue — line-segment midpoint
 const AXIS_COLOR = CAD.skAxis; // cyan — angle-lock guide axis
 
 // Unit circle in the XY plane (local coords), for the screen-scaled snap ring.
@@ -584,14 +585,17 @@ export default function SketchLayer() {
       {/* Snap indicator: a constant-screen-size ring on the point a click will
           snap to. Magenta for a vertex / rim landing; green for a tangent target
           (drawing a line); gold for two curves crossing; violet for a circle
-          quadrant — each with a small tag so it's unmistakable. */}
+          quadrant; blue for a line midpoint — each with a small tag so it's
+          unmistakable. */}
       {(drawing || picking) && snap && (() => {
         const kind = snap.tangent ? 'Tangent'
           : snap.intersection ? 'Intersection'
-            : snap.quadrant ? 'Quadrant' : null;
+            : snap.quadrant ? 'Quadrant'
+              : snap.midpoint ? 'Midpoint' : null;
         const color = snap.tangent ? TANGENT_COLOR
           : snap.intersection ? INTERSECT_COLOR
-            : snap.quadrant ? QUADRANT_COLOR : SNAP_COLOR;
+            : snap.quadrant ? QUADRANT_COLOR
+              : snap.midpoint ? MIDPOINT_COLOR : SNAP_COLOR;
         return (
           <>
             <ScreenRing x={snap.x} y={snap.y} color={color} />

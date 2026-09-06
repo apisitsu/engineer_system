@@ -24,7 +24,7 @@ import {
   filletCircleCircle as filletCircleCircleEdit,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
-  nearestIntersection, nearestQuadrant, entitiesInBox,
+  nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
@@ -429,6 +429,10 @@ export const useSketchStore = create((set, get) => ({
         };
       }
     }
+    if (!snap && placing) {
+      const mid = nearestMidpoint(sk, x, y, tol);
+      if (mid) snap = { x: mid.x, y: mid.y, midpoint: true, midOf: mid.id };
+    }
     if (!snap) {
       const rim = nearestRimPoint(sk, x, y, tol);
       if (rim) snap = { x: rim.x, y: rim.y, onCurve: rim.id, curveType: rim.type };
@@ -491,6 +495,14 @@ export const useSketchStore = create((set, get) => ({
       try {
         addConstraint(sk, q.axis === 'v' ? 'vertical' : 'horizontal', [id, q.center]);
       } catch { /* a redundant relation is fine — the point is already placed */ }
+      return id;
+    }
+    // A line-segment midpoint: pin it there with a `midpoint` relation so it
+    // stays centred as the line changes.
+    const mid = nearestMidpoint(sk, x, y, tol);
+    if (mid) {
+      const id = addPoint(sk, mid.x, mid.y);
+      try { addConstraint(sk, 'midpoint', [id, mid.id]); } catch { /* leave it a plain point on the line */ }
       return id;
     }
     const rim = nearestRimPoint(sk, x, y, tol);
