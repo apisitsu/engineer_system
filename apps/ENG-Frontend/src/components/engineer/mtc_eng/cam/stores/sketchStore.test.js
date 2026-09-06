@@ -472,6 +472,46 @@ describe('line guides — angle lock & tangent snap (hover)', () => {
   });
 });
 
+describe('intersection snap (hover + click)', () => {
+  const crossed = () => {
+    const sk = createSketch();
+    const h = addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
+    const v = addLine(sk, addPoint(sk, 0, -10), addPoint(sk, 0, 10)); // cross at (0,0)
+    useSketchStore.setState({
+      sk, tool: 'point', pickTol: 1.5, snap: null, past: [], future: [],
+    });
+    return { sk, h, v };
+  };
+
+  it('reports a gold intersection snap under the cursor while a placing tool is active', () => {
+    crossed();
+    useSketchStore.getState().hover(0.4, -0.3);
+    const { snap } = useSketchStore.getState();
+    expect(snap.intersection).toBe(true);
+    expect(near(snap.x, 0) && near(snap.y, 0)).toBe(true);
+    expect(snap.of).toHaveLength(2);
+  });
+
+  it('does not run the pairwise scan for a non-placing tool', () => {
+    crossed();
+    useSketchStore.setState({ tool: 'select' });
+    useSketchStore.getState().hover(0.4, -0.3);
+    expect(useSketchStore.getState().snap).toBeNull();
+  });
+
+  it('a click there drops a point on the crossing, pinned to both lines', () => {
+    const { sk, h, v } = crossed();
+    useSketchStore.getState().clickAt(0.3, 0.2);
+    const pts = [...sk.entities.values()].filter((e) => e.type === 'point');
+    const placed = pts[pts.length - 1];
+    expect(near(placed.x, 0) && near(placed.y, 0)).toBe(true);
+    const added = sk.constraints.filter((c) => c.refs.includes(placed.id));
+    expect(added.map((c) => c.kind).sort()).toEqual(['pointOnLine', 'pointOnLine']);
+    expect(added.some((c) => c.refs.includes(h))).toBe(true);
+    expect(added.some((c) => c.refs.includes(v))).toBe(true);
+  });
+});
+
 describe('swapDimensionRefs', () => {
   it('flips the ref order but keeps the interior corner angle', () => {
     const { sk, base, up } = corner(); // 90° corner sharing the origin

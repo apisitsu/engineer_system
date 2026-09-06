@@ -1170,6 +1170,86 @@ export function circleIntersections(sk, cx, cy, r, selfId) {
   return out;
 }
 
+/** The curve a line/circle/arc entity traces, in a form the intersection maths wants. */
+function curveOf(sk, e) {
+  if (!e) return null;
+  if (e.type === 'line') {
+    const a = sk.entities.get(e.p1);
+    const b = sk.entities.get(e.p2);
+    return a && b ? { kind: 'seg', a, b } : null;
+  }
+  const c = sk.entities.get(e.center);
+  if (!c) return null;
+  if (e.type === 'circle') return { kind: 'circle', cx: c.x, cy: c.y, r: e.r };
+  if (e.type === 'arc') return { kind: 'arc', cx: c.x, cy: c.y, r: e.r, ent: e };
+  return null;
+}
+
+/**
+ * Every point where two entities (lines, circles, arcs) actually cross —
+ * segments respect their endpoints, arcs their swept span. 0–2 points.
+ */
+export function entityIntersections(sk, e1, e2) {
+  const c1 = curveOf(sk, e1);
+  const c2 = curveOf(sk, e2);
+  if (!c1 || !c2) return [];
+
+  if (c1.kind === 'seg' && c2.kind === 'seg') {
+    const p = segIntersect(c1.a, c1.b, c2.a, c2.b);
+    return p ? [{ x: p.x, y: p.y }] : [];
+  }
+
+  // seg × (circle | arc)
+  const seg = c1.kind === 'seg' ? c1 : c2.kind === 'seg' ? c2 : null;
+  if (seg) {
+    const cir = seg === c1 ? c2 : c1;
+    const out = [];
+    for (const t of lineCircleParams(seg.a, seg.b, cir.cx, cir.cy, cir.r)) {
+      if (t < -1e-9 || t > 1 + 1e-9) continue;
+      const x = seg.a.x + (seg.b.x - seg.a.x) * t;
+      const y = seg.a.y + (seg.b.y - seg.a.y) * t;
+      if (cir.kind === 'arc' && !arcSpanContains(sk, cir.ent, x, y)) continue;
+      out.push({ x, y });
+    }
+    return out;
+  }
+
+  // (circle | arc) × (circle | arc)
+  const out = [];
+  for (const p of circleCircleInts(c1.cx, c1.cy, c1.r, c2.cx, c2.cy, c2.r)) {
+    if (c1.kind === 'arc' && !arcSpanContains(sk, c1.ent, p.x, p.y)) continue;
+    if (c2.kind === 'arc' && !arcSpanContains(sk, c2.ent, p.x, p.y)) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * The crossing point of two distinct entities nearest to (x, y), within `tol`,
+ * or null — the "intersection snap". A click on it lands exactly on the
+ * crossing; unlike the vertex / rim / tangent snaps it is where two *different*
+ * curves meet, whether or not a point was ever placed there.
+ *
+ * `skipId` drops one entity from the search (e.g. the one being drawn).
+ */
+export function nearestIntersection(sk, x, y, tol, skipId = null) {
+  const ents = [...sk.entities.values()].filter(
+    (e) => (e.type === 'line' || e.type === 'circle' || e.type === 'arc') && e.id !== skipId,
+  );
+  let best = null;
+  for (let i = 0; i < ents.length; i += 1) {
+    for (let j = i + 1; j < ents.length; j += 1) {
+      for (const p of entityIntersections(sk, ents[i], ents[j])) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (d <= tol && (!best || d < best.d)) {
+          best = { x: p.x, y: p.y, ids: [ents[i].id, ents[j].id], d };
+        }
+      }
+    }
+  }
+  return best ? { x: best.x, y: best.y, ids: best.ids } : null;
+}
+
 /** Crossing angles of `pts` about (cx, cy), sorted CCW and de-duplicated. */
 function sortedCutAngles(pts, cx, cy) {
   const angs = pts

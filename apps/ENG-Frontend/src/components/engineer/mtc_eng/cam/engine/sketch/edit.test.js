@@ -7,7 +7,7 @@ import {
   chamfer, fillet, filletLineArc, filletArcArc, tangentPoint, nearestTangent,
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
-  filletCircleCircle,
+  filletCircleCircle, entityIntersections, nearestIntersection,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -37,6 +37,62 @@ describe('circleIntersections', () => {
     const b = addPoint(sk, 0, 5); // never reaches r=10
     addLine(sk, a, b);
     expect(circleIntersections(sk, 0, 0, 10, circle).length).toBe(0);
+  });
+});
+
+describe('entityIntersections / nearestIntersection', () => {
+  it('crosses two segments, respecting both spans', () => {
+    const sk = createSketch();
+    const h = addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
+    const v = addLine(sk, addPoint(sk, 2, -10), addPoint(sk, 2, 10));
+    const pts = entityIntersections(sk, sk.entities.get(h), sk.entities.get(v));
+    expect(pts).toHaveLength(1);
+    expect(near(pts[0].x, 2) && near(pts[0].y, 0)).toBe(true);
+  });
+
+  it('does not cross two segments whose lines meet outside a span', () => {
+    const sk = createSketch();
+    const h = addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
+    const v = addLine(sk, addPoint(sk, 50, -5), addPoint(sk, 50, 5)); // x=50, off the h span
+    expect(entityIntersections(sk, sk.entities.get(h), sk.entities.get(v))).toHaveLength(0);
+  });
+
+  it('crosses a segment and a circle at both points', () => {
+    const sk = createSketch();
+    const circle = addCircle(sk, addPoint(sk, 0, 0), 10);
+    const seg = addLine(sk, addPoint(sk, -20, 0), addPoint(sk, 20, 0));
+    const pts = entityIntersections(sk, sk.entities.get(seg), sk.entities.get(circle))
+      .sort((u, v) => u.x - v.x);
+    expect(pts).toHaveLength(2);
+    expect(near(pts[0].x, -10) && near(pts[1].x, 10)).toBe(true);
+  });
+
+  it('keeps only crossings that fall within an arc span', () => {
+    const sk = createSketch();
+    // Quarter arc centre (0,0) r10, from (10,0) CCW to (0,10) — first quadrant only.
+    const arc = addArc(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0), addPoint(sk, 0, 10), 10);
+    const seg = addLine(sk, addPoint(sk, -20, 5), addPoint(sk, 20, 5)); // y=5 → x=±√75
+    const pts = entityIntersections(sk, sk.entities.get(seg), sk.entities.get(arc));
+    expect(pts).toHaveLength(1); // the −√75 crossing is outside the quarter arc
+    expect(pts[0].x).toBeGreaterThan(0);
+    expect(near(pts[0].y, 5)).toBe(true);
+  });
+
+  it('picks the crossing nearest the cursor, within tolerance', () => {
+    const sk = createSketch();
+    addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
+    addLine(sk, addPoint(sk, 0, -10), addPoint(sk, 0, 10)); // cross at (0,0)
+    addLine(sk, addPoint(sk, 6, -10), addPoint(sk, 6, 10)); // cross at (6,0)
+    const hit = nearestIntersection(sk, 5.5, 0.2, 1.5);
+    expect(near(hit.x, 6) && near(hit.y, 0)).toBe(true);
+    expect(nearestIntersection(sk, 3, 0, 1.5)).toBeNull(); // nothing within 1.5 of (3,0)
+  });
+
+  it('skips the excluded entity', () => {
+    const sk = createSketch();
+    const h = addLine(sk, addPoint(sk, -10, 0), addPoint(sk, 10, 0));
+    addLine(sk, addPoint(sk, 0, -10), addPoint(sk, 0, 10));
+    expect(nearestIntersection(sk, 0, 0, 1.5, h)).toBeNull();
   });
 });
 

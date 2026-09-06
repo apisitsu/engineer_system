@@ -78,6 +78,7 @@ export const CAD = {
   skAxis: '#0e7490',       // angle-lock guide axis / angle base line
   skTangent: '#0f9d58',
   skSnap: '#c026d3',
+  skIntersect: '#ca8a04',  // snap to where two curves cross
   skPreview: '#c2410c',    // rubber band while drawing
 };
 

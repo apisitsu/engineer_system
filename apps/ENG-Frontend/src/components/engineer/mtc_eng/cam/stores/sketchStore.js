@@ -24,6 +24,7 @@ import {
   filletCircleCircle as filletCircleCircleEdit,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
+  nearestIntersection,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
@@ -41,6 +42,12 @@ const DEG = Math.PI / 180;
 const SNAP = 1.5; // mm — click snap / pick tolerance
 const ANGLE_SNAP_DEG = 5; // ° — lock the line rubber-band to the nearest 45° axis within this
 const HISTORY = 50; // max undo depth
+
+/** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
+function pinPointOn(sk, pointId, entId) {
+  const kind = { line: 'pointOnLine', circle: 'pointOnCircle', arc: 'pointOnArc' }[sk.entities.get(entId)?.type];
+  if (kind) { try { addConstraint(sk, kind, [pointId, entId]); } catch { /* leave that side free */ } }
+}
 
 let sketchApi = null;
 function worker() {
@@ -399,6 +406,16 @@ export const useSketchStore = create((set, get) => ({
       const tan = nearestTangent(sk, anchor.x, anchor.y, x, y, tol);
       if (tan) snap = { x: tan.x, y: tan.y, tangent: true, tangentOf: tan.id, curveType: tan.type };
     }
+    // Where two curves cross — more specific than a plain rim landing, so it
+    // wins over it. A click here lands on the crossing and pins the new point to
+    // both curves (see `_pointAt`). Only while a point-placing tool is active:
+    // the pairwise scan is O(n²) and means nothing to select / dimension / trim.
+    const placing = tool === 'point' || tool === 'line' || tool === 'rectangle'
+      || tool === 'circle' || tool === 'arc' || tool === 'slot' || tool === 'polygon';
+    if (!snap && placing) {
+      const xn = nearestIntersection(sk, x, y, tol);
+      if (xn) snap = { x: xn.x, y: xn.y, intersection: true, of: xn.ids };
+    }
     if (!snap) {
       const rim = nearestRimPoint(sk, x, y, tol);
       if (rim) snap = { x: rim.x, y: rim.y, onCurve: rim.id, curveType: rim.type };
@@ -442,6 +459,15 @@ export const useSketchStore = create((set, get) => ({
     const tol = get().pickTol || SNAP;
     const hit = hitTestPoint(sk, x, y, tol);
     if (hit != null) return hit;
+    // Where two curves cross: place the point exactly on it and pin it to both,
+    // so it tracks the intersection through solves. Checked before the plain rim
+    // landing because it is the more specific target.
+    const xn = nearestIntersection(sk, x, y, tol);
+    if (xn) {
+      const id = addPoint(sk, xn.x, xn.y);
+      for (const entId of xn.ids) pinPointOn(sk, id, entId);
+      return id;
+    }
     const rim = nearestRimPoint(sk, x, y, tol);
     if (rim) {
       const id = addPoint(sk, rim.x, rim.y);
