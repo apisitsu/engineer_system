@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card, Steps,
   Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
@@ -164,6 +164,20 @@ const CARD_H_MULTI = 660;
 const CARD_H_SINGLE = 760;
 
 function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
+  const st = state || { status: 'loading' };
+
+  // Auto-scroll the roadmap so the CURRENT step sits at the top of the pane.
+  const paneRef = useRef(null);
+  useLayoutEffect(() => {
+    if (detailOpen || st.status !== 'ok') return;
+    const pane = paneRef.current;
+    if (!pane) return;
+    const cur = pane.querySelector('.ant-steps-item-process');
+    if (cur) {
+      pane.scrollTop += cur.getBoundingClientRect().top - pane.getBoundingClientRect().top - 6;
+    }
+  }, [detailOpen, st.status, st.data]);
+
   // Fixed to 1/5 of the row width so every column is identical whether its row
   // holds 5 (full) or fewer (left-aligned, trailing gap). 64px = 4 × 16px gaps.
   const flexStyle = single
@@ -179,8 +193,6 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
       {children}
     </Card>
   );
-
-  const st = state || { status: 'loading' };
 
   const headerBar = (label, sub, canToggle) => (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6, flex: '0 0 auto' }}>
@@ -285,7 +297,7 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
         ) : null}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: detailOpen ? 0 : 8 }}>
+      <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: detailOpen ? 0 : 8 }}>
         {detailOpen ? <ProcessDetail steps={data.steps} /> : <Roadmap steps={data.steps} />}
       </div>
     </>,
