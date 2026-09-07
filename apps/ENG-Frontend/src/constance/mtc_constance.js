@@ -40,7 +40,7 @@ export const MTC_VERSIONS = {
   'sds-template-b':           { version: '1.0', updated: '2026-08-27' },
   'sds-selection-cond':       { version: '1.0', updated: '2026-08-28' },
   'cam':                      { version: '1.0', updated: '2026-08-05' },
-  'lot-track':                { version: '1.0', updated: '2026-09-01' },
+  'lot-track':                { version: '1.1', updated: '2026-09-07' },
 };
 
 export const WORKFLOW_STATUS = {
