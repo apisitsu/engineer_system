@@ -8,6 +8,7 @@ import {
   SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
+  DeploymentUnitOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -84,6 +85,16 @@ const ToolGallery = () => {
       category: 'Tracking',
       status: 'Active',
       tags: ['Production', 'Lot', 'Status']
+    },
+    {
+      id: 'cad-cam',
+      title: 'Engineer CAD/CAM',
+      description: 'In-browser 2D sketch and CAM workspace — draw geometry, generate toolpaths, and save your work to a personal or shared library.',
+      icon: <DeploymentUnitOutlined style={{ fontSize: '32px', color: '#2f54eb' }} />,
+      path: '/eng/mtc_eng/cam',
+      category: 'Engineering',
+      status: 'Active',
+      tags: ['CAD', 'CAM', 'Sketch']
     }
   ];
 
