@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card, Steps,
-  Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
+  Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
   Tooltip, Popconfirm,
 } from 'antd';
 import {
@@ -72,18 +72,16 @@ const chunk = (arr, n) => {
   return out;
 };
 
-// ── roadmap (vertical stepper) ───────────────────────────────────────────────
+// ── roadmap (vertical stepper) — per-step line trimmed to WC · run · good · operator
 function Roadmap({ steps }) {
   const current = steps.findIndex((s) => s.status === 'current');
   const items = steps.map((s) => {
     const meta = STATUS_META[s.status] || STATUS_META.pending;
     const bits = [];
-    if (s.machineLabel) bits.push(`🏭 ${s.machineLabel}${s.wc ? ` (WC ${s.wc})` : ''}`);
-    if (s.compDate) bits.push(`✅ done ${s.compDate}`);
-    if (s.runMinutes != null && s.runMinutes > 0) bits.push(`⏱️ run ${fmtMinutes(s.runMinutes)}`);
-    if (s.dwellDays != null) bits.push(`📦 lead ${fmtDays(s.dwellDays)}`);
-    if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` / ng ${s.badQty}` : ''}`);
-    if (s.operator) bits.push(`👤 ${s.operator}`);
+    if (s.wc) bits.push(`WC ${s.wc}`);
+    if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
+    if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
+    if (s.operator) bits.push(s.operator);
     return {
       status: meta.step,
       icon: s.status === 'current' ? <SyncOutlined spin /> : undefined,
@@ -103,30 +101,38 @@ function Roadmap({ steps }) {
   return <Steps direction="vertical" size="small" current={current === -1 ? items.length : current} items={items} />;
 }
 
-// ── process detail — trimmed to WC · run · good · operator ───────────────────
+// ── process detail — the full per-step table (scrolls inside the card) ───────
+const detailColumns = [
+  { title: '#', dataIndex: 'order', width: 40, fixed: 'left' },
+  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v, r) => (
+    <span style={{ whiteSpace: 'nowrap' }}><Text strong>{v}</Text> <Tag>{r.processCode}</Tag></span>
+  ) },
+  { title: 'Status', dataIndex: 'status', width: 108, render: (v) => {
+    const m = STATUS_META[v] || STATUS_META.pending;
+    return <Tag color={m.tag}>{m.label}</Tag>;
+  } },
+  { title: 'Machine / WC', dataIndex: 'machineLabel', width: 210, render: (v, r) => v
+    ? <span>{v}{r.wc ? <Text type="secondary"> · WC {r.wc}</Text> : null}</span>
+    : <Text type="secondary">—</Text> },
+  { title: 'good / ng', dataIndex: 'goodQty', width: 96, align: 'right', render: (v, r) => v == null ? '—' : `${v}${r.badQty ? ` / ${r.badQty} ng` : ''}` },
+  { title: 'Cycle', dataIndex: 'cycleSec', width: 70, align: 'right', render: (v) => (v ? `${v}s` : '—') },
+  { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
+  { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
+  { title: 'Completed', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
+  { title: 'Lead time', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
+];
+
 function ProcessDetail({ steps }) {
   return (
-    <div style={{ padding: 8 }}>
-      {steps.map((s) => (
-        <div
-          key={s.order}
-          style={{
-            padding: '5px 6px',
-            borderBottom: '1px solid #f5f5f5',
-            background: s.status === 'current' ? 'rgba(24,144,255,0.08)' : undefined,
-          }}
-        >
-          <div style={{ fontSize: 12.5, fontWeight: 600 }}>
-            {s.order}. {s.nameEn} <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
-          </div>
-          <div style={{ fontSize: 11.5, color: '#8c8c8c' }}>
-            WC {s.wc || '—'} · run {s.runMinutes == null ? '—' : fmtMinutes(s.runMinutes)}
-            {' '}· good {s.goodQty ?? '—'}{s.badQty ? ` (ng ${s.badQty})` : ''}
-            {' '}· {s.operator || '—'}
-          </div>
-        </div>
-      ))}
-    </div>
+    <Table
+      size="small"
+      rowKey="order"
+      columns={detailColumns}
+      dataSource={steps}
+      pagination={false}
+      scroll={{ x: 1080 }}
+      rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
+    />
   );
 }
 
@@ -158,9 +164,11 @@ const CARD_H_MULTI = 660;
 const CARD_H_SINGLE = 760;
 
 function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
+  // Fixed to 1/5 of the row width so every column is identical whether its row
+  // holds 5 (full) or fewer (left-aligned, trailing gap). 64px = 4 × 16px gaps.
   const flexStyle = single
     ? { flex: '0 0 min(780px, 100%)', maxWidth: '100%' }
-    : { flex: '1 1 0', minWidth: 0, maxWidth: 380 }; // basis 0 → the 5 chunked per row share the line evenly
+    : { flex: '0 0 calc((100% - 64px) / 5)', minWidth: 0, maxWidth: 440 };
   const H = single ? CARD_H_SINGLE : CARD_H_MULTI;
   const wrap = (children) => (
     <Card
@@ -578,6 +586,8 @@ export default function LotStatusTracker() {
           {entries.length === 1 ? '1 lot (single)' : `${entries.length} lots (group)`}: {entries.map((e) => e.lotNo).join(', ')}
         </div>
       </Modal>
+
+      <style>{`.lot-track-current-row > td { background: rgba(24,144,255,0.08) !important; }`}</style>
     </Layout>
   );
 }
