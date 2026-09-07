@@ -74,6 +74,16 @@ const ToolGallery = () => {
       category: 'Tracking',
       status: 'Active',
       tags: ['Production', 'Status']
+    },
+    {
+      id: 'lot-status-tracker',
+      title: 'Lot Status Tracker',
+      description: 'Track production lots by number — which process each is at now, what it has passed, how many steps remain, and how it stands against plan. Watch several lots side by side and star the view.',
+      icon: <SearchOutlined style={{ fontSize: '32px', color: '#13c2c2' }} />,
+      path: '/eng/mtc_eng/lot-track',
+      category: 'Tracking',
+      status: 'Active',
+      tags: ['Production', 'Lot', 'Status']
     }
   ];
 
