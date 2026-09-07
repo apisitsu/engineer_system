@@ -205,7 +205,8 @@ try {
             
             if ($ConstContent -ne $UpdatedContent) {
                 Write-Host "Modifying constance.js to use http://plbmp130:2005/..." -ForegroundColor Green
-                Set-Content -Path $ConstFile -Value $UpdatedContent -Encoding UTF8
+                $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                [System.IO.File]::WriteAllText((Resolve-Path $ConstFile), $UpdatedContent, $utf8NoBom)
             } else {
                 Write-Host "constance.js is already configured correctly for plbmp130." -ForegroundColor Green
             }
