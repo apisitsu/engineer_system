@@ -25,6 +25,15 @@ function Remove-GitIndexLock {
     }
 }
 
+function Stop-ProcessTreeSafely {
+    param([int]$TargetPid)
+    if ($TargetPid -gt 0 -and $TargetPid -ne $PID) {
+        if (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) {
+            cmd.exe /c "taskkill.exe /PID $TargetPid /T /F >nul 2>&1"
+        }
+    }
+}
+
 # 1. Kill any existing stuck auto_update_and_run.ps1 processes and orphaned git processes
 try {
     $StuckProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { 
@@ -79,6 +88,7 @@ try {
 $env:GIT_PAGER = "cat"
 $env:GIT_TERMINAL_PROMPT = "0"
 $env:GIT_LFS_SKIP_SMUDGE = "1"
+$env:GIT_ASK_YESNO = "0"
 
 Remove-GitIndexLock -Path $ProjectPath
 
@@ -94,7 +104,7 @@ try {
     Set-Location -Path $ProjectPath
 
     Write-Host "Fetching from origin..." -ForegroundColor Cyan
-    git -c core.askpass= fetch origin main
+    $null | git -c core.askpass= fetch origin main
     if ($LASTEXITCODE -ne 0) { throw "git fetch origin main failed with exit code $LASTEXITCODE" }
 
     $LocalHash = (git rev-parse HEAD).Trim()
@@ -110,7 +120,7 @@ try {
         Write-Host "Stopping existing development server processes on ports 2005 and 3000..." -ForegroundColor Cyan
         
         # Kill previous dev window by title if running
-        taskkill.exe /FI "WINDOWTITLE eq EngineerSystem Dev*" /T /F 2>$null | Out-Null
+        cmd.exe /c 'taskkill.exe /FI "WINDOWTITLE eq EngineerSystem Dev*" /T /F >nul 2>&1'
 
         $Ports = @(2005, 3000)
         foreach ($Port in $Ports) {
@@ -119,6 +129,10 @@ try {
                     Where-Object { $_ -gt 0 -and $_ -ne $PID }
             if ($PIDs) {
                 foreach ($PidValue in $PIDs) {
+                    if (-not (Get-Process -Id $PidValue -ErrorAction SilentlyContinue)) {
+                        continue
+                    }
+
                     # Trace up to find top shell window (cmd.exe / powershell.exe / WindowsTerminal)
                     $p = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $PidValue) -ErrorAction SilentlyContinue
                     $topShell = $null
@@ -130,11 +144,13 @@ try {
                     }
 
                     if ($topShell -and $topShell.ProcessId -ne $PID) {
-                        Write-Host "Killing dev window tree PID $($topShell.ProcessId) on port $Port..." -ForegroundColor Yellow
-                        taskkill.exe /PID $topShell.ProcessId /T /F 2>$null | Out-Null
-                    } else {
+                        if (Get-Process -Id $topShell.ProcessId -ErrorAction SilentlyContinue) {
+                            Write-Host "Killing dev window tree PID $($topShell.ProcessId) on port $Port..." -ForegroundColor Yellow
+                            Stop-ProcessTreeSafely -TargetPid $topShell.ProcessId
+                        }
+                    } elseif (Get-Process -Id $PidValue -ErrorAction SilentlyContinue) {
                         Write-Host "Killing process tree PID $PidValue on port $Port..." -ForegroundColor Yellow
-                        taskkill.exe /PID $PidValue /T /F 2>$null | Out-Null
+                        Stop-ProcessTreeSafely -TargetPid $PidValue
                     }
                 }
             }
@@ -146,9 +162,9 @@ try {
                 (($_.Name -match "node|nodemon") -and ($_.CommandLine -match [regex]::Escape($ProjectPath) -or $_.CommandLine -match "EngineerSystem")) -or
                 ($_.Name -match "cmd" -and $_.CommandLine -match "npm run dev")
             } | ForEach-Object {
-                if ($_.ProcessId -ne $PID) {
+                if ($_.ProcessId -ne $PID -and (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue)) {
                     Write-Host "Stopping dev process PID $($_.ProcessId) ($($_.Name))..." -ForegroundColor Yellow
-                    taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null
+                    Stop-ProcessTreeSafely -TargetPid $_.ProcessId
                 }
             }
         } catch { }
@@ -160,8 +176,19 @@ try {
         Remove-GitIndexLock -Path $ProjectPath
 
         Write-Host "Resetting local repository to match origin/main..." -ForegroundColor Cyan
-        git -c core.askpass= -c core.preloadindex=true reset --hard origin/main
-        if ($LASTEXITCODE -ne 0) { throw "git reset --hard origin/main failed with exit code $LASTEXITCODE" }
+
+        # CRITICAL: Temporarily stop transcript to release file lock on update_progress_live.log.
+        # Otherwise Git reset will fail with: "Unlink of file 'update_progress_live.log' failed. Should I try again? (y/n)"
+        try { Stop-Transcript } catch { }
+
+        # Pipe $null to Git to enforce non-interactive execution (never hangs waiting for console input)
+        $null | git -c core.askpass= -c core.preloadindex=true reset --hard origin/main
+        $resetExitCode = $LASTEXITCODE
+
+        # Resume transcript logging
+        try { Start-Transcript -Path $LogFile -Append -Force } catch { }
+
+        if ($resetExitCode -ne 0) { throw "git reset --hard origin/main failed with exit code $resetExitCode" }
 
         # Update LocalHash after pull
         $NewLocalHash = (git rev-parse HEAD).Trim()
@@ -198,6 +225,6 @@ try {
     node apps\ENG-Backend\scripts\log_update.js "ERROR" "$ErrorMsg" "" ""
 } finally {
     Write-Host "`nThis window will close in 10 seconds..." -ForegroundColor Magenta
-    Stop-Transcript
+    try { Stop-Transcript } catch { }
     Start-Sleep -Seconds 10
 }
