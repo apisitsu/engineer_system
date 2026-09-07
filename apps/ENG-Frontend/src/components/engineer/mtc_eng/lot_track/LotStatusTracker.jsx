@@ -64,6 +64,14 @@ const STATUS_META = {
 // normalized [{lotNo, controlNo|null}] → stable JSON for change detection
 const lotsKey = (arr) => JSON.stringify((arr || []).map((l) => [String(l.lotNo || '').toUpperCase(), l.controlNo || '']));
 
+// columns per row before wrapping to a new one
+const ROW_SIZE = 5;
+const chunk = (arr, n) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+};
+
 // ── roadmap (vertical stepper) ───────────────────────────────────────────────
 function Roadmap({ steps }) {
   const current = steps.findIndex((s) => s.status === 'current');
@@ -139,13 +147,13 @@ function StatusStrip({ data }) {
 
 // ── one tracked lot ─────────────────────────────────────────────────────────
 function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
-  const width = single ? 'min(780px, 100%)' : 360;
+  // single lot → wide card; otherwise ~360px, allowed to shrink so a row of 5
+  // stays on one line rather than wrapping mid-row (the page chunks at 5).
+  const flexStyle = single
+    ? { flex: '0 0 min(780px, 100%)', maxWidth: '100%' }
+    : { flex: '0 1 360px', minWidth: 300, maxWidth: 380 };
   const wrap = (children) => (
-    <Card
-      size="small"
-      style={{ flex: `0 0 ${typeof width === 'number' ? `${width}px` : width}`, maxWidth: '100%' }}
-      styles={{ body: { padding: 12 } }}
-    >
+    <Card size="small" style={flexStyle} styles={{ body: { padding: 12 } }}>
       {children}
     </Card>
   );
@@ -510,21 +518,25 @@ export default function LotStatusTracker() {
           {entries.length === 0 ? (
             <Empty description="No lots tracked — add a lot number above, or load a saved track" style={{ marginTop: 64 }} />
           ) : (
-            <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start' }}>
-              {entries.map((e) => (
-                <LotColumn
-                  key={e.key}
-                  entry={e}
-                  state={stateByKey[e.key]}
-                  detailOpen={!!detailOpen[e.key]}
-                  single={single}
-                  onToggleDetail={() => setDetailOpen((m) => ({ ...m, [e.key]: !m[e.key] }))}
-                  onRemove={() => removeLot(e.key)}
-                  onReload={() => fetchEntry(e.key, e.lotNo, e.controlNo)}
-                  onResolveControl={(cn) => resolveControl(e.key, cn)}
-                />
+            <>
+              {chunk(entries, ROW_SIZE).map((row, ri) => (
+                <div key={ri} style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, alignItems: 'flex-start' }}>
+                  {row.map((e) => (
+                    <LotColumn
+                      key={e.key}
+                      entry={e}
+                      state={stateByKey[e.key]}
+                      detailOpen={!!detailOpen[e.key]}
+                      single={single}
+                      onToggleDetail={() => setDetailOpen((m) => ({ ...m, [e.key]: !m[e.key] }))}
+                      onRemove={() => removeLot(e.key)}
+                      onReload={() => fetchEntry(e.key, e.lotNo, e.controlNo)}
+                      onResolveControl={(cn) => resolveControl(e.key, cn)}
+                    />
+                  ))}
+                </div>
               ))}
-            </div>
+            </>
           )}
         </Content>
       </Layout>
