@@ -21,7 +21,7 @@ list produced wrong answers (see "Tooling that is documented but cannot be selec
 |---|---|---|---|
 | 1 | **`20260202_Tooling_Excel_List.xlsm`** | `G:\Shared drives\RD Development Technology Review Request\Tooling Select\` | **The index.** Every tooling list, per machine, with a 工程 (process) column. Start here — it is the only way to find a family no machine folder names, which is how 9901-09 was found under 工程 = 検査(CHECK). The per-machine workbooks it points at live under `DesignStandards_Dimensions_InventoryData\` and carry the `加工対象物寸法記入欄` calculation block that *is* the rule. |
 | 2 | **`TEMPLATE_B.xlsx`** | `api/engineer/mtc/doc/TEMPLATE_B.xlsx` (vendored) · also on the shared drive | **The process→machine→tooling map.** Col 1 process code, 2 its name, 3 machine, 5 tooling, 6 drawing family. Decides *what* should be covered and for which part families — including the grey-fill convention (grey = not selected for that family; white = selected). |
-| 3 | **RE33xxx design standards** | `api/engineer/mtc/doc/RE33*.pdf` — 12 files | **The design authority.** Work-size limits (`tooling_machine_limit`) and TYPE branch conditions come from here, cited by clause in each row's `description` (e.g. `RE33042 A §7: …`). |
+| 3 | **RE33xxx design standards** | `api/engineer/mtc/doc/RE33*.pdf` — 13 files | **The design authority.** Work-size limits (`tooling_machine_limit`) and TYPE branch conditions come from here, cited by clause in each row's `description` (e.g. `RE33042 A §7: …`). |
 
 Precedence when they disagree:
 
@@ -37,9 +37,12 @@ Precedence when they disagree:
   QUILL / WHEEL / the second plug pair are in TEMPLATE_B and in no standard — that is the
   standards lagging the worksheet, not a conformance failure.
 
-Which files exist is verified: 12 RE PDFs (`RE33024 D`, `RE33025 B`, `RE33026 A`, `RE33032 B`,
-`RE33034 B`, `RE33036 C`, `RE33037 D`, `RE33038 F`, `RE33039 A`, `RE33040 A`, `RE33041 B`,
-`RE33042 A`) plus `TEMPLATE_B.xlsx` sit in `api/engineer/mtc/doc/`. The index workbook is
+Which files exist is verified: 13 RE PDFs (`RE33024 D`, `RE33025 B`, `RE33026 A`, `RE33028`,
+`RE33032 B`, `RE33034 B`, `RE33036 C`, `RE33037 D`, `RE33038 F`, `RE33039 A`, `RE33040 A`,
+`RE33041 B`, `RE33042 A`) plus `TEMPLATE_B.xlsx` sit in `api/engineer/mtc/doc/`. `RE33028`
+("ボディ内研用治具", vendored 2026-08-28) is what TEMPLATE_B's `standard` column means where
+it prints the phantom number `RE33033` (BODY HOLDER 4651-20 rows on M/F/ABR/ROLLER BODY).
+The index workbook is
 **not** vendored — it is only on `G:`, which is Google Drive for Desktop and exists only
 inside a signed-in interactive session (→ `.claude/rules/backend-gotchas.md`).
 
@@ -389,6 +392,38 @@ Two shapes recur and are worth recognising on sight:
 - **`tooling_ksb80` stops at `dim_e`.** The KS-B80 wheel list carries both 砥石長 and 砥石径;
   only the length is stored. Adding `dim_f` to that table is the fix if the diameter is
   ever needed for ranking.
+
+### C/N work-type decode — `cnKubun.js` / `cn_kubun` (RE21000H §4-3(2), 2026-08-30)
+
+The first two digits of a control number are a factory-authoritative work-type code
+(RE21000H rev H "CONTROL NUMBER 区分一覧") carrying **part family, material class,
+lube type (M/M vs TFE vs DU), unit system, thread side, assembly count and shape**.
+Before this the system only decoded `{'35'}` → Y-BALL and scattered
+`cnPrefix == 23 or 25 or …` lists.
+
+- **`api/engineer/mtc/utils/cnKubun.js`** — the live decode. A frozen in-memory
+  table (**no I/O**, `resolveKubun()` is ~0.2 µs); called once per search in
+  `buildSpecContext`. Covers 61 component classes (11–19, 21–29, 31–39, 41–49,
+  51–69, 81–99) = 86 % of enabled C/Ns. The 7x assembled rod-ends and a handful of
+  strays (20, 27, 37, 45/46, 65/66) are **not** in §4-3(2) — `resolveKubun` returns
+  `null`, and every kubun context var is then `''` / `0`.
+- **`cn_kubun` table** (migration `20260830b_`) — the identical rows for report
+  JOINs; `tests/mtc/cnKubun.test.js` pins the two copies together. Read-only, nothing
+  on the search path touches it.
+- **`buildSpecContext` vars**: `partFamily`, `materialClass`, `lubeType`,
+  `unitSystem`, `threadSide`, `assemblyType`, `cnShape`, plus flags `isMM` / `isTFE`
+  / `isInch` / `isMetric` / `isExternalThread` / `isInternalThread`. `deriveYBall`
+  (specController) now routes through this — byte-identical to the old set.
+- **`NON_GRIND_KUBUN`** = `[49, 90, 92, 96, 97, 98, 99]` (kit / blanks / tooling /
+  paint-spec / purchased). The SDS **CN Enable audit** (`/audit/data-integrity`)
+  excludes these classes. Small effect at today's `sub_class` config (which pulls
+  mostly real components) — it is the principled guard for when the config broadens.
+- **Deliberately NOT done**: auto-deriving `tooling_spec_process.type` from the
+  kubun. `type` feeds KS-400B6 / KN-312 TYPE branches that change which *drawings*
+  are reported; it needs measuring against `lpb.eng_r_pi_tool` first and stays a
+  separate gated step. `materialClass` is exposed but not yet wired to any rule (that
+  is the RM grinding-condition audit's job).
+- Re-validate the decode against live data with `node scripts/validate_cn_kubun.js`.
 
 ### Coverage by process code (audited 2026-08-15)
 

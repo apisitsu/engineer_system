@@ -7,11 +7,30 @@ const tselectFallback = require('../services/tselectFallback');
 const searchService = require('../services/searchService');
 const cnFormat = require('../utils/cnFormat');
 const { syncNoStampBacklog } = require('../services/sdsBacklogIntake');
+const sdsAutoStamp = require('../services/sdsAutoStamp');
+const templateBConformance = require('../services/templateBConformance');
+const selectionConditionConformance = require('../services/selectionConditionConformance');
 const { hasFeature } = require('../../../../middleware/mtcAuth');
+const cache = require('../services/agents/CacheAgent');
 // SDS coverage-report config is part of the SDS admin surface.
 const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
+
+// Flush the SDS search/PDF cache (sds:* keys) + the coverage cache after a config
+// mutation on this router, so edits reflect on the very next search & PDF instead of
+// waiting out the 10-min / 15-min TTLs. Mirrors sdsV2AdminController.flushSds — kept
+// as a local copy because that controller already requires THIS module
+// (invalidateCoverageCache), so importing it back would be circular.
+const flushSds = (req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      cache.invalidatePrefix('sds:');
+      invalidateCoverageCache();
+    }
+  });
+  next();
+};
 
 // The coverage build runs in the background with no request in hand, so the
 // socket.io instance is captured from request traffic instead. Only used to push
@@ -109,6 +128,57 @@ async function loadPersistedCoverage() {
   return null;
 }
 
+// ── Monthly-status freeze — one immutable row per CLOSED calendar month ───────
+// The coverage report recomputes monthlyStatus from scratch every build, so a
+// config edit or a back-dated approval for an old part reshapes the WHOLE
+// historical curve (every cumulative bar from that part's production month on).
+// Freezing fixes that: the first build in a new month writes each now-closed
+// month's bar and it is served verbatim forever after. Only the CURRENT
+// (still-open) month stays live.
+//
+// NOTE: freezing captures whatever the numbers are the first time a month closes
+// after this shipped — it locks in TODAY's history, it does not reconstruct an
+// earlier state. To deliberately re-freeze a month after a real correction:
+//   DELETE FROM sds_coverage_monthly WHERE month = '2026-07';   -- next build re-freezes it
+let _covMonthlyTableReady = null;
+function ensureCoverageMonthlyTable() {
+  if (!_covMonthlyTableReady) {
+    _covMonthlyTableReady = engPool.query(`
+      CREATE TABLE IF NOT EXISTS sds_coverage_monthly (
+        month     TEXT PRIMARY KEY,
+        data      JSONB NOT NULL,
+        frozen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => { _covMonthlyTableReady = null; throw e; });
+  }
+  return _covMonthlyTableReady;
+}
+async function freezeMonthlyStatus(live) {
+  const curMonth = new Date().toISOString().slice(0, 7);
+  try {
+    await ensureCoverageMonthlyTable();
+    const { rows } = await engPool.query(`SELECT month, data FROM sds_coverage_monthly`);
+    const frozen = new Map(rows.map((r) => [r.month, r.data]));
+
+    const toFreeze = live.filter((m) => m.month < curMonth && !frozen.has(m.month));
+    if (toFreeze.length) {
+      const ph = toFreeze.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(',');
+      await engPool.query(
+        `INSERT INTO sds_coverage_monthly (month, data) VALUES ${ph}
+         ON CONFLICT (month) DO NOTHING`,
+        toFreeze.flatMap((m) => [m.month, JSON.stringify(m)])
+      );
+      for (const m of toFreeze) frozen.set(m.month, m);
+      console.log(`[SDS Report] froze ${toFreeze.length} monthlyStatus month(s): ${toFreeze.map((m) => m.month).join(', ')}`);
+    }
+    // Serve frozen for closed months, live for the current (open) month.
+    return live.map((m) => (m.month < curMonth && frozen.has(m.month) ? frozen.get(m.month) : m));
+  } catch (e) {
+    console.warn('[SDS Report] freezeMonthlyStatus failed, serving live curve:', e.message);
+    return live;   // fail open — a live curve beats a broken report
+  }
+}
+
 // ── Report scope config (admin-editable) ─────────────────────────────────────
 // The operational "dials" of the coverage scope, externalized from hardcode so
 // admins can change them without a deploy. Defaults == the original hardcoded
@@ -157,7 +227,18 @@ async function getReportScope() {
 }
 
 // Force the next /coverage request to rebuild (called when scope config changes).
-function invalidateCoverageCache() { _coverageCache = null; _coverageBuilding = null; }
+// Clearing the in-memory cache alone is NOT enough: the next GET re-hydrates
+// `_coverageCache` from the persisted `sds_coverage_cache` row (see /coverage
+// handler) and, finding it younger than COVERAGE_TTL_MS, serves the pre-change
+// scope as "fresh" with no rebuild — for up to 15 min. So also stamp the
+// persisted row stale (fire-and-forget; if it fails the TTL still bounds it).
+function invalidateCoverageCache() {
+  _coverageCache = null;
+  _coverageBuilding = null;
+  ensureCoverageTable()
+    .then(() => engPool.query(`UPDATE sds_coverage_cache SET built_at = 'epoch' WHERE id = 'coverage'`))
+    .catch(() => {});
+}
 
 // Convert pc_production.control_no (item number format) to standard CN format
 // e.g. "350528" → "C35-00528", "350528-C" → "C35-00528", "C35-00528" → "C35-00528"
@@ -185,6 +266,26 @@ function cnPartType(cn) {
   // real grinding production. Keep in sync with DEFAULT_AUDIT_SUB_CLASSES (admin).
   if (letter === 'C' && (n === 95 || n === 99)) return 'mecha';
   return 'other';
+}
+
+// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000), matching
+// legacyMtcController's currentFye/fyeToRange. Emitted in the coverage payload as
+// `fye` so the "New Parts per Month" / "Cumulative Coverage Status" charts window on
+// the CURRENT FY plus one leading prior-FY bar — WITHOUT the frontend hardcoding the
+// month strings (which silently break every April).
+function currentFyeWindow(ref = new Date()) {
+  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+  const sy = num + 1999;                       // FY start calendar year
+  const pad = (v) => String(v).padStart(2, '0');
+  return {
+    num,
+    start:     `${sy}-04`,       // 'YYYY-MM', inclusive
+    end:       `${sy + 1}-03`,   // inclusive
+    prevStart: `${sy - 1}-04`,
+    prevEnd:   `${sy}-03`,
+    label:     `FYE${pad(num)}`,
+    prevLabel: `FYE${pad(num - 1)}`,
+  };
 }
 
 /**
@@ -292,7 +393,10 @@ async function buildCoverage() {
       // 9. Machine code → machine_name mapping (machine_name = machine_type_name in sds_parameter)
       engPool.query(`SELECT machine_code, machine_name FROM ${TABLES.SDS_MACHINE_CODE}`),
 
-      // 10. Monthly sds_parameter additions
+      // 10. Monthly sds_parameter additions — the LAST 24 months. ORDER BY DESC so the
+      //     LIMIT keeps the most RECENT window (ascending + LIMIT kept the OLDEST 24 and
+      //     hid every recent month once history passed 24 months); re-sorted chronological
+      //     in JS below (see `monthlyTrend`).
       engPool.query(`
         SELECT TO_CHAR(DATE_TRUNC('month', first_seen), 'YYYY-MM') AS month,
                COUNT(*) AS configs_added
@@ -303,7 +407,7 @@ async function buildCoverage() {
           GROUP BY cn
         ) sub
         GROUP BY DATE_TRUNC('month', first_seen)
-        ORDER BY DATE_TRUNC('month', first_seen)
+        ORDER BY DATE_TRUNC('month', first_seen) DESC
         LIMIT 24
       `),
 
@@ -575,55 +679,104 @@ async function buildCoverage() {
       // with both ID grind 1061 and spherical grind 1041) stores only ONE spec.process
       // direction, so the gate would otherwise wrongly drop a valid spherical machine's
       // tooling on the 1041 row — undercounting coverage. Matches the SDS PDF behaviour.
-      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, { processCode: r.process_code, partHasProcess: true }).length > 0) {
+      //
+      // acceptFamilies: this machine's own sds_machine_tool whitelist. It lets a T-Select
+      // result filed under a SIBLING that IS in the T-Select registry (e.g. OC-16A's
+      // centreless COLLAR/PIN/RACE PUSHER on 4560-*) count for machines that are not —
+      // OC-18BR-150 / OC-20BR-200 / HI-GRIND-1-D share the identical config + whitelist.
+      // Same widening the SDS PDF renderer already applies, so report and sheet agree.
+      if (tselectFallback.tselectToolsForMachine(tsResult, acceptable, {
+            processCode: r.process_code, partHasProcess: true,
+            acceptFamilies: machineToolMap.get(`${r.machine_type_name}||${r.process_code}`),
+          }).length > 0) {
         r.has_tooling_match = true;
         r.tooling_source = 'tselect';
       }
     }
 
-    // ── Limit-excluded-but-produced anomalies ─────────────────────────────────
+    // ── Limit-excluded / limit-softened rows ──────────────────────────────────
     // A CN may appear in production on a machine whose Tooling Select size LIMIT
-    // (tooling_machine_limit) says the part cannot physically run there — a data
-    // anomaly (wrong limit, or an odd production record). Such (CN × machine)
-    // rows must NOT be counted in coverage. Uses the same limit check as T-Select
-    // (searchService.limitExcludedMachines) — cheap: spec context + in-memory
-    // limit cache, no inventory search. Runs for EVERY spec'd CN (not just the
-    // unmatched ones searched above) since a produced-there part is often matched.
+    // (tooling_machine_limit) says the part cannot physically run there. T-Select
+    // now splits those two ways (searchService.limitExcludedMachines):
+    //   • excluded — over the limit AND no sustained production history → a genuine
+    //     data anomaly (wrong limit, or an odd production record). Flagged red.
+    //   • softened — over the limit BUT the floor has genuinely run this CN here →
+    //     T-Select searches it normally ('limit_note'). NOT an anomaly; it is the
+    //     worklist of bounds a surgical tooling_machine_limit fix should look at.
+    // Cheap: spec context + in-memory limit cache, no inventory search. Runs for
+    // EVERY spec'd CN since a produced-there part is often matched.
     const needLimit = new Map(); // report cn → spec cn
     for (const r of evaluated) {
       if (!r.machine_type_name) continue;
       const sc = toSpecCn(r.cn);
       if (sc && specCnSet.has(sc)) needLimit.set(r.cn, sc);
     }
-    const limitExcludedByCn = new Map(); // report cn → Set<displayName>
+    const limitExcludedByCn = new Map(); // report cn → Map<displayName, reason>
+    const limitSoftenedByCn = new Map(); // report cn → Map<displayName, reason>
     const limitEntries = [...needLimit.entries()];
     for (let i = 0; i < limitEntries.length; i += TS_CONCURRENCY) {
       const batch = limitEntries.slice(i, i + TS_CONCURRENCY);
       await Promise.all(batch.map(async ([cn, sc]) => {
         try {
-          const ex = await searchService.limitExcludedMachines(sc);
-          if (ex && ex.size) limitExcludedByCn.set(cn, ex);
-        } catch (_) { /* fail-open: cannot judge → keep the row */ }
+          const r = await searchService.limitExcludedMachines(sc);
+          if (r?.excluded?.size) limitExcludedByCn.set(cn, r.excluded);
+          if (r?.softened?.size) limitSoftenedByCn.set(cn, r.softened);
+        } catch (_) { /* fail-open: cannot judge → keep the row, no flag */ }
       }));
     }
-    // A row is a limit anomaly when its machine (rep name OR its group label — the
-    // form searchService emits) is in the CN's excluded set. Fail-open otherwise.
-    const isLimitExcluded = (r) => {
-      const ex = limitExcludedByCn.get(r.cn);
-      if (!ex || !r.machine_type_name) return false;
-      if (ex.has(r.machine_type_name)) return true;
+    // A row matches when its machine (rep name OR its group label — the form
+    // searchService emits) is in the CN's set. Fail-open otherwise.
+    const inSet = (byCn) => (r) => {
+      const s = byCn.get(r.cn);
+      if (!s || !r.machine_type_name) return false;
+      if (s.has(r.machine_type_name)) return true;
       const g = nameToGroup[r.machine_type_name];
-      return g ? ex.has(g) : false;
+      return g ? s.has(g) : false;
     };
-    // COUNT-BACK (2026-07-02): previously these produced-but-limit-excluded rows were
-    // SPLICED OUT of `evaluated` (dropped from every count). They are now KEPT in the
-    // count and instead FLAGGED (`limit_excluded`) so the UI can highlight them red —
-    // matching the SDS page's red anomaly badge. limitExcludedCount stays as an
-    // informational KPI. The row still classifies normally (usually PENDING) and so
-    // shows up in `needsAttention` with the red flag riding along.
+    const isLimitExcluded = inSet(limitExcludedByCn);
+    const isLimitSoftened = inSet(limitSoftenedByCn);
+    // COUNT-BACK (2026-07-02, revised 2026-08-31, revised 2026-09-02): produced-but-
+    // limit-excluded rows rest on contradictory data (the T-Select size limit and a
+    // real production record disagree). They are still PENDING sheets, so they STAY in
+    // `needsAttention` — otherwise `pending` (= needsAttention.length) understates the
+    // true PENDING total and `total = complete + pending + missing` stops reconciling
+    // on the dashboard. They carry `limit_excluded: true`, the table flags them with a
+    // red "Limit Anomaly" badge, and the Kanban backlog feed re-filters them out in
+    // `selectNoStampRows` so no contradictory-data sheet is ever seeded as a sign task.
+    // `limitExcludedByMachine` is the (machine, process) reconcile worklist — each line
+    // is a `tooling_machine_limit` bound or production log that needs checking.
+    // Mirrors `limitSoftenedByMachine`.
     const limitExcludedRows = evaluated.filter(isLimitExcluded);
     for (const r of limitExcludedRows) r.limit_excluded = true;
     const limitExcludedCount = limitExcludedRows.length;
+    // `limit_softened` rows classify normally (they get tooling — often COMPLETE), so
+    // they are not a worklist row-by-row; the (machine, process) breakdown IS — each
+    // line is a `tooling_machine_limit` bound a surgical fix should measure next.
+    const limitSoftenedRows = evaluated.filter(isLimitSoftened);
+    for (const r of limitSoftenedRows) r.limit_softened = true;
+    const limitSoftenedCount = limitSoftenedRows.length;
+    // (machine, process) → { machine, process, reason, cn_count }, sorted by cn_count DESC.
+    // `reasonByCn` maps report cn → Map<displayName, reason> (the failing-limit text).
+    const byMachineWorklist = (rows, reasonByCn) => {
+      const m = new Map();   // "machine||process" → { machine, process, reason, cns:Set }
+      for (const r of rows) {
+        const machine = displayGroup(r.machine_type_name);
+        const key = `${machine}||${r.process_code || '-'}`;
+        if (!m.has(key)) {
+          const s = reasonByCn.get(r.cn);
+          const reason = (s && (s.get(machine) || s.get(r.machine_type_name)))
+            || (nameToGroup[r.machine_type_name] && s && s.get(nameToGroup[r.machine_type_name]))
+            || null;
+          m.set(key, { machine, process: r.process_code || '-', reason, cns: new Set() });
+        }
+        m.get(key).cns.add(r.cn);
+      }
+      return [...m.values()]
+        .map(({ cns, ...rest }) => ({ ...rest, cn_count: cns.size }))
+        .sort((a, b) => b.cn_count - a.cn_count);
+    };
+    const limitSoftenedByMachine = byMachineWorklist(limitSoftenedRows, limitSoftenedByCn);
+    const limitExcludedByMachine = byMachineWorklist(limitExcludedRows, limitExcludedByCn);
 
     // ── Stamp (approval) status — computed BEFORE coverage so COMPLETE can require
     // a FULL stamp (prepared+checked+approved). A stamp is keyed (cn, machine,
@@ -638,19 +791,24 @@ async function buildCoverage() {
       stampSrc = await engPool.query(`
         SELECT cn, machine_type_name, process_code,
                (prepared_em_id IS NOT NULL AND checked_em_id IS NOT NULL AND approved_em_id IS NOT NULL
-                AND approved_em_id <> prepared_em_id) AS full
+                AND approved_em_id <> prepared_em_id) AS full,
+               GREATEST(prepared_at, checked_at, approved_at) AS full_at
         FROM ${TABLES.SDS_APPROVAL}`);
     } catch (e) { /* table may not exist yet → every sheet reads as un-stamped */ }
-    const anyStamp = new Set(), fullStamp = new Set();
+    const anyStamp = new Set(), fullStamp = new Set(), fullStampAt = new Map();
     for (const s of stampSrc.rows) {
       const k = `${s.cn}||${repOf(s.machine_type_name)}||${s.process_code}`;
       anyStamp.add(k);
-      if (s.full) fullStamp.add(k);
+      if (s.full) { fullStamp.add(k); if (s.full_at) fullStampAt.set(k, s.full_at); }
     }
     for (const r of evaluated) {
       const k = `${r.cn}||${r.machine_type_name}||${r.process_code}`;
-      r.stamped      = anyStamp.has(k);
-      r.stamped_full = fullStamp.has(k);
+      r.stamped         = anyStamp.has(k);
+      r.stamped_full    = fullStamp.has(k);
+      // When the sheet became fully stamped (max of the three sign timestamps). Used
+      // by monthlyStatus to attribute a completion to the month the WORK happened,
+      // not the month the part was first produced.
+      r.stamped_full_at = fullStampAt.get(k) || null;
     }
 
     // Finalize coverage level (after T-Select augmentation).
@@ -674,10 +832,14 @@ async function buildCoverage() {
     // (informational — explains part of the tooling-gate pass rate).
     const toolingNotRequired = evaluated.filter(r => r.tooling_not_required).length;
     const excelConfig   = evaluated.filter(r => r.has_machine_template).length;
-    // PDF-ready = tool + Excel config, regardless of approval stamp. Since COMPLETE
-    // now also requires a full stamp, this is the only metric that answers "what %
-    // can actually be printed". pdfReady − complete = the NO_STAMP backlog.
-    const pdfReadyRows  = evaluated.filter(r => r.has_tooling_match && r.has_machine_template);
+    // PDF-ready = tooling gate satisfied + Excel config, regardless of approval stamp.
+    // Since COMPLETE now also requires a full stamp, this is the only metric that answers
+    // "what % can actually be printed". pdfReady − complete = the NO_STAMP backlog.
+    // The tooling gate must match classifyCoverage's — `tooling_not_required` (a real
+    // no-fixture surface-grind sheet) prints fine and IS COMPLETE-eligible, so counting
+    // only `has_tooling_match` here made pdfReady < complete possible and broke the
+    // "pdfReady − complete = NO_STAMP" identity.
+    const pdfReadyRows  = evaluated.filter(r => (r.has_tooling_match || r.tooling_not_required) && r.has_machine_template);
     const pdfReady      = pdfReadyRows.length;
     const pdfReadyPct   = total > 0 ? parseFloat(((pdfReady / total) * 100).toFixed(1)) : 0;
 
@@ -707,6 +869,9 @@ async function buildCoverage() {
     const cnMachineMap = new Map();
     for (const r of evaluated) {
       if (r.coverage_level !== 'PENDING') continue;
+      // Limit-anomaly rows (`limit_excluded`) stay IN the worklist so `pending`
+      // reconciles with `total - complete - missing`; they keep the flag, the table
+      // shows them with a red "Limit Anomaly" badge, and the backlog feed drops them.
       cnMachineMap.set(cnMachineProcessKey(r), r);
     }
     const needsAttention = [...cnMachineMap.values()]
@@ -781,38 +946,51 @@ async function buildCoverage() {
       .map(([month, counts]) => ({ month, ...counts }));
 
     // ── Monthly trend (from sds_parameter activity — when manual config was done) ──
-    const monthlyTrend = sdsParamMonthRes.rows;
+    // Query 10 returns the last 24 months newest-first; restore chronological order.
+    const monthlyTrend = sdsParamMonthRes.rows.slice().reverse();
 
-    // ── Monthly coverage status — cumulative running total by first-seen month ──
-    const monthlyStatusMap = new Map();
+    // ── Monthly coverage status — cumulative "% PDF-complete" by production month ─
+    //
+    // `complete` = a sheet that is TOOL + EXCEL ready AND fully approval-stamped
+    // (`coverage_level === 'COMPLETE'`); `complete_saved` is the same via a factory-plan
+    // tool only (the KZW baseline; the gap up to `complete` is the T-Select #1 boost).
+    // Both numerator and denominator bucket on the sheet's FIRST-PRODUCED month, and
+    // MISSING rows (no process plan at all) are excluded — so `complete_pct` reads
+    // "of the sheets we could work on, how many are done" per production cohort.
+    //
+    // A closed month is served from `sds_coverage_monthly` (frozen the first build in
+    // the next month) so a later config edit or a back-dated approval never rewrites a
+    // bar already reported. Only the current month is recomputed live. See
+    // `freezeMonthlyStatus`.
+    const ym = (d) => new Date(d).toISOString().slice(0, 7);
+    const stMon = new Map();   // first-produced 'YYYY-MM' → { workable, complete, completeSaved }
     for (const r of evaluated) {
-      if (!r.first_prod_date) continue;
-      const month = new Date(r.first_prod_date).toISOString().slice(0, 7);
-      if (!monthlyStatusMap.has(month)) monthlyStatusMap.set(month, { complete: 0, completeSaved: 0, pending: 0 });
-      const entry = monthlyStatusMap.get(month);
-      if (r.coverage_level === 'COMPLETE') entry.complete += 1;
-      else if (r.coverage_level === 'PENDING') entry.pending += 1;
-      if (r.coverage_level_saved === 'COMPLETE') entry.completeSaved += 1;
+      if (r.coverage_level === 'MISSING' || !r.first_prod_date) continue;
+      const m = ym(r.first_prod_date);
+      const e = stMon.get(m) || { workable: 0, complete: 0, completeSaved: 0 };
+      e.workable += 1;
+      if (r.coverage_level === 'COMPLETE')       e.complete += 1;
+      if (r.coverage_level_saved === 'COMPLETE') e.completeSaved += 1;
+      stMon.set(m, e);
     }
-    let cumComplete = 0;
-    let cumCompleteSaved = 0;
-    let cumAutoPending = 0;
-    const monthlyStatus = [...monthlyStatusMap.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, c]) => {
-        cumComplete      += c.complete;
-        cumCompleteSaved += c.completeSaved;
-        cumAutoPending   += c.pending;
-        const total = cumComplete + cumAutoPending;
-        return {
-          month,
-          complete:       cumComplete,         // with T-Select #1
-          complete_saved: cumCompleteSaved,    // baseline (saved only)
-          pending: cumAutoPending,
-          complete_pct: total > 0 ? parseFloat(((cumComplete / total) * 100).toFixed(1)) : 0,
-          complete_saved_pct: total > 0 ? parseFloat(((cumCompleteSaved / total) * 100).toFixed(1)) : 0,
-        };
-      });
+    let cumWorkable = 0, cumComplete = 0, cumCompleteSaved = 0;
+    const monthlyStatusLive = [...stMon.keys()].sort().map((month) => {
+      const d = stMon.get(month);
+      cumWorkable      += d.workable;
+      cumComplete      += d.complete;
+      cumCompleteSaved += d.completeSaved;
+      const pct = (n) => (cumWorkable > 0 ? parseFloat(((n / cumWorkable) * 100).toFixed(1)) : 0);
+      return {
+        month,
+        complete:       cumComplete,         // tool + Excel + stamped, incl. T-Select #1
+        complete_saved: cumCompleteSaved,    // same via factory-plan tool only (KZW)
+        pending:        Math.max(0, cumWorkable - cumComplete),
+        complete_pct:       pct(cumComplete),
+        complete_saved_pct: pct(cumCompleteSaved),
+      };
+    });
+    // Past months are served from the freeze table; only the current month is live.
+    const monthlyStatus = await freezeMonthlyStatus(monthlyStatusLive);
 
     // NOTE: the dedicated "Stamp Tracking" page (and the `stamp` payload section it
     // consumed) was removed 2026-06-28. Once COMPLETE was redefined to require a
@@ -846,15 +1024,30 @@ async function buildCoverage() {
         toolImageCount:     toolImagesRes.rows.length,
         grindingImageCount: parseInt(grindingImagesRes.rows[0].cnt, 10),
         machineCodeMapped:  machineCodesRes.rows.length,
-        // Produced-but-size-limit-excluded (CN × machine) rows. Now COUNTED IN the
-        // totals (flagged limit_excluded for the red UI highlight), not dropped.
+        // Produced-but-size-limit-excluded (CN × machine) rows — over the limit AND no
+        // sustained history. Counted in `total` and, when PENDING, kept in `needsAttention`
+        // (flagged `limit_excluded`) so `pending` reconciles; they rest on contradictory
+        // data, not a config gap, so `limitExcludedByMachine` is the reconcile worklist —
+        // each (machine, process) has a tooling_machine_limit bound or a production record
+        // that needs checking. This count spans COMPLETE + PENDING limit-anomaly rows.
         limitExcluded:      limitExcludedCount,
+        limitExcludedByMachine,
+        // Over the limit BUT the floor has genuinely run the CN there → T-Select
+        // softens it ('limit_note') instead of excluding. `limitSoftenedByMachine` is
+        // the worklist: each (machine, process) here is a tooling_machine_limit bound
+        // to measure against the plan and fix surgically.
+        limitSoftened:          limitSoftenedCount,
+        limitSoftenedByMachine,
       },
       // The configured part-type set (scope.part_types), in config order. Exposed so the
       // frontend charts (esp. "New Parts per Month") build their series from the scope
       // instead of a hardcoded ball/race/mecha list — add/remove a type in the report
       // config and the charts follow.
       partTypes,
+      // Current fiscal year (Apr–Mar) + the previous-FY window, so the New Parts /
+      // Cumulative Status charts window on this FY plus one leading prior-FY bar
+      // without the frontend hardcoding month strings that break every April.
+      fye: currentFyeWindow(),
       byPartType,
       monthlyTrend,
       monthlyNewParts,
@@ -880,12 +1073,19 @@ function kickCoverageBuild() {
       const at = Date.now();
       _coverageCache = { at, data: payload };
       persistCoverage(payload, at); // fire-and-forget → survives restarts
-      // Seed the board with the sheets that are printable but unsigned. Gated on
-      // the same total>0 check: a degraded build reports everything as pending,
-      // which would be a false backlog. Fire-and-forget and fail-open — the
-      // report must never fail because a board is misconfigured.
-      syncNoStampBacklog(payload.needsAttention, { io: _io })
-        .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message));
+      // Post-build board sync, gated on the same total>0 check (a degraded build
+      // reports everything as pending → false backlog). Both steps are
+      // fire-and-forget and fail-open — the report must never fail because a
+      // board or the approval table is misconfigured.
+      //   1. Auto Stamp: sign the signature-only sheets with the configured
+      //      responsible person per role (no-op unless the global toggle is on).
+      //   2. Backlog intake: seed a card for whatever still needs a human.
+      // Auto Stamp runs FIRST so a sheet it completes already has its card moved
+      // to Done before the backlog's createOnly pass would seed it into To Do.
+      sdsAutoStamp.runAutoStamp(payload.needsAttention, { io: _io })
+        .catch(e => console.warn('[SDS Report] auto-stamp failed:', e.message))
+        .finally(() => syncNoStampBacklog(payload.needsAttention, { io: _io })
+          .catch(e => console.warn('[SDS Report] backlog intake failed:', e.message)));
     } else {
       console.warn('[SDS Report] coverage build returned total=0 — not caching');
     }
@@ -913,10 +1113,14 @@ router.get('/coverage', async (req, res) => {
       return res.json({ ..._coverageCache.data, cached: true, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
-    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate)
+    // Stale cache → serve stale now, rebuild in background (stale-while-revalidate).
+    // Signal `building` while that rebuild is in flight so the dashboard's poll keeps
+    // going and picks up the fresh payload — without it the poll sees a 200 here,
+    // stops, and shows the pre-change scope until a manual reload (this is what made
+    // "enabled Spherical, still not shown" look like a data bug).
     if (!req.query.refresh && _coverageCache) {
       kickCoverageBuild();
-      return res.json({ ..._coverageCache.data, cached: true, stale: true, cachedAt: new Date(_coverageCache.at).toISOString() });
+      return res.json({ ..._coverageCache.data, cached: true, stale: true, building: !!_coverageBuilding, cachedAt: new Date(_coverageCache.at).toISOString() });
     }
 
     // No cache (or ?refresh=1) → ensure a build is running. ?wait=1 awaits it
@@ -963,6 +1167,58 @@ router.post('/backlog-to-board', isAdmin, async (req, res) => {
   }
 });
 
+// ── Auto Stamp — global toggle + per-role responsible signer ──────────────────
+/**
+ * GET  /api/sds/v2/report/auto-stamp/config        — read (any authed user)
+ * PUT  /api/sds/v2/report/auto-stamp/config        — write (sds_admin)
+ *        body: { enabled?, prepared_em_id?, prepared_name?, checked_em_id?,
+ *                checked_name?, approved_em_id?, approved_name?, max_per_run? }
+ *        Only the keys sent are changed; '' / null on a signer field clears it.
+ * POST /api/sds/v2/report/auto-stamp[?dryRun=1]    — run now (sds_admin)
+ *
+ * Auto Stamp also runs automatically after every coverage build; the POST is the
+ * manual trigger and preview. Like /backlog-to-board it reads the CACHED coverage
+ * payload only — it never kicks an expensive cold build.
+ */
+router.get('/auto-stamp/config', async (_req, res) => {
+  try {
+    res.json({ success: true, config: await sdsAutoStamp.resolveConfig() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config get:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/auto-stamp/config', isAdmin, async (req, res) => {
+  try {
+    const config = await sdsAutoStamp.setConfig(req.body || {}, req.user?.empno || null);
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp config put:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/auto-stamp', isAdmin, async (req, res) => {
+  try {
+    if (!_coverageCache) {
+      const persisted = await loadPersistedCoverage();
+      if (persisted) _coverageCache = persisted;
+    }
+    if (!_coverageCache) {
+      return res.status(409).json({ error: 'No coverage build available yet — open the coverage report first' });
+    }
+    const result = await sdsAutoStamp.runAutoStamp(_coverageCache.data.needsAttention, {
+      io: req.app.get('io'),
+      dryRun: !!req.query.dryRun,
+    });
+    res.json({ ...result, builtAt: new Date(_coverageCache.at).toISOString() });
+  } catch (err) {
+    console.error('[SDS Report] auto-stamp run:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * POST /api/sds/v2/report/access-log
  */
@@ -993,7 +1249,16 @@ router.get('/access-log', async (req, res) => {
   try {
     const params = [];
     let where = '';
-    if (cn?.trim()) { params.push(cn.trim()); where = 'WHERE cn = $1'; }
+    // The log stores whatever CN form the viewer's page held (usually control-no); the
+    // searcher may type either spelling or only a prefix. Match partial + both forms —
+    // an exact `cn = $1` made "search by item-no" silently return nothing (mirrors the
+    // /print-log filter).
+    if (cn?.trim()) {
+      const raw = cn.trim();
+      const ctrl = cnFormat.toControlNo(raw) || raw;
+      params.push(`%${raw}%`, `%${ctrl}%`);
+      where = 'WHERE (cn ILIKE $1 OR cn ILIKE $2)';
+    }
     const result = await engPool.query(
       `SELECT id, cn, machine_type_name, access_type, accessed_by, accessed_at
        FROM sds_access_log ${where}
@@ -1006,20 +1271,136 @@ router.get('/access-log', async (req, res) => {
   }
 });
 
+
+/**
+ * GET /api/sds/v2/report/print-log
+ * Paged history of SDS PDFs actually produced (`sds_print_log`).
+ *
+ * Distinct from /access-log, which records who OPENED a sheet. This records what was
+ * PRINTED — and is written by services/sdsPrintLog.js from both PDF paths, so it is the
+ * one place that shows the deep-link traffic from Ball_Grinding_Plan alongside in-app use.
+ *
+ * Filters are all optional and AND together: cn (either spelling), machine, process, lot,
+ * source ('app' | 'public'), and a from/to date window on printed_at. `lotState` narrows
+ * on the three-way `lot_verified` — 'verified' | 'unverified' | 'none' — which is the
+ * distinction the column exists to preserve (see the migration header).
+ *
+ * `tooling_snapshot` is returned as-is: it is the fixture list AS PRINTED, and the only
+ * field that can answer "was this sheet the same as that one" — `pdf_sha256` cannot,
+ * because Chrome stamps a generation timestamp into every PDF, so two renders of an
+ * identical sheet one second apart differ by exactly those bytes.
+ */
+router.get('/print-log', async (req, res) => {
+  const { cn, machine, process: processCode, lot, source, lotState, client, from, to } = req.query;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  const where = [];
+  const params = [];
+  const add = (sql, val) => { params.push(val); where.push(sql.replace('$?', `$${params.length}`)); };
+
+  if (cn && cn.trim()) {
+    // The table stores both spellings — `C35-00164` and `350164` — and a user types
+    // whichever they have in hand, often only the first digits of it. So all three arms
+    // are PARTIAL matches: an exact compare on item_no meant "35016" found nothing while
+    // "350164" worked, which reads as the search being broken. The canonical control-no is
+    // still derived so that typing the item number finds the row by its `cn` too.
+    const raw = cn.trim();
+    const ctrl = cnFormat.toControlNo(raw) || raw;
+    params.push(`%${raw}%`, `%${ctrl}%`);
+    where.push(`(cn ILIKE $${params.length - 1} OR item_no ILIKE $${params.length - 1} OR cn ILIKE $${params.length})`);
+  }
+  // One box searches both the model and the floor code — a user knows the sheet by one or
+  // the other, rarely by which of the two the row happens to store.
+  if (machine && machine.trim()) {
+    params.push(`%${machine.trim()}%`);
+    where.push(`(machine_type_name ILIKE $${params.length} OR machine_code ILIKE $${params.length})`);
+  }
+  if (processCode && processCode.trim()) add('process_code = $?', processCode.trim());
+  if (lot && lot.trim())              add('lot_no ILIKE $?', `%${lot.trim()}%`);
+  if (source && source.trim())        add('source = $?', source.trim());
+  // "which computer asked" — matched against the resolved name or the raw address, since
+  // a host with no PTR record is only ever identifiable by its IP.
+  if (client && client.trim()) {
+    params.push(`%${client.trim()}%`);
+    where.push(`(client_host ILIKE $${params.length} OR client_ip ILIKE $${params.length})`);
+  }
+  if (from && from.trim())            add('printed_at >= $?', from.trim());
+  if (to && to.trim())                add('printed_at < ($?::date + 1)', to.trim());
+
+  if (lotState === 'verified')        where.push('lot_verified IS TRUE');
+  else if (lotState === 'unverified') where.push('lot_verified IS FALSE');
+  else if (lotState === 'none')       where.push('lot_no IS NULL');
+
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  try {
+    const { rows: countRows } = await engPool.query(
+      `SELECT count(*)::int AS total FROM ${TABLES.SDS_PRINT_LOG} ${clause}`, params);
+
+    const { rows } = await engPool.query(
+      `SELECT id, cn, item_no, parts_no, parts_name, lot_no, lot_verified,
+              machine_type_name, machine_code, process_code, source, requested_by,
+              pdf_sha256, pdf_bytes, tooling_snapshot, client_ip, client_host, printed_at
+         FROM ${TABLES.SDS_PRINT_LOG} ${clause}
+        ORDER BY printed_at DESC, id DESC
+        LIMIT ${limit} OFFSET ${offset}`, params);
+
+    res.json({ success: true, total: countRows[0].total, page, limit, rows });
+  } catch (e) {
+    console.error('[print-log]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/** GET /api/sds/v2/report/print-log/facets — distinct values for the filter dropdowns. */
+router.get('/print-log/facets', async (_req, res) => {
+  try {
+    const { rows } = await engPool.query(
+      `SELECT
+         (SELECT array_agg(DISTINCT machine_type_name ORDER BY machine_type_name)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE machine_type_name IS NOT NULL) AS machines,
+         (SELECT array_agg(DISTINCT machine_code ORDER BY machine_code)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE machine_code IS NOT NULL) AS machine_codes,
+         (SELECT array_agg(DISTINCT process_code ORDER BY process_code)
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE process_code IS NOT NULL) AS processes,
+         (SELECT array_agg(DISTINCT source ORDER BY source)
+            FROM ${TABLES.SDS_PRINT_LOG}) AS sources,
+         (SELECT array_agg(DISTINCT coalesce(client_host, client_ip) ORDER BY coalesce(client_host, client_ip))
+            FROM ${TABLES.SDS_PRINT_LOG} WHERE client_ip IS NOT NULL) AS clients`);
+    res.json({ success: true, ...rows[0] });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 /**
  * POST /api/sds/v2/report/parameters/bulk-import
  * Bulk-upsert sds_parameter rows from CSV payload.
  * Body: { rows: [{ cn, machine_type_name, param_key, param_value }], updated_by }
+ *
+ * Writes the same table as sdsV2AdminController's PUT /parameters — so it carries the
+ * identical guard (isAdmin = 'AD' or 'sds_admin' feature) and cache flush (flushSds).
  */
-router.post('/parameters/bulk-import', async (req, res) => {
+router.post('/parameters/bulk-import', isAdmin, flushSds, async (req, res) => {
   const { rows, updated_by } = req.body;
   if (!Array.isArray(rows) || !rows.length) {
     return res.status(400).json({ error: 'rows array is required' });
   }
-  const REQUIRED = ['cn', 'machine_type_name', 'param_key', 'param_value'];
+  // Identity columns must be present AND non-blank: a blank `cn` is not NULL, so
+  // COALESCE(cn, '__machine_config__') would treat '' as a real key and write a row
+  // that matches nothing on read. `param_value` may legitimately be '' (clearing a
+  // value), so it is only checked for presence.
+  const KEY_FIELDS = ['cn', 'machine_type_name', 'param_key'];
   for (let i = 0; i < rows.length; i++) {
-    for (const f of REQUIRED) {
-      if (rows[i][f] == null) return res.status(400).json({ error: `Row ${i}: missing '${f}'` });
+    for (const f of KEY_FIELDS) {
+      if (rows[i][f] == null || !String(rows[i][f]).trim()) {
+        return res.status(400).json({ error: `Row ${i}: '${f}' is required and must not be blank` });
+      }
+    }
+    if (rows[i].param_value == null) {
+      return res.status(400).json({ error: `Row ${i}: missing 'param_value'` });
     }
   }
   const CHUNK = 200;
@@ -1034,7 +1415,8 @@ router.post('/parameters/bulk-import', async (req, res) => {
         `(${Array.from({ length: COLS }, (__, ci) => `$${ri * COLS + ci + 1}`).join(',')})`
       ).join(',');
       const vals = chunk.flatMap(r => [
-        r.cn, r.machine_type_name, r.param_key, String(r.param_value), updated_by || null,
+        String(r.cn).trim(), String(r.machine_type_name).trim(), String(r.param_key).trim(),
+        String(r.param_value), updated_by || null,
       ]);
       await client.query(
         // process_code omitted → defaults NULL (process-agnostic); the ON CONFLICT target
@@ -1072,6 +1454,117 @@ router.get('/config', async (req, res) => {
   }
 });
 
+// ── TEMPLATE_B conformance ───────────────────────────────────────────────────
+// Cheap enough (~1.5 s: one workbook parse plus four queries) that it needs none of the
+// coverage report's 202/poll machinery — a short TTL and a persisted copy are enough.
+// The persisted row is what makes a fresh process answer instantly instead of parsing
+// 31 sheets for the first caller.
+const CONFORMANCE_TTL_MS = 10 * 60 * 1000;
+let _conformanceCache = null;
+
+async function loadPersistedConformance() {
+  try {
+    await ensureCoverageTable();
+    const r = await engPool.query(
+      `SELECT data, built_at FROM sds_coverage_cache WHERE id = 'template_b_conformance' LIMIT 1`);
+    if (r.rows[0] && r.rows[0].data?.kpi?.pairsInTemplateB > 0) {
+      return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    }
+  } catch (e) { console.error('[SDS Report] load persisted conformance failed:', e.message); }
+  return null;
+}
+
+/**
+ * GET /api/sds/v2/report/template-b-conformance
+ *
+ * How much of TEMPLATE_B the live Machine Tool Config covers, per (machine, process).
+ * `?refresh=1` rebuilds instead of serving the cache — use it right after editing config,
+ * which is the whole reason this is a page rather than a static export.
+ */
+router.get('/template-b-conformance', async (req, res) => {
+  try {
+    if (!_conformanceCache && !req.query.refresh) {
+      const persisted = await loadPersistedConformance();
+      if (persisted) _conformanceCache = persisted;
+    }
+    const fresh = _conformanceCache && Date.now() - _conformanceCache.at < CONFORMANCE_TTL_MS;
+    if (!req.query.refresh && fresh) {
+      return res.json({ ..._conformanceCache.data, cached: true,
+                        cachedAt: new Date(_conformanceCache.at).toISOString() });
+    }
+
+    const data = await templateBConformance.build();
+    const at = Date.now();
+    _conformanceCache = { at, data };
+    // fire-and-forget: a persist failure must not fail the request
+    ensureCoverageTable()
+      .then(() => engPool.query(
+        `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('template_b_conformance', $1, $2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = EXCLUDED.built_at`,
+        [data, new Date(at)]))
+      .catch((e) => console.error('[SDS Report] persist conformance failed:', e.message));
+
+    res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[SDS Report] template-b-conformance:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Selection-condition conformance ─────────────────────────────────────────
+// Sibling of the TEMPLATE_B page: does every tooling the index workbook
+// (20260202_Tooling_Excel_List.xlsm) puts in Tooling Select scope actually have a
+// selection rule (formula + search_rule), a per-C/N pin, or a recorded reason it has
+// neither. Same cheap shape — a short TTL plus a persisted copy.
+let _selCondCache = null;
+
+async function loadPersistedSelCond() {
+  try {
+    await ensureCoverageTable();
+    const r = await engPool.query(
+      `SELECT data, built_at FROM sds_coverage_cache WHERE id = 'selection_condition_conformance' LIMIT 1`);
+    if (r.rows[0] && r.rows[0].data?.kpi?.scoped > 0) {
+      return { at: new Date(r.rows[0].built_at).getTime(), data: r.rows[0].data };
+    }
+  } catch (e) { console.error('[SDS Report] load persisted selection-cond failed:', e.message); }
+  return null;
+}
+
+/**
+ * GET /api/sds/v2/report/selection-condition-conformance
+ *
+ * Per scoped tooling family: whether the live config can actually SELECT it.
+ * `?refresh=1` rebuilds instead of serving the 10-min cache.
+ */
+router.get('/selection-condition-conformance', async (req, res) => {
+  try {
+    if (!_selCondCache && !req.query.refresh) {
+      const persisted = await loadPersistedSelCond();
+      if (persisted) _selCondCache = persisted;
+    }
+    const fresh = _selCondCache && Date.now() - _selCondCache.at < CONFORMANCE_TTL_MS;
+    if (!req.query.refresh && fresh) {
+      return res.json({ ..._selCondCache.data, cached: true,
+                        cachedAt: new Date(_selCondCache.at).toISOString() });
+    }
+
+    const data = await selectionConditionConformance.build();
+    const at = Date.now();
+    _selCondCache = { at, data };
+    ensureCoverageTable()
+      .then(() => engPool.query(
+        `INSERT INTO sds_coverage_cache (id, data, built_at) VALUES ('selection_condition_conformance', $1, $2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, built_at = EXCLUDED.built_at`,
+        [data, new Date(at)]))
+      .catch((e) => console.error('[SDS Report] persist selection-cond failed:', e.message));
+
+    res.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[SDS Report] selection-condition-conformance:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** GET /api/sds/v2/report/wc-options — work centers from rodpc.m_workcenter (code + name) */
 router.get('/wc-options', async (req, res) => {
   try {
@@ -1104,6 +1597,9 @@ router.put('/config', isAdmin, async (req, res) => {
       );
     }
     invalidateCoverageCache();
+    // Start the rebuild now rather than on the next visitor's GET — the modal tells
+    // the admin "Saving rebuilds the report", and the cold build is ~3 min.
+    kickCoverageBuild();
     res.json({ success: true, data: await getReportScope() });
   } catch (err) {
     console.error('[report-config PUT]', err.message);

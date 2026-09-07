@@ -18,6 +18,10 @@ export const MTC_PATHS = {
   SDS_V2_ADMIN: '/eng/mtc_eng/sds-v2/admin',
   SDS_TEMPLATE_CONFIG: '/eng/mtc_eng/sds-v2/template-config',
   SDS_COVERAGE_REPORT: '/eng/mtc_eng/sds-coverage-report',
+  SDS_HISTORY: '/eng/mtc_eng/sds-v2/history',
+  SDS_TEMPLATE_B: '/eng/mtc_eng/sds-v2/template-b',
+  SDS_SELECTION_COND: '/eng/mtc_eng/sds-v2/selection-condition',
+  LOT_TRACK: '/eng/mtc_eng/lot-track',
   EMAIL_CONFIG: '/eng/mtc/email-config',
   FORMULA_CONFIG: '/eng/mtc/formulas',
   SELECTION_RULES: '/eng/mtc_eng/selection-rules',
@@ -32,7 +36,11 @@ export const MTC_VERSIONS = {
   'sds-v2':                   { version: '2.1', updated: '2026-06-15' },
   'tooling-result-dashboard': { version: '1.0', updated: '2026-06-14' },
   'sds-coverage-report':      { version: '1.0', updated: '2026-06-14' },
+  'sds-history':              { version: '1.0', updated: '2026-08-26' },
+  'sds-template-b':           { version: '1.0', updated: '2026-08-27' },
+  'sds-selection-cond':       { version: '1.0', updated: '2026-08-28' },
   'cam':                      { version: '1.0', updated: '2026-08-05' },
+  'lot-track':                { version: '1.1', updated: '2026-09-07' },
 };
 
 export const WORKFLOW_STATUS = {

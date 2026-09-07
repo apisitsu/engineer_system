@@ -158,7 +158,20 @@ describe('picking a face off the model', () => {
 });
 
 describe('picking the datum off the model', () => {
-  const fakePoint = (arr) => ({ toArray: () => arr });
+  // A real R3F event: `point` is a THREE.Vector3 (clone + toArray) and `object`
+  // is the mesh, whose `worldToLocal` undoes the `part-work` group's transform.
+  // The default stand-in mesh is untransformed; a test can pass its own to model
+  // the "Work rotates" frame mid-index.
+  const fakePoint = (arr) => ({ toArray: () => arr.slice(), clone: () => fakePoint(arr) });
+  const identityMesh = { worldToLocal: (v) => fakePoint(v.toArray()) };
+  const evt = (point, over = {}) => ({
+    faceIndex: 0,
+    point: fakePoint(point),
+    face: { normal: fakePoint([0, 0, 1]) },
+    object: identityMesh,
+    stopPropagation() {},
+    ...over,
+  });
 
   it('a click while picking one axis sets only that axis, and does not select a feature', async () => {
     await store().loadStl(stlFile(box(60, 40, 20)));
@@ -169,12 +182,7 @@ describe('picking the datum off the model', () => {
     // eslint-disable-next-line testing-library/await-async-query
     const part = r.scene.findAllByType('Mesh')[0];
     await ReactThreeTestRenderer.act(async () => {
-      part.props.onClick({
-        faceIndex: 0,
-        point: fakePoint([7, 3, 10]), // only the Z (10) should be taken
-        face: { normal: fakePoint([0, 0, 1]) },
-        stopPropagation() {},
-      });
+      part.props.onClick(evt([7, 3, 10])); // only the Z (10) should be taken
     });
 
     expect(store().datumPickMode).toBeNull();
@@ -182,6 +190,30 @@ describe('picking the datum off the model', () => {
     // X and Y untouched (0), only Z zeroed at the clicked point.
     expect(store().displayedDatumPoint()).toEqual([0, 0, 10]);
     expect(store().datum.axesSet).toEqual([false, false, true]);
+  });
+
+  it('converts the pick out of world space, so a rotated part-work group cannot skew the origin', async () => {
+    // In the machine ("Work rotates") frame the mesh hangs under a group turned
+    // by the playhead's A index. `event.point` is world space; without
+    // `worldToLocal` the stored origin would be rotated by that angle.
+    await store().loadStl(stlFile(box(60, 40, 20)));
+    await store().makePlan();
+    store().startPickAxis(2); // arm Z
+
+    const r = await ReactThreeTestRenderer.create(<PartMesh meshVer={store().meshVer} />);
+    // eslint-disable-next-line testing-library/await-async-query
+    const part = r.scene.findAllByType('Mesh')[0];
+    // Stand-in for a group rotated about X: worldToLocal maps (x,y,z) → (x,z,−y).
+    const rotatedMesh = {
+      worldToLocal: (v) => { const [x, y, z] = v.toArray(); return fakePoint([x, z, -y]); },
+    };
+    await ReactThreeTestRenderer.act(async () => {
+      part.props.onClick(evt([7, 10, 3], { object: rotatedMesh }));
+    });
+
+    // World Z was 3; in the model's own frame the point is [7, 3, −10], so Z0
+    // lands at −10 — not the 3 the un-converted world point would have given.
+    expect(store().displayedDatumPoint()).toEqual([0, 0, -10]);
   });
 
   it('checks datum-pick mode before the turn-mode "no faces" bail-out', async () => {
@@ -196,12 +228,7 @@ describe('picking the datum off the model', () => {
     // eslint-disable-next-line testing-library/await-async-query
     const part = r.scene.findAllByType('Mesh')[0];
     await ReactThreeTestRenderer.act(async () => {
-      part.props.onClick({
-        faceIndex: 0,
-        point: fakePoint([0, 0, 5]),
-        face: { normal: fakePoint([1, 0, 0]) },
-        stopPropagation() {},
-      });
+      part.props.onClick(evt([0, 0, 5], { face: { normal: fakePoint([1, 0, 0]) } }));
     });
 
     expect(store().displayedDatumPoint()).toEqual([0, 0, 5]);
@@ -216,12 +243,7 @@ describe('picking the datum off the model', () => {
     // eslint-disable-next-line testing-library/await-async-query
     const part = r.scene.findAllByType('Mesh')[0];
     await ReactThreeTestRenderer.act(async () => {
-      part.props.onClick({
-        faceIndex: 0,
-        point: fakePoint([0, 5, 10]),
-        face: { normal: fakePoint([0, 0, 1]) },
-        stopPropagation() {},
-      });
+      part.props.onClick(evt([0, 5, 10]));
     });
 
     expect(store().datumPickMode).toBeNull();
@@ -239,12 +261,8 @@ describe('picking the datum off the model', () => {
     // eslint-disable-next-line testing-library/await-async-query
     const part = r.scene.findAllByType('Mesh')[0];
     await ReactThreeTestRenderer.act(async () => {
-      part.props.onClick({
-        faceIndex: 0,
-        point: fakePoint([0, 15, 0]),
-        face: { normal: fakePoint([0, 1, 0]) }, // the +Y side, not the current top
-        stopPropagation() {},
-      });
+      // the +Y side, not the current top
+      part.props.onClick(evt([0, 15, 0], { face: { normal: fakePoint([0, 1, 0]) } }));
     });
 
     expect(store().datumPickMode).toBeNull();

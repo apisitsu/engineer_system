@@ -362,14 +362,21 @@ const ToolingImagesTab = ({ theme }) => {
     }
   };
 
-  // A NAME-keyed image (tool_dwg_no = 'NAME:<TOOL>') is matched on the SDS PDF by tool
-  // NAME, so one image is shared by that fixture across every dwg/band. Must mirror
-  // NAME_IMG_KEY in sdsV2HeadlessController.js (uppercase + collapse whitespace).
-  const nameImgKey = (n) => 'NAME:' + n.toUpperCase().replace(/\s+/g, ' ').trim();
+  // A NAME-keyed image (tool_dwg_no = 'NAME:<family>:<TOOL>') is matched on the SDS PDF by
+  // tool NAME within ONE DWG family, so one image is shared by that fixture across every
+  // band of it. Must mirror NAME_IMG_KEY in sdsV2HeadlessController.js (uppercase +
+  // collapse whitespace). The FAMILY is required: keyed on the bare name the MSB COLLET
+  // picture printed on every tool called COLLET in the factory (KL-20, XD-8, KS-H70, …).
+  const nameImgKey = (fam, n) =>
+    `NAME:${fam.trim()}:` + n.toUpperCase().replace(/\s+/g, ' ').trim();
 
   const handleUpload = async () => {
     const byName = matchBy === 'name';
-    const key = byName ? (toolName.trim() && nameImgKey(toolName)) : dwgNo.trim();
+    if (byName && toolName.trim() && !dwgNo.trim()) {
+      message.warning('Pick the Tool DWG family too — a name-matched image is scoped to one family');
+      return;
+    }
+    const key = byName ? (toolName.trim() && nameImgKey(dwgNo, toolName)) : dwgNo.trim();
     if (!key) { message.warning(byName ? 'Enter Tool Name' : 'Enter Tool DWG No'); return; }
     if (!fileList.length) { message.warning('Select an image file'); return; }
     setUploading(true);
@@ -402,7 +409,10 @@ const ToolingImagesTab = ({ theme }) => {
 
   const inferredMachineName = (tool_dwg_no) => {
     if (!tool_dwg_no) return '-';
-    if (tool_dwg_no.startsWith('NAME:')) return <Text type="secondary">(any — by name)</Text>;
+    if (tool_dwg_no.startsWith('NAME:')) {
+      const fam = tool_dwg_no.split(':')[1] || '';
+      return <Text type="secondary">{fam ? `${fam} — by name` : '(any — by name)'}</Text>;
+    }
     if (!allMachineTypes || allMachineTypes.length === 0) {
       // Temporary fallback until data loads
       const match = tool_dwg_no.match(/(\d{3})/);
@@ -471,7 +481,6 @@ const ToolingImagesTab = ({ theme }) => {
               options={[{ label: 'DWG No', value: 'dwg' }, { label: 'Tool Name', value: 'name' }]}
             />
           </Col>
-          {matchBy === 'dwg' ? (
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool DWG No</Text></div>
             <AutoComplete
@@ -509,7 +518,7 @@ const ToolingImagesTab = ({ theme }) => {
               </div>
             )}
           </Col>
-          ) : (
+          {matchBy === 'name' && (
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool Name</Text></div>
             <Input
@@ -521,7 +530,8 @@ const ToolingImagesTab = ({ theme }) => {
             />
             <div style={{ marginTop: 4 }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Shared by every tool named this, across all DWG/bands (must match the name shown on the SDS)
+                Shared by every band of <b>{dwgNo.trim() || 'the family above'}</b> whose tool is
+                named this (must match the name shown on the SDS)
               </Text>
             </div>
           </Col>
@@ -2297,7 +2307,12 @@ export const AuditTab = ({ theme }) => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT);
+      // This audit scans lpb.eng_item ⋈ eng_process_info ⋈ eng_r_pi_tool across every
+      // sub_class pattern and process code in sds_audit_config. A broad config
+      // (currently 8 patterns × 43 codes) returns tens of thousands of rows / several
+      // MB, which comfortably exceeds HttpClient's 10s default and shows as
+      // "Load audit data failed" even though the request eventually succeeds.
+      const res = await axios.get(server.MTC_SDS_V2_ADMIN_AUDIT, { timeout: 60000 });
       setData(res.data);
     } catch (err) {
       message.error('Load audit data failed');

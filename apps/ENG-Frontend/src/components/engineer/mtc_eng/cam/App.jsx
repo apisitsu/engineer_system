@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   Layout, Button, Statistic, Alert, Space, Typography, theme,
   InputNumber, Segmented, Switch, Divider, Slider, Upload, Tag, Tooltip, Drawer,
+  App as AntdApp,
 } from 'antd';
 import {
   ThunderboltOutlined, BulbOutlined,
@@ -19,7 +20,7 @@ import {
 } from '@ant-design/icons';
 import CommandButton from './components/CommandButton.jsx';
 import {
-  PartIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
+  PartIcon, StockIcon, StockCutIcon, VoxelIcon, TurningIcon, ArborIcon, RotateWorkIcon, ToolpathIcon,
   CUTTER_ICONS,
 } from './components/glyph.jsx';
 import {
@@ -32,7 +33,8 @@ import { useCamPlanStore } from './stores/camPlanStore.js';
 import { PART_FORMATS } from './engine/mesh/import.js';
 import CamPanel from './components/CamPanel.jsx';
 import { useSketchStore } from './stores/sketchStore.js';
-import { exportGcode, openProjectFile } from './lib/projectIO.js';
+import { exportGcode, openProjectFile, applyProject } from './lib/projectIO.js';
+import { readDraft, clearDraft, startAutosave, suspendAutosave } from './lib/autosave.js';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import { fitBoundsFor, fitBoundsForPart, chuckFromBounds } from './engine/view/setup.js';
 import { unionBounds } from './engine/view/camera.js';
@@ -486,6 +488,7 @@ function BilletBox({
 
 export default function App() {
   const { token } = theme.useToken();
+  const { notification } = AntdApp.useApp();
   // Small scalar state from Zustand — large buffers live in bufferCache.
   const gcode = useCamStore((s) => s.gcode);
   const fileName = useCamStore((s) => s.fileName);
@@ -526,6 +529,8 @@ export default function App() {
   const showArbor = useCamStore((s) => s.showArbor);
   const showToolpath = useCamStore((s) => s.showToolpath);
   const cutFollowsPlayback = useCamStore((s) => s.cutFollowsPlayback);
+  const autoSimEnabled = useCamStore((s) => s.autoSimEnabled);
+  const toggleAutoSim = useCamStore((s) => s.toggleAutoSim);
   const simReady  = useCamStore((s) => s.simReady);
   const removalNote = useCamStore((s) => s.removalNote);
   const aIndex    = useCamStore((s) => s.aIndex);
@@ -583,6 +588,24 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Drives the feature-tree column's width; the tree itself owns the toggle.
   const treeOpen = useFeatureStore((s) => s.treeOpen);
+  const treeWidth = useFeatureStore((s) => s.treeWidth);
+  // While the edge handle is dragged, drop the width transition so the column
+  // tracks the pointer instead of easing behind it.
+  const [treeResizing, setTreeResizing] = useState(false);
+  const startTreeResize = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = useFeatureStore.getState().treeWidth;
+    setTreeResizing(true);
+    const onMove = (ev) => useFeatureStore.getState().setTreeWidth(startW + (ev.clientX - startX));
+    const onUp = () => {
+      setTreeResizing(false);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, []);
   const sketching = page === 'sketch';
   const turning = page === 'turn';
 
@@ -650,15 +673,16 @@ export default function App() {
   // ---- Simulate on its own, once the setup says what to simulate ----------
   //
   // A program, a stated billet and an origin are the three things that make
-  // "what will this make?" answerable, and the moment they are all there the
-  // operator has already asked the question. `autoSimKey` describes the setup as
-  // a string so the run happens once per setup rather than once per render —
-  // see `engine/view/autoSim.js`.
+  // "what will this make?" answerable. Opt-in via `autoSimEnabled` (off by
+  // default) so a session that only wants the backplot never carves; when on,
+  // `autoSimKey` describes the setup as a string so the run happens once per
+  // setup rather than once per render — see `engine/view/autoSim.js`.
   const autoKey = autoSimKey({
-    gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex,
+    gcode, stockEnabled, stockSize, stockOrigin, datum: partDatum, aIndex, mode,
   });
   const lastAutoKey = useRef(null);
   useEffect(() => {
+    if (!autoSimEnabled) return;
     if (!shouldAutoSimulate({
       key: autoKey,
       last: lastAutoKey.current,
@@ -668,7 +692,57 @@ export default function App() {
     })) return;
     lastAutoKey.current = autoKey;
     simulate();
-  }, [autoKey, playing, simStatus, sketching, simulate]);
+  }, [autoSimEnabled, autoKey, playing, simStatus, sketching, simulate]);
+
+  // A separately loaded .nc's indexed (A-word) moves pivot about camPlanStore's
+  // rotary centre, which only reaches the interpreter through
+  // `camStore.machineOpts()` at parse time. That store must not import the plan
+  // store back (see camStore.js), so the re-parse when the centre moves is wired
+  // here — the same shape as the auto-simulate effect above. Only the centre
+  // needs it: `reverseX` and the A0-face pick move the model, not the toolpath,
+  // and the viewport already redraws the model for those.
+  const rotaryCenterKey = JSON.stringify(partDatum.rotaryCenter ?? null);
+  const lastRotaryCenterKey = useRef(rotaryCenterKey);
+  useEffect(() => {
+    if (rotaryCenterKey === lastRotaryCenterKey.current) return;
+    lastRotaryCenterKey.current = rotaryCenterKey;
+    if (gcode) parse();
+  }, [rotaryCenterKey, gcode, parse]);
+
+  // Auto-save draft: mirror the drawing (sketches, feature tree, program) to
+  // localStorage on a debounce, and on load offer back whatever a previous
+  // session left. Cleared on an explicit Save (library or file) or New project.
+  useEffect(() => {
+    const draft = readDraft();
+    if (draft) {
+      const key = 'cam-autosave-draft';
+      notification.info({
+        key,
+        message: 'Unsaved work from a previous session',
+        description: `Last change ${new Date(draft.at).toLocaleString()}.`,
+        duration: 0,
+        btn: (
+          <Space>
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => {
+                notification.destroy(key);
+                suspendAutosave(() => applyProject(draft.project)).catch(() => {});
+              }}
+            >
+              Restore
+            </Button>
+            <Button size="small" onClick={() => { clearDraft(); notification.destroy(key); }}>
+              Discard
+            </Button>
+          </Space>
+        ),
+      });
+    }
+    return startAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Let a save confirmation fade rather than linger.
   useEffect(() => {
@@ -1024,14 +1098,29 @@ export default function App() {
               is a *setup* job, not something you watch while you work, so it
               moved into the drawer below and opens from the toolbar. */}
           <Sider
-            width={treeOpen ? TREE_SIZE.TREE_W : TREE_SIZE.TREE_STRIP + 8}
+            width={treeOpen ? treeWidth : TREE_SIZE.TREE_STRIP + 8}
             style={{
               background: CAD.panelBg,
               borderRight: `1px solid ${CAD.border}`,
-              transition: 'width 120ms ease',
+              transition: treeResizing ? 'none' : 'width 120ms ease',
+              position: 'relative',
             }}
           >
             <LeftColumn activeLine={activeLine} />
+            {treeOpen && (
+              // Drag the column edge to trade viewport for program/tree width.
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize"
+                data-tree-resize
+                onPointerDown={startTreeResize}
+                style={{
+                  position: 'absolute', top: 0, right: -3, width: 7, height: '100%',
+                  cursor: 'col-resize', zIndex: 3, touchAction: 'none',
+                }}
+              />
+            )}
           </Sider>
 
           <Drawer
@@ -1382,6 +1471,13 @@ export default function App() {
                 <Text style={{ color: CAD.muted }}>Material removal</Text>
               </Divider>
 
+              <Space size={6} align="center">
+                <Switch size="small" checked={autoSimEnabled} onChange={toggleAutoSim} />
+                <Tooltip title="Carve the program on its own whenever the setup (program, billet, origin) is complete or changes. Off by default — leave it off if you only want the backplot, and press Simulate by hand when you need a cut.">
+                  <span style={{ color: CAD.label, fontSize: 12 }}>Auto-simulate</span>
+                </Tooltip>
+              </Space>
+
               {turning ? (
                 <>
                   <Text style={{ color: CAD.dim, fontSize: 11 }}>
@@ -1414,10 +1510,8 @@ export default function App() {
                   )}
                   {sim && (
                     <Space size="large" wrap>
-                      <Space>
-                        <span style={{ color: CAD.label }}>Show stock</span>
-                        <Switch checked={showStock} onChange={toggleStock} size="small" />
-                      </Space>
+                      {/* Show stock is a view toggle now — on the bottom rail
+                          beside Show part / Show toolpath, not here. */}
                       <Space>
                         <Tooltip title="Turn the bar down progressively as the playhead moves">
                           <span style={{ color: CAD.label }}>Cut with playback</span>
@@ -1612,10 +1706,8 @@ export default function App() {
                     <Space size="large" align="center" wrap>
                       <Statistic title="Removed (mm³)" value={sim.removedVolume} precision={0} />
                       <Space direction="vertical" size={2}>
-                        <Space>
-                          <span style={{ color: CAD.label }}>Show stock</span>
-                          <Switch checked={showStock} onChange={toggleStock} size="small" />
-                        </Space>
+                        {/* Show stock moved to the bottom rail, with the other
+                            view toggles. */}
                         <Space>
                           <Tooltip title="Carve the stock progressively as the playhead moves">
                             <span style={{ color: CAD.label }}>Cut with playback</span>
@@ -1769,6 +1861,18 @@ export default function App() {
                   type={showPart ? 'primary' : 'default'}
                   icon={<PartIcon />}
                   onClick={() => setShowPart(!showPart)}
+                />
+              )}
+              {/* Show/hide the billet and the carved block — a view toggle like
+                  the part and toolpath ones, so it belongs here beside them
+                  rather than as a lone switch in the Setup drawer. Offered only
+                  when there is stock on screen: a preview billet, or a sim. */}
+              {!sketching && (sim || stockSolid) && (
+                <CommandButton
+                  id="showStock" size="small"
+                  type={showStock ? 'primary' : 'default'}
+                  icon={<StockIcon />}
+                  onClick={toggleStock}
                 />
               )}
               {/* The arbor is the widest part of the marker, so it is what hides

@@ -1,4 +1,4 @@
-export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
+﻿export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
 export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please try again.";
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
@@ -104,16 +104,30 @@ export const server = {
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
   MTC_SDS_V2_IMAGES_GRINDING_COVERAGE: `${apiUrl}api/sds/v2/images/grinding/coverage`,
   MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
+  MTC_SDS_V2_REPORT_TEMPLATE_B: `${apiUrl}api/sds/v2/report/template-b-conformance`,
+  MTC_SDS_V2_REPORT_SELECTION_COND: `${apiUrl}api/sds/v2/report/selection-condition-conformance`,
   MTC_SDS_V2_REPORT_CONFIG: `${apiUrl}api/sds/v2/report/config`,
   MTC_SDS_V2_REPORT_WC_OPTIONS: `${apiUrl}api/sds/v2/report/wc-options`,
   MTC_SDS_V2_REPORT_ACCESS_LOG: `${apiUrl}api/sds/v2/report/access-log`,
+  MTC_SDS_V2_PRINT_LOG: `${apiUrl}api/sds/v2/report/print-log`,
+  MTC_SDS_V2_PRINT_LOG_FACETS: `${apiUrl}api/sds/v2/report/print-log/facets`,
+  MTC_SDS_V2_APPROVAL_HISTORY: `${apiUrl}api/sds/v2/approval/history`,
+  MTC_SDS_V2_APPROVAL_HISTORY_FACETS: `${apiUrl}api/sds/v2/approval/history/facets`,
   MTC_SDS_V2_REPORT_BULK_IMPORT: `${apiUrl}api/sds/v2/report/parameters/bulk-import`,
+  MTC_SDS_V2_REPORT_BACKLOG_TO_BOARD: `${apiUrl}api/sds/v2/report/backlog-to-board`,
+  MTC_SDS_V2_AUTO_STAMP: `${apiUrl}api/sds/v2/report/auto-stamp`,
+  MTC_SDS_V2_AUTO_STAMP_CONFIG: `${apiUrl}api/sds/v2/report/auto-stamp/config`,
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG: `${apiUrl}api/sds/v2/admin/template-config`,
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS: `${apiUrl}api/sds/v2/admin/template-grids`,
   MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
+
+  // Lot Status Tracker
+  MTC_LOT_TRACK: `${apiUrl}api/mtc/lot-track`,                 // append /:lotNo?control_no=&source=
+  MTC_LOT_TRACK_SEARCH: `${apiUrl}api/mtc/lot-track/search`,   // ?q=
+  MTC_LOT_TRACK_SAVED: `${apiUrl}api/mtc/lot-track/saved`,     // GET list · POST create · PUT/DELETE /:id
 
   // Template Tool (APQP Forms)
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
@@ -264,3 +278,10 @@ export const GAS_WEBAPP_URL = 'https://script.google.com/a/macros/minebea.co.th/
 export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyeg7I4oCoNEX5K36D44IHG8O0iWOtsiBigO-eGqc9c9Twe8PYys0iLsrJXwydm4vdC/exec';
 // By me
 // export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbwJzagUw233ty6O8pMBAUtmRXLYXqdkdpQcrog5Wr_d5ERjPZEk4WK0pG5_OaXGLb7a/exec';
+
+// Google Apps Script Web App URL for the Tooling Inspection CSV upload (doPost).
+// The "Update data" flow returns the 2 CSVs and the browser POSTs them here — the
+// minebea Workspace blocks anonymous access, so the backend cannot upload them.
+// Deploy api/engineer/mtc/doc/gas_ti_csv_doPost.gs (Execute as: Me / Anyone within
+// minebea.co.th) and paste the /exec URL below. Empty ⇒ the upload step is skipped.
+export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbw5kxOm4FqqJZaikM-xXr2MH9m46LkbLnpXmx2t4vtMHMPlehyrZpwhD63vhSn077eG/exec';

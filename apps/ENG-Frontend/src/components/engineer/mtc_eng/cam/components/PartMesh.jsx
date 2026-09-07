@@ -105,17 +105,28 @@ export default function PartMesh({ meshVer, visible = true, wireframe = false })
    * thing the operator was pointing at.
    */
   const onClick = (event) => {
+    // `event.point` is in WORLD space. That equals the part's own frame only
+    // while the `part-work` group wrapping this mesh is unrotated — but in the
+    // machine ("Work rotates") frame, which is a 4-axis mill's default, that
+    // group is turned by the playhead's A index (`workTransform`). Picking then
+    // would store an origin rotated by that angle. `worldToLocal` strips the
+    // group transform, landing the pick in the mesh's own (laid-down, datum-
+    // shifted) frame — which is exactly what the datum store expects.
+    // `event.face.normal` needs no such fix: three.js reports it in geometry
+    // space already, unaffected by any ancestor transform.
+    const localPoint = () => event.object.worldToLocal(event.point.clone()).toArray();
+
     // An armed axis pick ('x'/'y'/'z') sets just that axis's zero at the clicked
     // point — no plane, no reorientation, the other two axes left alone.
     const axis = { x: 0, y: 1, z: 2 }[datumPickMode];
     if (axis !== undefined) {
       event.stopPropagation();
-      pickAxisOrigin(axis, event.point.toArray());
+      pickAxisOrigin(axis, localPoint());
       return;
     }
     if (datumPickMode === 'rotary') {
       event.stopPropagation();
-      pickRotaryCenter(event.point.toArray());
+      pickRotaryCenter(localPoint());
       return;
     }
     if (datumPickMode === 'zero') {

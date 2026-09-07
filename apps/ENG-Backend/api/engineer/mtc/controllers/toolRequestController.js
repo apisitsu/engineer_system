@@ -14,7 +14,6 @@ const {
     DUE_DATE_CONFIG,
     REQUEST_TYPES,
 } = require('../services/workflow');
-const { verifyToken, optionalAuth, checkStagePermission } = require('../utils/toolRequestAuth');
 const { validateFileUpload, sanitizeFilename } = require('../utils/fileUpload');
 const fs = require('fs');
 // Auto-intake: mirror each request onto the shared Kanban board (create on new,
@@ -216,9 +215,11 @@ const createToolRequest = async (req, res) => {
             machine_name
         } = req.body;
 
-        // Use verified user data from req.user (from JWT token)
-        const requester = req.user?.userName || req.body.requester;
-        const requester_email = req.user?.gmail_email || req.body.requester_email;
+        // Use verified user data from req.user (from JWT token) where available.
+        // The JWT payload only carries { empno, name, department, group, role, perms } -
+        // no email claim - so requester_email still has to come from the client.
+        const requester = req.user?.name || req.body.requester;
+        const requester_email = req.body.requester_email;
 
         // Validation
         if (!department || !work_center || !requester || !type_of_request || !category || !title || !detail) {
@@ -295,7 +296,7 @@ const createToolRequest = async (req, res) => {
                 logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
 
                 if (recipients.length > 0) {
-                    const subject = `[New Request] ${request_item}: ${title}`;
+                    const subject = `From ${requester} - [New Request] ${request_item}: ${title}`;
                     const html = renderEmail({
                         stage: 'eng_check',
                         decision: 'submit',
@@ -505,7 +506,10 @@ async function calculateRequestPerformance(dueDateVal, actualDateVal) {
  */
 const submitAction = async (req, res) => {
     const { id } = req.params;
-    const { stage, decision, comment, action_by } = req.body;
+    const { stage, decision, comment } = req.body;
+    // Prefer the verified JWT name for the audit trail - req.body.action_by is
+    // client-supplied and would let a caller record someone else's name as the actor
+    const action_by = req.user?.name || req.body.action_by;
     let extra = req.body.extra;
     if (typeof extra === 'string') {
         try { extra = JSON.parse(extra); } catch { extra = {}; }
@@ -535,19 +539,21 @@ const submitAction = async (req, res) => {
     if (!stage || !decision) return res.status(400).json({ error: 'stage and decision are required' });
 
     // ── ตรวจสิทธิ์ ──
+    // ใช้ req.user เท่านั้น (มาจาก JWT ที่ verifyToken เช็คลายเซ็นแล้ว) ไม่ใช่ req.body -
+    // req.body.user_department/user_code เป็นค่าที่ client ส่งมาเอง แก้ก่อนส่งได้อิสระ
+    // (เคยปล่อยให้ปลอมเป็น department 'AD' แล้วข้ามการตรวจสิทธิ์ทุก stage ได้)
     try {
         const recipientsAllowed = await getEmailRecipients(stage);
-        const userDept = (req.body.user_department || '').toUpperCase();
+        const userDept = (req.user?.department || '').toUpperCase();
         if (recipientsAllowed.length > 0 && userDept !== 'AD') {
             const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
-            const userCode = (req.body.user_code || '').toLowerCase();
-            const userEmailVal = (req.body.action_by_email || '').toLowerCase();
-            const isAllowed = allowedCodes.includes(userCode) ||
-                recipientsAllowed.map(e => e.toLowerCase()).includes(userEmailVal);
+            const userCode = (req.user?.empno || '').toLowerCase();
+            const isAllowed = allowedCodes.includes(userCode);
             if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
     } catch (err) {
-        logger.warn('Permission check failed', { error: err.message });
+        logger.warn('Permission check failed - denying by default', { error: err.message });
+        return res.status(403).json({ error: 'Unable to verify permission for this action' });
     }
 
     const stageConfig = STAGE_MAP[stage];

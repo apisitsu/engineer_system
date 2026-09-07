@@ -1,0 +1,6 @@
+# Files that tooling rewrites with LF. Pin them so core.autocrlf=true stops
+# flagging them modified after every rewrite (git diff empty, bytes match HEAD).
+#  - mtc_version_dates.json: scripts/gen-system-versions.js (predev/prestart/prebuild)
+#  - constance.js: scripts/fix_constance_prod.ps1 (Set-Content -NoNewline keeps LF)
+apps/ENG-Frontend/src/constance/mtc_version_dates.json text eol=lf
+apps/ENG-Frontend/src/constance/constance.js           text eol=lf

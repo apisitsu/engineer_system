@@ -34,9 +34,11 @@ apps/ENG-Backend/files/template/
 apps/ENG-Backend/api/engineer/mtc/images/
 apps/ENG-Backend/api/engineer/mtc/templates/Select_tool_backup/
 apps/run.ps1
+# Personal Claude Code launcher — holds a per-developer proxy password.
+/run.ps1
+/run.ps1.local
 
 # --- AI & Tool Configurations ---
-.thclaws/
 # .claude/* (not .claude/) — git will not descend into an excluded dir,
 # so the negations below only work if the contents are excluded, not the dir itself.
 .claude/*
@@ -44,17 +46,21 @@ apps/run.ps1
 !.claude/rules/**
 !.claude/skills/
 !.claude/skills/**
-.gemini/
-.clawsignore
 
 claude-skills/
 # --- Temporary & Local Files ---
 tmp/
 
-CLAUDE.md
-GEMINI.md
-
 ./apps/uploads
 
-git_sync_mtc.ps1system_update.log
+git_sync_mtc.ps1
+system_update.log
+# --- MTC design-standard PDFs & calc-block extraction (reference only; no code reads bytes) ---
+# TEMPLATE_B.xlsx + 20260202_Tooling_Excel_List.xlsm ARE read at runtime — keep those.
+apps/ENG-Backend/api/engineer/mtc/doc/RE*.pdf
+apps/ENG-Backend/api/engineer/mtc/doc/RM*.pdf
+apps/ENG-Backend/api/engineer/mtc/doc/EDRE*.pdf
+apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.pdf
+apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.xlsx
+apps/ENG-Backend/api/engineer/mtc/doc/tooling_calc_blocks/**/*.tsv
 update_progress_live.log

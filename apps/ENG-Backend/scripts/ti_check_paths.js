@@ -8,6 +8,10 @@
  * mounts. The same commit therefore behaves differently on plbmp118 and plbmp130, and the
  * 500 body says only which step failed. This says which PATH failed, and for whom.
  *
+ * TI_CSV_OUTPUT_DIR is now only an on-disk BACKUP: the CSVs reach the Google Sheet by
+ * the browser uploading them to Drive after "Update data" (frontend GAS_TI_CSV_URL).
+ * Set TI_CSV_SKIP_LOCAL=1 to skip the backup write on a host that cannot see G:.
+ *
  * Read-only apart from a byte written and deleted in the output folder — it touches no
  * database and changes no data, so it is safe to run on production at any time.
  *
@@ -108,27 +112,38 @@ function listWorkbooks(dir) {
   return out;
 }
 
+async function main() {
 console.log(`host ${os.hostname()} · running as ${os.userInfo().username} · node ${process.version}`);
 console.log('\n--- configuration ---');
-for (const key of ['TI_INSP_REC_DIR', 'TI_DWG_PRINT_FILE', 'TI_CSV_OUTPUT_DIR']) {
+for (const key of ['TI_INSP_REC_DIR', 'TI_DWG_PRINT_FILE', 'TI_CSV_OUTPUT_DIR', 'TI_CSV_SKIP_LOCAL']) {
   console.log(`  ${key.padEnd(19)} ${process.env[key] ? 'from .env' : 'DEFAULT (not set in .env)'}`);
 }
 
 console.log('\n--- paths ---');
 const srcOk = inspect('TI_INSP_REC_DIR', PATHS.TI_INSP_REC_DIR);
 const dwgOk = inspect('TI_DWG_PRINT_FILE', PATHS.TI_DWG_PRINT_FILE);
-inspect('TI_CSV_OUTPUT_DIR', PATHS.TI_CSV_OUTPUT_DIR, { needsWrite: true });
 
-if (/^[A-Za-z]:/.test(PATHS.TI_CSV_OUTPUT_DIR)) {
-  console.log(`\n  NOTE  TI_CSV_OUTPUT_DIR is a drive letter (${PATHS.TI_CSV_OUTPUT_DIR.slice(0, 2)}).`);
-  console.log('        Drive letters are mounted per signed-in session, not per machine, so this');
-  console.log('        line only proves it exists for the account above. G: is Google Drive and');
-  console.log('        has no UNC form to fall back on — if the backend account cannot see it,');
-  console.log('        use an ordinary folder and move the file to Drive separately.');
+// TI_CSV_OUTPUT_DIR is only a local BACKUP now — the CSVs reach Drive by the
+// browser uploading them after "Update data". TI_CSV_SKIP_LOCAL=1 turns the
+// backup write off, so probing an unwritable G: there is not a failure.
+const skipLocal = ['1', 'true'].includes(String(process.env.TI_CSV_SKIP_LOCAL || '').toLowerCase());
+if (skipLocal) {
+  console.log('  TI_CSV_OUTPUT_DIR    SKIPPED  local backup write is off (TI_CSV_SKIP_LOCAL)');
+  console.log(`  ${''.padEnd(19)}       the CSVs upload to Drive from the browser only.`);
+} else {
+  inspect('TI_CSV_OUTPUT_DIR', PATHS.TI_CSV_OUTPUT_DIR, { needsWrite: true });
+}
+
+if (!skipLocal && /^[A-Za-z]:/.test(PATHS.TI_CSV_OUTPUT_DIR)) {
+  console.log(`\n  NOTE  TI_CSV_OUTPUT_DIR is a drive letter (${PATHS.TI_CSV_OUTPUT_DIR.slice(0, 2)}) — a local BACKUP only.`);
+  console.log('        Drive letters mount per signed-in session, not per machine, so this line only');
+  console.log('        proves it exists for the account above. The CSVs reach Drive from the browser');
+  console.log('        (frontend GAS_TI_CSV_URL); if this account cannot write the backup, set');
+  console.log('        TI_CSV_SKIP_LOCAL=1 and the backup write is skipped.');
 }
 
 const repoRoot = path.resolve(__dirname, '..');
-if (path.resolve(PATHS.TI_CSV_OUTPUT_DIR).startsWith(repoRoot)) {
+if (!skipLocal && path.resolve(PATHS.TI_CSV_OUTPUT_DIR).startsWith(repoRoot)) {
   console.log('\n  PROBLEM  TI_CSV_OUTPUT_DIR is inside apps/ENG-Backend. nodemon only ignores');
   console.log('           output/* and files/*, so writing the CSV here restarts the server');
   console.log('           mid-import and the request never returns.');
@@ -177,8 +192,16 @@ if (dwgOk) {
 
 console.log(`\n--- verdict --- (${since(started)} total; the real request also does the DB work)`);
 if (!problems.length) {
-  console.log('  All three paths are reachable and the output folder is writable AS THIS USER.');
+  console.log('  The sources are reachable AS THIS USER.');
+  console.log(`  Local CSV backup: ${skipLocal ? 'off (TI_CSV_SKIP_LOCAL)' : 'on → ' + PATHS.TI_CSV_OUTPUT_DIR}.`);
+  console.log('  The CSVs reach Drive from the browser (frontend GAS_TI_CSV_URL), not this process.');
   console.log('  If the button still fails, confirm the backend runs as this same account.');
 } else {
   for (const p of problems) console.log(`  · ${p}`);
 }
+}
+
+main().catch((err) => {
+  console.error('\nti_check_paths crashed:', err && err.stack ? err.stack : err);
+  process.exit(1);
+});

@@ -52,7 +52,7 @@ These machines all have Drive installed, so `G:` is normally present on each of 
 - **It is mounted per signed-in session, not per machine.** Installed everywhere is not the same as visible to the account running node. There is no UNC fallback, so if that account cannot see it, point `TI_CSV_OUTPUT_DIR` at an ordinary folder (a real UNC share or local disk) and move the file to Drive separately.
 - **A write to it is a cloud sync, not a disk write**, so how long the two CSVs (~0.5 MB and ~1.1 MB) take depends on the host's link. `ti_check_paths.js` writes a realistic 1 MB and times it; on plbmp118 that is 0.1 s.
 
-Step 1 downgrades a failed CSV write to a warning (the DB sync is the real work), but step 2's CSV *is* its only output, so there it is a hard failure.
+**The CSVs reach the Google Sheet by the BROWSER uploading them, not the backend** (see "Getting the CSVs to Drive" below). `TI_CSV_OUTPUT_DIR` is now only a local backup — `publishCsv` writes it best-effort and **never throws**; both steps warn on a failed write and return the CSV body (base64) in the `sync_csv` response's `csvs[]` for the frontend to upload.
 
 > **`ls -l` ownership on `G:` is meaningless.** The mount reports the local user as owner for every file on it, including ones other people created years ago — so it can never tell you which host wrote a file. Use mtimes.
 
@@ -68,33 +68,23 @@ That also means a reader never sees a half-written file, which matters because t
 
 The whole sequence retries (3 attempts, linear backoff) on `UNKNOWN`/`EBUSY`/`EPERM`/`EACCES` — all transient by nature, whether it is Drive mid-sync or someone with the CSV open in Excel — and falls back to a direct write if the rename never succeeds. A non-retryable error (`ENOENT` for a folder that does not exist) still throws, because that is the one the step needs to report. Verified against the real Drive folder: create 0.10 s, overwrite 0.06 s, no temp left behind.
 
-> **This improves the odds; it does not remove the need to set `TI_CSV_OUTPUT_DIR`.** A retry helps a transient lock, not a folder the account cannot write at all.
+> **This improves the odds; it does not make `G:` a reliable sink.** Which is why the delivery moved off it — see below.
 
-### Getting the CSVs to Drive without a drive letter
+### Getting the CSVs to Drive: the browser uploads them, not the backend
 
-Writing into a Drive-for-Desktop folder fails intermittently with `UNKNOWN` / -4094, and the retry only buys time — Drive's sync is **asynchronous**, so it can be holding a file minutes or hours after whatever triggered it (observed stuck at "1.1 MB, 0% downloaded"). Two machines writing the same file makes it worse, but one machine hitting its own previous upload is enough.
+Writing into a Drive-for-Desktop folder fails intermittently with `UNKNOWN` / -4094 (async sync holding the file). The server-to-server fix — POST the CSV to an Apps Script web app — **does not work in this Workspace**: the minebea admin blocks anonymous ("Anyone") access to web apps, so a backend request with no Google session is 302'd to a login page and gets **HTML, not JSON**. Verified against all three GAS URLs in the repo, including both `GAS_EMAIL_URL` deployments (so `sendEmailViaAS` is silently returning the login page too — it never checks `data.success`).
 
-**`TI_CSV_GAS_URL` uploads them instead.** `docs/gas_ti_csv_doPost.gs` is an Apps Script web app deployed **Execute as: Me**; the backend POSTs `{ secret, fileName, base64Data }` and the script writes into the folder with the deployer's own Drive rights. No file on local disk for Drive to lock, and no OAuth — the same pattern `GAS_EMAIL_URL` and `api/kanban/gas/Code.gs` already use.
+So it works the way **Kanban** uploads Drive attachments — from the signed-in **browser**, which satisfies "Anyone within minebea.co.th":
 
-- Unset ⇒ nothing happens, so an unconfigured host behaves exactly as before.
-- The local `writeCsv` still runs and is still the step's real output; the upload only mirrors it, so a Drive outage or a stale URL degrades to a warning.
-- Only the **authoritative** exports are mirrored — not the backup copy `importPcTooling` writes before its DB round trip, which would upload the same filename twice per run.
-- Set `TI_CSV_GAS_SECRET` to match the script, or anyone in the org who finds the URL can overwrite the files.
-- **Re-deploying the script mints a new `/exec` URL.** Uploads that silently stop after someone "fixed" the script are almost always that; the warning says so when the response is HTML rather than JSON.
+- **Backend** (`ToolingSyncCSV`): each import returns its CSV base64-encoded; the response carries them in `csvs[]`. `publishCsv` also writes `TI_CSV_OUTPUT_DIR` as a **local backup** (best-effort, never throws), skipped by `TI_CSV_SKIP_LOCAL=1` — set that on plbmp130, whose service account cannot see `G:`. No `TI_CSV_GAS_*` on the backend any more.
+- **Frontend** (`src/utils/uploadTiCsvViaGas.js`): after "Update data" succeeds, a hidden `<form>` POST (`payload` = `{files:[…]}`) to `GAS_TI_CSV_URL` targeting a hidden iframe — same mechanism as `uploadFileToDrive.js`'s `deleteFileFromDrive`. The GAS page hands the result back via `postMessage` with `_gasUploadResponse:true`.
+- **GAS** (`api/engineer/mtc/doc/gas_ti_csv_doPost.gs`): deployed **Execute as: Me / Anyone within minebea.co.th**. No shared secret — the per-user browser session + org restriction is the gate, as in `Code.gs`. Writes each file in place; a re-deploy that mints a new `/exec` URL means updating `constance.js`.
+- `GAS_TI_CSV_URL` empty ⇒ upload skipped, toast says so; DB sync + local backup still run.
+- **The upload needs a browser signed into Google.** Fine today (always a button click); a headless/cron "Update data" would sync the DB and the local backup but not reach Drive.
 
-### Uploading to Drive through the official API is blocked on a credential
+Full deploy + config: `api/engineer/mtc/doc/ti_csv_drive_upload_runbook.md`.
 
-The obvious way to stop depending on a drive letter is to have the backend upload through the Drive API — `googleapis` is already a dependency. It cannot be done without someone re-authorising first:
-
-```
-GMAIL_REFRESH_TOKEN scopes: https://www.googleapis.com/auth/gmail.send
-```
-
-That is the **only** scope on the token. Drive needs `…/auth/drive.file` (or `…/auth/drive` for an existing Shared Drive folder), which means a fresh consent flow producing a new refresh token, and the Drive API enabled on the same OAuth client. Store it as its own variable rather than widening the Gmail one — a token that can both send mail and write Drive is a bigger blast radius than either job needs.
-
-The frontend's `uploadFileToDrive.js` is not a precedent to copy: it goes through a Google Apps Script web app deployed as *"execute as the user accessing the web app"*, which is why it needs a popup and why a server cannot use it.
-
-> `node scripts/ti_check_paths.js` reports all three paths, whether the output folder is writable, and **which account it ran as** — run it as the account that runs the backend, since running it in your own shell proves nothing about a service account. It touches no database. On plbmp118 as an interactive user all three pass in ~30 s (8 workbooks, ~3,100 rows, plus a 10 MB xlsm), so a request that dies in ~10 s is a client timeout and one that dies near 60 s is a proxy timeout — neither is the import itself.
+> `node scripts/ti_check_paths.js` reports the two source shares, whether the local backup folder is writable (unless `TI_CSV_SKIP_LOCAL`), and **which account it ran as** — run it as the account that runs the backend. It touches no database. On plbmp118 as an interactive user the sources read in ~30 s (8 workbooks, ~3,100 rows, plus a 10 MB xlsm), so a request that dies in ~10 s is a client timeout and one that dies near 60 s is a proxy timeout — neither is the import itself.
 
 ### Telling apart the three ways "Update data" fails
 

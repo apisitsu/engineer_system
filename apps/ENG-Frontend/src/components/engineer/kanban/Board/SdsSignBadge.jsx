@@ -119,12 +119,19 @@ const SdsSignBadge = ({ cardId }) => {
             const busy = signing === `${cardId}||${s.role}`;
 
             if (s.signed) {
+                // An auto-stamped signature carries a real person's name but was applied
+                // by the coverage build, not by them pressing Sign — so it reads amber
+                // with a ⚡, distinct from a hand ✓ and from a backfilled (recorded) one.
+                const isAuto = s.source === 'auto';
+                const srcNote = isAuto ? ' (auto-stamped)' : s.source === 'backfill' ? ' (recorded)' : '';
                 return (
                     <Tooltip
                         key={s.role}
-                        title={`${ROLE_LABEL[s.role]} — ${s.signer_name || s.em_id || 'signed'}${s.signed_at ? ` · ${fmt(s.signed_at)}` : ''}${s.source === 'backfill' ? ' (recorded)' : ''}\n${sheet}`}
+                        title={`${ROLE_LABEL[s.role]} — ${s.signer_name || s.em_id || 'signed'}${s.signed_at ? ` · ${fmt(s.signed_at)}` : ''}${srcNote}\n${sheet}`}
                     >
-                        {chip('#61bd4f22', '#3f8f2f', '#61bd4f55', <>{ROLE_SHORT[s.role]} ✓</>, s.role)}
+                        {isAuto
+                            ? chip('#faad1422', '#b3800c', '#faad1455', <>{ROLE_SHORT[s.role]} ⚡</>, s.role)
+                            : chip('#61bd4f22', '#3f8f2f', '#61bd4f55', <>{ROLE_SHORT[s.role]} ✓</>, s.role)}
                     </Tooltip>
                 );
             }

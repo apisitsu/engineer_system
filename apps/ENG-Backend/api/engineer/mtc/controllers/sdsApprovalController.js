@@ -218,6 +218,110 @@ router.get('/', async (req, res) => {
   }
 });
 
+
+// ── GET /history — paged signing history across every sheet ───────────────────
+//
+// `GET /` answers "what is signed on THIS sheet" and needs cn + machine + process. This
+// answers "what has been signed, by whom, when" across all 4,200+ rows, which is the
+// question an auditor asks and the one nothing could answer before.
+//
+// The table stores one row per (cn, machine, process, sds_rev) with three flat groups of
+// columns rather than one row per signature, so filtering "signed by X" or "signed in
+// August" has to look across all three. `role` narrows to one stage; `signer` matches an
+// em_id or a name in whichever stages are in scope. A row is returned when ANY in-scope
+// stage matches — that is what makes "everything Somchai checked in July" work.
+//
+// `status` is derived, not stored: complete / awaiting_checked / awaiting_approved /
+// unsigned, following the same prepared → checked → approved order the POST enforces.
+router.get('/history', async (req, res) => {
+  const { cn, machine, process: processCode, role, signer, status, from, to } = req.query;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  const ROLES = ['prepared', 'checked', 'approved'];
+  const scope = ROLES.includes(role) ? [role] : ROLES;
+
+  const where = [];
+  const params = [];
+  const add = (sql, val) => { params.push(val); where.push(sql.replace('$?', `$${params.length}`)); };
+
+  if (cn && cn.trim())                   add('cn ILIKE $?', `%${cn.trim()}%`);
+  if (machine && machine.trim())         add('machine_type_name ILIKE $?', `%${machine.trim()}%`);
+  if (processCode && processCode.trim()) add('process_code = $?', processCode.trim());
+
+  // A signer or a date window applies to the stages in scope, ORed across them: a sheet
+  // qualifies if the person signed ANY of those stages, not all of them.
+  if (signer && signer.trim()) {
+    params.push(`%${signer.trim()}%`);
+    const i = params.length;
+    where.push(`(${scope.map((r) => `${r}_em_id ILIKE $${i} OR ${r}_name ILIKE $${i}`).join(' OR ')})`);
+  }
+  if (from && from.trim()) {
+    params.push(from.trim());
+    const i = params.length;
+    where.push(`(${scope.map((r) => `${r}_at >= $${i}`).join(' OR ')})`);
+  }
+  if (to && to.trim()) {
+    params.push(to.trim());
+    const i = params.length;
+    where.push(`(${scope.map((r) => `${r}_at < ($${i}::date + 1)`).join(' OR ')})`);
+  }
+  // Asking for one role at all means "show sheets where that stage is signed".
+  if (ROLES.includes(role)) where.push(`${role}_at IS NOT NULL`);
+
+  if (status === 'complete')               where.push('approved_at IS NOT NULL');
+  else if (status === 'awaiting_approved') where.push('checked_at IS NOT NULL AND approved_at IS NULL');
+  else if (status === 'awaiting_checked')  where.push('prepared_at IS NOT NULL AND checked_at IS NULL');
+  else if (status === 'unsigned')          where.push('prepared_at IS NULL');
+
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  // Sort by the most recent signature on the row so the newest activity leads, whichever
+  // stage produced it. COALESCE alone would take approved even when checked is newer.
+  const lastSigned = 'GREATEST(COALESCE(prepared_at, \'-infinity\'), COALESCE(checked_at, \'-infinity\'), COALESCE(approved_at, \'-infinity\'))';
+
+  try {
+    const { rows: countRows } = await engPool.query(
+      `SELECT count(*)::int AS total FROM ${T} ${clause}`, params);
+
+    const { rows } = await engPool.query(
+      `SELECT id, cn, machine_type_name, process_code, sds_rev,
+              prepared_em_id, prepared_name, prepared_dept, prepared_at, prepared_source,
+              checked_em_id,  checked_name,  checked_dept,  checked_at,  checked_source,
+              approved_em_id, approved_name, approved_dept, approved_at, approved_source,
+              created_by, created_at, updated_at,
+              ${lastSigned} AS last_signed_at,
+              CASE WHEN approved_at IS NOT NULL THEN 'complete'
+                   WHEN checked_at  IS NOT NULL THEN 'awaiting_approved'
+                   WHEN prepared_at IS NOT NULL THEN 'awaiting_checked'
+                   ELSE 'unsigned' END AS status
+         FROM ${T} ${clause}
+        ORDER BY ${lastSigned} DESC NULLS LAST, id DESC
+        LIMIT ${limit} OFFSET ${offset}`, params);
+
+    res.json({ success: true, total: countRows[0].total, page, limit, rows });
+  } catch (e) {
+    console.error('[approval history]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/** GET /history/facets — distinct values for the filter dropdowns. */
+router.get('/history/facets', async (_req, res) => {
+  try {
+    const { rows } = await engPool.query(
+      `SELECT
+         (SELECT array_agg(DISTINCT machine_type_name ORDER BY machine_type_name)
+            FROM ${T} WHERE machine_type_name IS NOT NULL) AS machines,
+         (SELECT array_agg(DISTINCT process_code ORDER BY process_code)
+            FROM ${T} WHERE process_code IS NOT NULL) AS processes`);
+    res.json({ success: true, ...rows[0] });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ── GET /state — per-role status + whether the current user may sign next ─────
 router.get('/state', async (req, res) => {
   const { cn, machine_type_name, process_code } = req.query;
@@ -656,3 +760,10 @@ module.exports.userCanSign = userCanSign;
 module.exports.getApprovalSeals = getApprovalSeals;
 module.exports._ROLE_ORDER = ROLE_ORDER;
 module.exports.signPageUrl = signPageUrl;
+// Programmatic sign primitives — reused by services/sdsAutoStamp.js so Auto Stamp
+// writes signatures exactly the way POST /backfill does (custom signer + source tag,
+// no HTTP layer). Kept internal to the controller; nothing here is a route.
+module.exports.signUpsert = signUpsert;
+module.exports.resolveSdsRev = resolveSdsRev;
+module.exports.getSheet = getSheet;
+module.exports.roleRec = roleRec;

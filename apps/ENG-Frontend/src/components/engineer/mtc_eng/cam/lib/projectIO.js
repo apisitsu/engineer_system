@@ -13,6 +13,7 @@ import { sketchToDxf, sketchHasGeometry } from '../engine/sketch/dxf.js';
 import {
   buildProject, serializeProject, parseProject, projectFileName, programFileName,
 } from '../engine/projectFile.js';
+import { clearDraft } from './autosave.js';
 
 /**
  * Hand `text` to the browser as a download, named `suggestedName`.
@@ -91,11 +92,15 @@ export function currentProject() {
 /** Save the whole project (program + setup + sketch). Returns the file name. */
 export async function saveProject() {
   const cam = useCamStore.getState();
-  return saveTextFile(
+  const name = await saveTextFile(
     projectFileName(cam.fileName),
     serializeProject(currentProject()),
     { description: 'cam-web project', accept: { 'application/json': ['.json'] } },
   );
+  // Filed to disk → the auto-save draft is now redundant. `null` means the
+  // user cancelled the picker, so leave it.
+  if (name) clearDraft();
+  return name;
 }
 
 /**
@@ -148,6 +153,7 @@ export async function exportSketchDxf() {
  * that, because `projectIO` is deliberately unaware of the library.
  */
 export async function newProject() {
+  clearDraft(); // starting over — nothing to recover
   useCamPlanStore.getState().clear();
   useFeatureStore.getState().clear();
 
@@ -203,6 +209,10 @@ export async function applyProject(doc) {
   await cam.parse(project.gcode, project.fileName ?? 'project');
   // Land on the machine page that actually shows the restored part.
   if (camMode) await useCamStore.getState().setPage(camMode);
+  // Whatever was in the app before is now this project — any earlier draft is
+  // stale. (Restoring the draft itself comes through here too, which is fine:
+  // it has been consumed.)
+  clearDraft();
   return project;
 }
 

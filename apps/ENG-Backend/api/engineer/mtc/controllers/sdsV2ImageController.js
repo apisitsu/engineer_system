@@ -2,24 +2,63 @@ const express = require('express');
 const { engPool } = require('../../../../instance/eng_db');
 const { maqPool } = require('../../../../instance/maq_db');
 const { TABLES } = require('../mtcConstants');
+const { hasFeature } = require('../../../../middleware/mtcAuth');
 const { normalizeTarget, prefixLevel, cnMatchKeys, shapeFamiliesFor } = require('../utils/grindingPrefix');
+
+// SDS image mutations are part of the SDS admin surface — same guard as every other
+// SDS config write (sdsV2AdminController): full 'AD' admin OR the 'sds_admin' feature
+// permission. Reads (GET) stay open to any authenticated user. Without this, an
+// ENG/QA user (the SDS admin page is reachable by those roles) could upload, replace
+// or delete tooling / grinding images that print onto operator setup sheets.
+const isAdmin = hasFeature('sds_admin');
 
 const router = express.Router();
 
 // ── Tooling Images ──────────────────────────────────────────────────────────
 
-/** GET /api/sds/v2/images/tooling/search?q= — search tool_dwg_no from lpb.eng_tooling */
+/** GET /api/sds/v2/images/tooling/search?q= — search tool_dwg_no from lpb.eng_tooling
+ *
+ * ONE ROW PER DWG FAMILY, not per drawing. A tooling image is keyed on the 2-segment
+ * family (`4918-02`) — that is what the PDF matches on — and the picker groups whatever
+ * comes back down to families anyway. Returning raw drawings meant `LIMIT 20` was spent
+ * inside the FIRST family: typing `4918` returned twenty `4918-01-xxxx` rows, so
+ * **4918-02, -03 and -10 could not be selected at all**, and `4858` offered only 4858-01
+ * out of that series' twenty-two families. An image for a family the picker cannot reach
+ * never gets uploaded — reported from the floor for 4918-02 PALLET on 2026-08-26.
+ *
+ * `tool_name` is the family's most-planned ASCII name, matching what the SDS sheet prints
+ * for a slot with no Tool No (see pickFamilyName), so the picker's label and the sheet
+ * agree. A family whose drawings are all Japanese-named keeps its first name.
+ *
+ * The search also matches the NAME now, so "PALLET" finds 4918-02 — before this the
+ * clause was `tool_dwg_no ILIKE` only and a name search silently returned nothing.
+ */
 router.get('/tooling/search', async (req, res) => {
   const { q } = req.query;
   if (!q?.trim()) return res.json([]);
   try {
+    const term = `%${q.trim()}%`;
+    // The plan count is a JOINed aggregate, not a per-row subquery: as a correlated
+    // subquery this took 2-3 s, which an autocomplete firing per keystroke cannot wear.
     const result = await maqPool.query(
-      `SELECT tool_dwg_no, tool_name, machine_type
-       FROM ${TABLES.LPB_ENG_TOOLING}
-       WHERE tool_dwg_no ILIKE $1
-       ORDER BY tool_dwg_no
-       LIMIT 20`,
-      [`%${q.trim()}%`]
+      `WITH fam AS (
+         SELECT split_part(tool_dwg_no, '-', 1) || '-' || split_part(tool_dwg_no, '-', 2) AS family,
+                tool_dwg_no, tool_name, machine_type
+           FROM ${TABLES.LPB_ENG_TOOLING}
+          WHERE tool_name IS NOT NULL AND tool_name <> ''
+            AND (tool_dwg_no ILIKE $1 OR tool_name ILIKE $1)
+       ), cnt AS (
+         SELECT p.tool_dwg_no, count(*)::int AS n
+           FROM ${TABLES.LPB_ENG_R_PI_TOOL} p
+           JOIN fam f ON f.tool_dwg_no = p.tool_dwg_no
+          GROUP BY 1
+       )
+       SELECT DISTINCT ON (f.family) f.family AS tool_dwg_no, f.tool_name, f.machine_type
+         FROM fam f
+         LEFT JOIN cnt c ON c.tool_dwg_no = f.tool_dwg_no
+        ORDER BY f.family, (f.tool_name ~ '^[[:ascii:]]+$') DESC, COALESCE(c.n, 0) DESC, f.tool_name
+        LIMIT 40`,
+      [term]
     );
     res.json(result.rows);
   } catch (err) {
@@ -69,7 +108,7 @@ router.get('/tooling/:tool_dwg_no', async (req, res) => {
 });
 
 /** POST /api/sds/v2/images/tooling — upload (multipart: tool_dwg_no, file, description) */
-router.post('/tooling', async (req, res) => {
+router.post('/tooling', isAdmin, async (req, res) => {
   const { tool_dwg_no, description } = req.body;
   if (!tool_dwg_no?.trim()) return res.status(400).json({ error: 'tool_dwg_no is required' });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
@@ -101,7 +140,7 @@ router.post('/tooling', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/images/tooling/:tool_dwg_no */
-router.delete('/tooling/:tool_dwg_no', async (req, res) => {
+router.delete('/tooling/:tool_dwg_no', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = $1 RETURNING id`,
@@ -399,7 +438,7 @@ function parseGrindingTargets(body) {
 }
 
 /** POST /api/sds/v2/images/grinding — upload (fields: cn_prefixes JSON array, process_codes JSON array, file) */
-router.post('/grinding', async (req, res) => {
+router.post('/grinding', isAdmin, async (req, res) => {
   const parsed = parseGrindingTargets(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
@@ -456,7 +495,7 @@ router.post('/grinding', async (req, res) => {
  * Unlike POST this does NOT delete overlapping records: an edit is aimed at one row the
  * operator picked, and silently removing its neighbours is not what "save" should mean.
  */
-router.put('/grinding/:id', async (req, res) => {
+router.put('/grinding/:id', isAdmin, async (req, res) => {
   const parsed = parseGrindingTargets(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const { prefixes, process_codes, label } = parsed;
@@ -502,7 +541,7 @@ router.put('/grinding/:id', async (req, res) => {
 });
 
 /** DELETE /api/sds/v2/images/grinding/:id */
-router.delete('/grinding/:id', async (req, res) => {
+router.delete('/grinding/:id', isAdmin, async (req, res) => {
   try {
     const result = await engPool.query(
       `DELETE FROM ${TABLES.SDS_V2_GRINDING_IMAGE} WHERE id = $1 RETURNING id`,

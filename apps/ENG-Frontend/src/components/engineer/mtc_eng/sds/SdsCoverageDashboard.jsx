@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Layout, Select, Spin, Typography, Row, Col, Table, Tag, Space, Button, App, Tooltip } from 'antd';
 import { ReloadOutlined, CheckCircleOutlined, ClockCircleOutlined, SettingOutlined, WarningOutlined } from '@ant-design/icons';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import { useTheme } from '../../../../theme';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
@@ -23,32 +24,67 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 const { Content } = Layout;
 const { Text } = Typography;
 
-const C = {
-  bg:       '#041320',
-  card:     '#072035',
-  border:   '#0e3a5c',
-  blue:     '#1890ff',
-  cyan:     '#00d4ff',
-  green:    '#52c41a',
-  greenSoft:'#95de64',   // THAI Complete (T-Select #1 boost) — softer than the KZW green
-  red:      '#ff4d4f',
-  yellow:   '#ffc53d',
-  orange:   '#fa8c16',
-  purple:   '#722ed1',
-  textPri:  '#e8f4ff',
-  textSec:  '#6fa3c7',
-  gridLine: 'rgba(14,58,92,0.8)',
+// ── Palette ────────────────────────────────────────────────────────────────────
+// Chrome (bg / card / border / text) follows the app theme. The DATA colours cannot:
+// the theme supplies 8 light surfaces and 1 dark one (rpg), and this page's series
+// hues were picked against the old #041320 ground. Measured contrast vs #FFFFFF for
+// the dark set: cyan 1.77, greenSoft 1.63, yellow 1.58, green 2.27, orange 2.38 —
+// five of eight below the 3:1 floor, i.e. invisible on a light theme. So each set is
+// stated for the surface it is read on and picked by the theme's own lightness.
+//
+// Hue IDENTITY is preserved across the pair (green stays green, red stays red) —
+// these are status encodings the operator reads as meaning, not decoration.
+const SERIES_DARK = {
+  blue: '#1890ff', cyan: '#00d4ff', green: '#52c41a', greenSoft: '#95de64',
+  red: '#ff4d4f', yellow: '#ffc53d', orange: '#fa8c16',
+  purple: '#9254de',   // #722ed1 was 2.51 on the rpg ground — the one dark-set failure
+  magenta: '#eb2f96',
+};
+const SERIES_LIGHT = {
+  blue: '#0958d9', cyan: '#08979c', green: '#389e0d', greenSoft: '#5b8c00',
+  red: '#cf1322', yellow: '#ad6800', orange: '#d4380d',
+  purple: '#531dab', magenta: '#c41d7f',
 };
 
-const PART_TYPE_COLOR = {
-  ball: '#1890ff',
-  race: '#52c41a',
-  body: '#fa8c16',
-  sleeve: '#722ed1',
-  spherical: '#ff4d4f',
-  mecha: '#eb2f96',
-  other: '#6fa3c7',
+// The theme's own background decides which set is read — not a hardcoded theme name,
+// so a theme added later is classified correctly without touching this file.
+const isDarkHex = (hex) => {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return true;
+  const n = parseInt(h, 16);
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return (0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)) < 0.4;
 };
+
+const useColors = () => {
+  const { theme } = useTheme();
+  return useMemo(() => {
+    const c = theme?.colors || {};
+    const dark = isDarkHex(c.background || '#041320');
+    return {
+      ...(dark ? SERIES_DARK : SERIES_LIGHT),
+      bg: c.background || '#041320',
+      card: c.surface || '#072035',
+      border: c.border || '#0e3a5c',
+      textPri: c.textPrimary || '#e8f4ff',
+      textSec: c.textSecondary || '#6fa3c7',
+      // Grid lines must recede against whichever ground they sit on; borrowing the
+      // theme's border at low alpha keeps them recessive in both.
+      gridLine: hexToRgba(c.border || '#0e3a5c', dark ? 0.8 : 0.55),
+      isDark: dark,
+    };
+  }, [theme]);
+};
+
+const partTypeColors = (C) => ({
+  ball: C.blue,
+  race: C.green,
+  body: C.orange,
+  sleeve: C.purple,
+  spherical: C.red,
+  mecha: C.magenta,
+  other: C.textSec,
+});
 
 // Canonical display order for part-type series/cards. Types in scope but not listed
 // here fall to the end (still shown). Keep in sync with the backend cnPartType taxonomy.
@@ -71,16 +107,46 @@ const hexToRgba = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-const LEVEL_CFG = {
+// Fiscal year (Apr 1 – Mar 31). FYE N = Apr (N+1999) → Mar (N+2000). The backend now
+// sends this as `data.fye`; this is the fallback so an older cached payload still
+// windows the FY-scoped charts on the right period instead of a stale hardcoded one.
+const computeFyeWindow = (ref = new Date()) => {
+  const num = (ref.getMonth() + 1) >= 4 ? ref.getFullYear() - 1999 : ref.getFullYear() - 2000;
+  const sy = num + 1999;
+  const pad = (v) => String(v).padStart(2, '0');
+  return {
+    num,
+    start: `${sy}-04`, end: `${sy + 1}-03`,
+    prevStart: `${sy - 1}-04`, prevEnd: `${sy}-03`,
+    label: `FYE${pad(num)}`, prevLabel: `FYE${pad(num - 1)}`,
+  };
+};
+
+// The FY's calendar months as 'YYYY-MM', Apr → Mar (local-time safe — no toISOString,
+// which shifts to the previous month in negative-offset zones).
+const fyMonths = (fy) => {
+  const out = [];
+  const [sy, sm] = fy.start.split('-').map(Number);
+  const [ey, em] = fy.end.split('-').map(Number);
+  let d = new Date(sy, sm - 1, 1);
+  const last = new Date(ey, em - 1, 1);
+  while (d <= last) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+};
+
+const levelCfg = (C) => ({
   COMPLETE: { color: C.green, label: 'Complete', icon: <CheckCircleOutlined />, antd: 'success', desc: 'Tool match + Excel Config ✅ → PDF ready' },
   PENDING: { color: C.yellow, label: 'Pending', icon: <ClockCircleOutlined />, antd: 'warning', desc: 'Tool does not match sds_machine_tool or machine has no Excel Parameter Config yet' },
-};
+});
 
-const cardStyle = {
+const cardStyleOf = (C) => ({
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 18px',
-};
+});
 
-const sectionTitle = (label) => (
+const sectionTitle = (label, C) => (
   <div style={{
     color: C.cyan, fontWeight: 700, fontSize: 12, letterSpacing: '0.1em',
     textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`,
@@ -91,8 +157,9 @@ const sectionTitle = (label) => (
 );
 
 // ── Part Type Card ─────────────────────────────────────────────────────────────
-const PartTypeCard = ({ pt }) => {
-  const color = PART_TYPE_COLOR[pt.part_type] || C.cyan;
+const PartTypeCard = ({ pt, C }) => {
+  const cardStyle = cardStyleOf(C);
+  const color = partTypeColors(C)[pt.part_type] || C.cyan;
   const pct = pt.complete_pct || 0;                       // with T-Select #1
   const pctSaved = pt.complete_saved_pct ?? pct;          // baseline (saved only)
   const boost = Math.max(0, (pt.complete || 0) - (pt.complete_saved ?? pt.complete ?? 0));
@@ -138,17 +205,20 @@ const PartTypeCard = ({ pt }) => {
       </Tooltip>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
         <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>
-          {pctSaved}%
+          {pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text>
         </Text>
         {boost > 0 && (
-          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>
+          <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>
+        )}
+        {boost > 0 && (
+          <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>
         )}
       </div>
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
         <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
         {boost > 0 && (
           <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
+            <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{boost.toLocaleString()} THAI *</Tag>
           </Tooltip>
         )}
       </div>
@@ -162,17 +232,24 @@ const REASON_LABELS = {
   NO_EXCEL: 'Tool ✓ — needs Excel config',
   NO_TOOL: 'No tool match',
   NO_TOOL_NO_EXCEL: 'No tool + no Excel config',
+  NO_STAMP: 'PDF ready — needs signature',
 };
 
-// Extra reason-filter entry that is NOT a pending_reason. A limit anomaly is a
-// separate flag (`limit_excluded` — produced on a machine its T-Select size LIMIT
-// says it cannot run) that rides along on a row which still classifies under one of
-// the reasons above, so it can never be a REASON_LABELS key. The sentinel keeps it
-// selectable in the same dropdown; filteredAttention special-cases it.
-const LIMIT_ANOMALY = '__LIMIT_ANOMALY__';
+// A limit anomaly (`limit_excluded` — produced on a machine whose T-Select size LIMIT
+// says it cannot run) rests on contradictory data, not a config gap. These rows STAY
+// in `needsAttention` (so `pending` reconciles with total − complete − missing) and
+// appear in the table below with the red "Limit Anomaly" tag/row highlight; the
+// "Limit Anomaly — reconcile data" worklist card (`kpi.limitExcludedByMachine`) is
+// the (machine · process) reconcile list.
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function SdsCoverageDashboard() {
+  // Shadows nothing — the module-level `C` is gone. Every `C.*` below now reads the
+  // active theme, and the series half of it flips with the theme's own lightness.
+  const C = useColors();
+  const cardStyle = cardStyleOf(C);
+  const LEVEL_CFG = levelCfg(C);
+  const PART_TYPE_COLOR = partTypeColors(C);
   const { message } = App.useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -255,32 +332,30 @@ export default function SdsCoverageDashboard() {
     return new Date(+y, +mo - 1, 1).toLocaleString('en', { month: 'short' }) + ' ' + y.slice(2);
   };
 
+  // The FY window for the FY-scoped charts: the backend's `data.fye`, or a client-side
+  // fallback so an older cached payload still renders the current FY (not a stale one).
+  const fyeWin = useMemo(() => data?.fye || computeFyeWindow(), [data]);
+
   // ── Monthly New Parts chart ───────────────────────────────────────────────────
   const monthlyNewParts = useMemo(() => {
     const all = data?.monthlyNewParts || [];
     const raw = Object.fromEntries(
-      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
+      all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = [];
-    let d = new Date('2026-04-01');
-    while (d <= new Date('2027-03-01')) {
-      const key = d.toISOString().slice(0, 7);
-      // Missing part-type keys default to 0 at read time (r[t] || 0), so an empty
-      // { month } row is enough here — no need to pre-seed every scope type.
-      months.push(raw[key] || { month: key });
-      d.setMonth(d.getMonth() + 1);
-    }
-    // Prepend a baseline bar = previous FYE monthly average (Apr 2025 – Mar 2026),
-    // averaged over the months that had new parts. Sits before Apr as a muted reference.
-    const prev = all.filter(r => r.month >= '2025-04' && r.month <= '2026-03');
+    // Missing part-type keys default to 0 at read time (r[t] || 0), so an empty
+    // { month } row is enough here — no need to pre-seed every scope type.
+    const months = fyMonths(fyeWin).map(key => raw[key] || { month: key });
+    // Prepend a baseline bar = previous FY monthly average, over the months that had
+    // new parts. Sits before Apr as a muted reference.
+    const prev = all.filter(r => r.month >= fyeWin.prevStart && r.month <= fyeWin.prevEnd);
     if (prev.length) {
       const avg = k => Math.round(prev.reduce((s, r) => s + (r[k] || 0), 0) / prev.length);
-      const avgRow = { label: 'FYE26 avg', isAvg: true };
+      const avgRow = { label: `${fyeWin.prevLabel} avg`, isAvg: true };
       activePartTypes.forEach(t => { avgRow[t] = avg(t); });
       months.unshift(avgRow);
     }
     return months;
-  }, [data, activePartTypes]);
+  }, [data, activePartTypes, fyeWin]);
   // One stacked dataset per configured part type — derived from activePartTypes so the
   // chart tracks the scope config instead of a fixed Ball/Race/Mecha triple.
   const newPartsChartData = useMemo(() => ({
@@ -312,33 +387,37 @@ export default function SdsCoverageDashboard() {
   const monthlyStatus = useMemo(() => {
     const all = data?.monthlyStatus || [];
     const raw = Object.fromEntries(
-      all.filter(r => r.month >= '2026-04' && r.month <= '2027-03').map(r => [r.month, r])
+      all.filter(r => r.month >= fyeWin.start && r.month <= fyeWin.end).map(r => [r.month, r])
     );
-    const months = [];
-    let d = new Date('2026-04-01');
-    while (d <= new Date('2027-03-01')) {
-      const key = d.toISOString().slice(0, 7);
-      months.push(raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
-      d.setMonth(d.getMonth() + 1);
-    }
-    // Prepend the previous FYE's final cumulative bar (latest month ≤ Mar 2026) so the
+    const months = fyMonths(fyeWin).map(key => raw[key] || { month: key, complete: 0, pending: 0, complete_pct: 0 });
+    // Prepend the previous FY's final cumulative bar (latest month ≤ prevEnd) so the
     // current-FY running total starts from a visible carry-over baseline. `all` is sorted
-    // ascending by month, so the last matching row is the FYE-end value.
-    const prevRows = all.filter(r => r.month <= '2026-03');
+    // ascending by month, so the last matching row is the FY-end value.
+    const prevRows = all.filter(r => r.month <= fyeWin.prevEnd);
     const prevLast = prevRows.length ? prevRows[prevRows.length - 1] : null;
-    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true });
+    if (prevLast) months.unshift({ ...prevLast, isPrevLast: true, prevLabel: `${fyeWin.prevLabel} end` });
     return months;
-  }, [data]);
+  }, [data, fyeWin]);
 
-  const statusChartData = useMemo(() => ({
-    labels: monthlyStatus.map(r => r.isPrevLast ? 'FYE26 end' : fmtMonth(r.month)),
+  // Bars are stamp-GATED complete (KZW baseline + THAI T-Select #1) vs pending. Stable
+  // against a later bulk sign because the BACKEND now buckets each completion by the
+  // month it was fully stamped (max sign date), not the part's first-produced month —
+  // so signing work in August lifts only the August bar, not every historical bar.
+  const statusChartData = useMemo(() => {
+    // The current month is still open — the backend keeps its bar moving until the
+    // month closes and freezes (see freezeMonthlyStatus). Render it faded, like the
+    // prev-FY carry-over bar, so it reads as provisional rather than settled.
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const faint = (r) => r.isPrevLast || r.month === curMonth;
+    return {
+    labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
     datasets: [
       {
         type: 'bar',
         label: 'KZW Complete',
         data: monthlyStatus.map(r => r.complete_saved ?? r.complete),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(82,196,26,0.30)' : 'rgba(82,196,26,0.75)'),
-        borderColor: C.green,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.30 : 0.75)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.green, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -347,8 +426,8 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'THAI Complete *',
         data: monthlyStatus.map(r => Math.max(0, (r.complete || 0) - (r.complete_saved ?? r.complete ?? 0))),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(149,222,100,0.30)' : 'rgba(149,222,100,0.70)'),
-        borderColor: C.greenSoft,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.30 : 0.70)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.greenSoft, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -357,8 +436,8 @@ export default function SdsCoverageDashboard() {
         type: 'bar',
         label: 'Pending',
         data: monthlyStatus.map(r => r.pending),
-        backgroundColor: monthlyStatus.map(r => r.isPrevLast ? 'rgba(255,197,61,0.28)' : 'rgba(255,197,61,0.65)'),
-        borderColor: C.yellow,
+        backgroundColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.28 : 0.65)),
+        borderColor: monthlyStatus.map(r => hexToRgba(C.yellow, faint(r) ? 0.55 : 1)),
         borderWidth: 1,
         stack: 'status',
         yAxisID: 'y',
@@ -372,10 +451,11 @@ export default function SdsCoverageDashboard() {
         data: monthlyStatus.map(r => ((r.complete || 0) + (r.pending || 0)) > 0 ? r.complete_pct : null),
         spanGaps: true,
         borderColor: C.orange,
-        backgroundColor: 'rgba(250,140,22,0.15)',
+        backgroundColor: hexToRgba(C.orange, 0.15),
         borderWidth: 2,
-        pointRadius: 3,
-        pointBackgroundColor: C.orange,
+        pointRadius: monthlyStatus.map(r => r.month === curMonth ? 4 : 3),
+        pointBackgroundColor: monthlyStatus.map(r => r.month === curMonth ? hexToRgba(C.orange, 0.25) : C.orange),
+        pointBorderColor: C.orange,
         tension: 0.3,
         yAxisID: 'y1',
         datalabels: {
@@ -397,7 +477,7 @@ export default function SdsCoverageDashboard() {
         type: 'line',
         label: 'Target 90%',
         data: monthlyStatus.map(() => 90),
-        borderColor: 'rgba(255,77,79,0.85)',
+        borderColor: hexToRgba(C.red, 0.85),
         borderWidth: 1.5,
         borderDash: [6, 4],
         pointRadius: 0,
@@ -405,7 +485,8 @@ export default function SdsCoverageDashboard() {
         yAxisID: 'y1',
       },
     ],
-  }), [monthlyStatus]);
+    };
+  }, [monthlyStatus]);
 
   const statusChartOpts = {
     responsive: true, animation: false,
@@ -467,11 +548,7 @@ export default function SdsCoverageDashboard() {
   const reasonOptions = useMemo(() => {
     const rows = data?.needsAttention || [];
     const reasons = [...new Set(rows.map(r => r.pending_reason).filter(Boolean))].sort();
-    const anomalyCount = rows.filter(r => r.limit_excluded).length;
     return [{ value: '', label: 'All Reasons' },
-      // Listed only when such rows exist, so picking it always yields rows (same
-      // rule as the other two dropdowns).
-      ...(anomalyCount ? [{ value: LIMIT_ANOMALY, label: `⚠ Limit Anomaly (${anomalyCount})` }] : []),
       ...reasons.map(r => ({ value: r, label: REASON_LABELS[r] || r }))];
   }, [data]);
 
@@ -480,9 +557,7 @@ export default function SdsCoverageDashboard() {
     return rows.filter(r => {
       if (filterPt && r.part_type !== filterPt) return false;
       if (filterMc && r.machine_type_name !== filterMc) return false;
-      // The anomaly entry filters on the limit_excluded flag, not pending_reason.
-      if (filterReason === LIMIT_ANOMALY) { if (!r.limit_excluded) return false; }
-      else if (filterReason && r.pending_reason !== filterReason) return false;
+      if (filterReason && r.pending_reason !== filterReason) return false;
       return true;
     });
   }, [data, filterPt, filterMc, filterReason]);
@@ -577,7 +652,7 @@ export default function SdsCoverageDashboard() {
               <div>
                 <div style={{ color: C.cyan, fontSize: 18, fontWeight: 800, letterSpacing: '0.05em' }}>
                   Setup Data Sheet Dashboard
-                  <SystemVersionBadge system="sds-coverage-report" dark />
+                  <SystemVersionBadge system="sds-coverage-report" dark={C.isDark} />
                 </div>
                 {totalCns > 0 && (
                   <div style={{ color: C.textSec, fontSize: 12, marginTop: 2 }}>
@@ -660,8 +735,9 @@ export default function SdsCoverageDashboard() {
                           </div>
                         </Tooltip>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}%</Text>
-                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>→ {pct}% <Text style={{ color: C.greenSoft, fontSize: 9 }}>(+THAI *)</Text></Text>}
+                          <Text style={{ color: pctSaved >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 700 }}>{pctSaved}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>KZW</Text></Text>
+                          {boost > 0 && <Text style={{ color: C.greenSoft, fontSize: 11, fontWeight: 700 }}>+{(pct - pctSaved).toFixed(1)}% <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 400 }}>THAI *</Text></Text>}
+                          {boost > 0 && <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>}
                         </div>
                       </>);
                     })()}
@@ -669,7 +745,7 @@ export default function SdsCoverageDashboard() {
                       <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
                       {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
                         <Tooltip title="THAI Complete — extra completes unlocked by the Tooling Select #1 ( * ) fallback">
-                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: '#237804', background: 'rgba(149,222,100,0.18)', borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
+                          <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px', cursor: 'help', color: C.greenSoft, background: hexToRgba(C.greenSoft, 0.18), borderColor: C.greenSoft }}>+{Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)).toLocaleString()} THAI *</Tag>
                         </Tooltip>
                       )}
                     </div>
@@ -677,7 +753,7 @@ export default function SdsCoverageDashboard() {
                 </Col>
                 {byPartType.map(pt => (
                   <Col key={pt.part_type} span={4}>
-                    <PartTypeCard pt={pt} />
+                    <PartTypeCard pt={pt} C={C} />
                   </Col>
                 ))}
               </Row>
@@ -687,7 +763,7 @@ export default function SdsCoverageDashboard() {
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
               <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('New Parts per Month')}
+                  {sectionTitle('New Parts per Month', C)}
                   <div style={{ height: 240 }}>
                     {monthlyNewParts.length > 0
                       ? <Bar data={newPartsChartData} options={newPartsChartOpts} />
@@ -698,7 +774,7 @@ export default function SdsCoverageDashboard() {
               </Col>
               <Col span={16}>
                 <div style={{ ...cardStyle, height: '100%' }}>
-                  {sectionTitle('Cumulative Coverage Status')}
+                  {sectionTitle('Cumulative Coverage Status', C)}
                   <div style={{ height: 240 }}>
                     <Bar data={statusChartData} options={statusChartOpts} />
                   </div>
@@ -706,10 +782,65 @@ export default function SdsCoverageDashboard() {
               </Col>
             </Row>
 
+            {/* ── Limit-softening worklist ────────────────────────────────────── */}
+            {/* (machine, process) pairs where a part over the T-Select design work-size
+                limit is treated as usable because the factory floor has genuinely run it
+                there. Each line is a tooling_machine_limit bound to measure against the
+                plan and fix surgically — the standard is what needs revising, not the run. */}
+            {(data?.kpi?.limitSoftenedByMachine?.length > 0) && (
+              <div style={{ ...cardStyle, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                  {sectionTitle('Limit Softening — surgical-fix worklist', C)}
+                  <Text style={{ color: C.textSec, fontSize: 11 }}>
+                    {(data?.kpi?.limitSoftened ?? 0).toLocaleString()} sheet(s) across{' '}
+                    {data.kpi.limitSoftenedByMachine.length} (machine · process)
+                  </Text>
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {data.kpi.limitSoftenedByMachine.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textPri }}>{g.machine}</Tag>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
+                      <Text style={{ color: C.orange, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
+                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Limit-anomaly reconcile worklist ────────────────────────────── */}
+            {/* (machine, process) pairs where a part was PRODUCED but the T-Select
+                work-size limit says it cannot run there, and the floor has no sustained
+                history to soften it. The limit and the production record disagree —
+                one of them is wrong. These rows are flagged "Limit Anomaly" in the
+                table below; this card is the (machine · process) reconcile list. */}
+            {(data?.kpi?.limitExcludedByMachine?.length > 0) && (
+              <div style={{ ...cardStyle, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                  {sectionTitle('Limit Anomaly — reconcile data', C)}
+                  <Text style={{ color: C.textSec, fontSize: 11 }}>
+                    {(data?.kpi?.limitExcluded ?? 0).toLocaleString()} sheet(s) across{' '}
+                    {data.kpi.limitExcludedByMachine.length} (machine · process) — flagged in the table below
+                  </Text>
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {data.kpi.limitExcludedByMachine.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
+                      <Tag icon={<WarningOutlined />} color="error" style={{ fontFamily: 'monospace', fontSize: 11, margin: 0 }}>{g.machine}</Tag>
+                      <Tag style={{ fontFamily: 'monospace', fontSize: 11, margin: 0, background: 'transparent', borderColor: C.border, color: C.textSec }}>{g.process}</Tag>
+                      <Text style={{ color: C.red, fontSize: 11 }}>{g.reason || 'over work-size limit'}</Text>
+                      <Text style={{ color: C.textSec, fontSize: 11, marginLeft: 'auto' }}>{g.cn_count} C/N</Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Needs Attention Table ───────────────────────────────────────── */}
             <div style={cardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                {sectionTitle('CNs Requiring Action')}
+                {sectionTitle('CNs Requiring Action', C)}
                 <Space>
                   <Select size="small" value={filterPt} onChange={setFilterPt} style={{ width: 130 }}
                     options={partTypeOptions} popupMatchSelectWidth={false} />
@@ -739,8 +870,8 @@ export default function SdsCoverageDashboard() {
       <style>{`
         .sds-report-row td { background: ${C.bg} !important; color: ${C.textPri}; }
         .sds-report-row:hover td { background: ${C.card} !important; }
-        .sds-limit-excluded td { background: rgba(255,77,79,0.12) !important; box-shadow: inset 3px 0 0 #ff4d4f; }
-        .sds-limit-excluded:hover td { background: rgba(255,77,79,0.20) !important; }
+        .sds-limit-excluded td { background: ${hexToRgba(C.red, 0.12)} !important; box-shadow: inset 3px 0 0 ${C.red}; }
+        .sds-limit-excluded:hover td { background: ${hexToRgba(C.red, 0.20)} !important; }
         .ant-table-thead > tr > th { background: ${C.card} !important; color: ${C.textSec} !important; border-bottom: 1px solid ${C.border} !important; font-size: 11px; }
         .ant-table { background: ${C.bg} !important; }
         .ant-table-tbody > tr > td { border-bottom: 1px solid ${C.border} !important; }
