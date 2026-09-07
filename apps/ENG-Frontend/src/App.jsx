@@ -310,8 +310,8 @@ const AppContent = () => {
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG', 'QA']} />}>
-                {/* CAD/CAM is a standalone workspace opened in its own tab
-                    (the sidebar entry is target="_blank"), so it renders
+                {/* CAD/CAM and Lot Status Tracker are standalone workspaces opened
+                    in their own tab (from the Tools gallery), so they render
                     outside MainLayout — no app header, no sidebar, the whole
                     window is the viewport. */}
                 <Route
@@ -322,6 +322,7 @@ const AppContent = () => {
                     </React.Suspense>
                   )}
                 />
+                <Route path={MTC_PATHS.LOT_TRACK} element={<LotStatusTracker />} />
 
                 <Route element={<MainLayout />}>
                   {/* ------------ User Settings ------------ */}
@@ -365,7 +366,6 @@ const AppContent = () => {
                   <Route path={MTC_PATHS.SDS_TEMPLATE_CONFIG} element={<SdsTemplateConfigPage />} />
                   <Route path={MTC_PATHS.SDS_COVERAGE_REPORT} element={<SdsCoverageDashboard />} />
                   <Route path={MTC_PATHS.SDS_HISTORY} element={<SdsHistoryPage />} />
-                  <Route path={MTC_PATHS.LOT_TRACK} element={<LotStatusTracker />} />
                   {/* Merged into the Tooling Select page (tabs); keep the old paths as redirects */}
                   <Route path={MTC_PATHS.SDS_TEMPLATE_B} element={<Navigate to={MTC_PATHS.TOOLING_SELECT} replace />} />
                   <Route path={MTC_PATHS.SDS_SELECTION_COND} element={<Navigate to={MTC_PATHS.TOOLING_SELECT} replace />} />

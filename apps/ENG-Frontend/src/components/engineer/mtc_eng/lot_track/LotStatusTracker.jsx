@@ -8,7 +8,6 @@ import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, RightOutlined,
 } from '@ant-design/icons';
-import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
@@ -489,11 +488,12 @@ export default function LotStatusTracker() {
     </div>
   );
 
+  // Standalone workspace — opened in its own tab from the Tools gallery, so it
+  // renders full-window with no app header or sidebar.
   return (
-    <Layout style={{ height: '100%' }}>
-      <MenuTemplate type="MTC" defaultSelectedKeys="lot-track" defaultOpenKeys="report" />
+    <Layout style={{ height: '100vh' }}>
       <Layout>
-        <Content className="kb-vscroll" style={{ height: 'calc(100vh - 64px)', overflowY: 'auto', padding: '16px 20px' }}>
+        <Content className="kb-vscroll" style={{ height: '100vh', overflowY: 'auto', padding: '16px 20px' }}>
           <div style={{ marginBottom: 12 }}>
             <Title level={4} style={{ margin: 0 }}>
               Lot Status Tracker
