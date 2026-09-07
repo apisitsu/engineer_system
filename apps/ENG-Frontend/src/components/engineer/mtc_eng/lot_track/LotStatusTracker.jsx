@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card, Steps,
-  Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
+  Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
   Tooltip, Popconfirm,
 } from 'antd';
 import {
@@ -103,26 +103,32 @@ function Roadmap({ steps }) {
   return <Steps direction="vertical" size="small" current={current === -1 ? items.length : current} items={items} />;
 }
 
-// ── detail table ─────────────────────────────────────────────────────────────
-const detailColumns = [
-  { title: '#', dataIndex: 'order', width: 40, fixed: 'left' },
-  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v, r) => (
-    <span style={{ whiteSpace: 'nowrap' }}><Text strong>{v}</Text> <Tag>{r.processCode}</Tag></span>
-  ) },
-  { title: 'Status', dataIndex: 'status', width: 108, render: (v) => {
-    const m = STATUS_META[v] || STATUS_META.pending;
-    return <Tag color={m.tag}>{m.label}</Tag>;
-  } },
-  { title: 'Machine / WC', dataIndex: 'machineLabel', width: 210, render: (v, r) => v
-    ? <span>{v}{r.wc ? <Text type="secondary"> · WC {r.wc}</Text> : null}</span>
-    : <Text type="secondary">—</Text> },
-  { title: 'good / ng', dataIndex: 'goodQty', width: 96, align: 'right', render: (v, r) => v == null ? '—' : `${v}${r.badQty ? ` / ${r.badQty}` : ''}` },
-  { title: 'Cycle', dataIndex: 'cycleSec', width: 70, align: 'right', render: (v) => (v ? `${v}s` : '—') },
-  { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
-  { title: 'Run time', dataIndex: 'runMinutes', width: 110, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
-  { title: 'Completed', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
-  { title: 'Lead time', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
-];
+// ── process detail — trimmed to WC · run · good · operator ───────────────────
+function ProcessDetail({ steps }) {
+  return (
+    <div style={{ padding: 8 }}>
+      {steps.map((s) => (
+        <div
+          key={s.order}
+          style={{
+            padding: '5px 6px',
+            borderBottom: '1px solid #f5f5f5',
+            background: s.status === 'current' ? 'rgba(24,144,255,0.08)' : undefined,
+          }}
+        >
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+            {s.order}. {s.nameEn} <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
+          </div>
+          <div style={{ fontSize: 11.5, color: '#8c8c8c' }}>
+            WC {s.wc || '—'} · run {s.runMinutes == null ? '—' : fmtMinutes(s.runMinutes)}
+            {' '}· good {s.goodQty ?? '—'}{s.badQty ? ` (ng ${s.badQty})` : ''}
+            {' '}· {s.operator || '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── compact status strip for a column ────────────────────────────────────────
 function StatusStrip({ data }) {
@@ -146,28 +152,37 @@ function StatusStrip({ data }) {
 }
 
 // ── one tracked lot ─────────────────────────────────────────────────────────
+// Every column is a fixed-height card so a row of them lines up; the lower pane
+// (roadmap OR the trimmed process-detail table) is the only part that scrolls.
+const CARD_H_MULTI = 660;
+const CARD_H_SINGLE = 760;
+
 function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
-  // single lot → wide card; otherwise ~360px, allowed to shrink so a row of 5
-  // stays on one line rather than wrapping mid-row (the page chunks at 5).
   const flexStyle = single
     ? { flex: '0 0 min(780px, 100%)', maxWidth: '100%' }
-    : { flex: '0 1 360px', minWidth: 300, maxWidth: 380 };
+    : { flex: '1 1 0', minWidth: 0, maxWidth: 380 }; // basis 0 → the 5 chunked per row share the line evenly
+  const H = single ? CARD_H_SINGLE : CARD_H_MULTI;
   const wrap = (children) => (
-    <Card size="small" style={flexStyle} styles={{ body: { padding: 12 } }}>
+    <Card
+      size="small"
+      style={{ ...flexStyle, height: H }}
+      styles={{ body: { padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+    >
       {children}
     </Card>
   );
 
   const st = state || { status: 'loading' };
 
-  const headerBar = (label, sub) => (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+  const headerBar = (label, sub, canToggle) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6, flex: '0 0 auto' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <Button
           type="text" size="small"
-          onClick={onToggleDetail}
-          style={{ padding: 0, height: 'auto', fontWeight: 700, fontSize: 15 }}
-          icon={detailOpen ? <DownOutlined /> : <RightOutlined />}
+          onClick={canToggle ? onToggleDetail : undefined}
+          title={canToggle ? (detailOpen ? 'Show roadmap' : 'Show process detail') : undefined}
+          style={{ padding: 0, height: 'auto', fontWeight: 700, fontSize: 15, cursor: canToggle ? 'pointer' : 'default' }}
+          icon={canToggle ? (detailOpen ? <DownOutlined /> : <RightOutlined />) : null}
         >
           {label}
         </Button>
@@ -181,7 +196,7 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
   );
 
   if (st.status === 'loading') {
-    return wrap(<>{headerBar(entry.lotNo)}<div style={{ textAlign: 'center', padding: 32 }}><Spin /></div></>);
+    return wrap(<>{headerBar(entry.lotNo)}<div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin /></div></>);
   }
   if (st.status === 'error') {
     return wrap(<>{headerBar(entry.lotNo)}<Alert type="error" showIcon message={st.error || 'Failed to load'} /></>);
@@ -190,21 +205,23 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
     return wrap(
       <>
         {headerBar(entry.lotNo, `matches ${st.candidates.length} control numbers`)}
-        <Radio.Group
-          onChange={(e) => onResolveControl(e.target.value)}
-          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
-        >
-          {st.candidates.map((c) => (
-            <Radio key={c.controlNo} value={c.controlNo}>
-              <Space size={4} wrap>
-                <Text strong>{c.controlNo}</Text>
-                <Text type="secondary">{c.partsNo}</Text>
-                {c.gnk ? <Tag>{c.gnk}</Tag> : null}
-                {c.remark ? <Tag color="warning">{c.remark}</Tag> : null}
-              </Space>
-            </Radio>
-          ))}
-        </Radio.Group>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <Radio.Group
+            onChange={(e) => onResolveControl(e.target.value)}
+            style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+          >
+            {st.candidates.map((c) => (
+              <Radio key={c.controlNo} value={c.controlNo}>
+                <Space size={4} wrap>
+                  <Text strong>{c.controlNo}</Text>
+                  <Text type="secondary">{c.partsNo}</Text>
+                  {c.gnk ? <Tag>{c.gnk}</Tag> : null}
+                  {c.remark ? <Tag color="warning">{c.remark}</Tag> : null}
+                </Space>
+              </Radio>
+            ))}
+          </Radio.Group>
+        </div>
       </>,
     );
   }
@@ -212,6 +229,7 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
   const { data } = st;
   const { header, summary } = data;
   const di = dueInfo(header.compPlanDate, header.compDate);
+  const dl = !header.isCancelled && !header.compDate ? daysUntil(header.compPlanDate) : null;
 
   return wrap(
     <>
@@ -221,59 +239,47 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
           <Tag color="blue" style={{ marginInlineEnd: 0 }}>{header.controlNo}</Tag>
         </Space>,
         header.partsNo,
+        true,
       )}
 
-      <StatusStrip data={data} />
+      <div style={{ flex: '0 0 auto' }}>
+        <StatusStrip data={data} />
 
-      <div style={{ textAlign: 'center', marginBottom: 4 }}>
-        <Progress type="dashboard" percent={summary.pctComplete} size={single ? 150 : 118} />
-        {di ? (
-          <div>
-            <Tag color={di.color} style={{ fontSize: 12, padding: '1px 10px', margin: 0 }}>{di.text}</Tag>
-            <div><Text type="secondary" style={{ fontSize: 11 }}>Plan finish {header.compPlanDate || '—'}</Text></div>
-          </div>
+        <div style={{ textAlign: 'center', marginBottom: 4 }}>
+          <Progress type="dashboard" percent={summary.pctComplete} size={single ? 150 : 112} />
+          {di ? (
+            <div>
+              <Tag color={di.color} style={{ fontSize: 12, padding: '1px 10px', margin: 0 }}>{di.text}</Tag>
+              <div><Text type="secondary" style={{ fontSize: 11 }}>Plan finish {header.compPlanDate || '—'}</Text></div>
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ fontSize: 13, marginBottom: 2 }}>
+          {summary.hasCurrent
+            ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
+            : <>All {summary.totalSteps} steps complete</>}
+        </div>
+        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
+          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} ·
+          {' '}run {fmtMinutes(summary.totalRunMinutes)} · lead {fmtDays(summary.elapsedDays)}
+        </div>
+
+        {dl != null && dl <= DUE_SOON_DAYS ? (
+          <Alert
+            banner
+            type={dl < 0 ? 'error' : 'warning'}
+            message={dl < 0
+              ? `Behind plan by ${-dl} day(s) — ${summary.remainingSteps} step(s) left`
+              : `Due in ${dl} day(s) — ${summary.remainingSteps} step(s) left`}
+            style={{ marginBottom: 8, padding: '4px 8px', fontSize: 12 }}
+          />
         ) : null}
       </div>
 
-      <div style={{ fontSize: 13, marginBottom: 2 }}>
-        {summary.hasCurrent
-          ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
-          : <>All {summary.totalSteps} steps complete</>}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: detailOpen ? 0 : 8 }}>
+        {detailOpen ? <ProcessDetail steps={data.steps} /> : <Roadmap steps={data.steps} />}
       </div>
-      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
-        Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} ·
-        {' '}run {fmtMinutes(summary.totalRunMinutes)} · lead {fmtDays(summary.elapsedDays)}
-        {summary.lastDoneStepName ? <> · last: {summary.lastDoneStepName}{summary.lastMachine ? ` @ ${summary.lastMachine}` : ''}</> : null}
-      </div>
-
-      {!header.isCancelled && !header.compDate && header.compPlanDate && daysUntil(header.compPlanDate) != null && daysUntil(header.compPlanDate) <= DUE_SOON_DAYS ? (
-        <Alert
-          banner
-          type={daysUntil(header.compPlanDate) < 0 ? 'error' : 'warning'}
-          message={daysUntil(header.compPlanDate) < 0
-            ? `Behind plan by ${-daysUntil(header.compPlanDate)} day(s) — ${summary.remainingSteps} step(s) left`
-            : `Due in ${daysUntil(header.compPlanDate)} day(s) — ${summary.remainingSteps} step(s) left`}
-          style={{ marginBottom: 8, padding: '4px 8px', fontSize: 12 }}
-        />
-      ) : null}
-
-      <div style={{ maxHeight: single ? 560 : 380, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
-        <Roadmap steps={data.steps} />
-      </div>
-
-      {detailOpen ? (
-        <div style={{ marginTop: 8 }}>
-          <Table
-            size="small"
-            rowKey="order"
-            columns={detailColumns}
-            dataSource={data.steps}
-            pagination={false}
-            scroll={{ x: 1100, y: 360 }}
-            rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
-          />
-        </div>
-      ) : null}
     </>,
   );
 }
@@ -572,8 +578,6 @@ export default function LotStatusTracker() {
           {entries.length === 1 ? '1 lot (single)' : `${entries.length} lots (group)`}: {entries.map((e) => e.lotNo).join(', ')}
         </div>
       </Modal>
-
-      <style>{`.lot-track-current-row > td { background: rgba(24,144,255,0.08) !important; }`}</style>
     </Layout>
   );
 }
