@@ -127,6 +127,7 @@ export const server = {
   // Lot Status Tracker
   MTC_LOT_TRACK: `${apiUrl}api/mtc/lot-track`,                 // append /:lotNo?control_no=&source=
   MTC_LOT_TRACK_SEARCH: `${apiUrl}api/mtc/lot-track/search`,   // ?q=
+  MTC_LOT_TRACK_SAVED: `${apiUrl}api/mtc/lot-track/saved`,     // GET list · POST create · PUT/DELETE /:id
 
   // Template Tool (APQP Forms)
   TT_FORMS: `${apiUrl}api/engineer/new_prod/forms`,
