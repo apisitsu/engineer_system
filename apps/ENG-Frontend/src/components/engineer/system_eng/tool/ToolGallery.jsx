@@ -84,6 +84,7 @@ const ToolGallery = () => {
       path: '/eng/mtc_eng/lot-track',
       category: 'Tracking',
       status: 'Active',
+      newTab: true,
       tags: ['Production', 'Lot', 'Status']
     },
     {
@@ -94,6 +95,7 @@ const ToolGallery = () => {
       path: '/eng/mtc_eng/cam',
       category: 'Engineering',
       status: 'Active',
+      newTab: true,
       tags: ['CAD', 'CAM', 'Sketch']
     }
   ];
@@ -122,7 +124,7 @@ const ToolGallery = () => {
           background: theme.colors.surface
         }}
         bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px' }}
-        onClick={() => navigate(tool.path)}
+        onClick={() => (tool.newTab ? window.open(tool.path, '_blank', 'noopener,noreferrer') : navigate(tool.path))}
         className="tool-card-hover"
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
