@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card, Steps,
+  Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card,
   Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
   Tooltip, Popconfirm,
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
-  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, RightOutlined,
+  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, RightOutlined, CheckCircleFilled,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
@@ -71,38 +71,68 @@ const chunk = (arr, n) => {
   return out;
 };
 
-// ── roadmap (vertical stepper) — per-step: WC · done <date> · wait <d> · run · good · operator
+// ── roadmap — custom vertical timeline so the WIP-wait sits ON the connector
+// BETWEEN two steps (step N+1's dwellDays = the gap from step N finishing).
+function Dot({ status }) {
+  if (status === 'done') return <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />;
+  if (status === 'current') return <SyncOutlined spin style={{ color: '#1677ff', fontSize: 14 }} />;
+  return <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #d9d9d9', display: 'inline-block', marginTop: 3 }} />;
+}
+
 function Roadmap({ steps }) {
-  const current = steps.findIndex((s) => s.status === 'current');
-  const items = steps.map((s) => {
-    const meta = STATUS_META[s.status] || STATUS_META.pending;
-    const bits = [];
-    if (s.wc) bits.push(`WC ${s.wc}`);
-    if (s.compDate) {
-      bits.push(s.startDate && s.startDate !== s.compDate
-        ? `${s.startDate} → ${s.compDate}${s.dwellDays != null ? ` (wait ${fmtDays(s.dwellDays)})` : ''}`
-        : `done ${s.compDate}`);
-    }
-    if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
-    if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
-    if (s.operator) bits.push(s.operator);
-    return {
-      status: meta.step,
-      icon: s.status === 'current' ? <SyncOutlined spin /> : undefined,
-      title: (
-        <Space size={6} wrap>
-          <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
-          <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
-          <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-          {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
-        </Space>
-      ),
-      description: bits.length ? (
-        <Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text>
-      ) : null,
-    };
-  });
-  return <Steps direction="vertical" size="small" current={current === -1 ? items.length : current} items={items} />;
+  const RAIL = '#e8e8e8';
+  return (
+    <div style={{ paddingLeft: 2 }}>
+      {steps.map((s, i) => {
+        const meta = STATUS_META[s.status] || STATUS_META.pending;
+        const bits = [];
+        if (s.wc) bits.push(`WC ${s.wc}`);
+        if (s.compDate) {
+          bits.push(s.startDate && s.startDate !== s.compDate ? `${s.startDate} → ${s.compDate}` : `done ${s.compDate}`);
+        }
+        if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
+        if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
+        if (s.operator) bits.push(s.operator);
+        const isLast = i === steps.length - 1;
+        const gap = s.dwellDays != null && s.dwellDays > 0;
+
+        return (
+          <React.Fragment key={s.order}>
+            {gap ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22 }}>
+                <span style={{ width: 12, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
+                  <span style={{ width: 1, background: RAIL }} />
+                </span>
+                <Tag color={s.dwellDays >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
+                  ⏳ waited {fmtDays(s.dwellDays)}
+                </Tag>
+              </div>
+            ) : null}
+            <div
+              className={s.status === 'current' ? 'lot-roadmap-current' : undefined}
+              style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 12 }}>
+                <Dot status={s.status} />
+                {!isLast ? <span style={{ flex: 1, width: 1, minHeight: 14, background: RAIL }} /> : null}
+              </div>
+              <div style={{ flex: 1, paddingBottom: isLast ? 0 : 8, minWidth: 0 }}>
+                <Space size={6} wrap>
+                  <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
+                  <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
+                  <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
+                  {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
+                </Space>
+                {bits.length ? (
+                  <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
+                ) : null}
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── process detail — the full per-step table (scrolls inside the card) ───────
@@ -177,7 +207,7 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
     if (detailOpen || st.status !== 'ok') return;
     const pane = paneRef.current;
     if (!pane) return;
-    const cur = pane.querySelector('.ant-steps-item-process');
+    const cur = pane.querySelector('.lot-roadmap-current');
     if (cur) {
       pane.scrollTop += cur.getBoundingClientRect().top - pane.getBoundingClientRect().top - 6;
     }
