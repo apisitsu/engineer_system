@@ -279,9 +279,17 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
             ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
             : <>All {summary.totalSteps} steps complete</>}
         </div>
-        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 2 }}>
           Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} ·
-          {' '}run {fmtMinutes(summary.totalRunMinutes)} · lead {fmtDays(summary.elapsedDays)}
+          {' '}run {fmtMinutes(summary.totalRunMinutes)}
+        </div>
+        <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
+          Entered {header.entryDate || '—'}
+          {summary.firstProducedDate ? (
+            <> · production {summary.firstProducedDate} → {header.compDate || summary.lastProducedDate || '…'}
+              {summary.hasCurrent ? ' (running)' : header.compDate ? ' (done)' : ' (last step done)'}
+              {' '}· {fmtDays(summary.elapsedDays)}</>
+          ) : ' · not started'}
         </div>
 
         {dl != null && dl <= DUE_SOON_DAYS ? (
