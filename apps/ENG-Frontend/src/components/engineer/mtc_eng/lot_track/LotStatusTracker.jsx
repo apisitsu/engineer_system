@@ -71,13 +71,15 @@ const chunk = (arr, n) => {
   return out;
 };
 
-// ── roadmap (vertical stepper) — per-step line trimmed to WC · run · good · operator
+// ── roadmap (vertical stepper) — per-step: WC · done <date> · wait <d> · run · good · operator
 function Roadmap({ steps }) {
   const current = steps.findIndex((s) => s.status === 'current');
   const items = steps.map((s) => {
     const meta = STATUS_META[s.status] || STATUS_META.pending;
     const bits = [];
     if (s.wc) bits.push(`WC ${s.wc}`);
+    if (s.compDate) bits.push(`done ${s.compDate}`);
+    if (s.dwellDays != null) bits.push(`wait ${fmtDays(s.dwellDays)}`);
     if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
     if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
     if (s.operator) bits.push(s.operator);
@@ -117,8 +119,8 @@ const detailColumns = [
   { title: 'Cycle', dataIndex: 'cycleSec', width: 70, align: 'right', render: (v) => (v ? `${v}s` : '—') },
   { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
   { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
-  { title: 'Completed', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
-  { title: 'Lead time', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
+  { title: 'Done', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
+  { title: 'WIP wait', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
 ];
 
 function ProcessDetail({ steps }) {
