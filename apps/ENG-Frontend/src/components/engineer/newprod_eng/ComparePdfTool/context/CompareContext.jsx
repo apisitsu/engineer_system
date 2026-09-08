@@ -1,7 +1,7 @@
 import React, { createContext, useReducer, useContext, useEffect } from 'react';
 
 // ── localStorage helpers for review persistence ──
-const STORAGE_KEY_PREFIX = 'pdf-compare-review-';
+const STORAGE_KEY_PREFIX = 'pdf-compare-review-v2-';
 
 function getStorageKey(baseName, compareName) {
   return `${STORAGE_KEY_PREFIX}${baseName}__vs__${compareName}`;
@@ -29,7 +29,7 @@ const CompareContext = createContext();
 const initialState = {
   // ── File Management ──
   files: {
-    base: null,      // { pdfDoc, data (ArrayBuffer), name, pageCount, fileSize }
+    base: null,      // { pdfDoc, name, pageCount, fileSize }
     compare: null,   // same shape
   },
 
@@ -38,8 +38,8 @@ const initialState = {
     isComparing: false,
     progress: 0,
     progressText: '',
-    results: new Map(),  // Map<pageNumber, { pixelDiffs, textDiffs, diffImageData }>
-    threshold: 0.15,      // 0.0 - 1.0 sensitivity
+    results: new Map(),  // Map<pageNumber, { page, hasBasePage, hasComparePage, pixelDiffs, textDiffs }>
+    threshold: 0.15,     // 0.0 - 1.0 sensitivity
     mode: 'both',        // 'pixel' | 'text' | 'both'
     hasResults: false,
   },
@@ -49,8 +49,11 @@ const initialState = {
     currentPage: 1,
     totalPages: 0,
     zoom: 1.0,
-    viewMode: 'side-by-side',  // 'side-by-side' | 'overlay'
+    viewMode: 'side-by-side',  // 'side-by-side' | 'overlay' | 'curtain'
     overlayOpacity: 0.5,
+    diffLayerVisible: true,
+    diffLayerOpacity: 0.7,
+    curtainPosition: 0.5,      // 0.0 to 1.0 split position
   },
 
   // ── Review System ──
@@ -58,6 +61,8 @@ const initialState = {
     diffs: [],           // Array<{ id, type, status, page, bbox, description, textOld, textNew }>
     filter: 'all',       // 'all' | 'pending' | 'resolved' | 'ignored'
     selectedDiffId: null,
+    searchQuery: '',
+    scope: 'all',        // 'all' | 'current-page'
   },
 
   // ── Export ──
@@ -121,17 +126,23 @@ function compareReducer(state, action) {
 
     case 'SET_COMPARISON_RESULTS': {
       const { results, diffs } = action.payload;
-      const newDiffs = diffs.map((d, i) => ({
-        ...d,
-        id: `diff-${i}`,
-        status: 'pending',
-        visible: true,
-      }));
 
-      // Restore saved statuses from localStorage if available
+      // Assign deterministic IDs based on page and position
+      const newDiffs = diffs.map((d, i) => {
+        const detId = `d-p${d.page}-${d.type}-${Math.round(d.bbox?.x || 0)}_${Math.round(d.bbox?.y || 0)}-${i}`;
+        return {
+          ...d,
+          id: detId,
+          status: 'pending',
+          visible: true,
+        };
+      });
+
+      // Restore saved statuses from localStorage
       const baseName = state.files.base?.name || '';
       const compareName = state.files.compare?.name || '';
       const savedStatuses = loadReviewStatuses(baseName, compareName);
+
       if (savedStatuses) {
         const statusMap = new Map(savedStatuses.map(s => [s.id, s.status]));
         for (const diff of newDiffs) {
@@ -139,11 +150,6 @@ function compareReducer(state, action) {
             diff.status = statusMap.get(diff.id);
           }
         }
-      }
-
-      // Auto-hide non-pending diffs by default
-      for (const diff of newDiffs) {
-        diff.visible = (diff.status === 'pending');
       }
 
       return {
@@ -187,7 +193,7 @@ function compareReducer(state, action) {
 
     // ── Viewer Actions ──
     case 'SET_PAGE': {
-      const page = Math.max(1, Math.min(state.viewer.totalPages, action.payload));
+      const page = Math.max(1, Math.min(state.viewer.totalPages || 1, action.payload));
       return {
         ...state,
         viewer: { ...state.viewer, currentPage: page },
@@ -197,7 +203,7 @@ function compareReducer(state, action) {
     case 'SET_ZOOM':
       return {
         ...state,
-        viewer: { ...state.viewer, zoom: action.payload },
+        viewer: { ...state.viewer, zoom: Math.max(0.25, Math.min(4.0, action.payload)) },
       };
 
     case 'SET_VIEW_MODE':
@@ -212,13 +218,30 @@ function compareReducer(state, action) {
         viewer: { ...state.viewer, overlayOpacity: action.payload },
       };
 
+    case 'TOGGLE_DIFF_LAYER':
+      return {
+        ...state,
+        viewer: { ...state.viewer, diffLayerVisible: !state.viewer.diffLayerVisible },
+      };
+
+    case 'SET_DIFF_LAYER_OPACITY':
+      return {
+        ...state,
+        viewer: { ...state.viewer, diffLayerOpacity: action.payload },
+      };
+
+    case 'SET_CURTAIN_POSITION':
+      return {
+        ...state,
+        viewer: { ...state.viewer, curtainPosition: Math.max(0.02, Math.min(0.98, action.payload)) },
+      };
+
     // ── Review Actions ──
     case 'SELECT_DIFF': {
       const diff = state.review.diffs.find(d => d.id === action.payload);
       return {
         ...state,
         review: { ...state.review, selectedDiffId: action.payload },
-        // Auto-navigate to the diff's page
         viewer: diff
           ? { ...state.viewer, currentPage: diff.page }
           : state.viewer,
@@ -232,11 +255,7 @@ function compareReducer(state, action) {
           ...state.review,
           diffs: state.review.diffs.map(d =>
             d.id === action.payload.id
-              ? { 
-                  ...d, 
-                  status: action.payload.status,
-                  visible: action.payload.status === 'pending'
-                }
+              ? { ...d, status: action.payload.status }
               : d
           ),
         },
@@ -255,23 +274,41 @@ function compareReducer(state, action) {
         },
       };
 
-    case 'BULK_UPDATE_STATUS':
+    case 'BULK_UPDATE_STATUS': {
+      const targetStatus = action.payload.status;
+      const targetPage = action.payload.page; // optional page constraint
+
       return {
         ...state,
         review: {
           ...state.review,
-          diffs: state.review.diffs.map(d => ({
-            ...d,
-            status: action.payload.status,
-            visible: action.payload.status === 'pending',
-          })),
+          diffs: state.review.diffs.map(d => {
+            if (targetPage && d.page !== targetPage) return d;
+            return {
+              ...d,
+              status: targetStatus,
+            };
+          }),
         },
       };
+    }
 
     case 'SET_FILTER':
       return {
         ...state,
         review: { ...state.review, filter: action.payload },
+      };
+
+    case 'SET_REVIEW_SEARCH':
+      return {
+        ...state,
+        review: { ...state.review, searchQuery: action.payload },
+      };
+
+    case 'SET_REVIEW_SCOPE':
+      return {
+        ...state,
+        review: { ...state.review, scope: action.payload },
       };
 
     // ── Export ──
@@ -282,8 +319,18 @@ function compareReducer(state, action) {
       };
 
     // ── Reset ──
-    case 'RESET':
-      return { ...initialState, comparison: { ...initialState.comparison, results: new Map() } };
+    case 'RESET': {
+      // Destroy PDF documents to release worker memory
+      try {
+        if (state.files.base?.pdfDoc?.destroy) state.files.base.pdfDoc.destroy();
+        if (state.files.compare?.pdfDoc?.destroy) state.files.compare.pdfDoc.destroy();
+      } catch { /* ignore */ }
+
+      return {
+        ...initialState,
+        comparison: { ...initialState.comparison, results: new Map() },
+      };
+    }
 
     default:
       return state;
@@ -314,3 +361,4 @@ export function useCompare() {
 }
 
 export default CompareContext;
+

@@ -1,9 +1,9 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useCompare } from '../context/CompareContext';
 
-// Configure pdfjs worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+// Configure pdfjs worker to local bundled file
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 export default function FileUploadPanel() {
   const { state, dispatch } = useCompare();
@@ -11,15 +11,24 @@ export default function FileUploadPanel() {
   const baseInputRef = useRef(null);
   const compareInputRef = useRef(null);
 
+  // Local state for draft text input to allow backspace/typing
+  const [sensText, setSensText] = useState(
+    Math.round((1 - comparison.threshold * 2) * 100).toString()
+  );
+
+  useEffect(() => {
+    setSensText(Math.round((1 - comparison.threshold * 2) * 100).toString());
+  }, [comparison.threshold]);
+
   const loadPdf = useCallback(async (file, role) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const data = new Uint8Array(arrayBuffer);
       const doc = await pdfjsLib.getDocument({ data }).promise;
 
+      // Only store metadata and document proxy, release arrayBuffer
       const payload = {
         pdfDoc: doc,
-        data: arrayBuffer,
         name: file.name,
         pageCount: doc.numPages,
         fileSize: file.size,
@@ -42,7 +51,6 @@ export default function FileUploadPanel() {
     if (file && file.type === 'application/pdf') {
       loadPdf(file, role);
     }
-    // Remove drag-over class
     e.currentTarget.classList.remove('drag-over');
   }, [loadPdf]);
 
@@ -76,6 +84,28 @@ export default function FileUploadPanel() {
       dispatch({ type: 'START_COMPARISON' });
     }
   }, [files.base, files.compare, dispatch]);
+
+  const handleSensInputChange = (e) => {
+    const raw = e.target.value;
+    setSensText(raw);
+    const p = parseInt(raw, 10);
+    if (!isNaN(p)) {
+      const clamped = Math.max(0, Math.min(100, p));
+      const t = (100 - clamped) / 200;
+      dispatch({ type: 'SET_THRESHOLD', payload: t });
+    }
+  };
+
+  const handleSensInputBlur = () => {
+    let p = parseInt(sensText, 10);
+    if (isNaN(p)) {
+      p = Math.round((1 - comparison.threshold * 2) * 100);
+    }
+    const clamped = Math.max(0, Math.min(100, p));
+    setSensText(clamped.toString());
+    const t = (100 - clamped) / 200;
+    dispatch({ type: 'SET_THRESHOLD', payload: t });
+  };
 
   const renderZone = (role, file, inputRef) => {
     const isBase = role === 'base';
@@ -155,9 +185,9 @@ export default function FileUploadPanel() {
               value={comparison.mode}
               onChange={(e) => dispatch({ type: 'SET_COMPARE_MODE', payload: e.target.value })}
             >
-              <option value="pixel">Pixel (Visual)</option>
-              <option value="text">Text</option>
-              <option value="both">Both</option>
+              <option value="both">Both (Visual + Text)</option>
+              <option value="pixel">Pixel (Visual Only)</option>
+              <option value="text">Text Only</option>
             </select>
           </div>
 
@@ -179,14 +209,9 @@ export default function FileUploadPanel() {
               className="threshold-input"
               min="0"
               max="100"
-              value={Math.round((1 - comparison.threshold * 2) * 100)}
-              onChange={(e) => {
-                let p = parseInt(e.target.value, 10);
-                if (isNaN(p)) return;
-                p = Math.max(0, Math.min(100, p));
-                const t = (100 - p) / 200;
-                dispatch({ type: 'SET_THRESHOLD', payload: t });
-              }}
+              value={sensText}
+              onChange={handleSensInputChange}
+              onBlur={handleSensInputBlur}
               style={{ width: '60px', marginLeft: '8px', textAlign: 'right' }}
             />
             <span className="threshold-val">%</span>
@@ -204,3 +229,4 @@ export default function FileUploadPanel() {
     </div>
   );
 }
+

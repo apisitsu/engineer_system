@@ -32,14 +32,23 @@ export default function TopBar() {
             <button
               className={`toggle-btn ${viewer.viewMode === 'side-by-side' ? 'active' : ''}`}
               onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'side-by-side' })}
+              title="Side by Side panes"
             >
               ◫ Side by Side
             </button>
             <button
               className={`toggle-btn ${viewer.viewMode === 'overlay' ? 'active' : ''}`}
               onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'overlay' })}
+              title="Overlaid translucent comparison"
             >
               ◉ Overlay
+            </button>
+            <button
+              className={`toggle-btn ${viewer.viewMode === 'curtain' ? 'active' : ''}`}
+              onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'curtain' })}
+              title="Interactive curtain swipe divider"
+            >
+              ◧ Curtain
             </button>
           </div>
         </div>
