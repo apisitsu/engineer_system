@@ -78,8 +78,11 @@ function Roadmap({ steps }) {
     const meta = STATUS_META[s.status] || STATUS_META.pending;
     const bits = [];
     if (s.wc) bits.push(`WC ${s.wc}`);
-    if (s.compDate) bits.push(`done ${s.compDate}`);
-    if (s.dwellDays != null) bits.push(`wait ${fmtDays(s.dwellDays)}`);
+    if (s.compDate) {
+      bits.push(s.startDate && s.startDate !== s.compDate
+        ? `${s.startDate} → ${s.compDate}${s.dwellDays != null ? ` (wait ${fmtDays(s.dwellDays)})` : ''}`
+        : `done ${s.compDate}`);
+    }
     if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
     if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
     if (s.operator) bits.push(s.operator);
@@ -119,6 +122,7 @@ const detailColumns = [
   { title: 'Cycle', dataIndex: 'cycleSec', width: 70, align: 'right', render: (v) => (v ? `${v}s` : '—') },
   { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
   { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
+  { title: 'Started', dataIndex: 'startDate', width: 104, render: (v) => v || '—' },
   { title: 'Done', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
   { title: 'WIP wait', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
 ];
@@ -131,7 +135,7 @@ function ProcessDetail({ steps }) {
       columns={detailColumns}
       dataSource={steps}
       pagination={false}
-      scroll={{ x: 1080 }}
+      scroll={{ x: 1180 }}
       rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
     />
   );
