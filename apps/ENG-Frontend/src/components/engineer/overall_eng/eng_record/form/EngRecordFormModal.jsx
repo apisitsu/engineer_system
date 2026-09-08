@@ -1,25 +1,23 @@
 import React, { useEffect } from 'react';
 import { Modal, Form, Input, Select, DatePicker, Row, Col, App } from 'antd';
 import dayjs from 'dayjs';
-import useEngRecordStore from '../../../../stores/engRecordStore';
-import engRecordApi from '../../../../api/engRecordApi';
+import useEngRecordStore from '../../../../../stores/engRecordStore';
+import engRecordApi from '../../../../../api/engRecordApi';
+import { CASE_OPTIONS } from '../constants/caseTypes';
 
 const { TextArea } = Input;
 
-const CASE_OPTIONS = [
-    { value: 'Request Drawing', label: 'Request Drawing' },
-    { value: 'Judgment Spec', label: 'Judgment Spec' },
-    { value: 'Request change DWG/Traveler', label: 'Request change DWG/Traveler' },
-    { value: 'DWG/Traveler Problem', label: 'DWG/Traveler Problem' },
-    { value: 'Special', label: 'Special' },
-];
-
-function EngRecordFormModal() {
+export function EngRecordFormModal() {
     const [form] = Form.useForm();
     const { message } = App.useApp();
     const {
-        formModalOpen, editingRecord, closeFormModal,
-        createRecord, updateRecord, permissions, templateData,
+        formModalOpen,
+        editingRecord,
+        closeFormModal,
+        createRecord,
+        updateRecord,
+        permissions,
+        templateData,
     } = useEngRecordStore();
 
     const isEdit = !!editingRecord;
@@ -29,9 +27,15 @@ function EngRecordFormModal() {
         if (formModalOpen && editingRecord) {
             form.setFieldsValue({
                 ...editingRecord,
-                request_date: editingRecord.request_date ? dayjs(editingRecord.request_date) : null,
-                finish_date: editingRecord.finish_date ? dayjs(editingRecord.finish_date) : null,
-                plan_start_date: editingRecord.plan_start_date ? dayjs(editingRecord.plan_start_date) : null,
+                request_date: editingRecord.request_date
+                    ? dayjs(editingRecord.request_date)
+                    : null,
+                finish_date: editingRecord.finish_date
+                    ? dayjs(editingRecord.finish_date)
+                    : null,
+                plan_start_date: editingRecord.plan_start_date
+                    ? dayjs(editingRecord.plan_start_date)
+                    : null,
             });
         } else if (formModalOpen && templateData) {
             // Pre-fill from QuickCreate template
@@ -58,7 +62,9 @@ function EngRecordFormModal() {
                     form.setFieldsValue({
                         cn: res.data.cn || form.getFieldValue('cn'),
                         pn: res.data.pn || form.getFieldValue('pn'),
-                        plan_start_date: res.data.plan ? dayjs(res.data.plan) : form.getFieldValue('plan_start_date'),
+                        plan_start_date: res.data.plan
+                            ? dayjs(res.data.plan)
+                            : form.getFieldValue('plan_start_date'),
                     });
                 }
             } catch (err) {
@@ -90,7 +96,9 @@ function EngRecordFormModal() {
             closeFormModal();
         } catch (err) {
             if (err.errorFields) return; // form validation error
-            message.error('Operation failed: ' + (err.response?.data?.error || err.message));
+            message.error(
+                'Operation failed: ' + (err.response?.data?.error || err.message)
+            );
         }
     };
 
@@ -104,12 +112,7 @@ function EngRecordFormModal() {
             width={1200}
             destroyOnHidden
         >
-            <Form
-                form={form}
-                layout="vertical"
-                size="middle"
-                style={{ marginTop: 16 }}
-            >
+            <Form form={form} layout="vertical" size="middle" style={{ marginTop: 16 }}>
                 <Row gutter={16}>
                     <Col xs={24} sm={6}>
                         <Form.Item
@@ -162,18 +165,24 @@ function EngRecordFormModal() {
                 <Row gutter={16}>
                     <Col span={24}>
                         <Form.Item name="spec_problem" label="Spec / Problem">
-                            <TextArea rows={2} placeholder="Describe the specification or problem..." />
+                            <TextArea
+                                rows={2}
+                                placeholder="Describe the specification or problem..."
+                            />
                         </Form.Item>
                     </Col>
                 </Row>
 
-                {/* ─── Engineer Fields (hidden for submitters) ── */}
+                {/* Engineer Fields (hidden for submitters) */}
                 {!isSubmitter && (
                     <>
                         <Row gutter={16}>
                             <Col xs={24} sm={12}>
                                 <Form.Item name="judge_revise" label="Judge / Revise">
-                                    <TextArea rows={2} placeholder="Engineering judgment or revision..." />
+                                    <TextArea
+                                        rows={2}
+                                        placeholder="Engineering judgment or revision..."
+                                    />
                                 </Form.Item>
                             </Col>
                             <Col xs={24} sm={12}>
@@ -234,7 +243,7 @@ function EngRecordFormModal() {
                     </>
                 )}
 
-                {/* ─── Plan start for submitters ────────────── */}
+                {/* Plan start for submitters */}
                 {isSubmitter && (
                     <Form.Item name="plan_start_date" label="Plan Start Production">
                         <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />

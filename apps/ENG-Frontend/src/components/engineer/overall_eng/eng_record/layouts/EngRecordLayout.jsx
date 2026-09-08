@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Segmented, Button } from 'antd';
-import { MenuTemplate } from '../../../menu_sidebar/menu_template';
-import { useTheme } from '../../../../theme';
-import ScrollbarStyle from '../../../common/scrollbar';
-import useEngRecordStore from '../../../../stores/engRecordStore';
-import EngRecordDashboard from './EngRecordDashboard';
-import EngRecordTable from './EngRecordTable';
-import EngRecordSyncPanel from './EngRecordSyncPanel';
-import EngRecordDetailDrawer from './EngRecordDetailDrawer';
-import EngRecordFormModal from './EngRecordFormModal';
-import EngRecordQuickCreate from './EngRecordQuickCreate';
-import './eng_record.css';
+import { MenuTemplate } from '../../../../menu_sidebar/menu_template';
+import { useTheme } from '../../../../../theme';
+import ScrollbarStyle from '../../../../common/scrollbar';
+import useEngRecordStore from '../../../../../stores/engRecordStore';
+import { EngRecordDashboard } from '../dashboard';
+import { EngRecordTable } from '../table';
+import { EngRecordSyncPanel } from '../sync';
+import { EngRecordDetailDrawer } from '../drawer';
+import { EngRecordFormModal } from '../form';
+import { EngRecordQuickCreate } from '../quick_create';
+import '../styles/eng_record.css';
 
 import {
     DashboardOutlined,
@@ -21,11 +21,11 @@ import {
 
 const { Content } = Layout;
 
-function EngRecordLayout() {
+export function EngRecordLayout() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const { theme } = useTheme();
-    const fetchPermissions = useEngRecordStore(s => s.fetchPermissions);
-    const permissions = useEngRecordStore(s => s.permissions);
+    const fetchPermissions = useEngRecordStore((s) => s.fetchPermissions);
+    const permissions = useEngRecordStore((s) => s.permissions);
 
     useEffect(() => {
         fetchPermissions();
@@ -43,8 +43,14 @@ function EngRecordLayout() {
 
     return (
         <Layout style={{ height: '100%', overflow: 'hidden', display: 'flex' }}>
-            <MenuTemplate type="ALL" defaultSelectedKeys={["3"]} />
-            <Layout style={{ height: '100%', backgroundColor: theme.colors.background, overflow: 'hidden' }}>
+            <MenuTemplate type="ALL" defaultSelectedKeys={['3']} />
+            <Layout
+                style={{
+                    height: '100%',
+                    backgroundColor: theme.colors.background,
+                    overflow: 'hidden',
+                }}
+            >
                 <ScrollbarStyle primary={theme.colors.primary} />
                 <Content
                     className="kb-vscroll"
@@ -56,7 +62,14 @@ function EngRecordLayout() {
                 >
                     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
                         {/* Tab Navigation */}
-                        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div
+                            style={{
+                                marginBottom: 24,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}
+                        >
                             <Segmented
                                 options={tabOptions}
                                 value={activeTab}
@@ -70,7 +83,9 @@ function EngRecordLayout() {
                             <Button
                                 type="dashed"
                                 icon={<LinkOutlined />}
-                                onClick={() => window.open('/eng/viewer/eng-record', '_blank')}
+                                onClick={() =>
+                                    window.open('/eng/viewer/eng-record', '_blank')
+                                }
                             >
                                 Open Viewer Page
                             </Button>

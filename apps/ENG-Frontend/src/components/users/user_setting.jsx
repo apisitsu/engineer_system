@@ -3,7 +3,7 @@ import { Form, Select, Button, Upload, Modal, Typography, message, Tag, Space } 
 import { SaveOutlined, CameraOutlined, EditOutlined, UserOutlined, SettingOutlined } from "@ant-design/icons";
 import { useAuthStore } from "../../stores/authStore";
 import { useTheme } from "../../theme";
-import { orgRpgTheme } from "../engineer/overall_eng/orgTheme";
+import { orgRpgTheme } from "../engineer/overall_eng/organization/orgTheme";
 import { useNavigate } from "react-router-dom";
 import { httpClient } from "../../utils/HttpClient";
 import { server, key_constance } from "../../constance/constance";

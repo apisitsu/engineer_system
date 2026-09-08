@@ -1,25 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Segmented, Typography, Button } from 'antd';
-import { useTheme } from '../../../../theme';
-import ScrollbarStyle from '../../../common/scrollbar';
-import useEngRecordStore from '../../../../stores/engRecordStore';
-import EngRecordDashboard from './EngRecordDashboard';
-import EngRecordTable from './EngRecordTable';
-import EngRecordDetailDrawer from './EngRecordDetailDrawer';
+import { useTheme } from '../../../../../theme';
+import ScrollbarStyle from '../../../../common/scrollbar';
+import useEngRecordStore from '../../../../../stores/engRecordStore';
+import { EngRecordDashboard } from '../dashboard';
+import { EngRecordTable } from '../table';
+import { EngRecordDetailDrawer } from '../drawer';
 import { DashboardOutlined, TableOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import './eng_record.css';
+import '../styles/eng_record.css';
 
 const { Content, Header } = Layout;
 const { Title } = Typography;
 
-function EngRecordViewerLayout() {
+export function EngRecordViewerLayout() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const { theme } = useTheme();
     const navigate = useNavigate();
-    
-    // We still fetch records and initialize store
-    const fetchRecords = useEngRecordStore(s => s.fetchRecords);
+
+    // Fetch records and initialize store
+    const fetchRecords = useEngRecordStore((s) => s.fetchRecords);
 
     useEffect(() => {
         fetchRecords();
@@ -33,17 +33,19 @@ function EngRecordViewerLayout() {
     return (
         <Layout style={{ minHeight: '100vh', backgroundColor: theme.colors.background }}>
             <ScrollbarStyle primary={theme.colors.primary} />
-            <Header style={{ 
-                background: theme.colors.surface, 
-                padding: '0 24px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                borderBottom: `1px solid ${theme.colors.border}`,
-                boxShadow: theme.shadows.sm
-            }}>
-                <Button 
-                    type="text" 
-                    icon={<ArrowLeftOutlined />} 
+            <Header
+                style={{
+                    background: theme.colors.surface,
+                    padding: '0 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderBottom: `1px solid ${theme.colors.border}`,
+                    boxShadow: theme.shadows.sm,
+                }}
+            >
+                <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined />}
                     onClick={() => navigate(-1)}
                     style={{ marginRight: 16 }}
                 />

@@ -64,9 +64,9 @@ import LotStatusTracker from './components/engineer/mtc_eng/lot_track/LotStatusT
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
-import HomeOverallEng from './components/engineer/overall_eng/HomeOverallEng';
-import OrganizationEng from './components/engineer/overall_eng/OrganizationEng';
-import OverallToolGallery from './components/engineer/overall_eng/ToolGallery';
+import HomeOverallEng from './components/engineer/overall_eng/home_overall';
+import OrganizationEng from './components/engineer/overall_eng/organization';
+import OverallToolGallery from './components/engineer/overall_eng/tool_gallery';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
@@ -82,8 +82,7 @@ import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideF
 import RouteTracker from './components/common/RouteTracker';
 
 // Engineer Record
-import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
-import EngRecordViewerLayout from './components/engineer/overall_eng/eng_record/EngRecordViewerLayout';
+import { EngRecordLayout, EngRecordViewerLayout } from './components/engineer/overall_eng/eng_record';
 
 // PDF Hub
 import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
