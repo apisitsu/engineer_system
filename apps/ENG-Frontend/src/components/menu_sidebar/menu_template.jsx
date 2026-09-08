@@ -47,8 +47,9 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selec
             if (p === '/eng/overall_eng/organization') return ['2'];
             if (p.startsWith('/eng/overall_eng/eng-record')) return ['3'];
             if (p.startsWith('/eng/overall_eng/tools')) return ['4'];
-            if (p.includes('/lot-track')) return ['5'];
-            if (p.includes('/cam')) return ['6'];
+            if (p.startsWith('/eng/overall_eng/user_management')) return ['5'];
+            if (p.includes('/lot-track')) return ['6'];
+            if (p.includes('/cam')) return ['7'];
         }
         return [];
     };

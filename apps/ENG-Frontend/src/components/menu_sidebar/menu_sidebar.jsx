@@ -122,4 +122,5 @@ export const all = createMenu([
     { label: "Organization", path: "/eng/overall_eng/organization", key: "2" },
     { label: "Engineer Record", path: "/eng/overall_eng/eng-record", key: "3" },
     { label: "Tools Portal", path: "/eng/overall_eng/tools", key: "4" },
+    { label: "Engineer Roster & Skills", path: "/eng/overall_eng/user_management", key: "5" },
 ]);

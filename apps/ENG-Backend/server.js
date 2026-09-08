@@ -493,6 +493,12 @@ app.post('/api/system/user-management/users', userManagement.createUser);
 app.put('/api/system/user-management/users/:u_code', userManagement.updateUser);
 app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUserRecord);
 
+// User Skills Management & Power Calibration
+app.get('/api/system/user-management/skills', userManagement.getUserSkills);
+app.get('/api/system/user-management/skills/:u_code', userManagement.getUserSkillByCode);
+app.put('/api/system/user-management/skills/:u_code', userManagement.saveUserSkills);
+
+
 // Schema Modifying endpoints requiring super admin access
 app.post('/api/system/user-management/schema/add-column', requireSuperAdminOrEmergency, userManagement.addColumn);
 app.post('/api/system/user-management/schema/drop-column', requireSuperAdminOrEmergency, userManagement.dropColumn);

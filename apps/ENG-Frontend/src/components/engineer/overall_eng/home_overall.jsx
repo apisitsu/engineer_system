@@ -11,7 +11,8 @@ import {
   AppstoreOutlined,
   ThunderboltOutlined,
   BuildOutlined,
-  FileSearchOutlined
+  FileSearchOutlined,
+  TrophyOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../menu_sidebar/menu_template';
@@ -79,6 +80,24 @@ const HomeOverallEng = () => {
         'Categorized tool directory with tag search'
       ],
       actionText: 'Open Portal'
+    },
+    {
+      id: 'roster-skill-matrix',
+      title: 'Engineer Roster & Skills',
+      subtitle: 'Competency Matrix & Power Calibration',
+      description: 'Directory of engineering personnel featuring real-time RPG combat power calibration (ATK, DEF, HP, MP), game-style spider-web radar charts, and leader competency tracking.',
+      icon: <TrophyOutlined style={{ fontSize: '36px', color: '#fa8c16' }} />,
+      path: '/eng/overall_eng/user_management',
+      gradient: 'linear-gradient(135deg, rgba(250, 140, 22, 0.08) 0%, rgba(250, 140, 22, 0.02) 100%)',
+      borderHover: '#fa8c16',
+      badgeColor: 'orange',
+      badgeText: 'Skills & Calibration',
+      features: [
+        'Complete engineer roster with global search & filters',
+        'Spider-web radar charts & 4 combat power calibration',
+        '33 Leader competencies with historical evaluation archive'
+      ],
+      actionText: 'Open Roster & Matrix'
     }
   ];
 
@@ -235,7 +254,7 @@ const HomeOverallEng = () => {
                       </div>
                       <Divider type="vertical" style={{ height: '36px', borderColor: `${theme.colors.border}` }} />
                       <div style={{ textAlign: 'center' }}>
-                        <Text style={{ fontSize: '20px', fontWeight: 'bold', color: theme.colors.success || '#52c41a' }}>3</Text>
+                        <Text style={{ fontSize: '20px', fontWeight: 'bold', color: theme.colors.success || '#52c41a' }}>4</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: '12px' }}>Core Modules</Text>
                       </div>
@@ -264,7 +283,7 @@ const HomeOverallEng = () => {
 
               <Row gutter={[24, 24]}>
                 {coreModules.map(module => (
-                  <Col xs={24} lg={8} key={module.id}>
+                  <Col xs={24} sm={12} lg={12} xl={6} key={module.id}>
                     <Card
                       hoverable
                       onClick={() => navigate(module.path)}

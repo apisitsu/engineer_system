@@ -1,22 +1,26 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Button, Input, Space, Modal, Form, Select, Dropdown, Popconfirm, message, Layout,
-  Spin, Card, Row, Col, Typography, Tag, Avatar, Descriptions, Empty,
-  Divider, Pagination, Table, Tooltip, Radio, InputNumber, Alert, Segmented
+  Spin, Card, Row, Col, Typography, Tag, Avatar, Empty,
+  Divider, Pagination, Table, Tooltip, Radio, InputNumber, Alert, Segmented, Progress
 } from "antd";
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SettingOutlined, SearchOutlined,
   SafetyCertificateOutlined, UserOutlined, TeamOutlined, DatabaseOutlined,
   ReloadOutlined, AppstoreOutlined, UnorderedListOutlined, ExclamationCircleOutlined,
   IdcardOutlined, FilterOutlined, LockOutlined, CheckCircleOutlined,
-  CloudDownloadOutlined, UserAddOutlined
+  CloudDownloadOutlined, UserAddOutlined, TrophyOutlined, ThunderboltOutlined,
+  ApartmentOutlined, CalendarOutlined, EyeOutlined
 } from "@ant-design/icons";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import { server } from "../../../../constance/constance";
 import { useAuthStore } from "../../../../stores/authStore";
 import ScrollbarStyle from "../../../common/scrollbar";
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import { useTheme } from "../../../../theme";
+import SkillMatrixDrawer from "./SkillMatrixDrawer";
+
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -97,7 +101,7 @@ const NEW_USER_DEFAULTS = {
   section: 1
 };
 
-// Internal / System columns: ซ่อนออกจาก Form Add/Edit เพื่อให้กรอกเฉพาะข้อมูลจำเป็น
+// Internal / System columns: Hidden from Add/Edit Form to only require essential input fields
 const SYSTEM_MANAGED_COLUMNS = [
   "id",
   "created_at",
@@ -178,15 +182,32 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+// ── Helper Resolvers ──────────────────────────────────────────────────────
+const getDisplayName = (user) => user?.u_name || user?.u_code || "Unknown";
+const getDepartment = (user) => user?.u_department || user?.department || "";
+const getRole = (user) => user?.role || user?.u_role || "";
+const getGroup = (user) => user?.user_group || user?.u_group || "";
+const getAuthorityObj = (authVal) => {
+  const num = Number(authVal);
+  return AUTHORITY_OPTIONS.find((a) => a.value === num) || { label: `Level ${authVal}`, tagColor: "default" };
+};
+const isEngOrAdUser = (user) => {
+  if (!user) return false;
+  const dept = (getDepartment(user) || "").toUpperCase().trim();
+  return dept === "ENG" || dept === "AD";
+};
+
 const UserManagement = () => {
   const { theme } = useTheme();
+  const location = useLocation();
+  const isOverallEng = location.pathname.startsWith("/eng/overall_eng");
 
   // User auth state from Zustand
   const userAuth = useAuthStore((state) => state.userAuth);
   const userDepartment = useAuthStore((state) => state.userDepartment);
   const userRole = useAuthStore((state) => state.userRole);
 
-  // Authorization checks
+  // Authorization checks: Strictly AD and Authority Level 1 can add/edit/delete users or calibrate skills
   const isSuperAdmin =
     userDepartment === "AD" ||
     userRole === "AD" ||
@@ -196,7 +217,8 @@ const UserManagement = () => {
   const canManageUsers =
     isSuperAdmin ||
     userRole === "Admin" ||
-    userRole === "System Engineer";
+    Number(userAuth) === 1;
+
 
   // Data & Schema States
   const [schema, setSchema] = useState([]);
@@ -211,8 +233,10 @@ const UserManagement = () => {
   const [searchInput, setSearchInput] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [authorityFilter, setAuthorityFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(24);
+  const [pageSize, setPageSize] = useState(50);
   const [sortField, setSortField] = useState("u_code");
   const [sortOrder, setSortOrder] = useState("asc");
 
@@ -223,6 +247,33 @@ const UserManagement = () => {
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
   const [isDeleteColumnModalOpen, setIsDeleteColumnModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+
+  // Skill Matrix & Power Calibration Drawer
+  const [skillDrawerOpen, setSkillDrawerOpen] = useState(false);
+  const [skillDrawerUser, setSkillDrawerUser] = useState(null);
+
+  const openSkillDrawer = (user) => {
+    if (!isEngOrAdUser(user)) {
+      message.info("Skill Matrix & Power Calibration is available only for ENG and AD departments.");
+      return;
+    }
+    setSkillDrawerUser(user);
+    setSkillDrawerOpen(true);
+  };
+
+  const handleSkillUpdated = (u_code, updatedSkillData) => {
+    if (updatedSkillData?.powers) {
+      const { atk, def, hp, mp } = updatedSkillData.powers;
+      setData((prev) =>
+        prev.map((u) => (u.u_code === u_code ? { ...u, atk, def, hp, mp } : u))
+      );
+      if (selectedUser?.u_code === u_code) {
+        setSelectedUser((prev) => ({ ...prev, atk, def, hp, mp }));
+      }
+    } else {
+      fetchData();
+    }
+  };
 
   // Add User Mode: 'external' (Import from Factory DB RODPC) | 'manual' (Create in EngineerSystem)
   const [userCreationMode, setUserCreationMode] = useState("external");
@@ -250,53 +301,44 @@ const UserManagement = () => {
     }
   }, []);
 
-  // ── 2. Fetch Users (Server-side Search & Pagination) ───────────────────────
-  const fetchData = useCallback(
-    async (
-      searchQuery = activeSearch,
-      pageNum = page,
-      limitNum = pageSize,
-      field = sortField,
-      order = sortOrder
-    ) => {
-      setLoading(true);
-      try {
-        const endpoint = server.USER_MANAGEMENT_USERS || `${server.API_URL}api/system/user-management/users`;
-        const res = await axios.get(endpoint, {
-          headers: getAuthHeaders(),
-          params: {
-            search: searchQuery.trim(),
-            page: pageNum,
-            pageSize: limitNum,
-            sortField: field,
-            sortOrder: order
-          }
-        });
-
-        if (res.data?.result === "true") {
-          // Normalize user records & mask passwords
-          const sanitizedUsers = (res.data.data || []).map((user) => {
-            const copy = { ...user };
-            if ("u_pass" in copy) {
-              copy.u_pass = "••••••••";
-            }
-            return copy;
-          });
-          setData(sanitizedUsers);
-          setTotal(res.data.total || 0);
-        } else {
-          message.error(res.data?.message || "Failed to load user list");
+  // ── 2. Fetch Users (Fetches complete roster for unified client-side sorting & filtering) ──
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const endpoint = server.USER_MANAGEMENT_USERS || `${server.API_URL}api/system/user-management/users`;
+      const res = await axios.get(endpoint, {
+        headers: getAuthHeaders(),
+        params: {
+          search: "",
+          page: 1,
+          pageSize: "all",
+          sortField: "u_code",
+          sortOrder: "asc"
         }
-      } catch (error) {
-        console.error("Fetch Data Error:", error);
-        const errMsg = error?.response?.data?.message || "Failed to fetch user data from server.";
-        message.error(errMsg);
-      } finally {
-        setLoading(false);
+      });
+
+      if (res.data?.result === "true") {
+        // Normalize user records & mask passwords
+        const sanitizedUsers = (res.data.data || []).map((user) => {
+          const copy = { ...user };
+          if ("u_pass" in copy) {
+            copy.u_pass = "••••••••";
+          }
+          return copy;
+        });
+        setData(sanitizedUsers);
+        setTotal(res.data.total || sanitizedUsers.length);
+      } else {
+        message.error(res.data?.message || "Failed to load user list");
       }
-    },
-    [activeSearch, page, pageSize, sortField, sortOrder]
-  );
+    } catch (error) {
+      console.error("Fetch Data Error:", error);
+      const errMsg = error?.response?.data?.message || "Failed to fetch user data from server.";
+      message.error(errMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSchema();
@@ -304,9 +346,9 @@ const UserManagement = () => {
 
   useEffect(() => {
     if (schema.length > 0) {
-      fetchData(activeSearch, page, pageSize, sortField, sortOrder);
+      fetchData();
     }
-  }, [schema.length, activeSearch, page, pageSize, sortField, sortOrder, fetchData]);
+  }, [schema.length, fetchData]);
 
   // ── Search External Users (Factory RODPC m_user) ──────────────────────────
   const searchExternalUsers = useCallback(async (queryText = "") => {
@@ -338,6 +380,8 @@ const UserManagement = () => {
     setSearchInput("");
     setActiveSearch("");
     setDepartmentFilter("ALL");
+    setAuthorityFilter("ALL");
+    setRoleFilter("ALL");
     setPage(1);
   };
 
@@ -351,15 +395,140 @@ const UserManagement = () => {
     return Array.from(set).sort();
   }, [data]);
 
-  const displayedData = useMemo(() => {
-    if (!departmentFilter || departmentFilter === "ALL") {
-      return data;
-    }
-    return data.filter((user) => {
-      const dept = user.u_department || user.department;
-      return dept === departmentFilter;
+  // Team Hero Metrics Calculation (Averages calculated for ENG/AD personnel)
+  const teamStats = useMemo(() => {
+    if (!data.length) return { total: 0, active: 0, leaders: 0, avgAtk: 0, avgDef: 0, avgHp: 0, avgMp: 0 };
+    const totalCount = data.length;
+    let active = 0;
+    let leaders = 0;
+    let engCount = 0;
+    let sumAtk = 0, sumDef = 0, sumHp = 0, sumMp = 0;
+
+    data.forEach((u) => {
+      if (u.u_status === 1 || u.u_status === null) active++;
+      if (u.role === "LEADER" || (u.atk && u.atk >= 75)) leaders++;
+      if (isEngOrAdUser(u)) {
+        engCount++;
+        sumAtk += Number(u.atk || 0);
+        sumDef += Number(u.def || 0);
+        sumHp += Number(u.hp || 0);
+        sumMp += Number(u.mp || 0);
+      }
     });
-  }, [data, departmentFilter]);
+
+    return {
+      total: totalCount,
+      active,
+      leaders,
+      avgAtk: engCount ? Math.round(sumAtk / engCount) : 0,
+      avgDef: engCount ? Math.round(sumDef / engCount) : 0,
+      avgHp: engCount ? Math.round(sumHp / engCount) : 0,
+      avgMp: engCount ? Math.round(sumMp / engCount) : 0
+    };
+  }, [data]);
+
+  // ── Global Multi-Criteria Filtering & Global Sorting across All Engineers ──
+  const displayedData = useMemo(() => {
+    // 1. Filter
+    let result = data.filter((user) => {
+      if (activeSearch) {
+        const query = activeSearch.toLowerCase();
+        const code = (user.u_code || "").toLowerCase();
+        const name = (user.u_name || "").toLowerCase();
+        const nick = (user.u_nickname || "").toLowerCase();
+        const role = (user.role || user.u_role || "").toLowerCase();
+        const dept = (user.u_department || user.department || "").toLowerCase();
+        const grp = (user.user_group || user.u_group || "").toLowerCase();
+        const pos = (user.position || "").toLowerCase();
+
+        const matches =
+          code.includes(query) ||
+          name.includes(query) ||
+          nick.includes(query) ||
+          role.includes(query) ||
+          dept.includes(query) ||
+          grp.includes(query) ||
+          pos.includes(query);
+
+        if (!matches) return false;
+      }
+
+      if (departmentFilter && departmentFilter !== "ALL") {
+        const dept = user.u_department || user.department;
+        if (dept !== departmentFilter) return false;
+      }
+
+      if (authorityFilter && authorityFilter !== "ALL") {
+        if (Number(user.u_authority) !== Number(authorityFilter)) return false;
+      }
+
+      if (roleFilter && roleFilter !== "ALL") {
+        const r = user.role || user.u_role;
+        if (r !== roleFilter) return false;
+      }
+
+      return true;
+    });
+
+    // 2. Global Sorting (operates across ALL filtered users)
+    result.sort((a, b) => {
+      if (sortField === "u_code") {
+        const cmp = (a.u_code || "").localeCompare(b.u_code || "");
+        return sortOrder === "desc" ? -cmp : cmp;
+      }
+      if (sortField === "u_name") {
+        const cmp = (a.u_name || "").localeCompare(b.u_name || "");
+        return sortOrder === "desc" ? -cmp : cmp;
+      }
+      if (sortField === "created_at") {
+        const da = new Date(a.created_at || 0).getTime();
+        const db = new Date(b.created_at || 0).getTime();
+        return sortOrder === "desc" ? db - da : da - db;
+      }
+      if (sortField === "atk") {
+        const valA = Number(a.atk || 0);
+        const valB = Number(b.atk || 0);
+        return sortOrder === "desc" ? valB - valA : valA - valB;
+      }
+      if (sortField === "def") {
+        const valA = Number(a.def || 0);
+        const valB = Number(b.def || 0);
+        return sortOrder === "desc" ? valB - valA : valA - valB;
+      }
+      if (sortField === "hp") {
+        const valA = Number(a.hp || 0);
+        const valB = Number(b.hp || 0);
+        return sortOrder === "desc" ? valB - valA : valA - valB;
+      }
+      if (sortField === "mp") {
+        const valA = Number(a.mp || 0);
+        const valB = Number(b.mp || 0);
+        return sortOrder === "desc" ? valB - valA : valA - valB;
+      }
+      if (sortField === "powers") {
+        const totA = Number(a.atk || 0) + Number(a.def || 0) + Number(a.hp || 0) + Number(a.mp || 0);
+        const totB = Number(b.atk || 0) + Number(b.def || 0) + Number(b.hp || 0) + Number(b.mp || 0);
+        return sortOrder === "desc" ? totB - totA : totA - totB;
+      }
+      if (sortField === "u_authority") {
+        const valA = Number(a.u_authority || 4);
+        const valB = Number(b.u_authority || 4);
+        return sortOrder === "desc" ? valB - valA : valA - valB;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [data, activeSearch, departmentFilter, authorityFilter, roleFilter, sortField, sortOrder]);
+
+  // ── Unified Pagination: Slices the Globally Sorted & Filtered Dataset ───────
+  const pagedData = useMemo(() => {
+    if (pageSize >= displayedData.length) {
+      return displayedData;
+    }
+    const start = (page - 1) * pageSize;
+    return displayedData.slice(start, start + pageSize);
+  }, [displayedData, page, pageSize]);
 
   // ── User Details Popup Handlers (Modal) ───────────────────────────────────
   const openDetailsModal = (user) => {
@@ -571,15 +740,7 @@ const UserManagement = () => {
     }
   };
 
-  // ── Helper Resolvers ──────────────────────────────────────────────────────
-  const getDisplayName = (user) => user.u_name || user.u_code || "Unknown";
-  const getDepartment = (user) => user.u_department || user.department || "";
-  const getRole = (user) => user.role || user.u_role || "";
-  const getGroup = (user) => user.user_group || user.u_group || "";
-  const getAuthorityObj = (authVal) => {
-    const num = Number(authVal);
-    return AUTHORITY_OPTIONS.find((a) => a.value === num) || { label: `Level ${authVal}`, tagColor: "default" };
-  };
+
 
   // Dropdown options for schema alter menu
   const schemaMenuItems = [
@@ -632,6 +793,7 @@ const UserManagement = () => {
       title: "User",
       key: "user",
       width: 260,
+      fixed: "left",
       render: (_, record) => {
         const name = getDisplayName(record);
         const avatarBg = stringToColor(record.u_code);
@@ -711,12 +873,38 @@ const UserManagement = () => {
       render: (pos) => pos || <Text type="secondary">—</Text>
     },
     {
+      title: "Combat Powers",
+      key: "powers",
+      width: 210,
+      render: (_, record) => {
+        if (!isEngOrAdUser(record)) {
+          return <Text type="secondary" style={{ fontSize: "12px" }}>—</Text>;
+        }
+        return (
+          <div style={{ width: "100%", padding: "2px 0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", fontWeight: 700, marginBottom: "2px" }}>
+              <span style={{ color: "#ff4d4f" }}>⚔️ {record.atk || 0}</span>
+              <span style={{ color: "#1890ff" }}>🛡️ {record.def || 0}</span>
+              <span style={{ color: "#52c41a" }}>❤️ {record.hp || 0}</span>
+              <span style={{ color: "#722ed1" }}>🔮 {record.mp || 0}</span>
+            </div>
+            <Row gutter={4}>
+              <Col span={6}><Progress percent={record.atk || 0} showInfo={false} strokeColor="#ff4d4f" size="small" /></Col>
+              <Col span={6}><Progress percent={record.def || 0} showInfo={false} strokeColor="#1890ff" size="small" /></Col>
+              <Col span={6}><Progress percent={record.hp || 0} showInfo={false} strokeColor="#52c41a" size="small" /></Col>
+              <Col span={6}><Progress percent={record.mp || 0} showInfo={false} strokeColor="#722ed1" size="small" /></Col>
+            </Row>
+          </div>
+        );
+      }
+    },
+    {
       title: "Actions",
       key: "actions",
       fixed: "right",
-      width: 150,
+      width: 170,
       render: (_, record) => (
-        <Space size={8}>
+        <Space size={6}>
           <Tooltip title="View Details">
             <Button
               type="text"
@@ -724,6 +912,18 @@ const UserManagement = () => {
               onClick={() => openDetailsModal(record)}
             />
           </Tooltip>
+          {isEngOrAdUser(record) && (
+            <Tooltip title="Skill Matrix & Power">
+              <Button
+                type="text"
+                icon={<TrophyOutlined style={{ color: "#fa8c16" }} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openSkillDrawer(record);
+                }}
+              />
+            </Tooltip>
+          )}
           {canManageUsers && (
             <>
               <Tooltip title="Edit User">
@@ -754,7 +954,7 @@ const UserManagement = () => {
 
   return (
     <Layout style={{ minHeight: "100vh", display: "flex" }}>
-      <MenuTemplate type={"System"} defaultSelectedKeys={"2"} />
+      <MenuTemplate type={isOverallEng ? "ALL" : "System"} defaultSelectedKeys={isOverallEng ? "5" : "2"} />
       <Layout style={{ backgroundColor: theme.colors.background }}>
         <Spin tip="Loading users..." size="large" spinning={loading}>
           <ScrollbarStyle primary={theme.colors.primary} />
@@ -800,19 +1000,22 @@ const UserManagement = () => {
                     <TeamOutlined style={{ fontSize: "24px" }} />
                   </div>
                   <div>
-                    <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary }}>
-                      User Management
-                    </Title>
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
-                      {activeSearch ? (
-                        <>
-                          Found <strong>{total}</strong> users matching &quot;{activeSearch}&quot;
-                        </>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary }}>
+                        Engineer Roster & Skill Matrix
+                      </Title>
+                      {canManageUsers ? (
+                        <Tag color="gold" icon={<SafetyCertificateOutlined />} style={{ borderRadius: "10px", fontWeight: 600 }}>
+                          Admin & Calibration Mode 🛡️
+                        </Tag>
                       ) : (
-                        <>
-                          Total <strong>{total}</strong> registered users
-                        </>
+                        <Tag color="blue" icon={<EyeOutlined />} style={{ borderRadius: "10px", fontWeight: 600 }}>
+                          View-Only Roster 👁️
+                        </Tag>
                       )}
+                    </div>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
+                      ทำเนียบวิศวกรและเมทริกซ์ทักษะ — Comprehensive Engineer Directory, Competency & Calibration Portal
                     </Text>
                   </div>
                 </div>
@@ -858,6 +1061,61 @@ const UserManagement = () => {
                 </Space>
               </div>
 
+              {/* ── Team Hero Overview Stats Bar ────────────────────────── */}
+              <Row gutter={[16, 16]} style={{ marginBottom: "20px" }}>
+                <Col xs={24} sm={12} md={6}>
+                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Total Registered</Text>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: theme.colors.primary }}>{total || teamStats.total}</div>
+                      </div>
+                      <Avatar size={42} icon={<TeamOutlined />} style={{ background: `${theme.colors.primary}18`, color: theme.colors.primary }} />
+                    </div>
+                    <Text type="secondary" style={{ fontSize: "11px" }}>Across all engineering sections</Text>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Active Engineers</Text>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#52c41a" }}>{teamStats.active}</div>
+                      </div>
+                      <Avatar size={42} icon={<CheckCircleOutlined />} style={{ background: "#52c41a18", color: "#52c41a" }} />
+                    </div>
+                    <Text type="secondary" style={{ fontSize: "11px" }}>Active on duty in plant</Text>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Leaders & Specialists</Text>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#722ed1" }}>{teamStats.leaders}</div>
+                      </div>
+                      <Avatar size={42} icon={<TrophyOutlined />} style={{ background: "#722ed118", color: "#722ed1" }} />
+                    </div>
+                    <Text type="secondary" style={{ fontSize: "11px" }}>Team leaders & high-tier staff</Text>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                    <div style={{ marginBottom: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600 }}>
+                        <span style={{ color: theme.colors.textSecondary }}>Avg Team Powers</span>
+                        <span>⚔️{teamStats.avgAtk} 🛡️{teamStats.avgDef} ❤️{teamStats.avgHp} 🔮{teamStats.avgMp}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <Progress percent={teamStats.avgAtk} strokeColor="#ff4d4f" size="small" showInfo={false} />
+                      <Progress percent={teamStats.avgDef} strokeColor="#1890ff" size="small" showInfo={false} />
+                    </div>
+                    <Text type="secondary" style={{ fontSize: "10px", marginTop: "4px", display: "block" }}>Live team calibration averages</Text>
+                  </Card>
+                </Col>
+              </Row>
+
               {/* ── Control Bar: Search, Filters, Sorters, View Switcher ── */}
               <div
                 style={{
@@ -873,27 +1131,63 @@ const UserManagement = () => {
                   border: `1px solid ${theme.colors.border}`
                 }}
               >
-                {/* Search & Dept Filters */}
+                {/* Search & Dept, Auth, Role Filters */}
                 <Space wrap size={12}>
                   <Input.Search
                     placeholder="Search name, code, role..."
                     value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
+                    onChange={(e) => {
+                      setSearchInput(e.target.value);
+                      setActiveSearch(e.target.value.trim());
+                      setPage(1);
+                    }}
                     onSearch={handleSearchSubmit}
                     allowClear
                     onReset={handleResetSearch}
-                    style={{ width: 280 }}
+                    style={{ width: 260 }}
                     prefix={<SearchOutlined style={{ color: theme.colors.textSecondary }} />}
                   />
 
                   <Select
                     value={departmentFilter}
-                    onChange={(val) => setDepartmentFilter(val)}
-                    style={{ width: 170 }}
+                    onChange={(val) => {
+                      setDepartmentFilter(val);
+                      setPage(1);
+                    }}
+                    style={{ width: 160 }}
                     suffixIcon={<FilterOutlined />}
                     options={[
                       { value: "ALL", label: "All Departments" },
                       ...availableDepartments.map((dept) => ({ value: dept, label: `Dept: ${dept}` }))
+                    ]}
+                  />
+
+                  <Select
+                    value={authorityFilter}
+                    onChange={(val) => {
+                      setAuthorityFilter(val);
+                      setPage(1);
+                    }}
+                    style={{ width: 160 }}
+                    options={[
+                      { value: "ALL", label: "All Authorities" },
+                      { value: 1, label: "Level 1 (Mgr/AD)" },
+                      { value: 2, label: "Level 2 (Head/Asst)" },
+                      { value: 3, label: "Level 3 (Senior)" },
+                      { value: 4, label: "Level 4 (Staff)" }
+                    ]}
+                  />
+
+                  <Select
+                    value={roleFilter}
+                    onChange={(val) => {
+                      setRoleFilter(val);
+                      setPage(1);
+                    }}
+                    style={{ width: 140 }}
+                    options={[
+                      { value: "ALL", label: "All Roles" },
+                      ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.value }))
                     ]}
                   />
 
@@ -911,6 +1205,12 @@ const UserManagement = () => {
                       { value: "u_code:desc", label: "Code (Z → A)" },
                       { value: "u_name:asc", label: "Name (A → Z)" },
                       { value: "u_name:desc", label: "Name (Z → A)" },
+                      { value: "powers:desc", label: "Total Powers ⚡ (High → Low)" },
+                      { value: "atk:desc", label: "ATK ⚔️ (High → Low)" },
+                      { value: "def:desc", label: "DEF 🛡️ (High → Low)" },
+                      { value: "hp:desc", label: "HP ❤️ (High → Low)" },
+                      { value: "mp:desc", label: "MP 🔮 (High → Low)" },
+                      { value: "u_authority:asc", label: "Authority Level (1 → 4)" },
                       { value: "created_at:desc", label: "Newest First" },
                       { value: "created_at:asc", label: "Oldest First" }
                     ]}
@@ -965,7 +1265,7 @@ const UserManagement = () => {
               ) : viewMode === "cards" ? (
                 /* ── Cards Grid View ── */
                 <Row gutter={[20, 20]}>
-                  {displayedData.map((user) => {
+                  {pagedData.map((user) => {
                     const name = getDisplayName(user);
                     const dept = getDepartment(user);
                     const role = getRole(user);
@@ -1058,6 +1358,71 @@ const UserManagement = () => {
                               </Tag>
                             )}
                           </div>
+
+                          {/* 4 Combat Powers Mini Bar (ENG & AD Only) */}
+                          {isEngOrAdUser(user) && (
+                            <div
+                              style={{
+                                width: "100%",
+                                marginTop: "12px",
+                                padding: "8px 10px",
+                                borderRadius: "10px",
+                                background: `${theme.colors.border}18`,
+                                border: `1px solid ${theme.colors.border}33`
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", fontWeight: 700, marginBottom: "3px" }}>
+                                <span style={{ color: "#ff4d4f" }}>ATK {user.atk || 0}</span>
+                                <span style={{ color: "#1890ff" }}>DEF {user.def || 0}</span>
+                                <span style={{ color: "#52c41a" }}>HP {user.hp || 0}</span>
+                                <span style={{ color: "#722ed1" }}>MP {user.mp || 0}</span>
+                              </div>
+                              <Row gutter={4}>
+                                <Col span={6}><Progress percent={user.atk || 0} showInfo={false} strokeColor="#ff4d4f" size="small" /></Col>
+                                <Col span={6}><Progress percent={user.def || 0} showInfo={false} strokeColor="#1890ff" size="small" /></Col>
+                                <Col span={6}><Progress percent={user.hp || 0} showInfo={false} strokeColor="#52c41a" size="small" /></Col>
+                                <Col span={6}><Progress percent={user.mp || 0} showInfo={false} strokeColor="#722ed1" size="small" /></Col>
+                              </Row>
+                            </div>
+                          )}
+
+                          {isEngOrAdUser(user) ? (
+                            <Button
+                              size="small"
+                              icon={<TrophyOutlined style={{ color: "#fa8c16" }} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSkillDrawer(user);
+                              }}
+                              style={{
+                                marginTop: "10px",
+                                borderRadius: "8px",
+                                fontSize: "11px",
+                                border: `1px solid ${theme.colors.border}`,
+                                background: theme.colors.surface
+                              }}
+                            >
+                              Skill Matrix
+                            </Button>
+                          ) : (
+                            <Button
+                              size="small"
+                              icon={<UserOutlined style={{ color: theme.colors.primary }} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDetailsModal(user);
+                              }}
+                              style={{
+                                marginTop: "16px",
+                                borderRadius: "8px",
+                                fontSize: "11px",
+                                border: `1px solid ${theme.colors.border}`,
+                                background: theme.colors.surface
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          )}
                         </Card>
                       </Col>
                     );
@@ -1076,16 +1441,16 @@ const UserManagement = () => {
                 >
                   <Table
                     columns={tableColumns}
-                    dataSource={displayedData}
+                    dataSource={pagedData}
                     rowKey="u_code"
                     pagination={false}
-                    scroll={{ x: 1100 }}
+                    scroll={{ x: 1550 }}
                   />
                 </Card>
               )}
 
               {/* ── Pagination Component ────────────────────────────────── */}
-              {total > 0 && (
+              {displayedData.length > 0 && (
                 <div
                   style={{
                     display: "flex",
@@ -1101,15 +1466,20 @@ const UserManagement = () => {
                   }}
                 >
                   <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
-                    Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} of{" "}
-                    <strong>{total}</strong> users
+                    Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, displayedData.length)} of{" "}
+                    <strong>{displayedData.length}</strong> engineers
+                    {displayedData.length !== data.length && (
+                      <span style={{ marginLeft: 6, color: theme.colors.primary, fontWeight: 500 }}>
+                        (Filtered from {data.length} total)
+                      </span>
+                    )}
                   </Text>
                   <Pagination
                     current={page}
                     pageSize={pageSize}
-                    total={total}
+                    total={displayedData.length}
                     showSizeChanger
-                    pageSizeOptions={["12", "24", "48", "96"]}
+                    pageSizeOptions={["24", "50", "100", "200"]}
                     onChange={(p, ps) => {
                       setPage(p);
                       setPageSize(ps);
@@ -1119,17 +1489,24 @@ const UserManagement = () => {
               )}
             </div>
 
-            {/* ── 1. User Details Popup (Modal instead of Drawer) ─────── */}
+            {/* ── 1. User Details Popup (Modal - Modern Non-Table Redesign) ─────── */}
             <Modal
               title={
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <UserOutlined style={{ color: theme.colors.primary, fontSize: "20px" }} />
-                  <span style={{ fontSize: "18px", fontWeight: 600 }}>User Profile Details</span>
+                  <div>
+                    <span style={{ fontSize: "17px", fontWeight: 700, color: theme.colors.textPrimary }}>
+                      User Profile Details
+                    </span>
+                    <span style={{ fontSize: "12px", color: theme.colors.textSecondary, marginLeft: "8px", fontWeight: 400 }}>
+                      Engineering Identity & Skills
+                    </span>
+                  </div>
                 </div>
               }
               open={detailsModalOpen}
               onCancel={closeDetailsModal}
-              width={760}
+              width={820}
               destroyOnHidden
               footer={
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1168,189 +1545,432 @@ const UserManagement = () => {
               }
             >
               {selectedUser && (
-                <div style={{ padding: "8px 0" }}>
-                  {/* Top Profile Banner */}
+                <div style={{ padding: "4px 0" }}>
+                  {/* Top Profile Hero Card */}
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "24px",
+                      justifyContent: "space-between",
+                      gap: "20px",
                       padding: "20px 24px",
-                      marginBottom: "20px",
+                      marginBottom: "18px",
                       background: `linear-gradient(135deg, ${stringToColor(selectedUser.u_code)}15, ${stringToColor(selectedUser.u_code)}05)`,
-                      borderRadius: "14px",
-                      border: `1px solid ${theme.colors.border}`
+                      borderRadius: "16px",
+                      border: `1px solid ${theme.colors.border}`,
+                      boxShadow: "0 4px 16px rgba(0,0,0,0.03)"
                     }}
                   >
-                    <Avatar
-                      size={80}
-                      src={selectedUser.profile_img_b64}
-                      style={{
-                        backgroundColor: selectedUser.profile_img_b64
-                          ? "transparent"
-                          : stringToColor(selectedUser.u_code),
-                        fontSize: "32px",
-                        fontWeight: 700,
-                        boxShadow: selectedUser.profile_img_b64
-                          ? "none"
-                          : `0 6px 16px ${stringToColor(selectedUser.u_code)}44`,
-                        border: selectedUser.profile_img_b64 ? `1px solid ${theme.colors.border}` : "none",
-                        flexShrink: 0
-                      }}
-                    >
-                      {getDisplayName(selectedUser).charAt(0).toUpperCase()}
-                    </Avatar>
-
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                        <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary }}>
-                          {getDisplayName(selectedUser)}
-                        </Title>
-                        {selectedUser.u_nickname && (
-                          <Tag color="purple" style={{ borderRadius: "12px", margin: 0 }}>
-                            {selectedUser.u_nickname}
-                          </Tag>
-                        )}
-                        <Tag color="geekblue" style={{ borderRadius: "12px", margin: 0 }}>
-                          {selectedUser.u_code}
-                        </Tag>
-                      </div>
-
-                      <div style={{ marginTop: "6px" }}>
-                        <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
-                          Position: <strong>{selectedUser.position || "Engineer"}</strong>
-                        </Text>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: "12px",
-                          display: "flex",
-                          gap: "8px",
-                          flexWrap: "wrap"
-                        }}
-                      >
-                        {getDepartment(selectedUser) && (
-                          <Tag color="blue" style={{ borderRadius: "12px", margin: 0 }}>
-                            Dept: {getDepartment(selectedUser)}
-                          </Tag>
-                        )}
-                        {getGroup(selectedUser) && (
-                          <Tag color="cyan" style={{ borderRadius: "12px", margin: 0 }}>
-                            Group: {getGroup(selectedUser)}
-                          </Tag>
-                        )}
-                        {getRole(selectedUser) && (
-                          <Tag color="green" style={{ borderRadius: "12px", margin: 0 }}>
-                            Role: {getRole(selectedUser)}
-                          </Tag>
-                        )}
-                        <Tag
-                          color={getAuthorityObj(selectedUser.u_authority).tagColor}
-                          style={{ borderRadius: "12px", margin: 0 }}
+                    <div style={{ display: "flex", alignItems: "center", gap: "20px", flex: 1, minWidth: 0 }}>
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <Avatar
+                          size={76}
+                          src={selectedUser.profile_img_b64}
+                          style={{
+                            backgroundColor: selectedUser.profile_img_b64
+                              ? "transparent"
+                              : stringToColor(selectedUser.u_code),
+                            fontSize: "30px",
+                            fontWeight: 700,
+                            boxShadow: selectedUser.profile_img_b64
+                              ? "none"
+                              : `0 6px 16px ${stringToColor(selectedUser.u_code)}44`,
+                            border: `2px solid ${theme.colors.border}`
+                          }}
                         >
-                          {getAuthorityObj(selectedUser.u_authority).label}
-                        </Tag>
+                          {getDisplayName(selectedUser).charAt(0).toUpperCase()}
+                        </Avatar>
+                        {/* Status Indicator Ring */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 2,
+                            right: 2,
+                            width: "14px",
+                            height: "14px",
+                            borderRadius: "50%",
+                            background: (selectedUser.u_status === 1 || selectedUser.u_status === null) ? "#52c41a" : "#8c8c8c",
+                            border: "2px solid #fff"
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {getDisplayName(selectedUser)}
+                          </Title>
+                          {selectedUser.u_nickname && (
+                            <Tag color="purple" style={{ borderRadius: "10px", margin: 0, fontWeight: 600 }}>
+                              {selectedUser.u_nickname}
+                            </Tag>
+                          )}
+                          <Tag color="geekblue" style={{ borderRadius: "10px", margin: 0, fontWeight: 700 }}>
+                            {selectedUser.u_code}
+                          </Tag>
+                          <Tag
+                            color={selectedUser.u_status === 1 || selectedUser.u_status === null ? "success" : "default"}
+                            icon={<CheckCircleOutlined />}
+                            style={{ borderRadius: "10px", margin: 0, fontSize: "11px" }}
+                          >
+                            {selectedUser.u_status === 1 || selectedUser.u_status === null ? "Active" : "Inactive"}
+                          </Tag>
+                        </div>
+
+                        <div style={{ marginTop: "6px" }}>
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
+                            Position: <strong>{selectedUser.position || "Engineer"}</strong>
+                            <span style={{ margin: "0 8px", color: theme.colors.border }}>|</span>
+                            Section: <strong>{selectedUser.section ?? 1}</strong>
+                          </Text>
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: "10px",
+                            display: "flex",
+                            gap: "6px",
+                            flexWrap: "wrap"
+                          }}
+                        >
+                          {getDepartment(selectedUser) && (
+                            <Tag color="blue" style={{ borderRadius: "10px", margin: 0, fontSize: "11px" }}>
+                              Dept: {getDepartment(selectedUser)}
+                            </Tag>
+                          )}
+                          {getGroup(selectedUser) && (
+                            <Tag color="cyan" style={{ borderRadius: "10px", margin: 0, fontSize: "11px" }}>
+                              Group: {getGroup(selectedUser)}
+                            </Tag>
+                          )}
+                          {getRole(selectedUser) && (
+                            <Tag color="green" style={{ borderRadius: "10px", margin: 0, fontSize: "11px" }}>
+                              Role: {getRole(selectedUser)}
+                            </Tag>
+                          )}
+                          <Tag
+                            color={getAuthorityObj(selectedUser.u_authority).tagColor}
+                            style={{ borderRadius: "10px", margin: 0, fontSize: "11px" }}
+                          >
+                            {getAuthorityObj(selectedUser.u_authority).label}
+                          </Tag>
+                        </div>
                       </div>
                     </div>
+
+                    {/* Skill Calibration Hero Button (ENG & AD Only) */}
+                    {isEngOrAdUser(selectedUser) && (
+                      <div style={{ flexShrink: 0 }}>
+                        <Button
+                          type="primary"
+                          icon={<TrophyOutlined style={{ color: "#faad14" }} />}
+                          onClick={() => openSkillDrawer(selectedUser)}
+                          style={{
+                            borderRadius: "10px",
+                            background: "linear-gradient(135deg, #1890ff 0%, #722ed1 100%)",
+                            border: "none",
+                            fontWeight: 600,
+                            boxShadow: "0 4px 14px rgba(114, 46, 209, 0.35)",
+                            height: "38px",
+                            padding: "0 16px"
+                          }}
+                        >
+                          Skill Matrix & Radar
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Descriptions Grid (2 Columns) */}
-                  <Descriptions
-                    bordered
-                    column={2}
-                    size="middle"
-                    style={{ borderRadius: "10px", overflow: "hidden" }}
-                    labelStyle={{
-                      fontWeight: 600,
-                      width: "25%",
-                      background: `${theme.colors.primary}08`,
-                      color: theme.colors.textPrimary
-                    }}
-                    contentStyle={{ color: theme.colors.textPrimary, width: "25%" }}
-                  >
-                    <Descriptions.Item label="Employee Code">
-                      <Tag color="geekblue">{selectedUser.u_code}</Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Status">
-                      <Tag color="success" icon={<CheckCircleOutlined />}>
-                        {selectedUser.u_status === 1 || selectedUser.u_status === null ? "Active" : "Inactive"}
-                      </Tag>
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Full Name">
-                      {selectedUser.u_name || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Nickname">
-                      {selectedUser.u_nickname || "—"}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Department">
-                      {getDepartment(selectedUser) ? (
-                        <Tag color="blue">{getDepartment(selectedUser)}</Tag>
-                      ) : (
-                        "—"
-                      )}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Group">
-                      {getGroup(selectedUser) ? (
-                        <Tag color="cyan">{getGroup(selectedUser)}</Tag>
-                      ) : (
-                        "—"
-                      )}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Role">
-                      {getRole(selectedUser) ? (
-                        <Tag color="green">{getRole(selectedUser)}</Tag>
-                      ) : (
-                        "—"
-                      )}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Authority">
-                      {getAuthorityObj(selectedUser.u_authority).label}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Position">
-                      {selectedUser.position || "—"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Section">
-                      {selectedUser.section ?? 1}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Created At" span={2}>
-                      {selectedUser.created_at || selectedUser.create_d || "—"}
-                    </Descriptions.Item>
-                  </Descriptions>
-
-                  {/* Custom Extra Attributes if any */}
-                  {customSchemaColumns.length > 0 && (
-                    <div style={{ marginTop: "20px" }}>
-                      <Divider orientation="left" style={{ margin: "0 0 12px" }}>
-                        <Text strong style={{ color: theme.colors.textSecondary, fontSize: "12px" }}>
-                          ADDITIONAL CUSTOM ATTRIBUTES
-                        </Text>
-                      </Divider>
-                      <Descriptions
-                        bordered
-                        column={2}
+                  {/* Non-Table Modern Detail Cards */}
+                  <Row gutter={[14, 14]} style={{ marginBottom: "18px" }}>
+                    {/* Card 1: Organizational Hierarchy */}
+                    <Col span={12}>
+                      <Card
                         size="small"
-                        labelStyle={{
-                          fontWeight: 600,
-                          width: "25%",
-                          background: `${theme.colors.primary}08`
+                        style={{
+                          borderRadius: "14px",
+                          border: `1px solid ${theme.colors.border}`,
+                          background: theme.colors.surface,
+                          height: "100%",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.02)"
+                        }}
+                        title={
+                          <Space>
+                            <ApartmentOutlined style={{ color: "#1890ff", fontSize: "15px" }} />
+                            <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
+                              Organization & Placement
+                            </Text>
+                          </Space>
+                        }
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "4px 0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Department</Text>
+                            {getDepartment(selectedUser) ? (
+                              <Tag color="blue" style={{ borderRadius: "8px", margin: 0, fontWeight: 600 }}>
+                                {getDepartment(selectedUser)}
+                              </Tag>
+                            ) : (
+                              <Text type="secondary">—</Text>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>User Group</Text>
+                            {getGroup(selectedUser) ? (
+                              <Tag color="cyan" style={{ borderRadius: "8px", margin: 0, fontWeight: 600 }}>
+                                {getGroup(selectedUser)}
+                              </Tag>
+                            ) : (
+                              <Text type="secondary">—</Text>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Section Assignment</Text>
+                            <Tag style={{ borderRadius: "8px", margin: 0, fontWeight: 600, background: `${theme.colors.primary}10`, color: theme.colors.primary, border: `1px solid ${theme.colors.primary}30` }}>
+                              Section {selectedUser.section ?? 1}
+                            </Tag>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Position / Title</Text>
+                            <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
+                              {selectedUser.position || "Engineer"}
+                            </Text>
+                          </div>
+                        </div>
+                      </Card>
+                    </Col>
+
+                    {/* Card 2: System Access & Account Information */}
+                    <Col span={12}>
+                      <Card
+                        size="small"
+                        style={{
+                          borderRadius: "14px",
+                          border: `1px solid ${theme.colors.border}`,
+                          background: theme.colors.surface,
+                          height: "100%",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.02)"
+                        }}
+                        title={
+                          <Space>
+                            <SafetyCertificateOutlined style={{ color: "#52c41a", fontSize: "15px" }} />
+                            <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
+                              System Access & Account
+                            </Text>
+                          </Space>
+                        }
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "4px 0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>System Role</Text>
+                            {getRole(selectedUser) ? (
+                              <Tag color="green" style={{ borderRadius: "8px", margin: 0, fontWeight: 600 }}>
+                                {getRole(selectedUser)}
+                              </Tag>
+                            ) : (
+                              <Text type="secondary">—</Text>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Authority Level</Text>
+                            <Tag
+                              color={getAuthorityObj(selectedUser.u_authority).tagColor}
+                              style={{ borderRadius: "8px", margin: 0, fontWeight: 600 }}
+                            >
+                              {getAuthorityObj(selectedUser.u_authority).label}
+                            </Tag>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Account Status</Text>
+                            <Tag
+                              color={selectedUser.u_status === 1 || selectedUser.u_status === null ? "success" : "default"}
+                              icon={<CheckCircleOutlined />}
+                              style={{ borderRadius: "8px", margin: 0 }}
+                            >
+                              {selectedUser.u_status === 1 || selectedUser.u_status === null ? "Active Account" : "Inactive"}
+                            </Tag>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Member Since</Text>
+                            <Space size={4}>
+                              <CalendarOutlined style={{ fontSize: "12px", color: theme.colors.textSecondary }} />
+                              <Text style={{ fontSize: "12px", color: theme.colors.textSecondary }}>
+                                {selectedUser.created_at || selectedUser.create_d || "—"}
+                              </Text>
+                            </Space>
+                          </div>
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Combat & Engineering Powers Section (ENG & AD Only) */}
+                  {isEngOrAdUser(selectedUser) && (
+                    <div
+                      style={{
+                        padding: "16px",
+                        borderRadius: "14px",
+                        border: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.surface,
+                        marginBottom: "18px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.02)"
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "12px",
+                          paddingBottom: "8px",
+                          borderBottom: `1px solid ${theme.colors.border}`
                         }}
                       >
+                        <div>
+                          <Space>
+                            <ThunderboltOutlined style={{ color: "#faad14", fontSize: "16px" }} />
+                            <Text strong style={{ color: theme.colors.textPrimary, fontSize: "13px" }}>
+                              COMBAT & ENGINEERING POWERS (RPG STATS)
+                            </Text>
+                          </Space>
+                          <Text type="secondary" style={{ fontSize: "11px", display: "block", marginTop: "2px" }}>
+                            Calibrated from machining, quality standards, software wizardry, and execution.
+                          </Text>
+                        </div>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<TrophyOutlined />}
+                          onClick={() => openSkillDrawer(selectedUser)}
+                          style={{ fontWeight: 600, color: theme.colors.primary, padding: 0 }}
+                        >
+                          Calibrate Powers →
+                        </Button>
+                      </div>
+
+                      <Row gutter={[12, 12]}>
+                        <Col span={6}>
+                          <Card
+                            size="small"
+                            style={{
+                              borderRadius: "12px",
+                              background: "#ff4d4f0a",
+                              border: "1px solid #ff4d4f33",
+                              textAlign: "center"
+                            }}
+                          >
+                            <Text strong style={{ color: "#ff4d4f", fontSize: "12px" }}>ATK ⚔️</Text>
+                            <div style={{ fontSize: "22px", fontWeight: 800, color: "#ff4d4f", margin: "2px 0" }}>
+                              {selectedUser.atk || 0}
+                            </div>
+                            <Progress percent={selectedUser.atk || 0} strokeColor="#ff4d4f" size="small" showInfo={false} />
+                            <Text type="secondary" style={{ fontSize: "10px", display: "block", marginTop: "2px" }}>
+                              Machine & Setup
+                            </Text>
+                          </Card>
+                        </Col>
+                        <Col span={6}>
+                          <Card
+                            size="small"
+                            style={{
+                              borderRadius: "12px",
+                              background: "#1890ff0a",
+                              border: "1px solid #1890ff33",
+                              textAlign: "center"
+                            }}
+                          >
+                            <Text strong style={{ color: "#1890ff", fontSize: "12px" }}>DEF 🛡️</Text>
+                            <div style={{ fontSize: "22px", fontWeight: 800, color: "#1890ff", margin: "2px 0" }}>
+                              {selectedUser.def || 0}
+                            </div>
+                            <Progress percent={selectedUser.def || 0} strokeColor="#1890ff" size="small" showInfo={false} />
+                            <Text type="secondary" style={{ fontSize: "10px", display: "block", marginTop: "2px" }}>
+                              Standards & Quality
+                            </Text>
+                          </Card>
+                        </Col>
+                        <Col span={6}>
+                          <Card
+                            size="small"
+                            style={{
+                              borderRadius: "12px",
+                              background: "#52c41a0a",
+                              border: "1px solid #52c41a33",
+                              textAlign: "center"
+                            }}
+                          >
+                            <Text strong style={{ color: "#52c41a", fontSize: "12px" }}>HP ❤️</Text>
+                            <div style={{ fontSize: "22px", fontWeight: 800, color: "#52c41a", margin: "2px 0" }}>
+                              {selectedUser.hp || 0}
+                            </div>
+                            <Progress percent={selectedUser.hp || 0} strokeColor="#52c41a" size="small" showInfo={false} />
+                            <Text type="secondary" style={{ fontSize: "10px", display: "block", marginTop: "2px" }}>
+                              Time & Teamwork
+                            </Text>
+                          </Card>
+                        </Col>
+                        <Col span={6}>
+                          <Card
+                            size="small"
+                            style={{
+                              borderRadius: "12px",
+                              background: "#722ed10a",
+                              border: "1px solid #722ed133",
+                              textAlign: "center"
+                            }}
+                          >
+                            <Text strong style={{ color: "#722ed1", fontSize: "12px" }}>MP 🔮</Text>
+                            <div style={{ fontSize: "22px", fontWeight: 800, color: "#722ed1", margin: "2px 0" }}>
+                              {selectedUser.mp || 0}
+                            </div>
+                            <Progress percent={selectedUser.mp || 0} strokeColor="#722ed1" size="small" showInfo={false} />
+                            <Text type="secondary" style={{ fontSize: "10px", display: "block", marginTop: "2px" }}>
+                              Coding & Logic Magic
+                            </Text>
+                          </Card>
+                        </Col>
+                      </Row>
+                    </div>
+                  )}
+
+                  {/* Custom Extra Attributes if any (ENG & AD Only) */}
+                  {isEngOrAdUser(selectedUser) && customSchemaColumns.length > 0 && (
+                    <div>
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          paddingBottom: "6px",
+                          borderBottom: `1px solid ${theme.colors.border}`
+                        }}
+                      >
+                        <Text strong style={{ color: theme.colors.textSecondary, fontSize: "12px", textTransform: "uppercase" }}>
+                          Additional Custom Attributes
+                        </Text>
+                      </div>
+                      <Row gutter={[10, 10]}>
                         {customSchemaColumns.map((col) => {
                           let val = selectedUser[col.column_name];
                           if (val === null || val === undefined || val === "") val = "—";
                           return (
-                            <Descriptions.Item key={col.column_name} label={col.column_name}>
-                              {String(val)}
-                            </Descriptions.Item>
+                            <Col span={12} key={col.column_name}>
+                              <div
+                                style={{
+                                  padding: "8px 12px",
+                                  borderRadius: "8px",
+                                  background: `${theme.colors.primary}06`,
+                                  border: `1px solid ${theme.colors.border}`,
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center"
+                                }}
+                              >
+                                <Text type="secondary" style={{ fontSize: "12px" }}>{col.column_name}</Text>
+                                <Text strong style={{ fontSize: "12px", color: theme.colors.textPrimary }}>{String(val)}</Text>
+                              </div>
+                            </Col>
                           );
                         })}
-                      </Descriptions>
+                      </Row>
                     </div>
                   )}
                 </div>
@@ -1772,6 +2392,15 @@ const UserManagement = () => {
                 </Form>
               )}
             </Modal>
+
+            {/* ── 5. Skill Matrix & Power Calibration Drawer ── */}
+            <SkillMatrixDrawer
+              open={skillDrawerOpen}
+              onClose={() => setSkillDrawerOpen(false)}
+              user={skillDrawerUser}
+              canEdit={canManageUsers}
+              onSkillUpdated={handleSkillUpdated}
+            />
           </Content>
         </Spin>
       </Layout>

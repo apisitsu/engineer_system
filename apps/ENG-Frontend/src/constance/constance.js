@@ -182,6 +182,7 @@ export const server = {
   USER_MANAGEMENT_EXTERNAL_USERS: `${apiUrl}api/system/user-management/external-users`,
   USER_MANAGEMENT_ADD_COLUMN: `${apiUrl}api/system/user-management/schema/add-column`,
   USER_MANAGEMENT_DROP_COLUMN: `${apiUrl}api/system/user-management/schema/drop-column`,
+  USER_MANAGEMENT_SKILLS: `${apiUrl}api/system/user-management/skills`,
 
   //--------------------Kanban--------------------//
   KANBAN_USERS: `${apiUrl}api/kanban/users`,

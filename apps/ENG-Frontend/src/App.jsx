@@ -383,6 +383,7 @@ const AppContent = () => {
                   <Route path="/eng/overall_eng/organization" element={<OrganizationEng />} />
                   <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
                   <Route path="/eng/overall_eng/tools" element={<OverallToolGallery />} />
+                  <Route path="/eng/overall_eng/user_management" element={<UserManagement />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />
