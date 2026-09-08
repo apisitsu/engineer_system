@@ -1,5 +1,5 @@
 // Organization Chart RPG Theme
-// This theme is specifically for the /eng/all_eng page (home_overall.jsx)
+// This theme is specifically for the /eng/overall_eng/organization page (OrganizationEng.jsx)
 // It contains element-based colors and styling for the RPG-style organization chart
 
 export const orgRpgTheme = {

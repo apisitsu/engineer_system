@@ -8,6 +8,7 @@ import { orgRpgTheme } from './orgTheme';
 import RpgCard, { ELEMENT_CONFIG } from './components/RpgCard';
 import FormalCard from './components/FormalCard';
 import ViewSwitcher from './components/ViewSwitcher';
+import ScrollbarStyle from '../../common/scrollbar';
 
 const { Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -328,11 +329,19 @@ function OrganizationEng() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <MenuTemplate type={"ALL"} defaultSelectedKeys={"1"} />
-      <Layout style={{ backgroundColor: theme.colors.background }}>
-        <Spin tip="Loading Guild Data..." size="large" spinning={loading}>
-          <Content style={{ height: '90vh', overflowY: 'auto', padding: '10px 20px' }}>
+    <Layout style={{ height: '100%', overflow: 'hidden', display: 'flex' }}>
+      <MenuTemplate type={"ALL"} defaultSelectedKeys={"2"} />
+      <Layout style={{ height: '100%', backgroundColor: theme.colors.background, overflow: 'hidden' }}>
+        <ScrollbarStyle primary={theme.colors.primary} />
+        <Content
+          className="kb-vscroll"
+          style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: '16px 24px 80px 24px'
+          }}
+        >
+          <Spin tip="Loading Guild Data..." size="large" spinning={loading}>
             <div style={{ textAlign: "center", marginBottom: "15px" }}>
               <Title level={3} style={{ margin: 0, color: theme.colors.textPrimary }}>
                 {viewMode === 'rpg' ? '🛡️ Engineering Guild Structure' : 'Engineering Organization Chart'}
@@ -388,8 +397,8 @@ function OrganizationEng() {
                 )
               )}
             </Modal>
-          </Content>
-        </Spin>
+          </Spin>
+        </Content>
       </Layout>
     </Layout>
   );

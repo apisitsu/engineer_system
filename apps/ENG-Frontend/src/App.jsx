@@ -64,7 +64,9 @@ import LotStatusTracker from './components/engineer/mtc_eng/lot_track/LotStatusT
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
-import OrganizationEng from './components/engineer/overall_eng/home_overall';
+import HomeOverallEng from './components/engineer/overall_eng/HomeOverallEng';
+import OrganizationEng from './components/engineer/overall_eng/OrganizationEng';
+import OverallToolGallery from './components/engineer/overall_eng/ToolGallery';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
@@ -378,8 +380,10 @@ const AppContent = () => {
                   <Route path="/eng/compare_pdf" element={<ComparePdfTool />} />
 
                   {/* ------ Overall Engineer ------ */}
-                  <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+                  <Route path="/eng/overall_eng" element={<HomeOverallEng />} />
+                  <Route path="/eng/overall_eng/organization" element={<OrganizationEng />} />
                   <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
+                  <Route path="/eng/overall_eng/tools" element={<OverallToolGallery />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />

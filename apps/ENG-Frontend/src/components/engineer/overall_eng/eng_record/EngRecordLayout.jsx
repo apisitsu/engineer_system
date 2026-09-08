@@ -42,17 +42,16 @@ function EngRecordLayout() {
     }
 
     return (
-        // <Layout style={{ minHeight: '100vh' }}>
-        <Layout style={{ minHeight: 100, display: 'flex' }}>
-            <MenuTemplate type="ALL" defaultSelectedKeys={["2"]} />
-            <Layout style={{ backgroundColor: theme.colors.background }}>
+        <Layout style={{ height: '100%', overflow: 'hidden', display: 'flex' }}>
+            <MenuTemplate type="ALL" defaultSelectedKeys={["3"]} />
+            <Layout style={{ height: '100%', backgroundColor: theme.colors.background, overflow: 'hidden' }}>
                 <ScrollbarStyle primary={theme.colors.primary} />
                 <Content
                     className="kb-vscroll"
                     style={{
-                        height: 'calc(100vh - 64px)',
+                        height: '100%',
                         overflowY: 'auto',
-                        padding: '24px',
+                        padding: '24px 24px 80px 24px',
                     }}
                 >
                     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>

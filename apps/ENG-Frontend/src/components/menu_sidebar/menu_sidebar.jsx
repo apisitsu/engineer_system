@@ -38,7 +38,9 @@ const createMenu = (items) => {
                 label: item.label,
                 children: item.children.map((child, childIndex) => ({
                     key: child.key || `child-${index}-${childIndex}`,
-                    label: <Link to={child.path}>{child.label}</Link>
+                    label: child.newTab
+                        ? <Link to={child.path} target="_blank" rel="noopener noreferrer">{child.label}</Link>
+                        : <Link to={child.path}>{child.label}</Link>
                 }))
             };
         }
@@ -116,6 +118,8 @@ export const mtc = createMenu([
 ]);
 
 export const all = createMenu([
-    { label: "Organization", path: "/eng/overall_eng", key: "1" },
-    { label: "Engineer Record", path: "/eng/overall_eng/eng-record", key: "2" },
+    { label: "Home", path: "/eng/overall_eng", key: "1" },
+    { label: "Organization", path: "/eng/overall_eng/organization", key: "2" },
+    { label: "Engineer Record", path: "/eng/overall_eng/eng-record", key: "3" },
+    { label: "Tools Portal", path: "/eng/overall_eng/tools", key: "4" },
 ]);
