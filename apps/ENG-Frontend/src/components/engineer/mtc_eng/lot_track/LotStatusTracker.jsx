@@ -86,13 +86,23 @@ function Roadmap({ steps }) {
       {steps.map((s, i) => {
         const meta = STATUS_META[s.status] || STATUS_META.pending;
         const bits = [];
-        if (s.wc) bits.push(`WC ${s.wc}`);
-        if (s.compDate) {
-          bits.push(s.startDate && s.startDate !== s.compDate ? `${s.startDate} → ${s.compDate}` : `done ${s.compDate}`);
+        if (s.status === 'current') {
+          // no production row yet — show what is known while it's WIP
+          if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
+          if (s.startDate) {
+            const w = daysUntil(s.startDate);
+            bits.push(`received ${s.startDate}${w != null && w < 0 ? ` · waiting ${fmtDays(-w)}` : ''}`);
+          }
+          if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
+        } else {
+          if (s.wc) bits.push(`WC ${s.wc}`);
+          if (s.compDate) {
+            bits.push(s.startDate && s.startDate !== s.compDate ? `${s.startDate} → ${s.compDate}` : `done ${s.compDate}`);
+          }
+          if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
+          if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
+          if (s.operator) bits.push(s.operator);
         }
-        if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
-        if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
-        if (s.operator) bits.push(s.operator);
         const isLast = i === steps.length - 1;
         const gap = s.dwellDays != null && s.dwellDays > 0;
 
