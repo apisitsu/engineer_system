@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
-  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, RightOutlined, CheckCircleFilled,
+  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
@@ -208,20 +208,20 @@ function StatusStrip({ data }) {
 const CARD_H_MULTI = 660;
 const CARD_H_SINGLE = 760;
 
-function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
+function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onResolveControl }) {
   const st = state || { status: 'loading' };
 
   // Auto-scroll the roadmap so the CURRENT step sits at the top of the pane.
   const paneRef = useRef(null);
   useLayoutEffect(() => {
-    if (detailOpen || st.status !== 'ok') return;
+    if (st.status !== 'ok') return;
     const pane = paneRef.current;
     if (!pane) return;
     const cur = pane.querySelector('.lot-roadmap-current');
     if (cur) {
       pane.scrollTop += cur.getBoundingClientRect().top - pane.getBoundingClientRect().top - 6;
     }
-  }, [detailOpen, st.status, st.data]);
+  }, [st.status, st.data]);
 
   // Fixed to 1/5 of the row width so every column is identical whether its row
   // holds 5 (full) or fewer (left-aligned, trailing gap). 64px = 4 × 16px gaps.
@@ -244,10 +244,10 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
       <div style={{ flex: 1, minWidth: 0 }}>
         <Button
           type="text" size="small"
-          onClick={canToggle ? onToggleDetail : undefined}
-          title={canToggle ? (detailOpen ? 'Show roadmap' : 'Show process detail') : undefined}
+          onClick={canToggle ? onOpenDetail : undefined}
+          title={canToggle ? 'Open process detail' : undefined}
           style={{ padding: 0, height: 'auto', fontWeight: 700, fontSize: 15, cursor: canToggle ? 'pointer' : 'default' }}
-          icon={canToggle ? (detailOpen ? <DownOutlined /> : <RightOutlined />) : null}
+          icon={canToggle ? <ProfileOutlined /> : null}
         >
           {label}
         </Button>
@@ -350,8 +350,8 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
         ) : null}
       </div>
 
-      <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: detailOpen ? 0 : 8 }}>
-        {detailOpen ? <ProcessDetail steps={data.steps} /> : <Roadmap steps={data.steps} />}
+      <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+        <Roadmap steps={data.steps} />
       </div>
     </>,
   );
@@ -365,7 +365,7 @@ export default function LotStatusTracker() {
 
   const [entries, setEntries] = useState([]);          // [{ key, lotNo, controlNo }]
   const [stateByKey, setStateByKey] = useState({});    // key → { status, data, candidates, error }
-  const [detailOpen, setDetailOpen] = useState({});    // key → bool
+  const [detailModal, setDetailModal] = useState(null); // { header fields…, steps } shown in a modal
 
   const [term, setTerm] = useState('');
   const [options, setOptions] = useState([]);
@@ -417,7 +417,11 @@ export default function LotStatusTracker() {
   const removeLot = (key) => {
     setEntries((cur) => cur.filter((e) => e.key !== key));
     setStateByKey((m) => { const n = { ...m }; delete n[key]; return n; });
-    setDetailOpen((m) => { const n = { ...m }; delete n[key]; return n; });
+  };
+
+  const openDetail = (key) => {
+    const s = stateByKey[key];
+    if (s?.status === 'ok') setDetailModal({ ...s.data.header, steps: s.data.steps });
   };
 
   const resolveControl = (key, controlNo) => {
@@ -467,7 +471,6 @@ export default function LotStatusTracker() {
     const next = (track.lots || []).map((l) => ({ key: nextKey(), lotNo: l.lotNo, controlNo: l.controlNo || undefined }));
     setEntries(next);
     setStateByKey({});
-    setDetailOpen({});
     setActiveSaved({ id: track.id, name: track.name });
     setSavedOpen(false);
     next.forEach((e) => fetchEntry(e.key, e.lotNo, e.controlNo));
@@ -606,9 +609,8 @@ export default function LotStatusTracker() {
                       key={e.key}
                       entry={e}
                       state={stateByKey[e.key]}
-                      detailOpen={!!detailOpen[e.key]}
                       single={single}
-                      onToggleDetail={() => setDetailOpen((m) => ({ ...m, [e.key]: !m[e.key] }))}
+                      onOpenDetail={() => openDetail(e.key)}
                       onRemove={() => removeLot(e.key)}
                       onReload={() => fetchEntry(e.key, e.lotNo, e.controlNo)}
                       onResolveControl={(cn) => resolveControl(e.key, cn)}
@@ -651,6 +653,24 @@ export default function LotStatusTracker() {
         <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
           {entries.length === 1 ? '1 lot (single)' : `${entries.length} lots (group)`}: {entries.map((e) => e.lotNo).join(', ')}
         </div>
+      </Modal>
+
+      <Modal
+        title={detailModal ? (
+          <Space wrap>
+            <Text strong>{detailModal.lotNo}</Text>
+            <Tag color="blue">{detailModal.controlNo}</Tag>
+            <Text type="secondary">{detailModal.partsNo}</Text>
+            <Text type="secondary" style={{ fontWeight: 400 }}>Process detail</Text>
+          </Space>
+        ) : 'Process detail'}
+        open={!!detailModal}
+        onCancel={() => setDetailModal(null)}
+        footer={null}
+        width="min(1240px, 96vw)"
+        styles={{ body: { maxHeight: '75vh', overflowY: 'auto' } }}
+      >
+        {detailModal ? <ProcessDetail steps={detailModal.steps} /> : null}
       </Modal>
 
       <style>{`.lot-track-current-row > td { background: rgba(24,144,255,0.08) !important; }`}</style>
