@@ -8,7 +8,8 @@ import {
   EditOutlined, UserOutlined, SearchOutlined,
   InfoCircleOutlined, AppstoreOutlined, TableOutlined, StarFilled,
   CrownOutlined, TeamOutlined, ThunderboltOutlined, CheckOutlined,
-  RocketOutlined, ToolOutlined, FileProtectOutlined, FolderOutlined
+  RocketOutlined, ToolOutlined, FileProtectOutlined, FolderOutlined,
+  FileExcelOutlined
 } from "@ant-design/icons";
 import { useTheme } from "../../../../theme";
 import {
@@ -46,7 +47,8 @@ const QualificationSummaryView = ({
   canEditQualifications = false,
   onSaveQualifications,
   onRefresh,
-  qualificationColumns = QUALIFICATION_COLUMNS
+  qualificationColumns = QUALIFICATION_COLUMNS,
+  onExportExcel
 }) => {
   const { theme } = useTheme();
   const isDark = theme.isDark || false;
@@ -1122,6 +1124,19 @@ const QualificationSummaryView = ({
 
         {/* Right: Skill Require Button + View Switcher (Table / Board) */}
         <Space wrap size={10}>
+          {onExportExcel && (
+            <Button
+              icon={<FileExcelOutlined style={{ color: "#52c41a" }} />}
+              onClick={() => onExportExcel("all")}
+              style={{
+                borderRadius: "8px",
+                fontWeight: 600
+              }}
+            >
+              Export to Excel
+            </Button>
+          )}
+
           <Button
             icon={<InfoCircleOutlined />}
             onClick={() => setCriteriaModalOpen(true)}

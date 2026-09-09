@@ -7,7 +7,8 @@ import {
   SafetyCertificateOutlined, EditOutlined, SaveOutlined, ReloadOutlined,
   InfoCircleOutlined, SearchOutlined,
   FilterOutlined, TrophyOutlined, CloseOutlined,
-  RocketOutlined, ToolOutlined, FileProtectOutlined
+  RocketOutlined, ToolOutlined, FileProtectOutlined,
+  FileExcelOutlined
 } from "@ant-design/icons";
 import { useTheme } from "../../../../theme";
 import {
@@ -26,7 +27,8 @@ const SkillRequirementsMatrixView = ({
   onSaveCriteria,
   onResetCriteria,
   onRefresh,
-  loading = false
+  loading = false,
+  onExportExcel
 }) => {
   const { theme } = useTheme();
   const isDark = theme.isDark || false;
@@ -471,6 +473,16 @@ const SkillRequirementsMatrixView = ({
 
         {/* Action Buttons */}
         <Space wrap size={10}>
+          {onExportExcel && (
+            <Button
+              icon={<FileExcelOutlined style={{ color: "#52c41a" }} />}
+              onClick={() => onExportExcel("all")}
+              style={{ borderRadius: "8px", fontWeight: 600 }}
+            >
+              Export to Excel
+            </Button>
+          )}
+
           {/* Category Filter */}
           <Select
             value={selectedCategory}

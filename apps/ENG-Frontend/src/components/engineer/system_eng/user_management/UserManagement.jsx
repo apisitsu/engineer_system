@@ -10,7 +10,7 @@ import {
   ReloadOutlined, AppstoreOutlined, UnorderedListOutlined, ExclamationCircleOutlined,
   IdcardOutlined, FilterOutlined, LockOutlined, CheckCircleOutlined,
   CloudDownloadOutlined, UserAddOutlined, TrophyOutlined, ThunderboltOutlined,
-  ApartmentOutlined, CalendarOutlined, EyeOutlined
+  ApartmentOutlined, CalendarOutlined, EyeOutlined, FileExcelOutlined
 } from "@ant-design/icons";
 import { useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -23,6 +23,7 @@ import { useTheme } from "../../../../theme";
 import SkillMatrixDrawer from "./SkillMatrixDrawer";
 import QualificationSummaryView from "./QualificationSummaryView";
 import SkillRequirementsMatrixView from "./SkillRequirementsMatrixView";
+import { exportComprehensiveExcel } from "./exportExcelService";
 import {
   calculateExperience,
   USER_GROUP_ORDER,
@@ -209,6 +210,7 @@ const isEngOrAdUser = (user) => {
 
 const UserManagement = () => {
   const { theme } = useTheme();
+  const isDark = theme.isDark || false;
   const location = useLocation();
   const isOverallEng = location.pathname.startsWith("/eng/overall_eng");
 
@@ -323,6 +325,81 @@ const UserManagement = () => {
       }
     } else {
       fetchData();
+    }
+  };
+
+  // ── Comprehensive Excel Export ─────────────────────────────────────────────
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const handleExportExcel = async (mode = "all") => {
+    try {
+      setExportLoading(true);
+      message.loading({ content: "Preparing Comprehensive Excel Workbook...", key: "export_excel" });
+
+      let sheetOptions = {
+        includeSummary: true,
+        includeStaffMatrix: true,
+        includeLeaderMatrix: true,
+        includeSkillRequirements: true,
+        includeSkillRubrics: true,
+        includeUserRoster: true,
+        includeSkillCalibration: true
+      };
+
+      if (mode === "current") {
+        if (activeMainTab === "qualification_summary") {
+          sheetOptions = {
+            includeSummary: true,
+            includeStaffMatrix: true,
+            includeLeaderMatrix: true,
+            includeSkillRequirements: false,
+            includeSkillRubrics: false,
+            includeUserRoster: false,
+            includeSkillCalibration: false
+          };
+        } else if (activeMainTab === "skill_requirements") {
+          sheetOptions = {
+            includeSummary: false,
+            includeStaffMatrix: false,
+            includeLeaderMatrix: false,
+            includeSkillRequirements: true,
+            includeSkillRubrics: true,
+            includeUserRoster: false,
+            includeSkillCalibration: false
+          };
+        } else {
+          sheetOptions = {
+            includeSummary: true,
+            includeStaffMatrix: false,
+            includeLeaderMatrix: false,
+            includeSkillRequirements: false,
+            includeSkillRubrics: false,
+            includeUserRoster: true,
+            includeSkillCalibration: true
+          };
+        }
+      }
+
+      const res = await exportComprehensiveExcel({
+        users: data,
+        qualificationColumns: criteriaColumns,
+        skillDefinitions: skillDefinitions,
+        currentUser: userInfo,
+        sheetOptions
+      });
+
+      if (res?.success) {
+        message.success({
+          content: `Exported ${res.totalSheets} sheets successfully: ${res.fileName}`,
+          key: "export_excel",
+          duration: 4
+        });
+      }
+    } catch (err) {
+      console.error("Export Excel Error:", err);
+      message.error({ content: "Failed to generate Excel file: " + (err.message || err), key: "export_excel" });
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -1205,6 +1282,59 @@ const UserManagement = () => {
                     </Button>
                   </Tooltip>
 
+                  <Dropdown
+                    menu={{
+                      items: [
+                        {
+                          key: "full",
+                          icon: <FileExcelOutlined style={{ color: "#52c41a" }} />,
+                          label: (
+                            <div style={{ padding: "4px 0" }}>
+                              <div style={{ fontWeight: 700 }}>Export Comprehensive Workbook (All 7 Sheets)</div>
+                              <div style={{ fontSize: "11px", color: theme.colors.textSecondary }}>
+                                Executive Summary, Staff & Leader Matrices, Skill Requirements, Rubrics, Profiles & Calibration
+                              </div>
+                            </div>
+                          ),
+                          onClick: () => handleExportExcel("all")
+                        },
+                        { type: "divider" },
+                        {
+                          key: "current",
+                          icon: <CloudDownloadOutlined style={{ color: theme.colors.primary }} />,
+                          label: (
+                            <div style={{ padding: "4px 0" }}>
+                              <div style={{ fontWeight: 600 }}>Export Current View Only</div>
+                              <div style={{ fontSize: "11px", color: theme.colors.textSecondary }}>
+                                {activeMainTab === "qualification_summary"
+                                  ? "Exports Executive Summary, Staff Matrix & Leader Matrix"
+                                  : activeMainTab === "skill_requirements"
+                                  ? "Exports Minimum Skill Requirements & Level Rubrics"
+                                  : "Exports Complete User Profiles & Roster"}
+                              </div>
+                            </div>
+                          ),
+                          onClick: () => handleExportExcel("current")
+                        }
+                      ]
+                    }}
+                    trigger={["click"]}
+                  >
+                    <Button
+                      icon={<FileExcelOutlined style={{ color: "#52c41a" }} />}
+                      loading={exportLoading}
+                      style={{
+                        borderRadius: "8px",
+                        borderColor: "#52c41a",
+                        color: isDark ? "#73d13d" : "#237804",
+                        fontWeight: 600,
+                        background: isDark ? "#162312" : "#f6ffed"
+                      }}
+                    >
+                      Export to Excel ▾
+                    </Button>
+                  </Dropdown>
+
                   {canManageUsers && (
                     <Button
                       type="primary"
@@ -1323,6 +1453,7 @@ const UserManagement = () => {
                   canEditQualifications={canEditQualifications}
                   onSaveQualifications={handleSaveQualifications}
                   qualificationColumns={criteriaColumns}
+                  onExportExcel={handleExportExcel}
                   onRefresh={() => {
                     fetchData();
                     fetchCriteria();
@@ -1338,6 +1469,7 @@ const UserManagement = () => {
                   loading={criteriaLoading}
                   onSaveCriteria={handleSaveCriteria}
                   onResetCriteria={handleResetCriteria}
+                  onExportExcel={handleExportExcel}
                   onRefresh={fetchCriteria}
                 />
               )}
