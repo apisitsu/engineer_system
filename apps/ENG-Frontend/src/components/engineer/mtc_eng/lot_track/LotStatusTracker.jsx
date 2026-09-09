@@ -331,11 +331,6 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
         </div>
         <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
           Issued {header.entryDate || '—'}
-          {summary.firstProducedDate ? (
-            <> · production {summary.firstProducedDate} → {header.compDate || summary.lastProducedDate || '…'}
-              {summary.hasCurrent ? ' (running)' : header.compDate ? ' (done)' : ' (last step done)'}
-              {' '}· {fmtDays(summary.elapsedDays)}</>
-          ) : ' · not started'}
         </div>
 
         {dl != null && dl <= DUE_SOON_DAYS ? (
