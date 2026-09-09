@@ -326,7 +326,7 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
             : <>All {summary.totalSteps} steps complete</>}
         </div>
         <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 2 }}>
-          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} ·
+          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} process ·
           {' '}run {fmtMinutes(summary.totalRunMinutes)}
         </div>
         <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
