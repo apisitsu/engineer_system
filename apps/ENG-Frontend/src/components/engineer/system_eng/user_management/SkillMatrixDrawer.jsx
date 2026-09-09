@@ -23,6 +23,12 @@ import {
 import { Radar } from "react-chartjs-2";
 import { server } from "../../../../constance/constance";
 import { useTheme } from "../../../../theme";
+import {
+  isLeaderUser,
+  LEADER_OFFICIAL_EVALUATIONS,
+  LEADER_LEVEL_DEFINITIONS,
+  LEADER_DOMAINS_DETAILED
+} from "./qualificationCriteria";
 
 // Register Chart.js components for Radar
 ChartJS.register(
@@ -305,14 +311,6 @@ const LEADER_CATEGORIES = [
   }
 ];
 
-const LEADER_RUBRICS = {
-  0: "Level 0: No experience / Not yet trained in this competency",
-  1: "Level 1: Understands fundamental concept but requires ongoing supervisor guidance",
-  2: "Level 2: Capable of performing standard day-to-day operations partially independent",
-  3: "Level 3: Fully proficient, completely independent, zero supervision required",
-  4: "Level 4: Master & Subject Matter Expert (SME); capable of training and coaching others"
-};
-
 // Normalization functions
 const norm3 = (val) => (val ? (Number(val) / 3.0) * 100 : 0);
 const norm4 = (val) => (val ? (Number(val) / 4.0) * 100 : 0);
@@ -415,17 +413,14 @@ const SkillMatrixDrawer = ({
 
   // Determine if active user is evaluated as a leader
   const isLeader = useMemo(() => {
-    return (
-      evaluationType === "leader" ||
-      user?.role === "LEADER" ||
-      ["L6121", "F1754", "LE216", "LE511"].includes(user?.u_code)
-    );
+    return evaluationType === "leader" || isLeaderUser(user);
   }, [evaluationType, user]);
 
   useEffect(() => {
     if (open && user?.u_code) {
       fetchUserSkill(user.u_code);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user?.u_code]);
 
   // Set default radar mode when leader status changes
@@ -444,11 +439,16 @@ const SkillMatrixDrawer = ({
       const res = await axios.get(endpoint, { headers: getAuthHeaders() });
       if (res.data?.result === "true" && res.data?.data) {
         const d = res.data.data;
-        const evalType = d.evaluation_type || (user?.role === "LEADER" ? "leader" : "staff");
+        const isUserLead = isLeaderUser(user) || d.evaluation_type === "leader";
+        const evalType = isUserLead ? "leader" : (d.evaluation_type || "staff");
         setEvaluationType(evalType);
 
         if (evalType === "leader") {
-          setLeaderSkills(d.leader_skills || {});
+          const baselineSkills = LEADER_OFFICIAL_EVALUATIONS[u_code]?.skills || {};
+          const loadedSkills = (d.leader_skills && Object.keys(d.leader_skills).length > 0)
+            ? d.leader_skills
+            : baselineSkills;
+          setLeaderSkills(loadedSkills);
           setEvaluationHistory(d.evaluation_history || []);
           setSelectedQuarter("current");
         } else {
@@ -474,9 +474,9 @@ const SkillMatrixDrawer = ({
       }
     } catch (err) {
       console.warn("Skill fetch fallback:", err.message);
-      if (user?.role === "LEADER") {
+      if (isLeaderUser(user)) {
         setEvaluationType("leader");
-        setLeaderSkills({});
+        setLeaderSkills(LEADER_OFFICIAL_EVALUATIONS[user?.u_code]?.skills || {});
       } else {
         setEvaluationType("staff");
         setStaffSkills({
@@ -1145,9 +1145,9 @@ const SkillMatrixDrawer = ({
                 </Text>
               </div>
 
-              {LEADER_CATEGORIES.map((cat) => (
+              {LEADER_DOMAINS_DETAILED.map((dom) => (
                 <Card
-                  key={cat.key}
+                  key={dom.key}
                   size="small"
                   style={{
                     marginBottom: "14px",
@@ -1157,99 +1157,105 @@ const SkillMatrixDrawer = ({
                     overflow: "hidden"
                   }}
                   title={
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
                       <Space>
-                        {cat.icon}
-                        <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
-                          {cat.title}
-                        </Text>
+                        <span style={{ fontSize: "16px" }}>{dom.icon}</span>
+                        <div>
+                          <Text strong style={{ fontSize: "14px", color: theme.colors.textPrimary }}>
+                            Domain {dom.domainNum}: {dom.titleEn}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: "11px", display: "block" }}>
+                            {dom.subTitle}
+                          </Text>
+                        </div>
                       </Space>
-                      <Space size={4}>
-                        {cat.powersInfluenced.map((p) => (
-                          <Tag key={p} color={cat.color} style={{ borderRadius: "10px", fontSize: "10px", margin: 0 }}>
-                            {p}
-                          </Tag>
-                        ))}
-                      </Space>
+                      <Tag color={dom.tagColor || "blue"} style={{ borderRadius: "10px", fontSize: "11px", margin: 0, fontWeight: 600 }}>
+                        {dom.criteria.length} Criteria • Scale 0 - 4
+                      </Tag>
                     </div>
                   }
                 >
-                  {cat.skills.map((skill, idx) => {
-                    const currentScore = Number(leaderSkills[skill.key] || 0);
-                    const rubricText = LEADER_RUBRICS[currentScore] || "";
+                  {dom.criteria.map((c, idx) => {
+                    const currentScore = Number(leaderSkills[c.key] !== undefined ? leaderSkills[c.key] : 0);
+                    const lvlDef = LEADER_LEVEL_DEFINITIONS[currentScore] || LEADER_LEVEL_DEFINITIONS[0];
 
                     return (
                       <div
-                        key={skill.key}
+                        key={c.key}
                         style={{
-                          padding: "10px 0",
-                          borderBottom: idx < cat.skills.length - 1 ? `1px solid ${theme.colors.border}` : "none"
+                          padding: "12px 0",
+                          borderBottom: idx < dom.criteria.length - 1 ? `1px solid ${theme.colors.border}` : "none"
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div style={{ flex: 1, paddingRight: "16px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                              <Tag color="purple" style={{ margin: 0, fontWeight: 700, borderRadius: "6px" }}>
+                                {c.code}
+                              </Tag>
                               <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
-                                {skill.label}
+                                {c.nameEn}
                               </Text>
+                              {c.keywords && (
+                                <Tag color="cyan" style={{ margin: 0, fontSize: "10px", borderRadius: "6px" }}>
+                                  {c.keywords}
+                                </Tag>
+                              )}
                               <Tag
-                                color={
-                                  currentScore === 4
-                                    ? "gold"
-                                    : currentScore === 3
-                                    ? "purple"
-                                    : currentScore === 2
-                                    ? "blue"
-                                    : currentScore === 1
-                                    ? "cyan"
-                                    : "default"
-                                }
-                                style={{ borderRadius: "10px", fontSize: "10px", margin: 0 }}
+                                color={lvlDef.tagColor}
+                                style={{ borderRadius: "10px", fontSize: "10px", margin: 0, fontWeight: 600 }}
                               >
-                                {currentScore === 4
-                                  ? "Level 4 (Master/Trainer)"
-                                  : currentScore === 3
-                                  ? "Level 3 (Full Independent)"
-                                  : currentScore === 2
-                                  ? "Level 2 (Partial)"
-                                  : currentScore === 1
-                                  ? "Level 1 (Guidance)"
-                                  : "Level 0 (None)"}
+                                {lvlDef.titleTh} ({currentScore}/4)
                               </Tag>
                             </div>
+                            
+                            {/* Thai Title */}
+                            <div style={{ fontSize: "12px", color: theme.colors.textSecondary, marginTop: "3px", fontWeight: 500 }}>
+                              🇹🇭 {c.nameTh}
+                            </div>
+
+                            {/* Detailed Description */}
                             <Text type="secondary" style={{ fontSize: "11px", display: "block", marginTop: "2px" }}>
-                              {skill.desc}
+                              {c.desc}
                             </Text>
                           </div>
 
-                          <div>
+                          <div style={{ textAlign: "right", minWidth: "120px" }}>
                             <Rate
                               count={4}
                               value={currentScore}
                               disabled={!canEdit || selectedQuarter !== "current"}
                               allowClear={true}
-                              onChange={(val) => handleLeaderSkillChange(skill.key, val || 0)}
+                              onChange={(val) => handleLeaderSkillChange(c.key, val || 0)}
                               style={{
-                                color: currentScore >= 4 ? "#faad14" : currentScore >= 3 ? "#722ed1" : currentScore >= 2 ? "#1890ff" : "#52c41a",
-                                fontSize: "20px"
+                                color: currentScore >= 4 ? "#faad14" : currentScore >= 3 ? "#722ed1" : currentScore >= 2 ? "#1890ff" : currentScore >= 1 ? "#52c41a" : "#d9d9d9",
+                                fontSize: "18px"
                               }}
                             />
+                            <div style={{ fontSize: "10px", color: theme.colors.textSecondary, marginTop: "2px" }}>
+                              {currentScore === 0 ? "0 (ทำไม่ได้)" : `Level ${currentScore} / 4`}
+                            </div>
                           </div>
                         </div>
 
-                        {/* English Rubric Criteria */}
+                        {/* Thai & English Rubric Criteria Box */}
                         <div
                           style={{
-                            marginTop: "6px",
-                            padding: "6px 10px",
+                            marginTop: "8px",
+                            padding: "6px 12px",
                             borderRadius: "8px",
-                            background: `${cat.color}08`,
-                            borderLeft: `3px solid ${cat.color}`,
+                            background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                            borderLeft: `3px solid ${lvlDef.color}`,
                             fontSize: "11px",
                             color: theme.colors.textSecondary
                           }}
                         >
-                          💡 <strong>Criteria:</strong> {rubricText}
+                          <div style={{ fontWeight: 600, color: theme.colors.textPrimary, marginBottom: "2px" }}>
+                            🎯 Criteria: {lvlDef.descTh}
+                          </div>
+                          <div style={{ fontSize: "10px", opacity: 0.85 }}>
+                            🇬🇧 {lvlDef.descEn}
+                          </div>
                         </div>
                       </div>
                     );

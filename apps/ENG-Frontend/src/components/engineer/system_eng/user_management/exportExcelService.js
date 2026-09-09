@@ -9,7 +9,13 @@ import {
   isLeaderUser,
   USER_GROUPS_CONFIG,
   USER_GROUP_ORDER,
-  LEADER_PROFILES_INFO
+  LEADER_PROFILES_INFO,
+  calculateLeaderCompetencyStats,
+  LEADER_DOMAINS_DETAILED,
+  leaderHistoricalScores,
+  LEADER_ALL_PERIODS,
+  LEADER_LEVEL_DEFINITIONS,
+  LEADER_OFFICIAL_EVALUATIONS
 } from "./qualificationCriteria.js";
 
 // ── Palette & Styles Configuration ──────────────────────────────────────────
@@ -103,6 +109,8 @@ export const exportComprehensiveExcel = async ({
     includeSummary: true,
     includeStaffMatrix: true,
     includeLeaderMatrix: true,
+    includeLeaderHistory: true,
+    includeLeaderCriteria: true,
     includeSkillRequirements: true,
     includeSkillRubrics: true,
     includeUserRoster: true,
@@ -453,13 +461,14 @@ export const exportComprehensiveExcel = async ({
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SHEET 3: LEADER COMPETENCY MATRIX
+  // SHEET 3: LEADER COMPETENCY MATRIX (Detailed 33 Criteria across 3 Domains)
   // ═══════════════════════════════════════════════════════════════════════════
   if (sheetOptions.includeLeaderMatrix) {
     const ws3 = workbook.addWorksheet("Leader Matrix", {
-      views: [{ state: "frozen", xSplit: 3, ySplit: 2, showGridLines: true }]
+      views: [{ state: "frozen", xSplit: 4, ySplit: 2, showGridLines: true }]
     });
 
+    // Row 1: Hierarchical Group Headers
     ws3.mergeCells("A1:G1");
     const h1Ldr = ws3.getCell("A1");
     h1Ldr.value = "LEADER PROFILE & PROCESS RESPONSIBILITY";
@@ -467,23 +476,49 @@ export const exportComprehensiveExcel = async ({
     h1Ldr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.headerDark } };
     h1Ldr.alignment = { vertical: "middle", horizontal: "center" };
 
-    ws3.mergeCells("H1:J1");
-    const h1Dom = ws3.getCell("H1");
-    h1Dom.value = "LEADER COMPETENCY DOMAINS (0 - 4 SCALE)";
-    h1Dom.font = fontHeaderDarkText;
-    h1Dom.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.leaderHeader } };
-    h1Dom.alignment = { vertical: "middle", horizontal: "center" };
-
-    ws3.mergeCells("K1:M1");
-    const h1LSum = ws3.getCell("K1");
-    h1LSum.value = "RATING & EVALUATION STATUS";
+    ws3.mergeCells("H1:K1");
+    const h1LSum = ws3.getCell("H1");
+    h1LSum.value = "DOMAIN BENCHMARKS & TOTAL (0-4 SCALE)";
     h1LSum.font = fontHeaderDarkText;
-    h1LSum.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.summaryHeader } };
+    h1LSum.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.leaderHeader } };
     h1LSum.alignment = { vertical: "middle", horizontal: "center" };
+
+    ws3.mergeCells("L1:V1");
+    const h1D1 = ws3.getCell("L1");
+    h1D1.value = "DOMAIN 1: GENERAL DRAWING CONTROL (11 ITEMS)";
+    h1D1.font = fontHeaderDarkText;
+    h1D1.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.aeroHeader } };
+    h1D1.alignment = { vertical: "middle", horizontal: "center" };
+
+    ws3.mergeCells("W1:AG1");
+    const h1D2 = ws3.getCell("W1");
+    h1D2.value = "DOMAIN 2: TOOLING INSPECTOR (11 ITEMS)";
+    h1D2.font = fontHeaderDarkText;
+    h1D2.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.toolingHeader } };
+    h1D2.alignment = { vertical: "middle", horizontal: "center" };
+
+    ws3.mergeCells("AH1:AR1");
+    const h1D3 = ws3.getCell("AH1");
+    h1D3.value = "DOMAIN 3: DRAWING VERIFICATION (11 ITEMS)";
+    h1D3.font = fontHeaderDarkText;
+    h1D3.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.othersHeader } };
+    h1D3.alignment = { vertical: "middle", horizontal: "center" };
+
+    ws3.mergeCells("AS1:AU1");
+    const h1Tier = ws3.getCell("AS1");
+    h1Tier.value = "TIER & EVALUATION STATUS";
+    h1Tier.font = fontHeaderDarkText;
+    h1Tier.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.summaryHeader } };
+    h1Tier.alignment = { vertical: "middle", horizontal: "center" };
 
     ws3.getRow(1).height = 26;
 
-    const r2Ldr = ws3.addRow([
+    // Collect all 33 criteria titles
+    const d1Criteria = LEADER_DOMAINS_DETAILED.find(d => d.key === "general_drawing_control")?.criteria || [];
+    const d2Criteria = LEADER_DOMAINS_DETAILED.find(d => d.key === "tooling_inspector")?.criteria || [];
+    const d3Criteria = LEADER_DOMAINS_DETAILED.find(d => d.key === "drawing_verification")?.criteria || [];
+
+    const r2Vals = [
       "Group",
       "Code",
       "Name",
@@ -491,54 +526,61 @@ export const exportComprehensiveExcel = async ({
       "Position",
       "Experience",
       "Process Responsibility",
-      "D1: General Drawing Control",
-      "D2: Tooling Inspector",
-      "D3: Drawing Verification",
-      "Overall Average",
-      "Competency Tier",
-      "Evaluation Status"
-    ]);
+      "D1 Avg (/4)",
+      "D2 Avg (/4)",
+      "D3 Avg (/4)",
+      "Total (/132)",
+      ...d1Criteria.map(c => `[${c.code}] ${c.nameEn}`),
+      ...d2Criteria.map(c => `[${c.code}] ${c.nameEn}`),
+      ...d3Criteria.map(c => `[${c.code}] ${c.nameEn}`),
+      "Mastery %",
+      "Tier Rating",
+      "Status"
+    ];
+
+    const r2Ldr = ws3.addRow(r2Vals);
     r2Ldr.height = 24;
-    r2Ldr.eachCell({ includeEmpty: true }, (c) => {
+    r2Ldr.eachCell({ includeEmpty: true }, (c, colIdx) => {
       c.font = fontHeaderDarkText;
-      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F2EBF9" } };
       c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
       c.border = thinBorder;
+      if (colIdx <= 7) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E9EEF4" } };
+      else if (colIdx <= 11) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F2EBF9" } };
+      else if (colIdx <= 22) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "EDF2F8" } };
+      else if (colIdx <= 33) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2E8" } };
+      else if (colIdx <= 44) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFBE6" } };
+      else c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E2EFDA" } };
     });
 
     leaderUsers.forEach((ldr, idx) => {
       const pInfo = LEADER_PROFILES_INFO[ldr.u_code] || {};
       const expStr = calculateExperience(ldr.date_of_entering_rodend || ldr.qualifications?.date_of_entering_rodend);
+      const stats = calculateLeaderCompetencyStats(ldr);
 
-      // Compute domain scores from evaluation_details.sections
-      const sections = ldr.evaluation_details?.sections || {};
-      const calcDom = (domKey) => {
-        const qList = sections[domKey] || [];
-        if (!qList.length) return "N/A";
-        const sum = qList.reduce((acc, q) => acc + Number(q.score || 0), 0);
-        const avg = (sum / qList.length).toFixed(1);
-        const pct = Math.round((sum / (qList.length * 4)) * 100);
-        return `${avg} / 4.0 (${pct}%)`;
-      };
+      const d1Scores = d1Criteria.map(c => stats.scores?.[c.key] ?? 0);
+      const d2Scores = d2Criteria.map(c => stats.scores?.[c.key] ?? 0);
+      const d3Scores = d3Criteria.map(c => stats.scores?.[c.key] ?? 0);
 
-      const d1Str = calcDom("general_drawing");
-      const d2Str = calcDom("tooling_inspector");
-      const d3Str = calcDom("drawing_verification");
+      const tierLabel = stats.percentage >= 60 ? "Senior Leader / SME" : stats.percentage >= 40 ? "Practicing Leader" : "Foundational Lead";
 
       const row = ws3.addRow([
-        ldr.user_group || "MGR",
+        ldr.user_group || "MTC",
         ldr.u_code,
         ldr.u_name,
         ldr.u_nickname || "—",
-        ldr.position || "Section Leader",
+        ldr.position || "Leader",
         expStr || "—",
         pInfo.processRole || "Engineering Leadership",
-        d1Str,
-        d2Str,
-        d3Str,
-        "Level 3 - 4",
-        "Senior Leader / SME",
-        "Official Certified"
+        stats.domains?.general_drawing_control?.avg ?? 0,
+        stats.domains?.tooling_inspector?.avg ?? 0,
+        stats.domains?.drawing_verification?.avg ?? 0,
+        stats.totalScore,
+        ...d1Scores,
+        ...d2Scores,
+        ...d3Scores,
+        `${stats.percentage}%`,
+        tierLabel,
+        "Official Certified ★"
       ]);
 
       row.height = 22;
@@ -549,11 +591,328 @@ export const exportComprehensiveExcel = async ({
         c.alignment = { vertical: "middle", horizontal: "center" };
         if (colIdx === 1 || colIdx === 2 || colIdx === 4 || colIdx === 11) c.font = fontDataBold;
         if (colIdx === 3 || colIdx === 5 || colIdx === 7) c.alignment = { vertical: "middle", horizontal: "left" };
-        if (isEven) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+        
+        // Highlight score cells
+        if (colIdx >= 12 && colIdx <= 44) {
+          const num = Number(c.value);
+          if (num === 4) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E8D8F8" } };
+          else if (num === 3) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E6F7E6" } };
+          else if (num === 2) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4E6" } };
+          else if (num === 1) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAEA" } };
+          else if (isEven) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+        } else if (isEven) {
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+        }
       });
     });
 
-    autoFitColumns(ws3, 12, 40);
+    autoFitColumns(ws3, 12, 45);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHEET: LEADER HISTORY MATRIX (Quarterly Evaluations FY22 Q1 .. FY26 Q4)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (sheetOptions.includeLeaderHistory) {
+    const wsLH = workbook.addWorksheet("Leader History Matrix", {
+      views: [{ state: "frozen", xSplit: 5, ySplit: 2, showGridLines: true }]
+    });
+
+    const d1Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "general_drawing_control")?.criteria || [];
+    const d2Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "tooling_inspector")?.criteria || [];
+    const d3Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "drawing_verification")?.criteria || [];
+    const all33Criteria = [...d1Criteria, ...d2Criteria, ...d3Criteria];
+
+    const leadersToExport = [
+      { code: "L6121", name: "Suranat Naka", role: "Tooling Inspector / Draft Man", group: "MTC", color: "EDF2F8" },
+      { code: "F1754", name: "Kanjana Janyim", role: "Clerk / Drawing Verification", group: "MAT", color: "FFF2E8" },
+      { code: "LE216", name: "Wirayut Phlaikhong", role: "Machine Program / Metrology", group: "MTC", color: "F2EBF9" },
+      { code: "LE511", name: "Kanyarat Juyjaroen", role: "Operator / Verification", group: "MAT", color: "E2EFDA" }
+    ];
+
+    const periodsToExport = LEADER_ALL_PERIODS || [
+      { key: "FY26_Q4", label: "FY26 Q4" },
+      { key: "FY26_Q3", label: "FY26 Q3" },
+      { key: "FY26_Q2", label: "FY26 Q2" },
+      { key: "FY26_Q1", label: "FY26 Q1" },
+      { key: "FY25_Q4", label: "FY25 Q4" },
+      { key: "FY25_Q3", label: "FY25 Q3" },
+      { key: "FY25_Q2", label: "FY25 Q2" },
+      { key: "FY25_Q1", label: "FY25 Q1" },
+      { key: "FY24_Q4", label: "FY24 Q4" },
+      { key: "FY24_Q3", label: "FY24 Q3" },
+      { key: "FY24_Q2", label: "FY24 Q2" },
+      { key: "FY24_Q1", label: "FY24 Q1" },
+      { key: "FY23_Q4", label: "FY23 Q4" },
+      { key: "FY23_Q3", label: "FY23 Q3" },
+      { key: "FY23_Q2", label: "FY23 Q2" },
+      { key: "FY23_Q1", label: "FY23 Q1" },
+      { key: "FY22_Q4", label: "FY22 Q4" },
+      { key: "FY22_Q3", label: "FY22 Q3" },
+      { key: "FY22_Q2", label: "FY22 Q2" },
+      { key: "FY22_Q1", label: "FY22 Q1" }
+    ];
+
+    // Row 1: Merged Titles
+    wsLH.mergeCells("A1:E1");
+    const h1Crit = wsLH.getCell("A1");
+    h1Crit.value = "LEADER COMPETENCY EVALUATION CRITERIA (33 ITEMS • 3 DOMAINS)";
+    h1Crit.font = fontHeader;
+    h1Crit.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.headerDark } };
+    h1Crit.alignment = { vertical: "middle", horizontal: "center" };
+
+    let curColIdx = 6;
+    leadersToExport.forEach((ldr) => {
+      const startCol = curColIdx;
+      const endCol = curColIdx + periodsToExport.length - 1;
+      wsLH.mergeCells(1, startCol, 1, endCol);
+      const cell = wsLH.getCell(1, startCol);
+      cell.value = `[${ldr.code}] ${ldr.name} — ${ldr.role} (${ldr.group})`;
+      cell.font = fontHeaderDarkText;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ldr.color } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      curColIdx = endCol + 1;
+    });
+
+    wsLH.getRow(1).height = 28;
+
+    // Row 2: Sub-headers
+    const row2Headers = ["Domain", "Code", "Criteria Name (English)", "Criteria Name (Thai)", "Keywords / Focus"];
+    leadersToExport.forEach(() => {
+      periodsToExport.forEach((p) => {
+        row2Headers.push(p.key.replace("_", " "));
+      });
+    });
+
+    const r2LH = wsLH.addRow(row2Headers);
+    r2LH.height = 24;
+    r2LH.eachCell({ includeEmpty: true }, (c, colIdx) => {
+      c.font = fontHeaderDarkText;
+      c.alignment = { vertical: "middle", horizontal: "center" };
+      c.border = thinBorder;
+      if (colIdx <= 5) {
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E9EEF4" } };
+      } else {
+        const ldrIdx = Math.floor((colIdx - 6) / periodsToExport.length);
+        const ldr = leadersToExport[ldrIdx];
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ldr?.color || "F0F0F0" } };
+        c.font = { name: "Arial", size: 8, bold: true };
+      }
+    });
+
+    // Populate all 33 criteria rows
+    all33Criteria.forEach((crit, rIdx) => {
+      const domName = crit.code.startsWith("GDC")
+        ? "Domain 1: General Drawing"
+        : crit.code.startsWith("TIN")
+        ? "Domain 2: Tooling Inspector"
+        : "Domain 3: Drawing Verification";
+
+      const rowVals = [
+        domName,
+        crit.code,
+        crit.nameEn,
+        crit.nameTh || "—",
+        crit.keywords || "—"
+      ];
+
+      // Fill quarters for each leader
+      leadersToExport.forEach((ldr) => {
+        const histInfo = leaderHistoricalScores[ldr.code];
+        periodsToExport.forEach((p) => {
+          const score = histInfo?.byPeriod?.[p.key]?.scores?.[crit.key];
+          rowVals.push(score !== undefined ? score : "—");
+        });
+      });
+
+      const row = wsLH.addRow(rowVals);
+      row.height = 20;
+      const isEven = rIdx % 2 === 0;
+
+      row.eachCell({ includeEmpty: true }, (c, colIdx) => {
+        c.font = fontData;
+        c.border = thinBorder;
+        c.alignment = { vertical: "middle", horizontal: colIdx >= 6 ? "center" : "left" };
+        if (colIdx === 2) {
+          c.alignment = { vertical: "middle", horizontal: "center" };
+          c.font = fontDataBold;
+        }
+
+        if (colIdx >= 6) {
+          const num = Number(c.value);
+          if (c.value === 4 || num === 4) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E8D8F8" } };
+            c.font = { name: "Arial", size: 9, bold: true, color: { argb: "722ED1" } };
+          } else if (c.value === 3 || num === 3) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E6F7E6" } };
+            c.font = { name: "Arial", size: 9, bold: true, color: { argb: "389E0D" } };
+          } else if (c.value === 2 || num === 2) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4E6" } };
+            c.font = { name: "Arial", size: 9, bold: true, color: { argb: "D46B08" } };
+          } else if (c.value === 1 || num === 1) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAEA" } };
+            c.font = { name: "Arial", size: 9, bold: true, color: { argb: "CF1322" } };
+          } else if (c.value === 0 || num === 0) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F5F5F5" } };
+            c.font = { name: "Arial", size: 9, color: { argb: "8C8C8C" } };
+          } else if (isEven) {
+            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+          }
+        } else if (isEven) {
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+        }
+      });
+    });
+
+    // Summary Rows: Total Score & Percentage for each quarter
+    const totalRowVals = ["Summary", "TOTAL", "Total Evaluation Score", "คะแนนรวมทั้งหมด (/132)", "Scale 0-4"];
+    const pctRowVals = ["Summary", "MASTERY", "Mastery Percentage", "ระดับความสามารถภาพรวม (%)", "Target ≥ 60%"];
+
+    leadersToExport.forEach((ldr) => {
+      const histInfo = leaderHistoricalScores[ldr.code];
+      periodsToExport.forEach((p) => {
+        const tot = histInfo?.byPeriod?.[p.key]?.totalScore;
+        const pct = histInfo?.byPeriod?.[p.key]?.percentage;
+        totalRowVals.push(tot !== undefined ? tot : "—");
+        pctRowVals.push(pct !== undefined ? `${pct}%` : "—");
+      });
+    });
+
+    const rTot = wsLH.addRow(totalRowVals);
+    rTot.height = 22;
+    rTot.eachCell({ includeEmpty: true }, (c, colIdx) => {
+      c.font = fontDataBold;
+      c.border = thinBorder;
+      c.alignment = { vertical: "middle", horizontal: colIdx >= 6 ? "center" : "left" };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFBE6" } };
+    });
+
+    const rPct = wsLH.addRow(pctRowVals);
+    rPct.height = 22;
+    rPct.eachCell({ includeEmpty: true }, (c, colIdx) => {
+      c.font = fontDataBold;
+      c.border = thinBorder;
+      c.alignment = { vertical: "middle", horizontal: colIdx >= 6 ? "center" : "left" };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E6F7FF" } };
+    });
+
+    autoFitColumns(wsLH, 10, 45);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHEET: LEADER CRITERIA STANDARDS (All 33 Criteria & Rubric Definitions)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (sheetOptions.includeLeaderCriteria) {
+    const wsLC = workbook.addWorksheet("Leader Criteria Standards", {
+      views: [{ state: "frozen", xSplit: 2, ySplit: 2, showGridLines: true }]
+    });
+
+    wsLC.mergeCells("A1:K1");
+    const h1LCS = wsLC.getCell("A1");
+    h1LCS.value = "SECTION LEADER COMPETENCY EVALUATION STANDARDS & BENCHMARKS (33 CRITERIA)";
+    h1LCS.font = fontHeader;
+    h1LCS.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.headerDark } };
+    h1LCS.alignment = { vertical: "middle", horizontal: "center" };
+    wsLC.getRow(1).height = 28;
+
+    const r2LCS = wsLC.addRow([
+      "Domain",
+      "Code",
+      "Criteria Name (EN)",
+      "Criteria Name (TH)",
+      "Keywords / Scope",
+      "Detailed Operational Scope / Definition",
+      "Scale",
+      "Benchmark: L6121 (Suranat)",
+      "Benchmark: F1754 (Kanjana)",
+      "Benchmark: LE216 (Wirayut)",
+      "Benchmark: LE511 (Kanyarat)"
+    ]);
+    r2LCS.height = 24;
+    r2LCS.eachCell({ includeEmpty: true }, (c, colIdx) => {
+      c.font = fontHeaderDarkText;
+      c.alignment = { vertical: "middle", horizontal: "center" };
+      c.border = thinBorder;
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colIdx <= 7 ? "E9EEF4" : "F2EBF9" } };
+    });
+
+    const d1Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "general_drawing_control")?.criteria || [];
+    const d2Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "tooling_inspector")?.criteria || [];
+    const d3Criteria = LEADER_DOMAINS_DETAILED.find((d) => d.key === "drawing_verification")?.criteria || [];
+    const allCriteria = [...d1Criteria, ...d2Criteria, ...d3Criteria];
+
+    allCriteria.forEach((crit, idx) => {
+      const sL6121 = LEADER_OFFICIAL_EVALUATIONS.L6121?.scores?.[crit.key] ?? 0;
+      const sF1754 = LEADER_OFFICIAL_EVALUATIONS.F1754?.scores?.[crit.key] ?? 0;
+      const sLE216 = LEADER_OFFICIAL_EVALUATIONS.LE216?.scores?.[crit.key] ?? 0;
+      const sLE511 = LEADER_OFFICIAL_EVALUATIONS.LE511?.scores?.[crit.key] ?? 0;
+
+      const domTitle = crit.code.startsWith("GDC")
+        ? "Domain 1: General Drawing Control"
+        : crit.code.startsWith("TIN")
+        ? "Domain 2: Tooling Inspector"
+        : "Domain 3: Drawing Verification";
+
+      const row = wsLC.addRow([
+        domTitle,
+        crit.code,
+        crit.nameEn,
+        crit.nameTh || "—",
+        crit.keywords || "—",
+        crit.desc || "—",
+        "0–4",
+        sL6121,
+        sF1754,
+        sLE216,
+        sLE511
+      ]);
+      row.height = 22;
+      const isEven = idx % 2 === 0;
+
+      row.eachCell({ includeEmpty: true }, (c, colIdx) => {
+        c.font = fontData;
+        c.border = thinBorder;
+        c.alignment = { vertical: "middle", horizontal: colIdx === 2 || (colIdx >= 7 && colIdx <= 11) ? "center" : "left" };
+        if (colIdx === 2) c.font = fontDataBold;
+        if (colIdx >= 8 && colIdx <= 11) {
+          const num = Number(c.value);
+          if (num === 4) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E8D8F8" } };
+          else if (num === 3) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "E6F7E6" } };
+          else if (num === 2) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4E6" } };
+          else if (num === 1) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAEA" } };
+          else c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F5F5F5" } };
+        } else if (isEven) {
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PALETTE.zebraRow } };
+        }
+      });
+    });
+
+    // Add Rating Scale Definitions Table at the bottom of wsLC
+    wsLC.addRow([]);
+    const rScaleTitle = wsLC.addRow(["", "RATING SCALE 0–4 DEFINITIONS (จากแบบฟอร์ม FORMAT / FORMAT MANAO)"]);
+    rScaleTitle.getCell(2).font = fontHeaderDarkText;
+
+    Object.values(LEADER_LEVEL_DEFINITIONS).forEach((def) => {
+      const defRow = wsLC.addRow([
+        "",
+        `Level ${def.level}`,
+        def.titleTh,
+        def.descTh,
+        def.descEn
+      ]);
+      defRow.height = 20;
+      defRow.eachCell({ includeEmpty: true }, (c, colIdx) => {
+        c.font = fontData;
+        c.border = thinBorder;
+        if (colIdx === 2) {
+          c.font = fontDataBold;
+          c.alignment = { vertical: "middle", horizontal: "center" };
+          const colHex = def.level === 4 ? "E8D8F8" : def.level === 3 ? "E6F7E6" : def.level === 2 ? "FFF4E6" : def.level === 1 ? "FFEAEA" : "F5F5F5";
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colHex } };
+        }
+      });
+    });
+
+    autoFitColumns(wsLC, 12, 50);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

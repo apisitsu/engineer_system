@@ -1,0 +1,3964 @@
+{
+  "Qualified person (Form)": [
+    {
+      "row": 1,
+      "values": [
+        " Employee",
+        "",
+        "",
+        "",
+        "TYPE OF PARTS AT RODEND DIVISION",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "OTHERS",
+        "",
+        "",
+        "",
+        "NECESSARY SKILL"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "AEROSPACE & COMMERCIAL",
+        "",
+        "",
+        "",
+        "TOOLING",
+        "",
+        "",
+        "",
+        "SPECIFICATION",
+        "",
+        "JUDGEMENT",
+        "APPROVAL",
+        "INDUSTRY SKILL",
+        "",
+        "",
+        "DOCUMENT",
+        "",
+        "",
+        "COMPUTOR",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "",
+        "",
+        "GENERAL",
+        "",
+        "",
+        "TOTAL\nSCORE"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "NEW MODEL",
+        "",
+        "REVISE",
+        "",
+        "NEW",
+        "",
+        "REVISE",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "M/C setup",
+        "Inspection",
+        "M/C operation",
+        "Public STD",
+        "Cust. Specification",
+        "Internal Document",
+        "CAD",
+        "Programming",
+        "Microsoft",
+        "Detail oriented",
+        "Critical Thinking",
+        "Process comprehension",
+        "Time management",
+        "Collaboration",
+        "Leadership"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "Name",
+        "ID",
+        "Section",
+        "Date of Entering Rodend",
+        "DRAW",
+        "CHECK",
+        "DRAW",
+        "CHECK",
+        "DRAW",
+        "CHECK",
+        "DRAW",
+        "CHECK",
+        "REVIEW",
+        "CHECK"
+      ]
+    }
+  ],
+  "Qualified person": [
+    {
+      "row": 1,
+      "values": [
+        " Employee",
+        "",
+        "",
+        "",
+        "",
+        "TYPE OF PARTS AT RODEND DIVISION",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "OTHERS",
+        "",
+        "",
+        "NECESSARY SKILL"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "AEROSPACE & COMMERCIAL",
+        "",
+        "",
+        "",
+        "TOOLING",
+        "",
+        "",
+        "",
+        "SPECIFICATION",
+        "",
+        "APPROVAL",
+        "INDUSTRY SKILL",
+        "",
+        "",
+        "DOCUMENT",
+        "",
+        "",
+        "COMPUTOR",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "",
+        "",
+        "GENERAL"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "NEW MODEL / NEW PROCESS",
+        "",
+        "REVISE",
+        "",
+        "NEW",
+        "",
+        "REVISE",
+        "",
+        "",
+        "",
+        "",
+        "M/C setup",
+        "Inspection",
+        "M/C operation",
+        "Public STD",
+        "Cust. Specification",
+        "Internal Document",
+        "CAD",
+        "Programming",
+        "Microsoft",
+        "Detail oriented",
+        "Critical Thinking",
+        "Process comprehension",
+        "Time management",
+        "Collaboration",
+        "Leadership"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "Name",
+        "ID",
+        "Section",
+        "Date of Entering Rodend",
+        "Experience\n(Year&Month)",
+        "DRAW / PREPARE",
+        "CHECK",
+        "DRAW / PREPARE",
+        "CHECK",
+        "DRAW / PREPARE",
+        "CHECK",
+        "DRAW / PREPARE",
+        "CHECK",
+        "REVIEW",
+        "CHECK"
+      ]
+    },
+    {
+      "row": 5,
+      "values": [
+        "Mr. Teerapol Kantapoom",
+        "LB371",
+        "Head of Engineer Department",
+        "2017-01-23 00:00:00",
+        "9Y 5M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "2",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "41"
+      ]
+    },
+    {
+      "row": 7,
+      "values": [
+        "Mr. Thapanon Prasertsom",
+        "LE031",
+        "Head of New Product Engineer",
+        "2023-08-21 00:00:00",
+        "2Y 10M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "40"
+      ]
+    },
+    {
+      "row": 8,
+      "values": [
+        "Mr. Nanthiwa Kulachan",
+        "LE131",
+        "New Product Engineer",
+        "2023-09-11 00:00:00",
+        "2Y 9M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "40"
+      ]
+    },
+    {
+      "row": 9,
+      "values": [
+        "Miss Somsuda Srisujja",
+        "LE129",
+        "New Product Engineer",
+        "2023-08-30 00:00:00",
+        "2Y 10M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "39"
+      ]
+    },
+    {
+      "row": 10,
+      "values": [
+        "Mr.Tawan Sawatdimongkhon",
+        "LE488",
+        "New Product Engineer",
+        "2025-07-23 00:00:00",
+        "0Y 11M",
+        "★",
+        "",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "",
+        "",
+        "1",
+        "2",
+        "2",
+        "2",
+        "2",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "1"
+      ]
+    },
+    {
+      "row": 12,
+      "values": [
+        "Mr. Phanuwach Thongpradab",
+        "LC043",
+        "Head of Materials Engineer",
+        "2018-06-21 00:00:00",
+        "8Y 0M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "43"
+      ]
+    },
+    {
+      "row": 13,
+      "values": [
+        "Miss Kanyarat Chokboriboon",
+        "LE140",
+        "Special Eng.",
+        "2023-09-25 00:00:00",
+        "2Y 9M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "1",
+        "39"
+      ]
+    },
+    {
+      "row": 14,
+      "values": [
+        "Miss Kunpreaw Juntawee",
+        "LC919",
+        "Fastener Eng.",
+        "2022-08-19 00:00:00",
+        "3Y 10M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "2",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "40"
+      ]
+    },
+    {
+      "row": 15,
+      "values": [
+        "Miss Nutthaporn Boonwong",
+        "LE396",
+        "Compliance Eng.",
+        "2025-03-07 00:00:00",
+        "1Y 4M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2"
+      ]
+    },
+    {
+      "row": 16,
+      "values": [
+        "Miss Pirawan Muen-Iem",
+        "LE945",
+        "QT Engineer",
+        "2025-08-09 00:00:00",
+        "0Y 10M",
+        "★",
+        "",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "",
+        "",
+        "1",
+        "2",
+        "2",
+        "2",
+        "2",
+        "3",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "1"
+      ]
+    },
+    {
+      "row": 17,
+      "values": [
+        "Mr. Ittiwat  Jantarawongsa",
+        "LE685",
+        "Special Eng.",
+        "2026-07-03 00:00:00",
+        "0Y 0M",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "row": 19,
+      "values": [
+        "Mr. Nathaporn Yammanus",
+        "A5342",
+        "Head of Process Eng.",
+        "2019-07-22 00:00:00",
+        "6Y 11M",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "",
+        "1",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "39"
+      ]
+    },
+    {
+      "row": 20,
+      "values": [
+        "Mr. Nathanon Sengsuk",
+        "LE296",
+        "Process Eng.",
+        "2024-06-17 00:00:00",
+        "2Y 0M",
+        "★",
+        "",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "",
+        "",
+        "1",
+        "2",
+        "2",
+        "2",
+        "2",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "1",
+        "36"
+      ]
+    },
+    {
+      "row": 21,
+      "values": [
+        "Mr. Jakkit Phangphan",
+        "LE299",
+        "Process Eng.",
+        "2024-07-05 00:00:00",
+        "2Y 0M",
+        "★",
+        "",
+        "★",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "",
+        "",
+        "1",
+        "2",
+        "2",
+        "2",
+        "2",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "1",
+        "36"
+      ]
+    },
+    {
+      "row": 22,
+      "values": [
+        "Mr. Sataporn  Hadsai",
+        "LE679",
+        "Process Eng.",
+        "2026-06-17 00:00:00",
+        "0Y 0M",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "row": 24,
+      "values": [
+        "Mr. Pattanapong Promyai",
+        "T1460",
+        "Head of MTC Program",
+        "2023-08-21 00:00:00",
+        "2Y 10M",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "3",
+        "2",
+        "3",
+        "2",
+        "2",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "41"
+      ]
+    },
+    {
+      "row": 25,
+      "values": [
+        "Mr. Chairat Sripratueng",
+        "LE403",
+        "Tooling & Machine Program",
+        "2025-03-24 00:00:00",
+        "1Y 3M",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "3",
+        "2",
+        "3",
+        "2",
+        "2",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "40"
+      ]
+    },
+    {
+      "row": 26,
+      "values": [
+        "Mr. Apisit Suwannakate",
+        "LE485",
+        "Tooling & Machine Program",
+        "2025-07-23 00:00:00",
+        "0Y 11M",
+        "",
+        "",
+        "",
+        "",
+        "★",
+        "★",
+        "★",
+        "★",
+        "★",
+        "",
+        "",
+        "3",
+        "2",
+        "3",
+        "2",
+        "2",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "3",
+        "2",
+        "3",
+        "3",
+        "3",
+        "41"
+      ]
+    },
+    {
+      "row": 27,
+      "values": [
+        "Ms. Jenjira  Phonprajak",
+        "LE682",
+        "Tooling & Machine Program",
+        "2026-06-17 00:00:00",
+        "0Y 0M",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "15"
+      ]
+    },
+    {
+      "row": 36,
+      "values": [
+        "Major",
+        "Minor",
+        "Level",
+        "Description Thai version",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Description English version",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Experience or Job position"
+      ]
+    },
+    {
+      "row": 37,
+      "values": [
+        "Industry skill",
+        "M/C setup",
+        "1",
+        "เข้าใจหลักการ setup M/C แต่ไม่สามารถทำด้วยตัวเองได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to understand the M/C setup principle but can't do it by themselves.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 38,
+      "values": [
+        "",
+        "",
+        "2",
+        "Set โปรแกรมได้ แต่ไม่สามารถ set tooling ได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to Setup M/C but still need some help for special things.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 39,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถ setup เองได้ set โปรแกรมเองได้ รันเองได้จนจบกระบวนการ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to Setup M/C and produce the parts till finish.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 40,
+      "values": [
+        "",
+        "Inspection",
+        "1",
+        "สามารถใช้เครื่องมือวัดได้น้อยชนิด Micrometer, Caliper",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to use basic inspection instrument ex.Micrometer, Caliper",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 41,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถใช้เครื่องมือวัดได้บางชนิด +Countour, Projector",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to use basic inspection instrument and some special instrument ex. Contour, Projector",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 42,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถใช้เครื่องมือวัดได้ทุกชนิด +CMM, IDM",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to use almost all inspection instrument and special instrument ex.CMM, IDM",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 43,
+      "values": [
+        "",
+        "M/C Operation",
+        "1",
+        "เข้าใจว่า M/C ทำอะไรยังไง",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand how M/C work",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 44,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจการทำงานของ M/C ที่สัมพันธ์กับ Tooling",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand how M/C work related with tooling that related to the parts",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 45,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจการทำงานของ M/C ทั้งหมดที่สัมพันธ์กับ Tooling ทั้งหมด",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand how M/C work related with all toolings (6 month)",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 46,
+      "values": [
+        "Document",
+        "Public STD",
+        "1",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some requirement and purpose.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 47,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด แต่สามารถเขียน แก้ไขเอกสารภายในได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some of requirement and purpose include related standards, Able to write, revise Internal document.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 48,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์ทั้งหมด และสามารถเขียน แก้ไขเอกสารภายในได้ และ สามารถ ตรวจสอบเอกสารของผู้อื่นได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise Internal document and check for others.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 49,
+      "values": [
+        "",
+        "Cust. Specification",
+        "1",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some requirement and purpose.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 50,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด แต่สามารถเขียน แก้ไขเอกสารภายในและ Drawing ได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some of requirement and purpose include related standards, Able to write, revise Internal document/Drawing.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 51,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์ทั้งหมด และสามารถเขียน แก้ไขเอกสารภายในได้ และ สามารถ ตรวจสอบเอกสารของผู้อื่นได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise Internal document and check for others",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 52,
+      "values": [
+        "",
+        "Internal Document",
+        "1",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some requirement and purpose.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 53,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์แต่ไม่ทั้งหมด แต่สามารถเขียน แก้ไขเอกสารภายในได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood some requirement and purpose include related standards, Able to write and revise document.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 54,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจข้อกำหนดและวัตถุประสงค์ทั้งหมด และสามารถเขียน แก้ไขเอกสารภายในได้ และ สามารถ ตรวจสอบเอกสารของผู้อื่นได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise document and check for others",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 55,
+      "values": [
+        "Computor",
+        "CAD",
+        "1",
+        "ใช้ ME10 เบื้องต้นได้ ใช้ Function พื้นฐานได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to use ME10 basics, able to use basic functions",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 56,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถเขียน DWG ที่ไม่ซับซ้อนมากได้ Tooling, Spare part",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to write simple DWGs Tooling, Spare part",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 57,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถเขียน DWG งานได้และตรวจเช็คให้คนอื่นได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to write DWG jobs and check for others",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 58,
+      "values": [
+        "",
+        "Programming",
+        "1",
+        "มีแนวคิด ไอเดียในการทำ auto แบบ Logic",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Have an Idea for automation with logical thinking",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 59,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถเขียนโปรแกรมได้บ้างโดยใช้ record macro และแก้ไข",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to create automatic program by recording macro and edit some parts of code.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 60,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถเขียนโค้ดเองได้ทั้งหมด, คิดแทน User, debug ต่างๆ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to write all the code by yourself, think on behalf of users, debug",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 61,
+      "values": [
+        "",
+        "Microsoft",
+        "1",
+        "ใช้โปรแกรมเพื่อทำรายงานพื้นฐานได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to use the program to make basic reports ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 62,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถใช้คำสั่งต่างๆได้ เข้าใจสูตรที่ต้องใช้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "can use various commands and understand the formula to use ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 63,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจคำสั่งทั้งหมดของโปรแกรมและความเหมาะสมในการใช้งานในแต่ละกรณี",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the full commands of the program and their suitability in each case. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 64,
+      "values": [
+        "Problem Solving",
+        "Detail oriented",
+        "1",
+        "จับใจความได้บางส่วน มีผิดบ้าง ต้องใช้คนระดับสูงกว่าตรวจสอบ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Some parts are understandable, some are wrong, need someone at a higher level to check. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 65,
+      "values": [
+        "",
+        "",
+        "2",
+        "จับใจความได้ทั้งหมด มีผิดบ้าง ต้องใช้คนระดับสูงกว่าตรวจสอบ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to understand everything,but there are some mistakes. need someone from a higher level to check. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 66,
+      "values": [
+        "",
+        "",
+        "3",
+        "จับใจความได้ทั้งหมด ไม่ตกหล่น ระดับเดียวกันตรวจสอบ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "able to understand everything without mistake, the same level might check if necessary. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 67,
+      "values": [
+        "",
+        "Critical Thinking",
+        "1",
+        "เข้าใจปัญหาว่าเป็นแบบไหน แต่ไม่รู้แน่ชัดว่าเกิดจากอะไร",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the problem but don't know exactly where it came from.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 68,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจปัญหาว่าเป็นแบบไหนและเกิดจากอะไร",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the problem and where it came from.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 69,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจและสามารถมองเห็นที่มาของปัญหา, วิธีแก้ไขและผลกระทบในทุกๆมิติ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand completely of the problem and able to find the root cause and preventive action include consequence.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 70,
+      "values": [
+        "",
+        "Process comprehension",
+        "1",
+        "เข้าใจลำดับ process ว่าต้องทำอะไรก่อนและหลัง",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the process sequence of each parts.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 71,
+      "values": [
+        "",
+        "",
+        "2",
+        "เข้าใจว่าแต่ละ process ทำอะไร เพื่ออะไร",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the operation and purpose of each processes.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 72,
+      "values": [
+        "",
+        "",
+        "3",
+        "เข้าใจว่าแต่ละ process ทำอะไร เพื่ออะไร และ standards ที่เกี่ยวข้อง",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Understand the operation and purpose of each processes include related standards.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 73,
+      "values": [
+        "General",
+        "Time management",
+        "1",
+        "ระบุกรอบเวลาทำงานได้ แต่ไม่เป็นไปตามแผนบ้าง",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Specify the working time frame. But some did not go according to plan. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 74,
+      "values": [
+        "",
+        "",
+        "2",
+        "ระบุกรอบเวลาทำงานได้ และเสร็จตรงเวลา",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Specify the working time frame. and finished on time",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 75,
+      "values": [
+        "",
+        "",
+        "3",
+        "ระบุกรอบเวลาทำงานได้ และเสร็จก่อนเวลากำหนดเสมอ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Specify the working time frame. and always finish before the scheduled time ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 76,
+      "values": [
+        "",
+        "Collaboration",
+        "1",
+        "สามารถทำงานได้เฉพาะในส่วนงานตัวเอง",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to work with their department only.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 77,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถทำงานร่วมได้กับบางส่วนงาน",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to work with some departments ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 78,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถทำงานร่วมได้กับทุกส่วนงาน",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to work with all departments ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 79,
+      "values": [
+        "",
+        "Leadership",
+        "1",
+        "นำทีมได้กับบางคน",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Can lead the team with some people. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 80,
+      "values": [
+        "",
+        "",
+        "2",
+        "สามารถนำทีมได้และสื่อสารให้ลูกทีมเข้าใจสิ่งที่ต้องทำได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to lead the team and communicate with the team members to understand what needs to be done. ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "None"
+      ]
+    },
+    {
+      "row": 81,
+      "values": [
+        "",
+        "",
+        "3",
+        "สามารถนำทีมได้และสื่อสารให้ลูกทีมเข้าใจสิ่งที่ต้องทำได้ และช่วยเป็นที่ปรึกษา วางแผน แก้ไขปัญหา ให้ได้",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Able to lead the team and communicate to the team members to understand what needs to be done. and helping to be a consultant, planning, and solving problems ",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "12 Month"
+      ]
+    }
+  ],
+  "Ver 1": [
+    {
+      "row": 1,
+      "values": [
+        "SCOPE",
+        "",
+        "",
+        "",
+        "SKILL REQUIRE"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "Major",
+        "Minor(Level)",
+        "Level"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "TYPE OF PARTS \nAT RODEND DIVISION",
+        "AEROSPACE \n&\nCOMMERCIAL",
+        "NEW MODEL",
+        "DRAW",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "1\n1\n2\n3\n3\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "1\n1\n2\n3\n3\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 5,
+      "values": [
+        "",
+        "",
+        "REVISE",
+        "DRAW",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "1\n1\n2\n2\n2\n2\n3\n2\n2\n2\n2\n2"
+      ]
+    },
+    {
+      "row": 6,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "1\n1\n2\n3\n3\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 7,
+      "values": [
+        "",
+        "TOOLING",
+        "NEW",
+        "DRAW",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "2\n1\n2\n1\n2\n2\n3\n2\n3\n2\n2\n2"
+      ]
+    },
+    {
+      "row": 8,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "3\n1\n2\n1\n2\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 9,
+      "values": [
+        "",
+        "",
+        "REVISE",
+        "DRAW",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "2\n1\n2\n1\n2\n2\n3\n2\n2\n2\n2\n2"
+      ]
+    },
+    {
+      "row": 10,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "3\n1\n2\n1\n2\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 11,
+      "values": [
+        "OTHERS",
+        "SPECIFICATION",
+        "",
+        "REVIEW",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nMicrosoft\nTime management\nCollaboration",
+        "1\n1\n1\n3\n3\n3\n2\n1\n2\n2"
+      ]
+    },
+    {
+      "row": 12,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nMicrosoft\nTime management\nCollaboration",
+        "1\n1\n1\n3\n3\n3\n2\n1\n2\n2"
+      ]
+    },
+    {
+      "row": 13,
+      "values": [
+        "",
+        "JUDGEMENT",
+        "",
+        "",
+        "INDUSTRY\n\n\nDOCUMENT\n\n\nCOMPUTER\nPROBLEM SOLVING\n\n\nGENERAL",
+        "M/C setup\nInspection\nM/C operation\nPublic STD\nCust. Specification\nInternal Document\nCAD\nDetail oriented\nCritical Thinking\nProcess comprehension\nTime management\nCollaboration",
+        "1\n1\n2\n3\n3\n3\n3\n3\n3\n3\n2\n2"
+      ]
+    },
+    {
+      "row": 14,
+      "values": [
+        "",
+        "APPROVAL"
+      ]
+    }
+  ],
+  "Skill Require": [
+    {
+      "row": 1,
+      "values": [
+        "SCOPE",
+        "",
+        "",
+        "",
+        "SKILL REQUIRE"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "Major",
+        "Minor(Level)"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "TYPE OF PARTS \nAT RODEND DIVISION",
+        "AEROSPACE \n&\nCOMMERCIAL",
+        "NEW MODEL",
+        "DRAW",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(2), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 5,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(2)"
+      ]
+    },
+    {
+      "row": 6,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(2), Process comprehension(3)"
+      ]
+    },
+    {
+      "row": 7,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 8,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 9,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(3), Cust. Specification(3), Internal Document(3)"
+      ]
+    },
+    {
+      "row": 10,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 11,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(3), Critical Thinking(3), Process comprehension(3)"
+      ]
+    },
+    {
+      "row": 12,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 13,
+      "values": [
+        "",
+        "",
+        "REVISE",
+        "DRAW",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 14,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(2), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 15,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(2)"
+      ]
+    },
+    {
+      "row": 16,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(2), Process comprehension(2)"
+      ]
+    },
+    {
+      "row": 17,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 18,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 19,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(3), Cust. Specification(3), Internal Document(3)"
+      ]
+    },
+    {
+      "row": 20,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 21,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(3), Critical Thinking(3), Process comprehension(3)"
+      ]
+    },
+    {
+      "row": 22,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 23,
+      "values": [
+        "",
+        "TOOLING",
+        "NEW",
+        "DRAW",
+        "INDUSTRY",
+        "M/C setup(2), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 24,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(1), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 25,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 26,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(2), Critical Thinking(3), Process comprehension(2)"
+      ]
+    },
+    {
+      "row": 27,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 28,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY",
+        "M/C setup(3), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 29,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(1), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 30,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 31,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(3), Critical Thinking(2), Process comprehension(2)"
+      ]
+    },
+    {
+      "row": 32,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 33,
+      "values": [
+        "",
+        "",
+        "REVISE",
+        "DRAW",
+        "INDUSTRY",
+        "M/C setup(2), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 34,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(1), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 35,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 36,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(2), Critical Thinking(3), Process comprehension(2)"
+      ]
+    },
+    {
+      "row": 37,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 38,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY",
+        "M/C setup(3), Inspection(1), M/C operation(2)"
+      ]
+    },
+    {
+      "row": 39,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(1), Cust. Specification(2), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 40,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(3)"
+      ]
+    },
+    {
+      "row": 41,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "PROBLEM SOLVING",
+        "Detail oriented(3), Critical Thinking(2), Process comprehension(2)"
+      ]
+    },
+    {
+      "row": 42,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 43,
+      "values": [
+        "OTHERS",
+        "SPECIFICATION",
+        "",
+        "REVIEW",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(1)"
+      ]
+    },
+    {
+      "row": 44,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(2), Cust. Specification(3), Internal Document(2)"
+      ]
+    },
+    {
+      "row": 45,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(2), Microsoft(1)"
+      ]
+    },
+    {
+      "row": 46,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 47,
+      "values": [
+        "",
+        "",
+        "",
+        "CHECK",
+        "INDUSTRY",
+        "M/C setup(1), Inspection(1), M/C operation(1)"
+      ]
+    },
+    {
+      "row": 48,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "DOCUMENT",
+        "Public STD(3), Cust. Specification(3), Internal Document(3)"
+      ]
+    },
+    {
+      "row": 49,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "COMPUTER",
+        "CAD(2), Microsoft(1)"
+      ]
+    },
+    {
+      "row": 50,
+      "values": [
+        "",
+        "",
+        "",
+        "",
+        "GENERAL",
+        "Time management(2), Collaboration(2)"
+      ]
+    },
+    {
+      "row": 51,
+      "values": [
+        "",
+        "APPROVAL",
+        "",
+        "",
+        "Supervisor or higher (performed by Engineering manager)"
+      ]
+    }
+  ],
+  "Skill": [
+    {
+      "row": 1,
+      "values": [
+        "Major",
+        "Minor",
+        "Level",
+        "Description English version",
+        "Experience"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "Industry skill",
+        "M/C setup",
+        "1",
+        "able to understand the M/C setup principle but can't do it by themselves.",
+        "None"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "",
+        "",
+        "2",
+        "able to Setup M/C but still need some help for special things.",
+        "None"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "",
+        "",
+        "3",
+        "able to Setup M/C and produce the parts till finish.",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 5,
+      "values": [
+        "",
+        "Inspection",
+        "1",
+        "able to use basic inspection instrument ex.Micrometer, Caliper",
+        "None"
+      ]
+    },
+    {
+      "row": 6,
+      "values": [
+        "",
+        "",
+        "2",
+        "able to use basic inspection instrument and some special instrument ex. Contour, Projector",
+        "None"
+      ]
+    },
+    {
+      "row": 7,
+      "values": [
+        "",
+        "",
+        "3",
+        "able to use almost all inspection instrument and special instrument ex.CMM, IDM",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 8,
+      "values": [
+        "",
+        "M/C Operation",
+        "1",
+        "Understand how M/C work",
+        "None"
+      ]
+    },
+    {
+      "row": 9,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understand how M/C work related with tooling that related to the parts",
+        "None"
+      ]
+    },
+    {
+      "row": 10,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understand how M/C work related with all toolings (6 month)",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 11,
+      "values": [
+        "Document",
+        "Public STD",
+        "1",
+        "Understood some requirement and purpose.",
+        "None"
+      ]
+    },
+    {
+      "row": 12,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understood some of requirement and purpose include related standards, Able to write, revise Internal document.",
+        "None"
+      ]
+    },
+    {
+      "row": 13,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise Internal document and check for others.",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 14,
+      "values": [
+        "",
+        "Cust. Specification",
+        "1",
+        "Understood some requirement and purpose.",
+        "None"
+      ]
+    },
+    {
+      "row": 15,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understood some of requirement and purpose include related standards, Able to write, revise Internal document/Drawing.",
+        "None"
+      ]
+    },
+    {
+      "row": 16,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise Internal document and check for others",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 17,
+      "values": [
+        "",
+        "Internal Document",
+        "1",
+        "Understood some requirement and purpose.",
+        "None"
+      ]
+    },
+    {
+      "row": 18,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understood some requirement and purpose include related standards, Able to write and revise document.",
+        "None"
+      ]
+    },
+    {
+      "row": 19,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understood all of requirement and purpose of each specified include related standards, Able to write, revise document and check for others",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 20,
+      "values": [
+        "Computor",
+        "CAD",
+        "1",
+        "Able to use ME10 basics, able to use basic functions",
+        "None"
+      ]
+    },
+    {
+      "row": 21,
+      "values": [
+        "",
+        "",
+        "2",
+        "Able to write simple DWGs Tooling, Spare part",
+        "None"
+      ]
+    },
+    {
+      "row": 22,
+      "values": [
+        "",
+        "",
+        "3",
+        "Able to write DWG jobs and check for others",
+        "6 Month"
+      ]
+    },
+    {
+      "row": 23,
+      "values": [
+        "",
+        "Programming",
+        "1",
+        "Have an Idea for automation with logical thinking",
+        "None"
+      ]
+    },
+    {
+      "row": 24,
+      "values": [
+        "",
+        "",
+        "2",
+        "Able to create automatic program by recording macro and edit some parts of code.",
+        "None"
+      ]
+    },
+    {
+      "row": 25,
+      "values": [
+        "",
+        "",
+        "3",
+        "Able to write all the code by yourself, think on behalf of users, debug",
+        "None"
+      ]
+    },
+    {
+      "row": 26,
+      "values": [
+        "",
+        "Microsoft",
+        "1",
+        "Able to use the program to make basic reports ",
+        "None"
+      ]
+    },
+    {
+      "row": 27,
+      "values": [
+        "",
+        "",
+        "2",
+        "can use various commands and understand the formula to use ",
+        "None"
+      ]
+    },
+    {
+      "row": 28,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understand the full commands of the program and their suitability in each case. ",
+        "None"
+      ]
+    },
+    {
+      "row": 29,
+      "values": [
+        "Problem Solving",
+        "Detail oriented",
+        "1",
+        "Some parts are understandable, some are wrong, need someone at a higher level to check. ",
+        "None"
+      ]
+    },
+    {
+      "row": 30,
+      "values": [
+        "",
+        "",
+        "2",
+        "able to understand everything,but there are some mistakes. need someone from a higher level to check. ",
+        "None"
+      ]
+    },
+    {
+      "row": 31,
+      "values": [
+        "",
+        "",
+        "3",
+        "able to understand everything without mistake, the same level might check if necessary. ",
+        "None"
+      ]
+    },
+    {
+      "row": 32,
+      "values": [
+        "",
+        "Critical Thinking",
+        "1",
+        "Understand the problem but don't know exactly where it came from.",
+        "None"
+      ]
+    },
+    {
+      "row": 33,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understand the problem and where it came from.",
+        "None"
+      ]
+    },
+    {
+      "row": 34,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understand completely of the problem and able to find the root cause and preventive action include consequence.",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 35,
+      "values": [
+        "",
+        "Process comprehension",
+        "1",
+        "Understand the process sequence of each parts.",
+        "None"
+      ]
+    },
+    {
+      "row": 36,
+      "values": [
+        "",
+        "",
+        "2",
+        "Understand the operation and purpose of each processes.",
+        "None"
+      ]
+    },
+    {
+      "row": 37,
+      "values": [
+        "",
+        "",
+        "3",
+        "Understand the operation and purpose of each processes include related standards.",
+        "12 Month"
+      ]
+    },
+    {
+      "row": 38,
+      "values": [
+        "General",
+        "Time management",
+        "1",
+        "Specify the working time frame. But some did not go according to plan. ",
+        "None"
+      ]
+    },
+    {
+      "row": 39,
+      "values": [
+        "",
+        "",
+        "2",
+        "Specify the working time frame. and finished on time",
+        "None"
+      ]
+    },
+    {
+      "row": 40,
+      "values": [
+        "",
+        "",
+        "3",
+        "Specify the working time frame. and always finish before the scheduled time ",
+        "None"
+      ]
+    },
+    {
+      "row": 41,
+      "values": [
+        "",
+        "Collaboration",
+        "1",
+        "Able to work with their department only.",
+        "None"
+      ]
+    },
+    {
+      "row": 42,
+      "values": [
+        "",
+        "",
+        "2",
+        "Able to work with some departments ",
+        "None"
+      ]
+    },
+    {
+      "row": 43,
+      "values": [
+        "",
+        "",
+        "3",
+        "Able to work with all departments ",
+        "None"
+      ]
+    },
+    {
+      "row": 44,
+      "values": [
+        "",
+        "Leadership",
+        "1",
+        "Can lead the team with some people. ",
+        "None"
+      ]
+    },
+    {
+      "row": 45,
+      "values": [
+        "",
+        "",
+        "2",
+        "Able to lead the team and communicate with the team members to understand what needs to be done. ",
+        "None"
+      ]
+    },
+    {
+      "row": 46,
+      "values": [
+        "",
+        "",
+        "3",
+        "Able to lead the team and communicate to the team members to understand what needs to be done. and helping to be a consultant, planning, and solving problems ",
+        "12 Month"
+      ]
+    }
+  ],
+  "Job description": [
+    {
+      "row": 1,
+      "values": [
+        "Job description (content)",
+        "",
+        "Required skill"
+      ]
+    },
+    {
+      "row": 2,
+      "values": [
+        "Daily Job",
+        "Document review (Public Standards, Customer Specifications)\n - Verify revisions of public STDs, Customer specifications.\n - Issue CCB (If changed)",
+        "•Document Public STD 3\n•Document Cust. Specification 3\n•Document Internal Document 2\n•Computor Microsoft 1\n•Problem Solving  Detail oriented 3, Process comprehension 3\n"
+      ]
+    },
+    {
+      "row": 3,
+      "values": [
+        "",
+        "Analysis and Problem solving (For Drawing, Design)\n - On-site analysis and solving\n - Statistical analysis and solving\n - Data model analysis and solving\n - Solution Design",
+        "•Industry Inspection 2, M/C operation 2\n•Computor CAD 1, Microsoft 2\n•Problem solving Detail oriented 3, Critical thinking 3, Process comprehension 3\n•General Time management 2, Collaboration 1, Leader ship 1"
+      ]
+    },
+    {
+      "row": 4,
+      "values": [
+        "",
+        "Improvement and Developement (For Drawing, Design)\n - Time consuming process\n - Cost reduction\n - Quality improvement",
+        "•Industry M/C operation 2\n•Computor CAD I, Programming 1\n•Problem solving Detail oriented 2, Critical thinking 2, Process comprehension 2\n•General Time management 2, Collaboration 2, Leader ship 2"
+      ]
+    },
+    {
+      "row": 5,
+      "values": [
+        "",
+        "Print Drawing and Confirm (FAI)\n - Verify Drawing and Traveler sheet\n - Identify FAI lot",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3"
+      ]
+    },
+    {
+      "row": 6,
+      "values": [
+        "",
+        "General Drawing and Layout\n - Tooling Drawing, etc\n - Machine layout",
+        "•Industry M/C setup 2, M/C operation 2\n•Computor CAD 2\n•Problem solving Detail oriented I, Process comprehension 1\n•General Time management 1"
+      ]
+    },
+    {
+      "row": 8,
+      "values": [
+        "Change (ECN)",
+        "Issue CCB / ECN\n - Summary and Input details of change (FAI, CN to Customer, etc….)\n - Announce to Concern Department",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3, Process comprehension 3\n"
+      ]
+    },
+    {
+      "row": 9,
+      "values": [
+        "",
+        "Revise Drawing\n - Revise by hand or CAD (According to ECN)",
+        "•Computor CAD 1\n•Problem solving Detail oriented 1, Process comprehension 1\n•General Time management 1"
+      ]
+    },
+    {
+      "row": 10,
+      "values": [
+        "",
+        "Revise Engineer Document\n - Review and revise Engineer Document (Procrdure, WI, Reminder)",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3\n•General Time management 1"
+      ]
+    },
+    {
+      "row": 11,
+      "values": [
+        "",
+        "M/C Condition\n - Update program, M/C conditions",
+        "•Industry M/C setup 3, M/C operation 3\n•General Collaboration 2"
+      ]
+    },
+    {
+      "row": 13,
+      "values": [
+        "New Model\nProject",
+        "Review Customer specification, Requirement\n - Issue CCB\n - Consider requirement for accuracy, test, special process, applicable specifications, type of products, quantity, delivery, price, sample",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3, Critical Thinking 3, Process comprehension 3"
+      ]
+    },
+    {
+      "row": 14,
+      "values": [
+        "",
+        "Contact sale member or Customer (If need)\n - All information\n - Questions for certain requirements are unclear",
+        "•Computor Microsoft 3\n•Problem Solving  Detail oriented 3, Process comprehension 3\n•General Collaboration 2"
+      ]
+    },
+    {
+      "row": 15,
+      "values": [
+        "",
+        "New model planning and Meeting\n - Make schedule\n - Summary all requirement and Initial design \n - Contract review and meeting (All concern)",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3, Process comprehension 3\n•General Time management 3, Collaboration 3, Leader ship 2"
+      ]
+    },
+    {
+      "row": 16,
+      "values": [
+        "",
+        "Design (Process flow, Drawing, Engineer Internal Document)\n - Issue DPR (Design and process review), Specification Review\n - Sale Drawing approved by Customer (QTP if require)\n - Prepare Drawing and Process for test (incloud Tooling Drawing)\n - Simulate design,M/C program by Simulator\n - Prepare document (Internal document, PPAP, PFMEA, Process KCs, Process flow, etc…)",
+        "•Industry M/C setup 1, M/C Operation 3\n•Computor  CAD 3, Microsoft 3\n•Problem solving Detail oriented 3, Critical Thinking 2, Process comprehension 3\n•General Time management 3, Collaboration 1"
+      ]
+    },
+    {
+      "row": 17,
+      "values": [
+        "",
+        "Test design,M/C Condition and Make Drawing\n - Perform Test design and M/C conditions\n - Review, improve Drawing/Process design and determine corrective actions\n - Summary final design",
+        "•Industry M/C setup 3, Inspection 2, M/C Operation 3\n•Computor CAD 1\n•Problem solving Detial oriented 2, Critical thinking 3, Process comprehension 2\n•General Timemangement 2, Collaboration 3, Leader ship 1"
+      ]
+    },
+    {
+      "row": 18,
+      "values": [
+        "",
+        "Review the results of production process test and Summarize\n - Summary and Make document (Internal document, PPAP, PFMEA, Process KCs, Process flow, etc…)",
+        "•Computor Microsoft 3\n•Problem Solving  Detail oriented 3, Process comprehension 3\n•General Time management 2"
+      ]
+    },
+    {
+      "row": 19,
+      "values": [
+        "",
+        "Issue Drawing\n - Drawing Finish (Enable condition)\n - Announce to Concern Department, Issue Drawing ,Document and machine program/Tooling (For Pre-mass production)\n - Summary result of Pre-Production/Qualification lot",
+        "•Computor Microsoft 1\n•Problem Solving  Detail oriented 3\n•General Time management 2, Collaboration 2"
+      ]
+    },
+    {
+      "row": 20,
+      "values": [
+        "",
+        "Customer submit\n - PPAP, PCD, QTR, Special document(If require) Approved by Customer",
+        "•Computor Microsoft 3\n•Problem Solving Detail oriented 3, Process comprehension 2\n•General Time management 2, Collaboration 2"
+      ]
+    }
+  ]
+}

@@ -162,6 +162,8 @@ const getUsers = async (req, res) => {
                 s.detail_oriented, s.critical_thinking, s.process_comprehension,
                 s.time_management, s.collaboration, s.leadership,
                 s.qualifications,
+                s.leader_skills,
+                s.evaluation_type,
                 s.evaluation_details,
                 s.evaluation_history
             FROM m_user_profile u
@@ -700,33 +702,46 @@ const getQualificationCriteria = async (req, res) => {
 // 14. Save/Update Qualification Criteria
 const saveQualificationCriteria = async (req, res) => {
     try {
-        const { qualification_columns, skill_definitions, updated_by } = req.body;
+        const qualification_columns = req.body.qualification_columns || req.body.qualificationColumns;
+        const skill_definitions = req.body.skill_definitions || req.body.skillDefinitions;
+        const leader_criteria = req.body.leader_criteria || req.body.leaderCriteria;
+        const updated_by = req.body.updated_by || req.user?.empno || 'SYSTEM';
 
-        if (!qualification_columns || !Array.isArray(qualification_columns)) {
-            return res.status(400).json({ result: 'false', message: 'qualification_columns array is required' });
-        }
+        // Ensure leader_criteria column exists
+        await engPool.query(`
+            ALTER TABLE m_qualification_criteria 
+            ADD COLUMN IF NOT EXISTS leader_criteria JSONB;
+        `);
 
         const query = `
-            INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, updated_by, updated_at)
-            VALUES ('default', $1, $2, $3, NOW())
+            INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, leader_criteria, updated_by, updated_at)
+            VALUES ('default', 
+                COALESCE($1, '[]'::jsonb), 
+                COALESCE($2, '[]'::jsonb), 
+                COALESCE($3, '[]'::jsonb), 
+                $4, 
+                NOW()
+            )
             ON CONFLICT (criteria_key) DO UPDATE SET
-                qualification_columns = EXCLUDED.qualification_columns,
-                skill_definitions = COALESCE(EXCLUDED.skill_definitions, m_qualification_criteria.skill_definitions),
+                qualification_columns = CASE WHEN $1 IS NOT NULL THEN $1 ELSE m_qualification_criteria.qualification_columns END,
+                skill_definitions = CASE WHEN $2 IS NOT NULL THEN $2 ELSE m_qualification_criteria.skill_definitions END,
+                leader_criteria = CASE WHEN $3 IS NOT NULL THEN $3 ELSE m_qualification_criteria.leader_criteria END,
                 updated_by = EXCLUDED.updated_by,
                 updated_at = NOW()
             RETURNING *;
         `;
 
         const result = await engPool.query(query, [
-            JSON.stringify(qualification_columns),
-            JSON.stringify(skill_definitions || []),
-            updated_by || req.user?.empno || 'SYSTEM'
+            qualification_columns ? JSON.stringify(qualification_columns) : null,
+            skill_definitions ? JSON.stringify(skill_definitions) : null,
+            leader_criteria ? JSON.stringify(leader_criteria) : null,
+            updated_by
         ]);
 
         await logAction(
-            updated_by || req.user?.empno || 'SYSTEM',
+            updated_by,
             'UPDATE_QUALIFICATION_CRITERIA',
-            `Updated qualification criteria (${qualification_columns.length} columns configured)`
+            `Updated qualification criteria: ${qualification_columns ? qualification_columns.length + ' staff roles' : ''} ${skill_definitions ? skill_definitions.length + ' skills' : ''} ${leader_criteria ? leader_criteria.length + ' leader criteria' : ''}`
         );
 
         res.json({

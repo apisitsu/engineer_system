@@ -4,6 +4,24 @@
 // Sheets: 'Qualified person', 'Skill Require'
 // ============================================================================
 
+import {
+  LEADER_DOMAINS_DETAILED,
+  LEADER_ALL_CRITERIA_FLAT,
+  LEADER_LEVEL_DEFINITIONS,
+  LEADER_OFFICIAL_EVALUATIONS,
+  calculateLeaderCompetencyStats,
+  leaderRawSheets,
+  leaderHistoricalScores,
+  LEADER_ALL_PERIODS
+} from "./excelData/leaderData.js";
+
+import {
+  STAFF_LEVEL_DEFINITIONS,
+  STAFF_QUALIFIED_PERSONS,
+  STAFF_JOB_DESCRIPTIONS,
+  staffRawSheets
+} from "./excelData/staffData.js";
+
 export const SKILL_LABELS = {
   mc_setup: "M/C Setup",
   inspection: "Inspection",
@@ -778,6 +796,21 @@ export const calculateExperience = (dateVal) => {
   return `${years}Y ${months}M`;
 };
 
+export {
+  LEADER_DOMAINS_DETAILED,
+  LEADER_ALL_CRITERIA_FLAT,
+  LEADER_LEVEL_DEFINITIONS,
+  LEADER_OFFICIAL_EVALUATIONS,
+  calculateLeaderCompetencyStats,
+  leaderRawSheets,
+  leaderHistoricalScores,
+  LEADER_ALL_PERIODS,
+  STAFF_LEVEL_DEFINITIONS,
+  STAFF_QUALIFIED_PERSONS,
+  STAFF_JOB_DESCRIPTIONS,
+  staffRawSheets
+};
+
 // Known leader user codes from system & Excel
 export const LEADER_USER_CODES = ["L6121", "F1754", "LE216", "LE511"];
 
@@ -798,86 +831,59 @@ export const isLeaderUser = (user) => {
   return false;
 };
 
-// Leader Competency Domains from 'Evaluation Form for ENG-2026.xlsx'
-export const LEADER_DOMAINS = [
-  {
-    key: "general_drawing",
-    title: "1. General Drawing Control",
-    titleTh: "General Drawing Control (ME10 / Drafting / Jigs)",
-    icon: "📐",
-    accentColor: "#1890ff",
-    skills: [
-      { key: "drawing_drafting", name: "Drawing Drafting", max: 4 },
-      { key: "me10_basic", name: "ME10 Basic Command", max: 4 },
-      { key: "teaching_me10", name: "Teaching ME10", max: 4 },
-      { key: "jig_fixture_concept", name: "Jig & Fixture Concept", max: 4 },
-      { key: "jig_fixture_design", name: "Jig & Fixture Design", max: 4 },
-      { key: "drawing_symbols", name: "Drawing Symbols & Tolerances", max: 4 },
-      { key: "drawing_database", name: "Drawing Database Management", max: 4 },
-      { key: "target_delivery", name: "Target Delivery Control", max: 4 }
-    ]
-  },
-  {
-    key: "tooling_inspector",
-    title: "2. Tooling Inspector",
-    titleTh: "Tooling Inspection & Control (CMM / Contour)",
-    icon: "🔬",
-    accentColor: "#fa8c16",
-    skills: [
-      { key: "purchase_tooling_sys", name: "Purchase Tooling System", max: 4 },
-      { key: "tooling_purpose", name: "Tooling Purpose & Function", max: 4 },
-      { key: "tooling_advisory", name: "Tooling Advisory", max: 4 },
-      { key: "basic_instruments", name: "Basic Instruments", max: 4 },
-      { key: "instrument_selection", name: "Instrument Selection", max: 4 },
-      { key: "cmm_operation", name: "CMM Operation", max: 4 },
-      { key: "contour_projector", name: "Contour Projector", max: 4 },
-      { key: "dimensional_reporting", name: "Dimensional Reporting", max: 4 },
-      { key: "out_of_spec_action", name: "Out-of-Spec Corrective Action", max: 4 },
-      { key: "target_return_otd", name: "Target Return OTD", max: 4 }
-    ]
-  },
-  {
-    key: "drawing_verification",
-    title: "3. Drawing Verification",
-    titleTh: "Drawing Verification per WI-DV-EN-000001",
-    icon: "📑",
-    accentColor: "#52c41a",
-    skills: [
-      { key: "wi_dv_compliance", name: "WI-DV-EN-000001 Compliance", max: 4 },
-      { key: "training_wi_dv", name: "Training WI-DV-EN-000001", max: 4 },
-      { key: "read_drawing_symbols", name: "Read Drawing Symbols", max: 4 },
-      { key: "anomaly_detection", name: "Anomaly Detection", max: 4 },
-      { key: "anomaly_action", name: "Anomaly Action", max: 4 },
-      { key: "otd_traveler_pc", name: "OTD Traveler Sheet & PC", max: 4 },
-      { key: "lot_release_priority", name: "Lot Release Priority Control", max: 4 }
-    ]
-  }
-];
+// Complete Leader Competency Domains from 'Evaluation Form for ENG-2026.xlsx' (3 Domains, 11 criteria each)
+export const LEADER_DOMAINS = LEADER_DOMAINS_DETAILED.map(d => ({
+  key: d.key,
+  title: `${d.domainNum}. ${d.titleEn}`,
+  titleTh: `${d.titleTh} (${d.subTitle})`,
+  subTitle: d.subTitle,
+  icon: d.icon,
+  accentColor: d.color,
+  tagColor: d.tagColor,
+  skills: d.criteria.map(c => ({
+    key: c.key,
+    code: c.code,
+    name: c.nameEn,
+    nameTh: c.nameTh,
+    keywords: c.keywords,
+    desc: c.desc,
+    max: c.maxScore
+  }))
+}));
 
 export const LEADER_PROFILES_INFO = {
   L6121: {
-    nameTh: "Suranat Naka",
-    processRole: "Tooling & Machine Development Leader",
-    focusDomain: "General Drawing & Tooling Inspection",
-    group: "MTC"
+    nameTh: "Mr. Suranat Naka",
+    processRole: "Tooling Inspector/Draft Man",
+    focusDomain: "Domain 1 & 2: General Drawing & Tooling Inspector",
+    group: "MTC",
+    totalScore: 79,
+    percentage: 60
   },
   F1754: {
-    nameTh: "Kanjana Janyim",
-    processRole: "Materials & Heat Treatment Leader",
-    focusDomain: "Drawing Verification & Process Control",
-    group: "MAT"
+    nameTh: "Miss Kanjana Janyim",
+    processRole: "Clerk",
+    focusDomain: "Domain 3: Drawing Verification (WI-DV-EN-000001)",
+    group: "MAT",
+    totalScore: 44,
+    percentage: 33
   },
   LE216: {
-    nameTh: "Wirayut Phlaikhong",
-    processRole: "Tooling & Fixture Engineering Leader",
-    focusDomain: "Tooling Design & Inspection",
-    group: "MTC"
+    nameTh: "Mr. Wirayut Phlaikhong",
+    processRole: "Machine Program",
+    focusDomain: "Domain 1 & 2: Machine Program & Tooling Inspection",
+    group: "MTC",
+    totalScore: 60,
+    percentage: 45
   },
   LE511: {
-    nameTh: "Kanyarat Juyjaroen",
-    processRole: "Materials Testing & Specification Leader",
-    focusDomain: "Materials Inspection & Verification",
-    group: "MAT"
+    nameTh: "MS. KANYARAT JUYJAROEN",
+    processRole: "Operator",
+    focusDomain: "Domain 3: Drawing Verification & Inspection",
+    group: "MAT",
+    totalScore: 36,
+    percentage: 27
   }
 };
+
 

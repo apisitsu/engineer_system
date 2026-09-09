@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import {
   Row, Col, Card, Typography, Tag, Avatar, Button, Input, Select,
-  Space, Tooltip, Table, Modal, Popover, Alert, Segmented, Progress, Badge, Switch
+  Space, Tooltip, Table, Modal, Popover, Alert, Segmented, Progress, Badge, Switch, message
 } from "antd";
 import {
   SafetyCertificateOutlined, TrophyOutlined, CheckCircleOutlined,
@@ -9,8 +9,10 @@ import {
   InfoCircleOutlined, AppstoreOutlined, TableOutlined, StarFilled,
   CrownOutlined, TeamOutlined, ThunderboltOutlined, CheckOutlined,
   RocketOutlined, ToolOutlined, FileProtectOutlined, FolderOutlined,
-  FileExcelOutlined
+  FileExcelOutlined, HistoryOutlined, SaveOutlined, CloseOutlined
 } from "@ant-design/icons";
+import axios from "axios";
+import { server } from "../../../../constance/constance";
 import { useTheme } from "../../../../theme";
 import {
   QUALIFICATION_COLUMNS,
@@ -21,8 +23,16 @@ import {
   USER_GROUP_ORDER,
   isLeaderUser,
   LEADER_PROFILES_INFO,
-  calculateExperience
+  calculateExperience,
+  LEADER_DOMAINS_DETAILED,
+  LEADER_ALL_CRITERIA_FLAT,
+  calculateLeaderCompetencyStats,
+  LEADER_LEVEL_DEFINITIONS,
+  LEADER_OFFICIAL_EVALUATIONS,
+  leaderHistoricalScores,
+  LEADER_ALL_PERIODS
 } from "./qualificationCriteria";
+import ExcelSheetsExplorer from "./ExcelSheetsExplorer";
 
 const { Text } = Typography;
 
@@ -73,6 +83,12 @@ const QualificationSummaryView = ({
   // 2. Matrix Category: 'staff' (Staff & Engineer Matrix) | 'leader' (Leader Competency Matrix)
   const [matrixCategory, setMatrixCategory] = useState("staff");
 
+  // Leader View Mode: 'detailed' (All 33 Criteria Columns) | 'summary' (3 Domain Summary Columns)
+  const [leaderViewMode, setLeaderViewMode] = useState("detailed");
+
+  // Excel Sheets Explorer Modal
+  const [explorerModalOpen, setExplorerModalOpen] = useState(false);
+
   // 3. Controlled Table Pagination
   const [tablePagination, setTablePagination] = useState({
     current: 1,
@@ -87,6 +103,91 @@ const QualificationSummaryView = ({
 
   // Criteria Info Modal
   const [criteriaModalOpen, setCriteriaModalOpen] = useState(false);
+  const [criteriaModalCategory, setCriteriaModalCategory] = useState("staff");
+  const [modalLeaderPeriod, setModalLeaderPeriod] = useState("LATEST");
+  const [modalLeaderView, setModalLeaderView] = useState("table"); // 'table' | 'cards' | 'trend'
+  const [modalLeaderDomain, setModalLeaderDomain] = useState("ALL");
+  const [modalLeaderSearch, setModalLeaderSearch] = useState("");
+  const [modalTrendLeader, setModalTrendLeader] = useState("L6121");
+  const [isEditingModalScores, setIsEditingModalScores] = useState(false);
+  const [savingModalScores, setSavingModalScores] = useState(false);
+  const [editedModalScores, setEditedModalScores] = useState({});
+
+  const handleStartEditModalScores = () => {
+    const initialScores = {};
+    const leaderCodes = ["L6121", "F1754", "LE216", "LE511"];
+    leaderCodes.forEach((uCode) => {
+      let srcScores = {};
+      if (modalLeaderPeriod === "LATEST") {
+        srcScores = LEADER_OFFICIAL_EVALUATIONS[uCode]?.scores || {};
+      } else {
+        srcScores = leaderHistoricalScores[uCode]?.byPeriod?.[modalLeaderPeriod]?.scores || {};
+      }
+      initialScores[uCode] = { ...srcScores };
+    });
+    setEditedModalScores(initialScores);
+    setIsEditingModalScores(true);
+  };
+
+  const handleCancelEditModalScores = () => {
+    setIsEditingModalScores(false);
+    setEditedModalScores({});
+  };
+
+  const handleModalScoreChange = (uCode, criterionKey, val) => {
+    setEditedModalScores((prev) => ({
+      ...prev,
+      [uCode]: {
+        ...(prev[uCode] || {}),
+        [criterionKey]: Number(val)
+      }
+    }));
+  };
+
+  const handleSaveModalScores = async () => {
+    setSavingModalScores(true);
+    try {
+      const leaderCodes = ["L6121", "F1754", "LE216", "LE511"];
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      await Promise.all(
+        leaderCodes.map((uCode) => {
+          const scores = editedModalScores[uCode];
+          if (!scores) return Promise.resolve();
+          const endpoint = `${server.USER_MANAGEMENT_SKILLS}/${uCode}`;
+          return axios.put(
+            endpoint,
+            {
+              evaluation_type: "leader",
+              leader_skills: scores
+            },
+            { headers }
+          );
+        })
+      );
+      message.success("Leader competency scores saved and updated successfully!");
+      setIsEditingModalScores(false);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error("Save leader score error:", err);
+      message.error(err?.response?.data?.message || "Failed to save leader competency scores");
+    } finally {
+      setSavingModalScores(false);
+    }
+  };
+
+  const getScoreInModal = useCallback((uCode, criterionKey) => {
+    if (isEditingModalScores && editedModalScores[uCode]) {
+      return editedModalScores[uCode][criterionKey] ?? 0;
+    }
+    if (modalLeaderPeriod === "LATEST") {
+      return LEADER_OFFICIAL_EVALUATIONS[uCode]?.scores?.[criterionKey] ?? 0;
+    }
+    const pData = leaderHistoricalScores[uCode]?.byPeriod?.[modalLeaderPeriod];
+    if (!pData) return null;
+    return pData.scores?.[criterionKey] ?? 0;
+  }, [isEditingModalScores, editedModalScores, modalLeaderPeriod]);
 
   // ── Qualification & Certification Editor Modal State ──────────────────────
   const [qualModalOpen, setQualModalOpen] = useState(false);
@@ -343,16 +444,12 @@ const QualificationSummaryView = ({
     };
   }, [evaluatedStaffUsers, qualificationMode, effectiveQualColumns]);
 
-  // Helper: compute leader domain scores from evaluation_details.sections
+  // Helper: compute leader domain scores from calculateLeaderCompetencyStats (merging DB & Excel baseline)
   const getLeaderDomainScore = useCallback((leader, domainKey) => {
-    const sections = leader.evaluation_details?.sections || {};
-    const questions = sections[domainKey] || [];
-    if (!questions.length) return { totalScore: 0, maxScore: 44, percentage: 0, count: 0, avg: 0 };
-    const totalScore = questions.reduce((sum, q) => sum + Number(q.score || 0), 0);
-    const maxScore = questions.length * 4;
-    const avg = Number((totalScore / questions.length).toFixed(1));
-    const percentage = Math.round((totalScore / maxScore) * 100);
-    return { totalScore, maxScore, percentage, count: questions.length, avg };
+    const stats = calculateLeaderCompetencyStats(leader);
+    const d = stats.domains?.[domainKey];
+    if (!d) return { totalScore: 0, maxScore: 44, percentage: 0, count: 11, avg: 0 };
+    return { totalScore: d.total, maxScore: d.max, percentage: d.percentage, count: 11, avg: d.avg };
   }, []);
 
   // ── 5. Helper: Quick User Action Popover Content (Staff) ───────────────────
@@ -839,12 +936,12 @@ const QualificationSummaryView = ({
 
   // ── 7. Build Leader Competency Matrix Table Columns ────────────────────────
   const leaderTableColumns = useMemo(() => {
-    return [
+    const baseInfoCols = [
       {
         title: "Group",
         dataIndex: "user_group",
         key: "user_group",
-        width: 100,
+        width: 90,
         align: "center",
         fixed: "left",
         render: (group) => {
@@ -864,14 +961,14 @@ const QualificationSummaryView = ({
         dataIndex: "u_code",
         key: "leader_info",
         fixed: "left",
-        width: 230,
+        width: 220,
         render: (_, record) => (
           <div
             onClick={() => onOpenSkillDrawer && onOpenSkillDrawer(record)}
             style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
           >
             <Avatar
-              size={38}
+              size={36}
               src={getProfileImgSrc(record.profile_img_b64)}
               icon={<CrownOutlined />}
               style={{
@@ -898,7 +995,7 @@ const QualificationSummaryView = ({
         title: "Process Responsibility & Focus",
         dataIndex: "u_code",
         key: "process_role",
-        width: 240,
+        width: 220,
         render: (code) => {
           const info = LEADER_PROFILES_INFO[code];
           return (
@@ -907,168 +1004,699 @@ const QualificationSummaryView = ({
                 {info?.processRole || "Section Leader"}
               </div>
               <div style={{ fontSize: "11px", color: theme.colors.textSecondary }}>
-                Focus: {info?.focusDomain || "Engineering & Verification"}
+                {info?.focusDomain || "Engineering & Verification"}
               </div>
             </div>
           );
         }
-      },
-      {
+      }
+    ];
+
+    const rpgPowersCol = {
+      title: "Leader RPG Powers",
+      key: "rpg_powers",
+      width: 160,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          <div style={{ fontSize: "12px", fontWeight: 800, color: theme.colors.primary }}>
+            <ThunderboltOutlined style={{ color: "#faad14", marginRight: 4 }} />
+            Power Score: {record.total_score || 0}
+          </div>
+          <Space size={4} wrap>
+            <Tag color="red" style={{ fontSize: "9px", margin: 0 }}>ATK {record.atk || 0}</Tag>
+            <Tag color="blue" style={{ fontSize: "9px", margin: 0 }}>DEF {record.def || 0}</Tag>
+            <Tag color="green" style={{ fontSize: "9px", margin: 0 }}>HP {record.hp || 0}</Tag>
+            <Tag color="purple" style={{ fontSize: "9px", margin: 0 }}>MP {record.mp || 0}</Tag>
+          </Space>
+        </Space>
+      )
+    };
+
+    const actionCol = {
+      title: "Actions",
+      key: "actions",
+      fixed: "right",
+      width: 130,
+      align: "center",
+      render: (_, record) => (
+        <Space size={6}>
+          <Tooltip title="Calibrate Leader Evaluation Form (33 Skills)">
+            <Button
+              type="primary"
+              size="small"
+              icon={<TrophyOutlined />}
+              onClick={() => onOpenSkillDrawer && onOpenSkillDrawer(record)}
+              style={{ borderRadius: "6px", background: "#faad14", borderColor: "#faad14", color: "#000", fontWeight: 700 }}
+            >
+              Calibrate
+            </Button>
+          </Tooltip>
+          {canManageUsers && onEditUser && (
+            <Tooltip title="Edit Profile">
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => onEditUser(record)}
+                style={{ borderRadius: "6px" }}
+              />
+            </Tooltip>
+          )}
+        </Space>
+      )
+    };
+
+    // Branch A: Detailed View (All 33 Criteria Columns explicitly shown per domain)
+    if (leaderViewMode === "detailed") {
+      const d1 = LEADER_DOMAINS_DETAILED[0];
+      const d1Cols = d1.criteria.map((c) => ({
+        title: (
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+            <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
+              <div style={{ fontSize: "10px", fontWeight: 800, color: "#1890ff" }}>{c.code}</div>
+              <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
+                {c.keywords.split(",")[0]}
+              </div>
+            </div>
+          </Tooltip>
+        ),
+        key: `d1_${c.key}`,
+        width: 76,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const val = Number(stats.scores?.[c.key] !== undefined ? stats.scores[c.key] : 0);
+          const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
+          const rubric = LEADER_LEVEL_DEFINITIONS[val];
+          return (
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+              <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
+                {val}
+              </Tag>
+            </Tooltip>
+          );
+        }
+      }));
+
+      d1Cols.push({
+        title: <div style={{ textAlign: "center", fontWeight: 800, color: "#1890ff", fontSize: "11px" }}>D1 Avg</div>,
+        key: "d1_avg",
+        width: 78,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const d = stats.domains?.general_drawing_control;
+          return <Tag color="blue" style={{ fontWeight: 800 }}>{d?.avg || 0}</Tag>;
+        }
+      });
+
+      const d2 = LEADER_DOMAINS_DETAILED[1];
+      const d2Cols = d2.criteria.map((c) => ({
+        title: (
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+            <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
+              <div style={{ fontSize: "10px", fontWeight: 800, color: "#fa8c16" }}>{c.code}</div>
+              <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
+                {c.keywords.split(",")[0]}
+              </div>
+            </div>
+          </Tooltip>
+        ),
+        key: `d2_${c.key}`,
+        width: 76,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const val = Number(stats.scores?.[c.key] !== undefined ? stats.scores[c.key] : 0);
+          const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
+          const rubric = LEADER_LEVEL_DEFINITIONS[val];
+          return (
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+              <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
+                {val}
+              </Tag>
+            </Tooltip>
+          );
+        }
+      }));
+
+      d2Cols.push({
+        title: <div style={{ textAlign: "center", fontWeight: 800, color: "#fa8c16", fontSize: "11px" }}>D2 Avg</div>,
+        key: "d2_avg",
+        width: 78,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const d = stats.domains?.tooling_inspector;
+          return <Tag color="orange" style={{ fontWeight: 800 }}>{d?.avg || 0}</Tag>;
+        }
+      });
+
+      const d3 = LEADER_DOMAINS_DETAILED[2];
+      const d3Cols = d3.criteria.map((c) => ({
+        title: (
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+            <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
+              <div style={{ fontSize: "10px", fontWeight: 800, color: "#52c41a" }}>{c.code}</div>
+              <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
+                {c.keywords.split(",")[0]}
+              </div>
+            </div>
+          </Tooltip>
+        ),
+        key: `d3_${c.key}`,
+        width: 76,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const val = Number(stats.scores?.[c.key] !== undefined ? stats.scores[c.key] : 0);
+          const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
+          const rubric = LEADER_LEVEL_DEFINITIONS[val];
+          return (
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+              <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
+                {val}
+              </Tag>
+            </Tooltip>
+          );
+        }
+      }));
+
+      d3Cols.push({
+        title: <div style={{ textAlign: "center", fontWeight: 800, color: "#52c41a", fontSize: "11px" }}>D3 Avg</div>,
+        key: "d3_avg",
+        width: 78,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          const d = stats.domains?.drawing_verification;
+          return <Tag color="green" style={{ fontWeight: 800 }}>{d?.avg || 0}</Tag>;
+        }
+      });
+
+      const totalPointsCol = {
+        title: (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: 800, color: theme.colors.primary }}>Total Score</div>
+            <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>Max 132 pts</div>
+          </div>
+        ),
+        key: "leader_total_score",
+        width: 120,
+        align: "center",
+        render: (_, record) => {
+          const stats = calculateLeaderCompetencyStats(record);
+          return (
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "13px", color: theme.colors.primary }}>
+                {stats.totalScore} / 132
+              </div>
+              <Tag color="cyan" style={{ fontSize: "10px", margin: 0 }}>
+                {stats.percentage}%
+              </Tag>
+            </div>
+          );
+        }
+      };
+
+      const group1Col = {
         title: (
           <div style={{ textAlign: "center", color: "#1890ff" }}>
-            <div style={{ fontWeight: 800 }}>Domain 1: General Drawing Control</div>
+            <div style={{ fontWeight: 800, fontSize: "12px" }}>Domain 1: General Drawing Control (11 ข้อ)</div>
             <div style={{ fontSize: "10px", fontWeight: 400 }}>ME10, Drafting, Jigs/Fixtures, Symbols, Database, OTD</div>
           </div>
         ),
-        key: "domain_general_drawing",
-        width: 210,
-        render: (_, record) => {
-          const stats = getLeaderDomainScore(record, "general_drawing_control");
-          return (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "#1890ff" }}>
-                  {stats.totalScore} / {stats.maxScore} pts
-                </span>
-                <Tag color="blue" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
-                  Avg: {stats.avg} / 4.0
-                </Tag>
-              </div>
-              <Progress
-                percent={stats.percentage}
-                size="small"
-                strokeColor="#1890ff"
-                status={stats.percentage >= 75 ? "success" : "normal"}
-              />
-            </div>
-          );
-        }
-      },
-      {
+        children: d1Cols
+      };
+
+      const group2Col = {
         title: (
           <div style={{ textAlign: "center", color: "#fa8c16" }}>
-            <div style={{ fontWeight: 800 }}>Domain 2: Tooling Inspector</div>
+            <div style={{ fontWeight: 800, fontSize: "12px" }}>Domain 2: Tooling Inspector (11 ข้อ)</div>
             <div style={{ fontSize: "10px", fontWeight: 400 }}>Purchase sys, Instruments, CMM, Dimensional Report, Out-of-spec</div>
           </div>
         ),
-        key: "domain_tooling_inspector",
-        width: 210,
-        render: (_, record) => {
-          const stats = getLeaderDomainScore(record, "tooling_inspector");
-          return (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "#fa8c16" }}>
-                  {stats.totalScore} / {stats.maxScore} pts
-                </span>
-                <Tag color="orange" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
-                  Avg: {stats.avg} / 4.0
-                </Tag>
-              </div>
-              <Progress
-                percent={stats.percentage}
-                size="small"
-                strokeColor="#fa8c16"
-                status={stats.percentage >= 75 ? "success" : "normal"}
-              />
-            </div>
-          );
-        }
-      },
-      {
+        children: d2Cols
+      };
+
+      const group3Col = {
         title: (
           <div style={{ textAlign: "center", color: "#52c41a" }}>
-            <div style={{ fontWeight: 800 }}>Domain 3: Drawing Verification</div>
+            <div style={{ fontWeight: 800, fontSize: "12px" }}>Domain 3: Drawing Verification (11 ข้อ)</div>
             <div style={{ fontSize: "10px", fontWeight: 400 }}>WI-DV-EN-000001 compliance, Anomaly action, Lot release priority</div>
           </div>
         ),
-        key: "domain_drawing_verification",
-        width: 210,
-        render: (_, record) => {
-          const stats = getLeaderDomainScore(record, "drawing_verification");
-          return (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "#52c41a" }}>
-                  {stats.totalScore} / {stats.maxScore} pts
-                </span>
-                <Tag color="green" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
-                  Avg: {stats.avg} / 4.0
-                </Tag>
-              </div>
-              <Progress
-                percent={stats.percentage}
-                size="small"
-                strokeColor="#52c41a"
-                status={stats.percentage >= 75 ? "success" : "normal"}
-              />
+        children: d3Cols
+      };
+
+      return [...baseInfoCols, group1Col, group2Col, group3Col, totalPointsCol, rpgPowersCol, actionCol];
+    }
+
+    // Branch B: Summary View (3 Domain Summary Columns with progress bars)
+    const summaryD1 = {
+      title: (
+        <div style={{ textAlign: "center", color: "#1890ff" }}>
+          <div style={{ fontWeight: 800 }}>Domain 1: General Drawing Control</div>
+          <div style={{ fontSize: "10px", fontWeight: 400 }}>ME10, Drafting, Jigs/Fixtures, Symbols, Database, OTD</div>
+        </div>
+      ),
+      key: "domain_general_drawing",
+      width: 220,
+      render: (_, record) => {
+        const stats = getLeaderDomainScore(record, "general_drawing_control");
+        return (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#1890ff" }}>
+                {stats.totalScore} / {stats.maxScore} pts
+              </span>
+              <Tag color="blue" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
+                Avg: {stats.avg} / 4.0
+              </Tag>
             </div>
-          );
-        }
-      },
+            <Progress
+              percent={stats.percentage}
+              size="small"
+              strokeColor="#1890ff"
+              status={stats.percentage >= 75 ? "success" : "normal"}
+            />
+          </div>
+        );
+      }
+    };
+
+    const summaryD2 = {
+      title: (
+        <div style={{ textAlign: "center", color: "#fa8c16" }}>
+          <div style={{ fontWeight: 800 }}>Domain 2: Tooling Inspector</div>
+          <div style={{ fontSize: "10px", fontWeight: 400 }}>Purchase sys, Instruments, CMM, Dimensional Report, Out-of-spec</div>
+        </div>
+      ),
+      key: "domain_tooling_inspector",
+      width: 220,
+      render: (_, record) => {
+        const stats = getLeaderDomainScore(record, "tooling_inspector");
+        return (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#fa8c16" }}>
+                {stats.totalScore} / {stats.maxScore} pts
+              </span>
+              <Tag color="orange" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
+                Avg: {stats.avg} / 4.0
+              </Tag>
+            </div>
+            <Progress
+              percent={stats.percentage}
+              size="small"
+              strokeColor="#fa8c16"
+              status={stats.percentage >= 75 ? "success" : "normal"}
+            />
+          </div>
+        );
+      }
+    };
+
+    const summaryD3 = {
+      title: (
+        <div style={{ textAlign: "center", color: "#52c41a" }}>
+          <div style={{ fontWeight: 800 }}>Domain 3: Drawing Verification</div>
+          <div style={{ fontSize: "10px", fontWeight: 400 }}>WI-DV-EN-000001 compliance, Anomaly action, Lot release priority</div>
+        </div>
+      ),
+      key: "domain_drawing_verification",
+      width: 220,
+      render: (_, record) => {
+        const stats = getLeaderDomainScore(record, "drawing_verification");
+        return (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#52c41a" }}>
+                {stats.totalScore} / {stats.maxScore} pts
+              </span>
+              <Tag color="green" style={{ margin: 0, fontSize: "10px", fontWeight: 600 }}>
+                Avg: {stats.avg} / 4.0
+              </Tag>
+            </div>
+            <Progress
+              percent={stats.percentage}
+              size="small"
+              strokeColor="#52c41a"
+              status={stats.percentage >= 75 ? "success" : "normal"}
+            />
+          </div>
+        );
+      }
+    };
+
+    return [...baseInfoCols, summaryD1, summaryD2, summaryD3, rpgPowersCol, actionCol];
+  }, [leaderViewMode, theme, onOpenSkillDrawer, onEditUser, canManageUsers, canEditQualifications, getLeaderDomainScore]);
+
+  // ── FILTERED MODAL LEADER CRITERIA ROWS ────────────────────────────────────
+  const filteredModalLeaderCriteria = useMemo(() => {
+    return LEADER_ALL_CRITERIA_FLAT.filter((c) => {
+      if (modalLeaderDomain !== "ALL" && c.domainKey !== modalLeaderDomain) return false;
+      if (modalLeaderSearch) {
+        const q = modalLeaderSearch.toLowerCase().trim();
+        const matchName = c.nameEn.toLowerCase().includes(q) || c.nameTh.toLowerCase().includes(q);
+        const matchCode = c.code.toLowerCase().includes(q);
+        const matchKw = (c.keywords || "").toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchKw) return false;
+      }
+      return true;
+    });
+  }, [modalLeaderDomain, modalLeaderSearch]);
+
+  // ── MODAL TABLE COLUMNS (ALL 33 CRITERIA WITH SCORES & EDITING) ────────────
+  const modalTableColumns = useMemo(() => {
+    const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
+    return [
       {
-        title: "Leader RPG Powers",
-        key: "rpg_powers",
-        width: 170,
-        render: (_, record) => (
-          <Space direction="vertical" size={2}>
-            <div style={{ fontSize: "12px", fontWeight: 800, color: theme.colors.primary }}>
-              <ThunderboltOutlined style={{ color: "#faad14", marginRight: 4 }} />
-              Power Score: {record.total_score || 0}
-            </div>
-            <Space size={4} wrap>
-              <Tag color="red" style={{ fontSize: "9px", margin: 0 }}>ATK {record.atk || 0}</Tag>
-              <Tag color="blue" style={{ fontSize: "9px", margin: 0 }}>DEF {record.def || 0}</Tag>
-              <Tag color="green" style={{ fontSize: "9px", margin: 0 }}>HP {record.hp || 0}</Tag>
-              <Tag color="purple" style={{ fontSize: "9px", margin: 0 }}>MP {record.mp || 0}</Tag>
-            </Space>
-          </Space>
+        title: "Code",
+        dataIndex: "code",
+        key: "code",
+        width: 85,
+        align: "center",
+        fixed: "left",
+        render: (code, record) => (
+          <Tag color={record.domainColor} style={{ fontWeight: 800, margin: 0, borderRadius: "6px" }}>
+            {code}
+          </Tag>
         )
       },
       {
-        title: "Actions",
-        key: "actions",
-        fixed: "right",
-        width: canEditQualifications ? 165 : 130,
+        title: "Competency / Evaluation Criteria (เกณฑ์การประเมิน)",
+        key: "title",
+        width: 320,
+        fixed: "left",
+        render: (_, record) => (
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary }}>
+              {record.nameTh}
+            </div>
+            <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: 2 }}>
+              {record.nameEn}
+            </div>
+            {record.keywords && (
+              <Space size={4} wrap style={{ marginTop: 4 }}>
+                {record.keywords.split(",").map((kw) => (
+                  <Tag key={kw.trim()} color="cyan" style={{ fontSize: "10px", margin: 0, padding: "0 4px", borderRadius: "4px" }}>
+                    {kw.trim()}
+                  </Tag>
+                ))}
+              </Space>
+            )}
+          </div>
+        )
+      },
+      {
+        title: "Domain",
+        dataIndex: "domainTitle",
+        key: "domainTitle",
+        width: 170,
+        render: (dom, record) => (
+          <Tag color={record.domainColor} style={{ fontWeight: 700, borderRadius: "6px" }}>
+            {dom}
+          </Tag>
+        )
+      },
+      {
+        title: "Target Standard",
+        key: "target_standard",
+        width: 115,
         align: "center",
         render: (_, record) => (
-          <Space size={6}>
-            {canEditQualifications && (
-              <Tooltip title="Edit Qualification Certifications (★ Officially Approved)">
-                <Button
-                  size="small"
-                  icon={<StarFilled style={{ color: "#faad14" }} />}
-                  onClick={() => handleOpenQualModal(record)}
-                  style={{ borderRadius: "6px", background: "#fffbe6", borderColor: "#ffe58f" }}
-                />
-              </Tooltip>
-            )}
-            <Tooltip title="Calibrate Leader Evaluation Form (33 Skills)">
-              <Button
-                type="primary"
-                size="small"
-                icon={<TrophyOutlined />}
-                onClick={() => onOpenSkillDrawer && onOpenSkillDrawer(record)}
-                style={{ borderRadius: "6px", background: "#faad14", borderColor: "#faad14", color: "#000", fontWeight: 700 }}
-              >
-                Calibrate
-              </Button>
-            </Tooltip>
-            {canManageUsers && onEditUser && (
-              <Tooltip title="Edit Profile">
-                <Button
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => onEditUser(record)}
-                  style={{ borderRadius: "6px" }}
-                />
-              </Tooltip>
-            )}
-          </Space>
+          <div>
+            <Tag color="purple" style={{ fontWeight: 800, fontSize: "12px", borderRadius: "6px" }}>
+              Level {record.maxScore} (Max)
+            </Tag>
+            <div style={{ fontSize: "10px", color: theme.colors.textSecondary, marginTop: 2 }}>
+              0–4 Scale
+            </div>
+          </div>
+        )
+      },
+      {
+        title: (
+          <div style={{ textAlign: "center", color: "#722ed1" }}>
+            <CrownOutlined style={{ marginRight: 4 }} />
+            <span>
+              Leader Evaluations • Period: <strong>
+                {modalLeaderPeriod === "LATEST"
+                  ? "Latest Master Benchmark (SECTION OVERALL)"
+                  : LEADER_ALL_PERIODS.find((p) => p.key === modalLeaderPeriod)?.label || modalLeaderPeriod}
+              </strong>
+            </span>
+          </div>
+        ),
+        children: [
+          {
+            title: (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontWeight: 700 }}>Suranat</div>
+                <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>L6121 (Draft Man)</div>
+              </div>
+            ),
+            key: "score_L6121",
+            width: 110,
+            align: "center",
+            render: (_, record) => {
+              const score = getScoreInModal("L6121", record.key);
+              if (score === null) return <span style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>— (N/A)</span>;
+              if (isEditingModalScores) {
+                return (
+                  <Select
+                    size="small"
+                    value={score}
+                    onChange={(val) => handleModalScoreChange("L6121", record.key, val)}
+                    style={{ width: 68 }}
+                    dropdownMatchSelectWidth={false}
+                  >
+                    <Select.Option value={0}><Tag color="default" style={{ margin: 0 }}>0</Tag></Select.Option>
+                    <Select.Option value={1}><Tag color="error" style={{ margin: 0 }}>1</Tag></Select.Option>
+                    <Select.Option value={2}><Tag color="warning" style={{ margin: 0 }}>2</Tag></Select.Option>
+                    <Select.Option value={3}><Tag color="success" style={{ margin: 0 }}>3</Tag></Select.Option>
+                    <Select.Option value={4}><Tag color="purple" style={{ margin: 0 }}>4</Tag></Select.Option>
+                  </Select>
+                );
+              }
+              return (
+                <Tooltip title={`L6121: Score ${score}/4 — ${LEADER_LEVEL_DEFINITIONS[score]?.descTh || ""}`}>
+                  <Tag color={colMap[score]} style={{ fontWeight: 800, minWidth: 28, textAlign: "center" }}>
+                    {score}
+                  </Tag>
+                </Tooltip>
+              );
+            }
+          },
+          {
+            title: (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontWeight: 700 }}>Kanjana</div>
+                <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>F1754 (Clerk)</div>
+              </div>
+            ),
+            key: "score_F1754",
+            width: 110,
+            align: "center",
+            render: (_, record) => {
+              const score = getScoreInModal("F1754", record.key);
+              if (score === null) return <span style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>— (N/A)</span>;
+              if (isEditingModalScores) {
+                return (
+                  <Select
+                    size="small"
+                    value={score}
+                    onChange={(val) => handleModalScoreChange("F1754", record.key, val)}
+                    style={{ width: 68 }}
+                    dropdownMatchSelectWidth={false}
+                  >
+                    <Select.Option value={0}><Tag color="default" style={{ margin: 0 }}>0</Tag></Select.Option>
+                    <Select.Option value={1}><Tag color="error" style={{ margin: 0 }}>1</Tag></Select.Option>
+                    <Select.Option value={2}><Tag color="warning" style={{ margin: 0 }}>2</Tag></Select.Option>
+                    <Select.Option value={3}><Tag color="success" style={{ margin: 0 }}>3</Tag></Select.Option>
+                    <Select.Option value={4}><Tag color="purple" style={{ margin: 0 }}>4</Tag></Select.Option>
+                  </Select>
+                );
+              }
+              return (
+                <Tooltip title={`F1754: Score ${score}/4 — ${LEADER_LEVEL_DEFINITIONS[score]?.descTh || ""}`}>
+                  <Tag color={colMap[score]} style={{ fontWeight: 800, minWidth: 28, textAlign: "center" }}>
+                    {score}
+                  </Tag>
+                </Tooltip>
+              );
+            }
+          },
+          {
+            title: (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontWeight: 700 }}>Wirayut</div>
+                <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>LE216 (M/C Prog)</div>
+              </div>
+            ),
+            key: "score_LE216",
+            width: 110,
+            align: "center",
+            render: (_, record) => {
+              const score = getScoreInModal("LE216", record.key);
+              if (score === null) return <span style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>— (N/A)</span>;
+              if (isEditingModalScores) {
+                return (
+                  <Select
+                    size="small"
+                    value={score}
+                    onChange={(val) => handleModalScoreChange("LE216", record.key, val)}
+                    style={{ width: 68 }}
+                    dropdownMatchSelectWidth={false}
+                  >
+                    <Select.Option value={0}><Tag color="default" style={{ margin: 0 }}>0</Tag></Select.Option>
+                    <Select.Option value={1}><Tag color="error" style={{ margin: 0 }}>1</Tag></Select.Option>
+                    <Select.Option value={2}><Tag color="warning" style={{ margin: 0 }}>2</Tag></Select.Option>
+                    <Select.Option value={3}><Tag color="success" style={{ margin: 0 }}>3</Tag></Select.Option>
+                    <Select.Option value={4}><Tag color="purple" style={{ margin: 0 }}>4</Tag></Select.Option>
+                  </Select>
+                );
+              }
+              return (
+                <Tooltip title={`LE216: Score ${score}/4 — ${LEADER_LEVEL_DEFINITIONS[score]?.descTh || ""}`}>
+                  <Tag color={colMap[score]} style={{ fontWeight: 800, minWidth: 28, textAlign: "center" }}>
+                    {score}
+                  </Tag>
+                </Tooltip>
+              );
+            }
+          },
+          {
+            title: (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontWeight: 700 }}>Kanyarat</div>
+                <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>LE511 (Operator)</div>
+              </div>
+            ),
+            key: "score_LE511",
+            width: 110,
+            align: "center",
+            render: (_, record) => {
+              const score = getScoreInModal("LE511", record.key);
+              if (score === null) return <span style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>— (N/A)</span>;
+              if (isEditingModalScores) {
+                return (
+                  <Select
+                    size="small"
+                    value={score}
+                    onChange={(val) => handleModalScoreChange("LE511", record.key, val)}
+                    style={{ width: 68 }}
+                    dropdownMatchSelectWidth={false}
+                  >
+                    <Select.Option value={0}><Tag color="default" style={{ margin: 0 }}>0</Tag></Select.Option>
+                    <Select.Option value={1}><Tag color="error" style={{ margin: 0 }}>1</Tag></Select.Option>
+                    <Select.Option value={2}><Tag color="warning" style={{ margin: 0 }}>2</Tag></Select.Option>
+                    <Select.Option value={3}><Tag color="success" style={{ margin: 0 }}>3</Tag></Select.Option>
+                    <Select.Option value={4}><Tag color="purple" style={{ margin: 0 }}>4</Tag></Select.Option>
+                  </Select>
+                );
+              }
+              return (
+                <Tooltip title={`LE511: Score ${score}/4 — ${LEADER_LEVEL_DEFINITIONS[score]?.descTh || ""}`}>
+                  <Tag color={colMap[score]} style={{ fontWeight: 800, minWidth: 28, textAlign: "center" }}>
+                    {score}
+                  </Tag>
+                </Tooltip>
+              );
+            }
+          }
+        ]
+      },
+      {
+        title: "Description / Detailed Scope",
+        dataIndex: "desc",
+        key: "desc",
+        width: 320,
+        render: (desc) => (
+          <span style={{ fontSize: "12px", color: theme.colors.textSecondary, lineHeight: 1.5 }}>
+            {desc}
+          </span>
         )
       }
     ];
-  }, [theme, onOpenSkillDrawer, onEditUser, canManageUsers, canEditQualifications, handleOpenQualModal, getLeaderDomainScore]);
+  }, [theme, modalLeaderPeriod, isEditingModalScores, editedModalScores, getScoreInModal]);
+
+  // ── MODAL TREND COLUMNS (HISTORICAL PROGRESSION ACROSS ALL 20 QUARTERS) ────
+  const modalTrendColumns = useMemo(() => {
+    const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
+    const pInfo = LEADER_PROFILES_INFO[modalTrendLeader] || {};
+    const histData = leaderHistoricalScores[modalTrendLeader] || {};
+
+    const quarterCols = (LEADER_ALL_PERIODS || []).map((p) => ({
+      title: (
+        <div style={{ textAlign: "center", fontSize: "11px" }}>
+          <div style={{ fontWeight: 700 }}>{p.year} {p.quarter}</div>
+          <div style={{ fontSize: "9px", color: theme.colors.textSecondary }}>{p.label.split("—")[0].trim()}</div>
+        </div>
+      ),
+      key: `quarter_${p.key}`,
+      width: 82,
+      align: "center",
+      render: (_, record) => {
+        const pObj = histData.byPeriod?.[p.key];
+        if (!pObj) return <span style={{ color: "#bfbfbf", fontSize: "10px" }}>—</span>;
+        const val = pObj.scores?.[record.key];
+        if (val === undefined) return <span style={{ color: "#bfbfbf", fontSize: "10px" }}>—</span>;
+        return (
+          <Tooltip title={`${modalTrendLeader} (${p.key}): Score ${val}/4`}>
+            <Tag color={colMap[val]} style={{ fontWeight: 800, margin: 0, minWidth: 24, textAlign: "center" }}>
+              {val}
+            </Tag>
+          </Tooltip>
+        );
+      }
+    }));
+
+    return [
+      {
+        title: "Code",
+        dataIndex: "code",
+        key: "code",
+        width: 80,
+        align: "center",
+        fixed: "left",
+        render: (code, record) => (
+          <Tag color={record.domainColor} style={{ fontWeight: 800, margin: 0, borderRadius: "6px" }}>
+            {code}
+          </Tag>
+        )
+      },
+      {
+        title: "Competency Criteria",
+        key: "title",
+        width: 280,
+        fixed: "left",
+        render: (_, record) => (
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "12px", color: theme.colors.textPrimary }}>
+              {record.nameTh}
+            </div>
+            <div style={{ fontSize: "11px", color: theme.colors.textSecondary }}>
+              {record.nameEn}
+            </div>
+          </div>
+        )
+      },
+      {
+        title: (
+          <div style={{ textAlign: "center", color: "#722ed1" }}>
+            <HistoryOutlined style={{ marginRight: 6 }} />
+            <span>
+              Historical Quarterly Progression: <strong>{modalTrendLeader} — {pInfo.nameTh || histData.name}</strong> ({pInfo.processRole || "Leader"})
+            </span>
+          </div>
+        ),
+        children: quarterCols
+      }
+    ];
+  }, [modalTrendLeader, theme]);
+
+  const activeModalLeaderColumns = modalLeaderView === "trend" ? modalTrendColumns : modalTableColumns;
 
   return (
     <div>
@@ -1122,8 +1750,36 @@ const QualificationSummaryView = ({
           </Tag>
         </div>
 
-        {/* Right: Skill Require Button + View Switcher (Table / Board) */}
+        {/* Right: Leader detailed/summary toggle + Excel Sheets Explorer + Skill Require Button + View Switcher */}
         <Space wrap size={10}>
+          {matrixCategory === "leader" && viewMode === "table" && (
+            <Segmented
+              value={leaderViewMode}
+              onChange={setLeaderViewMode}
+              options={[
+                {
+                  value: "detailed",
+                  label: <span style={{ fontWeight: 600 }}>Detailed (33 Items)</span>
+                },
+                {
+                  value: "summary",
+                  label: <span style={{ fontWeight: 600 }}>Summary (3 Domains)</span>
+                }
+              ]}
+            />
+          )}
+
+          <Button
+            icon={<FileExcelOutlined style={{ color: "#1890ff" }} />}
+            onClick={() => setExplorerModalOpen(true)}
+            style={{
+              borderRadius: "8px",
+              fontWeight: 600
+            }}
+          >
+            Excel Sheets Explorer (14 Sheets)
+          </Button>
+
           {onExportExcel && (
             <Button
               icon={<FileExcelOutlined style={{ color: "#52c41a" }} />}
@@ -1139,15 +1795,18 @@ const QualificationSummaryView = ({
 
           <Button
             icon={<InfoCircleOutlined />}
-            onClick={() => setCriteriaModalOpen(true)}
+            onClick={() => {
+              setCriteriaModalCategory(matrixCategory);
+              setCriteriaModalOpen(true);
+            }}
             style={{
               borderRadius: "8px",
-              borderColor: theme.colors.primary,
-              color: theme.colors.primary,
+              borderColor: matrixCategory === "leader" ? "#722ed1" : theme.colors.primary,
+              color: matrixCategory === "leader" ? "#722ed1" : theme.colors.primary,
               fontWeight: 600
             }}
           >
-            Skill Requirements
+            {matrixCategory === "leader" ? "Leader Skill Requirements" : "Skill Requirements"}
           </Button>
 
           <Segmented
@@ -1658,7 +2317,11 @@ const QualificationSummaryView = ({
               },
               showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`
             }}
-            scroll={{ x: matrixCategory === "leader" ? 1400 : 1750 }}
+            scroll={{
+              x: matrixCategory === "leader"
+                ? (leaderViewMode === "detailed" ? 3200 : 1400)
+                : 1750
+            }}
             bordered
             size="small"
           />
@@ -1932,99 +2595,532 @@ const QualificationSummaryView = ({
         </div>
       )}
 
-      {/* ── Criteria Detail Modal (Skill Requirements) ─────────────────── */}
+      {/* ── Criteria Detail Modal (Skill Requirements: Staff & Leader Aware) ── */}
       <Modal
         title={
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <SafetyCertificateOutlined style={{ color: "#faad14" }} />
-            <span style={{ fontWeight: 700 }}>
-              Minimum Skill Requirements for Design Development Work
+            {criteriaModalCategory === "leader" ? (
+              <CrownOutlined style={{ color: "#722ed1", fontSize: "20px" }} />
+            ) : (
+              <SafetyCertificateOutlined style={{ color: "#faad14", fontSize: "20px" }} />
+            )}
+            <span style={{ fontWeight: 700, fontSize: "16px" }}>
+              {criteriaModalCategory === "leader"
+                ? "Leader Competency Requirements & Evaluation Standards"
+                : "Minimum Skill Requirements for Design Development Work"}
             </span>
           </div>
         }
         open={criteriaModalOpen}
-        onCancel={() => setCriteriaModalOpen(false)}
-        footer={[
-          <Button key="close" type="primary" onClick={() => setCriteriaModalOpen(false)} style={{ borderRadius: "8px" }}>
-            Close
-          </Button>
-        ]}
-        width={920}
+        onCancel={() => {
+          setCriteriaModalOpen(false);
+          setIsEditingModalScores(false);
+        }}
+        footer={
+          criteriaModalCategory === "leader" ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <Space>
+                <Tag color="purple" style={{ fontWeight: 700, margin: 0 }}>
+                  33 Criteria • Scale 0–4
+                </Tag>
+                {modalLeaderPeriod !== "LATEST" && (
+                  <Tag color="cyan" style={{ margin: 0 }}>
+                    Period: {modalLeaderPeriod.replace("_", " ")}
+                  </Tag>
+                )}
+              </Space>
+              <Space>
+                {isEditingModalScores && (
+                  <>
+                    <Button onClick={handleCancelEditModalScores} disabled={savingModalScores} style={{ borderRadius: "8px" }}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="primary"
+                      icon={<SaveOutlined />}
+                      loading={savingModalScores}
+                      onClick={handleSaveModalScores}
+                      style={{ borderRadius: "8px", background: "#52c41a", borderColor: "#52c41a" }}
+                    >
+                      Save Changes
+                    </Button>
+                  </>
+                )}
+                <Button
+                  key="close"
+                  type={isEditingModalScores ? "default" : "primary"}
+                  onClick={() => {
+                    setCriteriaModalOpen(false);
+                    setIsEditingModalScores(false);
+                  }}
+                  style={{ borderRadius: "8px" }}
+                >
+                  Close
+                </Button>
+              </Space>
+            </div>
+          ) : [
+            <Button key="close" type="primary" onClick={() => setCriteriaModalOpen(false)} style={{ borderRadius: "8px" }}>
+              Close
+            </Button>
+          ]
+        }
+        width={criteriaModalCategory === "leader" ? 1260 : 960}
+        style={{ top: 20 }}
+        bodyStyle={{ maxHeight: "calc(88vh - 70px)", overflowY: "auto", padding: "16px 20px" }}
       >
-        <Alert
-          type="info"
-          showIcon
-          message="Skill Requirement Guidelines"
-          description="Each skill area is assessed on a 1-3 scale. An engineer qualifies for a role when their skill level meets or exceeds the minimum required thresholds for DRAW, CHECK, REVIEW, or APPROVAL."
-          style={{ marginBottom: "16px", borderRadius: "8px" }}
-        />
+        {/* Category Switcher inside Modal */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+          <Segmented
+            value={criteriaModalCategory}
+            onChange={(val) => {
+              setCriteriaModalCategory(val);
+              setIsEditingModalScores(false);
+            }}
+            options={[
+              {
+                value: "leader",
+                label: (
+                  <span style={{ fontWeight: 700, padding: "0 12px" }}>
+                    <CrownOutlined style={{ marginRight: 6, color: "#722ed1" }} />
+                    Leader Competency Standards (Scale 0–4)
+                  </span>
+                )
+              },
+              {
+                value: "staff",
+                label: (
+                  <span style={{ fontWeight: 700, padding: "0 12px" }}>
+                    <SafetyCertificateOutlined style={{ marginRight: 6, color: "#faad14" }} />
+                    Staff Minimum Requirements (Scale 1–3)
+                  </span>
+                )
+              }
+            ]}
+          />
+          <Tag color={criteriaModalCategory === "leader" ? "purple" : "gold"} style={{ fontWeight: 700, margin: 0, padding: "2px 8px" }}>
+            {criteriaModalCategory === "leader" ? "33 Criteria • 3 Domains • 4 Section Leaders" : "11 Qualification Scopes • 15 Skills"}
+          </Tag>
+        </div>
 
-        <div style={{ maxHeight: "550px", overflowY: "auto", paddingRight: "6px" }}>
-          {effectiveQualColumns.map((col) => {
-            return (
-              <Card
-                key={col.id}
+        {criteriaModalCategory === "leader" ? (
+          <div>
+            <Alert
+              type="info"
+              showIcon
+              message="Leader Evaluation Framework & Competency Benchmarks"
+              description="Official competency evaluation framework from 'Evaluation Form for ENG-2026.xlsx'. Leader competencies are assessed across 33 criteria divided into 3 domains on a scale of 0 to 4. Benchmark scores for active Section Leaders (L6121, F1754, LE216, LE511) are derived from the SECTION OVERALL master sheet with full historical progression across 20 quarters (FY22–FY26)."
+              style={{ marginBottom: "14px", borderRadius: "8px" }}
+            />
+
+            {/* Rubrics Card 0 to 4 */}
+            <Card
+              size="small"
+              style={{
+                marginBottom: "14px",
+                borderRadius: "12px",
+                background: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
+                border: `1px solid ${theme.colors.border}`
+              }}
+              title={<Text strong style={{ fontSize: "12px" }}>📖 Level 0–4 Rating Scale & Definitions</Text>}
+            >
+              <Row gutter={[8, 8]}>
+                {Object.values(LEADER_LEVEL_DEFINITIONS).map((def) => (
+                  <Col xs={24} sm={12} lg={def.level === 4 ? 24 : 12} key={def.level}>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: "8px",
+                        background: isDark ? "rgba(255,255,255,0.03)" : "#fff",
+                        borderLeft: `4px solid ${def.color}`,
+                        border: `1px solid ${theme.colors.border}30`,
+                        borderLeftWidth: "4px"
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 700, fontSize: "12px", color: def.color }}>
+                          {def.titleTh} (Level {def.level})
+                        </span>
+                        <Tag color={def.tagColor} style={{ fontSize: "10px", margin: 0 }}>
+                          {def.level === 4 ? "Master / Trainer" : def.level === 3 ? "Independent" : def.level === 2 ? "Partial" : def.level === 1 ? "Guidance" : "Untrained"}
+                        </Tag>
+                      </div>
+                      <div style={{ fontSize: "11px", color: theme.colors.textPrimary, marginTop: "2px" }}>
+                        🇹🇭 {def.descTh}
+                      </div>
+                      <div style={{ fontSize: "10px", color: theme.colors.textSecondary }}>
+                        🇬🇧 {def.descEn}
+                      </div>
+                    </div>
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+
+            {/* Modal Sub-Toolbar (Domain filter, Period Selector, View Mode, Search, Edit button) */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+                padding: "10px 14px",
+                background: isDark ? "rgba(255,255,255,0.03)" : "#f8f9fa",
+                borderRadius: "10px",
+                border: `1px solid ${theme.colors.border}`,
+                marginBottom: "14px"
+              }}
+            >
+              <Space size={8} wrap>
+                {/* Domain Filter */}
+                <Select
+                  size="small"
+                  value={modalLeaderDomain}
+                  onChange={setModalLeaderDomain}
+                  style={{ width: 190 }}
+                  options={[
+                    { value: "ALL", label: "All 3 Domains (33 Criteria)" },
+                    { value: "general_drawing_control", label: "Domain 1: Drawing (11)" },
+                    { value: "tooling_inspector", label: "Domain 2: Tooling (11)" },
+                    { value: "drawing_verification", label: "Domain 3: Verification (11)" }
+                  ]}
+                />
+
+                {/* Period Selector (when not in trend mode) */}
+                {modalLeaderView !== "trend" && (
+                  <Select
+                    size="small"
+                    value={modalLeaderPeriod}
+                    onChange={setModalLeaderPeriod}
+                    disabled={isEditingModalScores}
+                    style={{ width: 230 }}
+                    options={[
+                      { value: "LATEST", label: "★ Master Benchmark (SECTION OVERALL)" },
+                      ...(LEADER_ALL_PERIODS || []).map((p) => ({
+                        value: p.key,
+                        label: p.label
+                      }))
+                    ]}
+                  />
+                )}
+
+                {/* View Switcher: Table | Cards | Timeline Trend */}
+                <Segmented
+                  size="small"
+                  value={modalLeaderView}
+                  onChange={setModalLeaderView}
+                  disabled={isEditingModalScores}
+                  options={[
+                    { value: "table", label: "Table View (All 33)" },
+                    { value: "cards", label: "Domain Cards" },
+                    { value: "trend", label: "Quarterly Timeline" }
+                  ]}
+                />
+
+                {/* Trend Leader Selector (if trend mode) */}
+                {modalLeaderView === "trend" && (
+                  <Select
+                    size="small"
+                    value={modalTrendLeader}
+                    onChange={setModalTrendLeader}
+                    style={{ width: 210 }}
+                    options={[
+                      { value: "L6121", label: "L6121 — Suranat (Draft Man)" },
+                      { value: "F1754", label: "F1754 — Kanjana (Clerk)" },
+                      { value: "LE216", label: "LE216 — Wirayut (M/C Prog)" },
+                      { value: "LE511", label: "LE511 — Kanyarat (Operator)" }
+                    ]}
+                  />
+                )}
+
+                {/* Search */}
+                <Input
+                  size="small"
+                  placeholder="Search (ME10, CMM, OTD)..."
+                  value={modalLeaderSearch}
+                  onChange={(e) => setModalLeaderSearch(e.target.value)}
+                  allowClear
+                  prefix={<SearchOutlined style={{ color: theme.colors.textSecondary }} />}
+                  style={{ width: 170 }}
+                />
+              </Space>
+
+              {/* Edit Scores Button */}
+              {modalLeaderView !== "trend" && (
+                <Space>
+                  {!isEditingModalScores ? (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={handleStartEditModalScores}
+                      style={{ borderRadius: "6px", background: "#722ed1", borderColor: "#722ed1", fontWeight: 600 }}
+                    >
+                      Edit Competencies
+                    </Button>
+                  ) : (
+                    <Space size={6}>
+                      <Button size="small" icon={<CloseOutlined />} onClick={handleCancelEditModalScores} style={{ borderRadius: "6px" }}>
+                        Cancel
+                      </Button>
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<SaveOutlined />}
+                        loading={savingModalScores}
+                        onClick={handleSaveModalScores}
+                        style={{ borderRadius: "6px", background: "#52c41a", borderColor: "#52c41a" }}
+                      >
+                        Save
+                      </Button>
+                    </Space>
+                  )}
+                </Space>
+              )}
+            </div>
+
+            {/* Display: Table View (All 33) or Trend View */}
+            {(modalLeaderView === "table" || modalLeaderView === "trend") && (
+              <Table
+                dataSource={filteredModalLeaderCriteria}
+                columns={activeModalLeaderColumns}
+                pagination={false}
                 size="small"
+                scroll={{ x: modalLeaderView === "trend" ? 2200 : 1100, y: 460 }}
+                bordered
+                rowKey="key"
                 style={{
-                  marginBottom: "12px",
                   borderRadius: "10px",
-                  border: `1px solid ${theme.colors.border}`,
-                  background: col.scope === "OTHERS" ? (isDark ? "#2b1e0020" : "#fffbe660") : theme.colors.surface
+                  overflow: "hidden",
+                  border: `1px solid ${theme.colors.border}`
                 }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <Space size={6}>
-                    <Tag color={col.badgeColor} style={{ fontWeight: 700 }}>
-                      {col.scope}
-                    </Tag>
-                    <Tag>{col.group}</Tag>
-                    <Tag color="purple" style={{ fontWeight: 700 }}>
-                      {col.role}
-                    </Tag>
-                  </Space>
-                  <Text type="secondary" style={{ fontSize: "11px" }}>
-                    ID: {col.id}
-                  </Text>
-                </div>
+              />
+            )}
 
-                {col.isApproval ? (
-                  <div style={{ fontSize: "12px", color: theme.colors.textPrimary, padding: "6px 0" }}>
-                    <strong>Requirement:</strong> {col.criteriaSummary} (Department Manager, Assistant Manager, or Section Head)
-                  </div>
-                ) : (
-                  <div>
-                    <Text strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
-                      Required Minimum Skills (Criteria Thresholds):
-                    </Text>
-                    <Row gutter={[8, 8]}>
-                      {col.criteria &&
-                        Object.entries(col.criteria).map(([sKey, reqLvl]) => {
+            {/* Display: Domain Cards View (with all criteria fully visible) */}
+            {modalLeaderView === "cards" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {LEADER_DOMAINS_DETAILED.filter((dom) => modalLeaderDomain === "ALL" || dom.key === modalLeaderDomain).map((dom) => (
+                  <Card
+                    key={dom.key}
+                    size="small"
+                    style={{
+                      borderRadius: "14px",
+                      border: `1px solid ${theme.colors.border}`,
+                      background: theme.colors.surface,
+                      overflow: "hidden"
+                    }}
+                    title={
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                        <Space>
+                          <span style={{ fontSize: "18px" }}>{dom.icon}</span>
+                          <div>
+                            <Text strong style={{ fontSize: "14px", color: theme.colors.textPrimary }}>
+                              Domain {dom.domainNum}: {dom.titleEn}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: "11px", display: "block" }}>
+                              {dom.subTitle}
+                            </Text>
+                          </div>
+                        </Space>
+                        <Tag color={dom.tagColor || "purple"} style={{ fontWeight: 700, margin: 0, borderRadius: "6px" }}>
+                          {dom.criteria.length} Criteria • Scale 0–4
+                        </Tag>
+                      </div>
+                    }
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {dom.criteria.filter((c) => {
+                        if (!modalLeaderSearch) return true;
+                        const q = modalLeaderSearch.toLowerCase().trim();
+                        return (
+                          c.nameEn.toLowerCase().includes(q) ||
+                          c.nameTh.toLowerCase().includes(q) ||
+                          c.code.toLowerCase().includes(q) ||
+                          (c.keywords || "").toLowerCase().includes(q)
+                        );
+                      }).map((c) => {
+                        const sL6121 = getScoreInModal("L6121", c.key);
+                        const sF1754 = getScoreInModal("F1754", c.key);
+                        const sLE216 = getScoreInModal("LE216", c.key);
+                        const sLE511 = getScoreInModal("LE511", c.key);
+
+                        const renderScoreItem = (uCode, sVal, name) => {
+                          if (isEditingModalScores) {
+                            return (
+                              <Space size={2} key={uCode}>
+                                <span style={{ fontSize: "10px", color: theme.colors.textSecondary }}>{uCode}:</span>
+                                <Select
+                                  size="small"
+                                  value={sVal ?? 0}
+                                  onChange={(val) => handleModalScoreChange(uCode, c.key, val)}
+                                  style={{ width: 64 }}
+                                  dropdownMatchSelectWidth={false}
+                                >
+                                  <Select.Option value={0}><Tag color="default" style={{ margin: 0 }}>0</Tag></Select.Option>
+                                  <Select.Option value={1}><Tag color="error" style={{ margin: 0 }}>1</Tag></Select.Option>
+                                  <Select.Option value={2}><Tag color="warning" style={{ margin: 0 }}>2</Tag></Select.Option>
+                                  <Select.Option value={3}><Tag color="success" style={{ margin: 0 }}>3</Tag></Select.Option>
+                                  <Select.Option value={4}><Tag color="purple" style={{ margin: 0 }}>4</Tag></Select.Option>
+                                </Select>
+                              </Space>
+                            );
+                          }
+                          const col = sVal === 4 ? "purple" : sVal === 3 ? "success" : sVal === 2 ? "warning" : sVal === 1 ? "error" : "default";
                           return (
-                            <Col span={8} key={sKey}>
+                            <Tooltip key={uCode} title={`${name} (${uCode}): Score ${sVal}/4`}>
+                              <Space size={2}>
+                                <span style={{ fontSize: "10px", color: theme.colors.textSecondary }}>{uCode}:</span>
+                                <Tag color={col} style={{ fontWeight: 800, margin: 0, minWidth: "22px", textAlign: "center" }}>
+                                  {sVal ?? "—"}
+                                </Tag>
+                              </Space>
+                            </Tooltip>
+                          );
+                        };
+
+                        return (
+                          <div
+                            key={c.key}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              background: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
+                              border: `1px solid ${theme.colors.border}40`
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px" }}>
+                              <div style={{ flex: 1, minWidth: "260px" }}>
+                                <Space size={6} wrap style={{ marginBottom: "2px" }}>
+                                  <Tag color="purple" style={{ fontWeight: 800, margin: 0 }}>
+                                    {c.code}
+                                  </Tag>
+                                  <span style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary }}>
+                                    {c.nameEn}
+                                  </span>
+                                  {c.keywords && (
+                                    <Tag color="cyan" style={{ fontSize: "10px", margin: 0 }}>
+                                      {c.keywords}
+                                    </Tag>
+                                  )}
+                                </Space>
+                                <div style={{ fontSize: "12px", color: theme.colors.textSecondary, marginTop: "2px" }}>
+                                  🇹🇭 {c.nameTh}
+                                </div>
+                                <div style={{ fontSize: "11px", color: theme.colors.textSecondary, opacity: 0.85, marginTop: "2px" }}>
+                                  {c.desc}
+                                </div>
+                              </div>
+
+                              {/* Leader Scores */}
                               <div
                                 style={{
                                   display: "flex",
-                                  justifyContent: "space-between",
-                                  padding: "4px 8px",
-                                  borderRadius: "6px",
-                                  background: `${theme.colors.border}15`,
-                                  border: `1px solid ${theme.colors.border}30`,
-                                  fontSize: "11px"
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  background: isDark ? "#141414" : "#f0f2f5",
+                                  padding: "4px 10px",
+                                  borderRadius: "8px",
+                                  border: `1px solid ${theme.colors.border}`
                                 }}
                               >
-                                <span>{SKILL_LABELS[sKey] || sKey}</span>
-                                <strong style={{ color: theme.colors.primary }}>≥ Level {reqLvl}</strong>
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: theme.colors.textSecondary }}>
+                                  SCORES:
+                                </span>
+                                {renderScoreItem("L6121", sL6121, "Suranat")}
+                                {renderScoreItem("F1754", sF1754, "Kanjana")}
+                                {renderScoreItem("LE216", sLE216, "Wirayut")}
+                                {renderScoreItem("LE511", sLE511, "Kanyarat")}
                               </div>
-                            </Col>
-                          );
-                        })}
-                    </Row>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <Alert
+              type="info"
+              showIcon
+              message="Staff Skill Requirement Guidelines"
+              description="Each skill area is assessed on a 1-3 scale. An engineer qualifies for a role when their skill level meets or exceeds the minimum required thresholds for DRAW, CHECK, REVIEW, or APPROVAL."
+              style={{ marginBottom: "16px", borderRadius: "8px" }}
+            />
+
+            <div style={{ paddingRight: "6px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              {effectiveQualColumns.map((col) => {
+                return (
+                  <Card
+                    key={col.id}
+                    size="small"
+                    style={{
+                      marginBottom: "12px",
+                      borderRadius: "10px",
+                      border: `1px solid ${theme.colors.border}`,
+                      background: col.scope === "OTHERS" ? (isDark ? "#2b1e0020" : "#fffbe660") : theme.colors.surface
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <Space size={6}>
+                        <Tag color={col.badgeColor} style={{ fontWeight: 700 }}>
+                          {col.scope}
+                        </Tag>
+                        <Tag>{col.group}</Tag>
+                        <Tag color="purple" style={{ fontWeight: 700 }}>
+                          {col.role}
+                        </Tag>
+                      </Space>
+                      <Text type="secondary" style={{ fontSize: "11px" }}>
+                        ID: {col.id}
+                      </Text>
+                    </div>
+
+                    {col.isApproval ? (
+                      <div style={{ fontSize: "12px", color: theme.colors.textPrimary, padding: "6px 0" }}>
+                        <strong>Requirement:</strong> {col.criteriaSummary} (Department Manager, Assistant Manager, or Section Head)
+                      </div>
+                    ) : (
+                      <div>
+                        <Text strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
+                          Required Minimum Skills (Criteria Thresholds):
+                        </Text>
+                        <Row gutter={[8, 8]}>
+                          {col.criteria &&
+                            Object.entries(col.criteria).map(([sKey, reqLvl]) => {
+                              return (
+                                <Col span={8} key={sKey}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      padding: "4px 8px",
+                                      borderRadius: "6px",
+                                      background: `${theme.colors.border}15`,
+                                      border: `1px solid ${theme.colors.border}30`,
+                                      fontSize: "11px"
+                                    }}
+                                  >
+                                    <span>{SKILL_LABELS[sKey] || sKey}</span>
+                                    <strong style={{ color: theme.colors.primary }}>≥ Level {reqLvl}</strong>
+                                  </div>
+                                </Col>
+                              );
+                            })}
+                        </Row>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* ── Qualification & Certification Editor Modal (MGR / COORD / AD) ── */}
@@ -2385,6 +3481,20 @@ const QualificationSummaryView = ({
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ── Excel Sheets Explorer Modal (All 14 sheets across both workbooks) ── */}
+      <Modal
+        title={null}
+        open={explorerModalOpen}
+        onCancel={() => setExplorerModalOpen(false)}
+        footer={null}
+        width="95vw"
+        style={{ top: 20 }}
+        bodyStyle={{ padding: "16px 20px" }}
+        destroyOnClose
+      >
+        <ExcelSheetsExplorer />
       </Modal>
     </div>
   );

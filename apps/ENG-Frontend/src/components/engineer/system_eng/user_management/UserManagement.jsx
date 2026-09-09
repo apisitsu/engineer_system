@@ -28,7 +28,8 @@ import {
   calculateExperience,
   USER_GROUP_ORDER,
   QUALIFICATION_COLUMNS,
-  DEFAULT_SKILL_DEFINITIONS
+  DEFAULT_SKILL_DEFINITIONS,
+  LEADER_ALL_CRITERIA_FLAT
 } from "./qualificationCriteria";
 
 
@@ -274,6 +275,7 @@ const UserManagement = () => {
   // Criteria & Skill Definitions State (Synced with PostgreSQL m_qualification_criteria)
   const [criteriaColumns, setCriteriaColumns] = useState(QUALIFICATION_COLUMNS);
   const [skillDefinitions, setSkillDefinitions] = useState(DEFAULT_SKILL_DEFINITIONS);
+  const [leaderCriteria, setLeaderCriteria] = useState(LEADER_ALL_CRITERIA_FLAT);
   const [criteriaLoading, setCriteriaLoading] = useState(false);
 
   // Main Page View Mode: 'qualification_summary' (Default First Page) | 'skill_requirements' | 'roster' (Engineer Directory)
@@ -340,6 +342,8 @@ const UserManagement = () => {
         includeSummary: true,
         includeStaffMatrix: true,
         includeLeaderMatrix: true,
+        includeLeaderHistory: true,
+        includeLeaderCriteria: true,
         includeSkillRequirements: true,
         includeSkillRubrics: true,
         includeUserRoster: true,
@@ -352,6 +356,8 @@ const UserManagement = () => {
             includeSummary: true,
             includeStaffMatrix: true,
             includeLeaderMatrix: true,
+            includeLeaderHistory: true,
+            includeLeaderCriteria: true,
             includeSkillRequirements: false,
             includeSkillRubrics: false,
             includeUserRoster: false,
@@ -361,7 +367,9 @@ const UserManagement = () => {
           sheetOptions = {
             includeSummary: false,
             includeStaffMatrix: false,
-            includeLeaderMatrix: false,
+            includeLeaderMatrix: true,
+            includeLeaderHistory: true,
+            includeLeaderCriteria: true,
             includeSkillRequirements: true,
             includeSkillRubrics: true,
             includeUserRoster: false,
@@ -372,6 +380,8 @@ const UserManagement = () => {
             includeSummary: true,
             includeStaffMatrix: false,
             includeLeaderMatrix: false,
+            includeLeaderHistory: false,
+            includeLeaderCriteria: false,
             includeSkillRequirements: false,
             includeSkillRubrics: false,
             includeUserRoster: true,
@@ -491,6 +501,9 @@ const UserManagement = () => {
         if (Array.isArray(res.data.data.skill_definitions) && res.data.data.skill_definitions.length > 0) {
           setSkillDefinitions(res.data.data.skill_definitions);
         }
+        if (Array.isArray(res.data.data.leader_criteria) && res.data.data.leader_criteria.length > 0) {
+          setLeaderCriteria(res.data.data.leader_criteria);
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch qualification criteria:", err);
@@ -503,19 +516,24 @@ const UserManagement = () => {
     fetchCriteria();
   }, [fetchCriteria]);
 
-  const handleSaveCriteria = async (newColumns, newDefinitions) => {
+  const handleSaveCriteria = async (newColumns, newDefinitions, newLeaderCriteria) => {
     try {
       setCriteriaLoading(true);
       const url = `${server.API_URL}api/system/qualification-criteria`;
       const res = await axios.put(
         url,
-        { qualificationColumns: newColumns, skillDefinitions: newDefinitions },
+        {
+          qualification_columns: newColumns || criteriaColumns,
+          skill_definitions: newDefinitions || skillDefinitions,
+          leader_criteria: newLeaderCriteria || leaderCriteria
+        },
         { headers: getAuthHeaders() }
       );
       if (res.data?.result === "true") {
-        message.success(res.data.message || "Skill criteria saved successfully!");
-        setCriteriaColumns(newColumns);
-        setSkillDefinitions(newDefinitions);
+        message.success(res.data.message || "Criteria saved successfully!");
+        if (newColumns) setCriteriaColumns(newColumns);
+        if (newDefinitions) setSkillDefinitions(newDefinitions);
+        if (newLeaderCriteria) setLeaderCriteria(newLeaderCriteria);
         return true;
       }
       message.error(res.data?.message || "Failed to save criteria");
@@ -1465,6 +1483,7 @@ const UserManagement = () => {
                 <SkillRequirementsMatrixView
                   qualificationColumns={criteriaColumns}
                   skillDefinitions={skillDefinitions}
+                  leaderCriteria={leaderCriteria}
                   canEditCriteria={canEditQualifications}
                   loading={criteriaLoading}
                   onSaveCriteria={handleSaveCriteria}
