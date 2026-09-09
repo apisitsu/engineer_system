@@ -570,43 +570,27 @@ export const CHARACTER_PRESETS = [
   }
 ];
 
-// Sample public 3D models for testing and quick loading (Robots, Mecha, Androids, Sci-Fi Equipment)
+// Sample 3D models for testing and quick loading (stored locally for offline use)
 export const SAMPLE_3D_MODELS = [
   {
     name: "Stylized Sci-Fi Robot",
-    url: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+    url: `${process.env.PUBLIC_URL || ""}/models/RobotExpressive.glb`,
     type: "glb",
     category: "Robots & Mecha",
     icon: "🤖",
     description: "Articulated expressive sci-fi robot with animated emotes, idle, and wave motions"
   },
   {
-    name: "Cybernetic Android X-Bot",
-    url: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Xbot.glb",
-    type: "glb",
-    category: "Robots & Mecha",
-    icon: "🦾",
-    description: "Full-body humanoid combat android with skeletal mechanical joints"
-  },
-  {
     name: "Tactical Combat Soldier",
-    url: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb",
+    url: `${process.env.PUBLIC_URL || ""}/models/Soldier.glb`,
     type: "glb",
     category: "Robots & Mecha",
     icon: "🪖",
     description: "Heavily armored tactical cyber-soldier with animated idle stance"
   },
   {
-    name: "Cesium Cyber Navigator",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMan/glTF-Binary/CesiumMan.glb",
-    type: "glb",
-    category: "Robots & Mecha",
-    icon: "🚶",
-    description: "High-mobility animated reconnaissance operative"
-  },
-  {
     name: "Biomecha Walker Robot",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BrainStem/glTF-Binary/BrainStem.glb",
+    url: `${process.env.PUBLIC_URL || ""}/models/BrainStem.glb`,
     type: "glb",
     category: "Robots & Mecha",
     icon: "🦿",
@@ -614,107 +598,20 @@ export const SAMPLE_3D_MODELS = [
   },
   {
     name: "Cyber Companion Fox",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Fox/glTF-Binary/Fox.glb",
+    url: `${process.env.PUBLIC_URL || ""}/models/Fox.glb`,
     type: "glb",
     category: "Robots & Mecha",
     icon: "🦊",
     description: "Stylized low-poly robotic companion scout with lifelike idle animation"
   },
   {
-    name: "Battle-Worn Cyber Helmet",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🪖",
-    description: "Hyper-detailed battle-tested cyberpunk helmet with PBR emissive visor"
-  },
-  {
-    name: "Aerospace Flight Gear",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-    type: "gltf",
-    category: "Artifacts & Gear",
-    icon: "🚀",
-    description: "Multi-layered aerospace pilot flight helmet with optical oxygen rig"
-  },
-  {
-    name: "Planetary Rover Buggy",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Buggy/glTF-Binary/Buggy.glb",
-    type: "glb",
-    category: "Vehicles & Drones",
-    icon: "🚙",
-    description: "Off-world surface exploration rover with heavy suspension and chassis"
-  },
-  {
-    name: "Mecha Golden Mascot Duck",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb",
-    type: "glb",
-    category: "Robots & Mecha",
-    icon: "🦆",
-    description: "Legendary cybernetic test mascot rendered in lustrous metallic finish"
-  },
-  {
-    name: "Sub-Aqua Cyber Drone",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BarramundiFish/glTF-Binary/BarramundiFish.glb",
-    type: "glb",
-    category: "Vehicles & Drones",
-    icon: "🐟",
-    description: "Biomimetic aquatic reconnaissance drone with hydrodynamic fins"
-  },
-  {
-    name: "Quantum Energy Core Sphere",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MetalRoughSpheres/glTF-Binary/MetalRoughSpheres.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🔮",
-    description: "Array of calibrated alloy and dielectric quantum power spheres"
-  },
-  {
-    name: "Cyber Sonic Blaster",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BoomBox/glTF-Binary/BoomBox.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "📻",
-    description: "Retro-futuristic soundwave frequency resonance amplifier"
-  },
-  {
-    name: "Plasma Energy Beacon",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Lantern/glTF-Binary/Lantern.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🏮",
-    description: "Ornate high-energy containment lantern with internal plasma glow"
-  },
-  {
-    name: "Cryo Containment Cell",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/WaterBottle/glTF-Binary/WaterBottle.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🧪",
-    description: "Reinforced cryogenic liquid cell with hermetic vacuum seals"
-  },
-  {
-    name: "Exoskeleton Armor Harness",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Corset/glTF-Binary/Corset.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🛡️",
-    description: "Reinforced composite spinal exoskeleton brace for heavy lifting"
-  },
-  {
-    name: "Cyber Bio-Core",
-    url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Avocado/glTF-Binary/Avocado.glb",
-    type: "glb",
-    category: "Artifacts & Gear",
-    icon: "🥑",
-    description: "Synthetic biological sample unit with high-density nutrient core"
-  },
-  {
     name: "Tokyo Cyber City Station",
-    url: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb",
+    url: `${process.env.PUBLIC_URL || ""}/models/LittlestTokyo.glb`,
     type: "glb",
     category: "Vehicles & Drones",
     icon: "🏙️",
     description: "Animated miniature cyberpunk urban station with train and steam effects"
   }
 ];
+
 

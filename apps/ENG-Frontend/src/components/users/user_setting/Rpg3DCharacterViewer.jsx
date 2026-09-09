@@ -936,9 +936,22 @@ const Rpg3DCharacterViewer = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.isCustom && parsed.url) {
-          setCustomModelUrl(parsed.url);
-          setActiveModelName(parsed.name || "Custom 3D Model");
-          setIsCustomMode(true);
+          const filename = parsed.url.split('/').pop();
+          const matchedModel = SAMPLE_3D_MODELS.find(m => m.name === parsed.name || m.url === parsed.url || m.url.endsWith(filename));
+          if (matchedModel) {
+            setCustomModelUrl(matchedModel.url);
+            setActiveModelName(matchedModel.name);
+            setIsCustomMode(true);
+          } else if (parsed.url.startsWith('blob:') || parsed.url.startsWith('data:')) {
+            setCustomModelUrl(parsed.url);
+            setActiveModelName(parsed.name || "Custom 3D Model");
+            setIsCustomMode(true);
+          } else {
+            setSelectedPresetId(initialPresetId);
+            const found = CHARACTER_PRESETS.find(p => p.id === initialPresetId);
+            setActiveModelName(found?.name || "Cyborg Engineer");
+            setIsCustomMode(false);
+          }
         } else if (parsed.presetId) {
           setSelectedPresetId(parsed.presetId);
           const found = CHARACTER_PRESETS.find(p => p.id === parsed.presetId);
@@ -949,7 +962,7 @@ const Rpg3DCharacterViewer = ({
     } catch (e) {
       console.warn("Failed to read 3D character storage:", e);
     }
-  }, [storageKey]);
+  }, [storageKey, initialPresetId]);
 
   const activePreset = useMemo(() => {
     return CHARACTER_PRESETS.find(p => p.id === selectedPresetId) || CHARACTER_PRESETS[0];
@@ -1117,44 +1130,33 @@ const Rpg3DCharacterViewer = ({
         </div>
       </div>
 
-      {/* ── Bottom Controls & Instructions ──────────────────────────────────── */}
-      <div style={{
-        position: 'absolute',
-        bottom: 12,
-        left: 16,
-        right: 16,
-        zIndex: 10,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        pointerEvents: 'none'
-      }}>
+      {/* ── Bottom Controls ──────────────────────────────────────────────────── */}
+      {isCustomMode && (
         <div style={{
-          background: 'rgba(32, 38, 56, 0.88)',
-          backdropFilter: 'blur(6px)',
-          padding: '4px 10px',
-          borderRadius: '8px',
-          border: '1px solid rgba(255,255,255,0.12)'
+          position: 'absolute',
+          bottom: 12,
+          right: 16,
+          zIndex: 10,
+          pointerEvents: 'auto'
         }}>
-          <Text style={{ color: '#cbd5e1', fontSize: '11px' }}>
-            🖱️ Drag to rotate | Scroll to zoom | Right-click to pan
-          </Text>
+          <Button
+            size="small"
+            type="text"
+            icon={<ClearOutlined />}
+            onClick={handleResetToDefault}
+            style={{
+              color: '#ff7875',
+              fontSize: '11px',
+              background: 'rgba(32, 38, 56, 0.88)',
+              backdropFilter: 'blur(6px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '8px'
+            }}
+          >
+            Reset Preset
+          </Button>
         </div>
-
-        {isCustomMode && (
-          <div style={{ pointerEvents: 'auto' }}>
-            <Button
-              size="small"
-              type="text"
-              icon={<ClearOutlined />}
-              onClick={handleResetToDefault}
-              style={{ color: '#ff7875', fontSize: '11px' }}
-            >
-              Reset Preset
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── 3D Canvas Viewport ───────────────────────────────────────────────── */}
       <ThreeCanvasErrorBoundary>
@@ -1335,7 +1337,7 @@ const Rpg3DCharacterViewer = ({
                   Explore 3D GLB Models
                 </Text>
                 <Tag color="cyan" style={{ borderRadius: '6px', fontSize: '11px', margin: 0 }}>
-                  {SAMPLE_3D_MODELS.length} Free CDN Models
+                  {SAMPLE_3D_MODELS.length} Offline 3D Models
                 </Tag>
               </Space>
 
@@ -1345,9 +1347,8 @@ const Rpg3DCharacterViewer = ({
                 onChange={setSampleCategory}
                 options={[
                   { label: "All", value: "all" },
-                  { label: "🤖 Robots", value: "Robots & Mecha" },
-                  { label: "🪖 Artifacts", value: "Artifacts & Gear" },
-                  { label: "🚀 Vehicles", value: "Vehicles & Drones" }
+                  { label: "🤖 Robots & Mecha", value: "Robots & Mecha" },
+                  { label: "🏙️ Vehicles & Scenes", value: "Vehicles & Drones" }
                 ]}
                 style={{
                   background: '#242b3e',
