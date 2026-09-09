@@ -96,14 +96,14 @@ export const QUALIFICATION_COLUMNS = [
       public_std: 3,
       cust_specification: 3,
       internal_document: 3,
-      cad: 2,
+      cad: 3,
       detail_oriented: 3,
       critical_thinking: 3,
       process_comprehension: 3,
       time_management: 2,
       collaboration: 2
     },
-    criteriaSummary: "CAD≥2, Critical≥3, Detail≥3, Doc≥3, Process≥3"
+    criteriaSummary: "CAD≥3, Critical≥3, Detail≥3, Doc≥3, Process≥3"
   },
   {
     id: "aerospace_revise_draw",
@@ -149,14 +149,14 @@ export const QUALIFICATION_COLUMNS = [
       public_std: 3,
       cust_specification: 3,
       internal_document: 3,
-      cad: 2,
+      cad: 3,
       detail_oriented: 3,
       critical_thinking: 3,
       process_comprehension: 3,
       time_management: 2,
       collaboration: 2
     },
-    criteriaSummary: "CAD≥2, Critical≥3, Detail≥3, Doc≥3, Process≥3"
+    criteriaSummary: "CAD≥3, Critical≥3, Detail≥3, Doc≥3, Process≥3"
   },
   {
     id: "tooling_new_draw",
@@ -282,14 +282,14 @@ export const QUALIFICATION_COLUMNS = [
       inspection: 1,
       mc_operation: 1,
       public_std: 2,
-      cust_specification: 2,
+      cust_specification: 3,
       internal_document: 2,
       cad: 2,
       microsoft: 1,
       time_management: 2,
       collaboration: 2
     },
-    criteriaSummary: "Public STD≥2, Cust Spec≥2, CAD≥2, Office≥1"
+    criteriaSummary: "Cust Spec≥3, Public STD≥2, CAD≥2, Office≥1"
   },
   {
     id: "specification_check",
@@ -388,18 +388,236 @@ export const SCOPE_GROUPS = [
   }
 ];
 
+export const DEFAULT_SKILL_DEFINITIONS = [
+  {
+    key: "mc_setup",
+    label: "M/C Setup",
+    categoryKey: "industry",
+    categoryName: "INDUSTRY SKILL",
+    levels: {
+      1: { desc: "Able to understand the M/C setup principle but cannot do it by themselves.", exp: "None" },
+      2: { desc: "Able to Setup M/C but still need some help for special setups.", exp: "None" },
+      3: { desc: "Able to Setup M/C and produce parts through completion independently.", exp: "6 Months" }
+    }
+  },
+  {
+    key: "inspection",
+    label: "Inspection",
+    categoryKey: "industry",
+    categoryName: "INDUSTRY SKILL",
+    levels: {
+      1: { desc: "Able to use basic inspection instruments (e.g. Micrometer, Caliper).", exp: "None" },
+      2: { desc: "Able to use basic instruments and specialized instruments (e.g. Contour, Projector).", exp: "None" },
+      3: { desc: "Able to use almost all inspection instruments and advanced equipment (e.g. CMM, IDM).", exp: "6 Months" }
+    }
+  },
+  {
+    key: "mc_operation",
+    label: "M/C Operation",
+    categoryKey: "industry",
+    categoryName: "INDUSTRY SKILL",
+    levels: {
+      1: { desc: "Understand fundamental machine working principles.", exp: "None" },
+      2: { desc: "Understand machine operations related to tooling and manufactured parts.", exp: "None" },
+      3: { desc: "Master full machine operations and interactions across all tooling sets.", exp: "12 Months" }
+    }
+  },
+  {
+    key: "public_std",
+    label: "Public STD",
+    categoryKey: "document",
+    categoryName: "DOCUMENT",
+    levels: {
+      1: { desc: "Understand basic standards requirements and purposes.", exp: "None" },
+      2: { desc: "Understand standard requirements; able to draft and revise internal documents.", exp: "None" },
+      3: { desc: "Full comprehension of all standards; able to draft, revise, and verify work for others.", exp: "12 Months" }
+    }
+  },
+  {
+    key: "cust_specification",
+    label: "Cust. Specification",
+    categoryKey: "document",
+    categoryName: "DOCUMENT",
+    levels: {
+      1: { desc: "Understand customer specifications and intent.", exp: "None" },
+      2: { desc: "Understand customer requirements; able to draft/revise customer drawings and specs.", exp: "None" },
+      3: { desc: "Master customer specifications; able to verify compliance and audit work for others.", exp: "12 Months" }
+    }
+  },
+  {
+    key: "internal_document",
+    label: "Internal Document",
+    categoryKey: "document",
+    categoryName: "DOCUMENT",
+    levels: {
+      1: { desc: "Understand internal standard operating procedures and documentation.", exp: "None" },
+      2: { desc: "Able to author, update, and maintain internal technical procedures.", exp: "None" },
+      3: { desc: "Expert on internal documentation standards; able to review and approve work for others.", exp: "6 Months" }
+    }
+  },
+  {
+    key: "cad",
+    label: "CAD",
+    categoryKey: "computer",
+    categoryName: "COMPUTER",
+    levels: {
+      1: { desc: "Able to use ME10/CAD basics and standard geometric commands.", exp: "None" },
+      2: { desc: "Able to draft simple 2D drawings for tooling and spare parts.", exp: "None" },
+      3: { desc: "Able to design complete production drawings and check/audit drawings for others.", exp: "6 Months" }
+    }
+  },
+  {
+    key: "programming",
+    label: "Programming",
+    categoryKey: "computer",
+    categoryName: "COMPUTER",
+    levels: {
+      1: { desc: "Logical thinking with foundational automation concepts.", exp: "None" },
+      2: { desc: "Able to create macros and edit automation scripts.", exp: "None" },
+      3: { desc: "Able to write end-to-end applications, debug complex logic, and optimize workflows.", exp: "None" }
+    }
+  },
+  {
+    key: "microsoft",
+    label: "Microsoft",
+    categoryKey: "computer",
+    categoryName: "COMPUTER",
+    levels: {
+      1: { desc: "Able to use Office software to produce basic engineering reports.", exp: "None" },
+      2: { desc: "Proficient with advanced commands, pivot tables, and spreadsheet formulas.", exp: "None" },
+      3: { desc: "Expert proficiency in office tools, database connections, and technical reporting.", exp: "None" }
+    }
+  },
+  {
+    key: "detail_oriented",
+    label: "Detail Oriented",
+    categoryKey: "problem_solving",
+    categoryName: "PROBLEM SOLVING",
+    levels: {
+      1: { desc: "Basic attention to detail; requires senior guidance for quality checks.", exp: "None" },
+      2: { desc: "Good thoroughness with minor oversights; requires occasional higher-level check.", exp: "None" },
+      3: { desc: "Flawless accuracy and precision; able to perform peer and subordinate reviews.", exp: "None" }
+    }
+  },
+  {
+    key: "critical_thinking",
+    label: "Critical Thinking",
+    categoryKey: "problem_solving",
+    categoryName: "PROBLEM SOLVING",
+    levels: {
+      1: { desc: "Recognizes engineering anomalies but needs support identifying root cause.", exp: "None" },
+      2: { desc: "Understands root causes of anomalies and suggests direct corrective actions.", exp: "None" },
+      3: { desc: "Comprehensive root cause analysis with preventive systems and risk mitigation.", exp: "12 Months" }
+    }
+  },
+  {
+    key: "process_comprehension",
+    label: "Process Comprehension",
+    categoryKey: "problem_solving",
+    categoryName: "PROBLEM SOLVING",
+    levels: {
+      1: { desc: "Understands overall process routing and sequence.", exp: "None" },
+      2: { desc: "Understands detailed unit operations, parameters, and machine capabilities.", exp: "None" },
+      3: { desc: "Master of manufacturing processes, tolerances, and engineering process standards.", exp: "12 Months" }
+    }
+  },
+  {
+    key: "time_management",
+    label: "Time Management",
+    categoryKey: "general",
+    categoryName: "GENERAL",
+    levels: {
+      1: { desc: "Sets delivery milestones but occasionally encounters schedule slippage.", exp: "None" },
+      2: { desc: "Consistently achieves on-time delivery per committed engineering schedules.", exp: "None" },
+      3: { desc: "Always delivers ahead of schedule through proactive planning and priority control.", exp: "None" }
+    }
+  },
+  {
+    key: "collaboration",
+    label: "Collaboration",
+    categoryKey: "general",
+    categoryName: "GENERAL",
+    levels: {
+      1: { desc: "Works effectively within immediate section/team.", exp: "None" },
+      2: { desc: "Collaborates smoothly across multiple related engineering departments.", exp: "None" },
+      3: { desc: "Seamless cross-functional leadership across production, QC, sales, and management.", exp: "None" }
+    }
+  },
+  {
+    key: "leadership",
+    label: "Leadership",
+    categoryKey: "general",
+    categoryName: "GENERAL",
+    levels: {
+      1: { desc: "Capable of mentoring junior team members on specific tasks.", exp: "None" },
+      2: { desc: "Directs sub-teams and clearly communicates goals, requirements, and deadlines.", exp: "None" },
+      3: { desc: "Senior mentor, consultant, planner, and decisive problem solver for the division.", exp: "12 Months" }
+    }
+  }
+];
+
 /**
- * Evaluates a single user against all 11 qualification scopes
+ * Generates human-friendly criteria summary text (e.g. "CAD≥2, Process≥3, Doc≥2")
+ * @param {Object} criteria - Map of skillKey: requiredLevel
+ * @returns {string}
+ */
+export const generateCriteriaSummary = (criteria) => {
+  if (!criteria || typeof criteria !== "object") return "";
+  const priorityKeys = ["cad", "process_comprehension", "critical_thinking", "detail_oriented", "mc_setup", "mc_operation", "public_std", "cust_specification", "internal_document", "microsoft"];
+  const shortLabels = {
+    cad: "CAD",
+    process_comprehension: "Process",
+    critical_thinking: "Critical",
+    detail_oriented: "Detail",
+    mc_setup: "Setup",
+    mc_operation: "M/C Op",
+    public_std: "Public STD",
+    cust_specification: "Cust Spec",
+    internal_document: "Doc",
+    microsoft: "Office",
+    programming: "Prog",
+    inspection: "Inspect",
+    time_management: "Time",
+    collaboration: "Collab",
+    leadership: "Lead"
+  };
+
+  const keys = Object.keys(criteria).sort((a, b) => {
+    const idxA = priorityKeys.indexOf(a);
+    const idxB = priorityKeys.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const parts = [];
+  keys.forEach((k) => {
+    const lvl = Number(criteria[k]);
+    if (lvl > 0) {
+      parts.push(`${shortLabels[k] || k}≥${lvl}`);
+    }
+  });
+
+  return parts.slice(0, 5).join(", ");
+};
+
+/**
+ * Evaluates a single user against all qualification scopes
  * @param {Object} user User object containing skills (mc_setup, etc.) and qualifications JSONB
+ * @param {Array} customColumns Optional dynamic qualification columns configuration
  * @returns {Object} { [colId]: { isQualified, isApproved, meetsCriteria, missingSkills } }
  */
-export const evaluateUserQualifications = (user) => {
+export const evaluateUserQualifications = (user, customColumns) => {
   if (!user) return {};
 
   const quals = user.qualifications || {};
   const results = {};
+  const columnsToEval = customColumns && Array.isArray(customColumns) && customColumns.length > 0
+    ? customColumns
+    : QUALIFICATION_COLUMNS;
 
-  QUALIFICATION_COLUMNS.forEach((col) => {
+  columnsToEval.forEach((col) => {
     // 1. Check if officially approved in stored qualifications
     let isApproved = false;
     if (col.path && col.path.length === 3) {
@@ -426,13 +644,15 @@ export const evaluateUserQualifications = (user) => {
         pos.includes("MANAGER");
     } else if (col.criteria) {
       for (const [skillKey, requiredLvl] of Object.entries(col.criteria)) {
+        const requiredNum = Number(requiredLvl);
+        if (requiredNum <= 0) continue;
         const currentLvl = Number(user[skillKey] || 0);
-        if (currentLvl < requiredLvl) {
+        if (currentLvl < requiredNum) {
           meetsCriteria = false;
           missingSkills.push({
             skillKey,
             skillLabel: SKILL_LABELS[skillKey] || skillKey,
-            required: requiredLvl,
+            required: requiredNum,
             current: currentLvl
           });
         }
@@ -448,7 +668,7 @@ export const evaluateUserQualifications = (user) => {
       isApproved,
       meetsCriteria,
       missingSkills,
-      criteriaSummary: col.criteriaSummary
+      criteriaSummary: col.criteriaSummary || generateCriteriaSummary(col.criteria)
     };
   });
 

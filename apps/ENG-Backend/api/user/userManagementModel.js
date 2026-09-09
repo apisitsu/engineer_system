@@ -667,8 +667,118 @@ const updateQualifications = async (req, res) => {
     }
 };
 
+// 13. Get Qualification Criteria & Skill Definitions
+const getQualificationCriteria = async (req, res) => {
+    try {
+        const { DEFAULT_QUALIFICATION_COLUMNS, DEFAULT_SKILL_DEFINITIONS } = require('../../scripts/init_criteria_db');
+        const query = `SELECT * FROM m_qualification_criteria WHERE criteria_key = 'default';`;
+        let result = await engPool.query(query);
+
+        if (result.rows.length === 0) {
+            // Seed default if empty
+            const seedQuery = `
+                INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, updated_by, updated_at)
+                VALUES ('default', $1, $2, 'SYSTEM_INIT', NOW())
+                RETURNING *;
+            `;
+            result = await engPool.query(seedQuery, [
+                JSON.stringify(DEFAULT_QUALIFICATION_COLUMNS),
+                JSON.stringify(DEFAULT_SKILL_DEFINITIONS)
+            ]);
+        }
+
+        res.json({
+            result: 'true',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Error fetching qualification criteria:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+// 14. Save/Update Qualification Criteria
+const saveQualificationCriteria = async (req, res) => {
+    try {
+        const { qualification_columns, skill_definitions, updated_by } = req.body;
+
+        if (!qualification_columns || !Array.isArray(qualification_columns)) {
+            return res.status(400).json({ result: 'false', message: 'qualification_columns array is required' });
+        }
+
+        const query = `
+            INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, updated_by, updated_at)
+            VALUES ('default', $1, $2, $3, NOW())
+            ON CONFLICT (criteria_key) DO UPDATE SET
+                qualification_columns = EXCLUDED.qualification_columns,
+                skill_definitions = COALESCE(EXCLUDED.skill_definitions, m_qualification_criteria.skill_definitions),
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING *;
+        `;
+
+        const result = await engPool.query(query, [
+            JSON.stringify(qualification_columns),
+            JSON.stringify(skill_definitions || []),
+            updated_by || req.user?.empno || 'SYSTEM'
+        ]);
+
+        await logAction(
+            updated_by || req.user?.empno || 'SYSTEM',
+            'UPDATE_QUALIFICATION_CRITERIA',
+            `Updated qualification criteria (${qualification_columns.length} columns configured)`
+        );
+
+        res.json({
+            result: 'true',
+            message: 'Qualification criteria saved successfully',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Error saving qualification criteria:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+// 15. Reset Qualification Criteria to Factory Defaults
+const resetQualificationCriteria = async (req, res) => {
+    try {
+        const { DEFAULT_QUALIFICATION_COLUMNS, DEFAULT_SKILL_DEFINITIONS } = require('../../scripts/init_criteria_db');
+        const userCode = req.body?.updated_by || req.user?.empno || 'SYSTEM';
+
+        const query = `
+            INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, updated_by, updated_at)
+            VALUES ('default', $1, $2, $3, NOW())
+            ON CONFLICT (criteria_key) DO UPDATE SET
+                qualification_columns = EXCLUDED.qualification_columns,
+                skill_definitions = EXCLUDED.skill_definitions,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING *;
+        `;
+
+        const result = await engPool.query(query, [
+            JSON.stringify(DEFAULT_QUALIFICATION_COLUMNS),
+            JSON.stringify(DEFAULT_SKILL_DEFINITIONS),
+            userCode
+        ]);
+
+        await logAction(userCode, 'RESET_QUALIFICATION_CRITERIA', 'Reset qualification criteria to Excel factory defaults');
+
+        res.json({
+            result: 'true',
+            message: 'Qualification criteria reset to factory defaults successfully',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Error resetting qualification criteria:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
 module.exports = {
     getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers,
-    getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers, updateQualifications
+    getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers, updateQualifications,
+    getQualificationCriteria, saveQualificationCriteria, resetQualificationCriteria
 };
 

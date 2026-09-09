@@ -45,10 +45,25 @@ const QualificationSummaryView = ({
   canManageUsers = false,
   canEditQualifications = false,
   onSaveQualifications,
-  onRefresh
+  onRefresh,
+  qualificationColumns = QUALIFICATION_COLUMNS
 }) => {
   const { theme } = useTheme();
   const isDark = theme.isDark || false;
+
+  const effectiveQualColumns = useMemo(() => {
+    return Array.isArray(qualificationColumns) && qualificationColumns.length > 0
+      ? qualificationColumns
+      : QUALIFICATION_COLUMNS;
+  }, [qualificationColumns]);
+
+  const getQualCol = useCallback((colId) => {
+    return (
+      effectiveQualColumns.find((c) => c.id === colId) ||
+      QUALIFICATION_COLUMNS.find((c) => c.id === colId) ||
+      {}
+    );
+  }, [effectiveQualColumns]);
 
   // 1. Default View: 'table' (Full Matrix Table as requested) | 'board' (Hierarchy Board)
   const [viewMode, setViewMode] = useState("table");
@@ -111,7 +126,7 @@ const QualificationSummaryView = ({
   const handleCertifyAll = (val = true) => {
     setEditingQuals((prev) => {
       const next = JSON.parse(JSON.stringify(prev || {}));
-      QUALIFICATION_COLUMNS.forEach((col) => {
+      effectiveQualColumns.forEach((col) => {
         if (col.path && col.path.length === 3) {
           if (!next[col.path[0]]) next[col.path[0]] = {};
           if (!next[col.path[0]][col.path[1]]) next[col.path[0]][col.path[1]] = {};
@@ -131,7 +146,7 @@ const QualificationSummaryView = ({
     const colIds = sg.subgroups.flatMap((sub) => sub.columns);
     setEditingQuals((prev) => {
       const next = JSON.parse(JSON.stringify(prev || {}));
-      QUALIFICATION_COLUMNS.forEach((col) => {
+      effectiveQualColumns.forEach((col) => {
         if (!colIds.includes(col.id)) return;
         if (col.path && col.path.length === 3) {
           if (!next[col.path[0]]) next[col.path[0]] = {};
@@ -199,13 +214,13 @@ const QualificationSummaryView = ({
   // ── 2. Evaluate Staff Users against the 11 Design Qualifications ────────────
   const evaluatedStaffUsers = useMemo(() => {
     return staffUsers.map((u) => {
-      const evalResults = evaluateUserQualifications(u);
+      const evalResults = evaluateUserQualifications(u, effectiveQualColumns);
       return {
         ...u,
         _evalResults: evalResults
       };
     });
-  }, [staffUsers]);
+  }, [staffUsers, effectiveQualColumns]);
 
   // Active base dataset according to active matrix tab
   const activeSourceUsers = useMemo(() => {
@@ -235,7 +250,7 @@ const QualificationSummaryView = ({
 
       // Staff Scope filter (only applicable in Staff mode)
       if (matrixCategory === "staff" && scopeFilter !== "ALL") {
-        const matchesScope = QUALIFICATION_COLUMNS.some((col) => {
+        const matchesScope = effectiveQualColumns.some((col) => {
           if (col.scopeKey !== scopeFilter) return false;
           const res = u._evalResults?.[col.id];
           if (!res) return false;
@@ -258,13 +273,13 @@ const QualificationSummaryView = ({
       if (idxA !== idxB) return idxA - idxB;
       return String(a.u_code || "").localeCompare(String(b.u_code || ""));
     });
-  }, [activeSourceUsers, searchText, selectedGroup, scopeFilter, qualificationMode, matrixCategory]);
+  }, [activeSourceUsers, searchText, selectedGroup, scopeFilter, qualificationMode, matrixCategory, effectiveQualColumns]);
 
   // ── 4. Calculate Summary Metrics for Staff (Unique Person Counts) ─────────
   const staffMetrics = useMemo(() => {
     let totalQualifiedUsers = 0;
     const countByCol = {};
-    QUALIFICATION_COLUMNS.forEach((col) => {
+    effectiveQualColumns.forEach((col) => {
       countByCol[col.id] = 0;
     });
 
@@ -285,7 +300,7 @@ const QualificationSummaryView = ({
 
     evaluatedStaffUsers.forEach((u) => {
       let isAnyQualified = false;
-      QUALIFICATION_COLUMNS.forEach((col) => {
+      effectiveQualColumns.forEach((col) => {
         if (isQualifiedInCol(u, col.id)) {
           countByCol[col.id]++;
           isAnyQualified = true;
@@ -324,7 +339,7 @@ const QualificationSummaryView = ({
       specCount: specUsers,
       approvalCount: approvalUsers
     };
-  }, [evaluatedStaffUsers, qualificationMode]);
+  }, [evaluatedStaffUsers, qualificationMode, effectiveQualColumns]);
 
   // Helper: compute leader domain scores from evaluation_details.sections
   const getLeaderDomainScore = useCallback((leader, domainKey) => {
@@ -637,14 +652,14 @@ const QualificationSummaryView = ({
                   key: "aerospace_new_model_draw",
                   width: 95,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[0])
+                  render: renderQualCell(getQualCol("aerospace_new_model_draw"))
                 },
                 {
                   title: "CHECK",
                   key: "aerospace_new_model_check",
                   width: 90,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[1])
+                  render: renderQualCell(getQualCol("aerospace_new_model_check"))
                 }
               ]
             },
@@ -656,14 +671,14 @@ const QualificationSummaryView = ({
                   key: "aerospace_revise_draw",
                   width: 95,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[2])
+                  render: renderQualCell(getQualCol("aerospace_revise_draw"))
                 },
                 {
                   title: "CHECK",
                   key: "aerospace_revise_check",
                   width: 90,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[3])
+                  render: renderQualCell(getQualCol("aerospace_revise_check"))
                 }
               ]
             }
@@ -684,14 +699,14 @@ const QualificationSummaryView = ({
                   key: "tooling_new_draw",
                   width: 95,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[4])
+                  render: renderQualCell(getQualCol("tooling_new_draw"))
                 },
                 {
                   title: "CHECK",
                   key: "tooling_new_check",
                   width: 90,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[5])
+                  render: renderQualCell(getQualCol("tooling_new_check"))
                 }
               ]
             },
@@ -703,14 +718,14 @@ const QualificationSummaryView = ({
                   key: "tooling_revise_draw",
                   width: 95,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[6])
+                  render: renderQualCell(getQualCol("tooling_revise_draw"))
                 },
                 {
                   title: "CHECK",
                   key: "tooling_revise_check",
                   width: 90,
                   align: "center",
-                  render: renderQualCell(QUALIFICATION_COLUMNS[7])
+                  render: renderQualCell(getQualCol("tooling_revise_check"))
                 }
               ]
             }
@@ -747,14 +762,14 @@ const QualificationSummaryView = ({
               key: "specification_review",
               width: 90,
               align: "center",
-              render: renderQualCell(QUALIFICATION_COLUMNS[8])
+              render: renderQualCell(getQualCol("specification_review"))
             },
             {
               title: "CHECK",
               key: "specification_check",
               width: 90,
               align: "center",
-              render: renderQualCell(QUALIFICATION_COLUMNS[9])
+              render: renderQualCell(getQualCol("specification_check"))
             }
           ]
         },
@@ -770,7 +785,7 @@ const QualificationSummaryView = ({
               key: "approval",
               width: 100,
               align: "center",
-              render: renderQualCell(QUALIFICATION_COLUMNS[10])
+              render: renderQualCell(getQualCol("approval"))
             }
           ]
         }
@@ -818,7 +833,7 @@ const QualificationSummaryView = ({
     };
 
     return [...empColumns, rodendPartsColumns, othersColumns, actionColumn];
-  }, [theme, isDark, onOpenSkillDrawer, onEditUser, canManageUsers, canEditQualifications, renderUserActionPopover, handleOpenQualModal]);
+  }, [theme, isDark, onOpenSkillDrawer, onEditUser, canManageUsers, canEditQualifications, renderUserActionPopover, handleOpenQualModal, getQualCol]);
 
   // ── 7. Build Leader Competency Matrix Table Columns ────────────────────────
   const leaderTableColumns = useMemo(() => {
@@ -1723,7 +1738,7 @@ const QualificationSummaryView = ({
 
                             <Row gutter={[12, 12]}>
                               {subgroup.columns.map((colId) => {
-                                const colDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
+                                const colDef = effectiveQualColumns.find((c) => c.id === colId);
                                 if (!colDef) return null;
 
                                 const qualifiedUsersInCol = filteredUsers.filter((u) => {
@@ -1930,7 +1945,7 @@ const QualificationSummaryView = ({
         />
 
         <div style={{ maxHeight: "550px", overflowY: "auto", paddingRight: "6px" }}>
-          {QUALIFICATION_COLUMNS.map((col) => {
+          {effectiveQualColumns.map((col) => {
             return (
               <Card
                 key={col.id}
@@ -2094,7 +2109,7 @@ const QualificationSummaryView = ({
                 sg.subgroups.forEach((sub) => {
                   sub.columns.forEach((colId) => {
                     scopeTotal++;
-                    const cDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
+                    const cDef = effectiveQualColumns.find((c) => c.id === colId);
                     if (cDef && getApprovedVal(cDef)) scopeApproved++;
                   });
                 });
@@ -2250,7 +2265,7 @@ const QualificationSummaryView = ({
                               </thead>
                               <tbody>
                                 {sub.columns.map((colId, cIdx) => {
-                                  const colDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
+                                  const colDef = effectiveQualColumns.find((c) => c.id === colId);
                                   if (!colDef) return null;
                                   const evalData = qualModalUser?._evalResults?.[colId];
                                   const isApproved = getApprovedVal(colDef);

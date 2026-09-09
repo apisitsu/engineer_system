@@ -498,6 +498,9 @@ app.get('/api/system/user-management/skills', userManagement.getUserSkills);
 app.get('/api/system/user-management/skills/:u_code', userManagement.getUserSkillByCode);
 app.put('/api/system/user-management/skills/:u_code', userManagement.saveUserSkills);
 app.put('/api/system/user-management/qualifications/:u_code', userManagement.updateQualifications);
+app.get('/api/system/qualification-criteria', userManagement.getQualificationCriteria);
+app.put('/api/system/qualification-criteria', userManagement.saveQualificationCriteria);
+app.post('/api/system/qualification-criteria/reset', userManagement.resetQualificationCriteria);
 
 
 // Schema Modifying endpoints requiring super admin access

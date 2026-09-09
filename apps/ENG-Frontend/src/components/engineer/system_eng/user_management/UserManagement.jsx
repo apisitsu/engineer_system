@@ -22,7 +22,13 @@ import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import { useTheme } from "../../../../theme";
 import SkillMatrixDrawer from "./SkillMatrixDrawer";
 import QualificationSummaryView from "./QualificationSummaryView";
-import { calculateExperience, USER_GROUP_ORDER } from "./qualificationCriteria";
+import SkillRequirementsMatrixView from "./SkillRequirementsMatrixView";
+import {
+  calculateExperience,
+  USER_GROUP_ORDER,
+  QUALIFICATION_COLUMNS,
+  DEFAULT_SKILL_DEFINITIONS
+} from "./qualificationCriteria";
 
 
 const { Content } = Layout;
@@ -263,7 +269,12 @@ const UserManagement = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Main Page View Mode: 'qualification_summary' (Default First Page) | 'roster' (Engineer Directory)
+  // Criteria & Skill Definitions State (Synced with PostgreSQL m_qualification_criteria)
+  const [criteriaColumns, setCriteriaColumns] = useState(QUALIFICATION_COLUMNS);
+  const [skillDefinitions, setSkillDefinitions] = useState(DEFAULT_SKILL_DEFINITIONS);
+  const [criteriaLoading, setCriteriaLoading] = useState(false);
+
+  // Main Page View Mode: 'qualification_summary' (Default First Page) | 'skill_requirements' | 'roster' (Engineer Directory)
   const [activeMainTab, setActiveMainTab] = useState("qualification_summary");
 
   // View mode: 'cards' | 'table'
@@ -389,6 +400,83 @@ const UserManagement = () => {
       fetchData();
     }
   }, [schema.length, fetchData]);
+
+  // ── Qualification Criteria Fetch & Save Handlers ──────────────────────────
+  const fetchCriteria = useCallback(async () => {
+    try {
+      setCriteriaLoading(true);
+      const url = `${server.API_URL}api/system/qualification-criteria`;
+      const res = await axios.get(url, { headers: getAuthHeaders() });
+      if (res.data?.result === "true" && res.data?.data) {
+        if (Array.isArray(res.data.data.qualification_columns) && res.data.data.qualification_columns.length > 0) {
+          setCriteriaColumns(res.data.data.qualification_columns);
+        }
+        if (Array.isArray(res.data.data.skill_definitions) && res.data.data.skill_definitions.length > 0) {
+          setSkillDefinitions(res.data.data.skill_definitions);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch qualification criteria:", err);
+    } finally {
+      setCriteriaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCriteria();
+  }, [fetchCriteria]);
+
+  const handleSaveCriteria = async (newColumns, newDefinitions) => {
+    try {
+      setCriteriaLoading(true);
+      const url = `${server.API_URL}api/system/qualification-criteria`;
+      const res = await axios.put(
+        url,
+        { qualificationColumns: newColumns, skillDefinitions: newDefinitions },
+        { headers: getAuthHeaders() }
+      );
+      if (res.data?.result === "true") {
+        message.success(res.data.message || "Skill criteria saved successfully!");
+        setCriteriaColumns(newColumns);
+        setSkillDefinitions(newDefinitions);
+        return true;
+      }
+      message.error(res.data?.message || "Failed to save criteria");
+      return false;
+    } catch (err) {
+      console.error("Save Criteria Error:", err);
+      message.error(err?.response?.data?.message || "Failed to save criteria");
+      return false;
+    } finally {
+      setCriteriaLoading(false);
+    }
+  };
+
+  const handleResetCriteria = async () => {
+    try {
+      setCriteriaLoading(true);
+      const url = `${server.API_URL}api/system/qualification-criteria/reset`;
+      const res = await axios.post(url, {}, { headers: getAuthHeaders() });
+      if (res.data?.result === "true" && res.data?.data) {
+        message.success(res.data.message || "Criteria reset to factory baseline defaults!");
+        if (Array.isArray(res.data.data.qualification_columns)) {
+          setCriteriaColumns(res.data.data.qualification_columns);
+        }
+        if (Array.isArray(res.data.data.skill_definitions)) {
+          setSkillDefinitions(res.data.data.skill_definitions);
+        }
+        return true;
+      }
+      message.error(res.data?.message || "Failed to reset criteria");
+      return false;
+    } catch (err) {
+      console.error("Reset Criteria Error:", err);
+      message.error(err?.response?.data?.message || "Failed to reset criteria");
+      return false;
+    } finally {
+      setCriteriaLoading(false);
+    }
+  };
 
   // ── Search External Users (Factory RODPC m_user) ──────────────────────────
   const searchExternalUsers = useCallback(async (queryText = "") => {
@@ -1182,6 +1270,25 @@ const UserManagement = () => {
                       )
                     },
                     {
+                      value: "skill_requirements",
+                      label: (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "6px 18px" }}>
+                          <TrophyOutlined
+                            style={{
+                              color: activeMainTab === "skill_requirements" ? theme.colors.primary : undefined,
+                              fontSize: "15px"
+                            }}
+                          />
+                          <span style={{ fontWeight: 600 }}>
+                            Minimum Skill Requirements
+                          </span>
+                          <Tag color="cyan" style={{ margin: 0, borderRadius: "10px", fontSize: "10px", fontWeight: 700 }}>
+                            11 Scopes
+                          </Tag>
+                        </div>
+                      )
+                    },
+                    {
                       value: "roster",
                       label: (
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "6px 18px" }}>
@@ -1204,8 +1311,8 @@ const UserManagement = () => {
                 />
               </div>
 
-              {/* ── Conditional Render: Engineering Qualification Matrix (Default) vs Traditional Roster ── */}
-              {activeMainTab === "qualification_summary" ? (
+              {/* ── Conditional Render: Engineering Qualification Matrix (Default) vs Minimum Skill Requirements vs Traditional Roster ── */}
+              {activeMainTab === "qualification_summary" && (
                 <QualificationSummaryView
                   users={data}
                   loading={loading}
@@ -1215,9 +1322,27 @@ const UserManagement = () => {
                   canManageUsers={canManageUsers}
                   canEditQualifications={canEditQualifications}
                   onSaveQualifications={handleSaveQualifications}
-                  onRefresh={fetchData}
+                  qualificationColumns={criteriaColumns}
+                  onRefresh={() => {
+                    fetchData();
+                    fetchCriteria();
+                  }}
                 />
-              ) : (
+              )}
+
+              {activeMainTab === "skill_requirements" && (
+                <SkillRequirementsMatrixView
+                  qualificationColumns={criteriaColumns}
+                  skillDefinitions={skillDefinitions}
+                  canEditCriteria={canEditQualifications}
+                  loading={criteriaLoading}
+                  onSaveCriteria={handleSaveCriteria}
+                  onResetCriteria={handleResetCriteria}
+                  onRefresh={fetchCriteria}
+                />
+              )}
+
+              {activeMainTab === "roster" && (
                 <div>
                   {/* ── Team Hero Overview Stats Bar ────────────────────────── */}
                   <Row gutter={[16, 16]} style={{ marginBottom: "20px" }}>
