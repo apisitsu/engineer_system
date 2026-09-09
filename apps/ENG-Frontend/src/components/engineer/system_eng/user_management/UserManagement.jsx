@@ -1087,7 +1087,7 @@ const UserManagement = () => {
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                       <Title level={4} style={{ margin: 0, color: theme.colors.textPrimary }}>
-                        Engineer Roster & Skill Matrix
+                        User & Skill Matrix
                       </Title>
                       {canManageUsers ? (
                         <Tag color="gold" icon={<SafetyCertificateOutlined />} style={{ borderRadius: "10px", fontWeight: 600 }}>
@@ -1173,7 +1173,7 @@ const UserManagement = () => {
                             }}
                           />
                           <span style={{ fontWeight: 600 }}>
-                            Qualification Summary Matrix
+                            Engineering Qualification Matrix
                           </span>
                           <Tag color="gold" style={{ margin: 0, borderRadius: "10px", fontSize: "10px", fontWeight: 700 }}>
                             Primary ★
@@ -1204,7 +1204,7 @@ const UserManagement = () => {
                 />
               </div>
 
-              {/* ── Conditional Render: Qualification Summary Matrix (Default) vs Traditional Roster ── */}
+              {/* ── Conditional Render: Engineering Qualification Matrix (Default) vs Traditional Roster ── */}
               {activeMainTab === "qualification_summary" ? (
                 <QualificationSummaryView
                   users={data}
@@ -1220,434 +1220,434 @@ const UserManagement = () => {
               ) : (
                 <div>
                   {/* ── Team Hero Overview Stats Bar ────────────────────────── */}
-              <Row gutter={[16, 16]} style={{ marginBottom: "20px" }}>
-                <Col xs={24} sm={12} md={6}>
-                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div>
-                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Total Registered</Text>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: theme.colors.primary }}>{total || teamStats.total}</div>
-                      </div>
-                      <Avatar size={42} icon={<TeamOutlined />} style={{ background: `${theme.colors.primary}18`, color: theme.colors.primary }} />
-                    </div>
-                    <Text type="secondary" style={{ fontSize: "11px" }}>Across all engineering sections</Text>
-                  </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div>
-                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Active Engineers</Text>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#52c41a" }}>{teamStats.active}</div>
-                      </div>
-                      <Avatar size={42} icon={<CheckCircleOutlined />} style={{ background: "#52c41a18", color: "#52c41a" }} />
-                    </div>
-                    <Text type="secondary" style={{ fontSize: "11px" }}>Active on duty in plant</Text>
-                  </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div>
-                        <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Leaders & Specialists</Text>
-                        <div style={{ fontSize: "24px", fontWeight: 800, color: "#722ed1" }}>{teamStats.leaders}</div>
-                      </div>
-                      <Avatar size={42} icon={<TrophyOutlined />} style={{ background: "#722ed118", color: "#722ed1" }} />
-                    </div>
-                    <Text type="secondary" style={{ fontSize: "11px" }}>Team leaders & high-tier staff</Text>
-                  </Card>
-                </Col>
-                <Col xs={24} sm={12} md={6}>
-                  <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
-                    <div style={{ marginBottom: "4px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600 }}>
-                        <span style={{ color: theme.colors.textSecondary }}>Avg Team Powers</span>
-                        <span>⚔️{teamStats.avgAtk} 🛡️{teamStats.avgDef} ❤️{teamStats.avgHp} 🔮{teamStats.avgMp}</span>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                      <Progress percent={teamStats.avgAtk} strokeColor="#ff4d4f" size="small" showInfo={false} />
-                      <Progress percent={teamStats.avgDef} strokeColor="#1890ff" size="small" showInfo={false} />
-                    </div>
-                    <Text type="secondary" style={{ fontSize: "10px", marginTop: "4px", display: "block" }}>Live team calibration averages</Text>
-                  </Card>
-                </Col>
-              </Row>
-
-              {/* ── Control Bar: Search, Filters, Sorters, View Switcher ── */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "12px",
-                  marginBottom: "20px",
-                  padding: "16px 20px",
-                  background: theme.colors.surface,
-                  borderRadius: "12px",
-                  border: `1px solid ${theme.colors.border}`
-                }}
-              >
-                {/* Search & Dept, Auth, Role Filters */}
-                <Space wrap size={12}>
-                  <Input.Search
-                    placeholder="Search name, code, role..."
-                    value={searchInput}
-                    onChange={(e) => {
-                      setSearchInput(e.target.value);
-                      setActiveSearch(e.target.value.trim());
-                      setPage(1);
-                    }}
-                    onSearch={handleSearchSubmit}
-                    allowClear
-                    onReset={handleResetSearch}
-                    style={{ width: 260 }}
-                    prefix={<SearchOutlined style={{ color: theme.colors.textSecondary }} />}
-                  />
-
-                  <Select
-                    value={departmentFilter}
-                    onChange={(val) => {
-                      setDepartmentFilter(val);
-                      setPage(1);
-                    }}
-                    style={{ width: 160 }}
-                    suffixIcon={<FilterOutlined />}
-                    options={[
-                      { value: "ALL", label: "All Departments" },
-                      ...availableDepartments.map((dept) => ({ value: dept, label: `Dept: ${dept}` }))
-                    ]}
-                  />
-
-                  <Select
-                    value={authorityFilter}
-                    onChange={(val) => {
-                      setAuthorityFilter(val);
-                      setPage(1);
-                    }}
-                    style={{ width: 160 }}
-                    options={[
-                      { value: "ALL", label: "All Authorities" },
-                      { value: 1, label: "Level 1 (Mgr/AD)" },
-                      { value: 2, label: "Level 2 (Head/Asst)" },
-                      { value: 3, label: "Level 3 (Senior)" },
-                      { value: 4, label: "Level 4 (Staff)" }
-                    ]}
-                  />
-
-                  <Select
-                    value={roleFilter}
-                    onChange={(val) => {
-                      setRoleFilter(val);
-                      setPage(1);
-                    }}
-                    style={{ width: 140 }}
-                    options={[
-                      { value: "ALL", label: "All Roles" },
-                      ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.value }))
-                    ]}
-                  />
-
-                  <Select
-                    value={`${sortField}:${sortOrder}`}
-                    onChange={(val) => {
-                      const [f, o] = val.split(":");
-                      setSortField(f);
-                      setSortOrder(o);
-                      setPage(1);
-                    }}
-                    style={{ width: 210 }}
-                    options={[
-                      { value: "u_code:asc", label: "Code (A → Z)" },
-                      { value: "u_code:desc", label: "Code (Z → A)" },
-                      { value: "u_name:asc", label: "Name (A → Z)" },
-                      { value: "u_name:desc", label: "Name (Z → A)" },
-                      { value: "powers:desc", label: "Total Powers ⚡ (High → Low)" },
-                      { value: "atk:desc", label: "ATK ⚔️ (High → Low)" },
-                      { value: "def:desc", label: "DEF 🛡️ (High → Low)" },
-                      { value: "hp:desc", label: "HP ❤️ (High → Low)" },
-                      { value: "mp:desc", label: "MP 🔮 (High → Low)" },
-                      { value: "u_authority:asc", label: "Authority Level (1 → 4)" },
-                      { value: "created_at:desc", label: "Newest First" },
-                      { value: "created_at:asc", label: "Oldest First" }
-                    ]}
-                  />
-                </Space>
-
-                {/* View Switcher: Cards vs Table */}
-                <Radio.Group
-                  value={viewMode}
-                  onChange={(e) => setViewMode(e.target.value)}
-                  buttonStyle="solid"
-                >
-                  <Radio.Button value="cards">
-                    <AppstoreOutlined style={{ marginRight: 6 }} />
-                    Cards
-                  </Radio.Button>
-                  <Radio.Button value="table">
-                    <UnorderedListOutlined style={{ marginRight: 6 }} />
-                    Table
-                  </Radio.Button>
-                </Radio.Group>
-              </div>
-
-              {/* ── Content Body: Empty State or Cards/Table ───────────── */}
-              {displayedData.length === 0 && !loading ? (
-                <div
-                  style={{
-                    padding: "80px 24px",
-                    textAlign: "center",
-                    background: theme.colors.surface,
-                    borderRadius: "16px",
-                    border: `1px dashed ${theme.colors.border}`
-                  }}
-                >
-                  <Empty
-                    description={
-                      <Space direction="vertical" size={6}>
-                        <Text style={{ color: theme.colors.textSecondary }}>
-                          {activeSearch || departmentFilter !== "ALL"
-                            ? "No users match your search and filter criteria."
-                            : "No user records found in the database."}
-                        </Text>
-                        {(activeSearch || departmentFilter !== "ALL") && (
-                          <Button size="small" onClick={handleResetSearch}>
-                            Clear Filters
-                          </Button>
-                        )}
-                      </Space>
-                    }
-                  />
-                </div>
-              ) : viewMode === "cards" ? (
-                /* ── Cards Grid View ── */
-                <Row gutter={[20, 20]}>
-                  {pagedData.map((user) => {
-                    const name = getDisplayName(user);
-                    const dept = getDepartment(user);
-                    const role = getRole(user);
-                    const grp = getGroup(user);
-                    const avatarColor = stringToColor(user.u_code);
-
-                    return (
-                      <Col xs={24} sm={12} md={8} lg={6} key={user.u_code}>
-                        <Card
-                          hoverable
-                          onClick={() => openDetailsModal(user)}
-                          style={{
-                            borderRadius: "16px",
-                            border: `1px solid ${theme.colors.border}`,
-                            background: theme.colors.surface,
-                            height: "100%",
-                            cursor: "pointer",
-                            transition: "transform 0.2s ease, box-shadow 0.2s ease"
-                          }}
-                          styles={{
-                            body: {
-                              padding: "24px",
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              textAlign: "center"
-                            }
-                          }}
-                        >
-                          <Avatar
-                            size={64}
-                            src={user.profile_img_b64}
-                            style={{
-                              backgroundColor: user.profile_img_b64 ? "transparent" : avatarColor,
-                              fontSize: "24px",
-                              fontWeight: 700,
-                              marginBottom: "14px",
-                              boxShadow: user.profile_img_b64 ? "none" : `0 4px 12px ${avatarColor}44`,
-                              border: user.profile_img_b64 ? `1px solid ${theme.colors.border}` : "none"
-                            }}
-                          >
-                            {name.charAt(0).toUpperCase()}
-                          </Avatar>
-
-                          <Title
-                            level={5}
-                            style={{
-                              margin: "0 0 4px 0",
-                              color: theme.colors.textPrimary,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: "100%"
-                            }}
-                          >
-                            {name}
-                          </Title>
-
-                          <Text
-                            style={{
-                              color: theme.colors.textSecondary,
-                              fontSize: "13px",
-                              marginBottom: "12px"
-                            }}
-                          >
-                            {user.u_code}
-                          </Text>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "6px",
-                              flexWrap: "wrap",
-                              justifyContent: "center"
-                            }}
-                          >
-                            {dept && (
-                              <Tag color="blue" style={{ borderRadius: "20px", margin: 0 }}>
-                                {dept}
-                              </Tag>
-                            )}
-                            {grp && (
-                              <Tag color="cyan" style={{ borderRadius: "20px", margin: 0 }}>
-                                {grp}
-                              </Tag>
-                            )}
-                            {role && (
-                              <Tag color="green" style={{ borderRadius: "20px", margin: 0 }}>
-                                {role}
-                              </Tag>
-                            )}
+                  <Row gutter={[16, 16]} style={{ marginBottom: "20px" }}>
+                    <Col xs={24} sm={12} md={6}>
+                      <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div>
+                            <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Total Registered</Text>
+                            <div style={{ fontSize: "24px", fontWeight: 800, color: theme.colors.primary }}>{total || teamStats.total}</div>
                           </div>
+                          <Avatar size={42} icon={<TeamOutlined />} style={{ background: `${theme.colors.primary}18`, color: theme.colors.primary }} />
+                        </div>
+                        <Text type="secondary" style={{ fontSize: "11px" }}>Across all engineering sections</Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div>
+                            <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Active Engineers</Text>
+                            <div style={{ fontSize: "24px", fontWeight: 800, color: "#52c41a" }}>{teamStats.active}</div>
+                          </div>
+                          <Avatar size={42} icon={<CheckCircleOutlined />} style={{ background: "#52c41a18", color: "#52c41a" }} />
+                        </div>
+                        <Text type="secondary" style={{ fontSize: "11px" }}>Active on duty in plant</Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div>
+                            <Text type="secondary" style={{ fontSize: "11px", textTransform: "uppercase" }}>Leaders & Specialists</Text>
+                            <div style={{ fontSize: "24px", fontWeight: 800, color: "#722ed1" }}>{teamStats.leaders}</div>
+                          </div>
+                          <Avatar size={42} icon={<TrophyOutlined />} style={{ background: "#722ed118", color: "#722ed1" }} />
+                        </div>
+                        <Text type="secondary" style={{ fontSize: "11px" }}>Team leaders & high-tier staff</Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
+                        <div style={{ marginBottom: "4px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600 }}>
+                            <span style={{ color: theme.colors.textSecondary }}>Avg Team Powers</span>
+                            <span>⚔️{teamStats.avgAtk} 🛡️{teamStats.avgDef} ❤️{teamStats.avgHp} 🔮{teamStats.avgMp}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                          <Progress percent={teamStats.avgAtk} strokeColor="#ff4d4f" size="small" showInfo={false} />
+                          <Progress percent={teamStats.avgDef} strokeColor="#1890ff" size="small" showInfo={false} />
+                        </div>
+                        <Text type="secondary" style={{ fontSize: "10px", marginTop: "4px", display: "block" }}>Live team calibration averages</Text>
+                      </Card>
+                    </Col>
+                  </Row>
 
-                          {/* 4 Combat Powers Mini Bar (ENG & AD Only) */}
-                          {isEngOrAdUser(user) && (
-                            <div
-                              style={{
-                                width: "100%",
-                                marginTop: "12px",
-                                padding: "8px 10px",
-                                borderRadius: "10px",
-                                background: `${theme.colors.border}18`,
-                                border: `1px solid ${theme.colors.border}33`
-                              }}
-                            >
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", fontWeight: 700, marginBottom: "3px" }}>
-                                <span style={{ color: "#ff4d4f" }}>ATK {user.atk || 0}</span>
-                                <span style={{ color: "#1890ff" }}>DEF {user.def || 0}</span>
-                                <span style={{ color: "#52c41a" }}>HP {user.hp || 0}</span>
-                                <span style={{ color: "#722ed1" }}>MP {user.mp || 0}</span>
-                              </div>
-                              <Row gutter={4}>
-                                <Col span={6}><Progress percent={user.atk || 0} showInfo={false} strokeColor="#ff4d4f" size="small" /></Col>
-                                <Col span={6}><Progress percent={user.def || 0} showInfo={false} strokeColor="#1890ff" size="small" /></Col>
-                                <Col span={6}><Progress percent={user.hp || 0} showInfo={false} strokeColor="#52c41a" size="small" /></Col>
-                                <Col span={6}><Progress percent={user.mp || 0} showInfo={false} strokeColor="#722ed1" size="small" /></Col>
-                              </Row>
-                            </div>
-                          )}
-
-                          {isEngOrAdUser(user) ? (
-                            <Button
-                              size="small"
-                              icon={<TrophyOutlined style={{ color: "#fa8c16" }} />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openSkillDrawer(user);
-                              }}
-                              style={{
-                                marginTop: "10px",
-                                borderRadius: "8px",
-                                fontSize: "11px",
-                                border: `1px solid ${theme.colors.border}`,
-                                background: theme.colors.surface
-                              }}
-                            >
-                              Skill Matrix
-                            </Button>
-                          ) : (
-                            <Button
-                              size="small"
-                              icon={<UserOutlined style={{ color: theme.colors.primary }} />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDetailsModal(user);
-                              }}
-                              style={{
-                                marginTop: "16px",
-                                borderRadius: "8px",
-                                fontSize: "11px",
-                                border: `1px solid ${theme.colors.border}`,
-                                background: theme.colors.surface
-                              }}
-                            >
-                              View Details
-                            </Button>
-                          )}
-                        </Card>
-                      </Col>
-                    );
-                  })}
-                </Row>
-              ) : (
-                /* ── Table View ── */
-                <Card
-                  style={{
-                    borderRadius: "16px",
-                    border: `1px solid ${theme.colors.border}`,
-                    background: theme.colors.surface,
-                    overflow: "hidden"
-                  }}
-                  styles={{ body: { padding: 0 } }}
-                >
-                  <Table
-                    columns={tableColumns}
-                    dataSource={pagedData}
-                    rowKey="u_code"
-                    pagination={false}
-                    scroll={{ x: 1550 }}
-                  />
-                </Card>
-              )}
-
-              {/* ── Pagination Component ────────────────────────────────── */}
-              {displayedData.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "16px",
-                    marginTop: "24px",
-                    padding: "16px 24px",
-                    background: theme.colors.surface,
-                    borderRadius: "12px",
-                    border: `1px solid ${theme.colors.border}`
-                  }}
-                >
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
-                    Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, displayedData.length)} of{" "}
-                    <strong>{displayedData.length}</strong> engineers
-                    {displayedData.length !== data.length && (
-                      <span style={{ marginLeft: 6, color: theme.colors.primary, fontWeight: 500 }}>
-                        (Filtered from {data.length} total)
-                      </span>
-                    )}
-                  </Text>
-                  <Pagination
-                    current={page}
-                    pageSize={pageSize}
-                    total={displayedData.length}
-                    showSizeChanger
-                    pageSizeOptions={["24", "50", "100", "200"]}
-                    onChange={(p, ps) => {
-                      setPage(p);
-                      setPageSize(ps);
+                  {/* ── Control Bar: Search, Filters, Sorters, View Switcher ── */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                      marginBottom: "20px",
+                      padding: "16px 20px",
+                      background: theme.colors.surface,
+                      borderRadius: "12px",
+                      border: `1px solid ${theme.colors.border}`
                     }}
-                  />
+                  >
+                    {/* Search & Dept, Auth, Role Filters */}
+                    <Space wrap size={12}>
+                      <Input.Search
+                        placeholder="Search name, code, role..."
+                        value={searchInput}
+                        onChange={(e) => {
+                          setSearchInput(e.target.value);
+                          setActiveSearch(e.target.value.trim());
+                          setPage(1);
+                        }}
+                        onSearch={handleSearchSubmit}
+                        allowClear
+                        onReset={handleResetSearch}
+                        style={{ width: 260 }}
+                        prefix={<SearchOutlined style={{ color: theme.colors.textSecondary }} />}
+                      />
+
+                      <Select
+                        value={departmentFilter}
+                        onChange={(val) => {
+                          setDepartmentFilter(val);
+                          setPage(1);
+                        }}
+                        style={{ width: 160 }}
+                        suffixIcon={<FilterOutlined />}
+                        options={[
+                          { value: "ALL", label: "All Departments" },
+                          ...availableDepartments.map((dept) => ({ value: dept, label: `Dept: ${dept}` }))
+                        ]}
+                      />
+
+                      <Select
+                        value={authorityFilter}
+                        onChange={(val) => {
+                          setAuthorityFilter(val);
+                          setPage(1);
+                        }}
+                        style={{ width: 160 }}
+                        options={[
+                          { value: "ALL", label: "All Authorities" },
+                          { value: 1, label: "Level 1 (Mgr/AD)" },
+                          { value: 2, label: "Level 2 (Head/Asst)" },
+                          { value: 3, label: "Level 3 (Senior)" },
+                          { value: 4, label: "Level 4 (Staff)" }
+                        ]}
+                      />
+
+                      <Select
+                        value={roleFilter}
+                        onChange={(val) => {
+                          setRoleFilter(val);
+                          setPage(1);
+                        }}
+                        style={{ width: 140 }}
+                        options={[
+                          { value: "ALL", label: "All Roles" },
+                          ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.value }))
+                        ]}
+                      />
+
+                      <Select
+                        value={`${sortField}:${sortOrder}`}
+                        onChange={(val) => {
+                          const [f, o] = val.split(":");
+                          setSortField(f);
+                          setSortOrder(o);
+                          setPage(1);
+                        }}
+                        style={{ width: 210 }}
+                        options={[
+                          { value: "u_code:asc", label: "Code (A → Z)" },
+                          { value: "u_code:desc", label: "Code (Z → A)" },
+                          { value: "u_name:asc", label: "Name (A → Z)" },
+                          { value: "u_name:desc", label: "Name (Z → A)" },
+                          { value: "powers:desc", label: "Total Powers ⚡ (High → Low)" },
+                          { value: "atk:desc", label: "ATK ⚔️ (High → Low)" },
+                          { value: "def:desc", label: "DEF 🛡️ (High → Low)" },
+                          { value: "hp:desc", label: "HP ❤️ (High → Low)" },
+                          { value: "mp:desc", label: "MP 🔮 (High → Low)" },
+                          { value: "u_authority:asc", label: "Authority Level (1 → 4)" },
+                          { value: "created_at:desc", label: "Newest First" },
+                          { value: "created_at:asc", label: "Oldest First" }
+                        ]}
+                      />
+                    </Space>
+
+                    {/* View Switcher: Cards vs Table */}
+                    <Radio.Group
+                      value={viewMode}
+                      onChange={(e) => setViewMode(e.target.value)}
+                      buttonStyle="solid"
+                    >
+                      <Radio.Button value="cards">
+                        <AppstoreOutlined style={{ marginRight: 6 }} />
+                        Cards
+                      </Radio.Button>
+                      <Radio.Button value="table">
+                        <UnorderedListOutlined style={{ marginRight: 6 }} />
+                        Table
+                      </Radio.Button>
+                    </Radio.Group>
+                  </div>
+
+                  {/* ── Content Body: Empty State or Cards/Table ───────────── */}
+                  {displayedData.length === 0 && !loading ? (
+                    <div
+                      style={{
+                        padding: "80px 24px",
+                        textAlign: "center",
+                        background: theme.colors.surface,
+                        borderRadius: "16px",
+                        border: `1px dashed ${theme.colors.border}`
+                      }}
+                    >
+                      <Empty
+                        description={
+                          <Space direction="vertical" size={6}>
+                            <Text style={{ color: theme.colors.textSecondary }}>
+                              {activeSearch || departmentFilter !== "ALL"
+                                ? "No users match your search and filter criteria."
+                                : "No user records found in the database."}
+                            </Text>
+                            {(activeSearch || departmentFilter !== "ALL") && (
+                              <Button size="small" onClick={handleResetSearch}>
+                                Clear Filters
+                              </Button>
+                            )}
+                          </Space>
+                        }
+                      />
+                    </div>
+                  ) : viewMode === "cards" ? (
+                    /* ── Cards Grid View ── */
+                    <Row gutter={[20, 20]}>
+                      {pagedData.map((user) => {
+                        const name = getDisplayName(user);
+                        const dept = getDepartment(user);
+                        const role = getRole(user);
+                        const grp = getGroup(user);
+                        const avatarColor = stringToColor(user.u_code);
+
+                        return (
+                          <Col xs={24} sm={12} md={8} lg={6} key={user.u_code}>
+                            <Card
+                              hoverable
+                              onClick={() => openDetailsModal(user)}
+                              style={{
+                                borderRadius: "16px",
+                                border: `1px solid ${theme.colors.border}`,
+                                background: theme.colors.surface,
+                                height: "100%",
+                                cursor: "pointer",
+                                transition: "transform 0.2s ease, box-shadow 0.2s ease"
+                              }}
+                              styles={{
+                                body: {
+                                  padding: "24px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  textAlign: "center"
+                                }
+                              }}
+                            >
+                              <Avatar
+                                size={64}
+                                src={user.profile_img_b64}
+                                style={{
+                                  backgroundColor: user.profile_img_b64 ? "transparent" : avatarColor,
+                                  fontSize: "24px",
+                                  fontWeight: 700,
+                                  marginBottom: "14px",
+                                  boxShadow: user.profile_img_b64 ? "none" : `0 4px 12px ${avatarColor}44`,
+                                  border: user.profile_img_b64 ? `1px solid ${theme.colors.border}` : "none"
+                                }}
+                              >
+                                {name.charAt(0).toUpperCase()}
+                              </Avatar>
+
+                              <Title
+                                level={5}
+                                style={{
+                                  margin: "0 0 4px 0",
+                                  color: theme.colors.textPrimary,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  maxWidth: "100%"
+                                }}
+                              >
+                                {name}
+                              </Title>
+
+                              <Text
+                                style={{
+                                  color: theme.colors.textSecondary,
+                                  fontSize: "13px",
+                                  marginBottom: "12px"
+                                }}
+                              >
+                                {user.u_code}
+                              </Text>
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "6px",
+                                  flexWrap: "wrap",
+                                  justifyContent: "center"
+                                }}
+                              >
+                                {dept && (
+                                  <Tag color="blue" style={{ borderRadius: "20px", margin: 0 }}>
+                                    {dept}
+                                  </Tag>
+                                )}
+                                {grp && (
+                                  <Tag color="cyan" style={{ borderRadius: "20px", margin: 0 }}>
+                                    {grp}
+                                  </Tag>
+                                )}
+                                {role && (
+                                  <Tag color="green" style={{ borderRadius: "20px", margin: 0 }}>
+                                    {role}
+                                  </Tag>
+                                )}
+                              </div>
+
+                              {/* 4 Combat Powers Mini Bar (ENG & AD Only) */}
+                              {isEngOrAdUser(user) && (
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    marginTop: "12px",
+                                    padding: "8px 10px",
+                                    borderRadius: "10px",
+                                    background: `${theme.colors.border}18`,
+                                    border: `1px solid ${theme.colors.border}33`
+                                  }}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", fontWeight: 700, marginBottom: "3px" }}>
+                                    <span style={{ color: "#ff4d4f" }}>ATK {user.atk || 0}</span>
+                                    <span style={{ color: "#1890ff" }}>DEF {user.def || 0}</span>
+                                    <span style={{ color: "#52c41a" }}>HP {user.hp || 0}</span>
+                                    <span style={{ color: "#722ed1" }}>MP {user.mp || 0}</span>
+                                  </div>
+                                  <Row gutter={4}>
+                                    <Col span={6}><Progress percent={user.atk || 0} showInfo={false} strokeColor="#ff4d4f" size="small" /></Col>
+                                    <Col span={6}><Progress percent={user.def || 0} showInfo={false} strokeColor="#1890ff" size="small" /></Col>
+                                    <Col span={6}><Progress percent={user.hp || 0} showInfo={false} strokeColor="#52c41a" size="small" /></Col>
+                                    <Col span={6}><Progress percent={user.mp || 0} showInfo={false} strokeColor="#722ed1" size="small" /></Col>
+                                  </Row>
+                                </div>
+                              )}
+
+                              {isEngOrAdUser(user) ? (
+                                <Button
+                                  size="small"
+                                  icon={<TrophyOutlined style={{ color: "#fa8c16" }} />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openSkillDrawer(user);
+                                  }}
+                                  style={{
+                                    marginTop: "10px",
+                                    borderRadius: "8px",
+                                    fontSize: "11px",
+                                    border: `1px solid ${theme.colors.border}`,
+                                    background: theme.colors.surface
+                                  }}
+                                >
+                                  Skill Matrix
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="small"
+                                  icon={<UserOutlined style={{ color: theme.colors.primary }} />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDetailsModal(user);
+                                  }}
+                                  style={{
+                                    marginTop: "16px",
+                                    borderRadius: "8px",
+                                    fontSize: "11px",
+                                    border: `1px solid ${theme.colors.border}`,
+                                    background: theme.colors.surface
+                                  }}
+                                >
+                                  View Details
+                                </Button>
+                              )}
+                            </Card>
+                          </Col>
+                        );
+                      })}
+                    </Row>
+                  ) : (
+                    /* ── Table View ── */
+                    <Card
+                      style={{
+                        borderRadius: "16px",
+                        border: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.surface,
+                        overflow: "hidden"
+                      }}
+                      styles={{ body: { padding: 0 } }}
+                    >
+                      <Table
+                        columns={tableColumns}
+                        dataSource={pagedData}
+                        rowKey="u_code"
+                        pagination={false}
+                        scroll={{ x: 1550 }}
+                      />
+                    </Card>
+                  )}
+
+                  {/* ── Pagination Component ────────────────────────────────── */}
+                  {displayedData.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "16px",
+                        marginTop: "24px",
+                        padding: "16px 24px",
+                        background: theme.colors.surface,
+                        borderRadius: "12px",
+                        border: `1px solid ${theme.colors.border}`
+                      }}
+                    >
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
+                        Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, displayedData.length)} of{" "}
+                        <strong>{displayedData.length}</strong> engineers
+                        {displayedData.length !== data.length && (
+                          <span style={{ marginLeft: 6, color: theme.colors.primary, fontWeight: 500 }}>
+                            (Filtered from {data.length} total)
+                          </span>
+                        )}
+                      </Text>
+                      <Pagination
+                        current={page}
+                        pageSize={pageSize}
+                        total={displayedData.length}
+                        showSizeChanger
+                        pageSizeOptions={["24", "50", "100", "200"]}
+                        onChange={(p, ps) => {
+                          setPage(p);
+                          setPageSize(ps);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
             {/* ── 1. User Details Popup (Modal - Modern Non-Table Redesign) ─────── */}
             <Modal
@@ -1904,8 +1904,8 @@ const UserManagement = () => {
                                 {selectedUser.date_of_entering_rodend
                                   ? String(selectedUser.date_of_entering_rodend).slice(0, 10)
                                   : selectedUser.qualifications?.date_of_entering_rodend
-                                  ? String(selectedUser.qualifications.date_of_entering_rodend).slice(0, 10)
-                                  : "—"}
+                                    ? String(selectedUser.qualifications.date_of_entering_rodend).slice(0, 10)
+                                    : "—"}
                               </Text>
                               {(selectedUser.date_of_entering_rodend || selectedUser.qualifications?.date_of_entering_rodend) && (
                                 <Tag color="gold" style={{ borderRadius: "8px", margin: 0, fontSize: "11px", fontWeight: 700 }}>

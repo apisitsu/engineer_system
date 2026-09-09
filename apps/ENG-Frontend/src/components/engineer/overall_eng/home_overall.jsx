@@ -83,7 +83,7 @@ const HomeOverallEng = () => {
     },
     {
       id: 'roster-skill-matrix',
-      title: 'Engineer Roster & Skills',
+      title: 'User & Skill Matrix',
       subtitle: 'Competency Matrix & Power Calibration',
       description: 'Directory of engineering personnel featuring real-time RPG combat power calibration (ATK, DEF, HP, MP), game-style spider-web radar charts, and leader competency tracking.',
       icon: <TrophyOutlined style={{ fontSize: '36px', color: '#fa8c16' }} />,

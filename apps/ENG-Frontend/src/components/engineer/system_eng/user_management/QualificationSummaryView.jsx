@@ -7,7 +7,8 @@ import {
   SafetyCertificateOutlined, TrophyOutlined, CheckCircleOutlined,
   EditOutlined, UserOutlined, SearchOutlined,
   InfoCircleOutlined, AppstoreOutlined, TableOutlined, StarFilled,
-  CrownOutlined, TeamOutlined, ThunderboltOutlined, CheckOutlined
+  CrownOutlined, TeamOutlined, ThunderboltOutlined, CheckOutlined,
+  RocketOutlined, ToolOutlined, FileProtectOutlined, FolderOutlined
 } from "@ant-design/icons";
 import { useTheme } from "../../../../theme";
 import {
@@ -79,7 +80,6 @@ const QualificationSummaryView = ({
   const handleOpenQualModal = useCallback((user) => {
     setQualModalUser(user);
     const q = JSON.parse(JSON.stringify(user.qualifications || {}));
-    if (!q.special_overrides) q.special_overrides = {};
     setEditingQuals(q);
     setQualModalOpen(true);
   }, []);
@@ -107,15 +107,6 @@ const QualificationSummaryView = ({
     });
   };
 
-  const getSpecialVal = (colId) => Boolean(editingQuals?.special_overrides?.[colId]);
-  const setSpecialVal = (colId, val) => {
-    setEditingQuals((prev) => {
-      const next = JSON.parse(JSON.stringify(prev || {}));
-      if (!next.special_overrides) next.special_overrides = {};
-      next.special_overrides[colId] = val;
-      return next;
-    });
-  };
 
   const handleCertifyAll = (val = true) => {
     setEditingQuals((prev) => {
@@ -132,6 +123,40 @@ const QualificationSummaryView = ({
       });
       return next;
     });
+  };
+
+  const handleCertifyScope = (scopeKey, val = true) => {
+    const sg = SCOPE_GROUPS.find((g) => g.key === scopeKey);
+    if (!sg) return;
+    const colIds = sg.subgroups.flatMap((sub) => sub.columns);
+    setEditingQuals((prev) => {
+      const next = JSON.parse(JSON.stringify(prev || {}));
+      QUALIFICATION_COLUMNS.forEach((col) => {
+        if (!colIds.includes(col.id)) return;
+        if (col.path && col.path.length === 3) {
+          if (!next[col.path[0]]) next[col.path[0]] = {};
+          if (!next[col.path[0]][col.path[1]]) next[col.path[0]][col.path[1]] = {};
+          next[col.path[0]][col.path[1]][col.path[2]] = val;
+        } else if (col.path && col.path.length === 2) {
+          if (!next[col.path[0]]) next[col.path[0]] = {};
+          next[col.path[0]][col.path[1]] = val;
+        }
+      });
+      return next;
+    });
+  };
+
+  const getScopeIcon = (scopeKey) => {
+    switch (scopeKey) {
+      case "aerospace":
+        return <RocketOutlined style={{ color: "#1890ff", fontSize: "16px" }} />;
+      case "tooling":
+        return <ToolOutlined style={{ color: "#fa8c16", fontSize: "16px" }} />;
+      case "others":
+        return <FileProtectOutlined style={{ color: "#d48806", fontSize: "16px" }} />;
+      default:
+        return <SafetyCertificateOutlined style={{ color: theme.colors.primary, fontSize: "16px" }} />;
+    }
   };
 
   const handleSaveQualModal = async () => {
@@ -385,7 +410,7 @@ const QualificationSummaryView = ({
                 fontWeight: 700
               }}
             >
-              Edit Certifications ★ 🎯
+              Edit Certifications ★
             </Button>
           )}
 
@@ -761,7 +786,7 @@ const QualificationSummaryView = ({
       render: (_, record) => (
         <Space size={4}>
           {canEditQualifications && (
-            <Tooltip title="Edit Qualification Certifications (★ Officially Approved / 🎯 Special Overrides)">
+            <Tooltip title="Edit Qualification Certifications (★ Officially Approved)">
               <Button
                 size="small"
                 icon={<StarFilled style={{ color: "#faad14" }} />}
@@ -992,7 +1017,7 @@ const QualificationSummaryView = ({
         render: (_, record) => (
           <Space size={6}>
             {canEditQualifications && (
-              <Tooltip title="Edit Qualification Certifications (★ Officially Approved / 🎯 Special Overrides)">
+              <Tooltip title="Edit Qualification Certifications (★ Officially Approved)">
                 <Button
                   size="small"
                   icon={<StarFilled style={{ color: "#faad14" }} />}
@@ -2058,108 +2083,275 @@ const QualificationSummaryView = ({
               showIcon
               icon={<SafetyCertificateOutlined style={{ color: "#faad14" }} />}
               message="Special Case & Off-Cycle Qualification Control"
-              description="You have authority to grant, update, or revoke certifications (★ Officially Approved) or grant special case qualification waivers (🎯 Meets Criteria) without waiting for annual review cycles."
+              description="You have authority to grant, update, or revoke official certifications (★ Officially Approved) without waiting for annual review cycles."
               style={{ marginBottom: "16px", borderRadius: "10px" }}
             />
 
-            <div style={{ maxHeight: "500px", overflowY: "auto", paddingRight: "4px" }}>
-              {SCOPE_GROUPS.map((sg) => (
-                <Card
-                  key={sg.key}
-                  size="small"
-                  title={<span style={{ fontWeight: 700, color: theme.colors.textPrimary }}>{sg.title}</span>}
-                  style={{ marginBottom: "14px", borderRadius: "12px", border: `1px solid ${theme.colors.border}` }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {sg.subgroups.map((sub) => {
-                      return sub.columns.map((colId) => {
-                        const colDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
-                        if (!colDef) return null;
-                        const evalData = qualModalUser?._evalResults?.[colId];
-                        const isApproved = getApprovedVal(colDef);
-                        const isSpecial = getSpecialVal(colDef.id);
+            <div style={{ maxHeight: "560px", overflowY: "auto", paddingRight: "4px" }}>
+              {SCOPE_GROUPS.map((sg) => {
+                let scopeTotal = 0;
+                let scopeApproved = 0;
+                sg.subgroups.forEach((sub) => {
+                  sub.columns.forEach((colId) => {
+                    scopeTotal++;
+                    const cDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
+                    if (cDef && getApprovedVal(cDef)) scopeApproved++;
+                  });
+                });
 
+                return (
+                  <Card
+                    key={sg.key}
+                    size="small"
+                    style={{
+                      marginBottom: "16px",
+                      borderRadius: "12px",
+                      border: `1px solid ${theme.colors.border}`,
+                      overflow: "hidden"
+                    }}
+                    styles={{
+                      header: {
+                        background: isDark ? "#1f1f1f" : "#fafafa",
+                        borderBottom: `1px solid ${theme.colors.border}`,
+                        padding: "10px 16px"
+                      },
+                      body: { padding: "14px" }
+                    }}
+                    title={
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          {getScopeIcon(sg.key)}
+                          <span style={{ fontSize: "14px", fontWeight: 800, color: theme.colors.textPrimary }}>
+                            {sg.name}
+                          </span>
+                          <Tag color={sg.tagColor} style={{ borderRadius: "6px", fontWeight: 700, fontSize: "11px", margin: 0 }}>
+                            {scopeApproved} / {scopeTotal} Approved ★
+                          </Tag>
+                        </div>
+                        <Space size={6}>
+                          <Button
+                            size="small"
+                            onClick={() => handleCertifyScope(sg.key, true)}
+                            style={{ borderRadius: "6px", fontSize: "11px" }}
+                          >
+                            Certify Scope ★
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() => handleCertifyScope(sg.key, false)}
+                            style={{ borderRadius: "6px", fontSize: "11px" }}
+                          >
+                            Clear Scope
+                          </Button>
+                        </Space>
+                      </div>
+                    }
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      {sg.subgroups.map((sub) => {
                         return (
                           <div
-                            key={colDef.id}
+                            key={sub.key}
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              padding: "10px 14px",
                               borderRadius: "8px",
-                              background: isApproved ? (isDark ? "#2b1e0025" : "#fffbe6") : (isDark ? "#141414" : "#fafafa"),
-                              border: `1px solid ${isApproved ? "#ffe58f" : theme.colors.border}`,
-                              transition: "all 0.2s ease"
+                              border: `1px solid ${theme.colors.border}`,
+                              overflow: "hidden"
                             }}
                           >
-                            <div style={{ flex: 1, minWidth: 0, marginRight: "16px" }}>
+                            {/* Subgroup Banner / Section Header */}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 14px",
+                                background: isDark ? "#262626" : "#f5f7fa",
+                                borderBottom: `1px solid ${theme.colors.border}`
+                              }}
+                            >
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <Tag color="purple" style={{ fontWeight: 700, fontSize: "11px", margin: 0 }}>
-                                  {colDef.role}
-                                </Tag>
-                                <span style={{ fontWeight: 600, fontSize: "13px", color: theme.colors.textPrimary }}>
-                                  {colDef.group}
+                                <FolderOutlined style={{ color: sg.tagColor, fontSize: "13px" }} />
+                                <span style={{ fontWeight: 700, fontSize: "12px", color: theme.colors.textPrimary, letterSpacing: "0.5px" }}>
+                                  {sub.name}
                                 </span>
                               </div>
-                              <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: "4px" }}>
-                                {colDef.criteriaSummary}
-                              </div>
+                              <Tag style={{ fontSize: "10px", borderRadius: "6px", margin: 0 }}>
+                                {sub.columns.length} roles
+                              </Tag>
                             </div>
 
-                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                              {/* Criteria Status Tag */}
-                              <div style={{ width: "135px", textAlign: "center" }}>
-                                {isSpecial ? (
-                                  <Tag color="cyan" icon={<CheckCircleOutlined />} style={{ margin: 0, fontSize: "11px" }}>
-                                    Special Override 🎯
-                                  </Tag>
-                                ) : evalData?.meetsCriteria ? (
-                                  <Tag color="green" icon={<CheckCircleOutlined />} style={{ margin: 0, fontSize: "11px" }}>
-                                    Meets Criteria 🎯
-                                  </Tag>
-                                ) : (
-                                  <Tag color="default" style={{ margin: 0, fontSize: "11px" }}>
-                                    Criteria Pending
-                                  </Tag>
-                                )}
-                              </div>
+                            {/* Structured Table with Explicit Table Headers (หัวตาราง) */}
+                            <table
+                              style={{
+                                width: "100%",
+                                borderCollapse: "collapse"
+                              }}
+                            >
+                              <thead>
+                                <tr
+                                  style={{
+                                    background: isDark ? "#1a1a1a" : "#fafafa",
+                                    borderBottom: `2px solid ${theme.colors.border}`
+                                  }}
+                                >
+                                  <th
+                                    style={{
+                                      textAlign: "left",
+                                      padding: "8px 14px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      color: theme.colors.textSecondary,
+                                      letterSpacing: "0.5px",
+                                      width: "28%"
+                                    }}
+                                  >
+                                    ROLE & SCOPE
+                                  </th>
+                                  <th
+                                    style={{
+                                      textAlign: "left",
+                                      padding: "8px 14px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      color: theme.colors.textSecondary,
+                                      letterSpacing: "0.5px",
+                                      width: "38%"
+                                    }}
+                                  >
+                                    MINIMUM SKILL REQUIREMENTS
+                                  </th>
+                                  <th
+                                    style={{
+                                      textAlign: "center",
+                                      padding: "8px 14px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      color: theme.colors.textSecondary,
+                                      letterSpacing: "0.5px",
+                                      width: "17%"
+                                    }}
+                                  >
+                                    CRITERIA STATUS (🎯)
+                                  </th>
+                                  <th
+                                    style={{
+                                      textAlign: "center",
+                                      padding: "8px 14px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      color: theme.colors.textSecondary,
+                                      letterSpacing: "0.5px",
+                                      width: "17%"
+                                    }}
+                                  >
+                                    ★ OFFICIALLY APPROVED
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sub.columns.map((colId, cIdx) => {
+                                  const colDef = QUALIFICATION_COLUMNS.find((c) => c.id === colId);
+                                  if (!colDef) return null;
+                                  const evalData = qualModalUser?._evalResults?.[colId];
+                                  const isApproved = getApprovedVal(colDef);
 
-                              {/* Switch 1: Officially Approved ★ */}
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "12px", fontWeight: 600, color: isApproved ? "#faad14" : theme.colors.textSecondary }}>
-                                  ★ Approved:
-                                </span>
-                                <Switch
-                                  checked={isApproved}
-                                  onChange={(checked) => setApprovedVal(colDef, checked)}
-                                  checkedChildren="★"
-                                  unCheckedChildren="—"
-                                  style={{ background: isApproved ? "#faad14" : undefined }}
-                                />
-                              </div>
+                                  return (
+                                    <tr
+                                      key={colDef.id}
+                                      style={{
+                                        background: isApproved
+                                          ? (isDark ? "#2b1e0020" : "#fffbe6")
+                                          : (isDark ? "#141414" : "#ffffff"),
+                                        borderBottom: cIdx === sub.columns.length - 1 ? "none" : `1px solid ${theme.colors.border}`,
+                                        transition: "background 0.2s"
+                                      }}
+                                    >
+                                      {/* Role & Scope */}
+                                      <td style={{ padding: "10px 14px", verticalAlign: "middle" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                          <Tag
+                                            color={
+                                              colDef.roleType === "draw"
+                                                ? "blue"
+                                                : colDef.roleType === "check"
+                                                ? "orange"
+                                                : colDef.roleType === "review"
+                                                ? "gold"
+                                                : "purple"
+                                            }
+                                            style={{ fontWeight: 700, fontSize: "11px", margin: 0 }}
+                                          >
+                                            {colDef.role}
+                                          </Tag>
+                                          <span style={{ fontWeight: 600, fontSize: "13px", color: theme.colors.textPrimary }}>
+                                            {colDef.shortRole || colDef.role}
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: "2px" }}>
+                                          {colDef.group}
+                                        </div>
+                                      </td>
 
-                              {/* Switch 2: Special Override 🎯 */}
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "12px", fontWeight: 600, color: isSpecial ? "#13c2c2" : theme.colors.textSecondary }}>
-                                  🎯 Override:
-                                </span>
-                                <Switch
-                                  checked={isSpecial}
-                                  onChange={(checked) => setSpecialVal(colDef.id, checked)}
-                                  checkedChildren="🎯"
-                                  unCheckedChildren="—"
-                                  style={{ background: isSpecial ? "#13c2c2" : undefined }}
-                                />
-                              </div>
-                            </div>
+                                      {/* Minimum Skill Requirements */}
+                                      <td style={{ padding: "10px 14px", verticalAlign: "middle" }}>
+                                        <div style={{ fontSize: "12px", color: theme.colors.textPrimary, fontWeight: 500 }}>
+                                          {colDef.criteriaSummary}
+                                        </div>
+                                        {evalData?.missingSkills && evalData.missingSkills.length > 0 && (
+                                          <div style={{ fontSize: "10px", color: "#ff4d4f", marginTop: "3px" }}>
+                                            Missing: {evalData.missingSkills.map((s) => `${s.skillLabel} (${s.current}/${s.required})`).join(", ")}
+                                          </div>
+                                        )}
+                                      </td>
+
+                                      {/* Criteria Status (🎯) */}
+                                      <td style={{ padding: "10px 14px", textAlign: "center", verticalAlign: "middle" }}>
+                                        {evalData?.meetsCriteria ? (
+                                          <Tag color="green" icon={<CheckCircleOutlined />} style={{ margin: 0, fontSize: "11px", borderRadius: "6px" }}>
+                                            Meets Criteria 🎯
+                                          </Tag>
+                                        ) : (
+                                          <Tag color="default" style={{ margin: 0, fontSize: "11px", borderRadius: "6px" }}>
+                                            Criteria Pending
+                                          </Tag>
+                                        )}
+                                      </td>
+
+                                      {/* Officially Approved ★ Switch */}
+                                      <td style={{ padding: "10px 14px", textAlign: "center", verticalAlign: "middle" }}>
+                                        <Space size={6}>
+                                          <Switch
+                                            checked={isApproved}
+                                            onChange={(checked) => setApprovedVal(colDef, checked)}
+                                            checkedChildren="★"
+                                            unCheckedChildren="—"
+                                            style={{ background: isApproved ? "#faad14" : undefined }}
+                                          />
+                                          <span
+                                            style={{
+                                              fontSize: "11px",
+                                              fontWeight: 600,
+                                              color: isApproved ? "#faad14" : theme.colors.textSecondary,
+                                              minWidth: "55px",
+                                              textAlign: "left"
+                                            }}
+                                          >
+                                            {isApproved ? "Certified" : "Off"}
+                                          </span>
+                                        </Space>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         );
-                      });
-                    })}
-                  </div>
-                </Card>
-              ))}
+                      })}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           </div>
         )}

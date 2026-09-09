@@ -408,16 +408,11 @@ export const evaluateUserQualifications = (user) => {
       isApproved = Boolean(quals[col.path[0]]?.[col.path[1]]);
     }
 
-    // Check if there is a special override for criteria
-    const isSpecialOverride = Boolean(quals?.special_overrides?.[col.id]);
-
     // 2. Dynamic criteria check based on skill levels
     let meetsCriteria = true;
     const missingSkills = [];
 
-    if (isSpecialOverride) {
-      meetsCriteria = true;
-    } else if (col.isApproval) {
+    if (col.isApproval) {
       // Supervisor or higher (performed by Engineering manager)
       const role = String(user.role || "").toUpperCase();
       const pos = String(user.position || "").toUpperCase();
@@ -445,14 +440,13 @@ export const evaluateUserQualifications = (user) => {
     }
 
     // A user is officially qualified if they are explicitly approved in the sheet/DB,
-    // or if they satisfy the criteria (or have special override)
+    // or if they satisfy the criteria
     const isQualified = isApproved || meetsCriteria;
 
     results[col.id] = {
       isQualified,
       isApproved,
       meetsCriteria,
-      isSpecialOverride,
       missingSkills,
       criteriaSummary: col.criteriaSummary
     };
