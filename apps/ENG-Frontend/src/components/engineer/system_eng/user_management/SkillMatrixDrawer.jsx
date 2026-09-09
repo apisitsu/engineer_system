@@ -1114,6 +1114,18 @@ const SkillMatrixDrawer = ({
                 {qualifications.tooling?.new?.check && (
                   <Tag color="orange" icon={<CheckCircleOutlined />}>Tooling New (Check)</Tag>
                 )}
+                {qualifications.tooling?.revise?.draw_prepare && (
+                  <Tag color="volcano" icon={<ToolOutlined />}>Tooling Revise (Draw/Prepare)</Tag>
+                )}
+                {qualifications.tooling?.revise?.check && (
+                  <Tag color="volcano" icon={<CheckCircleOutlined />}>Tooling Revise (Check)</Tag>
+                )}
+                {qualifications.others_specification?.review && (
+                  <Tag color="gold" icon={<StarFilled />}>Specification Review</Tag>
+                )}
+                {qualifications.others_specification?.check && (
+                  <Tag color="gold" icon={<CheckCircleOutlined />}>Specification Check</Tag>
+                )}
                 {qualifications.others_specification?.approval && (
                   <Tag color="purple" icon={<TrophyOutlined />}>Specification Approval Authority</Tag>
                 )}

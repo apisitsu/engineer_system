@@ -497,6 +497,7 @@ app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUse
 app.get('/api/system/user-management/skills', userManagement.getUserSkills);
 app.get('/api/system/user-management/skills/:u_code', userManagement.getUserSkillByCode);
 app.put('/api/system/user-management/skills/:u_code', userManagement.saveUserSkills);
+app.put('/api/system/user-management/qualifications/:u_code', userManagement.updateQualifications);
 
 
 // Schema Modifying endpoints requiring super admin access

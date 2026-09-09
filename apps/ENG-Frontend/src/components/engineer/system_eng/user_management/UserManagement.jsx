@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   Button, Input, Space, Modal, Form, Select, Dropdown, Popconfirm, message, Layout,
   Spin, Card, Row, Col, Typography, Tag, Avatar, Empty,
-  Divider, Pagination, Table, Tooltip, Radio, InputNumber, Alert, Segmented, Progress
+  Divider, Pagination, Table, Tooltip, Radio, InputNumber, Alert, Segmented, Progress, DatePicker
 } from "antd";
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SettingOutlined, SearchOutlined,
@@ -13,6 +13,7 @@ import {
   ApartmentOutlined, CalendarOutlined, EyeOutlined
 } from "@ant-design/icons";
 import { useLocation } from "react-router-dom";
+import dayjs from "dayjs";
 import axios from "axios";
 import { server } from "../../../../constance/constance";
 import { useAuthStore } from "../../../../stores/authStore";
@@ -20,6 +21,8 @@ import ScrollbarStyle from "../../../common/scrollbar";
 import { MenuTemplate } from "../../../menu_sidebar/menu_template";
 import { useTheme } from "../../../../theme";
 import SkillMatrixDrawer from "./SkillMatrixDrawer";
+import QualificationSummaryView from "./QualificationSummaryView";
+import { calculateExperience, USER_GROUP_ORDER } from "./qualificationCriteria";
 
 
 const { Content } = Layout;
@@ -98,7 +101,8 @@ const NEW_USER_DEFAULTS = {
   u_authority: 4,
   position: "Engineer",
   u_status: 1,
-  section: 1
+  section: 1,
+  date_of_entering_rodend: null
 };
 
 // Internal / System columns: Hidden from Add/Edit Form to only require essential input fields
@@ -206,6 +210,7 @@ const UserManagement = () => {
   const userAuth = useAuthStore((state) => state.userAuth);
   const userDepartment = useAuthStore((state) => state.userDepartment);
   const userRole = useAuthStore((state) => state.userRole);
+  const userInfo = useAuthStore((state) => state.userInfo);
 
   // Authorization checks: Strictly AD and Authority Level 1 can add/edit/delete users or calibrate skills
   const isSuperAdmin =
@@ -219,12 +224,47 @@ const UserManagement = () => {
     userRole === "Admin" ||
     Number(userAuth) === 1;
 
+  // Authorization check for editing qualifications:
+  // Strictly MGR and COORD of ENG department, or AD (Super Admin / Authority 1 / AD role/dept)
+  const canEditQualifications = useMemo(() => {
+    const dept = (userDepartment || userInfo?.u_department || userInfo?.department || "").toUpperCase().trim();
+    const role = (userRole || userInfo?.role || userInfo?.u_role || "").toUpperCase().trim();
+    const grp = (userInfo?.user_group || userInfo?.u_group || "").toUpperCase().trim();
+    const auth = String(userAuth || userInfo?.u_authority || "");
+
+    const isAD =
+      dept === "AD" ||
+      role === "AD" ||
+      role === "ADMIN" ||
+      grp === "AD" ||
+      auth === "1" ||
+      auth === "Super Admin" ||
+      auth === "Emergency User";
+
+    if (isAD) return true;
+
+    const isEng = dept === "ENG";
+    const isMgrOrCoord =
+      role === "MGR" ||
+      role === "COORD" ||
+      grp === "MGR" ||
+      grp === "COORD" ||
+      role.includes("MGR") ||
+      role.includes("COORD") ||
+      role.includes("MANAGER");
+
+    return isEng && isMgrOrCoord;
+  }, [userDepartment, userRole, userAuth, userInfo]);
+
 
   // Data & Schema States
   const [schema, setSchema] = useState([]);
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // Main Page View Mode: 'qualification_summary' (Default First Page) | 'roster' (Engineer Directory)
+  const [activeMainTab, setActiveMainTab] = useState("qualification_summary");
 
   // View mode: 'cards' | 'table'
   const [viewMode, setViewMode] = useState("cards");
@@ -470,9 +510,16 @@ const UserManagement = () => {
       return true;
     });
 
-    // 2. Global Sorting (operates across ALL filtered users)
+    // 2. Global Sorting (operates across ALL filtered users - no users are filtered out)
     result.sort((a, b) => {
-      if (sortField === "u_code") {
+      if (sortField === "u_code" || sortField === "group" || !sortField) {
+        const grpA = (a.user_group || a.u_group || "").toUpperCase().trim();
+        const grpB = (b.user_group || b.u_group || "").toUpperCase().trim();
+        const idxA = USER_GROUP_ORDER.indexOf(grpA) !== -1 ? USER_GROUP_ORDER.indexOf(grpA) : 999;
+        const idxB = USER_GROUP_ORDER.indexOf(grpB) !== -1 ? USER_GROUP_ORDER.indexOf(grpB) : 999;
+        if (idxA !== idxB) {
+          return sortOrder === "desc" ? idxB - idxA : idxA - idxB;
+        }
         const cmp = (a.u_code || "").localeCompare(b.u_code || "");
         return sortOrder === "desc" ? -cmp : cmp;
       }
@@ -555,7 +602,8 @@ const UserManagement = () => {
         user_group: record.user_group || record.u_group || "ENG",
         role: record.role || record.u_role || "STAFF",
         u_authority: Number(record.u_authority) || 4,
-        position: record.position || "Engineer"
+        position: record.position || "Engineer",
+        date_of_entering_rodend: record.date_of_entering_rodend ? dayjs(record.date_of_entering_rodend) : null
       });
     } else {
       // In create mode: Default to 'external' mode (Pull from factory system)
@@ -581,6 +629,33 @@ const UserManagement = () => {
     }
   };
 
+  // Handler for saving qualification updates (Official certifications & special overrides)
+  const handleSaveQualifications = async (uCode, updatedQualifications) => {
+    try {
+      setLoading(true);
+      const url = `${server.API_URL}api/system/user-management/qualifications/${encodeURIComponent(uCode)}`;
+      const res = await axios.put(url, { qualifications: updatedQualifications }, { headers: getAuthHeaders() });
+      if (res.data?.result === "true") {
+        message.success(`Qualifications for ${uCode} updated successfully`);
+        setData((prev) =>
+          prev.map((u) => (u.u_code === uCode ? { ...u, qualifications: updatedQualifications } : u))
+        );
+        if (selectedUser?.u_code === uCode) {
+          setSelectedUser((prev) => ({ ...prev, qualifications: updatedQualifications }));
+        }
+        return true;
+      }
+      message.error(res.data?.message || "Failed to update qualifications");
+      return false;
+    } catch (err) {
+      console.error("Save Qualifications Error:", err);
+      message.error(err?.response?.data?.message || "Error saving qualifications");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRecordSave = async () => {
     try {
       const values = await recordForm.validateFields();
@@ -590,6 +665,15 @@ const UserManagement = () => {
       // If empty (e.g. edit mode or imported from factory DB), omit u_pass so login checks factory DB
       if (!sanitizedPayload.u_pass) {
         delete sanitizedPayload.u_pass;
+      }
+
+      // Format Date of Entering Rodend if provided
+      if (values.date_of_entering_rodend) {
+        sanitizedPayload.date_of_entering_rodend = typeof values.date_of_entering_rodend?.format === "function"
+          ? values.date_of_entering_rodend.format("YYYY-MM-DD")
+          : values.date_of_entering_rodend;
+      } else {
+        sanitizedPayload.date_of_entering_rodend = null;
       }
 
       // 2. Map system defaults for new users
@@ -777,7 +861,8 @@ const UserManagement = () => {
           "role",
           "u_role",
           "u_authority",
-          "position"
+          "position",
+          "date_of_entering_rodend"
         ].includes(col.column_name)
     );
   }, [schema]);
@@ -966,7 +1051,7 @@ const UserManagement = () => {
               padding: "24px"
             }}
           >
-            <div style={{ maxWidth: "1440px", margin: "0 auto" }}>
+            <div style={{ maxWidth: "100%", width: "100%", margin: "0 auto" }}>
 
               {/* ── Page Header ─────────────────────────────────────────── */}
               <div
@@ -1015,7 +1100,7 @@ const UserManagement = () => {
                       )}
                     </div>
                     <Text style={{ color: theme.colors.textSecondary, fontSize: "13px" }}>
-                      ทำเนียบวิศวกรและเมทริกซ์ทักษะ — Comprehensive Engineer Directory, Competency & Calibration Portal
+                      Comprehensive User Directory, Competency & Calibration Portal
                     </Text>
                   </div>
                 </div>
@@ -1061,7 +1146,80 @@ const UserManagement = () => {
                 </Space>
               </div>
 
-              {/* ── Team Hero Overview Stats Bar ────────────────────────── */}
+              {/* ── Main View Segmented Navigation (Summary Matrix vs User Management) ── */}
+              <div style={{ marginBottom: "20px" }}>
+                <Segmented
+                  block
+                  size="large"
+                  value={activeMainTab}
+                  onChange={setActiveMainTab}
+                  style={{
+                    width: "100%",
+                    padding: "4px",
+                    borderRadius: "12px",
+                    background: theme.colors.surface,
+                    border: `1px solid ${theme.colors.border}`,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+                  }}
+                  options={[
+                    {
+                      value: "qualification_summary",
+                      label: (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "6px 18px" }}>
+                          <SafetyCertificateOutlined
+                            style={{
+                              color: activeMainTab === "qualification_summary" ? theme.colors.primary : undefined,
+                              fontSize: "15px"
+                            }}
+                          />
+                          <span style={{ fontWeight: 600 }}>
+                            Qualification Summary Matrix
+                          </span>
+                          <Tag color="gold" style={{ margin: 0, borderRadius: "10px", fontSize: "10px", fontWeight: 700 }}>
+                            Primary ★
+                          </Tag>
+                        </div>
+                      )
+                    },
+                    {
+                      value: "roster",
+                      label: (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "6px 18px" }}>
+                          <TeamOutlined
+                            style={{
+                              color: activeMainTab === "roster" ? theme.colors.primary : undefined,
+                              fontSize: "15px"
+                            }}
+                          />
+                          <span style={{ fontWeight: 600 }}>
+                            User Management
+                          </span>
+                          <Tag style={{ margin: 0, borderRadius: "10px", fontSize: "10px" }}>
+                            {data.length}
+                          </Tag>
+                        </div>
+                      )
+                    }
+                  ]}
+                />
+              </div>
+
+              {/* ── Conditional Render: Qualification Summary Matrix (Default) vs Traditional Roster ── */}
+              {activeMainTab === "qualification_summary" ? (
+                <QualificationSummaryView
+                  users={data}
+                  loading={loading}
+                  onEditUser={(user) => openRecordModal(user)}
+                  onOpenSkillDrawer={(user) => openSkillDrawer(user)}
+                  onViewDetails={(user) => openDetailsModal(user)}
+                  canManageUsers={canManageUsers}
+                  canEditQualifications={canEditQualifications}
+                  onSaveQualifications={handleSaveQualifications}
+                  onRefresh={fetchData}
+                />
+              ) : (
+                <div>
+                  {/* ── Team Hero Overview Stats Bar ────────────────────────── */}
               <Row gutter={[16, 16]} style={{ marginBottom: "20px" }}>
                 <Col xs={24} sm={12} md={6}>
                   <Card size="small" style={{ borderRadius: "14px", border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}>
@@ -1488,6 +1646,8 @@ const UserManagement = () => {
                 </div>
               )}
             </div>
+          )}
+        </div>
 
             {/* ── 1. User Details Popup (Modal - Modern Non-Table Redesign) ─────── */}
             <Modal
@@ -1735,6 +1895,24 @@ const UserManagement = () => {
                             <Text strong style={{ fontSize: "13px", color: theme.colors.textPrimary }}>
                               {selectedUser.position || "Engineer"}
                             </Text>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Text type="secondary" style={{ fontSize: "12px" }}>Date of Entering Rodend</Text>
+                            <Space size={6}>
+                              <CalendarOutlined style={{ fontSize: "12px", color: theme.colors.textSecondary }} />
+                              <Text strong style={{ fontSize: "12px", color: theme.colors.textPrimary }}>
+                                {selectedUser.date_of_entering_rodend
+                                  ? String(selectedUser.date_of_entering_rodend).slice(0, 10)
+                                  : selectedUser.qualifications?.date_of_entering_rodend
+                                  ? String(selectedUser.qualifications.date_of_entering_rodend).slice(0, 10)
+                                  : "—"}
+                              </Text>
+                              {(selectedUser.date_of_entering_rodend || selectedUser.qualifications?.date_of_entering_rodend) && (
+                                <Tag color="gold" style={{ borderRadius: "8px", margin: 0, fontSize: "11px", fontWeight: 700 }}>
+                                  {calculateExperience(selectedUser.date_of_entering_rodend || selectedUser.qualifications?.date_of_entering_rodend)}
+                                </Tag>
+                              )}
+                            </Space>
                           </div>
                         </div>
                       </Card>
@@ -2236,12 +2414,32 @@ const UserManagement = () => {
                     </Form.Item>
                   </Col>
 
-                  <Col span={24}>
+                  <Col span={12}>
                     <Form.Item label="Position Title (position)" name="position">
                       <Input
                         size="large"
                         placeholder="e.g. Materials Head, QT Engineer, Process Design"
                         style={{ borderRadius: "8px" }}
+                      />
+                    </Form.Item>
+                  </Col>
+
+                  <Col span={12}>
+                    <Form.Item
+                      label={
+                        <Space size={4}>
+                          <CalendarOutlined style={{ color: theme.colors.primary }} />
+                          <span style={{ fontWeight: 600 }}>Date of Entering Rodend</span>
+                        </Space>
+                      }
+                      name="date_of_entering_rodend"
+                      tooltip="Official start/entrance date at Rodend Division. Used to calculate real-time engineering experience."
+                    >
+                      <DatePicker
+                        size="large"
+                        format="YYYY-MM-DD"
+                        placeholder="Select Entering Date"
+                        style={{ width: "100%", borderRadius: "8px" }}
                       />
                     </Form.Item>
                   </Col>

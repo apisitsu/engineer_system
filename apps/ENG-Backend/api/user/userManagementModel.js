@@ -153,8 +153,24 @@ const getUsers = async (req, res) => {
             params.push(Number(pageSize), (Number(page) - 1) * Number(pageSize));
         }
 
-        const dataQuery = `SELECT * FROM m_user_profile ${whereString} ${orderString} ${limitString}`;
-        const countQuery = `SELECT COUNT(*) FROM m_user_profile ${whereString}`;
+        const dataQuery = `
+            SELECT 
+                u.*,
+                s.mc_setup, s.inspection, s.mc_operation,
+                s.public_std, s.cust_specification, s.internal_document,
+                s.cad, s.programming, s.microsoft,
+                s.detail_oriented, s.critical_thinking, s.process_comprehension,
+                s.time_management, s.collaboration, s.leadership,
+                s.qualifications,
+                s.evaluation_details,
+                s.evaluation_history
+            FROM m_user_profile u
+            LEFT JOIN m_user_skills s ON u.u_code = s.u_code
+            ${whereString ? whereString.replace(/\b([a-z_]+)\b(?= ILIKE)/g, 'u.$1') : ''} 
+            ${orderString ? orderString.replace(/ORDER BY ([a-z_]+)/g, 'ORDER BY u.$1') : ''} 
+            ${limitString}
+        `;
+        const countQuery = `SELECT COUNT(*) FROM m_user_profile u ${whereString ? whereString.replace(/\b([a-z_]+)\b(?= ILIKE)/g, 'u.$1') : ''}`;
 
         const countParams = limitString ? params.slice(0, params.length - 2) : params;
         const [dataResult, countResult] = await Promise.all([
@@ -330,18 +346,45 @@ const getUserSkills = async (req, res) => {
     try {
         const query = `
             SELECT 
-                s.*,
+                u.u_code,
                 u.u_name,
                 u.u_nickname,
                 u.position,
                 u.u_department,
                 u.user_group,
                 u.role,
+                u.section,
+                u.u_authority,
+                u.u_status,
                 u.profile_img_b64,
                 u.element,
-                u.theme
-            FROM m_user_skills s
-            JOIN m_user_profile u ON s.u_code = u.u_code
+                u.theme,
+                s.mc_setup,
+                s.inspection,
+                s.mc_operation,
+                s.public_std,
+                s.cust_specification,
+                s.internal_document,
+                s.cad,
+                s.programming,
+                s.microsoft,
+                s.detail_oriented,
+                s.critical_thinking,
+                s.process_comprehension,
+                s.time_management,
+                s.collaboration,
+                s.leadership,
+                COALESCE(s.atk, u.atk, 0) as atk,
+                COALESCE(s.def, u.def, 0) as def,
+                COALESCE(s.hp, u.hp, 0) as hp,
+                COALESCE(s.mp, u.mp, 0) as mp,
+                s.total_score,
+                s.qualifications,
+                s.evaluation_details,
+                s.evaluation_history,
+                s.updated_at
+            FROM m_user_profile u
+            LEFT JOIN m_user_skills s ON u.u_code = s.u_code
             ORDER BY u.u_code ASC
         `;
         const result = await engPool.query(query);
@@ -590,8 +633,42 @@ const saveUserSkills = async (req, res) => {
     }
 };
 
+// 12. Update User Qualifications directly (Official certifications & special overrides)
+const updateQualifications = async (req, res) => {
+    try {
+        const { u_code } = req.params;
+        const { qualifications } = req.body;
+
+        if (!qualifications || typeof qualifications !== 'object') {
+            return res.status(400).json({ result: 'false', message: 'Valid qualifications object is required' });
+        }
+
+        const query = `
+            INSERT INTO m_user_skills (u_code, qualifications, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (u_code) DO UPDATE SET
+                qualifications = EXCLUDED.qualifications,
+                updated_at = NOW()
+            RETURNING *
+        `;
+
+        const result = await engPool.query(query, [u_code, JSON.stringify(qualifications)]);
+
+        await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_QUALIFICATIONS', `Updated qualifications for ${u_code}`);
+
+        res.json({
+            result: 'true',
+            message: `Qualifications updated successfully for ${u_code}`,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Error updating user qualifications:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
 module.exports = {
     getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers,
-    getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers
+    getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers, updateQualifications
 };
 
