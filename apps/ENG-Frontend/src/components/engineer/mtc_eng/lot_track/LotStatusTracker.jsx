@@ -330,7 +330,7 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
           {' '}run {fmtMinutes(summary.totalRunMinutes)}
         </div>
         <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
-          Entered {header.entryDate || '—'}
+          Issued {header.entryDate || '—'}
           {summary.firstProducedDate ? (
             <> · production {summary.firstProducedDate} → {header.compDate || summary.lastProducedDate || '…'}
               {summary.hasCurrent ? ' (running)' : header.compDate ? ' (done)' : ' (last step done)'}
