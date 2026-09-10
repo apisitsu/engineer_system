@@ -106,10 +106,11 @@ function Roadmap({ steps }) {
           if (s.operator) bits.push(s.operator);
         }
         const isLast = i === steps.length - 1;
-        // Chip above THIS step's node = how long it waited for the previous step
-        // to hand the lot over. Previous step done → settled gap (prev.dwellDays,
-        // = comp[i-1] − comp[i-2]); previous step still WIP → running count since
-        // the lot reached it; previous step pending / no previous → no chip.
+        // Chip sits on the connector just BELOW this step's node and reports the
+        // wait the PREVIOUS step went through before it handed the lot on —
+        // settled gap (prev.dwellDays = comp[i-1] − comp[i-2]) once that step is
+        // done, or a running "so far" count while it is still WIP. This puts the
+        // gap one connector lower than the pair of completions that bound it.
         const prev = i > 0 ? steps[i - 1] : null;
         let waitChip = null;
         if (prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
@@ -121,16 +122,6 @@ function Roadmap({ steps }) {
 
         return (
           <React.Fragment key={s.order}>
-            {waitChip ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22 }}>
-                <span style={{ width: 12, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
-                  <span style={{ width: 1, background: RAIL }} />
-                </span>
-                <Tag color={waitChip.days >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
-                  ⏳ {waitChip.ongoing ? `Waiting ${fmtDays(waitChip.days)} so far` : `Wait in process ${fmtDays(waitChip.days)}`}
-                </Tag>
-              </div>
-            ) : null}
             <div
               className={s.status === 'current' ? 'lot-roadmap-current' : undefined}
               style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}
@@ -139,7 +130,7 @@ function Roadmap({ steps }) {
                 <Dot status={s.status} />
                 {!isLast ? <span style={{ flex: 1, width: 1, minHeight: 14, background: RAIL }} /> : null}
               </div>
-              <div style={{ flex: 1, paddingBottom: isLast ? 0 : 8, minWidth: 0 }}>
+              <div style={{ flex: 1, paddingBottom: isLast || waitChip ? 0 : 8, minWidth: 0 }}>
                 <Space size={6} wrap>
                   <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
                   <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
@@ -151,6 +142,16 @@ function Roadmap({ steps }) {
                 ) : null}
               </div>
             </div>
+            {waitChip ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22, paddingBottom: 8 }}>
+                <span style={{ width: 12, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
+                  <span style={{ width: 1, background: RAIL }} />
+                </span>
+                <Tag color={waitChip.days >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
+                  ⏳ {waitChip.ongoing ? `Waiting ${fmtDays(waitChip.days)} so far` : `Wait in process ${fmtDays(waitChip.days)}`}
+                </Tag>
+              </div>
+            ) : null}
           </React.Fragment>
         );
       })}
