@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import {
   Card, Table, Tag, Button, Input, Select, Space, Tooltip,
   Typography, Drawer, Popconfirm, message, Alert,
-  Segmented, Modal, Row, Col, Form
+  Segmented, Modal, Row, Col, Form, Divider
 } from "antd";
 import {
   SafetyCertificateOutlined, EditOutlined, SaveOutlined, ReloadOutlined,
@@ -50,6 +50,36 @@ const SkillRequirementsMatrixView = ({
 }) => {
   const { theme } = useTheme();
   const isDark = theme.isDark || false;
+
+  // Resolve columns: prioritize qualificationColumns over columns
+  const effectiveColumns = useMemo(() => {
+    if (Array.isArray(qualificationColumns) && qualificationColumns.length > 0) {
+      return qualificationColumns;
+    }
+    if (Array.isArray(columns) && columns.length > 0) {
+      return columns;
+    }
+    return [];
+  }, [qualificationColumns, columns]);
+
+  // Local editing state for staff criteria columns
+  const [localColumns, setLocalColumns] = useState(() =>
+    JSON.parse(
+      JSON.stringify(
+        qualificationColumns?.length
+          ? qualificationColumns
+          : columns?.length
+          ? columns
+          : []
+      )
+    )
+  );
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [detailSkill, setDetailSkill] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // 1. Matrix Type Switcher: 'staff' (15 skills, 11 scopes, scale 0-3) | 'leader' (33 competencies, 3 domains, scale 0-4)
   const [matrixCategory, setMatrixCategory] = useState("staff");
@@ -180,30 +210,38 @@ const SkillRequirementsMatrixView = ({
       }
     };
 
+    let nextDefs;
     if (editingSkill) {
-      setLocalSkillDefinitions((prev) => prev.map((s) => (s.key === editingSkill.key ? { ...s, ...skillObj } : s)));
+      nextDefs = localSkillDefinitions.map((s) => (s.key === editingSkill.key ? { ...s, ...skillObj } : s));
       message.success(`Updated competency "${skillObj.label}"`);
     } else {
-      setLocalSkillDefinitions((prev) => [...prev, skillObj]);
+      nextDefs = [...localSkillDefinitions, skillObj];
       message.success(`Added new required competency "${skillObj.label}"`);
+    }
+    setLocalSkillDefinitions(nextDefs);
+    if (onSaveCriteria) {
+      onSaveCriteria(localColumns, nextDefs, localLeaderCriteria).catch((e) => console.error("Auto-save criteria error:", e));
     }
     setIsSkillModalOpen(false);
   };
 
   const handleDeleteStaffSkill = (skillKey) => {
-    setLocalSkillDefinitions((prev) => prev.filter((s) => s.key !== skillKey));
-    setLocalColumns((prev) =>
-      prev.map((col) => {
-        if (!col.criteria || !col.criteria[skillKey]) return col;
-        const nextCriteria = { ...col.criteria };
-        delete nextCriteria[skillKey];
-        return {
-          ...col,
-          criteria: nextCriteria,
-          criteriaSummary: generateCriteriaSummary(nextCriteria)
-        };
-      })
-    );
+    const nextDefs = localSkillDefinitions.filter((s) => s.key !== skillKey);
+    const nextCols = localColumns.map((col) => {
+      if (!col.criteria || !col.criteria[skillKey]) return col;
+      const nextCriteria = { ...col.criteria };
+      delete nextCriteria[skillKey];
+      return {
+        ...col,
+        criteria: nextCriteria,
+        criteriaSummary: generateCriteriaSummary(nextCriteria)
+      };
+    });
+    setLocalSkillDefinitions(nextDefs);
+    setLocalColumns(nextCols);
+    if (onSaveCriteria) {
+      onSaveCriteria(nextCols, nextDefs, localLeaderCriteria).catch((e) => console.error("Auto-save criteria error:", e));
+    }
     message.success("Competency removed from matrix");
   };
 
@@ -260,22 +298,31 @@ const SkillRequirementsMatrixView = ({
       maxScore: Number(values.maxScore || 4)
     };
 
+    let nextLeader;
     if (editingLeaderCrit) {
-      setLocalLeaderCriteria((prev) => prev.map((c) => (c.key === editingLeaderCrit.key ? criterionObj : c)));
+      nextLeader = localLeaderCriteria.map((c) => (c.key === editingLeaderCrit.key ? criterionObj : c));
       message.success(`Updated criterion "${criterionObj.code}"`);
     } else {
       if (localLeaderCriteria.some((c) => c.key === key || c.code === criterionObj.code)) {
         message.error(`Criterion code "${criterionObj.code}" already exists!`);
         return;
       }
-      setLocalLeaderCriteria((prev) => [...prev, criterionObj]);
+      nextLeader = [...localLeaderCriteria, criterionObj];
       message.success(`Added new criterion "${criterionObj.code}" to Domain ${dNum}`);
+    }
+    setLocalLeaderCriteria(nextLeader);
+    if (onSaveCriteria) {
+      onSaveCriteria(localColumns, localSkillDefinitions, nextLeader).catch((e) => console.error("Auto-save leader criteria error:", e));
     }
     setIsLeaderCritModalOpen(false);
   };
 
   const handleDeleteLeaderCriterion = (critKey) => {
-    setLocalLeaderCriteria((prev) => prev.filter((c) => c.key !== critKey));
+    const nextLeader = localLeaderCriteria.filter((c) => c.key !== critKey);
+    setLocalLeaderCriteria(nextLeader);
+    if (onSaveCriteria) {
+      onSaveCriteria(localColumns, localSkillDefinitions, nextLeader).catch((e) => console.error("Auto-save leader criteria error:", e));
+    }
     message.success("Leader criterion removed from matrix");
   };
 
@@ -328,34 +375,6 @@ const SkillRequirementsMatrixView = ({
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
 
   // ── STAFF MATRIX STATE ─────────────────────────────────────────────────────
-  const effectiveColumns = useMemo(() => {
-    if (Array.isArray(qualificationColumns) && qualificationColumns.length > 0) {
-      return qualificationColumns;
-    }
-    if (Array.isArray(columns) && columns.length > 0) {
-      return columns;
-    }
-    return [];
-  }, [qualificationColumns, columns]);
-
-  // Local editing state for staff criteria columns
-  const [localColumns, setLocalColumns] = useState(() =>
-    JSON.parse(
-      JSON.stringify(
-        qualificationColumns?.length
-          ? qualificationColumns
-          : columns?.length
-          ? columns
-          : []
-      )
-    )
-  );
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [detailSkill, setDetailSkill] = useState(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Sync with incoming columns when not actively editing
   React.useEffect(() => {
@@ -438,38 +457,36 @@ const SkillRequirementsMatrixView = ({
   // ── FILTERED STAFF SKILL ROWS ──────────────────────────────────────────────
   const filteredSkillRows = useMemo(() => {
     const list = [];
-    const defsMap = {};
-    (skillDefinitions || []).forEach((d) => {
-      defsMap[d.key] = d;
-    });
+    (localSkillDefinitions || []).forEach((def) => {
+      const catKey = def.categoryKey || def.category || "industry";
+      if (selectedCategory !== "ALL" && catKey !== selectedCategory) return;
 
-    SKILL_CATEGORIES.forEach((cat) => {
-      if (selectedCategory !== "ALL" && cat.key !== selectedCategory) return;
+      const label = def.label || def.key;
+      const catName =
+        def.categoryName ||
+        SKILL_CATEGORIES.find((c) => c.key === catKey)?.name ||
+        catKey.toUpperCase();
 
-      cat.skills.forEach((skillKey) => {
-        const def = defsMap[skillKey] || {};
-        const label = def.label || skillKey;
+      if (
+        searchQuery &&
+        !label.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !catName.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !def.key.toLowerCase().includes(searchQuery.toLowerCase())
+      ) {
+        return;
+      }
 
-        if (
-          searchQuery &&
-          !label.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !cat.name.toLowerCase().includes(searchQuery.toLowerCase())
-        ) {
-          return;
-        }
-
-        list.push({
-          skillKey,
-          label,
-          categoryKey: cat.key,
-          categoryName: cat.name,
-          definition: def
-        });
+      list.push({
+        skillKey: def.key,
+        label,
+        categoryKey: catKey,
+        categoryName: catName,
+        definition: def
       });
     });
 
     return list;
-  }, [skillDefinitions, selectedCategory, searchQuery]);
+  }, [localSkillDefinitions, selectedCategory, searchQuery]);
 
   // ── BUILD STAFF TABLE COLUMNS ──────────────────────────────────────────────
   const staffTableColumns = useMemo(() => {
@@ -489,7 +506,7 @@ const SkillRequirementsMatrixView = ({
       ),
       key: "skill_name",
       fixed: "left",
-      width: 220,
+      width: 250,
       render: (_, record) => {
         const catColor =
           record.categoryKey === "industry" ? "orange" :
@@ -498,24 +515,53 @@ const SkillRequirementsMatrixView = ({
           record.categoryKey === "problem_solving" ? "red" : "green";
 
         return (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 0" }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 0", gap: "6px" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {record.label}
               </div>
               <Tag color={catColor} style={{ fontSize: "10px", padding: "0 6px", borderRadius: "6px", marginTop: "2px" }}>
                 {record.categoryName}
               </Tag>
             </div>
-            <Tooltip title="View Capability Descriptions & Experience Requirements">
-              <Button
-                type="text"
-                size="small"
-                icon={<InfoCircleOutlined style={{ color: theme.colors.primary, fontSize: "14px" }} />}
-                onClick={() => handleOpenDetail(record)}
-                style={{ borderRadius: "50%", padding: 0, width: "26px", height: "26px" }}
-              />
-            </Tooltip>
+            <Space size={2} style={{ flexShrink: 0 }}>
+              <Tooltip title="Edit Competency Details">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined style={{ color: "#722ed1", fontSize: "13px" }} />}
+                  onClick={() => handleOpenEditSkillModal(record.definition)}
+                  style={{ width: "24px", height: "24px", padding: 0 }}
+                />
+              </Tooltip>
+              <Tooltip title="View Capability Details">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<InfoCircleOutlined style={{ color: theme.colors.primary, fontSize: "13px" }} />}
+                  onClick={() => handleOpenDetail(record)}
+                  style={{ width: "24px", height: "24px", padding: 0 }}
+                />
+              </Tooltip>
+              <Popconfirm
+                title="Delete Competency"
+                description={`Remove "${record.label}" from required competencies?`}
+                onConfirm={() => handleDeleteStaffSkill(record.skillKey)}
+                okText="Delete"
+                cancelText="Cancel"
+                okButtonProps={{ danger: true }}
+              >
+                <Tooltip title="Remove Competency">
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    icon={<DeleteOutlined style={{ fontSize: "13px" }} />}
+                    style={{ width: "24px", height: "24px", padding: 0 }}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
           </div>
         );
       }
@@ -692,18 +738,19 @@ const SkillRequirementsMatrixView = ({
 
   // ── FILTERED LEADER CRITERIA ROWS ──────────────────────────────────────────
   const filteredLeaderRows = useMemo(() => {
-    return LEADER_ALL_CRITERIA_FLAT.filter((c) => {
+    const list = localLeaderCriteria?.length ? localLeaderCriteria : LEADER_ALL_CRITERIA_FLAT;
+    return list.filter((c) => {
       if (selectedLeaderDomain !== "ALL" && c.domainKey !== selectedLeaderDomain) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase().trim();
-        const matchName = c.nameEn.toLowerCase().includes(q) || c.nameTh.toLowerCase().includes(q);
-        const matchCode = c.code.toLowerCase().includes(q);
-        const matchKw = c.keywords.toLowerCase().includes(q);
+        const matchName = (c.nameEn || "").toLowerCase().includes(q) || (c.nameTh || "").toLowerCase().includes(q);
+        const matchCode = (c.code || "").toLowerCase().includes(q);
+        const matchKw = (c.keywords || "").toLowerCase().includes(q);
         if (!matchName && !matchCode && !matchKw) return false;
       }
       return true;
     });
-  }, [selectedLeaderDomain, searchQuery]);
+  }, [localLeaderCriteria, selectedLeaderDomain, searchQuery]);
 
   // ── BUILD LEADER TABLE COLUMNS ─────────────────────────────────────────────
   const leaderTableColumns = useMemo(() => {
@@ -724,18 +771,49 @@ const SkillRequirementsMatrixView = ({
       {
         title: "Competency / Evaluation Criteria (ตารางเกณฑ์ประเมิน)",
         key: "title",
-        width: 320,
+        width: 330,
         fixed: "left",
         render: (_, record) => (
           <div>
-            <div style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary }}>
-              {record.nameTh}
-            </div>
-            <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: 2 }}>
-              {record.nameEn}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "13px", color: theme.colors.textPrimary }}>
+                  {record.nameTh}
+                </div>
+                <div style={{ fontSize: "11px", color: theme.colors.textSecondary, marginTop: 2 }}>
+                  {record.nameEn}
+                </div>
+              </div>
+              <Space size={2}>
+                <Tooltip title="Edit Criterion (แก้ไขเกณฑ์)">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined style={{ fontSize: "12px", color: "#722ed1" }} />}
+                    onClick={() => handleOpenEditLeaderCritModal(record)}
+                    style={{ width: 22, height: 22, padding: 0 }}
+                  />
+                </Tooltip>
+                <Popconfirm
+                  title={`Delete criterion ${record.code}?`}
+                  description="Are you sure you want to remove this leader competency criterion?"
+                  onConfirm={() => handleDeleteLeaderCriterion(record.key)}
+                  okText="Delete"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined style={{ fontSize: "12px" }} />}
+                    style={{ width: 22, height: 22, padding: 0 }}
+                  />
+                </Popconfirm>
+              </Space>
             </div>
             <Space size={4} wrap style={{ marginTop: 4 }}>
-              {record.keywords.split(",").map((kw) => (
+              {(record.keywords || "").split(",").filter(Boolean).map((kw) => (
                 <Tag key={kw.trim()} color="cyan" style={{ fontSize: "10px", margin: 0, padding: "0 4px", borderRadius: "4px" }}>
                   {kw.trim()}
                 </Tag>
@@ -959,7 +1037,7 @@ const SkillRequirementsMatrixView = ({
         )
       }
     ];
-  }, [theme, selectedLeaderPeriod, isEditingLeader, editedLeaderScores, getScoreForLeader]);
+  }, [theme, selectedLeaderPeriod, isEditingLeader, editedLeaderScores, getScoreForLeader, localLeaderCriteria]);
 
   // ── BUILD LEADER HISTORICAL TREND COLUMNS (TIMELINE ACROSS ALL 20 QUARTERS) ──
   const leaderTrendColumns = useMemo(() => {
@@ -1233,6 +1311,13 @@ const SkillRequirementsMatrixView = ({
         {/* Staff Edit Controls */}
         {matrixCategory === "staff" && (
           <Space>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleOpenAddSkillModal}
+              style={{ borderRadius: "8px", fontWeight: 600, color: theme.colors.primary, borderColor: theme.colors.primary }}
+            >
+              Add Competency (เพิ่ม Competency)
+            </Button>
             {!isEditing ? (
               <Button
                 type="primary"
@@ -1275,32 +1360,41 @@ const SkillRequirementsMatrixView = ({
         )}
 
         {/* Leader Edit Controls */}
-        {matrixCategory === "leader" && leaderViewMode === "by_period" && (
+        {matrixCategory === "leader" && (
           <Space>
-            {!isEditingLeader ? (
-              <Button
-                type="primary"
-                icon={<EditOutlined />}
-                onClick={handleStartEditLeader}
-                style={{ borderRadius: "8px", background: "#722ed1", borderColor: "#722ed1" }}
-              >
-                Edit Leader Scores (แก้ไขคะแนน)
-              </Button>
-            ) : (
-              <Space>
-                <Button icon={<CloseOutlined />} onClick={handleCancelEditLeader} style={{ borderRadius: "8px" }}>
-                  Cancel (ยกเลิก)
-                </Button>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleOpenAddLeaderCritModal}
+              style={{ borderRadius: "8px", fontWeight: 600, color: "#722ed1", borderColor: "#722ed1" }}
+            >
+              Add Criterion (เพิ่มเกณฑ์)
+            </Button>
+            {leaderViewMode === "by_period" && (
+              !isEditingLeader ? (
                 <Button
                   type="primary"
-                  icon={<SaveOutlined />}
-                  loading={savingLeader}
-                  onClick={handleSaveLeader}
-                  style={{ borderRadius: "8px", background: "#52c41a", borderColor: "#52c41a" }}
+                  icon={<EditOutlined />}
+                  onClick={handleStartEditLeader}
+                  style={{ borderRadius: "8px", background: "#722ed1", borderColor: "#722ed1" }}
                 >
-                  Save Changes (บันทึก)
+                  Edit Leader Scores (แก้ไขคะแนน)
                 </Button>
-              </Space>
+              ) : (
+                <Space>
+                  <Button icon={<CloseOutlined />} onClick={handleCancelEditLeader} style={{ borderRadius: "8px" }}>
+                    Cancel (ยกเลิก)
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={savingLeader}
+                    onClick={handleSaveLeader}
+                    style={{ borderRadius: "8px", background: "#52c41a", borderColor: "#52c41a" }}
+                  >
+                    Save Changes (บันทึก)
+                  </Button>
+                </Space>
+              )
             )}
           </Space>
         )}
@@ -1550,6 +1644,183 @@ const SkillRequirementsMatrixView = ({
         bodyStyle={{ padding: 0 }}
       >
         <ExcelSheetsExplorer initialWorkbook={matrixCategory === "leader" ? "leader" : "staff"} />
+      </Modal>
+
+      {/* ── Add / Edit Staff Competency Modal ──────────────────────── */}
+      <Modal
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <TeamOutlined style={{ color: theme.colors.primary }} />
+            <span>{editingSkill ? "Edit Required Competency" : "Add New Required Competency (เพิ่ม Competency)"}</span>
+          </div>
+        }
+        open={isSkillModalOpen}
+        onCancel={() => setIsSkillModalOpen(false)}
+        onOk={() => skillForm.submit()}
+        okText={editingSkill ? "Update Competency" : "Add Competency"}
+        destroyOnClose
+        width={580}
+      >
+        <Form form={skillForm} layout="vertical" onFinish={handleSaveSkillModal} style={{ marginTop: 16 }}>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="label"
+                label="Competency Name (ชื่อทักษะ)"
+                rules={[{ required: true, message: "Please input competency name" }]}
+              >
+                <Input placeholder="e.g. ME10 / Drafting Technique" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="key"
+                label="Skill Key (รหัสระบุ)"
+                rules={[{ required: true, message: "Please input skill key" }]}
+                extra={editingSkill ? "Key cannot be changed once created" : "Unique identifier (lowercase_with_underscores)"}
+              >
+                <Input placeholder="e.g. me10_drafting" disabled={!!editingSkill} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="category"
+            label="Skill Category (หมวดหมู่)"
+            rules={[{ required: true, message: "Please select a category" }]}
+          >
+            <Select placeholder="Select category">
+              {SKILL_CATEGORIES.map((c) => (
+                <Select.Option key={c.key} value={c.key}>
+                  {c.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Divider style={{ margin: "12px 0" }}>Level Capability Definitions (คำจำกัดความแต่ละระดับ 1–3)</Divider>
+
+          <Form.Item name="desc1" label="Level 1 Capability Description (ระดับ 1)">
+            <Input.TextArea rows={2} placeholder="Can perform basic tasks under supervision..." />
+          </Form.Item>
+          <Form.Item name="exp1" label="Level 1 Experience Required">
+            <Input placeholder="e.g. None or 3 Months" />
+          </Form.Item>
+
+          <Form.Item name="desc2" label="Level 2 Capability Description (ระดับ 2)">
+            <Input.TextArea rows={2} placeholder="Can perform tasks independently..." />
+          </Form.Item>
+          <Form.Item name="exp2" label="Level 2 Experience Required">
+            <Input placeholder="e.g. 6 Months or 1 Year" />
+          </Form.Item>
+
+          <Form.Item name="desc3" label="Level 3 Capability Description (ระดับ 3)">
+            <Input.TextArea rows={2} placeholder="Expert level, can train and solve complex issues..." />
+          </Form.Item>
+          <Form.Item name="exp3" label="Level 3 Experience Required">
+            <Input placeholder="e.g. 1 Year or 2 Years" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* ── Add / Edit Leader Competency Criterion Modal ───────────── */}
+      <Modal
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <CrownOutlined style={{ color: "#722ed1" }} />
+            <span>{editingLeaderCrit ? "Edit Leader Criterion" : "Add Leader Competency Criterion (เพิ่มเกณฑ์ประเมิน)"}</span>
+          </div>
+        }
+        open={isLeaderCritModalOpen}
+        onCancel={() => setIsLeaderCritModalOpen(false)}
+        onOk={() => leaderCritForm.submit()}
+        okText={editingLeaderCrit ? "Update Criterion" : "Add Criterion"}
+        destroyOnClose
+        width={620}
+      >
+        <Form form={leaderCritForm} layout="vertical" onFinish={handleSaveLeaderCritModal} style={{ marginTop: 16 }}>
+          <Row gutter={12}>
+            <Col span={14}>
+              <Form.Item
+                name="domainKey"
+                label="Domain (กลุ่มการประเมิน)"
+                rules={[{ required: true, message: "Please select domain" }]}
+              >
+                <Select
+                  onChange={(val) => {
+                    if (!editingLeaderCrit) {
+                      const prefix = val === "general_drawing_control" ? "GDC" : val === "tooling_inspector" ? "TIN" : "DVF";
+                      const count = (localLeaderCriteria || []).filter((c) => c.domainKey === val).length + 1;
+                      leaderCritForm.setFieldsValue({ code: `${prefix}-${String(count).padStart(2, "0")}` });
+                    }
+                  }}
+                >
+                  <Select.Option value="general_drawing_control">Domain 1: General Drawing Control</Select.Option>
+                  <Select.Option value="tooling_inspector">Domain 2: Tooling Inspector</Select.Option>
+                  <Select.Option value="drawing_verification">Domain 3: Drawing Verification</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item
+                name="code"
+                label="Criterion Code (รหัสเกณฑ์)"
+                rules={[{ required: true, message: "Please input criterion code" }]}
+              >
+                <Input placeholder="e.g. GDC-12" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="nameTh"
+                label="Thai Criteria Name (ชื่อเกณฑ์ภาษาไทย)"
+                rules={[{ required: true, message: "Please input Thai criteria name" }]}
+              >
+                <Input placeholder="e.g. การควบคุม ME10 และ Drawing" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="nameEn"
+                label="English Criteria Name (ชื่อเกณฑ์ภาษาอังกฤษ)"
+                rules={[{ required: true, message: "Please input English criteria name" }]}
+              >
+                <Input placeholder="e.g. ME10 & Drawing Control" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="keywords"
+            label="Keywords (คำสำคัญ สำหรับค้นหาและแท็ก)"
+            extra="Separate multiple keywords with commas (e.g. ME10, Drafting, Revision)"
+          >
+            <Input placeholder="e.g. ME10, Drawing, CAD, Revision" />
+          </Form.Item>
+
+          <Form.Item
+            name="desc"
+            label="Detailed Scope / Description (ขอบเขตและคำอธิบายเกณฑ์)"
+          >
+            <Input.TextArea rows={3} placeholder="Explain the evaluation criteria and expected outputs..." />
+          </Form.Item>
+
+          <Form.Item
+            name="maxScore"
+            label="Max Target Score (คะแนนเต็ม)"
+            rules={[{ required: true }]}
+          >
+            <Select>
+              <Select.Option value={1}>1 (Level 1)</Select.Option>
+              <Select.Option value={2}>2 (Level 2)</Select.Option>
+              <Select.Option value={3}>3 (Level 3)</Select.Option>
+              <Select.Option value={4}>4 (Level 4 - Full Scale)</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );
