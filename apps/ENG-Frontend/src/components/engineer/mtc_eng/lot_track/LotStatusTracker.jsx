@@ -96,7 +96,7 @@ function Roadmap({ steps, issuedDate }) {
     <div style={{ position: 'relative', paddingTop: 12, paddingBottom: 4 }}>
       <span style={{ position: 'absolute', top: 4, bottom: 4, left: 'calc(50% - 1px)', width: 2, background: RAIL, zIndex: 0 }} />
 
-      {/* Flow 1 — the lot being issued on paper, the roadmap's starting milestone */}
+      {/* the lot being issued on paper — the roadmap's starting milestone */}
       <div style={{ position: 'relative', zIndex: 1, borderRadius: 12, padding: '10px 12px 9px', ...STEP_BOX.done }}>
         <span style={{
           position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
@@ -104,10 +104,7 @@ function Roadmap({ steps, issuedDate }) {
         }}>
           <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />
         </span>
-        <Space size={[6, 2]} wrap>
-          <Text strong style={{ fontSize: 13 }}>Issued Lot</Text>
-          <Tag color="success" style={{ marginInlineEnd: 0 }}>Flow 1</Tag>
-        </Space>
+        <Text strong style={{ fontSize: 13 }}>Issued Lot</Text>
         <div><Text type="secondary" style={{ fontSize: 11.5 }}>issued {issuedDate || '—'}</Text></div>
       </div>
       <div style={{ height: 12 }} />
@@ -131,15 +128,14 @@ function Roadmap({ steps, issuedDate }) {
           if (s.operator) bits.push(s.operator);
         }
         // Wait chip sits on the spine in the gap just below THIS step's box and
-        // reports the wait the PREVIOUS step went through before it handed the
-        // lot on: settled gap (prev.dwellDays = comp[i-1] − comp[i-2]) once that
-        // step is done, or a running "so far" count while it is still WIP.
-        const prev = i > 0 ? steps[i - 1] : null;
+        // reports THIS step's own wait — the span from the previous milestone to
+        // this step completing (s.dwellDays = comp[i] − comp[i-1], or issue date
+        // for the first step) once done, or a running "so far" count while WIP.
         let waitChip = null;
-        if (prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
-          waitChip = { days: prev.dwellDays, ongoing: false };
-        } else if (prev && prev.status === 'current' && prev.startDate) {
-          const soFar = -(daysUntil(prev.startDate) || 0);
+        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0) {
+          waitChip = { days: s.dwellDays, ongoing: false };
+        } else if (s.status === 'current' && s.startDate) {
+          const soFar = -(daysUntil(s.startDate) || 0);
           if (soFar > 0) waitChip = { days: soFar, ongoing: true };
         }
 
