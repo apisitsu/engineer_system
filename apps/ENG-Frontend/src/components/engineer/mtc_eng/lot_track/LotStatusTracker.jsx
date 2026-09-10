@@ -71,8 +71,10 @@ const chunk = (arr, n) => {
   return out;
 };
 
-// ── roadmap — custom vertical timeline so the WIP-wait sits ON the connector
-// BETWEEN two steps (step N+1's dwellDays = the gap from step N finishing).
+// ── roadmap — custom vertical timeline. The WIP-wait chip sits ON the connector
+// just above a step's node and belongs to THAT step: how long it waited for the
+// previous step to finish and hand the lot over. Settled (prev.dwellDays) once
+// the previous step is done; a running "so far" count while it is still WIP.
 function Dot({ status }) {
   if (status === 'done') return <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />;
   if (status === 'current') return <SyncOutlined spin style={{ color: '#1677ff', fontSize: 14 }} />;
@@ -89,10 +91,9 @@ function Roadmap({ steps }) {
         if (s.status === 'current') {
           // no production row yet — show what is known while it's WIP
           if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
-          if (s.startDate) {
-            const w = daysUntil(s.startDate);
-            bits.push(`received ${s.startDate}${w != null && w < 0 ? ` · waiting ${fmtDays(-w)}` : ''}`);
-          }
+          // the "waiting N d so far" figure now rides as a chip above the NEXT
+          // step's node, so this line just states when the lot arrived.
+          if (s.startDate) bits.push(`received ${s.startDate}`);
           if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
         } else {
           if (s.wc) bits.push(`WC ${s.wc}`);
@@ -105,17 +106,28 @@ function Roadmap({ steps }) {
           if (s.operator) bits.push(s.operator);
         }
         const isLast = i === steps.length - 1;
-        const gap = s.dwellDays != null && s.dwellDays > 0;
+        // Chip above THIS step's node = how long it waited for the previous step
+        // to hand the lot over. Previous step done → settled gap (prev.dwellDays,
+        // = comp[i-1] − comp[i-2]); previous step still WIP → running count since
+        // the lot reached it; previous step pending / no previous → no chip.
+        const prev = i > 0 ? steps[i - 1] : null;
+        let waitChip = null;
+        if (prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
+          waitChip = { days: prev.dwellDays, ongoing: false };
+        } else if (prev && prev.status === 'current' && prev.startDate) {
+          const soFar = -(daysUntil(prev.startDate) || 0);
+          if (soFar > 0) waitChip = { days: soFar, ongoing: true };
+        }
 
         return (
           <React.Fragment key={s.order}>
-            {gap ? (
+            {waitChip ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22 }}>
                 <span style={{ width: 12, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
                   <span style={{ width: 1, background: RAIL }} />
                 </span>
-                <Tag color={s.dwellDays >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
-                  ⏳ Wait in process {fmtDays(s.dwellDays)}
+                <Tag color={waitChip.days >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
+                  ⏳ {waitChip.ongoing ? `Waiting ${fmtDays(waitChip.days)} so far` : `Wait in process ${fmtDays(waitChip.days)}`}
                 </Tag>
               </div>
             ) : null}
