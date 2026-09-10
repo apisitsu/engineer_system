@@ -436,27 +436,36 @@ describe('chamfer', () => {
 
 describe('angleGuide — inference direction while drawing a line', () => {
   const anchor = { x: 0, y: 0 };
+  const OPT = { showDeg: 8, lockDeg: 2 };
 
-  it('locks to a 45° axis and names the horizontal/vertical relation', () => {
-    const g = angleGuide(createSketch(), anchor, 0.3, 10, 5); // ~88°
-    expect(g.kind).toBe('axis');
-    expect(g.deg).toBe(90);
-    expect(g.hv).toBe('vertical');
+  it('grabs a 45° axis only from the tight lock band, but shows it from the wide one', () => {
+    const near90 = angleGuide(createSketch(), anchor, 0.3, 10, OPT); // ~88.3° → within 2°
+    expect(near90.kind).toBe('axis');
+    expect(near90.deg).toBe(90);
+    expect(near90.hv).toBe('vertical');
+    expect(near90.locked).toBe(true);
+
+    const hint = angleGuide(createSketch(), anchor, 1.5, 10, OPT); // ~81.5° → 8.5° off... just outside show
+    expect(hint).toBeNull();
+    const shown = angleGuide(createSketch(), anchor, 1.1, 10, OPT); // ~83.7° → in show band, not lock
+    expect(shown.deg).toBe(90);
+    expect(shown.locked).toBe(false);
   });
 
-  it('returns null when no candidate is within tolerance', () => {
-    expect(angleGuide(createSketch(), anchor, 10, 5.77, 5)).toBeNull(); // ~30°
+  it('returns null when no candidate is within the show band', () => {
+    expect(angleGuide(createSketch(), anchor, 10, 5.77, OPT)).toBeNull(); // ~30°
   });
 
   it('locks parallel to a slanted line, pointing the way the cursor pulls', () => {
     const sk = createSketch();
     const ref = addLine(sk, addPoint(sk, 5, 5), addPoint(sk, 15, 11)); // ~31°
     const refDeg = (Math.atan2(6, 10) * 180) / Math.PI;
-    const g1 = angleGuide(sk, anchor, 10, 6.1, 5);        // cursor ~31°
+    const g1 = angleGuide(sk, anchor, 10, 6.1, OPT);        // cursor ~31°
     expect(g1.kind).toBe('parallel');
     expect(g1.ref).toBe(ref);
+    expect(g1.locked).toBe(true);
     expect(Math.abs(g1.deg - refDeg)).toBeLessThan(0.01);
-    const g2 = angleGuide(sk, anchor, -10, -6.1, 5);      // cursor ~211° → reversed
+    const g2 = angleGuide(sk, anchor, -10, -6.1, OPT);      // cursor ~211° → reversed
     expect(g2.kind).toBe('parallel');
     expect(Math.abs(g2.deg - (refDeg + 180))).toBeLessThan(0.01);
   });
@@ -466,15 +475,16 @@ describe('angleGuide — inference direction while drawing a line', () => {
     const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6));
     const perp = (Math.atan2(6, 10) * 180) / Math.PI + 90;
     const rad = perp * (Math.PI / 180);
-    const g = angleGuide(sk, anchor, Math.cos(rad) * 15, Math.sin(rad) * 15, 5);
+    const g = angleGuide(sk, anchor, Math.cos(rad) * 15, Math.sin(rad) * 15, OPT);
     expect(g.kind).toBe('perpendicular');
     expect(g.ref).toBe(ref);
+    expect(g.locked).toBe(true);
   });
 
   it('ignores an axis-aligned reference (the 45° axis already covers it)', () => {
     const sk = createSketch();
     addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0)); // horizontal
-    const g = angleGuide(sk, anchor, 10, 0.2, 5); // ~1°
+    const g = angleGuide(sk, anchor, 10, 0.2, OPT); // ~1°
     expect(g.kind).toBe('axis');
     expect(g.ref).toBeNull();
   });

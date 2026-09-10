@@ -523,22 +523,31 @@ describe('drag-to-modify (arm / end)', () => {
 });
 
 describe('line guides — angle lock & tangent snap (hover)', () => {
-  it('locks the rubber-band to the nearest 45° axis when close, and reports the angle', () => {
+  it('grabs the vertical axis from the tight band; only shows a guide from the wide one', () => {
     const sk = createSketch();
     const anchor = addPoint(sk, 0, 0);
     useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
-    // Cursor at ~87° — within 5° of the vertical axis → lock to 90°.
-    useSketchStore.getState().hover(0.5, 9.9);
+
+    // ~89° — inside the lock band → the endpoint snaps onto the axis.
+    useSketchStore.getState().hover(0.15, 9.9);
     const s1 = useSketchStore.getState();
-    expect(s1.axisSnap).not.toBeNull();
+    expect(s1.axisSnap.locked).toBe(true);
     expect(s1.axisSnap.deg).toBe(90);
     expect(near(s1.axisSnap.x, 0)).toBe(true); // snapped onto the vertical axis
     expect(near(s1.lineAngle, 90)).toBe(true);
-    // Cursor at 30° — far from any 45° axis → no lock, raw angle reported.
-    useSketchStore.getState().hover(10, 5.77);
+
+    // ~84° — in the show band, not the lock band → a hint only: the point stays
+    // where the cursor is and the raw angle is reported.
+    useSketchStore.getState().hover(1.05, 9.9);
     const s2 = useSketchStore.getState();
-    expect(s2.axisSnap).toBeNull();
-    expect(near(s2.lineAngle, 30, 0.2)).toBe(true);
+    expect(s2.axisSnap.locked).toBe(false);
+    expect(s2.axisSnap.deg).toBe(90);        // guide still points at vertical
+    expect(near(s2.axisSnap.x, 1.05)).toBe(true); // ...but the endpoint is not pulled
+    expect(near(s2.lineAngle, 84, 1)).toBe(true);
+
+    // ~30° — nothing near → no guide at all.
+    useSketchStore.getState().hover(10, 5.77);
+    expect(useSketchStore.getState().axisSnap).toBeNull();
   });
 
   it('offers a tangent snap when the line approaches a circle rim', () => {

@@ -584,17 +584,21 @@ export default function SketchLayer() {
         );
       })()}
 
-      {/* Angle-lock guide: a cyan axis through the anchor along the locked
+      {/* Angle guide: a cyan axis through the anchor along an inference
           direction — a standard 0/45/90/…° axis, or parallel / perpendicular to
-          an existing line. When it's a relation to a reference line, that line
-          is highlighted and a ∥ / ⊥ glyph is shown, SolidWorks-style. */}
+          an existing line. Faint when it is only a *hint*; when the cursor is
+          on it (`locked`) it firms up, the reference line is highlighted and a
+          ∥ / ⊥ glyph shows, SolidWorks-style. */}
       {tool === 'line' && anchor && axisSnap && (() => {
         const a = axisSnap.deg * (Math.PI / 180);
         const L = Math.max(Math.hypot(tip.x - anchor.x, tip.y - anchor.y) * 1.5, 12);
-        const ref = axisSnap.ref != null ? sk.entities.get(axisSnap.ref) : null;
+        const on = !!axisSnap.locked;
+        const ref = on && axisSnap.ref != null ? sk.entities.get(axisSnap.ref) : null;
         const ra = ref && sk.entities.get(ref.p1);
         const rb = ref && sk.entities.get(ref.p2);
-        const glyph = axisSnap.kind === 'parallel' ? '∥' : axisSnap.kind === 'perpendicular' ? '⊥' : null;
+        const glyph = on
+          ? (axisSnap.kind === 'parallel' ? '∥' : axisSnap.kind === 'perpendicular' ? '⊥' : null)
+          : null;
         return (
           <>
             <Line
@@ -608,7 +612,7 @@ export default function SketchLayer() {
               dashSize={1.2}
               gapSize={0.8}
               transparent
-              opacity={0.7}
+              opacity={on ? 0.7 : 0.28}
               raycast={noRaycast}
             />
             {ra && rb && (
@@ -639,7 +643,7 @@ export default function SketchLayer() {
       {/* Live angle / length readout at the tip while drawing a line. */}
       {tool === 'line' && anchor && tip && lineAngle != null && (
         <Html position={[tip.x, tip.y, Z]} zIndexRange={[3, 0]}>
-          <div style={angleReadoutStyle(!!axisSnap)}>
+          <div style={angleReadoutStyle(!!axisSnap?.locked)}>
             {lineAngle.toFixed(1)}° · {Math.hypot(tip.x - anchor.x, tip.y - anchor.y).toFixed(1)} mm
           </div>
         </Html>
