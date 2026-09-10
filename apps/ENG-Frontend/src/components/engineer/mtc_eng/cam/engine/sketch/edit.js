@@ -1429,18 +1429,22 @@ function angleGap(a, b) {
 }
 
 /**
- * While drawing a line from `anchor` toward (x, y), the direction to lock the
- * rubber-band to and the relation that lock implies — SolidWorks' inference
- * lines. Candidates are the standard 0/45/90/… axes (relation: horizontal /
+ * While drawing a line from `anchor` toward (x, y), the inference direction to
+ * show a guide for and — when the cursor is right on it — to lock the rubber-band
+ * to. Candidates are the standard 0/45/90/… axes (relation: horizontal /
  * vertical / none) and, for every existing **non-axis-aligned** line, its own
- * direction (parallel) and its perpendicular. The closest candidate within
- * `tolDeg` wins; `deg` is snapped to whichever of it / it+180° the cursor is
- * pulling toward. Returns null when nothing is close enough.
+ * direction (parallel) and its perpendicular.
+ *
+ * The guide **appears** within `showDeg` but only **grabs** within `lockDeg` —
+ * so a deliberately off-axis angle is not pulled straight, the guide is just a
+ * hint. `deg` is the guide direction (pointed the way the cursor pulls);
+ * `locked` says whether the endpoint should snap onto it and the relation be
+ * added. Returns null when nothing is close enough to even show.
  *
  * @returns {{deg:number, kind:'axis'|'parallel'|'perpendicular',
- *   ref:(string|number|null), hv:('horizontal'|'vertical'|null)}|null}
+ *   ref:(string|number|null), hv:('horizontal'|'vertical'|null), locked:boolean}|null}
  */
-export function angleGuide(sk, anchor, x, y, tolDeg = 5) {
+export function angleGuide(sk, anchor, x, y, { showDeg = 8, lockDeg = 2 } = {}) {
   if (!anchor) return null;
   const dx = x - anchor.x;
   const dy = y - anchor.y;
@@ -1473,17 +1477,17 @@ export function angleGuide(sk, anchor, x, y, tolDeg = 5) {
   let best = null;
   for (const c of cands) {
     const o = angleGap(c.deg, cur);
-    if (o <= tolDeg && (!best || o < best.o)) best = { ...c, o };
+    if (o <= showDeg && (!best || o < best.o)) best = { ...c, o };
   }
   if (!best) return null;
 
-  // Point the rubber-band the way the cursor is pulling: whichever of the
-  // candidate direction / its 180° reverse is angularly nearer the cursor.
+  // Point the guide the way the cursor is pulling: whichever of the candidate
+  // direction / its 180° reverse is angularly nearer the cursor.
   const gapTo = (d) => { const g = Math.abs(wrap360(cur - d)); return g > 180 ? 360 - g : g; };
   const flip = wrap360(best.deg + 180);
   const deg = gapTo(best.deg) <= gapTo(flip) ? best.deg : flip;
   return {
-    deg, kind: best.kind, ref: best.ref, hv: best.hv,
+    deg, kind: best.kind, ref: best.ref, hv: best.hv, locked: best.o <= lockDeg,
   };
 }
 

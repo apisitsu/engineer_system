@@ -679,8 +679,8 @@ export default function SketchToolbar() {
       <Tooltip title="Redo (Ctrl+Y)" placement="bottom">
         <Button type="text" icon={<RedoOutlined />} disabled={!future.length} onClick={() => redo()} style={{ ...railBtn(), color: CAD.icon }} />
       </Tooltip>
-      <Tooltip title="Delete selection (Del)" placement="bottom">
-        <Button type="text" danger icon={<DeleteOutlined />} disabled={!selection.length} onClick={() => deleteSelected()} style={railBtn()} />
+      <Tooltip title="Delete selection (Del) — geometry or a selected dimension" placement="bottom">
+        <Button type="text" danger icon={<DeleteOutlined />} disabled={!selection.length && !selectedDims.length} onClick={() => deleteSelected()} style={railBtn()} />
       </Tooltip>
 
       {/* The library, on its own trigger rather than inside the menu below: a

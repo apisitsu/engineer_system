@@ -88,13 +88,29 @@ const STEP_BOX = {
   pending: { border: '1px dashed #d9d9d9', background: '#fff' },
 };
 
-function Roadmap({ steps }) {
+function Roadmap({ steps, issuedDate }) {
   const RAIL = '#d9d9d9';
   return (
     // centre spine: an absolutely-placed line down the middle, step boxes and
     // wait chips stack on top of it (zIndex 1) so the line only shows in the gaps
     <div style={{ position: 'relative', paddingTop: 12, paddingBottom: 4 }}>
       <span style={{ position: 'absolute', top: 4, bottom: 4, left: 'calc(50% - 1px)', width: 2, background: RAIL, zIndex: 0 }} />
+
+      {/* Flow 1 — the lot being issued on paper, the roadmap's starting milestone */}
+      <div style={{ position: 'relative', zIndex: 1, borderRadius: 12, padding: '10px 12px 9px', ...STEP_BOX.done }}>
+        <span style={{
+          position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
+          background: '#fff', border: STEP_BOX.done.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />
+        </span>
+        <Space size={[6, 2]} wrap>
+          <Text strong style={{ fontSize: 13 }}>Issued Lot</Text>
+          <Tag color="success" style={{ marginInlineEnd: 0 }}>Flow 1</Tag>
+        </Space>
+        <div><Text type="secondary" style={{ fontSize: 11.5 }}>issued {issuedDate || '—'}</Text></div>
+      </div>
+      <div style={{ height: 12 }} />
       {steps.map((s, i) => {
         const meta = STATUS_META[s.status] || STATUS_META.pending;
         const box = STEP_BOX[s.status] || STEP_BOX.pending;
@@ -371,7 +387,7 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
       </div>
 
       <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
-        <Roadmap steps={data.steps} />
+        <Roadmap steps={data.steps} issuedDate={header.entryDate} />
       </div>
     </>,
   );

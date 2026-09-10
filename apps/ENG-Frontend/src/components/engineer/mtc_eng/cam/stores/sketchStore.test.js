@@ -249,6 +249,48 @@ describe('editing a placed dimension (double-click)', () => {
   });
 });
 
+describe('deleting a placed dimension from the viewport', () => {
+  const dimensioned = () => {
+    const sk = createSketch();
+    const a = addPoint(sk, 0, 0);
+    const b = addPoint(sk, 10, 0);
+    addLine(sk, a, b);
+    addConstraint(sk, 'horizontal', [a, b]);              // idx 0 — not a dimension
+    const di = addConstraint(sk, 'distance', [a, b], 10); // idx 1 — a dimension
+    useSketchStore.setState({ sk, selection: [], selectedDims: [], past: [], future: [] });
+    return { sk, di };
+  };
+
+  it('toggleDimSelect only takes a dimensional constraint', () => {
+    const { di } = dimensioned();
+    useSketchStore.getState().toggleDimSelect(0); // horizontal — not a dim
+    expect(useSketchStore.getState().selectedDims).toEqual([]);
+    useSketchStore.getState().toggleDimSelect(di);
+    expect(useSketchStore.getState().selectedDims).toEqual([di]);
+    useSketchStore.getState().toggleDimSelect(di); // toggle off
+    expect(useSketchStore.getState().selectedDims).toEqual([]);
+  });
+
+  it('Delete removes the selected dimension, leaving the other constraints', () => {
+    const { sk, di } = dimensioned();
+    useSketchStore.getState().toggleDimSelect(di);
+    const before = sk.constraints.length;
+    useSketchStore.getState().deleteSelected();
+    expect(sk.constraints.length).toBe(before - 1);
+    expect(sk.constraints.some((c) => c.kind === 'distance')).toBe(false);
+    expect(sk.constraints.some((c) => c.kind === 'horizontal')).toBe(true);
+    expect(useSketchStore.getState().selectedDims).toEqual([]);
+    expect(useSketchStore.getState().past.length).toBe(1); // one undo step
+  });
+
+  it('an edit invalidates a stale dimension selection', () => {
+    const { di } = dimensioned();
+    useSketchStore.getState().toggleDimSelect(di);
+    useSketchStore.getState()._snapshot();
+    expect(useSketchStore.getState().selectedDims).toEqual([]);
+  });
+});
+
 describe('setDimensionOffset — dragging a placed dimension', () => {
   const withDim = () => {
     const sk = createSketch();

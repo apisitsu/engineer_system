@@ -40,7 +40,11 @@ import { useCamPlanStore } from './camPlanStore.js';
 const DEG = Math.PI / 180;
 
 const SNAP = 1.5; // mm — click snap / pick tolerance
-const ANGLE_SNAP_DEG = 5; // ° — lock the line rubber-band to the nearest 45° axis within this
+// The line rubber-band's angle inference: the guide is *shown* within ANGLE_GUIDE_DEG
+// but only *grabs* the endpoint within the tighter ANGLE_LOCK_DEG, so a
+// deliberately off-axis angle is a hint, not a snap.
+const ANGLE_GUIDE_DEG = 8;
+const ANGLE_LOCK_DEG = 2;
 const HISTORY = 50; // max undo depth
 
 /** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
@@ -442,25 +446,28 @@ export const useSketchStore = create((set, get) => ({
       if (rim) snap = { x: rim.x, y: rim.y, onCurve: rim.id, curveType: rim.type };
     }
 
-    // Angle guide (line only): report the current rubber-band angle, and — when no
-    // positional snap already owns the endpoint — lock it to an inference
-    // direction: a standard 0/45/90/… axis, or **parallel / perpendicular to an
-    // existing line** (SolidWorks' relation inference). `axisSnap.kind` /
-    // `.ref` / `.hv` say which, so the click can add the matching relation.
+    // Angle guide (line only): a SolidWorks-style inference line for a standard
+    // 0/45/90/… axis or for **parallel / perpendicular to an existing line**. It
+    // is shown as a hint from a wide band but only *grabs* the endpoint from a
+    // narrow one (`axisSnap.locked`) — a deliberately off-axis angle is not
+    // pulled straight. When it grabs, the click adds the matching relation
+    // (`axisSnap.kind` / `.ref` / `.hv`).
     let axisSnap = null;
     let lineAngle = null;
     if (anchor) {
       let deg = ((Math.atan2(y - anchor.y, x - anchor.x) / DEG) % 360 + 360) % 360;
       if (!snap) {
-        const g = angleGuide(sk, anchor, x, y, ANGLE_SNAP_DEG);
+        const g = angleGuide(sk, anchor, x, y, { showDeg: ANGLE_GUIDE_DEG, lockDeg: ANGLE_LOCK_DEG });
         if (g) {
           const len = Math.hypot(x - anchor.x, y - anchor.y);
-          axisSnap = {
-            x: anchor.x + Math.cos(g.deg * DEG) * len,
-            y: anchor.y + Math.sin(g.deg * DEG) * len,
-            deg: g.deg, kind: g.kind, ref: g.ref, hv: g.hv,
-          };
-          deg = g.deg;
+          axisSnap = g.locked
+            ? {
+              x: anchor.x + Math.cos(g.deg * DEG) * len,
+              y: anchor.y + Math.sin(g.deg * DEG) * len,
+              deg: g.deg, kind: g.kind, ref: g.ref, hv: g.hv, locked: true,
+            }
+            : { x, y, deg: g.deg, kind: g.kind, ref: g.ref, hv: g.hv, locked: false };
+          if (g.locked) deg = g.deg;
         }
       }
       lineAngle = deg;
@@ -625,9 +632,10 @@ export const useSketchStore = create((set, get) => ({
           p = addPoint(sk, snap.x, snap.y);
           const onKind = snap.curveType === 'arc' ? 'pointOnArc' : 'pointOnCircle';
           try { addConstraint(sk, onKind, [p, snap.onCurve]); } catch { /* leave endpoint free */ }
-        } else if (axisSnap) {
+        } else if (axisSnap && axisSnap.locked) {
           p = addPoint(sk, axisSnap.x, axisSnap.y);
-          // SolidWorks-style automatic relation from the inference lock: a
+          // SolidWorks-style automatic relation, but only when the inference
+          // actually *grabbed* (a shown-but-not-locked guide adds nothing): a
           // horizontal/vertical axis → Horizontal/Vertical; parallel or
           // perpendicular to a reference line → that relation between the two
           // lines. Drawing + dimensioning alone can then fully define the sketch.
