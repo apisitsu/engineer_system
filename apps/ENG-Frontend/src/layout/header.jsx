@@ -16,7 +16,7 @@ const HeaderBar = () => {
     const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false);
 
     // เช็คว่าเป็นเวอร์ชันทดสอบหรือไม่
-    const isTestVersion = apiUrl !== "http://plbmp130:2005/";
+    const isTestVersion = apiUrl !== "http://plbmp130:2005/" && apiUrl !== "http://plbmp130.lb.minebea.local:2005/";
 
     const headerStyle = useMemo(() => ({
         header: {
@@ -149,8 +149,8 @@ const HeaderBar = () => {
             {/* จัดกลุ่มทางขวา: ThemeSelector และ Profile ให้อยู่ชิดกันทางขวา */}
             <div style={headerStyle.rightSection}>
                 {userDepartment === "AD" && (
-                    <InfoCircleOutlined 
-                        style={{ fontSize: '18px', color: theme.colors.textInverse, cursor: 'pointer', marginRight: '12px' }} 
+                    <InfoCircleOutlined
+                        style={{ fontSize: '18px', color: theme.colors.textInverse, cursor: 'pointer', marginRight: '12px' }}
                         onClick={() => setIsVersionsModalOpen(true)}
                         title="System Versions Info"
                     />
@@ -179,10 +179,10 @@ const HeaderBar = () => {
                     </div>
                 </Dropdown>
             </div>
-            
-            <SystemVersionsModal 
-                open={isVersionsModalOpen} 
-                onClose={() => setIsVersionsModalOpen(false)} 
+
+            <SystemVersionsModal
+                open={isVersionsModalOpen}
+                onClose={() => setIsVersionsModalOpen(false)}
             />
         </Header>
     );
