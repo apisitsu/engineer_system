@@ -1418,6 +1418,75 @@ export function nearestMidpoint(sk, x, y, tol, skipId = null) {
   return best ? { x: best.x, y: best.y, id: best.id } : null;
 }
 
+/** Fold an angle (deg) into [0, 360). */
+const wrap360 = (d) => ((d % 360) + 360) % 360;
+/** Smallest unsigned gap (deg) between two *undirected* line angles — 179° ≈ 1°. */
+function angleGap(a, b) {
+  let o = Math.abs(wrap360(a - b));
+  if (o > 180) o = 360 - o;
+  if (o > 90) o = 180 - o;
+  return o;
+}
+
+/**
+ * While drawing a line from `anchor` toward (x, y), the direction to lock the
+ * rubber-band to and the relation that lock implies — SolidWorks' inference
+ * lines. Candidates are the standard 0/45/90/… axes (relation: horizontal /
+ * vertical / none) and, for every existing **non-axis-aligned** line, its own
+ * direction (parallel) and its perpendicular. The closest candidate within
+ * `tolDeg` wins; `deg` is snapped to whichever of it / it+180° the cursor is
+ * pulling toward. Returns null when nothing is close enough.
+ *
+ * @returns {{deg:number, kind:'axis'|'parallel'|'perpendicular',
+ *   ref:(string|number|null), hv:('horizontal'|'vertical'|null)}|null}
+ */
+export function angleGuide(sk, anchor, x, y, tolDeg = 5) {
+  if (!anchor) return null;
+  const dx = x - anchor.x;
+  const dy = y - anchor.y;
+  if (Math.hypot(dx, dy) < 1e-6) return null;
+  const cur = wrap360((Math.atan2(dy, dx) * 180) / Math.PI);
+
+  const cands = [];
+  for (let k = 0; k < 8; k += 1) {
+    const d = k * 45;
+    cands.push({
+      deg: d,
+      kind: 'axis',
+      ref: null,
+      hv: d % 180 === 0 ? 'horizontal' : d % 180 === 90 ? 'vertical' : null,
+    });
+  }
+  for (const e of sk.entities.values()) {
+    if (e.type !== 'line') continue;
+    const a = sk.entities.get(e.p1);
+    const b = sk.entities.get(e.p2);
+    if (!a || !b) continue;
+    const la = wrap360((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI);
+    // An axis-aligned reference is already covered by the 45° candidates, with a
+    // simpler relation (horizontal/vertical, not a dependency on another line).
+    if (angleGap(la, 0) < 1e-6 || angleGap(la, 90) < 1e-6) continue;
+    cands.push({ deg: la, kind: 'parallel', ref: e.id, hv: null });
+    cands.push({ deg: wrap360(la + 90), kind: 'perpendicular', ref: e.id, hv: null });
+  }
+
+  let best = null;
+  for (const c of cands) {
+    const o = angleGap(c.deg, cur);
+    if (o <= tolDeg && (!best || o < best.o)) best = { ...c, o };
+  }
+  if (!best) return null;
+
+  // Point the rubber-band the way the cursor is pulling: whichever of the
+  // candidate direction / its 180° reverse is angularly nearer the cursor.
+  const gapTo = (d) => { const g = Math.abs(wrap360(cur - d)); return g > 180 ? 360 - g : g; };
+  const flip = wrap360(best.deg + 180);
+  const deg = gapTo(best.deg) <= gapTo(flip) ? best.deg : flip;
+  return {
+    deg, kind: best.kind, ref: best.ref, hv: best.hv,
+  };
+}
+
 /** Crossing angles of `pts` about (cx, cy), sorted CCW and de-duplicated. */
 function sortedCutAngles(pts, cx, cy) {
   const angs = pts

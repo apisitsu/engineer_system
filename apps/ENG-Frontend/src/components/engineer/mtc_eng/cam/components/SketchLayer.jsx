@@ -551,25 +551,54 @@ export default function SketchLayer() {
       })()}
 
       {/* Angle-lock guide: a cyan axis through the anchor along the locked
-          standard direction, so it's obvious the line snapped to 0/45/90/…°. */}
+          direction — a standard 0/45/90/…° axis, or parallel / perpendicular to
+          an existing line. When it's a relation to a reference line, that line
+          is highlighted and a ∥ / ⊥ glyph is shown, SolidWorks-style. */}
       {tool === 'line' && anchor && axisSnap && (() => {
         const a = axisSnap.deg * (Math.PI / 180);
         const L = Math.max(Math.hypot(tip.x - anchor.x, tip.y - anchor.y) * 1.5, 12);
+        const ref = axisSnap.ref != null ? sk.entities.get(axisSnap.ref) : null;
+        const ra = ref && sk.entities.get(ref.p1);
+        const rb = ref && sk.entities.get(ref.p2);
+        const glyph = axisSnap.kind === 'parallel' ? '∥' : axisSnap.kind === 'perpendicular' ? '⊥' : null;
         return (
-          <Line
-            points={[
-              [anchor.x - Math.cos(a) * L, anchor.y - Math.sin(a) * L, Z],
-              [anchor.x + Math.cos(a) * L, anchor.y + Math.sin(a) * L, Z],
-            ]}
-            color={AXIS_COLOR}
-            lineWidth={1}
-            dashed
-            dashSize={1.2}
-            gapSize={0.8}
-            transparent
-            opacity={0.7}
-            raycast={noRaycast}
-          />
+          <>
+            <Line
+              points={[
+                [anchor.x - Math.cos(a) * L, anchor.y - Math.sin(a) * L, Z],
+                [anchor.x + Math.cos(a) * L, anchor.y + Math.sin(a) * L, Z],
+              ]}
+              color={AXIS_COLOR}
+              lineWidth={1}
+              dashed
+              dashSize={1.2}
+              gapSize={0.8}
+              transparent
+              opacity={0.7}
+              raycast={noRaycast}
+            />
+            {ra && rb && (
+              <Line
+                points={[[ra.x, ra.y, Z], [rb.x, rb.y, Z]]}
+                color={AXIS_COLOR}
+                lineWidth={2.5}
+                transparent
+                opacity={0.6}
+                raycast={noRaycast}
+              />
+            )}
+            {glyph && (
+              <Html position={[anchor.x, anchor.y, Z]} zIndexRange={[3, 0]}>
+                <div style={{
+                  color: CAD.surface, background: AXIS_COLOR, borderRadius: 4,
+                  font: '600 11px monospace', padding: '0 4px', whiteSpace: 'nowrap',
+                  userSelect: 'none', pointerEvents: 'none', transform: 'translate(10px, -20px)',
+                }}>
+                  {glyph}
+                </div>
+              </Html>
+            )}
+          </>
         );
       })()}
 

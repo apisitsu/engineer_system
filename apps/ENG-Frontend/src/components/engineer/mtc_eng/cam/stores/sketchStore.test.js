@@ -513,6 +513,51 @@ describe('line guides — angle lock & tangent snap (hover)', () => {
     expect(snap.tangentOf).toBe(circle);
     expect(near(Math.hypot(snap.x, snap.y), 10, 1e-6)).toBe(true); // lies on the rim
   });
+
+  it('locks parallel to a slanted line and clicking adds the parallel relation', () => {
+    const sk = createSketch();
+    const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6)); // ~31°
+    const refDeg = (Math.atan2(6, 10) * 180) / Math.PI;
+    const anchor = addPoint(sk, 0, 20);
+    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null, selection: [] });
+    // Cursor roughly parallel to ref from the anchor.
+    useSketchStore.getState().hover(10, 26.3);
+    const s = useSketchStore.getState();
+    expect(s.axisSnap.kind).toBe('parallel');
+    expect(s.axisSnap.ref).toBe(ref);
+    expect(near(s.axisSnap.deg, refDeg, 0.01)).toBe(true);
+
+    useSketchStore.getState().clickAt(10, 26.3);
+    const st = useSketchStore.getState();
+    const newLine = [...st.sk.entities.values()].find((e) => e.type === 'line' && e.id !== ref);
+    const par = st.sk.constraints.find((c) => c.kind === 'parallel');
+    expect(par).toBeTruthy();
+    expect(par.refs).toEqual(expect.arrayContaining([ref, newLine.id]));
+  });
+
+  it('locks perpendicular to a slanted line', () => {
+    const sk = createSketch();
+    const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6));
+    const perpRad = ((Math.atan2(6, 10) * 180) / Math.PI + 90) * (Math.PI / 180);
+    const anchor = addPoint(sk, 0, 20);
+    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
+    useSketchStore.getState().hover(0 + Math.cos(perpRad) * 15, 20 + Math.sin(perpRad) * 15);
+    const s = useSketchStore.getState();
+    expect(s.axisSnap.kind).toBe('perpendicular');
+    expect(s.axisSnap.ref).toBe(ref);
+  });
+
+  it('prefers the plain horizontal axis over "parallel to a horizontal line"', () => {
+    const sk = createSketch();
+    addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0)); // axis-aligned reference
+    const anchor = addPoint(sk, 0, 20);
+    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
+    useSketchStore.getState().hover(10, 20.2); // ~1° → near horizontal
+    const s = useSketchStore.getState();
+    expect(s.axisSnap.kind).toBe('axis');
+    expect(s.axisSnap.hv).toBe('horizontal');
+    expect(s.axisSnap.ref).toBeNull();
+  });
 });
 
 describe('intersection snap (hover + click)', () => {

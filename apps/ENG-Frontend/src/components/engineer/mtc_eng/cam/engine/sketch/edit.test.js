@@ -8,7 +8,7 @@ import {
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
   filletCircleCircle, entityIntersections, nearestIntersection, entitiesInBox,
-  nearestQuadrant, nearestMidpoint, linesShareCorner,
+  nearestQuadrant, nearestMidpoint, linesShareCorner, angleGuide,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -431,6 +431,52 @@ describe('chamfer', () => {
     // Without the weld this returns null; with it the corner is chamfered.
     expect(chamfer(sk, l1, l2, 4, 1e-6)).toBeNull();
     expect(chamfer(sk, l1, l2, 4, 0.05)).not.toBeNull();
+  });
+});
+
+describe('angleGuide — inference direction while drawing a line', () => {
+  const anchor = { x: 0, y: 0 };
+
+  it('locks to a 45° axis and names the horizontal/vertical relation', () => {
+    const g = angleGuide(createSketch(), anchor, 0.3, 10, 5); // ~88°
+    expect(g.kind).toBe('axis');
+    expect(g.deg).toBe(90);
+    expect(g.hv).toBe('vertical');
+  });
+
+  it('returns null when no candidate is within tolerance', () => {
+    expect(angleGuide(createSketch(), anchor, 10, 5.77, 5)).toBeNull(); // ~30°
+  });
+
+  it('locks parallel to a slanted line, pointing the way the cursor pulls', () => {
+    const sk = createSketch();
+    const ref = addLine(sk, addPoint(sk, 5, 5), addPoint(sk, 15, 11)); // ~31°
+    const refDeg = (Math.atan2(6, 10) * 180) / Math.PI;
+    const g1 = angleGuide(sk, anchor, 10, 6.1, 5);        // cursor ~31°
+    expect(g1.kind).toBe('parallel');
+    expect(g1.ref).toBe(ref);
+    expect(Math.abs(g1.deg - refDeg)).toBeLessThan(0.01);
+    const g2 = angleGuide(sk, anchor, -10, -6.1, 5);      // cursor ~211° → reversed
+    expect(g2.kind).toBe('parallel');
+    expect(Math.abs(g2.deg - (refDeg + 180))).toBeLessThan(0.01);
+  });
+
+  it('locks perpendicular to a slanted line', () => {
+    const sk = createSketch();
+    const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6));
+    const perp = (Math.atan2(6, 10) * 180) / Math.PI + 90;
+    const rad = perp * (Math.PI / 180);
+    const g = angleGuide(sk, anchor, Math.cos(rad) * 15, Math.sin(rad) * 15, 5);
+    expect(g.kind).toBe('perpendicular');
+    expect(g.ref).toBe(ref);
+  });
+
+  it('ignores an axis-aligned reference (the 45° axis already covers it)', () => {
+    const sk = createSketch();
+    addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0)); // horizontal
+    const g = angleGuide(sk, anchor, 10, 0.2, 5); // ~1°
+    expect(g.kind).toBe('axis');
+    expect(g.ref).toBeNull();
   });
 });
 

@@ -24,7 +24,7 @@ import {
   filletCircleCircle as filletCircleCircleEdit, linesShareCorner,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
-  nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox,
+  nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox, angleGuide,
   measureConstraint, lineArcMeet, arcArcMeet, angleSpec, interiorAngleToModel,
   axisFromPlacement, dimensionLockDir, projectOnto,
 } from '../engine/sketch/edit.js';
@@ -439,19 +439,24 @@ export const useSketchStore = create((set, get) => ({
     }
 
     // Angle guide (line only): report the current rubber-band angle, and — when no
-    // positional snap already owns the endpoint — lock it to the nearest standard
-    // 45° axis (0/45/90/…/315) once it's within ANGLE_SNAP_DEG.
+    // positional snap already owns the endpoint — lock it to an inference
+    // direction: a standard 0/45/90/… axis, or **parallel / perpendicular to an
+    // existing line** (SolidWorks' relation inference). `axisSnap.kind` /
+    // `.ref` / `.hv` say which, so the click can add the matching relation.
     let axisSnap = null;
     let lineAngle = null;
     if (anchor) {
       let deg = ((Math.atan2(y - anchor.y, x - anchor.x) / DEG) % 360 + 360) % 360;
       if (!snap) {
-        const step = ((Math.round(deg / 45) * 45) % 360 + 360) % 360;
-        if (Math.abs(deg - Math.round(deg / 45) * 45) <= ANGLE_SNAP_DEG) {
-          const lockRad = step * DEG;
+        const g = angleGuide(sk, anchor, x, y, ANGLE_SNAP_DEG);
+        if (g) {
           const len = Math.hypot(x - anchor.x, y - anchor.y);
-          axisSnap = { x: anchor.x + Math.cos(lockRad) * len, y: anchor.y + Math.sin(lockRad) * len, deg: step };
-          deg = step;
+          axisSnap = {
+            x: anchor.x + Math.cos(g.deg * DEG) * len,
+            y: anchor.y + Math.sin(g.deg * DEG) * len,
+            deg: g.deg, kind: g.kind, ref: g.ref, hv: g.hv,
+          };
+          deg = g.deg;
         }
       }
       lineAngle = deg;
@@ -599,6 +604,7 @@ export const useSketchStore = create((set, get) => ({
         let p;
         let tangentKind = null;
         let hvKind = null; // auto horizontal/vertical relation from an orthogonal axis lock
+        let relKind = null; // auto parallel/perpendicular relation from an inference lock
         if (snap?.tangent) {
           p = addPoint(sk, snap.x, snap.y);
           const onKind = snap.curveType === 'arc' ? 'pointOnArc' : 'pointOnCircle';
@@ -617,11 +623,15 @@ export const useSketchStore = create((set, get) => ({
           try { addConstraint(sk, onKind, [p, snap.onCurve]); } catch { /* leave endpoint free */ }
         } else if (axisSnap) {
           p = addPoint(sk, axisSnap.x, axisSnap.y);
-          // SolidWorks-style automatic relation: a line locked to a horizontal or
-          // vertical axis gets a real Horizontal/Vertical constraint, so drawing
-          // + dimensioning alone can fully define the sketch.
-          if (axisSnap.deg === 0 || axisSnap.deg === 180) hvKind = 'horizontal';
-          else if (axisSnap.deg === 90 || axisSnap.deg === 270) hvKind = 'vertical';
+          // SolidWorks-style automatic relation from the inference lock: a
+          // horizontal/vertical axis → Horizontal/Vertical; parallel or
+          // perpendicular to a reference line → that relation between the two
+          // lines. Drawing + dimensioning alone can then fully define the sketch.
+          if (axisSnap.kind === 'parallel' || axisSnap.kind === 'perpendicular') {
+            relKind = { kind: axisSnap.kind, ref: axisSnap.ref };
+          } else if (axisSnap.hv) {
+            hvKind = axisSnap.hv;
+          }
         } else {
           p = get()._pointAt(x, y);
         }
@@ -634,10 +644,13 @@ export const useSketchStore = create((set, get) => ({
           if (hvKind) {
             try { addConstraint(sk, hvKind, [pending, p]); } catch { /* skip if redundant */ }
           }
+          if (relKind && relKind.ref != null && relKind.ref !== line) {
+            try { addConstraint(sk, relKind.kind, [line, relKind.ref]); } catch { /* skip if redundant */ }
+          }
         }
         set({ pending: null, snap: null, axisSnap: null, lineAngle: null });
         get()._bump();
-        if (tangentKind || hvKind) get().solve();
+        if (tangentKind || hvKind || relKind) get().solve();
       }
     } else if (tool === 'circle') {
       // Circle tool: first click sets the centre (held in `pending`, same as the

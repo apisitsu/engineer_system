@@ -57,7 +57,7 @@ const ExtrudeIcon = glyph(<><rect x="3.5" y="9.5" width="10" height="8" /><path 
 const TOOLS = [
   { value: 'select', label: 'Select', Icon: SelectIcon, hint: 'Click to select · drag empty space for a box (left→right encloses, right→left also grabs what it touches) · drag a point to move it · double-click a dimension to edit it' },
   { value: 'point', label: 'Point', Icon: PointIcon, hint: 'Click on the plane to add points · snaps to vertices, curve rims, line midpoints, circle quadrants (the axis high points) and where two curves cross' },
-  { value: 'line', label: 'Line', Icon: LineIcon, hint: 'Click to start, click to finish · locks to 0/45/90…°, snaps tangent to circles/arcs, to line midpoints, quadrants and curve intersections · Esc cancels' },
+  { value: 'line', label: 'Line', Icon: LineIcon, hint: 'Click to start, click to finish · locks to 0/45/90…° and to parallel / perpendicular of an existing line (adds the relation) · snaps tangent, to midpoints, quadrants and intersections · Esc cancels' },
   { value: 'rectangle', label: 'Rectangle', Icon: RectIcon, hint: 'Click two opposite corners' },
   { value: 'slot', label: 'Slot', Icon: SlotIcon, hint: 'Click the two ends of the slot axis, then a point setting the radius · the flanks stay tangent to the caps' },
   { value: 'polygon', label: 'Polygon', Icon: PolygonIcon, hint: 'Click the centre, then a corner (sets size and rotation) · pick the number of sides on the rail' },
