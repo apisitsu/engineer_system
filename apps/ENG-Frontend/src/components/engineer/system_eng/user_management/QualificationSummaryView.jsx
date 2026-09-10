@@ -1070,7 +1070,7 @@ const QualificationSummaryView = ({
       const d1 = LEADER_DOMAINS_DETAILED[0];
       const d1Cols = d1.criteria.map((c) => ({
         title: (
-          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br /><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
             <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
               <div style={{ fontSize: "10px", fontWeight: 800, color: "#1890ff" }}>{c.code}</div>
               <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
@@ -1088,7 +1088,7 @@ const QualificationSummaryView = ({
           const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
           const rubric = LEADER_LEVEL_DEFINITIONS[val];
           return (
-            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br />Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
               <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
                 {val}
               </Tag>
@@ -1112,7 +1112,7 @@ const QualificationSummaryView = ({
       const d2 = LEADER_DOMAINS_DETAILED[1];
       const d2Cols = d2.criteria.map((c) => ({
         title: (
-          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br /><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
             <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
               <div style={{ fontSize: "10px", fontWeight: 800, color: "#fa8c16" }}>{c.code}</div>
               <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
@@ -1130,7 +1130,7 @@ const QualificationSummaryView = ({
           const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
           const rubric = LEADER_LEVEL_DEFINITIONS[val];
           return (
-            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br />Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
               <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
                 {val}
               </Tag>
@@ -1154,7 +1154,7 @@ const QualificationSummaryView = ({
       const d3 = LEADER_DOMAINS_DETAILED[2];
       const d3Cols = d3.criteria.map((c) => ({
         title: (
-          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br/><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
+          <Tooltip title={<div><strong>{c.code}</strong>: {c.nameTh}<br /><span style={{ fontSize: "11px", color: "#bfbfbf" }}>{c.nameEn} ({c.keywords})</span></div>}>
             <div style={{ textAlign: "center", cursor: "help", padding: "2px 0" }}>
               <div style={{ fontSize: "10px", fontWeight: 800, color: "#52c41a" }}>{c.code}</div>
               <div style={{ fontSize: "9px", color: theme.colors.textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 68 }}>
@@ -1172,7 +1172,7 @@ const QualificationSummaryView = ({
           const colMap = { 0: "default", 1: "error", 2: "warning", 3: "success", 4: "purple" };
           const rubric = LEADER_LEVEL_DEFINITIONS[val];
           return (
-            <Tooltip title={<div><strong>{c.nameTh}</strong><br/>Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
+            <Tooltip title={<div><strong>{c.nameTh}</strong><br />Score: <strong>Level {val}</strong> — {rubric?.descTh}</div>}>
               <Tag color={colMap[val]} style={{ fontWeight: 800, minWidth: 26, textAlign: "center", margin: 0, cursor: "default" }}>
                 {val}
               </Tag>
@@ -1777,7 +1777,7 @@ const QualificationSummaryView = ({
               fontWeight: 600
             }}
           >
-            Excel Sheets Explorer (14 Sheets)
+            Excel Sheets Explorer
           </Button>
 
           {onExportExcel && (
@@ -3400,10 +3400,10 @@ const QualificationSummaryView = ({
                                               colDef.roleType === "draw"
                                                 ? "blue"
                                                 : colDef.roleType === "check"
-                                                ? "orange"
-                                                : colDef.roleType === "review"
-                                                ? "gold"
-                                                : "purple"
+                                                  ? "orange"
+                                                  : colDef.roleType === "review"
+                                                    ? "gold"
+                                                    : "purple"
                                             }
                                             style={{ fontWeight: 700, fontSize: "11px", margin: 0 }}
                                           >

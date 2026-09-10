@@ -69,8 +69,8 @@ const SkillRequirementsMatrixView = ({
         qualificationColumns?.length
           ? qualificationColumns
           : columns?.length
-          ? columns
-          : []
+            ? columns
+            : []
       )
     )
   );
@@ -510,9 +510,9 @@ const SkillRequirementsMatrixView = ({
       render: (_, record) => {
         const catColor =
           record.categoryKey === "industry" ? "orange" :
-          record.categoryKey === "document" ? "blue" :
-          record.categoryKey === "computer" ? "purple" :
-          record.categoryKey === "problem_solving" ? "red" : "green";
+            record.categoryKey === "document" ? "blue" :
+              record.categoryKey === "computer" ? "purple" :
+                record.categoryKey === "problem_solving" ? "red" : "green";
 
         return (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 0", gap: "6px" }}>
@@ -574,8 +574,8 @@ const SkillRequirementsMatrixView = ({
 
       const tagColor =
         roleType === "draw" ? "blue" :
-        roleType === "check" ? "orange" :
-        roleType === "review" ? "gold" : "purple";
+          roleType === "check" ? "orange" :
+            roleType === "review" ? "gold" : "purple";
 
       return {
         title: (
@@ -636,8 +636,8 @@ const SkillRequirementsMatrixView = ({
 
           const badgeColor =
             currentLvl === 1 ? "default" :
-            currentLvl === 2 ? "blue" :
-            currentLvl === 3 ? "gold" : "purple";
+              currentLvl === 2 ? "blue" :
+                currentLvl === 3 ? "gold" : "purple";
 
           return (
             <Tag
@@ -769,7 +769,7 @@ const SkillRequirementsMatrixView = ({
         )
       },
       {
-        title: "Competency / Evaluation Criteria (ตารางเกณฑ์ประเมิน)",
+        title: "Competency / Evaluation Criteria",
         key: "title",
         width: 330,
         fixed: "left",
@@ -1164,7 +1164,7 @@ const SkillRequirementsMatrixView = ({
                 label: (
                   <div style={{ padding: "4px 10px", fontWeight: 700 }}>
                     <TeamOutlined style={{ marginRight: 6, color: "#1890ff" }} />
-                    Staff Matrix (0–3)
+                    Staff Matrix
                   </div>
                 )
               },
@@ -1173,7 +1173,7 @@ const SkillRequirementsMatrixView = ({
                 label: (
                   <div style={{ padding: "4px 10px", fontWeight: 700 }}>
                     <CrownOutlined style={{ marginRight: 6, color: "#722ed1" }} />
-                    Leader Competency (0–4)
+                    Leader Competency
                   </div>
                 )
               }
@@ -1186,7 +1186,7 @@ const SkillRequirementsMatrixView = ({
             onClick={() => setIsExplorerOpen(true)}
             style={{ borderRadius: "8px", fontWeight: 600 }}
           >
-            Excel Sheets Explorer (All 14 Sheets)
+            Excel Sheets Explorer
           </Button>
 
           {/* Export Excel */}
@@ -1316,7 +1316,7 @@ const SkillRequirementsMatrixView = ({
               onClick={handleOpenAddSkillModal}
               style={{ borderRadius: "8px", fontWeight: 600, color: theme.colors.primary, borderColor: theme.colors.primary }}
             >
-              Add Competency (เพิ่ม Competency)
+              Add Competency
             </Button>
             {!isEditing ? (
               <Button
@@ -1367,7 +1367,7 @@ const SkillRequirementsMatrixView = ({
               onClick={handleOpenAddLeaderCritModal}
               style={{ borderRadius: "8px", fontWeight: 600, color: "#722ed1", borderColor: "#722ed1" }}
             >
-              Add Criterion (เพิ่มเกณฑ์)
+              Add Criterion
             </Button>
             {leaderViewMode === "by_period" && (
               !isEditingLeader ? (
@@ -1377,7 +1377,7 @@ const SkillRequirementsMatrixView = ({
                   onClick={handleStartEditLeader}
                   style={{ borderRadius: "8px", background: "#722ed1", borderColor: "#722ed1" }}
                 >
-                  Edit Leader Scores (แก้ไขคะแนน)
+                  Edit Leader Scores
                 </Button>
               ) : (
                 <Space>
@@ -1633,7 +1633,7 @@ const SkillRequirementsMatrixView = ({
         )}
       </Drawer>
 
-      {/* ── Excel Sheets Explorer Modal (All 14 Sheets) ─────────────── */}
+      {/* ── Excel Sheets Explorer Modal ─────────────── */}
       <Modal
         title={null}
         open={isExplorerOpen}
@@ -1651,7 +1651,7 @@ const SkillRequirementsMatrixView = ({
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <TeamOutlined style={{ color: theme.colors.primary }} />
-            <span>{editingSkill ? "Edit Required Competency" : "Add New Required Competency (เพิ่ม Competency)"}</span>
+            <span>{editingSkill ? "Edit Required Competency" : "Add New Required Competency"}</span>
           </div>
         }
         open={isSkillModalOpen}
@@ -1675,7 +1675,7 @@ const SkillRequirementsMatrixView = ({
             <Col span={12}>
               <Form.Item
                 name="key"
-                label="Skill Key (รหัสระบุ)"
+                label="Skill Key"
                 rules={[{ required: true, message: "Please input skill key" }]}
                 extra={editingSkill ? "Key cannot be changed once created" : "Unique identifier (lowercase_with_underscores)"}
               >
@@ -1698,23 +1698,23 @@ const SkillRequirementsMatrixView = ({
             </Select>
           </Form.Item>
 
-          <Divider style={{ margin: "12px 0" }}>Level Capability Definitions (คำจำกัดความแต่ละระดับ 1–3)</Divider>
+          <Divider style={{ margin: "12px 0" }}>Level Capability Definitions</Divider>
 
-          <Form.Item name="desc1" label="Level 1 Capability Description (ระดับ 1)">
+          <Form.Item name="desc1" label="Level 1 Capability Description">
             <Input.TextArea rows={2} placeholder="Can perform basic tasks under supervision..." />
           </Form.Item>
           <Form.Item name="exp1" label="Level 1 Experience Required">
             <Input placeholder="e.g. None or 3 Months" />
           </Form.Item>
 
-          <Form.Item name="desc2" label="Level 2 Capability Description (ระดับ 2)">
+          <Form.Item name="desc2" label="Level 2 Capability Description">
             <Input.TextArea rows={2} placeholder="Can perform tasks independently..." />
           </Form.Item>
           <Form.Item name="exp2" label="Level 2 Experience Required">
             <Input placeholder="e.g. 6 Months or 1 Year" />
           </Form.Item>
 
-          <Form.Item name="desc3" label="Level 3 Capability Description (ระดับ 3)">
+          <Form.Item name="desc3" label="Level 3 Capability Description">
             <Input.TextArea rows={2} placeholder="Expert level, can train and solve complex issues..." />
           </Form.Item>
           <Form.Item name="exp3" label="Level 3 Experience Required">
@@ -1728,7 +1728,7 @@ const SkillRequirementsMatrixView = ({
         title={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <CrownOutlined style={{ color: "#722ed1" }} />
-            <span>{editingLeaderCrit ? "Edit Leader Criterion" : "Add Leader Competency Criterion (เพิ่มเกณฑ์ประเมิน)"}</span>
+            <span>{editingLeaderCrit ? "Edit Leader Criterion" : "Add Leader Competency Criterion"}</span>
           </div>
         }
         open={isLeaderCritModalOpen}
@@ -1743,7 +1743,7 @@ const SkillRequirementsMatrixView = ({
             <Col span={14}>
               <Form.Item
                 name="domainKey"
-                label="Domain (กลุ่มการประเมิน)"
+                label="Domain"
                 rules={[{ required: true, message: "Please select domain" }]}
               >
                 <Select
@@ -1764,7 +1764,7 @@ const SkillRequirementsMatrixView = ({
             <Col span={10}>
               <Form.Item
                 name="code"
-                label="Criterion Code (รหัสเกณฑ์)"
+                label="Criterion Code"
                 rules={[{ required: true, message: "Please input criterion code" }]}
               >
                 <Input placeholder="e.g. GDC-12" />
@@ -1776,7 +1776,7 @@ const SkillRequirementsMatrixView = ({
             <Col span={12}>
               <Form.Item
                 name="nameTh"
-                label="Thai Criteria Name (ชื่อเกณฑ์ภาษาไทย)"
+                label="Thai Criteria Name"
                 rules={[{ required: true, message: "Please input Thai criteria name" }]}
               >
                 <Input placeholder="e.g. การควบคุม ME10 และ Drawing" />
@@ -1785,7 +1785,7 @@ const SkillRequirementsMatrixView = ({
             <Col span={12}>
               <Form.Item
                 name="nameEn"
-                label="English Criteria Name (ชื่อเกณฑ์ภาษาอังกฤษ)"
+                label="English Criteria Name"
                 rules={[{ required: true, message: "Please input English criteria name" }]}
               >
                 <Input placeholder="e.g. ME10 & Drawing Control" />
@@ -1795,7 +1795,7 @@ const SkillRequirementsMatrixView = ({
 
           <Form.Item
             name="keywords"
-            label="Keywords (คำสำคัญ สำหรับค้นหาและแท็ก)"
+            label="Keywords"
             extra="Separate multiple keywords with commas (e.g. ME10, Drafting, Revision)"
           >
             <Input placeholder="e.g. ME10, Drawing, CAD, Revision" />
@@ -1803,14 +1803,14 @@ const SkillRequirementsMatrixView = ({
 
           <Form.Item
             name="desc"
-            label="Detailed Scope / Description (ขอบเขตและคำอธิบายเกณฑ์)"
+            label="Detailed Scope / Description"
           >
             <Input.TextArea rows={3} placeholder="Explain the evaluation criteria and expected outputs..." />
           </Form.Item>
 
           <Form.Item
             name="maxScore"
-            label="Max Target Score (คะแนนเต็ม)"
+            label="Max Target Score"
             rules={[{ required: true }]}
           >
             <Select>

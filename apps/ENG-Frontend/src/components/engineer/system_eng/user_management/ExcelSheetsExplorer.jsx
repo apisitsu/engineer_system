@@ -165,7 +165,7 @@ const ExcelSheetsExplorer = ({ initialWorkbook = "leader", initialSheet }) => {
             <FileExcelOutlined style={{ color: "#52c41a" }} />
             <span>Excel Master Sheets Explorer</span>
             <Tag color="cyan" style={{ marginLeft: 6, fontWeight: 700 }}>
-              100% Data Preserved (All 14 Sheets)
+              100% Data Preserved
             </Tag>
           </Title>
           <Text type="secondary" style={{ fontSize: "12px" }}>
