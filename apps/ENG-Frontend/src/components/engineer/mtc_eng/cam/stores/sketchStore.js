@@ -21,7 +21,7 @@ import {
   getOrCreatePoint, hitTestPoint, hitTestLine, hitTestCircle, hitTestArc,
   deleteEntity, removeConstraint, chamfer as chamferEdit, fillet as filletEdit,
   filletLineArc as filletLineArcEdit, filletArcArc as filletArcArcEdit,
-  filletCircleCircle as filletCircleCircleEdit,
+  filletCircleCircle as filletCircleCircleEdit, linesShareCorner,
   trimLine, trimCircle, trimArc, mirror as mirrorEdit, offsetChain,
   distancePointToLine, farEndpointFromLine, nearestRimPoint, nearestTangent,
   nearestIntersection, nearestQuadrant, nearestMidpoint, entitiesInBox,
@@ -1119,11 +1119,18 @@ export const useSketchStore = create((set, get) => ({
       set({ error: 'Chamfer needs exactly 2 lines' });
       return;
     }
+    // Endpoints drawn to the same spot but never merged still count as a corner:
+    // `chamferEdit` welds a pair within this tolerance before it cuts.
+    const touchTol = Math.min(Math.max(get().pickTol || 1.5, 0.75), 3);
     get()._snapshot();
-    const res = chamferEdit(sk, lines[0], lines[1], dist);
+    const res = chamferEdit(sk, lines[0], lines[1], dist, touchTol);
     if (res == null) {
       get()._undoSnapshot();
-      set({ error: 'Lines must share a corner and the distance must fit' });
+      set({
+        error: linesShareCorner(sk, lines[0], lines[1], touchTol)
+          ? `${dist} mm is too large to fit that corner — try a smaller distance.`
+          : "The two lines don't meet at a corner — draw them to a shared endpoint, or add a Coincident first.",
+      });
       return;
     }
     set({ selection: [], error: null });
@@ -1179,8 +1186,10 @@ export const useSketchStore = create((set, get) => ({
     let run = null;
     // `meets` = do the two picks actually touch at a corner? (drives the message)
     let meets = true;
-    if (lines.length === 2) run = (s) => filletEdit(s, lines[0], lines[1], radius);
-    else if (lines.length === 1 && arcs.length === 1) {
+    if (lines.length === 2) {
+      meets = linesShareCorner(sk, lines[0], lines[1], touchTol);
+      run = (s) => filletEdit(s, lines[0], lines[1], radius, touchTol);
+    } else if (lines.length === 1 && arcs.length === 1) {
       meets = lineArcMeet(sk, lines[0], arcs[0], touchTol);
       run = (s) => filletLineArcEdit(s, lines[0], arcs[0], radius, touchTol);
     } else if (arcs.length === 2) {
@@ -1195,7 +1204,9 @@ export const useSketchStore = create((set, get) => ({
       set({
         error: meets
           ? `R${radius} is too large to fit that corner — try a smaller radius.`
-          : "The two picks don't meet at a corner — trim them so they touch first (the arc's end must lie on the line).",
+          : (lines.length === 2
+            ? "The two lines don't meet at a corner — draw them to a shared endpoint, or add a Coincident first."
+            : "The two picks don't meet at a corner — trim them so they touch first (the arc's end must lie on the line)."),
       });
       return;
     }

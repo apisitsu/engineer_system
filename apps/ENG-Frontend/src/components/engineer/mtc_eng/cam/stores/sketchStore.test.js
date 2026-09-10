@@ -403,6 +403,49 @@ describe('fillet (R) between two curves', () => {
     useSketchStore.getState().fillet(3);
     expect(useSketchStore.getState().error).toMatch(/don't meet|do not meet/i);
   });
+
+  it('fillets two lines whose corner points coincide but were never merged', () => {
+    const sk = createSketch();
+    const l1 = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 30, 0));
+    const l2 = addLine(sk, addPoint(sk, 0.4, -0.3), addPoint(sk, 0, 30)); // corner ≈ l1's, separate point
+    useSketchStore.setState({ sk, selection: [l1, l2], past: [], error: null, pickTol: 1.5 });
+    useSketchStore.getState().fillet(5);
+    expect(filletError(useSketchStore.getState().error)).toBeNull();
+    expect(arcCount(sk)).toBe(1); // the fillet arc got made — the weld worked
+  });
+
+  it('tells two loose lines to share an endpoint, not "R too large"', () => {
+    const sk = createSketch();
+    const l1 = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 30, 0));
+    const l2 = addLine(sk, addPoint(sk, 50, 5), addPoint(sk, 50, 30)); // nowhere near l1
+    useSketchStore.setState({ sk, selection: [l1, l2], past: [], error: null, pickTol: 1.5 });
+    useSketchStore.getState().fillet(5);
+    expect(useSketchStore.getState().error).toMatch(/don't meet|shared endpoint|Coincident/i);
+    expect(useSketchStore.getState().error).not.toMatch(/too large/i);
+  });
+});
+
+describe('chamfer via the store', () => {
+  it('welds a coincident-but-separate corner, and names the real failure otherwise', () => {
+    const sk = createSketch();
+    const l1 = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 30, 0));
+    const l2 = addLine(sk, addPoint(sk, 0.5, 0.2), addPoint(sk, 0, 30));
+    useSketchStore.setState({ sk, selection: [l1, l2], past: [], error: null, pickTol: 1.5 });
+    useSketchStore.getState().chamfer(4);
+    // The chamfer went through (a `solve()` error from the missing Worker in
+    // node is unrelated) — no "don't meet / too large" refusal, and a 3rd line
+    // (the chamfer edge) now exists.
+    expect(useSketchStore.getState().error || '').not.toMatch(/too large|don't meet|shared endpoint|Coincident/i);
+    expect([...sk.entities.values()].filter((x) => x.type === 'line').length).toBe(3);
+
+    // Two lines that genuinely don't touch → the corner message, not the size one.
+    const sk2 = createSketch();
+    const a = addLine(sk2, addPoint(sk2, 0, 0), addPoint(sk2, 30, 0));
+    const b = addLine(sk2, addPoint(sk2, 100, 0), addPoint(sk2, 100, 30));
+    useSketchStore.setState({ sk: sk2, selection: [a, b], past: [], error: null, pickTol: 1.5 });
+    useSketchStore.getState().chamfer(4);
+    expect(useSketchStore.getState().error).toMatch(/don't meet|shared endpoint/i);
+  });
 });
 
 describe('drag-to-modify (arm / end)', () => {

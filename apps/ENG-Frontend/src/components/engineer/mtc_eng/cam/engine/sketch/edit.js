@@ -348,6 +348,58 @@ function repointCorner(sk, shared, c1, c2, l1Id, l2Id, far1Id, far2Id) {
 }
 
 /**
+ * The point id two lines share at a corner — either literally the same id, or,
+ * when their endpoints were drawn to the same spot but never merged, welded
+ * within `tol` (l2's endpoint is repointed onto l1's, its constraints move with
+ * it, the orphan is dropped). Returns the shared id, or null when the lines have
+ * no endpoint pair close enough to be a corner.
+ */
+function sharedCornerOf(sk, l1, l2, tol = 1e-6) {
+  const direct = [l1.p1, l1.p2].find((id) => id === l2.p1 || id === l2.p2);
+  if (direct != null) return direct;
+  let best = null;
+  for (const ak of ['p1', 'p2']) {
+    for (const bk of ['p1', 'p2']) {
+      const a = sk.entities.get(l1[ak]);
+      const b = sk.entities.get(l2[bk]);
+      if (!a || !b || l1[ak] === l2[bk]) continue;
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d <= tol && (!best || d < best.d)) best = { keep: l1[ak], drop: l2[bk], d };
+    }
+  }
+  if (!best) return null;
+  for (const e of sk.entities.values()) {
+    for (const k of ['p1', 'p2', 'center', 'start', 'end']) {
+      if (e[k] === best.drop) e[k] = best.keep;
+    }
+  }
+  sk.constraints = sk.constraints.filter((c) => {
+    const refs = c.refs.map((r) => (r === best.drop ? best.keep : r));
+    if (refs.length === 2 && refs[0] === refs[1]) return false; // a relation that collapsed onto one point
+    c.refs = refs;
+    return true;
+  });
+  removeIfOrphan(sk, best.drop);
+  return best.keep;
+}
+
+/** Do two lines meet at a corner — sharing an endpoint id, or within `tol` of one? (Read-only.) */
+export function linesShareCorner(sk, l1Id, l2Id, tol = 1e-6) {
+  const l1 = sk.entities.get(l1Id);
+  const l2 = sk.entities.get(l2Id);
+  if (!l1 || l1.type !== 'line' || !l2 || l2.type !== 'line') return false;
+  if ([l1.p1, l1.p2].some((id) => id === l2.p1 || id === l2.p2)) return true;
+  for (const a of [l1.p1, l1.p2]) {
+    for (const b of [l2.p1, l2.p2]) {
+      const pa = sk.entities.get(a);
+      const pb = sk.entities.get(b);
+      if (pa && pb && Math.hypot(pa.x - pb.x, pa.y - pb.y) <= tol) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Chamfer the corner where two lines meet: pull each line's shared endpoint back
  * by `dist` to a new point and join them with a chamfer line. Like SolidWorks, the
  * old corner is **kept as a construction "virtual sharp"**: the two edges are
@@ -355,15 +407,15 @@ function repointCorner(sk, shared, c1, c2, l1Id, l2Id, far1Id, far2Id) {
  * intersection (`pointOnLine` to each edge) with its setbacks locked
  * (`distance` = dist). So any dimension placed on that corner stays at its original
  * value (the corner doesn't recede inward), and the chamfer is fully defined.
- * Returns the chamfer line id, or null if the lines don't share a corner or `dist`
- * doesn't fit.
+ * Returns the chamfer line id, or null if the lines don't meet at a corner (even
+ * within `tol`) or `dist` doesn't fit.
  */
-export function chamfer(sk, l1Id, l2Id, dist) {
+export function chamfer(sk, l1Id, l2Id, dist, tol = 1e-6) {
   const l1 = sk.entities.get(l1Id);
   const l2 = sk.entities.get(l2Id);
   if (!l1 || l1.type !== 'line' || !l2 || l2.type !== 'line') return null;
   if (!(dist > 0)) return null;
-  const shared = [l1.p1, l1.p2].find((id) => id === l2.p1 || id === l2.p2);
+  const shared = sharedCornerOf(sk, l1, l2, tol);
   if (shared == null) return null;
   const P = sk.entities.get(shared);
   const far1 = sk.entities.get(l1.p1 === shared ? l1.p2 : l1.p1);
@@ -396,16 +448,16 @@ export function chamfer(sk, l1Id, l2Id, dist) {
  * straight cut. The arc is tangent to both legs — its centre sits on the corner's
  * angle bisector at `radius / sin(θ/2)` and the tangent points are `radius /
  * tan(θ/2)` back from the corner along each leg (θ = the corner angle). Returns
- * the new arc id, or null if the lines don't share a corner, are collinear, or
- * the radius doesn't fit on either leg. Start/end are ordered so planegcs' CCW
- * sweep traces the minor (rounded-corner) arc.
+ * the new arc id, or null if the lines don't meet at a corner (even within
+ * `tol`), are collinear, or the radius doesn't fit on either leg. Start/end are
+ * ordered so planegcs' CCW sweep traces the minor (rounded-corner) arc.
  */
-export function fillet(sk, l1Id, l2Id, radius) {
+export function fillet(sk, l1Id, l2Id, radius, tol = 1e-6) {
   const l1 = sk.entities.get(l1Id);
   const l2 = sk.entities.get(l2Id);
   if (!l1 || l1.type !== 'line' || !l2 || l2.type !== 'line') return null;
   if (!(radius > 0)) return null;
-  const shared = [l1.p1, l1.p2].find((id) => id === l2.p1 || id === l2.p2);
+  const shared = sharedCornerOf(sk, l1, l2, tol);
   if (shared == null) return null;
   const P = sk.entities.get(shared);
   const far1 = sk.entities.get(l1.p1 === shared ? l1.p2 : l1.p1);

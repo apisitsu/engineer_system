@@ -8,7 +8,7 @@ import {
   deleteEntity, mirror, offsetEntity, angleSpec, interiorAngleToModel,
   axisDimensionGeometry, measureConstraint, axisFromPlacement, arcArcMeet,
   filletCircleCircle, entityIntersections, nearestIntersection, entitiesInBox,
-  nearestQuadrant, nearestMidpoint,
+  nearestQuadrant, nearestMidpoint, linesShareCorner,
 } from './edit.js';
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -418,6 +418,19 @@ describe('chamfer', () => {
     // The chamfer is pinned parametrically: B on both edges + two 4 mm setbacks.
     expect(sk.constraints.filter((c) => c.kind === 'pointOnLine' && c.refs.includes(B)).length).toBe(2);
     expect(sk.constraints.filter((c) => c.kind === 'distance' && c.refs.includes(B) && c.value === 4).length).toBe(2);
+  });
+
+  it('welds two lines drawn to the same corner but never merged', () => {
+    const sk = createSketch();
+    // Corner endpoints coincide on screen but are SEPARATE points.
+    const l1 = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 20, 0));
+    const l2 = addLine(sk, addPoint(sk, 0.003, -0.002), addPoint(sk, 0, 20));
+    expect(linesShareCorner(sk, l1, l2)).toBe(false);        // beyond the µm default
+    expect(linesShareCorner(sk, l1, l2, 0.05)).toBe(true);   // within a pick tolerance
+
+    // Without the weld this returns null; with it the corner is chamfered.
+    expect(chamfer(sk, l1, l2, 4, 1e-6)).toBeNull();
+    expect(chamfer(sk, l1, l2, 4, 0.05)).not.toBeNull();
   });
 });
 
