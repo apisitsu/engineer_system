@@ -565,20 +565,22 @@ describe('line guides — angle lock & tangent snap (hover)', () => {
     expect(near(Math.hypot(snap.x, snap.y), 10, 1e-6)).toBe(true); // lies on the rim
   });
 
-  it('locks parallel to a slanted line and clicking adds the parallel relation', () => {
+  it('locks parallel to the line the anchor continues, and the click adds the relation', () => {
     const sk = createSketch();
-    const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6)); // ~31°
+    const p0 = addPoint(sk, 0, 0);
+    const p1 = addPoint(sk, 10, 6); // ref ~31°
+    const ref = addLine(sk, p0, p1);
     const refDeg = (Math.atan2(6, 10) * 180) / Math.PI;
-    const anchor = addPoint(sk, 0, 20);
-    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null, selection: [] });
-    // Cursor roughly parallel to ref from the anchor.
-    useSketchStore.getState().hover(10, 26.3);
+    useSketchStore.setState({ sk, tool: 'line', pending: p1, snap: null, axisSnap: null, selection: [], pickTol: 1.5 });
+    // Draw on from the ref's far end, roughly along the same 31°.
+    useSketchStore.getState().hover(20, 12.15);
     const s = useSketchStore.getState();
     expect(s.axisSnap.kind).toBe('parallel');
     expect(s.axisSnap.ref).toBe(ref);
+    expect(s.axisSnap.locked).toBe(true);
     expect(near(s.axisSnap.deg, refDeg, 0.01)).toBe(true);
 
-    useSketchStore.getState().clickAt(10, 26.3);
+    useSketchStore.getState().clickAt(20, 12.15);
     const st = useSketchStore.getState();
     const newLine = [...st.sk.entities.values()].find((e) => e.type === 'line' && e.id !== ref);
     const par = st.sk.constraints.find((c) => c.kind === 'parallel');
@@ -586,24 +588,38 @@ describe('line guides — angle lock & tangent snap (hover)', () => {
     expect(par.refs).toEqual(expect.arrayContaining([ref, newLine.id]));
   });
 
-  it('locks perpendicular to a slanted line', () => {
+  it('does NOT infer parallel from a line far from the anchor and the cursor', () => {
     const sk = createSketch();
-    const ref = addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6));
+    addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 6)); // ~31°, but off in a corner
+    const anchor = addPoint(sk, 0, 200);
+    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null, pickTol: 1.5 });
+    useSketchStore.getState().hover(100, 260); // ~31° from the anchor, nowhere near the ref line
+    // No axis is close either, so no guide at all.
+    expect(useSketchStore.getState().axisSnap).toBeNull();
+  });
+
+  it('locks perpendicular to the anchor line', () => {
+    const sk = createSketch();
+    const p0 = addPoint(sk, 0, 0);
+    const p1 = addPoint(sk, 10, 6);
+    const ref = addLine(sk, p0, p1);
     const perpRad = ((Math.atan2(6, 10) * 180) / Math.PI + 90) * (Math.PI / 180);
-    const anchor = addPoint(sk, 0, 20);
-    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
-    useSketchStore.getState().hover(0 + Math.cos(perpRad) * 15, 20 + Math.sin(perpRad) * 15);
+    const anchor = sk.entities.get(p1);
+    useSketchStore.setState({ sk, tool: 'line', pending: p1, snap: null, axisSnap: null, pickTol: 1.5 });
+    useSketchStore.getState().hover(anchor.x + Math.cos(perpRad) * 15, anchor.y + Math.sin(perpRad) * 15);
     const s = useSketchStore.getState();
     expect(s.axisSnap.kind).toBe('perpendicular');
     expect(s.axisSnap.ref).toBe(ref);
   });
 
-  it('prefers the plain horizontal axis over "parallel to a horizontal line"', () => {
+  it('locks to the plain horizontal axis, not "parallel to a horizontal line"', () => {
     const sk = createSketch();
-    addLine(sk, addPoint(sk, 0, 0), addPoint(sk, 10, 0)); // axis-aligned reference
-    const anchor = addPoint(sk, 0, 20);
-    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
-    useSketchStore.getState().hover(10, 20.2); // ~1° → near horizontal
+    const a = addPoint(sk, 0, 0);
+    const b = addPoint(sk, 20, 0);
+    addLine(sk, a, b); // axis-aligned — skipped as a parallel/perp reference
+    useSketchStore.setState({ sk, tool: 'line', pending: b, snap: null, axisSnap: null, pickTol: 1.5 });
+    // Continue from the horizontal line's end, ~1° above horizontal.
+    useSketchStore.getState().hover(30, 0.17);
     const s = useSketchStore.getState();
     expect(s.axisSnap.kind).toBe('axis');
     expect(s.axisSnap.hv).toBe('horizontal');

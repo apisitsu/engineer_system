@@ -1431,9 +1431,15 @@ function angleGap(a, b) {
 /**
  * While drawing a line from `anchor` toward (x, y), the inference direction to
  * show a guide for and — when the cursor is right on it — to lock the rubber-band
- * to. Candidates are the standard 0/45/90/… axes (relation: horizontal /
- * vertical / none) and, for every existing **non-axis-aligned** line, its own
- * direction (parallel) and its perpendicular.
+ * to.
+ *
+ * The standard 0/45/90/… axes are always candidates (relation: horizontal /
+ * vertical / none). A **parallel / perpendicular** candidate is only offered for
+ * a line the operator is actually working with — one the anchor is an endpoint
+ * of (continuing a chain), or one the cursor is within `nearTol` of right now —
+ * *not* every line in the sketch, which on a busy drawing would leave almost no
+ * free angle. An axis-aligned reference is skipped (the 45° axes cover it, with
+ * a simpler relation).
  *
  * The guide **appears** within `showDeg` but only **grabs** within `lockDeg` —
  * so a deliberately off-axis angle is not pulled straight, the guide is just a
@@ -1444,7 +1450,7 @@ function angleGap(a, b) {
  * @returns {{deg:number, kind:'axis'|'parallel'|'perpendicular',
  *   ref:(string|number|null), hv:('horizontal'|'vertical'|null), locked:boolean}|null}
  */
-export function angleGuide(sk, anchor, x, y, { showDeg = 8, lockDeg = 2 } = {}) {
+export function angleGuide(sk, anchor, x, y, { showDeg = 8, lockDeg = 2, nearTol = 1.5 } = {}) {
   if (!anchor) return null;
   const dx = x - anchor.x;
   const dy = y - anchor.y;
@@ -1461,14 +1467,18 @@ export function angleGuide(sk, anchor, x, y, { showDeg = 8, lockDeg = 2 } = {}) 
       hv: d % 180 === 0 ? 'horizontal' : d % 180 === 90 ? 'vertical' : null,
     });
   }
+  const nearTol2 = nearTol * nearTol;
   for (const e of sk.entities.values()) {
     if (e.type !== 'line') continue;
     const a = sk.entities.get(e.p1);
     const b = sk.entities.get(e.p2);
     if (!a || !b) continue;
+    // Only a line the operator is working with: chained off the anchor, or under
+    // the cursor.
+    const relevant = e.p1 === anchor.id || e.p2 === anchor.id
+      || segDist2(x, y, a.x, a.y, b.x, b.y) <= nearTol2;
+    if (!relevant) continue;
     const la = wrap360((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI);
-    // An axis-aligned reference is already covered by the 45° candidates, with a
-    // simpler relation (horizontal/vertical, not a dependency on another line).
     if (angleGap(la, 0) < 1e-6 || angleGap(la, 90) < 1e-6) continue;
     cands.push({ deg: la, kind: 'parallel', ref: e.id, hv: null });
     cands.push({ deg: wrap360(la + 90), kind: 'perpendicular', ref: e.id, hv: null });

@@ -457,7 +457,9 @@ export const useSketchStore = create((set, get) => ({
     if (anchor) {
       let deg = ((Math.atan2(y - anchor.y, x - anchor.x) / DEG) % 360 + 360) % 360;
       if (!snap) {
-        const g = angleGuide(sk, anchor, x, y, { showDeg: ANGLE_GUIDE_DEG, lockDeg: ANGLE_LOCK_DEG });
+        const g = angleGuide(sk, anchor, x, y, {
+          showDeg: ANGLE_GUIDE_DEG, lockDeg: ANGLE_LOCK_DEG, nearTol: tol,
+        });
         if (g) {
           const len = Math.hypot(x - anchor.x, y - anchor.y);
           axisSnap = g.locked
