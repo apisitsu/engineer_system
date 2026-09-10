@@ -493,6 +493,10 @@ app.post('/api/system/user-management/users', userManagement.createUser);
 app.put('/api/system/user-management/users/:u_code', userManagement.updateUser);
 app.delete('/api/system/user-management/users/:u_code', userManagement.deleteUserRecord);
 
+// User Audit Logs & Change History Tracking
+app.get('/api/system/user-management/audit-logs', userManagement.getAuditLogs);
+app.get('/api/system/user-management/audit-logs/stats', userManagement.getAuditLogStats);
+
 // User Skills Management & Power Calibration
 app.get('/api/system/user-management/skills', userManagement.getUserSkills);
 app.get('/api/system/user-management/skills/:u_code', userManagement.getUserSkillByCode);

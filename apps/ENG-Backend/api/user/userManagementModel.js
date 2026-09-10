@@ -10,7 +10,7 @@ const BLACKLISTED_COLUMNS = [
     'u_nickname', 'profile_img_b64', 'theme', 'element', 'section'
 ];
 
-// Verify if the table system_logs exists, if not create it
+// Verify if the table system_logs exists, if not create it with enhanced audit columns
 const initAuditTable = async () => {
     try {
         await engPool.query(`
@@ -20,21 +20,86 @@ const initAuditTable = async () => {
                 action VARCHAR(255) NOT NULL,
                 details TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            );
+
+            ALTER TABLE system_logs 
+            ADD COLUMN IF NOT EXISTS actor_name VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS category VARCHAR(50),
+            ADD COLUMN IF NOT EXISTS target_id VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS target_name VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS old_data JSONB,
+            ADD COLUMN IF NOT EXISTS new_data JSONB,
+            ADD COLUMN IF NOT EXISTS changes JSONB,
+            ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100);
+
+            CREATE INDEX IF NOT EXISTS idx_system_logs_created_at ON system_logs (created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_target_id ON system_logs (target_id);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_category ON system_logs (category);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_user_id ON system_logs (user_id);
         `);
     } catch (err) {
-        console.error("Error creating system_logs table:", err);
+        console.error("Error creating/upgrading system_logs table:", err);
     }
 };
 
 initAuditTable();
 
-const logAction = async (userId, action, details) => {
+// Standardized Actor Resolver from Express Request
+const getActorInfo = (req) => {
+    const userId = req.user?.empno || req.user?.id || req.body?.updated_by || req.headers['x-user-id'] || 'SYSTEM';
+    const actorName = req.user?.name || req.user?.u_name || req.body?.actor_name || null;
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null;
+    return { userId, actorName, ipAddress };
+};
+
+// Flexible, Backward-Compatible Audit Logger
+const logAction = async (arg1, arg2, arg3, options = {}) => {
     try {
-        await engPool.query(
-            "INSERT INTO system_logs (user_id, action, details) VALUES ($1, $2, $3)",
-            [userId, action, details]
-        );
+        let payload = {};
+        if (typeof arg1 === 'object' && arg1 !== null && !arg2) {
+            payload = arg1;
+        } else {
+            payload = {
+                userId: arg1,
+                action: arg2,
+                details: arg3,
+                ...options
+            };
+        }
+
+        const {
+            userId = 'SYSTEM',
+            actorName = null,
+            action = 'UNKNOWN_ACTION',
+            category = 'GENERAL',
+            targetId = null,
+            targetName = null,
+            details = '',
+            oldData = null,
+            newData = null,
+            changes = null,
+            ipAddress = null
+        } = payload;
+
+        await engPool.query(`
+            INSERT INTO system_logs (
+                user_id, actor_name, action, category, 
+                target_id, target_name, details, 
+                old_data, new_data, changes, ip_address, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        `, [
+            userId,
+            actorName,
+            action,
+            category,
+            targetId,
+            targetName,
+            details,
+            oldData ? JSON.stringify(oldData) : null,
+            newData ? JSON.stringify(newData) : null,
+            changes ? JSON.stringify(changes) : null,
+            ipAddress
+        ]);
     } catch (err) {
         console.error("Audit log failed:", err);
     }
@@ -86,13 +151,21 @@ const addColumn = async (req, res) => {
     }
 
     try {
-        // Build the query safely with pg-format for the identifier
-        // and parameterized query for the default value doesn't exactly work in ALTER TABLE DEFAULT, 
-        // so we format the literal safely or use format('%L')
         const alterQuery = format('ALTER TABLE m_user_profile ADD COLUMN %I %s DEFAULT %L', columnName, sqlDataType, defaultValue);
-
         await engPool.query(alterQuery);
-        await logAction(userId, 'ADD_COLUMN', `Added column ${columnName} of type ${sqlDataType} with default ${defaultValue}`);
+
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'SCHEMA_ADD_COLUMN',
+            category: 'DATABASE_SCHEMA',
+            targetId: columnName,
+            targetName: `Column: ${columnName}`,
+            details: `Added new column "${columnName}" (${sqlDataType}) with default value "${defaultValue}" to m_user_profile`,
+            newData: { columnName, dataType: sqlDataType, defaultValue },
+            ipAddress
+        });
 
         res.json({ result: 'true', message: `Column ${columnName} added successfully.` });
     } catch (error) {
@@ -104,7 +177,6 @@ const addColumn = async (req, res) => {
 // 3. Delete Column
 const dropColumn = async (req, res) => {
     const { columnName } = req.body;
-    const userId = req.user?.id || 'System';
 
     if (BLACKLISTED_COLUMNS.includes(columnName)) {
         return res.status(403).json({ result: 'false', message: `Cannot drop blacklisted column: ${columnName}` });
@@ -113,7 +185,19 @@ const dropColumn = async (req, res) => {
     try {
         const alterQuery = format('ALTER TABLE m_user_profile DROP COLUMN %I', columnName);
         await engPool.query(alterQuery);
-        await logAction(userId, 'DROP_COLUMN', `Dropped column ${columnName}`);
+
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'SCHEMA_DROP_COLUMN',
+            category: 'DATABASE_SCHEMA',
+            targetId: columnName,
+            targetName: `Column: ${columnName}`,
+            details: `Dropped column "${columnName}" from m_user_profile`,
+            oldData: { columnName },
+            ipAddress
+        });
 
         res.json({ result: 'true', message: `Column ${columnName} dropped successfully.` });
     } catch (error) {
@@ -197,7 +281,7 @@ const getUsers = async (req, res) => {
 // 5. Create user record
 const createUser = async (req, res) => {
     try {
-        const record = req.body;
+        const record = { ...req.body };
 
         // Hash password if provided
         if (record.u_pass) {
@@ -210,24 +294,45 @@ const createUser = async (req, res) => {
         const values = Object.values(record);
 
         const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-        // Format columns safely
         const colString = columns.map(c => format('%I', c)).join(', ');
 
         const insertQuery = `INSERT INTO m_user_profile (${colString}) VALUES (${placeholders}) RETURNING *`;
 
         const result = await engPool.query(insertQuery, values);
-        res.json({ result: 'true', data: result.rows[0], message: 'User created' });
+        const createdUser = result.rows[0];
+
+        // Audit Log
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        const safeRecord = { ...createdUser, u_pass: '[PROTECTED]' };
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'USER_CREATE',
+            category: 'USER_PROFILE',
+            targetId: createdUser.u_code,
+            targetName: createdUser.u_name,
+            details: `Registered new user ${createdUser.u_code} (${createdUser.u_name || ''}) - Role: ${createdUser.role || '-'}, Dept: ${createdUser.u_department || '-'}`,
+            newData: safeRecord,
+            ipAddress
+        });
+
+        res.json({ result: 'true', data: createdUser, message: 'User created' });
     } catch (error) {
         console.error("Error creating user:", error);
         res.status(500).json({ result: 'false', error: error.message });
     }
 };
 
-// 6. Update user record
+// 6. Update user record with field-by-field diff tracking
 const updateUser = async (req, res) => {
     try {
         const { u_code } = req.params;
-        const record = req.body;
+        const record = { ...req.body };
+
+        // Retrieve existing state before update for diff calculation
+        const oldRes = await engPool.query('SELECT * FROM m_user_profile WHERE u_code = $1', [u_code]);
+        if (oldRes.rowCount === 0) return res.status(404).json({ result: 'false', message: 'User not found.' });
+        const oldUser = oldRes.rows[0];
 
         // Hash password if explicitly provided in update payload
         if (record.u_pass) {
@@ -244,10 +349,50 @@ const updateUser = async (req, res) => {
 
         const updateQuery = `UPDATE m_user_profile SET ${setString} WHERE u_code = $${values.length} RETURNING *`;
         const result = await engPool.query(updateQuery, values);
+        const updatedUser = result.rows[0];
 
-        if (result.rowCount === 0) return res.status(404).json({ result: 'false', message: 'User not found.' });
+        // Compute exact field-by-field diff
+        const changes = {};
+        const changeSummaries = [];
+        for (const key of columns) {
+            if (key === 'u_pass') {
+                changes['u_pass'] = { old: '[PROTECTED]', new: '[UPDATED]' };
+                changeSummaries.push('Password updated');
+                continue;
+            }
+            const oldVal = oldUser[key];
+            const newVal = record[key];
+            if (String(oldVal ?? '') !== String(newVal ?? '')) {
+                changes[key] = {
+                    old: oldVal ?? null,
+                    new: newVal ?? null
+                };
+                changeSummaries.push(`${key}: "${oldVal ?? '—'}" ➔ "${newVal ?? '—'}"`);
+            }
+        }
 
-        res.json({ result: 'true', data: result.rows[0], message: 'User updated' });
+        // Audit Log if any fields changed
+        if (Object.keys(changes).length > 0) {
+            const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+            const safeOld = { ...oldUser, u_pass: '[PROTECTED]' };
+            const safeNew = { ...updatedUser, u_pass: '[PROTECTED]' };
+
+            await logAction({
+                userId: actorId,
+                actorName,
+                action: 'USER_UPDATE',
+                category: 'USER_PROFILE',
+                targetId: u_code,
+                targetName: updatedUser.u_name,
+                details: `Updated user ${u_code} (${updatedUser.u_name}): ${changeSummaries.join(', ')}`,
+                oldData: safeOld,
+                newData: safeNew,
+                changes,
+                ipAddress
+            });
+        }
+
+        res.json({ result: 'true', data: updatedUser, message: 'User updated' });
     } catch (error) {
         console.error("Error updating user:", error);
         res.status(500).json({ result: 'false', error: error.message });
@@ -258,9 +403,29 @@ const updateUser = async (req, res) => {
 const deleteUserRecord = async (req, res) => {
     try {
         const { u_code } = req.params;
+
+        // Retrieve existing user before deleting for historical archive
+        const oldRes = await engPool.query('SELECT * FROM m_user_profile WHERE u_code = $1', [u_code]);
+        if (oldRes.rowCount === 0) return res.status(404).json({ result: 'false', message: 'User not found.' });
+        const oldUser = oldRes.rows[0];
+
         const deleteQuery = `DELETE FROM m_user_profile WHERE u_code = $1 RETURNING *`;
-        const result = await engPool.query(deleteQuery, [u_code]);
-        if (result.rowCount === 0) return res.status(404).json({ result: 'false', message: 'User not found.' });
+        await engPool.query(deleteQuery, [u_code]);
+
+        // Audit Log
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        const safeOld = { ...oldUser, u_pass: '[PROTECTED]' };
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'USER_DELETE',
+            category: 'USER_PROFILE',
+            targetId: u_code,
+            targetName: oldUser.u_name,
+            details: `Deleted user ${u_code} (${oldUser.u_name || ''}) from department ${oldUser.u_department || '-'}`,
+            oldData: safeOld,
+            ipAddress
+        });
 
         res.json({ result: 'true', message: 'User deleted successfully' });
     } catch (error) {
@@ -475,10 +640,14 @@ const saveUserSkills = async (req, res) => {
         const { u_code } = req.params;
         const skillsData = req.body;
 
-        const userCheck = await engPool.query('SELECT u_code, role FROM m_user_profile WHERE u_code = $1', [u_code]);
+        const userCheck = await engPool.query('SELECT u_code, u_name, role FROM m_user_profile WHERE u_code = $1', [u_code]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ result: 'false', message: `User ${u_code} not found in profile.` });
         }
+
+        // Fetch previous skills for audit diff
+        const oldSkillsRes = await engPool.query('SELECT * FROM m_user_skills WHERE u_code = $1', [u_code]);
+        const oldSkills = oldSkillsRes.rows[0] || null;
 
         // Branch 1: Leader Evaluation (33 Skills, scale 0-4)
         if (skillsData.evaluation_type === 'leader' || userCheck.rows[0].role === 'LEADER') {
@@ -525,7 +694,29 @@ const saveUserSkills = async (req, res) => {
                 [powers.atk, powers.def, powers.hp, powers.mp, u_code]
             );
 
-            await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_LEADER_SKILLS', `Updated leader skills for ${u_code}: ATK=${powers.atk}, DEF=${powers.def}, HP=${powers.hp}, MP=${powers.mp}`);
+            // Audit Log
+            const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+            const powerChanges = {
+                atk: { old: oldSkills?.atk ?? 0, new: powers.atk },
+                def: { old: oldSkills?.def ?? 0, new: powers.def },
+                hp: { old: oldSkills?.hp ?? 0, new: powers.hp },
+                mp: { old: oldSkills?.mp ?? 0, new: powers.mp },
+                total_score: { old: oldSkills?.total_score ?? 0, new: totalScore }
+            };
+
+            await logAction({
+                userId: actorId,
+                actorName,
+                action: 'SKILL_UPDATE_LEADER',
+                category: 'USER_SKILLS',
+                targetId: u_code,
+                targetName: userCheck.rows[0].u_name,
+                details: `Updated Leader skills & calibrated powers for ${u_code} (${userCheck.rows[0].u_name || ''}): ATK ${oldSkills?.atk ?? 0}➔${powers.atk}, DEF ${oldSkills?.def ?? 0}➔${powers.def}, HP ${oldSkills?.hp ?? 0}➔${powers.hp}, MP ${oldSkills?.mp ?? 0}➔${powers.mp} (Total: ${totalScore})`,
+                oldData: oldSkills,
+                newData: { leader_skills: leaderSkills, powers, totalScore },
+                changes: powerChanges,
+                ipAddress
+            });
 
             return res.json({
                 result: 'true',
@@ -619,7 +810,33 @@ const saveUserSkills = async (req, res) => {
             WHERE u_code = $5
         `, [powers.atk, powers.def, powers.hp, powers.mp, u_code]);
 
-        await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_USER_SKILLS', `Updated skills and power for ${u_code}: ATK=${powers.atk}, DEF=${powers.def}, HP=${powers.hp}, MP=${powers.mp}`);
+        // Audit Log
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        const skillChanges = {};
+        for (const k of skillKeys) {
+            if (oldSkills && oldSkills[k] !== sanitizedSkills[k]) {
+                skillChanges[k] = { old: oldSkills[k], new: sanitizedSkills[k] };
+            }
+        }
+        skillChanges['atk'] = { old: oldSkills?.atk ?? 0, new: powers.atk };
+        skillChanges['def'] = { old: oldSkills?.def ?? 0, new: powers.def };
+        skillChanges['hp'] = { old: oldSkills?.hp ?? 0, new: powers.hp };
+        skillChanges['mp'] = { old: oldSkills?.mp ?? 0, new: powers.mp };
+        skillChanges['total_score'] = { old: oldSkills?.total_score ?? 0, new: totalScore };
+
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'SKILL_UPDATE_STAFF',
+            category: 'USER_SKILLS',
+            targetId: u_code,
+            targetName: userCheck.rows[0].u_name,
+            details: `Updated Staff skills & calibrated powers for ${u_code} (${userCheck.rows[0].u_name || ''}): ATK ${oldSkills?.atk ?? 0}➔${powers.atk}, DEF ${oldSkills?.def ?? 0}➔${powers.def}, HP ${oldSkills?.hp ?? 0}➔${powers.hp}, MP ${oldSkills?.mp ?? 0}➔${powers.mp} (Total: ${totalScore})`,
+            oldData: oldSkills,
+            newData: { ...sanitizedSkills, powers, totalScore },
+            changes: skillChanges,
+            ipAddress
+        });
 
         res.json({
             result: 'true',
@@ -645,6 +862,10 @@ const updateQualifications = async (req, res) => {
             return res.status(400).json({ result: 'false', message: 'Valid qualifications object is required' });
         }
 
+        // Retrieve old qualifications for diff
+        const oldSkillsRes = await engPool.query('SELECT qualifications FROM m_user_skills WHERE u_code = $1', [u_code]);
+        const oldQualifications = oldSkillsRes.rows[0]?.qualifications || {};
+
         const query = `
             INSERT INTO m_user_skills (u_code, qualifications, updated_at)
             VALUES ($1, $2, NOW())
@@ -656,7 +877,29 @@ const updateQualifications = async (req, res) => {
 
         const result = await engPool.query(query, [u_code, JSON.stringify(qualifications)]);
 
-        await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_QUALIFICATIONS', `Updated qualifications for ${u_code}`);
+        // Compute diff
+        const diffQual = {};
+        const allKeys = Array.from(new Set([...Object.keys(oldQualifications), ...Object.keys(qualifications)]));
+        for (const k of allKeys) {
+            if (JSON.stringify(oldQualifications[k]) !== JSON.stringify(qualifications[k])) {
+                diffQual[k] = { old: oldQualifications[k] || null, new: qualifications[k] || null };
+            }
+        }
+
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'QUALIFICATION_UPDATE',
+            category: 'QUALIFICATIONS',
+            targetId: u_code,
+            targetName: `Qualifications (${u_code})`,
+            details: `Updated qualifications & certifications for user ${u_code}`,
+            oldData: oldQualifications,
+            newData: qualifications,
+            changes: diffQual,
+            ipAddress
+        });
 
         res.json({
             result: 'true',
@@ -705,7 +948,7 @@ const saveQualificationCriteria = async (req, res) => {
         const qualification_columns = req.body.qualification_columns || req.body.qualificationColumns;
         const skill_definitions = req.body.skill_definitions || req.body.skillDefinitions;
         const leader_criteria = req.body.leader_criteria || req.body.leaderCriteria;
-        const updated_by = req.body.updated_by || req.user?.empno || 'SYSTEM';
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
 
         // Ensure leader_criteria column exists
         await engPool.query(`
@@ -735,14 +978,20 @@ const saveQualificationCriteria = async (req, res) => {
             qualification_columns ? JSON.stringify(qualification_columns) : null,
             skill_definitions ? JSON.stringify(skill_definitions) : null,
             leader_criteria ? JSON.stringify(leader_criteria) : null,
-            updated_by
+            actorId
         ]);
 
-        await logAction(
-            updated_by,
-            'UPDATE_QUALIFICATION_CRITERIA',
-            `Updated qualification criteria: ${qualification_columns ? qualification_columns.length + ' staff roles' : ''} ${skill_definitions ? skill_definitions.length + ' skills' : ''} ${leader_criteria ? leader_criteria.length + ' leader criteria' : ''}`
-        );
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'CRITERIA_UPDATE',
+            category: 'CRITERIA',
+            targetId: 'criteria:default',
+            targetName: 'Master Qualification Criteria',
+            details: `Updated qualification criteria: ${qualification_columns ? qualification_columns.length + ' staff roles' : ''} ${skill_definitions ? skill_definitions.length + ' skills' : ''} ${leader_criteria ? leader_criteria.length + ' leader criteria' : ''}`,
+            newData: { qualification_columns, skill_definitions, leader_criteria },
+            ipAddress
+        });
 
         res.json({
             result: 'true',
@@ -759,7 +1008,7 @@ const saveQualificationCriteria = async (req, res) => {
 const resetQualificationCriteria = async (req, res) => {
     try {
         const { DEFAULT_QUALIFICATION_COLUMNS, DEFAULT_SKILL_DEFINITIONS } = require('../../scripts/init_criteria_db');
-        const userCode = req.body?.updated_by || req.user?.empno || 'SYSTEM';
+        const { userId: actorId, actorName, ipAddress } = getActorInfo(req);
 
         const query = `
             INSERT INTO m_qualification_criteria (criteria_key, qualification_columns, skill_definitions, updated_by, updated_at)
@@ -775,10 +1024,19 @@ const resetQualificationCriteria = async (req, res) => {
         const result = await engPool.query(query, [
             JSON.stringify(DEFAULT_QUALIFICATION_COLUMNS),
             JSON.stringify(DEFAULT_SKILL_DEFINITIONS),
-            userCode
+            actorId
         ]);
 
-        await logAction(userCode, 'RESET_QUALIFICATION_CRITERIA', 'Reset qualification criteria to Excel factory defaults');
+        await logAction({
+            userId: actorId,
+            actorName,
+            action: 'CRITERIA_RESET',
+            category: 'CRITERIA',
+            targetId: 'criteria:default',
+            targetName: 'Master Qualification Criteria',
+            details: 'Reset qualification criteria matrix to factory baseline defaults',
+            ipAddress
+        });
 
         res.json({
             result: 'true',
@@ -791,9 +1049,152 @@ const resetQualificationCriteria = async (req, res) => {
     }
 };
 
+// 16. Get Audit Logs with comprehensive filtering & pagination
+const getAuditLogs = async (req, res) => {
+    try {
+        const queryParams = req?.query || req || {};
+        const {
+            page = 1,
+            pageSize = 20,
+            search = '',
+            category = 'ALL',
+            action = 'ALL',
+            targetId = '',
+            userId = '',
+            startDate = '',
+            endDate = '',
+            sortOrder = 'desc'
+        } = queryParams;
+
+        let whereClauses = [];
+        let params = [];
+        let paramIdx = 1;
+
+        if (search && search.trim()) {
+            whereClauses.push(`(
+                details ILIKE $${paramIdx} OR 
+                user_id ILIKE $${paramIdx} OR 
+                actor_name ILIKE $${paramIdx} OR 
+                target_id ILIKE $${paramIdx} OR 
+                target_name ILIKE $${paramIdx} OR 
+                action ILIKE $${paramIdx}
+            )`);
+            params.push(`%${search.trim()}%`);
+            paramIdx++;
+        }
+
+        if (category && category !== 'ALL') {
+            whereClauses.push(`category = $${paramIdx}`);
+            params.push(category);
+            paramIdx++;
+        }
+
+        if (action && action !== 'ALL') {
+            whereClauses.push(`action = $${paramIdx}`);
+            params.push(action);
+            paramIdx++;
+        }
+
+        if (targetId && targetId.trim()) {
+            whereClauses.push(`target_id ILIKE $${paramIdx}`);
+            params.push(`%${targetId.trim()}%`);
+            paramIdx++;
+        }
+
+        if (userId && userId.trim()) {
+            whereClauses.push(`(user_id ILIKE $${paramIdx} OR actor_name ILIKE $${paramIdx})`);
+            params.push(`%${userId.trim()}%`);
+            paramIdx++;
+        }
+
+        if (startDate) {
+            whereClauses.push(`created_at >= $${paramIdx}`);
+            params.push(startDate);
+            paramIdx++;
+        }
+
+        if (endDate) {
+            whereClauses.push(`created_at <= $${paramIdx}::date + interval '1 day'`);
+            params.push(endDate);
+            paramIdx++;
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+        const orderSql = sortOrder.toLowerCase() === 'asc' ? 'ORDER BY created_at ASC, id ASC' : 'ORDER BY created_at DESC, id DESC';
+
+        let limitSql = '';
+        if (pageSize !== 'all' && Number(pageSize) > 0) {
+            limitSql = `LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+            params.push(Number(pageSize), (Number(page) - 1) * Number(pageSize));
+        }
+
+        const dataQuery = `SELECT * FROM system_logs ${whereSql} ${orderSql} ${limitSql}`;
+        const countParams = limitSql ? params.slice(0, params.length - 2) : params;
+        const countQuery = `SELECT COUNT(*) FROM system_logs ${whereSql}`;
+
+        const [dataRes, countRes] = await Promise.all([
+            engPool.query(dataQuery, params),
+            engPool.query(countQuery, countParams)
+        ]);
+
+        res.json({
+            result: 'true',
+            data: dataRes.rows,
+            total: parseInt(countRes.rows[0].count, 10),
+            page: parseInt(page, 10),
+            pageSize: pageSize === 'all' ? dataRes.rows.length : parseInt(pageSize, 10)
+        });
+    } catch (error) {
+        console.error("Error fetching audit logs:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+// 17. Get Audit Log Stats
+const getAuditLogStats = async (req, res) => {
+    try {
+        const totalQuery = `SELECT COUNT(*) FROM system_logs;`;
+        const todayQuery = `SELECT COUNT(*) FROM system_logs WHERE created_at >= CURRENT_DATE;`;
+        const categoryQuery = `
+            SELECT COALESCE(category, 'GENERAL') as category, COUNT(*) as count 
+            FROM system_logs 
+            GROUP BY category 
+            ORDER BY count DESC;
+        `;
+        const recentActorsQuery = `
+            SELECT COALESCE(actor_name, user_id) as actor, COUNT(*) as count 
+            FROM system_logs 
+            GROUP BY actor 
+            ORDER BY count DESC 
+            LIMIT 5;
+        `;
+
+        const [totalRes, todayRes, catRes, actorsRes] = await Promise.all([
+            engPool.query(totalQuery),
+            engPool.query(todayQuery),
+            engPool.query(categoryQuery),
+            engPool.query(recentActorsQuery)
+        ]);
+
+        res.json({
+            result: 'true',
+            data: {
+                total: parseInt(totalRes.rows[0].count, 10),
+                today: parseInt(todayRes.rows[0].count, 10),
+                categories: catRes.rows,
+                topActors: actorsRes.rows
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching audit log stats:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
 module.exports = {
     getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers,
     getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers, updateQualifications,
-    getQualificationCriteria, saveQualificationCriteria, resetQualificationCriteria
+    getQualificationCriteria, saveQualificationCriteria, resetQualificationCriteria,
+    getAuditLogs, getAuditLogStats, logAction
 };
 
