@@ -81,18 +81,27 @@ function Dot({ status }) {
   return <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #d9d9d9', display: 'inline-block', marginTop: 3 }} />;
 }
 
+// per-status framing for a step box on the centre-spine roadmap
+const STEP_BOX = {
+  done: { border: '1px solid #b7eb8f', background: '#f6ffed' },
+  current: { border: '1px solid #69b1ff', background: '#e6f4ff', boxShadow: '0 0 0 3px rgba(22,119,255,0.12)' },
+  pending: { border: '1px dashed #d9d9d9', background: '#fff' },
+};
+
 function Roadmap({ steps }) {
-  const RAIL = '#e8e8e8';
+  const RAIL = '#d9d9d9';
   return (
-    <div style={{ paddingLeft: 2 }}>
+    // centre spine: an absolutely-placed line down the middle, step boxes and
+    // wait chips stack on top of it (zIndex 1) so the line only shows in the gaps
+    <div style={{ position: 'relative', paddingTop: 12, paddingBottom: 4 }}>
+      <span style={{ position: 'absolute', top: 4, bottom: 4, left: 'calc(50% - 1px)', width: 2, background: RAIL, zIndex: 0 }} />
       {steps.map((s, i) => {
         const meta = STATUS_META[s.status] || STATUS_META.pending;
+        const box = STEP_BOX[s.status] || STEP_BOX.pending;
         const bits = [];
         if (s.status === 'current') {
           // no production row yet — show what is known while it's WIP
           if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
-          // the "waiting N d so far" figure now rides as a chip above the NEXT
-          // step's node, so this line just states when the lot arrived.
           if (s.startDate) bits.push(`received ${s.startDate}`);
           if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
         } else {
@@ -105,12 +114,10 @@ function Roadmap({ steps }) {
           if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
           if (s.operator) bits.push(s.operator);
         }
-        const isLast = i === steps.length - 1;
-        // Chip sits on the connector just BELOW this step's node and reports the
-        // wait the PREVIOUS step went through before it handed the lot on —
-        // settled gap (prev.dwellDays = comp[i-1] − comp[i-2]) once that step is
-        // done, or a running "so far" count while it is still WIP. This puts the
-        // gap one connector lower than the pair of completions that bound it.
+        // Wait chip sits on the spine in the gap just below THIS step's box and
+        // reports the wait the PREVIOUS step went through before it handed the
+        // lot on: settled gap (prev.dwellDays = comp[i-1] − comp[i-2]) once that
+        // step is done, or a running "so far" count while it is still WIP.
         const prev = i > 0 ? steps[i - 1] : null;
         let waitChip = null;
         if (prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
@@ -124,34 +131,38 @@ function Roadmap({ steps }) {
           <React.Fragment key={s.order}>
             <div
               className={s.status === 'current' ? 'lot-roadmap-current' : undefined}
-              style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}
+              style={{
+                position: 'relative', zIndex: 1, borderRadius: 12, padding: '10px 12px 9px',
+                ...box,
+              }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 12 }}>
+              {/* status dot straddling the top edge, sitting on the spine */}
+              <span style={{
+                position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
+                background: '#fff', border: box.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
                 <Dot status={s.status} />
-                {!isLast ? <span style={{ flex: 1, width: 1, minHeight: 14, background: RAIL }} /> : null}
-              </div>
-              <div style={{ flex: 1, paddingBottom: isLast || waitChip ? 0 : 8, minWidth: 0 }}>
-                <Space size={6} wrap>
-                  <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
-                  <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
-                  <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-                  {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
-                </Space>
-                {bits.length ? (
-                  <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
-                ) : null}
-              </div>
+              </span>
+              <Space size={[6, 2]} wrap>
+                <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
+                <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
+                <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
+                {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
+              </Space>
+              {bits.length ? (
+                <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
+              ) : null}
             </div>
             {waitChip ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 22, paddingBottom: 8 }}>
-                <span style={{ width: 12, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
-                  <span style={{ width: 1, background: RAIL }} />
-                </span>
-                <Tag color={waitChip.days >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center', padding: '7px 0' }}>
+                <Tag
+                  color={waitChip.days >= 7 ? 'warning' : 'default'}
+                  style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
+                >
                   ⏳ {waitChip.ongoing ? `Waiting ${fmtDays(waitChip.days)} so far` : `Wait in process ${fmtDays(waitChip.days)}`}
                 </Tag>
               </div>
-            ) : null}
+            ) : <div style={{ height: 12 }} />}
           </React.Fragment>
         );
       })}

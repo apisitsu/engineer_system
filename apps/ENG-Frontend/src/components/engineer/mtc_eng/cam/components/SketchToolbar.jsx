@@ -535,6 +535,7 @@ function OffsetInput() {
 export default function SketchToolbar() {
   const tool = useSketchStore((s) => s.tool);
   const selection = useSketchStore((s) => s.selection);
+  const selectedDims = useSketchStore((s) => s.selectedDims);
   const past = useSketchStore((s) => s.past);
   const future = useSketchStore((s) => s.future);
   const dofState = useSketchStore((s) => s.dofState);

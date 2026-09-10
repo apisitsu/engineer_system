@@ -128,6 +128,7 @@ export const useSketchStore = create((set, get) => ({
   dimensionAxis: 'aligned', // 'aligned' true distance | 'x' horizontal (dX) | 'y' vertical (dY) — SW's dimension orientation
   hoverId: null, // entity id a click would pick right now — drives the pre-select highlight
   selection: [], // selected entity ids — points, lines, circles, and/or arcs (mixed)
+  selectedDims: [], // indices into sk.constraints of dimensions selected in the viewport (Delete removes them)
   dimensionPending: null, // { kind, refs, label, current } set on a dimension-mode empty-click → shows the inline value input
   offsetPending: false, // true while the Offset rail button is waiting for its distance
   editingConstraint: null, // { index, kind, label, angular, value } set when a placed dimension is double-clicked → shows the edit input
@@ -304,7 +305,10 @@ export const useSketchStore = create((set, get) => ({
   _snapshot() {
     const past = get().past.concat([serialize(get().sk)]);
     if (past.length > HISTORY) past.shift();
-    set({ past, future: [] });
+    // Any edit can add/remove constraints and shift their indices, so a
+    // viewport dimension selection cannot be trusted past this point.
+    // (`deleteSelected` reads it *before* snapshotting.)
+    set({ past, future: [], selectedDims: [] });
   },
 
   undo() {
@@ -336,7 +340,7 @@ export const useSketchStore = create((set, get) => ({
   },
 
   setTool(tool) {
-    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, boxSelect: null, _boxStart: null });
+    set({ tool, pending: null, pending2: null, cursor: null, snap: null, axisSnap: null, lineAngle: null, hoverId: null, error: null, dimensionPending: null, editingConstraint: null, offsetPending: false, boxSelect: null, _boxStart: null, selectedDims: [] });
   },
 
   /** Show a message on the sketcher's error line (used by save/open failures). */
@@ -1368,15 +1372,31 @@ export const useSketchStore = create((set, get) => ({
   },
 
   deleteSelected() {
-    const { sk, selection } = get();
+    const { sk, selection, selectedDims } = get();
     // The origin is a fixed reference — never delete it.
     const ids = selection.filter((id) => !sk.entities.get(id)?.origin);
-    if (!ids.length) { set({ selection: [] }); return; }
+    const dims = [...new Set(selectedDims)].filter((i) => sk.constraints[i]?.value != null);
+    if (!ids.length && !dims.length) { set({ selection: [], selectedDims: [] }); return; }
     get()._snapshot();
     ids.forEach((id) => deleteEntity(sk, id, true)); // prune dangling endpoints (SW-style)
-    set({ selection: [] });
+    // Descending order so earlier removals don't shift the indices still to go.
+    dims.sort((a, b) => b - a).forEach((i) => removeConstraint(sk, i));
+    set({ selection: [], selectedDims: [] });
     get()._bump();
     get().solve();
+  },
+
+  /** Toggle a placed dimension (by its constraint index) in/out of the viewport selection. */
+  toggleDimSelect(index) {
+    if (get().sk.constraints[index]?.value == null) return;
+    const sel = get().selectedDims.slice();
+    const i = sel.indexOf(index);
+    if (i >= 0) sel.splice(i, 1); else sel.push(index);
+    set({ selectedDims: sel });
+  },
+
+  clearDimSelect() {
+    if (get().selectedDims.length) set({ selectedDims: [] });
   },
 
   /** Remove one constraint (by its index in sk.constraints), then re-solve. */
