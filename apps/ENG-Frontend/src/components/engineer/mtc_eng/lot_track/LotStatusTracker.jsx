@@ -114,7 +114,7 @@ function Roadmap({ steps }) {
                   <span style={{ width: 1, background: RAIL }} />
                 </span>
                 <Tag color={s.dwellDays >= 7 ? 'warning' : 'default'} style={{ margin: 0, fontSize: 11 }}>
-                  ⏳ waited {fmtDays(s.dwellDays)}
+                  ⏳ Wait in process {fmtDays(s.dwellDays)}
                 </Tag>
               </div>
             ) : null}
