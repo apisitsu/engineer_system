@@ -15,7 +15,8 @@ function Get-ProcessAncestors {
         $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $curPid" -ErrorAction SilentlyContinue
         if ($proc -and $proc.ParentProcessId -gt 0 -and $proc.ParentProcessId -ne $curPid) {
             $curPid = $proc.ParentProcessId
-        } else {
+        }
+        else {
             break
         }
     }
@@ -32,7 +33,8 @@ function Remove-GitIndexLock {
                 Remove-Item $lockFile -Force -ErrorAction Stop
                 Write-Host "Successfully removed $lockFile" -ForegroundColor Green
                 return
-            } catch {
+            }
+            catch {
                 Write-Host "Waiting for .git\index.lock to be released ($i/5)..." -ForegroundColor Yellow
                 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
                     $_.Name -match "git" -and ($_.CommandLine -match [regex]::Escape($Path) -or $_.CommandLine -match "EngineerSystem")
@@ -78,8 +80,8 @@ function Stop-DevServers {
     $Ports = @(2005, 3000)
     foreach ($Port in $Ports) {
         $PIDs = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | 
-                Select-Object -ExpandProperty OwningProcess -Unique | 
-                Where-Object { $_ -gt 0 -and $_ -ne $PID -and (-not $myAncestors.Contains($_)) }
+        Select-Object -ExpandProperty OwningProcess -Unique | 
+        Where-Object { $_ -gt 0 -and $_ -ne $PID -and (-not $myAncestors.Contains($_)) }
         if ($PIDs) {
             foreach ($PidValue in $PIDs) {
                 if (-not (Get-Process -Id $PidValue -ErrorAction SilentlyContinue)) {
@@ -116,7 +118,8 @@ function Stop-DevServers {
                 Stop-ProcessTreeSafely -TargetPid $_.ProcessId -ProtectedPids $myAncestors
             }
         }
-    } catch { }
+    }
+    catch { }
 
     # Allow Windows to release open file handles
     Start-Sleep -Seconds 3
@@ -139,7 +142,8 @@ function Wait-BackendHealthCheck {
             if ($res.status -eq "ok") {
                 return $true
             }
-        } catch { }
+        }
+        catch { }
     }
     return $false
 }
@@ -150,7 +154,8 @@ function Ensure-ConstanceConfig {
     $constFile = Join-Path $Path "apps\ENG-Frontend\src\constance\constance.js"
     if (Test-Path $fixScript) {
         & $fixScript -ConstancePath $constFile
-    } else {
+    }
+    else {
         if (-not (Test-Path $constFile)) {
             Write-Host "Could not find $constFile. Skipping." -ForegroundColor Yellow
             return
@@ -158,10 +163,11 @@ function Ensure-ConstanceConfig {
         $raw = [System.IO.File]::ReadAllText((Resolve-Path $constFile), [System.Text.Encoding]::UTF8)
         if ($raw.Length -gt 0 -and [int]$raw[0] -eq 65279) { $raw = $raw.Substring(1) }
         $updated = $raw -replace '(?m)^(\s*)export const apiUrl\s*=', '$1// export const apiUrl ='
-        if ($updated -match '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130:2005/";') {
-            $updated = $updated -replace '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130:2005/";', 'export const apiUrl = "http://plbmp130:2005/";'
-        } else {
-            $updated = $updated -replace '(?m)(export const server\s*=)', "export const apiUrl = ""http://plbmp130:2005/"";`n`n`$1"
+        if ($updated -match '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130.lb.minebea.local:2005/";') {
+            $updated = $updated -replace '(?m)^\s*//\s*export const apiUrl\s*=\s*"http://plbmp130.lb.minebea.local:2005/";', 'export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";'
+        }
+        else {
+            $updated = $updated -replace '(?m)(export const server\s*=)', "export const apiUrl = ""http://plbmp130.lb.minebea.local:2005/"";`n`n`$1"
         }
         $updated = $updated.Replace("`r`n", "`n")
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -182,7 +188,8 @@ function Invoke-UpdateLogger {
         if (Test-Path $logScript) {
             node $logScript $ActionType "$safeDesc" "$LocalHash" "$RemoteHash"
         }
-    } catch {
+    }
+    catch {
         Write-Host "Notice: Could not write update log: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
@@ -214,7 +221,8 @@ try {
         Write-Host "Killing orphaned git process PID $($_.ProcessId)..." -ForegroundColor Yellow
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
-} catch { }
+}
+catch { }
 
 # 2. Disable QuickEdit mode in Windows Console so mouse clicks do not freeze execution
 try {
@@ -245,7 +253,8 @@ try {
         Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
     }
     [ConsoleUtils]::DisableQuickEdit()
-} catch { }
+}
+catch { }
 
 # 3. Non-interactive Git environment variables & clean stale index lock
 $env:GIT_PAGER = "cat"
@@ -260,12 +269,14 @@ Remove-GitIndexLock -Path $ProjectPath
 try { Stop-Transcript -ErrorAction SilentlyContinue } catch { }
 try {
     if (Test-Path $LogFile) { Remove-Item $LogFile -Force -ErrorAction Stop }
-} catch {
+}
+catch {
     Clear-Content -Path $LogFile -ErrorAction SilentlyContinue
 }
 try {
     Start-Transcript -Path $LogFile -Force -ErrorAction Stop
-} catch {
+}
+catch {
     Write-Host "Warning: Could not start transcript: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
@@ -290,7 +301,8 @@ try {
             $fetchSucceeded = $false
             Write-Host "Warning: git fetch origin main returned exit code $LASTEXITCODE. Remote may be unreachable." -ForegroundColor Yellow
         }
-    } catch {
+    }
+    catch {
         $fetchSucceeded = $false
         Write-Host "Warning: git fetch origin main failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
@@ -351,14 +363,17 @@ try {
         if ($healthOk) {
             Write-Host "Backend health check passed! System updated and restarted successfully." -ForegroundColor Green
             Invoke-UpdateLogger "UPDATE_SUCCESS" "System updated and restarted successfully (Health OK)" "$LocalHash" "$NewLocalHash"
-        } else {
+        }
+        else {
             Write-Host "Notice: Backend process started, but health check is taking longer than expected." -ForegroundColor Yellow
             Invoke-UpdateLogger "UPDATE_WARNING" "System updated and restarted (Health check pending/timed out)" "$LocalHash" "$NewLocalHash"
         }
-    } else {
+    }
+    else {
         if ($fetchSucceeded) {
             Write-Host "No updates found on main branch ($LocalHash)." -ForegroundColor Cyan
-        } else {
+        }
+        else {
             Write-Host "Operating in offline/local mode. Checking local dev server status..." -ForegroundColor Yellow
         }
 
@@ -375,18 +390,21 @@ try {
             $logAction = if ($fetchSucceeded) { "RESTART" } else { "OFFLINE_START" }
             $logDesc = if ($healthOk) { "Dev server started successfully" } else { "Dev server started (Health check pending)" }
             Invoke-UpdateLogger "$logAction" "$logDesc" "$LocalHash" "$RemoteHash"
-        } else {
+        }
+        else {
             Write-Host "Dev servers are running normally on ports 2005 and 3000. System is ready." -ForegroundColor Green
             if ($fetchSucceeded) {
                 Invoke-UpdateLogger "NO_UPDATE" "No updates found on main branch (servers healthy)" "$LocalHash" "$RemoteHash"
             }
         }
     }
-} catch {
+}
+catch {
     $ErrorMsg = $_.Exception.Message
     Write-Host "An error occurred during execution:`n$ErrorMsg" -ForegroundColor Red
     Invoke-UpdateLogger "ERROR" "$ErrorMsg" "$LocalHash" "$RemoteHash"
-} finally {
+}
+finally {
     Write-Host "`nThis window will close in 10 seconds..." -ForegroundColor Magenta
     try { Stop-Transcript -ErrorAction SilentlyContinue } catch { }
     Start-Sleep -Seconds 10
