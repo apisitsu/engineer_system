@@ -127,24 +127,27 @@ function Roadmap({ steps, issuedDate }) {
           if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
           if (s.operator) bits.push(s.operator);
         }
-        // Wait chip(s) sit on the spine in the gap just below THIS step's box and
-        // report THIS step's own wait — the span from the previous milestone to
-        // this step completing (s.dwellDays = comp[i] − comp[i-1], or issue date
-        // for the first step) once done, or a running "so far" count while WIP.
-        // Exception: a settled chip never sits directly above the in-progress
-        // step — it is carried down to sit alongside that step's own running
-        // count instead, so nothing reads as "in progress" wait time.
+        // Settled wait chip(s) sit on the spine in the gap just below THIS step's
+        // box — this step's own dwell (comp[i] − comp[i-1], or the issue date for
+        // the first step). A settled chip never sits directly above the
+        // in-progress step, though: it is carried down one slot to sit below it
+        // instead, so nothing there reads as that step's own wait.
         const prev = i > 0 ? steps[i - 1] : null;
         const nextIsCurrent = steps[i + 1] && steps[i + 1].status === 'current';
         const chips = [];
         if (s.status === 'current' && prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
-          chips.push({ days: prev.dwellDays, ongoing: false });
+          chips.push({ days: prev.dwellDays });
         }
         if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 && !nextIsCurrent) {
-          chips.push({ days: s.dwellDays, ongoing: false });
-        } else if (s.status === 'current' && s.startDate) {
+          chips.push({ days: s.dwellDays });
+        }
+        // The in-progress step's own running count rides inline next to its
+        // status tag instead of on the connector — it is THIS step's own state,
+        // not a wait between two steps.
+        let soFarDays = null;
+        if (s.status === 'current' && s.startDate) {
           const soFar = -(daysUntil(s.startDate) || 0);
-          if (soFar > 0) chips.push({ days: soFar, ongoing: true });
+          if (soFar > 0) soFarDays = soFar;
         }
 
         return (
@@ -167,6 +170,11 @@ function Roadmap({ steps, issuedDate }) {
                 <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
                 <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
                 <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
+                {soFarDays != null ? (
+                  <Tag color={soFarDays >= 7 ? 'warning' : 'gold'} style={{ marginInlineEnd: 0 }}>
+                    ⏳ WIP {soFarDays === 0 ? 'same day' : `${soFarDays} days`}
+                  </Tag>
+                ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
               </Space>
               {bits.length ? (
@@ -181,7 +189,7 @@ function Roadmap({ steps, issuedDate }) {
                     color={c.days >= 7 ? 'warning' : 'default'}
                     style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
                   >
-                    ⏳ {c.ongoing ? `WIP ${c.days === 0 ? 'same day' : `${c.days} days`}` : `Wait in process ${fmtDays(c.days)}`}
+                    ⏳ Wait in process {fmtDays(c.days)}
                   </Tag>
                 ))}
               </div>
