@@ -172,22 +172,28 @@ function Roadmap({ steps, issuedDate }) {
                 <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
                 <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
                 <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-                {headerWait != null ? (
-                  <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
-                    ⏳ Wait in process {headerWait} d
-                  </Tag>
-                ) : null}
-                {headerAnomaly ? (
-                  <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
-                    <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
-                      ⚠ Date out of order
-                    </Tag>
-                  </Tooltip>
-                ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
               </Space>
+              {/* own row, always — so it lands on the same line in every block
+                  instead of wrapping onto the title row only when it happens to fit */}
+              {headerWait != null || headerAnomaly ? (
+                <div style={{ marginTop: 4 }}>
+                  {headerWait != null ? (
+                    <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
+                      ⏳ Wait in process {headerWait} d
+                    </Tag>
+                  ) : null}
+                  {headerAnomaly ? (
+                    <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
+                      <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
+                        ⚠ Date out of order
+                      </Tag>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              ) : null}
               {bits.length ? (
-                <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
+                <div style={{ marginTop: 4 }}><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
               ) : null}
             </div>
             {soFarDays != null ? (
