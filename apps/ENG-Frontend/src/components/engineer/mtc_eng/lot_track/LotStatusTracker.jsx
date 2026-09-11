@@ -127,22 +127,17 @@ function Roadmap({ steps, issuedDate }) {
           if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
           if (s.operator) bits.push(s.operator);
         }
-        // Every done step shows its own settled wait inline in its own header
-        // ("Wait in process N d" = comp[i] − comp[i-1], or the issue date for the
-        // first step) — except the step handing off to the in-progress one: that
-        // number moves down into the IN-PROGRESS step's own header instead, since
-        // it reads as "what this step waited through to get here". The
-        // in-progress step's live running count still shows on the connector
-        // below it ("WIP N days" — how long it has held the lot so far).
+        // Every step's header shows the PREVIOUS step's settled wait, not its
+        // own — "Wait in process N d" reads as "what the step before this one
+        // waited through before handing the lot on". That shifts every wait
+        // chip one step down from where it was produced (comp[i-1] − comp[i-2]
+        // lands on step i's header, not step i-1's). The in-progress step's own
+        // live running count still shows separately on the connector below it
+        // ("WIP N days" — how long it has held the lot so far).
         const prev = i > 0 ? steps[i - 1] : null;
-        const nextIsCurrent = steps[i + 1] && steps[i + 1].status === 'current';
-        let headerWait = null;
-        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 && !nextIsCurrent) {
-          headerWait = s.dwellDays;
-        }
-        if (s.status === 'current' && prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
-          headerWait = prev.dwellDays;
-        }
+        const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0
+          ? prev.dwellDays
+          : null;
         let soFarDays = null;
         if (s.status === 'current' && s.startDate) {
           const soFar = -(daysUntil(s.startDate) || 0);
