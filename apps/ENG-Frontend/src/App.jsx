@@ -64,7 +64,9 @@ import LotStatusTracker from './components/engineer/mtc_eng/lot_track/LotStatusT
 import HomeNewProdEng from './components/engineer/newprod_eng/home_newprod';
 import ComparePdfTool from './components/engineer/newprod_eng/ComparePdfTool/ComparePdfTool';
 
-import OrganizationEng from './components/engineer/overall_eng/home_overall';
+import HomeOverallEng from './components/engineer/overall_eng/home_overall';
+import OrganizationEng from './components/engineer/overall_eng/organization';
+import OverallToolGallery from './components/engineer/overall_eng/tool_gallery';
 
 import DwgCheckApp from './components/engineer/newprod_eng/dwg_check/DwgCheckApp';
 import TemplateTool from './components/engineer/newprod_eng/TemplateTool/TemplateTool';
@@ -80,8 +82,7 @@ import UserGuideFullPage from './components/engineer/kanban/UserGuide/UserGuideF
 import RouteTracker from './components/common/RouteTracker';
 
 // Engineer Record
-import EngRecordLayout from './components/engineer/overall_eng/eng_record/EngRecordLayout';
-import EngRecordViewerLayout from './components/engineer/overall_eng/eng_record/EngRecordViewerLayout';
+import { EngRecordLayout, EngRecordViewerLayout } from './components/engineer/overall_eng/eng_record';
 
 // PDF Hub
 import PdfHubLayout from './components/engineer/system_eng/pdf_hub/PdfHubLayout';
@@ -378,8 +379,11 @@ const AppContent = () => {
                   <Route path="/eng/compare_pdf" element={<ComparePdfTool />} />
 
                   {/* ------ Overall Engineer ------ */}
-                  <Route path="/eng/overall_eng" element={<OrganizationEng />} />
+                  <Route path="/eng/overall_eng" element={<HomeOverallEng />} />
+                  <Route path="/eng/overall_eng/organization" element={<OrganizationEng />} />
                   <Route path="/eng/overall_eng/eng-record" element={<EngRecordLayout />} />
+                  <Route path="/eng/overall_eng/tools" element={<OverallToolGallery />} />
+                  <Route path="/eng/overall_eng/user_management" element={<UserManagement />} />
 
                   {/* ------ Kanban Module ------ */}
                   <Route path="/eng/kanban" element={<KanbanMain />} />

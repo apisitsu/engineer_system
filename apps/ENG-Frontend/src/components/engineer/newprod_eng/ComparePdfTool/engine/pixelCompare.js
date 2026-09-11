@@ -1,12 +1,13 @@
 /**
  * Pixel Comparison Engine
  * Renders PDF pages to canvas and uses pixelmatch for pixel-by-pixel diffing.
+ * Optimized for low memory footprint and on-demand rendering.
  */
 import pixelmatch from 'pixelmatch';
 import { detectRegions } from './regionDetector.js';
 
 /**
- * Renders a single PDF page to an ImageData at the given scale.
+ * Renders a single PDF page to an offscreen canvas and returns ImageData.
  * @param {PDFDocumentProxy} pdfDoc - pdfjs document
  * @param {number} pageNum - 1-indexed page number
  * @param {number} scale - render scale (e.g., 2.0 for high-DPI)
@@ -17,9 +18,9 @@ export async function renderPageToImageData(pdfDoc, pageNum, scale = 2.0) {
   const viewport = page.getViewport({ scale });
 
   const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   // Fill with white to prevent transparent background alpha-noise
   ctx.fillStyle = '#ffffff';
@@ -37,19 +38,44 @@ export async function renderPageToImageData(pdfDoc, pageNum, scale = 2.0) {
 }
 
 /**
- * Compares two PDF pages pixel-by-pixel.
+ * Helper to render a page directly to an existing canvas element (used by ViewerArea).
+ */
+export async function renderPageToCanvas(pdfDoc, pageNum, scale, canvas) {
+  if (!pdfDoc || !canvas) return null;
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const renderTask = page.render({ canvasContext: ctx, viewport });
+  await renderTask.promise;
+
+  return {
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
+
+/**
+ * Compares two PDF pages pixel-by-pixel and extracts bounding box regions.
+ * Cleans up temporary canvas and image buffers immediately to prevent memory leaks.
  *
  * @param {PDFDocumentProxy} basePdf - base (Rev 1) document
  * @param {PDFDocumentProxy} comparePdf - comparison (Rev 2) document
  * @param {number} pageNum - 1-indexed page number
  * @param {object} options
- * @param {number} options.threshold - pixelmatch threshold (0.0 - 1.0, default 0.1)
+ * @param {number} options.threshold - pixelmatch threshold (0.0 - 1.0, default 0.15)
  * @param {number} options.renderScale - render scale for canvas (default 2.0)
- * @returns {Promise<{diffImageData: ImageData, mismatchCount: number, mismatchPercentage: number, regions: Array, width: number, height: number}>}
+ * @returns {Promise<{mismatchCount: number, mismatchPercentage: number, regions: Array, width: number, height: number, renderScale: number}>}
  */
 export async function comparePagePixels(basePdf, comparePdf, pageNum, options = {}) {
   const {
-    threshold = 0.1,
+    threshold = 0.15,
     renderScale = 2.0,
   } = options;
 
@@ -59,11 +85,10 @@ export async function comparePagePixels(basePdf, comparePdf, pageNum, options = 
     renderPageToImageData(comparePdf, pageNum, renderScale),
   ]);
 
-  // Ensure same dimensions by using the larger of the two
   const width = Math.max(baseResult.width, compareResult.width);
   const height = Math.max(baseResult.height, compareResult.height);
 
-  // If dimensions differ, re-render onto canvases of the same size
+  // Normalize image data to matching dimensions
   const baseData = normalizeImageData(baseResult.imageData, baseResult.width, baseResult.height, width, height);
   const compareData = normalizeImageData(compareResult.imageData, compareResult.width, compareResult.height, width, height);
 
@@ -83,35 +108,30 @@ export async function comparePagePixels(basePdf, comparePdf, pageNum, options = 
   );
 
   const totalPixels = width * height;
-  const mismatchPercentage = (mismatchCount / totalPixels) * 100;
-
-  // Create diff ImageData
-  const diffImageData = new ImageData(diffPixels, width, height);
-  const diffCanvas = document.createElement('canvas');
-  diffCanvas.width = width;
-  diffCanvas.height = height;
-  diffCanvas.getContext('2d').putImageData(diffImageData, 0, 0);
+  const mismatchPercentage = totalPixels > 0 ? (mismatchCount / totalPixels) * 100 : 0;
 
   // Detect regions (bounding boxes) from the diff
   const regions = detectRegions(diffPixels, width, height, {
-    minArea: 100,       // Minimum area (width * height)
-    minPixels: 15,      // Minimum actual changed pixels
-    mergeMargin: 10,    // Merge regions within 10 pixels
+    minArea: 80,
+    minPixels: 12,
+    mergeMargin: 12,
     scale: renderScale,
-    edgeIgnore: 4,      // Ignore differences within 4 pixels of the canvas edge
+    edgeIgnore: 4,
   });
 
+  // Free memory immediately by resetting canvas dimensions
+  baseResult.canvas.width = 0;
+  baseResult.canvas.height = 0;
+  compareResult.canvas.width = 0;
+  compareResult.canvas.height = 0;
+
   return {
-    diffImageData,
-    diffCanvas,
     mismatchCount,
     mismatchPercentage,
     regions,
     width,
     height,
     renderScale,
-    baseCanvas: baseResult.canvas,
-    compareCanvas: compareResult.canvas,
   };
 }
 
@@ -132,12 +152,66 @@ function normalizeImageData(imageData, srcW, srcH, targetW, targetH) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, targetW, targetH);
 
-  // Draw the original image data
+  // Draw the original image data aligned at (0, 0)
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = srcW;
   tempCanvas.height = srcH;
   tempCanvas.getContext('2d').putImageData(imageData, 0, 0);
   ctx.drawImage(tempCanvas, 0, 0);
 
-  return ctx.getImageData(0, 0, targetW, targetH);
+  const result = ctx.getImageData(0, 0, targetW, targetH);
+
+  // Clean up
+  tempCanvas.width = 0;
+  tempCanvas.height = 0;
+  canvas.width = 0;
+  canvas.height = 0;
+
+  return result;
 }
+
+/**
+ * Render visual diff on-demand for the current page (used by OverlayView).
+ */
+export async function renderDiffOnDemand(basePdf, comparePdf, pageNum, scale, targetCanvas, threshold = 0.15) {
+  if (!basePdf || !comparePdf || !targetCanvas) return;
+
+  const [baseResult, compareResult] = await Promise.all([
+    renderPageToImageData(basePdf, pageNum, scale),
+    renderPageToImageData(comparePdf, pageNum, scale),
+  ]);
+
+  const width = Math.max(baseResult.width, compareResult.width);
+  const height = Math.max(baseResult.height, compareResult.height);
+
+  targetCanvas.width = width;
+  targetCanvas.height = height;
+
+  const baseData = normalizeImageData(baseResult.imageData, baseResult.width, baseResult.height, width, height);
+  const compareData = normalizeImageData(compareResult.imageData, compareResult.width, compareResult.height, width, height);
+
+  const diffPixels = new Uint8ClampedArray(width * height * 4);
+  pixelmatch(
+    baseData.data,
+    compareData.data,
+    diffPixels,
+    width,
+    height,
+    {
+      threshold,
+      includeAA: false,
+      alpha: 0,
+    }
+  );
+
+  const diffImageData = new ImageData(diffPixels, width, height);
+  const ctx = targetCanvas.getContext('2d');
+  ctx.putImageData(diffImageData, 0, 0);
+
+  // Cleanup
+  baseResult.canvas.width = 0;
+  baseResult.canvas.height = 0;
+  compareResult.canvas.width = 0;
+  compareResult.canvas.height = 0;
+}
+

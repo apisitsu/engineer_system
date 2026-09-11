@@ -1,7 +1,6 @@
 /**
  * Region Detector — Groups changed pixels into discrete bounding boxes.
- * Uses a simple flood-fill / connected-component labeling approach
- * on the binary diff mask from pixelmatch.
+ * Uses connected-component labeling with 8-connectivity and spatial box clustering.
  */
 
 /**
@@ -12,55 +11,57 @@
  * @param {number} width - Image width
  * @param {number} height - Image height
  * @param {object} options
- * @param {number} options.minArea - Minimum area in pixels to consider a region (filters noise)
+ * @param {number} options.minArea - Minimum area in pixels to consider a region
+ * @param {number} options.minPixels - Minimum actual changed pixels
  * @param {number} options.mergeMargin - Merge regions within this pixel distance
  * @param {number} options.scale - Scale factor to convert pixel coords back to PDF coords
+ * @param {number} options.edgeIgnore - Ignore pixels at border
  * @returns {Array<{x, y, width, height, pixelCount, id}>}
  */
 export function detectRegions(diffData, width, height, options = {}) {
   const {
-    minArea = 25,
-    minPixels = 15,
-    mergeMargin = 15,
+    minArea = 50,
+    minPixels = 12,
+    mergeMargin = 12,
     edgeIgnore = 4,
     scale = 1,
   } = options;
 
-  // Step 1: Create binary mask — any non-black pixel in the diff = changed
+  // Step 1: Create binary mask — changed pixels (red in pixelmatch)
   const mask = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      // Ignore extreme edges to prevent page-sized bounding boxes from alignment artifacts
-      if (x < edgeIgnore || x >= width - edgeIgnore || y < edgeIgnore || y >= height - edgeIgnore) {
-        continue;
-      }
-
-      const idx = (y * width + x) * 4;
+  for (let y = edgeIgnore; y < height - edgeIgnore; y++) {
+    const rowOffset = y * width;
+    for (let x = edgeIgnore; x < width - edgeIgnore; x++) {
+      const idx = (rowOffset + x) * 4;
       const r = diffData[idx];
       const g = diffData[idx + 1];
       const b = diffData[idx + 2];
       const a = diffData[idx + 3];
 
-      // pixelmatch outputs changed pixels in pure red [255, 0, 0]
-      // It outputs anti-aliasing differences in yellow [255, 255, 0]
-      // We only want to flag actual differences
+      // pixelmatch diff color: pure red [255, 0, 0, >0]
       if (r === 255 && g === 0 && b === 0 && a > 0) {
-        mask[y * width + x] = 1;
+        mask[rowOffset + x] = 1;
       }
     }
   }
 
-  // Step 2: Connected component labeling using union-find
+  // Step 2: Connected component labeling with 8-connectivity using union-find
   const labels = new Int32Array(width * height).fill(-1);
   const parent = [];
   let nextLabel = 0;
 
   function find(x) {
-    while (parent[x] !== x) {
-      parent[x] = parent[parent[x]]; // path compression
-      x = parent[x];
+    let root = x;
+    while (parent[root] !== root) {
+      root = parent[root];
     }
-    return x;
+    let curr = x;
+    while (curr !== root) {
+      const nxt = parent[curr];
+      parent[curr] = root;
+      curr = nxt;
+    }
+    return root;
   }
 
   function union(a, b) {
@@ -71,15 +72,22 @@ export function detectRegions(diffData, width, height, options = {}) {
     }
   }
 
-  // First pass
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x;
+  // First pass — 8-connectivity checks (top-left, top, top-right, left)
+  for (let y = 1; y < height - 1; y++) {
+    const rowOffset = y * width;
+    const prevRowOffset = (y - 1) * width;
+
+    for (let x = 1; x < width - 1; x++) {
+      const idx = rowOffset + x;
       if (!mask[idx]) continue;
 
       const neighbors = [];
-      if (x > 0 && mask[idx - 1]) neighbors.push(labels[idx - 1]);
-      if (y > 0 && mask[idx - width]) neighbors.push(labels[idx - width]);
+
+      // 8-connectivity neighbors:
+      if (mask[idx - 1]) neighbors.push(labels[idx - 1]); // left
+      if (mask[prevRowOffset + x - 1]) neighbors.push(labels[prevRowOffset + x - 1]); // top-left
+      if (mask[prevRowOffset + x]) neighbors.push(labels[prevRowOffset + x]); // top
+      if (mask[prevRowOffset + x + 1]) neighbors.push(labels[prevRowOffset + x + 1]); // top-right
 
       if (neighbors.length === 0) {
         labels[idx] = nextLabel;
@@ -95,28 +103,30 @@ export function detectRegions(diffData, width, height, options = {}) {
     }
   }
 
-  // Second pass — collect bounding boxes per component
-  const componentMap = new Map(); // root label -> {minX, minY, maxX, maxY, count}
+  // Second pass — collect bounding boxes per connected component
+  const componentMap = new Map();
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x;
+  for (let y = 1; y < height - 1; y++) {
+    const rowOffset = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = rowOffset + x;
       if (labels[idx] < 0) continue;
 
       const root = find(labels[idx]);
-      if (!componentMap.has(root)) {
-        componentMap.set(root, { minX: x, minY: y, maxX: x, maxY: y, count: 0 });
+      let comp = componentMap.get(root);
+      if (!comp) {
+        comp = { minX: x, minY: y, maxX: x, maxY: y, count: 0 };
+        componentMap.set(root, comp);
       }
-      const comp = componentMap.get(root);
-      comp.minX = Math.min(comp.minX, x);
-      comp.minY = Math.min(comp.minY, y);
-      comp.maxX = Math.max(comp.maxX, x);
-      comp.maxY = Math.max(comp.maxY, y);
+      if (x < comp.minX) comp.minX = x;
+      if (x > comp.maxX) comp.maxX = x;
+      if (y < comp.minY) comp.minY = y;
+      if (y > comp.maxY) comp.maxY = y;
       comp.count++;
     }
   }
 
-  // Step 3: Convert to bounding boxes and filter by minimum area and pixel count
+  // Step 3: Convert to bounding boxes and filter noise
   let regions = [];
   for (const [, comp] of componentMap) {
     const w = comp.maxX - comp.minX + 1;
@@ -132,59 +142,87 @@ export function detectRegions(diffData, width, height, options = {}) {
     }
   }
 
-  // Step 4: Merge nearby regions
-  regions = mergeNearbyRegions(regions, mergeMargin);
+  // Step 4: Fast spatial cluster merge
+  regions = clusterNearbyRegions(regions, mergeMargin);
 
-  // Step 5: Apply scale factor and assign IDs
+  // Step 5: Convert to PDF scale
   return regions.map((r, i) => ({
     id: `pixel-region-${i}`,
-    x: r.x / scale,
-    y: r.y / scale,
-    width: r.width / scale,
-    height: r.height / scale,
+    x: Math.round((r.x / scale) * 10) / 10,
+    y: Math.round((r.y / scale) * 10) / 10,
+    width: Math.round((r.width / scale) * 10) / 10,
+    height: Math.round((r.height / scale) * 10) / 10,
     pixelCount: r.pixelCount,
   }));
 }
 
 /**
- * Merges regions whose bounding boxes are within `margin` pixels of each other.
+ * Merges bounding boxes that overlap or are within `margin` pixels.
+ * Uses sorted intervals for high performance.
  */
-function mergeNearbyRegions(regions, margin) {
+function clusterNearbyRegions(regions, margin) {
   if (regions.length <= 1) return regions;
 
-  let merged = true;
-  let result = [...regions];
+  // Max span prevents accidental merging into a single giant box covering the entire page
+  const MAX_SPAN = 600;
 
-  while (merged) {
-    merged = false;
-    const next = [];
-    const used = new Set();
+  let currentList = regions;
+  let hasMerged = true;
+  let iterations = 0;
 
-    for (let i = 0; i < result.length; i++) {
-      if (used.has(i)) continue;
+  while (hasMerged && iterations < 5) {
+    hasMerged = false;
+    iterations++;
 
-      let current = { ...result[i] };
+    // Sort primarily by X, then Y
+    currentList.sort((a, b) => a.x - b.x || a.y - b.y);
 
-      for (let j = i + 1; j < result.length; j++) {
-        if (used.has(j)) continue;
+    const merged = [];
+    const used = new Uint8Array(currentList.length);
 
-        if (regionsOverlap(current, result[j], margin)) {
-          current = mergeBoxes(current, result[j]);
-          used.add(j);
-          merged = true;
+    for (let i = 0; i < currentList.length; i++) {
+      if (used[i]) continue;
+
+      let a = { ...currentList[i] };
+
+      for (let j = i + 1; j < currentList.length; j++) {
+        if (used[j]) continue;
+        const b = currentList[j];
+
+        // If b is beyond margin in X, cannot overlap with a
+        if (b.x > a.x + a.width + margin) {
+          break;
+        }
+
+        if (boxesIntersectOrNear(a, b, margin)) {
+          const newW = Math.max(a.x + a.width, b.x + b.width) - Math.min(a.x, b.x);
+          const newH = Math.max(a.y + a.height, b.y + b.height) - Math.min(a.y, b.y);
+
+          // Only merge if resulting box is within acceptable span
+          if (newW <= MAX_SPAN && newH <= MAX_SPAN) {
+            a = {
+              x: Math.min(a.x, b.x),
+              y: Math.min(a.y, b.y),
+              width: newW,
+              height: newH,
+              pixelCount: a.pixelCount + b.pixelCount,
+            };
+            used[j] = 1;
+            hasMerged = true;
+          }
         }
       }
 
-      next.push(current);
+      merged.push(a);
     }
 
-    result = next;
+    currentList = merged;
   }
 
-  return result;
+  return currentList;
 }
 
-function regionsOverlap(a, b, margin) {
+function boxesIntersectOrNear(a, b, margin) {
   return !(
     a.x + a.width + margin < b.x ||
     b.x + b.width + margin < a.x ||
@@ -193,16 +231,3 @@ function regionsOverlap(a, b, margin) {
   );
 }
 
-function mergeBoxes(a, b) {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  const maxX = Math.max(a.x + a.width, b.x + b.width);
-  const maxY = Math.max(a.y + a.height, b.y + b.height);
-  return {
-    x,
-    y,
-    width: maxX - x,
-    height: maxY - y,
-    pixelCount: a.pixelCount + b.pixelCount,
-  };
-}

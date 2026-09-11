@@ -10,7 +10,17 @@
   box-sizing: border-box;
 }
 
-:root {
+.compare-pdf-tool-container {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+
   /* ── Color Palette ── */
   --bg-primary: #0f1419;
   --bg-secondary: #1a1f2e;
@@ -93,30 +103,19 @@
   --glass-backdrop: blur(12px);
 }
 
-.compare-pdf-tool-container {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar {
+/* ── Scoped Scrollbar ── */
+.compare-pdf-tool-container ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track {
+.compare-pdf-tool-container ::-webkit-scrollbar-track {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
+.compare-pdf-tool-container ::-webkit-scrollbar-thumb {
   background: var(--border-secondary);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover {
+.compare-pdf-tool-container ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
 
@@ -127,8 +126,8 @@
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
 }
 
 .app-body {
@@ -1466,3 +1465,147 @@
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* ========================================================================
+   CURTAIN (SPLIT SLIDER) VIEW & PAN TOOL
+   ======================================================================== */
+
+.viewer-pane.can-pan {
+  cursor: grab;
+}
+
+.viewer-pane.is-panning {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.viewer-area.curtain {
+  padding: 20px;
+  overflow: auto;
+  text-align: center;
+  user-select: none;
+}
+
+.curtain-wrapper {
+  position: relative;
+  box-shadow: var(--shadow-lg);
+  line-height: 0;
+  display: inline-block;
+  text-align: left;
+  margin: 0 auto;
+  overflow: hidden;
+  background: white;
+}
+
+.curtain-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.curtain-layer.compare {
+  overflow: hidden;
+  border-left: 2px solid var(--accent-primary);
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.4);
+}
+
+.curtain-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent-primary);
+  cursor: col-resize;
+  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.curtain-handle {
+  width: 28px;
+  height: 28px;
+  background: var(--accent-primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  border: 2px solid white;
+}
+
+/* Diff Panel Search and Page Filter */
+.diff-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.diff-search-input {
+  width: 100%;
+  padding: 5px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.diff-search-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.diff-scope-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.diff-scope-btn {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.diff-scope-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+/* Layer Toggle Buttons in Overlay Controls */
+.layer-toggle-btn {
+  padding: 3px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.layer-toggle-btn.active {
+  background: var(--status-pending-bg);
+  color: var(--status-pending);
+  border-color: var(--status-pending);
+}
+

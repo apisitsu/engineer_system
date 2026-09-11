@@ -1,543 +1,536 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Form, Select, Button, Upload, Modal, Typography, message, Tag, Space } from "antd";
-import { SaveOutlined, CameraOutlined, EditOutlined, UserOutlined, SettingOutlined } from "@ant-design/icons";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  Typography, message, Modal, Segmented, Space, Tag, Spin, Button
+} from "antd";
+import {
+  UserOutlined,
+  ThunderboltFilled,
+  SaveOutlined,
+  ArrowLeftOutlined
+} from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { useTheme } from "../../theme";
-import { orgRpgTheme } from "../engineer/overall_eng/orgTheme";
-import { useNavigate } from "react-router-dom";
 import { httpClient } from "../../utils/HttpClient";
 import { server, key_constance } from "../../constance/constance";
 
-const { Title, Text } = Typography;
-const { Option } = Select;
+// Modular Subcomponents
+import NormalProfileView from "./user_setting/NormalProfileView";
+import RpgGameView from "./user_setting/RpgGameView";
+import {
+  calculateStaffPowers,
+  calculateLeaderPowers,
+  ELEMENT_CONFIGS
+} from "./user_setting/rpgConstants";
 
-const THEME_OPTIONS = [
-    { label: "Minimal (Light)", value: "minimal" },
-    { label: "Bright Pink", value: "brightPink" },
-    { label: "Lavender Rose", value: "lavenderRose" },
-    { label: "Mint Peach", value: "mintPeach" },
-    { label: "Sky Coral", value: "skyCoral" },
-    { label: "Pink Pastel", value: "pinkPastel" },
-    { label: "Orange Pastel", value: "orangePastel" },
-    { label: "Red Pastel", value: "redPastel" },
-    { label: "RPG Mode", value: "rpg" }
-];
+const { Title, Text } = Typography;
 
 const UserSetting = () => {
-    const navigate = useNavigate();
-    const { userDepartment, userInfo } = useAuthStore();
-    const { theme, switchTheme } = useTheme();
+  const navigate = useNavigate();
+  const { userDepartment, userInfo, empNo, login } = useAuthStore();
+  const { theme, switchTheme } = useTheme();
 
-    const [form] = Form.useForm();
-    const [previewData, setPreviewData] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [editTheme, setEditTheme] = useState(false);
-    const [isHoveringAvatar, setIsHoveringAvatar] = useState(false);
+  // Active View Mode: 'normal' (default) | 'rpg'
+  const [viewMode, setViewMode] = useState("normal");
 
-    // Crop State
-    const [isCropModalVisible, setIsCropModalVisible] = useState(false);
-    const [uploadedImage, setUploadedImage] = useState(null);
-    const imageRef = useRef(null);
-    const [crop, setCrop] = useState({ x: 0, y: 0, size: 200 });
-    const [dragging, setDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // Data Loading & States
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [fullUserData, setFullUserData] = useState(null);
+  const [skillsData, setSkillsData] = useState({});
+  const [evaluationType, setEvaluationType] = useState("staff"); // 'staff' | 'leader'
 
-    useEffect(() => {
-        if (userDepartment === "USER") {
-            message.error("Access Denied: User role requires special permissions.");
-            navigate("/home");
-            return;
+  // Editable Values (strictly restricted to Nickname, Theme, and Avatar)
+  const [editableValues, setEditableValues] = useState({
+    u_nickname: "",
+    theme: "minimal",
+    profile_img_base64: null
+  });
+
+  // Avatar Crop Modal States
+  const [isCropModalVisible, setIsCropModalVisible] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const imageRef = useRef(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0, size: 200 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // ── 1. Fetch User Info and Skills ──────────────────────────────────────────
+  useEffect(() => {
+    if (userDepartment === "USER") {
+      message.error("Access Denied: User role requires special permissions.");
+      navigate("/home");
+      return;
+    }
+
+    const activeEmpNo = empNo || userInfo?.u_code || localStorage.getItem(key_constance.USER_EMPNO);
+    if (activeEmpNo) {
+      loadInitialData(activeEmpNo);
+    } else {
+      setLoading(false);
+    }
+  }, [userDepartment, empNo, navigate]);
+
+  const loadInitialData = async (targetEmpNo) => {
+    setLoading(true);
+    try {
+      // 1. Fetch Fresh User Profile
+      let freshUser = userInfo || {};
+      try {
+        const userRes = await httpClient.post(server.GET_USER_INFO, { empno: targetEmpNo });
+        if (userRes.data?.result === 'true' && userRes.data?.userInfo) {
+          freshUser = userRes.data.userInfo;
         }
+      } catch (err) {
+        console.warn("Failed to fetch fresh user info, using cached session:", err.message);
+      }
 
-        if (userInfo) {
-            const initialData = {
-                ...userInfo,
-                u_nickname: userInfo.u_nickname || "",
-                element: userInfo.element || "Light",
-                theme: userInfo.theme || "minimal",
-                profile_img_base64: userInfo.profile_img_base64 || null
-            };
-            setPreviewData(initialData);
-            form.setFieldsValue(initialData);
+      setFullUserData(freshUser);
+      setEditableValues({
+        u_nickname: freshUser.u_nickname || "",
+        theme: freshUser.theme || "minimal",
+        profile_img_base64: freshUser.profile_img_base64 || freshUser.profile_img_b64 || null
+      });
+
+      // 2. Fetch User Skill Matrix
+      try {
+        const skillUrl = `${server.USER_MANAGEMENT_SKILLS}/${targetEmpNo}`;
+        const skillRes = await httpClient.get(skillUrl);
+        if (skillRes.data?.result === 'true' && skillRes.data?.data) {
+          const d = skillRes.data.data;
+          const evalType = d.evaluation_type || (freshUser.role === "LEADER" ? "leader" : "staff");
+          setEvaluationType(evalType);
+
+          if (evalType === "leader") {
+            setSkillsData(d.leader_skills || d || {});
+          } else {
+            setSkillsData({
+              mc_setup: d.mc_setup ?? 1,
+              inspection: d.inspection ?? 1,
+              mc_operation: d.mc_operation ?? 1,
+              public_std: d.public_std ?? 1,
+              cust_specification: d.cust_specification ?? 1,
+              internal_document: d.internal_document ?? 1,
+              cad: d.cad ?? 1,
+              programming: d.programming ?? 1,
+              microsoft: d.microsoft ?? 1,
+              detail_oriented: d.detail_oriented ?? 1,
+              critical_thinking: d.critical_thinking ?? 1,
+              process_comprehension: d.process_comprehension ?? 1,
+              time_management: d.time_management ?? 1,
+              collaboration: d.collaboration ?? 1,
+              leadership: d.leadership ?? 1
+            });
+          }
+        } else {
+          fallbackSkills(freshUser);
         }
-    }, [userDepartment, userInfo, form, navigate]);
+      } catch (skillErr) {
+        console.warn("Skills endpoint unavailable, calculating baseline:", skillErr.message);
+        fallbackSkills(freshUser);
+      }
+    } catch (e) {
+      console.error("Initial load error:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleValuesChange = (changedValues) => {
-        setPreviewData(prev => ({ ...prev, ...changedValues }));
-        if (changedValues.theme && switchTheme) {
-            switchTheme(changedValues.theme, false);
-        }
-    };
+  const fallbackSkills = (userObj) => {
+    if (userObj?.role === "LEADER") {
+      setEvaluationType("leader");
+      setSkillsData({
+        me10_basic: 2, jig_fixture_concept: 2, drawing_symbols: 2, drawing_database: 2,
+        teaching_me10: 2, handling_situations: 2, jig_fixture_design: 2, target_delivery: 3,
+        prioritization: 3, drawing_drafting: 2, external_communication: 2,
+        purchase_tooling_sys: 2, read_drawing_symbols: 3, instrument_selection: 2,
+        basic_instruments: 3, contour_projector: 2, cmm_operation: 2, dimensional_reporting: 3,
+        out_of_spec_action: 2, tooling_purpose: 2, target_return_otd: 3, tooling_advisory: 2,
+        wi_dv_compliance: 3, lot_release_priority: 2, troubleshooting: 2, excel_reporting: 3,
+        anomaly_detection: 3, training_wi_dv: 2, anomaly_action: 2, continuous_improvement: 2,
+        otd_traveler_pc: 3, computer_mrp: 2, ot_planning: 2
+      });
+    } else {
+      setEvaluationType("staff");
+      setSkillsData({
+        mc_setup: 2, inspection: 2, mc_operation: 2,
+        public_std: 2, cust_specification: 2, internal_document: 2,
+        cad: 2, programming: 1, microsoft: 2,
+        detail_oriented: 2, critical_thinking: 2, process_comprehension: 2,
+        time_management: 2, collaboration: 2, leadership: 1
+      });
+    }
+  };
 
-    const getFullDepartment = (deptCode) => {
-        const map = { "AD": "ADMIN", "ENG": "ENGINEER", "USER": "OTHER DEPARTMENT" };
-        return map[deptCode] || deptCode;
-    };
+  // ── 2. Calculate Combat & Engineering Powers ───────────────────────────────
+  const powers = useMemo(() => {
+    if (evaluationType === "leader") {
+      return calculateLeaderPowers(skillsData);
+    }
+    return calculateStaffPowers(skillsData);
+  }, [evaluationType, skillsData]);
 
-    const getThemeColors = (themeKey) => {
-        const map = {
-            minimal: ["#ffffff", "#f0f2f5"],
-            brightPink: ["#ffadd2", "#fff0f6"],
-            lavenderRose: ["#d3adf7", "#f9f0ff"],
-            mintPeach: ["#b7eb8f", "#f6ffed"],
-            skyCoral: ["#bae7ff", "#e6f7ff"],
-            pinkPastel: ["#ffbb96", "#fff2e8"],
-            orangePastel: ["#ffe7ba", "#fff7e6"],
-            redPastel: ["#ffccc7", "#fff1f0"],
-            rpg: ["#262626", "#141414"]
-        };
-        return map[themeKey] || ["#ccc", "#eee"];
-    };
-
-    // --- Image Handling ---
-    const handleUpload = (file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            setUploadedImage(e.target.result);
-            setIsCropModalVisible(true);
-            setCrop({ x: 0, y: 0, size: 200 });
-        };
-        reader.readAsDataURL(file);
-        return false;
-    };
-
-    const onCropSave = () => {
-        if (!imageRef.current) return;
-        const canvas = document.createElement('canvas');
-        canvas.width = 300;
-        canvas.height = 300;
-        const ctx = canvas.getContext('2d');
-
-        const sourceImage = imageRef.current;
-        const renderedWidth = sourceImage.width;
-        const renderedHeight = sourceImage.height;
-
-        const scaleX = sourceImage.naturalWidth / renderedWidth;
-        const scaleY = sourceImage.naturalHeight / renderedHeight;
-
-        ctx.drawImage(
-            sourceImage,
-            crop.x * scaleX, crop.y * scaleY, crop.size * scaleX, crop.size * scaleY,
-            0, 0, 300, 300
-        );
-
-        const base64 = canvas.toDataURL('image/jpeg', 0.9);
-        setPreviewData(prev => ({ ...prev, profile_img_base64: base64 }));
-        form.setFieldsValue({ profile_img_base64: base64 });
-        setIsCropModalVisible(false);
-    };
-
-    const handleMouseDown = (e) => {
-        setDragging(true);
-        setDragStart({ x: e.clientX - crop.x, y: e.clientY - crop.y });
-    };
-
-    const handleMouseMove = (e) => {
-        if (dragging) {
-            const container = imageRef.current;
-            if (!container) return;
-
-            let newX = e.clientX - dragStart.x;
-            let newY = e.clientY - dragStart.y;
-
-            const maxRight = container.width - crop.size;
-            const maxBottom = container.height - crop.size;
-
-            if (newX < 0) newX = 0;
-            if (newY < 0) newY = 0;
-            if (newX > maxRight) newX = maxRight;
-            if (newY > maxBottom) newY = maxBottom;
-
-            setCrop(prev => ({ ...prev, x: newX, y: newY }));
-        }
-    };
-
-    const handleMouseUp = () => setDragging(false);
-
-    const handleWheel = (e) => {
-        const container = imageRef.current;
-        if (!container) return;
-
-        const maxDimension = Math.min(container.width, container.height);
-
-        setCrop(prev => {
-            let newSize = prev.size;
-            if (e.deltaY < 0) {
-                newSize = Math.min(prev.size + 10, maxDimension);
-            } else {
-                newSize = Math.max(prev.size - 10, 50);
-            }
-
-            let newX = prev.x;
-            let newY = prev.y;
-
-            if (newX + newSize > container.width) newX = container.width - newSize;
-            if (newY + newSize > container.height) newY = container.height - newSize;
-
-            return { ...prev, size: newSize, x: Math.max(0, newX), y: Math.max(0, newY) };
-        });
-    };
-
-    // --- API ---
-    const refreshUserData = async (empno) => {
-        try {
-            const response = await httpClient.post(server.GET_USER_INFO, { empno });
-            if (response.data.result === 'true') {
-                const freshUserInfo = response.data.userInfo;
-                localStorage.setItem(key_constance.USER_INFO, JSON.stringify(freshUserInfo));
-                setPreviewData(prev => ({ ...prev, ...freshUserInfo }));
-                form.setFieldsValue(freshUserInfo);
-            }
-        } catch (err) {
-            console.error("Refresh Error:", err);
-        }
-    };
-
-    const handleSave = async () => {
-        setLoading(true);
-        try {
-            const payload = {
-                empno: previewData.u_code,
-                u_nickname: previewData.u_nickname || "",
-                element: previewData.element || "Light",
-                theme: previewData.theme || "minimal",
-                profile_img_base64: previewData.profile_img_base64 || ""
-            };
-
-            const response = await httpClient.post(server.UPDATE_USER_PROFILE, payload);
-
-            if (response.data.result === 'true') {
-                message.success("Profile updated successfully!");
-                await refreshUserData(previewData.u_code);
-            } else {
-                message.error("Update failed: " + response.data.message);
-            }
-        } catch (err) {
-            console.error("Save Error:", err);
-            message.error("Failed to save data.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const filteredThemeOptions = THEME_OPTIONS.filter(opt => {
-        if (opt.value === 'rpg') return userDepartment === 'AD';
-        return true;
+  // ── 3. Handle Changes for Editable Fields ──────────────────────────────────
+  const handleEditableChange = (changedValues) => {
+    setEditableValues(prev => {
+      const next = { ...prev, ...changedValues };
+      // Switch application theme live when theme changed
+      if (changedValues.theme && switchTheme) {
+        switchTheme(changedValues.theme, false);
+      }
+      return next;
     });
+  };
 
-    const isRpg = previewData?.theme === 'rpg';
+  // ── 4. Save Profile Configuration ──────────────────────────────────────────
+  const handleSave = async () => {
+    if (!fullUserData?.u_code) {
+      message.error("Cannot save: Employee ID missing.");
+      return;
+    }
 
-    if (!previewData) return null;
+    setSaving(true);
+    try {
+      const payload = {
+        empno: fullUserData.u_code,
+        u_nickname: editableValues.u_nickname || "",
+        element: fullUserData.element || "Light",
+        theme: editableValues.theme || "minimal",
+        profile_img_base64: editableValues.profile_img_base64 || ""
+      };
 
-    // --- ENTIRELY NEW STRUCTURAL HTML/CSS ---
-    return (
-        <>
-            <div style={{
-                width: '100%',
-                // height: '100%', // Take full height of whatever parent provides
-                height: 'calc(100vh-64px)',
-                overflowY: 'auto', // ONLY scroll this specific container, not the body
-                backgroundColor: theme.colors.background || '#f5f7fa',
-                boxSizing: 'border-box',
-                padding: '2rem 1rem', // Flexible padding
-                fontFamily: "'Inter', sans-serif"
-            }}>
-                {/* Centered Content Wrapper */}
-                <div style={{
-                    maxWidth: '700px',
-                    margin: '0 auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '24px'
-                }}>
+      const res = await httpClient.post(server.UPDATE_USER_PROFILE, payload);
+      if (res.data?.result === 'true') {
+        message.success("Profile configuration saved successfully!");
 
-                    {/* 1. HERO HEADER (Avatar & Name) */}
-                    <div style={{
-                        backgroundColor: isRpg ? '#141414' : '#fff',
-                        borderRadius: '24px',
-                        boxShadow: isRpg ? '0 8px 24px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.05)',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        border: isRpg ? '1px solid #333' : 'none'
-                    }}>
-                        {/* Gradient Top Half */}
-                        <div style={{
-                            height: '140px',
-                            background: `linear-gradient(120deg, ${orgRpgTheme.elements[previewData.element]?.primary || theme.colors.primary} 0%, ${theme.colors.background} 100%)`,
-                            opacity: isRpg ? 0.6 : 0.8
-                        }} />
+        // Update stored profile and Zustand store
+        const updatedProfile = {
+          ...fullUserData,
+          u_nickname: editableValues.u_nickname,
+          theme: editableValues.theme,
+          profile_img_base64: editableValues.profile_img_base64,
+          profile_img_b64: editableValues.profile_img_base64
+        };
+        localStorage.setItem(key_constance.USER_INFO, JSON.stringify(updatedProfile));
+        setFullUserData(updatedProfile);
+      } else {
+        message.error("Save failed: " + (res.data?.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Save profile error:", err);
+      message.error("Failed to save profile changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-                        {/* Bottom Half & Avatar Overlap */}
-                        <div style={{
-                            padding: '0 32px 32px 32px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            position: 'relative'
-                        }}>
-                            {/* Avatar */}
-                            <div style={{
-                                marginTop: '-60px', /* Pulls avatar up into gradient */
-                                marginBottom: '16px',
-                                zIndex: 2
-                            }}>
-                                <Upload beforeUpload={handleUpload} showUploadList={false} accept="image/*">
-                                    <div
-                                        onMouseEnter={() => setIsHoveringAvatar(true)}
-                                        onMouseLeave={() => setIsHoveringAvatar(false)}
-                                        style={{
-                                            width: '120px',
-                                            height: '120px',
-                                            borderRadius: '50%',
-                                            backgroundColor: '#fff',
-                                            padding: '4px',
-                                            boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
-                                            cursor: 'pointer',
-                                            position: 'relative',
-                                            overflow: 'hidden',
-                                            transition: 'transform 0.2s'
-                                        }}
-                                    >
-                                        <img
-                                            src={previewData.profile_img_base64 || "https://api.dicebear.com/7.x/avataaars/svg?seed=" + previewData.u_name}
-                                            alt="Avatar"
-                                            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                                        />
-                                        {isHoveringAvatar && (
-                                            <div style={{
-                                                position: 'absolute',
-                                                top: 4, left: 4, right: 4, bottom: 4,
-                                                borderRadius: '50%',
-                                                backgroundColor: 'rgba(0,0,0,0.5)',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: '#fff'
-                                            }}>
-                                                <CameraOutlined style={{ fontSize: '24px' }} />
-                                                <span style={{ fontSize: '10px', fontWeight: 'bold', marginTop: '4px' }}>EDIT</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </Upload>
-                            </div>
+  // ── 5. Image Upload & Crop Handling ────────────────────────────────────────
+  const handleUploadFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setUploadedImage(e.target.result);
+      setIsCropModalVisible(true);
+      setCrop({ x: 0, y: 0, size: 200 });
+    };
+    reader.readAsDataURL(file);
+    return false;
+  };
 
-                            {/* Name Info */}
-                            <Title level={2} style={{ margin: 0, color: isRpg ? '#fff' : '#1f1f1f' }}>
-                                {previewData.u_name || previewData.u_nickname}
-                            </Title>
-                            <Text style={{ fontSize: '16px', color: isRpg ? '#aaa' : '#666', marginBottom: '16px' }}>
-                                {previewData.position}
-                            </Text>
+  const triggerUploadInput = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      if (e.target.files?.[0]) {
+        handleUploadFile(e.target.files[0]);
+      }
+    };
+    input.click();
+  };
 
-                            <Tag color={orgRpgTheme.elements[previewData.element]?.primary || "blue"} style={{ borderRadius: '16px', padding: '4px 16px', fontSize: '14px', border: 'none', fontWeight: 600 }}>
-                                {previewData.element} Core
-                            </Tag>
-                        </div>
-                    </div>
+  const onCropSave = () => {
+    if (!imageRef.current) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 300;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d');
 
-                    {/* 2. FORM CONFIGURATION */}
-                    <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
+    const sourceImage = imageRef.current;
+    const renderedWidth = sourceImage.width;
+    const renderedHeight = sourceImage.height;
 
-                        {/* Identity Plate */}
-                        <div style={{
-                            backgroundColor: isRpg ? '#141414' : '#fff',
-                            borderRadius: '24px',
-                            padding: '32px',
-                            boxShadow: isRpg ? '0 8px 24px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.05)',
-                            border: isRpg ? '1px solid #333' : 'none',
-                            marginBottom: '24px'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                                <UserOutlined style={{ fontSize: '20px', color: theme.colors.primary }} />
-                                <Title level={4} style={{ margin: 0, color: isRpg ? '#eee' : '#1f1f1f' }}>Identity Base</Title>
-                            </div>
+    const scaleX = sourceImage.naturalWidth / renderedWidth;
+    const scaleY = sourceImage.naturalHeight / renderedHeight;
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                {/* Nickname Row */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: isRpg ? '1px solid #333' : '1px solid #f0f0f0' }}>
-                                    <Text style={{ color: isRpg ? '#aaa' : '#666', fontSize: '15px' }}>Assigned Nickname</Text>
-                                    <Text strong style={{ fontSize: '16px', color: isRpg ? '#fff' : '#1f1f1f' }}>{previewData.u_nickname || "Not Set"}</Text>
-                                </div>
-
-                                {/* Department Row */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: isRpg ? '1px solid #333' : '1px solid #f0f0f0' }}>
-                                    <Text style={{ color: isRpg ? '#aaa' : '#666', fontSize: '15px' }}>Department</Text>
-                                    <Tag color={isRpg ? 'purple' : 'geekblue'} style={{ fontSize: '14px', padding: '2px 10px', borderRadius: '8px', margin: 0 }}>
-                                        {getFullDepartment(previewData.u_department)}
-                                    </Tag>
-                                </div>
-
-                                {/* Element Row */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text style={{ color: isRpg ? '#aaa' : '#666', fontSize: '15px' }}>Elemental Affinity</Text>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: orgRpgTheme.elements[previewData.element]?.primary }}></div>
-                                        <Text strong style={{ fontSize: '16px', color: isRpg ? '#fff' : '#1f1f1f' }}>{previewData.element}</Text>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* System Plate */}
-                        <div style={{
-                            backgroundColor: isRpg ? '#141414' : '#fff',
-                            borderRadius: '24px',
-                            padding: '32px',
-                            boxShadow: isRpg ? '0 8px 24px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.05)',
-                            border: isRpg ? '1px solid #333' : 'none',
-                            marginBottom: '32px'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                                <SettingOutlined style={{ fontSize: '20px', color: theme.colors.primary }} />
-                                <Title level={4} style={{ margin: 0, color: isRpg ? '#eee' : '#1f1f1f' }}>Interface Config</Title>
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <Text strong style={{ fontSize: '16px', display: 'block', color: isRpg ? '#fff' : '#1f1f1f' }}>Display Theme</Text>
-                                    <Text style={{ color: isRpg ? '#888' : '#888', fontSize: '13px' }}>Adjust application colors</Text>
-                                </div>
-
-                                <div>
-                                    {!editTheme ? (
-                                        <Button
-                                            type="default"
-                                            onClick={() => setEditTheme(true)}
-                                            style={{
-                                                borderRadius: '12px',
-                                                padding: '8px 20px',
-                                                height: 'auto',
-                                                backgroundColor: isRpg ? '#262626' : '#f5f7fa',
-                                                borderColor: isRpg ? '#444' : '#e4e7eb',
-                                                color: isRpg ? '#fff' : '#333'
-                                            }}
-                                        >
-                                            <Space>
-                                                {THEME_OPTIONS.find(o => o.value === previewData.theme)?.label || previewData.theme}
-                                                <EditOutlined style={{ color: '#888' }} />
-                                            </Space>
-                                        </Button>
-                                    ) : (
-                                        <Space>
-                                            <Form.Item name="theme" noStyle>
-                                                <Select
-                                                    style={{ width: 220 }}
-                                                    size="large"
-                                                    defaultOpen
-                                                    onChange={(val) => {
-                                                        form.setFieldsValue({ theme: val });
-                                                        handleValuesChange({ theme: val });
-                                                        setEditTheme(false);
-                                                    }}
-                                                >
-                                                    {filteredThemeOptions.map(opt => {
-                                                        const colors = getThemeColors(opt.value);
-                                                        return (
-                                                            <Option key={opt.value} value={opt.value} label={opt.label}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                                    <div style={{ display: 'flex', gap: 2 }}>
-                                                                        <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: colors[0], border: '1px solid rgba(0,0,0,0.1)' }} />
-                                                                        <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: colors[1], border: '1px solid rgba(0,0,0,0.1)' }} />
-                                                                    </div>
-                                                                    <span style={{ fontWeight: 500 }}>{opt.label}</span>
-                                                                </div>
-                                                            </Option>
-                                                        );
-                                                    })}
-                                                </Select>
-                                            </Form.Item>
-                                            <Form.Item shouldUpdate={(prev, curr) => prev.theme !== curr.theme} noStyle>{() => null}</Form.Item>
-                                        </Space>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Action */}
-                        <Button
-                            type="primary"
-                            size="large"
-                            onClick={handleSave}
-                            loading={loading}
-                            icon={<SaveOutlined />}
-                            style={{
-                                width: '100%',
-                                height: '56px',
-                                borderRadius: '16px',
-                                fontSize: '18px',
-                                fontWeight: 'bold',
-                                boxShadow: isRpg ? '0 4px 12px rgba(0,0,0,0.8)' : `0 8px 16px ${theme.colors.primary}40`,
-                            }}
-                        >
-                            Save Configuration
-                        </Button>
-                    </Form>
-                </div>
-
-                {/* Crop Modal */}
-                <Modal
-                    title="Reposition Avatar"
-                    open={isCropModalVisible}
-                    onOk={onCropSave}
-                    onCancel={() => setIsCropModalVisible(false)}
-                    width={600}
-                    centered
-                    okText="Crop Image"
-                    bodyStyle={{ padding: 0 }}
-                >
-                    <div
-                        style={{
-                            width: '100%',
-                            height: '400px',
-                            background: '#111',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            overflow: 'hidden',
-                            position: 'relative',
-                            userSelect: 'none'
-                        }}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                    >
-                        {uploadedImage && (
-                            <div style={{ position: 'relative' }}>
-                                <img ref={imageRef} src={uploadedImage} alt="Crop" style={{ maxHeight: '400px', maxWidth: '100%', opacity: 0.7 }} draggable={false} />
-                                {/* Circle Mask */}
-                                <div
-                                    onMouseDown={handleMouseDown}
-                                    onWheel={handleWheel}
-                                    style={{
-                                        position: 'absolute',
-                                        top: crop.y,
-                                        left: crop.x,
-                                        width: crop.size,
-                                        height: crop.size,
-                                        border: '2px solid #fff',
-                                        borderRadius: '50%',
-                                        boxShadow: '0 0 0 9999px rgba(0,0,0,0.7)',
-                                        cursor: 'move',
-                                        zIndex: 10
-                                    }}
-                                >
-                                    <div style={{
-                                        position: 'absolute', bottom: -24, left: '50%', transform: 'translateX(-50%)',
-                                        color: '#fff', fontSize: '12px', background: 'rgba(0,0,0,0.8)', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap'
-                                    }}>
-                                        Scroll to Zoom
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </Modal>
-            </div>
-        </>
+    ctx.drawImage(
+      sourceImage,
+      crop.x * scaleX, crop.y * scaleY, crop.size * scaleX, crop.size * scaleY,
+      0, 0, 300, 300
     );
+
+    const base64 = canvas.toDataURL('image/jpeg', 0.9);
+    handleEditableChange({ profile_img_base64: base64 });
+    setIsCropModalVisible(false);
+  };
+
+  const handleMouseDown = (e) => {
+    setDragging(true);
+    setDragStart({ x: e.clientX - crop.x, y: e.clientY - crop.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (dragging) {
+      const container = imageRef.current;
+      if (!container) return;
+
+      let newX = e.clientX - dragStart.x;
+      let newY = e.clientY - dragStart.y;
+
+      const maxRight = container.width - crop.size;
+      const maxBottom = container.height - crop.size;
+
+      if (newX < 0) newX = 0;
+      if (newY < 0) newY = 0;
+      if (newX > maxRight) newX = maxRight;
+      if (newY > maxBottom) newY = maxBottom;
+
+      setCrop(prev => ({ ...prev, x: newX, y: newY }));
+    }
+  };
+
+  const handleMouseUp = () => setDragging(false);
+
+  const handleWheel = (e) => {
+    const container = imageRef.current;
+    if (!container) return;
+
+    const maxDimension = Math.min(container.width, container.height);
+
+    setCrop(prev => {
+      let newSize = prev.size;
+      if (e.deltaY < 0) {
+        newSize = Math.min(prev.size + 10, maxDimension);
+      } else {
+        newSize = Math.max(prev.size - 10, 50);
+      }
+
+      let newX = prev.x;
+      let newY = prev.y;
+
+      if (newX + newSize > container.width) newX = container.width - newSize;
+      if (newY + newSize > container.height) newY = container.height - newSize;
+
+      return { ...prev, size: newSize, x: Math.max(0, newX), y: Math.max(0, newY) };
+    });
+  };
+
+  if (loading || !fullUserData) {
+    return (
+      <div style={{
+        width: '100%',
+        minHeight: '80vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '16px'
+      }}>
+        <Spin size="large" />
+        <Text type="secondary" style={{ fontSize: '15px' }}>Loading User Profile & Skills...</Text>
+      </div>
+    );
+  }
+
+  const isRpg = viewMode === "rpg";
+  const userElem = fullUserData.element || "Light";
+  const elementCfg = ELEMENT_CONFIGS[userElem] || ELEMENT_CONFIGS.Light;
+
+  return (
+    <div
+      className={isRpg ? "themed-scrollbar-dark" : "themed-scrollbar-light"}
+      style={{
+        width: '100%',
+        height: '100%',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        background: isRpg ? 'linear-gradient(180deg, #1c202e 0%, #23283a 100%)' : (theme.colors?.background || '#f5f7fa'),
+        padding: '24px 20px 60px 20px',
+        boxSizing: 'border-box',
+        transition: 'background-color 0.3s ease',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      }}
+    >
+      {/* Max Width Container */}
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        {/* ── Top Bar: Page Title & Dual Mode Switcher ────────────────────────── */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          background: isRpg ? '#262c3e' : '#ffffff',
+          borderRadius: '16px',
+          padding: '14px 20px',
+          border: isRpg ? '1px solid #3a435e' : '1px solid #eaeaea',
+          boxShadow: isRpg ? '0 4px 20px rgba(0,0,0,0.2)' : '0 4px 16px rgba(0,0,0,0.03)'
+        }}>
+          <div>
+            <Title level={4} style={{ margin: 0, color: isRpg ? '#ffffff' : '#1f1f1f' }}>
+              User Profile & Competency Dashboard
+            </Title>
+            <Text style={{ fontSize: '12px', color: isRpg ? '#a0aec0' : '#666' }}>
+              Personnel record, Skill Matrix radar, and display configuration
+            </Text>
+          </div>
+
+          {/* Dual Mode Switcher: Normal Profile (Default) vs RPG Game Mode */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Text strong style={{ fontSize: '13px', color: isRpg ? '#cbd5e1' : '#666' }}>
+              View Mode:
+            </Text>
+            <Segmented
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                {
+                  label: (
+                    <Space size={6} style={{ padding: '4px 8px', fontWeight: 600 }}>
+                      <UserOutlined />
+                      <span>Normal Profile</span>
+                    </Space>
+                  ),
+                  value: 'normal'
+                },
+                {
+                  label: (
+                    <Space size={6} style={{ padding: '4px 8px', fontWeight: 600 }}>
+                      <ThunderboltFilled style={{ color: elementCfg.color }} />
+                      <span>RPG Game Mode</span>
+                    </Space>
+                  ),
+                  value: 'rpg'
+                }
+              ]}
+              style={{
+                background: isRpg ? '#1c202e' : '#f0f0f0',
+                color: isRpg ? '#ffffff' : '#1f1f1f',
+                padding: '3px',
+                borderRadius: '12px'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* ── Active View Mode Rendering ──────────────────────────────────────── */}
+        {viewMode === "normal" ? (
+          <NormalProfileView
+            user={fullUserData}
+            skillsData={skillsData}
+            evaluationType={evaluationType}
+            powers={powers}
+            editableValues={editableValues}
+            onValueChange={handleEditableChange}
+            onSave={handleSave}
+            onAvatarClick={triggerUploadInput}
+            saving={saving}
+            appTheme={theme}
+          />
+        ) : (
+          <RpgGameView
+            user={fullUserData}
+            skillsData={skillsData}
+            evaluationType={evaluationType}
+            powers={powers}
+            editableValues={editableValues}
+            onValueChange={handleEditableChange}
+            onSave={handleSave}
+            onAvatarClick={triggerUploadInput}
+            saving={saving}
+          />
+        )}
+      </div>
+
+      {/* ── Avatar Crop Modal (Preserved & Enhanced) ────────────────────────── */}
+      <Modal
+        title="Crop & Reposition Profile Picture"
+        open={isCropModalVisible}
+        onOk={onCropSave}
+        onCancel={() => setIsCropModalVisible(false)}
+        width={600}
+        centered
+        okText="Apply Crop"
+        styles={{ body: { padding: 0 } }}
+      >
+        <div
+          style={{
+            width: '100%',
+            height: '400px',
+            background: '#111',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            overflow: 'hidden',
+            position: 'relative',
+            userSelect: 'none'
+          }}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          {uploadedImage && (
+            <div style={{ position: 'relative' }}>
+              <img
+                ref={imageRef}
+                src={uploadedImage}
+                alt="Crop Target"
+                style={{ maxHeight: '400px', maxWidth: '100%', opacity: 0.7 }}
+                draggable={false}
+              />
+              {/* Circle Mask */}
+              <div
+                onMouseDown={handleMouseDown}
+                onWheel={handleWheel}
+                style={{
+                  position: 'absolute',
+                  top: crop.y,
+                  left: crop.x,
+                  width: crop.size,
+                  height: crop.size,
+                  border: '2px solid #fff',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.7)',
+                  cursor: 'move',
+                  zIndex: 10
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  bottom: -24,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  color: '#fff',
+                  fontSize: '12px',
+                  background: 'rgba(0,0,0,0.85)',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Drag to Move • Scroll to Zoom
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </div>
+  );
 };
 
 export default UserSetting;

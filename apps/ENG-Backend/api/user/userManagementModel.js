@@ -147,16 +147,35 @@ const getUsers = async (req, res) => {
 
         const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
         const orderString = format('ORDER BY %I %s', sortField, sortOrder === 'desc' ? 'DESC' : 'ASC'); // pg-format handling sort safely
-        const limitString = `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        let limitString = '';
+        if (pageSize !== 'all' && Number(pageSize) < 1000) {
+            limitString = `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            params.push(Number(pageSize), (Number(page) - 1) * Number(pageSize));
+        }
 
-        params.push(pageSize, (page - 1) * pageSize);
+        const dataQuery = `
+            SELECT 
+                u.*,
+                s.mc_setup, s.inspection, s.mc_operation,
+                s.public_std, s.cust_specification, s.internal_document,
+                s.cad, s.programming, s.microsoft,
+                s.detail_oriented, s.critical_thinking, s.process_comprehension,
+                s.time_management, s.collaboration, s.leadership,
+                s.qualifications,
+                s.evaluation_details,
+                s.evaluation_history
+            FROM m_user_profile u
+            LEFT JOIN m_user_skills s ON u.u_code = s.u_code
+            ${whereString ? whereString.replace(/\b([a-z_]+)\b(?= ILIKE)/g, 'u.$1') : ''} 
+            ${orderString ? orderString.replace(/ORDER BY ([a-z_]+)/g, 'ORDER BY u.$1') : ''} 
+            ${limitString}
+        `;
+        const countQuery = `SELECT COUNT(*) FROM m_user_profile u ${whereString ? whereString.replace(/\b([a-z_]+)\b(?= ILIKE)/g, 'u.$1') : ''}`;
 
-        const dataQuery = `SELECT * FROM m_user_profile ${whereString} ${orderString} ${limitString}`;
-        const countQuery = `SELECT COUNT(*) FROM m_user_profile ${whereString}`;
-
+        const countParams = limitString ? params.slice(0, params.length - 2) : params;
         const [dataResult, countResult] = await Promise.all([
             engPool.query(dataQuery, params),
-            engPool.query(countQuery, params.slice(0, params.length - 2)) // Remove limit/offset params
+            engPool.query(countQuery, countParams)
         ]);
 
         res.json({
@@ -164,7 +183,7 @@ const getUsers = async (req, res) => {
             data: dataResult.rows,
             total: parseInt(countResult.rows[0].count, 10),
             page: parseInt(page, 10),
-            pageSize: parseInt(pageSize, 10)
+            pageSize: pageSize === 'all' ? dataResult.rows.length : parseInt(pageSize, 10)
         });
 
     } catch (error) {
@@ -295,6 +314,361 @@ const searchExternalUsers = async (req, res) => {
     }
 };
 
-module.exports = {
-    getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers
+// 9. Skill Management & Power Calculation
+const norm = (val, maxVal = 3.0) => (val ? (Number(val) / maxVal) * 100 : 0);
+
+const calculatePowers = (skills) => {
+    const mc_setup = norm(skills.mc_setup || 1);
+    const inspection = norm(skills.inspection || 1);
+    const mc_op = norm(skills.mc_operation || 1);
+    const pub_std = norm(skills.public_std || 1);
+    const cust_spec = norm(skills.cust_specification || 1);
+    const int_doc = norm(skills.internal_document || 1);
+    const cad = norm(skills.cad || 1);
+    const prog = norm(skills.programming || 1);
+    const ms = norm(skills.microsoft || 1);
+    const detail = norm(skills.detail_oriented || 1);
+    const crit = norm(skills.critical_thinking || 1);
+    const proc = norm(skills.process_comprehension || 1);
+    const time_m = norm(skills.time_management || 1);
+    const collab = norm(skills.collaboration || 1);
+    const leader = norm(skills.leadership || 1);
+
+    const atk = Math.round(0.35 * mc_setup + 0.35 * mc_op + 0.20 * inspection + 0.10 * detail);
+    const def = Math.round(0.25 * pub_std + 0.30 * cust_spec + 0.25 * int_doc + 0.10 * inspection + 0.10 * detail);
+    const hp = Math.round(0.35 * time_m + 0.35 * collab + 0.20 * leader + 0.10 * proc);
+    const mp = Math.round(0.35 * prog + 0.30 * cad + 0.15 * ms + 0.20 * crit);
+
+    return { atk, def, hp, mp };
 };
+
+const getUserSkills = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                u.u_code,
+                u.u_name,
+                u.u_nickname,
+                u.position,
+                u.u_department,
+                u.user_group,
+                u.role,
+                u.section,
+                u.u_authority,
+                u.u_status,
+                u.profile_img_b64,
+                u.element,
+                u.theme,
+                s.mc_setup,
+                s.inspection,
+                s.mc_operation,
+                s.public_std,
+                s.cust_specification,
+                s.internal_document,
+                s.cad,
+                s.programming,
+                s.microsoft,
+                s.detail_oriented,
+                s.critical_thinking,
+                s.process_comprehension,
+                s.time_management,
+                s.collaboration,
+                s.leadership,
+                COALESCE(s.atk, u.atk, 0) as atk,
+                COALESCE(s.def, u.def, 0) as def,
+                COALESCE(s.hp, u.hp, 0) as hp,
+                COALESCE(s.mp, u.mp, 0) as mp,
+                s.total_score,
+                s.qualifications,
+                s.evaluation_details,
+                s.evaluation_history,
+                s.updated_at
+            FROM m_user_profile u
+            LEFT JOIN m_user_skills s ON u.u_code = s.u_code
+            ORDER BY u.u_code ASC
+        `;
+        const result = await engPool.query(query);
+        res.json({ result: 'true', data: result.rows });
+    } catch (error) {
+        console.error("Error fetching user skills:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+const getUserSkillByCode = async (req, res) => {
+    try {
+        const { u_code } = req.params;
+        const query = `
+            SELECT 
+                s.*,
+                u.u_name,
+                u.u_nickname,
+                u.position,
+                u.u_department,
+                u.user_group,
+                u.role,
+                u.profile_img_b64,
+                u.element,
+                u.theme
+            FROM m_user_skills s
+            JOIN m_user_profile u ON s.u_code = u.u_code
+            WHERE s.u_code = $1
+        `;
+        const result = await engPool.query(query, [u_code]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ result: 'false', message: `Skills not found for user ${u_code}` });
+        }
+        res.json({ result: 'true', data: result.rows[0] });
+    } catch (error) {
+        console.error(`Error fetching skill for ${req.params.u_code}:`, error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+const norm4 = (v) => (Number(v || 0) / 4.0) * 100;
+
+const calculateLeaderPowers = (skills) => {
+    const atk = Math.round(
+        0.15 * norm4(skills.basic_instruments) +
+        0.15 * norm4(skills.contour_projector) +
+        0.20 * norm4(skills.cmm_operation) +
+        0.15 * norm4(skills.instrument_selection) +
+        0.15 * norm4(skills.dimensional_reporting) +
+        0.10 * norm4(skills.jig_fixture_design) +
+        0.10 * norm4(skills.jig_fixture_concept)
+    );
+
+    const def = Math.round(
+        0.25 * norm4(skills.wi_dv_compliance) +
+        0.20 * norm4(skills.anomaly_detection) +
+        0.15 * norm4(skills.anomaly_action) +
+        0.15 * norm4(skills.read_drawing_symbols) +
+        0.15 * norm4(skills.drawing_symbols) +
+        0.10 * norm4(skills.out_of_spec_action)
+    );
+
+    const hp = Math.round(
+        0.20 * norm4(skills.target_delivery) +
+        0.20 * norm4(skills.otd_traveler_pc) +
+        0.15 * norm4(skills.prioritization) +
+        0.15 * norm4(skills.training_wi_dv) +
+        0.10 * norm4(skills.teaching_me10) +
+        0.10 * norm4(skills.external_communication) +
+        0.10 * norm4(skills.ot_planning)
+    );
+
+    const mp = Math.round(
+        0.30 * norm4(skills.me10_basic) +
+        0.25 * norm4(skills.drawing_drafting) +
+        0.20 * norm4(skills.drawing_database) +
+        0.15 * norm4(skills.computer_mrp) +
+        0.10 * norm4(skills.excel_reporting)
+    );
+
+    return { atk, def, hp, mp };
+};
+
+const saveUserSkills = async (req, res) => {
+    try {
+        const { u_code } = req.params;
+        const skillsData = req.body;
+
+        const userCheck = await engPool.query('SELECT u_code, role FROM m_user_profile WHERE u_code = $1', [u_code]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ result: 'false', message: `User ${u_code} not found in profile.` });
+        }
+
+        // Branch 1: Leader Evaluation (33 Skills, scale 0-4)
+        if (skillsData.evaluation_type === 'leader' || userCheck.rows[0].role === 'LEADER') {
+            const leaderSkills = skillsData.leader_skills || {};
+            const powers = calculateLeaderPowers(leaderSkills);
+            const totalScore = Object.values(leaderSkills).reduce((a, b) => a + (Number(b) || 0), 0);
+            const history = skillsData.evaluation_history ? JSON.stringify(skillsData.evaluation_history) : '[]';
+
+            const updateLeaderQuery = `
+                INSERT INTO m_user_skills (
+                    u_code, evaluation_type, leader_skills, evaluation_history,
+                    atk, def, hp, mp, total_score, updated_at
+                ) VALUES ($1, 'leader', $2, $3, $4, $5, $6, $7, $8, NOW())
+                ON CONFLICT (u_code) DO UPDATE SET
+                    evaluation_type = 'leader',
+                    leader_skills = EXCLUDED.leader_skills,
+                    evaluation_history = CASE 
+                        WHEN EXCLUDED.evaluation_history IS NOT NULL AND EXCLUDED.evaluation_history != '[]'::jsonb 
+                        THEN EXCLUDED.evaluation_history 
+                        ELSE m_user_skills.evaluation_history 
+                    END,
+                    atk = EXCLUDED.atk,
+                    def = EXCLUDED.def,
+                    hp = EXCLUDED.hp,
+                    mp = EXCLUDED.mp,
+                    total_score = EXCLUDED.total_score,
+                    updated_at = NOW()
+                RETURNING *;
+            `;
+
+            const skillResult = await engPool.query(updateLeaderQuery, [
+                u_code,
+                JSON.stringify(leaderSkills),
+                history,
+                powers.atk,
+                powers.def,
+                powers.hp,
+                powers.mp,
+                totalScore
+            ]);
+
+            await engPool.query(
+                `UPDATE m_user_profile SET atk = $1, def = $2, hp = $3, mp = $4, updated_at = NOW() WHERE u_code = $5`,
+                [powers.atk, powers.def, powers.hp, powers.mp, u_code]
+            );
+
+            await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_LEADER_SKILLS', `Updated leader skills for ${u_code}: ATK=${powers.atk}, DEF=${powers.def}, HP=${powers.hp}, MP=${powers.mp}`);
+
+            return res.json({
+                result: 'true',
+                message: `Leader skills and powers updated successfully for ${u_code}`,
+                data: {
+                    ...skillResult.rows[0],
+                    powers
+                }
+            });
+        }
+
+        // Branch 2: Staff Evaluation (15 Engineering Skills, scale 1-3)
+        const skillKeys = [
+            'mc_setup', 'inspection', 'mc_operation',
+            'public_std', 'cust_specification', 'internal_document',
+            'cad', 'programming', 'microsoft',
+            'detail_oriented', 'critical_thinking', 'process_comprehension',
+            'time_management', 'collaboration', 'leadership'
+        ];
+
+        const sanitizedSkills = {};
+        let totalScore = 0;
+        for (const key of skillKeys) {
+            let val = parseInt(skillsData[key], 10);
+            if (isNaN(val) || val < 1) val = 1;
+            if (val > 3) val = 3;
+            sanitizedSkills[key] = val;
+            totalScore += val;
+        }
+
+        const powers = calculatePowers(sanitizedSkills);
+        const qualifications = skillsData.qualifications ? JSON.stringify(skillsData.qualifications) : '{}';
+
+        const updateSkillQuery = `
+            INSERT INTO m_user_skills (
+                u_code, mc_setup, inspection, mc_operation,
+                public_std, cust_specification, internal_document,
+                cad, programming, microsoft,
+                detail_oriented, critical_thinking, process_comprehension,
+                time_management, collaboration, leadership,
+                total_score, atk, def, hp, mp,
+                qualifications, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                $17, $18, $19, $20, $21, $22, NOW()
+            )
+            ON CONFLICT (u_code) DO UPDATE SET
+                mc_setup = EXCLUDED.mc_setup,
+                inspection = EXCLUDED.inspection,
+                mc_operation = EXCLUDED.mc_operation,
+                public_std = EXCLUDED.public_std,
+                cust_specification = EXCLUDED.cust_specification,
+                internal_document = EXCLUDED.internal_document,
+                cad = EXCLUDED.cad,
+                programming = EXCLUDED.programming,
+                microsoft = EXCLUDED.microsoft,
+                detail_oriented = EXCLUDED.detail_oriented,
+                critical_thinking = EXCLUDED.critical_thinking,
+                process_comprehension = EXCLUDED.process_comprehension,
+                time_management = EXCLUDED.time_management,
+                collaboration = EXCLUDED.collaboration,
+                leadership = EXCLUDED.leadership,
+                total_score = EXCLUDED.total_score,
+                atk = EXCLUDED.atk,
+                def = EXCLUDED.def,
+                hp = EXCLUDED.hp,
+                mp = EXCLUDED.mp,
+                qualifications = CASE 
+                    WHEN EXCLUDED.qualifications IS NOT NULL AND EXCLUDED.qualifications != '{}'::jsonb 
+                    THEN EXCLUDED.qualifications 
+                    ELSE m_user_skills.qualifications 
+                END,
+                updated_at = NOW()
+            RETURNING *
+        `;
+
+        const skillResult = await engPool.query(updateSkillQuery, [
+            u_code,
+            sanitizedSkills.mc_setup, sanitizedSkills.inspection, sanitizedSkills.mc_operation,
+            sanitizedSkills.public_std, sanitizedSkills.cust_specification, sanitizedSkills.internal_document,
+            sanitizedSkills.cad, sanitizedSkills.programming, sanitizedSkills.microsoft,
+            sanitizedSkills.detail_oriented, sanitizedSkills.critical_thinking, sanitizedSkills.process_comprehension,
+            sanitizedSkills.time_management, sanitizedSkills.collaboration, sanitizedSkills.leadership,
+            totalScore, powers.atk, powers.def, powers.hp, powers.mp,
+            qualifications
+        ]);
+
+        await engPool.query(`
+            UPDATE m_user_profile 
+            SET atk = $1, def = $2, hp = $3, mp = $4, updated_at = NOW()
+            WHERE u_code = $5
+        `, [powers.atk, powers.def, powers.hp, powers.mp, u_code]);
+
+        await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_USER_SKILLS', `Updated skills and power for ${u_code}: ATK=${powers.atk}, DEF=${powers.def}, HP=${powers.hp}, MP=${powers.mp}`);
+
+        res.json({
+            result: 'true',
+            message: `User skills and powers updated successfully for ${u_code}`,
+            data: {
+                ...skillResult.rows[0],
+                powers
+            }
+        });
+    } catch (error) {
+        console.error("Error saving user skills:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+// 12. Update User Qualifications directly (Official certifications & special overrides)
+const updateQualifications = async (req, res) => {
+    try {
+        const { u_code } = req.params;
+        const { qualifications } = req.body;
+
+        if (!qualifications || typeof qualifications !== 'object') {
+            return res.status(400).json({ result: 'false', message: 'Valid qualifications object is required' });
+        }
+
+        const query = `
+            INSERT INTO m_user_skills (u_code, qualifications, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (u_code) DO UPDATE SET
+                qualifications = EXCLUDED.qualifications,
+                updated_at = NOW()
+            RETURNING *
+        `;
+
+        const result = await engPool.query(query, [u_code, JSON.stringify(qualifications)]);
+
+        await logAction(req.user?.empno || 'SYSTEM', 'UPDATE_QUALIFICATIONS', `Updated qualifications for ${u_code}`);
+
+        res.json({
+            result: 'true',
+            message: `Qualifications updated successfully for ${u_code}`,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Error updating user qualifications:", error);
+        res.status(500).json({ result: 'false', error: error.message });
+    }
+};
+
+module.exports = {
+    getSchema, addColumn, dropColumn, getUsers, createUser, updateUser, deleteUserRecord, searchExternalUsers,
+    getUserSkills, getUserSkillByCode, saveUserSkills, calculatePowers, updateQualifications
+};
+
