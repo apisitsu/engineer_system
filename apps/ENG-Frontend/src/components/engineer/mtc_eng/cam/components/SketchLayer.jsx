@@ -11,7 +11,7 @@ import { useMemo, useEffect, useRef } from 'react';
 import { Line, Html } from '@react-three/drei';
 import { invalidate, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useSketchStore } from '../stores/sketchStore.js';
+import { useSketchStore, AXIS_LOCK_FACTOR } from '../stores/sketchStore.js';
 import { dimensionAnnotations } from '../engine/sketch/annotations.js';
 import { polygonPreview, slotPreview, axisDistance } from '../engine/sketch/shapes.js';
 import { tessellateArc, CHORD_TOL } from '../engine/sketch/loops.js';
@@ -612,14 +612,13 @@ export default function SketchLayer() {
               dashed
               // A dotted look (short square dashes, wide gaps) rather than a
               // dashed one — reads as a row of points, not a broken line. Sized off
-              // `pickTol` (already screen-constant, ~9 px worth of world units at
-              // the current zoom) rather than a fixed world size: a fixed size
-              // shrinks toward invisible zoomed out, same failure `ScreenRing` and
-              // `Vertex` were built to avoid, and here it hid exactly where the
-              // guide's real (correctly tight) lock band was — a click that looked
-              // far from the sparse dots was often still within it.
-              dashSize={pickTol * 0.25}
-              gapSize={pickTol}
+              // `pickTol * AXIS_LOCK_FACTOR` — the same screen-constant distance
+              // `hover()` actually locks against, not a second, drifting guess —
+              // so the dots visually mark the true (tight) lock band instead of
+              // the looser point-pick tolerance. A fixed world size shrinks toward
+              // invisible zoomed out, same failure `ScreenRing`/`Vertex` avoid.
+              dashSize={pickTol * AXIS_LOCK_FACTOR * 0.3}
+              gapSize={pickTol * AXIS_LOCK_FACTOR}
               transparent
               opacity={on ? 0.7 : 0.28}
               raycast={noRaycast}

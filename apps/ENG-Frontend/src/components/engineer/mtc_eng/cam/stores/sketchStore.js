@@ -42,10 +42,18 @@ const DEG = Math.PI / 180;
 const SNAP = 1.5; // mm — click snap / pick tolerance
 // The line rubber-band's angle inference: the guide is *shown* from this far off
 // (an angle — visible from further away the longer the rubber-band gets, like a
-// real extension line) but only *grabs* within the on-screen pick tolerance
-// (`pickTol`, a world-unit distance, passed as `angleGuide`'s `lockTol` — see
-// its notes on why a distance and not a second, tighter angle).
+// real extension line) but only *grabs* within a screen-constant distance (world
+// units, passed as `angleGuide`'s `lockTol` — see its notes on why a distance
+// and not a second, tighter angle).
 const ANGLE_GUIDE_DEG = 8;
+// The guide's *own* lock band, as a fraction of `pickTol`. `pickTol` (9 px) is
+// deliberately generous for hit-testing an imprecise click on a point; a
+// perpendicular gap that size read as "clearly off the line" once judged
+// against a long guide instead of a small click radius around a point, so a
+// click that visibly missed the dotted line by several px was still grabbed.
+// Exported so `SketchLayer` sizes the guide's dots off the same number it
+// actually locks against, instead of a second, drifting guess.
+export const AXIS_LOCK_FACTOR = 0.45;
 const HISTORY = 50; // max undo depth
 
 /** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
@@ -459,7 +467,7 @@ export const useSketchStore = create((set, get) => ({
       let deg = ((Math.atan2(y - anchor.y, x - anchor.x) / DEG) % 360 + 360) % 360;
       if (!snap) {
         const g = angleGuide(sk, anchor, x, y, {
-          showDeg: ANGLE_GUIDE_DEG, lockTol: tol, nearTol: tol,
+          showDeg: ANGLE_GUIDE_DEG, lockTol: tol * AXIS_LOCK_FACTOR, nearTol: tol,
         });
         if (g) {
           const len = Math.hypot(x - anchor.x, y - anchor.y);
