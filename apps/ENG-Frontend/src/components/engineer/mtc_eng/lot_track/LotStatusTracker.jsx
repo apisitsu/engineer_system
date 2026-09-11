@@ -121,31 +121,22 @@ function Roadmap({ steps, issuedDate }) {
           if (s.wc) bits.push(`WC ${s.wc}`);
           // No per-step start timestamp exists in pc_production, so show only the
           // recorded completion date — the inter-step gap is carried by the
-          // "Wait in process" chip on the connector, not by a fake start→done span.
+          // "Wait in process" chip in the header, not by a fake start→done span.
           if (s.compDate) bits.push(`done ${s.compDate}`);
           if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
           if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
           if (s.operator) bits.push(s.operator);
         }
-        // The in-progress step shows its settled incoming wait inline in its own
-        // header ("Wait in process N d" — the wait the PREVIOUS step went
-        // through before handing the lot on), and its own running count on the
-        // connector below ("WIP N days" — how long it has held the lot so far).
-        // A done step's own settled wait chip sits on the connector below it too,
-        // except when the very next step is the in-progress one — that case is
-        // already covered by the inline header above.
-        const prev = i > 0 ? steps[i - 1] : null;
-        const nextIsCurrent = steps[i + 1] && steps[i + 1].status === 'current';
-        let incomingWait = null;
-        if (s.status === 'current' && prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
-          incomingWait = prev.dwellDays;
-        }
-        const chips = [];
-        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 && !nextIsCurrent) {
-          chips.push({ days: s.dwellDays });
-        } else if (s.status === 'current' && s.startDate) {
+        // Every done step shows its own settled wait inline in its own header
+        // ("Wait in process N d" = comp[i] − comp[i-1], or the issue date for the
+        // first step). The in-progress step has no dwellDays of its own yet, so
+        // its header stays plain; its live running count shows on the connector
+        // below instead ("WIP N days" — how long it has held the lot so far).
+        const headerWait = s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 ? s.dwellDays : null;
+        let soFarDays = null;
+        if (s.status === 'current' && s.startDate) {
           const soFar = -(daysUntil(s.startDate) || 0);
-          if (soFar > 0) chips.push({ days: soFar, wip: true });
+          if (soFar > 0) soFarDays = soFar;
         }
 
         return (
@@ -168,9 +159,9 @@ function Roadmap({ steps, issuedDate }) {
                 <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
                 <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
                 <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-                {incomingWait != null ? (
-                  <Tag color={incomingWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
-                    ⏳ Wait in process {fmtDays(incomingWait)}
+                {headerWait != null ? (
+                  <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
+                    ⏳ Wait in process {fmtDays(headerWait)}
                   </Tag>
                 ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
@@ -179,17 +170,14 @@ function Roadmap({ steps, issuedDate }) {
                 <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
               ) : null}
             </div>
-            {chips.length ? (
-              <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '7px 0' }}>
-                {chips.map((c, ci) => (
-                  <Tag
-                    key={ci}
-                    color={c.wip ? (c.days >= 7 ? 'warning' : 'gold') : (c.days >= 7 ? 'warning' : 'default')}
-                    style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
-                  >
-                    ⏳ {c.wip ? `WIP ${c.days === 0 ? 'same day' : `${c.days} days`}` : `Wait in process ${fmtDays(c.days)}`}
-                  </Tag>
-                ))}
+            {soFarDays != null ? (
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center', padding: '7px 0' }}>
+                <Tag
+                  color={soFarDays >= 7 ? 'warning' : 'gold'}
+                  style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
+                >
+                  ⏳ WIP {soFarDays === 0 ? 'same day' : `${soFarDays} days`}
+                </Tag>
               </div>
             ) : <div style={{ height: 12 }} />}
           </React.Fragment>
