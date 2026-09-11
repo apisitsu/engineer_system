@@ -127,16 +127,24 @@ function Roadmap({ steps, issuedDate }) {
           if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
           if (s.operator) bits.push(s.operator);
         }
-        // Wait chip sits on the spine in the gap just below THIS step's box and
-        // reports THIS step's own wait — the span from the previous milestone to
+        // Wait chip(s) sit on the spine in the gap just below THIS step's box and
+        // report THIS step's own wait — the span from the previous milestone to
         // this step completing (s.dwellDays = comp[i] − comp[i-1], or issue date
         // for the first step) once done, or a running "so far" count while WIP.
-        let waitChip = null;
-        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0) {
-          waitChip = { days: s.dwellDays, ongoing: false };
+        // Exception: a settled chip never sits directly above the in-progress
+        // step — it is carried down to sit alongside that step's own running
+        // count instead, so nothing reads as "in progress" wait time.
+        const prev = i > 0 ? steps[i - 1] : null;
+        const nextIsCurrent = steps[i + 1] && steps[i + 1].status === 'current';
+        const chips = [];
+        if (s.status === 'current' && prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
+          chips.push({ days: prev.dwellDays, ongoing: false });
+        }
+        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 && !nextIsCurrent) {
+          chips.push({ days: s.dwellDays, ongoing: false });
         } else if (s.status === 'current' && s.startDate) {
           const soFar = -(daysUntil(s.startDate) || 0);
-          if (soFar > 0) waitChip = { days: soFar, ongoing: true };
+          if (soFar > 0) chips.push({ days: soFar, ongoing: true });
         }
 
         return (
@@ -165,14 +173,17 @@ function Roadmap({ steps, issuedDate }) {
                 <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
               ) : null}
             </div>
-            {waitChip ? (
-              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center', padding: '7px 0' }}>
-                <Tag
-                  color={waitChip.days >= 7 ? 'warning' : 'default'}
-                  style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
-                >
-                  ⏳ {waitChip.ongoing ? `WIP ${waitChip.days === 0 ? 'same day' : `${waitChip.days} days`}` : `Wait in process ${fmtDays(waitChip.days)}`}
-                </Tag>
+            {chips.length ? (
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '7px 0' }}>
+                {chips.map((c, ci) => (
+                  <Tag
+                    key={ci}
+                    color={c.days >= 7 ? 'warning' : 'default'}
+                    style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
+                  >
+                    ⏳ {c.ongoing ? `WIP ${c.days === 0 ? 'same day' : `${c.days} days`}` : `Wait in process ${fmtDays(c.days)}`}
+                  </Tag>
+                ))}
               </div>
             ) : <div style={{ height: 12 }} />}
           </React.Fragment>
