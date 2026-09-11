@@ -607,10 +607,12 @@ export default function SketchLayer() {
                 [anchor.x + Math.cos(a) * L, anchor.y + Math.sin(a) * L, Z],
               ]}
               color={AXIS_COLOR}
-              lineWidth={1}
+              lineWidth={2}
               dashed
-              dashSize={1.2}
-              gapSize={0.8}
+              // A dotted look (short square dashes, wide gaps) rather than a
+              // dashed one — reads as a row of points, not a broken line.
+              dashSize={0.15}
+              gapSize={0.7}
               transparent
               opacity={on ? 0.7 : 0.28}
               raycast={noRaycast}
