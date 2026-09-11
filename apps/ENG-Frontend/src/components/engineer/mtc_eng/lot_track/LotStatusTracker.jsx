@@ -129,10 +129,20 @@ function Roadmap({ steps, issuedDate }) {
         }
         // Every done step shows its own settled wait inline in its own header
         // ("Wait in process N d" = comp[i] − comp[i-1], or the issue date for the
-        // first step). The in-progress step has no dwellDays of its own yet, so
-        // its header stays plain; its live running count shows on the connector
-        // below instead ("WIP N days" — how long it has held the lot so far).
-        const headerWait = s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 ? s.dwellDays : null;
+        // first step) — except the step handing off to the in-progress one: that
+        // number moves down into the IN-PROGRESS step's own header instead, since
+        // it reads as "what this step waited through to get here". The
+        // in-progress step's live running count still shows on the connector
+        // below it ("WIP N days" — how long it has held the lot so far).
+        const prev = i > 0 ? steps[i - 1] : null;
+        const nextIsCurrent = steps[i + 1] && steps[i + 1].status === 'current';
+        let headerWait = null;
+        if (s.status === 'done' && s.dwellDays != null && s.dwellDays > 0 && !nextIsCurrent) {
+          headerWait = s.dwellDays;
+        }
+        if (s.status === 'current' && prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0) {
+          headerWait = prev.dwellDays;
+        }
         let soFarDays = null;
         if (s.status === 'current' && s.startDate) {
           const soFar = -(daysUntil(s.startDate) || 0);
