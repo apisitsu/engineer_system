@@ -201,7 +201,7 @@ const detailColumns = [
   { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
   // No 'Started' column: pc_production records only the completion date per step.
   { title: 'Done', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
-  { title: 'WIP wait', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
+  { title: 'Total time inprocess', dataIndex: 'dwellDays', width: 140, align: 'right', render: (v) => fmtDays(v) },
 ];
 
 function ProcessDetail({ steps }) {
@@ -212,7 +212,7 @@ function ProcessDetail({ steps }) {
       columns={detailColumns}
       dataSource={steps}
       pagination={false}
-      scroll={{ x: 1076 }}
+      scroll={{ x: 1128 }}
       rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
     />
   );
