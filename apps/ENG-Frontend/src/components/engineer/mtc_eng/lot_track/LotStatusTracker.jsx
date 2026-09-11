@@ -135,7 +135,9 @@ function Roadmap({ steps, issuedDate }) {
         // live running count still shows separately on the connector below it
         // ("WIP N days" — how long it has held the lot so far).
         const prev = i > 0 ? steps[i - 1] : null;
-        const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays > 0
+        // >= 0, not > 0: a same-day handoff still gets its own "Wait in process
+        // 0 d" chip rather than being silently dropped.
+        const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays >= 0
           ? prev.dwellDays
           : null;
         let soFarDays = null;
@@ -166,7 +168,7 @@ function Roadmap({ steps, issuedDate }) {
                 <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
                 {headerWait != null ? (
                   <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
-                    ⏳ Wait in process {fmtDays(headerWait)}
+                    ⏳ Wait in process {headerWait} d
                   </Tag>
                 ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
