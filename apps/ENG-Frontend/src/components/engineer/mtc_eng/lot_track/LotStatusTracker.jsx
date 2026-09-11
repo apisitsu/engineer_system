@@ -7,11 +7,13 @@ import {
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
+import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
 
 const { Content } = Layout;
 const { Text, Title } = Typography;
@@ -59,6 +61,43 @@ const STATUS_META = {
   done: { step: 'finish', tag: 'success', label: 'Done' },
   current: { step: 'process', tag: 'processing', label: 'In progress' },
   pending: { step: 'wait', tag: 'default', label: 'Waiting' },
+};
+
+// ── CSV export (Saved tracks → Drive, same folder as Tooling Inspection) ─────
+const CSV_HEADER = [
+  'Lot No', 'Control No', 'Part No', '#', 'Process', 'Code', 'Status',
+  'Machine / WC', 'good / ng', 'Cycle', 'Setup', 'Run time', 'Done', 'Total time inprocess',
+];
+// One row per process step, mirroring the Process detail table exactly —
+// same labels and formatting the user already sees on screen.
+const stepToCsvRow = (h, s) => [
+  h.lotNo, h.controlNo, h.partsNo,
+  s.order, s.nameEn, s.processCode, (STATUS_META[s.status] || STATUS_META.pending).label,
+  s.machineLabel ? `${s.machineLabel}${s.wc ? ` · WC ${s.wc}` : ''}` : '—',
+  s.goodQty == null ? '—' : `${s.goodQty}${s.badQty ? ` / ${s.badQty} ng` : ''}`,
+  s.cycleSec ? `${s.cycleSec}s` : '—',
+  s.setupSec ? fmtMinutes(Math.round(s.setupSec / 60)) : '—',
+  s.runMinutes == null ? '—' : fmtMinutes(s.runMinutes),
+  s.compDate || '—',
+  fmtDays(s.dwellDays),
+];
+const csvEscape = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (rows) => rows.map((r) => r.map(csvEscape).join(',')).join('\r\n');
+// The deployed GAS uploader only accepts /^[A-Za-z0-9_-]+\.csv$/ (see
+// gas_ti_csv_doPost.gs) — a Thai-only save name has nothing left after
+// stripping, so it falls back to the track id rather than an empty name.
+const sanitizeCsvName = (name, fallbackId) => {
+  const base = String(name || '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+  return `${base || `track_${fallbackId}`}.csv`;
+};
+const utf8ToBase64 = (str) => {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
 };
 
 // normalized [{lotNo, controlNo|null}] → stable JSON for change detection
@@ -428,6 +467,7 @@ export default function LotStatusTracker() {
   const [saveName, setSaveName] = useState('');
   const [saveMode, setSaveMode] = useState('new');     // 'new' | 'update'
   const [busy, setBusy] = useState(false);
+  const [exportingId, setExportingId] = useState(null); // saved-track id currently exporting
 
   const patchState = (key, patch) =>
     setStateByKey((m) => ({ ...m, [key]: { ...(m[key] || {}), ...patch } }));
@@ -564,10 +604,41 @@ export default function LotStatusTracker() {
     } catch (e) { message.error(e.response?.data?.error || e.message); }
   };
 
+  // Export ONE saved track's lots — fetched fresh, independent of whatever is
+  // currently on screen — as one CSV (one row per process step), uploaded to
+  // the same Drive folder Tooling Inspection's "Update data" writes to.
+  const exportSavedCsv = async (track) => {
+    const lots = track.lots || [];
+    if (!lots.length) { message.info('This track has no lots'); return; }
+    setExportingId(track.id);
+    try {
+      const responses = await Promise.all(lots.map((l) =>
+        axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
+          params: l.controlNo ? { control_no: l.controlNo } : {},
+        }).then((r) => r.data).catch(() => null),
+      ));
+      const rows = [CSV_HEADER];
+      let skipped = 0;
+      responses.forEach((d) => {
+        if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
+        (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
+      });
+      if (rows.length === 1) { message.warning('No process data to export'); return; }
+
+      const fileName = sanitizeCsvName(track.name, track.id);
+      await uploadTiCsvViaGas([{ fileName, base64Data: utf8ToBase64(toCsv(rows)) }]);
+      message.success(`Exported "${fileName}" to Drive${skipped ? ` (${skipped} lot(s) skipped — not found/ambiguous)` : ''}`);
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Export failed');
+    } finally {
+      setExportingId(null);
+    }
+  };
+
   const single = entries.length <= 1;
 
   const savedPanel = (
-    <div style={{ width: 320 }}>
+    <div style={{ width: 380 }}>
       {saved.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No saved tracks yet" />
       ) : (
@@ -578,6 +649,15 @@ export default function LotStatusTracker() {
             <List.Item
               style={{ padding: '6px 0' }}
               actions={[
+                <Tooltip key="csv" title="Export this track's process detail as CSV to the Tooling Inspection Drive folder">
+                  <Button
+                    type="link" size="small" icon={<ExportOutlined />}
+                    loading={exportingId === t.id}
+                    onClick={() => exportSavedCsv(t)}
+                  >
+                    CSV
+                  </Button>
+                </Tooltip>,
                 <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
                 <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
                   <Button type="text" size="small" danger icon={<DeleteOutlined />} />
