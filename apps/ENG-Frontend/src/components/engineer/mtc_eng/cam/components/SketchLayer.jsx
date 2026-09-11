@@ -285,6 +285,31 @@ const localPoint = (e) => {
   return e.object?.parent ? e.object.worldToLocal(p) : p;
 };
 
+/**
+ * Sketch coordinates for a **click** — a pointer-down or pick that is about to
+ * place or select something, as opposed to a plain hover.
+ *
+ * Prefers `sketchStore`'s `cursor` (refreshed on every pointermove, so it
+ * always matches whatever the rubber-band / hover indicators are actually
+ * showing on screen) over `localPoint(e)`'s own fresh raycast. The two
+ * should always agree — the mouse doesn't teleport between the last move and
+ * a click at the same spot — but for some pointerdown events R3F's own
+ * raycasting has been observed to return a wildly wrong world point (tens to
+ * hundreds of mm off) even though clientX/clientY and the camera exactly
+ * match the immediately preceding, correct pointermove. Root cause not
+ * pinned down; the store's cursor is the value actually rendered as the
+ * click target, so trusting it instead makes the click land where the
+ * operator can see it landing regardless. Falls back to the raycast only
+ * when there is no prior hover yet (the very first click after selecting a
+ * tool, before the pointer has moved over the plane).
+ */
+const resolveClickPoint = (e) => {
+  const cursor = useSketchStore.getState().cursor;
+  if (cursor) return [cursor.x, cursor.y];
+  const p = localPoint(e);
+  return [p.x, p.y];
+};
+
 export default function SketchLayer() {
   const version = useSketchStore((s) => s.version);
   const sk = useSketchStore((s) => s.sk);
@@ -512,8 +537,7 @@ export default function SketchLayer() {
           onPointerDown={(e) => {
             if (drawing) {
               e.stopPropagation();
-              const p = localPoint(e);
-              clickAt(p.x, p.y);
+              clickAt(...resolveClickPoint(e));
               return;
             }
             // Arm a marquee. No stopPropagation: a bare press must still reach
@@ -546,8 +570,7 @@ export default function SketchLayer() {
             if (!picking) return;
             e.stopPropagation();
             if (swallowClick.current) { swallowClick.current = false; return; }
-            const p = localPoint(e);
-            clickAt(p.x, p.y);
+            clickAt(...resolveClickPoint(e));
           }}
         >
           {/* Large enough that clicks still land on the plane when zoomed far out. */}
