@@ -206,6 +206,7 @@ async function fetchLot(lotNo, opts = {}) {
     .sort((a, b) => a - b)[0];
 
   let prevLastComp = H.entry_date || null;
+  let prevOut = { nextWc: null, goodQty: null }; // last done step's hand-off
   const steps = plannedSteps.map((p, i) => {
     const a = prodBySeq.get(p.seq);
     const isDone = !!a;
@@ -213,8 +214,17 @@ async function fetchLot(lotNo, opts = {}) {
     const status = isDone ? 'done' : (n === nextSeq ? 'current' : 'pending');
     const nm = nameByCode.get(p.process) || {};
     const machineCodes = a ? [...a.machines] : [];
+    // Inferred window for this process: the source has no per-step start date, so
+    // "start" = when the previous step finished (the lot left it and entered this
+    // one's queue); for the first step it is the lot entry date. Also carried for
+    // the CURRENT step so the card can show when/what it received while WIP.
+    const startDate = (isDone || status === 'current') ? prevLastComp : null;
     const dwellDays = isDone ? daysBetween(prevLastComp, a.lastComp) : null;
+    // what the current (WIP) step received from the previous done step
+    const incomingWc = status === 'current' ? (prevOut.nextWc || null) : null;
+    const incomingQty = status === 'current' ? prevOut.goodQty : null;
     if (isDone && a.lastComp) prevLastComp = a.lastComp;
+    if (isDone) prevOut = { nextWc: a.nextWc || null, goodQty: a.goodQty };
 
     return {
       order: i + 1,
@@ -239,7 +249,10 @@ async function fetchLot(lotNo, opts = {}) {
       runMinutes: a ? Math.round(a.runSeconds / 60) : null,
       firstCompDate: a ? a.firstComp : null,
       compDate: a ? a.lastComp : null,
+      startDate,   // inferred — previous step's completion (lot entry date for step 1)
       dwellDays,
+      incomingWc,   // current step only: where the previous step routed the lot
+      incomingQty,  // current step only: good qty handed off by the previous step
     };
   });
 

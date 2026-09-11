@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card, Steps,
+  Layout, Typography, AutoComplete, Input, Button, Alert, Progress, Card,
   Table, Tag, Space, Radio, Empty, Spin, App, Popover, List, Modal, Segmented,
   Tooltip, Popconfirm,
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
-  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, RightOutlined,
+  StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
 import { server } from '../../../../constance/constance';
@@ -71,33 +71,140 @@ const chunk = (arr, n) => {
   return out;
 };
 
-// ── roadmap (vertical stepper) — per-step line trimmed to WC · run · good · operator
-function Roadmap({ steps }) {
-  const current = steps.findIndex((s) => s.status === 'current');
-  const items = steps.map((s) => {
-    const meta = STATUS_META[s.status] || STATUS_META.pending;
-    const bits = [];
-    if (s.wc) bits.push(`WC ${s.wc}`);
-    if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
-    if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
-    if (s.operator) bits.push(s.operator);
-    return {
-      status: meta.step,
-      icon: s.status === 'current' ? <SyncOutlined spin /> : undefined,
-      title: (
-        <Space size={6} wrap>
-          <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
-          <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
-          <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-          {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
-        </Space>
-      ),
-      description: bits.length ? (
-        <Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text>
-      ) : null,
-    };
-  });
-  return <Steps direction="vertical" size="small" current={current === -1 ? items.length : current} items={items} />;
+// ── roadmap — custom vertical timeline. The WIP-wait chip sits ON the connector
+// just above a step's node and belongs to THAT step: how long it waited for the
+// previous step to finish and hand the lot over. Settled (prev.dwellDays) once
+// the previous step is done; a running "so far" count while it is still WIP.
+function Dot({ status }) {
+  if (status === 'done') return <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />;
+  if (status === 'current') return <SyncOutlined spin style={{ color: '#1677ff', fontSize: 14 }} />;
+  return <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #d9d9d9', display: 'inline-block', marginTop: 3 }} />;
+}
+
+// per-status framing for a step box on the centre-spine roadmap
+const STEP_BOX = {
+  done: { border: '1px solid #b7eb8f', background: '#f6ffed' },
+  current: { border: '1px solid #69b1ff', background: '#e6f4ff', boxShadow: '0 0 0 3px rgba(22,119,255,0.12)' },
+  pending: { border: '1px dashed #d9d9d9', background: '#fff' },
+};
+
+function Roadmap({ steps, issuedDate }) {
+  const RAIL = '#d9d9d9';
+  return (
+    // centre spine: an absolutely-placed line down the middle, step boxes and
+    // wait chips stack on top of it (zIndex 1) so the line only shows in the gaps
+    <div style={{ position: 'relative', paddingTop: 12, paddingBottom: 4 }}>
+      <span style={{ position: 'absolute', top: 4, bottom: 4, left: 'calc(50% - 1px)', width: 2, background: RAIL, zIndex: 0 }} />
+
+      {/* the lot being issued on paper — the roadmap's starting milestone */}
+      <div style={{ position: 'relative', zIndex: 1, borderRadius: 12, padding: '10px 12px 9px', ...STEP_BOX.done }}>
+        <span style={{
+          position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
+          background: '#fff', border: STEP_BOX.done.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <CheckCircleFilled style={{ color: '#52c41a', fontSize: 15 }} />
+        </span>
+        <Text strong style={{ fontSize: 13 }}>Issued Lot</Text>
+        <div><Text type="secondary" style={{ fontSize: 11.5 }}>issued {issuedDate || '—'}</Text></div>
+      </div>
+      <div style={{ height: 12 }} />
+      {steps.map((s, i) => {
+        const meta = STATUS_META[s.status] || STATUS_META.pending;
+        const box = STEP_BOX[s.status] || STEP_BOX.pending;
+        const bits = [];
+        if (s.status === 'current') {
+          // no production row yet — show what is known while it's WIP
+          if (s.incomingWc) bits.push(`WC ${s.incomingWc}`);
+          if (s.startDate) bits.push(`received ${s.startDate}`);
+          if (s.incomingQty != null) bits.push(`qty in ${s.incomingQty}`);
+        } else {
+          if (s.wc) bits.push(`WC ${s.wc}`);
+          // No per-step start timestamp exists in pc_production, so show only the
+          // recorded completion date — the inter-step gap is carried by the
+          // "Wait in process" chip in the header, not by a fake start→done span.
+          if (s.compDate) bits.push(`done ${s.compDate}`);
+          if (s.runMinutes != null && s.runMinutes > 0) bits.push(`run ${fmtMinutes(s.runMinutes)}`);
+          if (s.goodQty != null) bits.push(`good ${s.goodQty}${s.badQty ? ` (ng ${s.badQty})` : ''}`);
+          if (s.operator) bits.push(s.operator);
+        }
+        // Every step's header shows the PREVIOUS step's settled wait, not its
+        // own — "Wait in process N d" reads as "what the step before this one
+        // waited through before handing the lot on". That shifts every wait
+        // chip one step down from where it was produced (comp[i-1] − comp[i-2]
+        // lands on step i's header, not step i-1's). The in-progress step's own
+        // live running count still shows separately on the connector below it
+        // ("WIP N days" — how long it has held the lot so far).
+        const prev = i > 0 ? steps[i - 1] : null;
+        // >= 0, not > 0: a same-day handoff still gets its own "Wait in process
+        // 0 d" chip rather than being silently dropped. A NEGATIVE dwellDays
+        // means the previous step's own comp_date recorded later than steps
+        // after it in the plan (source-data ordering issue, e.g. a late/rework
+        // update) — flag it instead of just going quiet.
+        const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays >= 0
+          ? prev.dwellDays
+          : null;
+        const headerAnomaly = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays < 0
+          ? prev
+          : null;
+        let soFarDays = null;
+        if (s.status === 'current' && s.startDate) {
+          const soFar = -(daysUntil(s.startDate) || 0);
+          if (soFar > 0) soFarDays = soFar;
+        }
+
+        return (
+          <React.Fragment key={s.order}>
+            <div
+              className={s.status === 'current' ? 'lot-roadmap-current' : undefined}
+              style={{
+                position: 'relative', zIndex: 1, borderRadius: 12, padding: '10px 12px 9px',
+                ...box,
+              }}
+            >
+              {/* status dot straddling the top edge, sitting on the spine */}
+              <span style={{
+                position: 'absolute', top: -9, left: 'calc(50% - 9px)', width: 18, height: 18, borderRadius: '50%',
+                background: '#fff', border: box.border, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Dot status={s.status} />
+              </span>
+              <Space size={[6, 2]} wrap>
+                <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
+                <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
+                <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
+                {headerWait != null ? (
+                  <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
+                    ⏳ Wait in process {headerWait} d
+                  </Tag>
+                ) : null}
+                {headerAnomaly ? (
+                  <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
+                    <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
+                      ⚠ Date out of order
+                    </Tag>
+                  </Tooltip>
+                ) : null}
+                {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
+              </Space>
+              {bits.length ? (
+                <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
+              ) : null}
+            </div>
+            {soFarDays != null ? (
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center', padding: '7px 0' }}>
+                <Tag
+                  color={soFarDays >= 7 ? 'warning' : 'gold'}
+                  style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
+                >
+                  ⏳ WIP {soFarDays === 0 ? 'same day' : `${soFarDays} days`}
+                </Tag>
+              </div>
+            ) : <div style={{ height: 12 }} />}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── process detail — the full per-step table (scrolls inside the card) ───────
@@ -117,8 +224,9 @@ const detailColumns = [
   { title: 'Cycle', dataIndex: 'cycleSec', width: 70, align: 'right', render: (v) => (v ? `${v}s` : '—') },
   { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
   { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
-  { title: 'Completed', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
-  { title: 'Lead time', dataIndex: 'dwellDays', width: 88, align: 'right', render: (v) => fmtDays(v) },
+  // No 'Started' column: pc_production records only the completion date per step.
+  { title: 'Done', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
+  { title: 'Total time inprocess', dataIndex: 'dwellDays', width: 140, align: 'right', render: (v) => fmtDays(v) },
 ];
 
 function ProcessDetail({ steps }) {
@@ -129,7 +237,7 @@ function ProcessDetail({ steps }) {
       columns={detailColumns}
       dataSource={steps}
       pagination={false}
-      scroll={{ x: 1080 }}
+      scroll={{ x: 1128 }}
       rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
     />
   );
@@ -140,8 +248,7 @@ function StatusStrip({ data }) {
   const { header, summary } = data;
   const tags = [];
   if (header.isCancelled) tags.push(<Tag key="c" color="error">Cancelled / closed</Tag>);
-  const di = dueInfo(header.compPlanDate, header.compDate);
-  if (di && di.color !== 'green' && di.color !== 'success') tags.push(<Tag key="d" color={di.color}>{di.text}</Tag>);
+  // The overdue/due tag now shows only once, under the progress dashboard below.
   const idleH = hoursBetween(data.lotUpdatedAt, data.syncAsOf);
   if (!header.isCancelled && summary.hasCurrent && idleH != null && idleH > 26) {
     tags.push(<Tag key="i" color="gold">idle {Math.round(idleH / 24)} d @ {summary.currentStepName}</Tag>);
@@ -150,7 +257,7 @@ function StatusStrip({ data }) {
     <div style={{ marginBottom: 6, lineHeight: 1.9 }}>
       {tags}
       <Text type="secondary" style={{ fontSize: 11 }}>
-        synced {fmtDateTime(data.syncAsOf)} · lot moved {fmtDateTime(data.lotUpdatedAt)}
+        Data synced {fmtDateTime(data.syncAsOf)} · Last lot moved {fmtDateTime(data.lotUpdatedAt)}
       </Text>
     </div>
   );
@@ -162,20 +269,20 @@ function StatusStrip({ data }) {
 const CARD_H_MULTI = 660;
 const CARD_H_SINGLE = 760;
 
-function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove, onReload, onResolveControl }) {
+function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onResolveControl }) {
   const st = state || { status: 'loading' };
 
   // Auto-scroll the roadmap so the CURRENT step sits at the top of the pane.
   const paneRef = useRef(null);
   useLayoutEffect(() => {
-    if (detailOpen || st.status !== 'ok') return;
+    if (st.status !== 'ok') return;
     const pane = paneRef.current;
     if (!pane) return;
-    const cur = pane.querySelector('.ant-steps-item-process');
+    const cur = pane.querySelector('.lot-roadmap-current');
     if (cur) {
       pane.scrollTop += cur.getBoundingClientRect().top - pane.getBoundingClientRect().top - 6;
     }
-  }, [detailOpen, st.status, st.data]);
+  }, [st.status, st.data]);
 
   // Fixed to 1/5 of the row width so every column is identical whether its row
   // holds 5 (full) or fewer (left-aligned, trailing gap). 64px = 4 × 16px gaps.
@@ -198,10 +305,10 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
       <div style={{ flex: 1, minWidth: 0 }}>
         <Button
           type="text" size="small"
-          onClick={canToggle ? onToggleDetail : undefined}
-          title={canToggle ? (detailOpen ? 'Show roadmap' : 'Show process detail') : undefined}
+          onClick={canToggle ? onOpenDetail : undefined}
+          title={canToggle ? 'Open process detail' : undefined}
           style={{ padding: 0, height: 'auto', fontWeight: 700, fontSize: 15, cursor: canToggle ? 'pointer' : 'default' }}
-          icon={canToggle ? (detailOpen ? <DownOutlined /> : <RightOutlined />) : null}
+          icon={canToggle ? <ProfileOutlined /> : null}
         >
           {label}
         </Button>
@@ -248,7 +355,6 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
   const { data } = st;
   const { header, summary } = data;
   const di = dueInfo(header.compPlanDate, header.compDate);
-  const dl = !header.isCancelled && !header.compDate ? daysUntil(header.compPlanDate) : null;
 
   return wrap(
     <>
@@ -279,25 +385,17 @@ function LotColumn({ entry, state, detailOpen, single, onToggleDetail, onRemove,
             ? <>Now at <Text strong>{summary.currentOrder}/{summary.totalSteps}</Text> — <Text strong>{summary.currentStepName}</Text></>
             : <>All {summary.totalSteps} steps complete</>}
         </div>
-        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
-          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} ·
-          {' '}run {fmtMinutes(summary.totalRunMinutes)} · lead {fmtDays(summary.elapsedDays)}
+        <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 2 }}>
+          Done {summary.doneSteps}/{summary.totalSteps} · Remaining {summary.remainingSteps} process ·
+          {' '}run {fmtMinutes(summary.totalRunMinutes)}
         </div>
-
-        {dl != null && dl <= DUE_SOON_DAYS ? (
-          <Alert
-            banner
-            type={dl < 0 ? 'error' : 'warning'}
-            message={dl < 0
-              ? `Behind plan by ${-dl} day(s) — ${summary.remainingSteps} step(s) left`
-              : `Due in ${dl} day(s) — ${summary.remainingSteps} step(s) left`}
-            style={{ marginBottom: 8, padding: '4px 8px', fontSize: 12 }}
-          />
-        ) : null}
+        <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
+          Issued {header.entryDate || '—'}
+        </div>
       </div>
 
-      <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: detailOpen ? 0 : 8 }}>
-        {detailOpen ? <ProcessDetail steps={data.steps} /> : <Roadmap steps={data.steps} />}
+      <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+        <Roadmap steps={data.steps} issuedDate={header.entryDate} />
       </div>
     </>,
   );
@@ -311,7 +409,7 @@ export default function LotStatusTracker() {
 
   const [entries, setEntries] = useState([]);          // [{ key, lotNo, controlNo }]
   const [stateByKey, setStateByKey] = useState({});    // key → { status, data, candidates, error }
-  const [detailOpen, setDetailOpen] = useState({});    // key → bool
+  const [detailModal, setDetailModal] = useState(null); // { header fields…, steps } shown in a modal
 
   const [term, setTerm] = useState('');
   const [options, setOptions] = useState([]);
@@ -363,7 +461,11 @@ export default function LotStatusTracker() {
   const removeLot = (key) => {
     setEntries((cur) => cur.filter((e) => e.key !== key));
     setStateByKey((m) => { const n = { ...m }; delete n[key]; return n; });
-    setDetailOpen((m) => { const n = { ...m }; delete n[key]; return n; });
+  };
+
+  const openDetail = (key) => {
+    const s = stateByKey[key];
+    if (s?.status === 'ok') setDetailModal({ ...s.data.header, steps: s.data.steps });
   };
 
   const resolveControl = (key, controlNo) => {
@@ -413,7 +515,6 @@ export default function LotStatusTracker() {
     const next = (track.lots || []).map((l) => ({ key: nextKey(), lotNo: l.lotNo, controlNo: l.controlNo || undefined }));
     setEntries(next);
     setStateByKey({});
-    setDetailOpen({});
     setActiveSaved({ id: track.id, name: track.name });
     setSavedOpen(false);
     next.forEach((e) => fetchEntry(e.key, e.lotNo, e.controlNo));
@@ -552,9 +653,8 @@ export default function LotStatusTracker() {
                       key={e.key}
                       entry={e}
                       state={stateByKey[e.key]}
-                      detailOpen={!!detailOpen[e.key]}
                       single={single}
-                      onToggleDetail={() => setDetailOpen((m) => ({ ...m, [e.key]: !m[e.key] }))}
+                      onOpenDetail={() => openDetail(e.key)}
                       onRemove={() => removeLot(e.key)}
                       onReload={() => fetchEntry(e.key, e.lotNo, e.controlNo)}
                       onResolveControl={(cn) => resolveControl(e.key, cn)}
@@ -597,6 +697,24 @@ export default function LotStatusTracker() {
         <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
           {entries.length === 1 ? '1 lot (single)' : `${entries.length} lots (group)`}: {entries.map((e) => e.lotNo).join(', ')}
         </div>
+      </Modal>
+
+      <Modal
+        title={detailModal ? (
+          <Space wrap>
+            <Text strong>{detailModal.lotNo}</Text>
+            <Tag color="blue">{detailModal.controlNo}</Tag>
+            <Text type="secondary">{detailModal.partsNo}</Text>
+            <Text type="secondary" style={{ fontWeight: 400 }}>Process detail</Text>
+          </Space>
+        ) : 'Process detail'}
+        open={!!detailModal}
+        onCancel={() => setDetailModal(null)}
+        footer={null}
+        width="min(1240px, 96vw)"
+        styles={{ body: { maxHeight: '75vh', overflowY: 'auto' } }}
+      >
+        {detailModal ? <ProcessDetail steps={detailModal.steps} /> : null}
       </Modal>
 
       <style>{`.lot-track-current-row > td { background: rgba(24,144,255,0.08) !important; }`}</style>
