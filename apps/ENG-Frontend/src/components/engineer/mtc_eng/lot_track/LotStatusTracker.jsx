@@ -232,7 +232,7 @@ function StatusStrip({ data }) {
     <div style={{ marginBottom: 6, lineHeight: 1.9 }}>
       {tags}
       <Text type="secondary" style={{ fontSize: 11 }}>
-        synced {fmtDateTime(data.syncAsOf)} · lot moved {fmtDateTime(data.lotUpdatedAt)}
+        Data synced {fmtDateTime(data.syncAsOf)} · Last lot moved {fmtDateTime(data.lotUpdatedAt)}
       </Text>
     </div>
   );
