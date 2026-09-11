@@ -217,9 +217,8 @@ function Roadmap({ steps, issuedDate }) {
 // ── process detail — the full per-step table (scrolls inside the card) ───────
 const detailColumns = [
   { title: '#', dataIndex: 'order', width: 40, fixed: 'left' },
-  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v, r) => (
-    <span style={{ whiteSpace: 'nowrap' }}><Text strong>{v}</Text> <Tag>{r.processCode}</Tag></span>
-  ) },
+  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v) => <Text strong>{v}</Text> },
+  { title: 'Code', dataIndex: 'processCode', width: 64, render: (v) => <Tag style={{ marginInlineEnd: 0 }}>{v}</Tag> },
   { title: 'Status', dataIndex: 'status', width: 108, render: (v) => {
     const m = STATUS_META[v] || STATUS_META.pending;
     return <Tag color={m.tag}>{m.label}</Tag>;
@@ -244,7 +243,7 @@ function ProcessDetail({ steps }) {
       columns={detailColumns}
       dataSource={steps}
       pagination={false}
-      scroll={{ x: 1128 }}
+      scroll={{ x: 1192 }}
       rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
     />
   );

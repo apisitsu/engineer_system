@@ -40,11 +40,12 @@ import { useCamPlanStore } from './camPlanStore.js';
 const DEG = Math.PI / 180;
 
 const SNAP = 1.5; // mm — click snap / pick tolerance
-// The line rubber-band's angle inference: the guide is *shown* within ANGLE_GUIDE_DEG
-// but only *grabs* the endpoint within the tighter ANGLE_LOCK_DEG, so a
-// deliberately off-axis angle is a hint, not a snap.
+// The line rubber-band's angle inference: the guide is *shown* from this far off
+// (an angle — visible from further away the longer the rubber-band gets, like a
+// real extension line) but only *grabs* within the on-screen pick tolerance
+// (`pickTol`, a world-unit distance, passed as `angleGuide`'s `lockTol` — see
+// its notes on why a distance and not a second, tighter angle).
 const ANGLE_GUIDE_DEG = 8;
-const ANGLE_LOCK_DEG = 2;
 const HISTORY = 50; // max undo depth
 
 /** Pin `pointId` onto a line / circle / arc with the matching relation. No-op on any other type; a redundant relation is swallowed. */
@@ -458,7 +459,7 @@ export const useSketchStore = create((set, get) => ({
       let deg = ((Math.atan2(y - anchor.y, x - anchor.x) / DEG) % 360 + 360) % 360;
       if (!snap) {
         const g = angleGuide(sk, anchor, x, y, {
-          showDeg: ANGLE_GUIDE_DEG, lockDeg: ANGLE_LOCK_DEG, nearTol: tol,
+          showDeg: ANGLE_GUIDE_DEG, lockTol: tol, nearTol: tol,
         });
         if (g) {
           const len = Math.hypot(x - anchor.x, y - anchor.y);

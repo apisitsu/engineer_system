@@ -523,12 +523,12 @@ describe('drag-to-modify (arm / end)', () => {
 });
 
 describe('line guides — angle lock & tangent snap (hover)', () => {
-  it('grabs the vertical axis from the tight band; only shows a guide from the wide one', () => {
+  it('grabs the vertical axis only within the pick tolerance; shows a wider hint', () => {
     const sk = createSketch();
     const anchor = addPoint(sk, 0, 0);
-    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null });
+    useSketchStore.setState({ sk, tool: 'line', pending: anchor, snap: null, axisSnap: null, pickTol: 1.5 });
 
-    // ~89° — inside the lock band → the endpoint snaps onto the axis.
+    // ~89° AND close on screen (0.15 mm off the vertical) → grabs.
     useSketchStore.getState().hover(0.15, 9.9);
     const s1 = useSketchStore.getState();
     expect(s1.axisSnap.locked).toBe(true);
@@ -536,14 +536,16 @@ describe('line guides — angle lock & tangent snap (hover)', () => {
     expect(near(s1.axisSnap.x, 0)).toBe(true); // snapped onto the vertical axis
     expect(near(s1.lineAngle, 90)).toBe(true);
 
-    // ~84° — in the show band, not the lock band → a hint only: the point stays
-    // where the cursor is and the raw angle is reported.
-    useSketchStore.getState().hover(1.05, 9.9);
+    // ~84° — within the show angle, but 2 mm off the vertical axis on screen,
+    // past the 1.5 mm pick tolerance: a lock here would grab from further and
+    // further away the longer the rubber-band gets, which is the bug this
+    // guards — a click that looks well off the line must not jump onto it.
+    useSketchStore.getState().hover(2, 20);
     const s2 = useSketchStore.getState();
     expect(s2.axisSnap.locked).toBe(false);
-    expect(s2.axisSnap.deg).toBe(90);        // guide still points at vertical
-    expect(near(s2.axisSnap.x, 1.05)).toBe(true); // ...but the endpoint is not pulled
-    expect(near(s2.lineAngle, 84, 1)).toBe(true);
+    expect(s2.axisSnap.deg).toBe(90);      // guide still points at vertical
+    expect(near(s2.axisSnap.x, 2)).toBe(true); // ...but the endpoint is not pulled
+    expect(near(s2.lineAngle, 84.3, 0.1)).toBe(true);
 
     // ~30° — nothing near → no guide at all.
     useSketchStore.getState().hover(10, 5.77);
