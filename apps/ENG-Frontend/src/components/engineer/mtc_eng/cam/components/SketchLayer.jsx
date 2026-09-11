@@ -311,6 +311,7 @@ export default function SketchLayer() {
   const dragTo = useSketchStore((s) => s.dragTo);
   const endDrag = useSketchStore((s) => s.endDrag);
   const setPickTol = useSketchStore((s) => s.setPickTol);
+  const pickTol = useSketchStore((s) => s.pickTol);
   const cancelPending = useSketchStore((s) => s.cancelPending);
   const deleteSelected = useSketchStore((s) => s.deleteSelected);
   const undo = useSketchStore((s) => s.undo);
@@ -610,9 +611,15 @@ export default function SketchLayer() {
               lineWidth={2}
               dashed
               // A dotted look (short square dashes, wide gaps) rather than a
-              // dashed one — reads as a row of points, not a broken line.
-              dashSize={0.15}
-              gapSize={0.7}
+              // dashed one — reads as a row of points, not a broken line. Sized off
+              // `pickTol` (already screen-constant, ~9 px worth of world units at
+              // the current zoom) rather than a fixed world size: a fixed size
+              // shrinks toward invisible zoomed out, same failure `ScreenRing` and
+              // `Vertex` were built to avoid, and here it hid exactly where the
+              // guide's real (correctly tight) lock band was — a click that looked
+              // far from the sparse dots was often still within it.
+              dashSize={pickTol * 0.25}
+              gapSize={pickTol}
               transparent
               opacity={on ? 0.7 : 0.28}
               raycast={noRaycast}
