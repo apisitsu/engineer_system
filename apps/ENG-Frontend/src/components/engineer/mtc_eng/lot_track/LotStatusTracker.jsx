@@ -9,6 +9,7 @@ import {
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 
@@ -595,12 +596,13 @@ export default function LotStatusTracker() {
     </div>
   );
 
-  // Standalone workspace — opened in its own tab from the Tools gallery, so it
-  // renders full-window with no app header or sidebar.
+  // Reached via in-app navigation (Overall Engineering ▸ Tools Portal), so it
+  // renders inside MainLayout with the same "ALL" sidebar as that section.
   return (
-    <Layout style={{ height: '100vh' }}>
+    <Layout style={{ height: '100%' }}>
+      <MenuTemplate type={"ALL"} />
       <Layout>
-        <Content className="kb-vscroll" style={{ height: '100vh', overflowY: 'auto', padding: '16px 20px' }}>
+        <Content className="kb-vscroll" style={{ height: '100%', overflowY: 'auto', padding: '16px 20px' }}>
           <div style={{ marginBottom: 12 }}>
             <Title level={4} style={{ margin: 0 }}>
               Lot Status Tracker
