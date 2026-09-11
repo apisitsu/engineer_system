@@ -500,9 +500,19 @@ const PdfEditorTool = () => {
 
     const handleMergeFilesAdd = useCallback((files) => {
         setMergeFiles(prev => {
-            const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified}`;
+            const getFileKey = (f) => `${f.name}-${f.size}-${f.lastModified || 0}`;
             const existingKeys = new Set(prev.map(getFileKey));
-            const newItems = files.filter(f => !existingKeys.has(getFileKey(f)));
+            const newItems = files
+                .filter(f => !existingKeys.has(getFileKey(f)))
+                .map(f => {
+                    const uid = f.uid || `merge_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    return Object.assign(f, {
+                        uid,
+                        arrayBuffer: typeof f.arrayBuffer === 'function'
+                            ? () => f.arrayBuffer()
+                            : () => f.originFileObj?.arrayBuffer()
+                    });
+                });
             return [...prev, ...newItems];
         });
     }, [setMergeFiles]);
@@ -980,6 +990,8 @@ const PdfEditorTool = () => {
                 fabricCanvasRefs={fabricCanvasRefs}
                 pushHistory={pushHistory}
                 logPdfUsage={logPdfUsage}
+                pageAnnotations={pageAnnotations}
+                setPageAnnotations={setPageAnnotations}
             />
         </div>
     );

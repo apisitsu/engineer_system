@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { message } from 'antd';
 import axios from 'axios';
 import { PDFDocument, degrees } from 'pdf-lib';
+import { getEffectivePageSize, getRawPlacement } from '../PdfEditor/engine/commitHelpers';
 import { pdfjsLib } from '../pdfWorkerConfig';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
@@ -236,19 +237,6 @@ export default function useSignStamp() {
             const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             const pages = doc.getPages();
 
-            // ── Normalize page rotation (same fix as commitEngine) ──
-            // Landscape PDFs stored as portrait MediaBox + /Rotate 90 need
-            // their dimensions swapped so coordinate mapping is correct.
-            for (const page of pages) {
-                const rotation = page.getRotation().angle || 0;
-                const normalizedRotation = ((rotation % 360) + 360) % 360;
-                if (normalizedRotation === 90 || normalizedRotation === 270) {
-                    const { width, height } = page.getSize();
-                    page.setSize(height, width);
-                    page.setRotation(degrees(0));
-                }
-            }
-
             // Prepare stamp/signature images
             let stampImg = null;
             let sigImg = null;
@@ -279,8 +267,7 @@ export default function useSignStamp() {
                 if (pageIndex < 0 || pageIndex >= pages.length) continue;
 
                 const page = pages[pageIndex];
-                const pageWidth = page.getWidth();
-                const pageHeight = page.getHeight();
+                const { width: effW, height: effH, rotation } = getEffectivePageSize(page);
 
                 const img = placement.type === 'stamp' ? stampImg : sigImg;
                 if (!img) continue;
@@ -289,16 +276,19 @@ export default function useSignStamp() {
                 const widthPt = mmToPoints(placement.widthMm);
                 const heightPt = mmToPoints(placement.heightMm);
 
-                // Convert normalized position to PDF coordinates (#24)
-                const pdfX = placement.normX * pageWidth;
-                const pdfY = pageHeight - (placement.normY * pageHeight);
+                // Convert normalized position to effective visual PDF coordinates (origin bottom-left)
+                const visX = placement.normX * effW;
+                const visY = effH - (placement.normY * effH) - heightPt;
 
-                // drawImage uses bottom-left as anchor point
+                // Map to raw coordinates & rotation compensation
+                const placementRaw = getRawPlacement(visX, visY, widthPt, heightPt, effW, effH, rotation);
+
                 page.drawImage(img, {
-                    x: pdfX,
-                    y: pdfY - heightPt,
-                    width: widthPt,
-                    height: heightPt,
+                    x: placementRaw.x,
+                    y: placementRaw.y,
+                    width: placementRaw.width,
+                    height: placementRaw.height,
+                    rotate: degrees(placementRaw.rotateDegrees),
                 });
             }
 

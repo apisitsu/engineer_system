@@ -205,13 +205,14 @@ export function getEffectivePageSize(page) {
  * @returns {{ rawX: number, rawY: number }}
  */
 export function visualToRawPdfCoords(visX, visY, effW, effH, rotation) {
-    switch (rotation) {
+    const rot = ((rotation % 360) + 360) % 360;
+    switch (rot) {
         case 90:
-            return { rawX: visY, rawY: effW - visX };
+            return { rawX: effH - visY, rawY: visX };
         case 180:
             return { rawX: effW - visX, rawY: effH - visY };
         case 270:
-            return { rawX: effH - visY, rawY: visX };
+            return { rawX: visY, rawY: effW - visX };
         default: // 0 or unrecognized
             return { rawX: visX, rawY: visY };
     }
@@ -222,9 +223,59 @@ export function visualToRawPdfCoords(visX, visY, effW, effH, rotation) {
  * Rotation 90/270 swaps width↔height.
  */
 export function visualToRawSize(w, h, rotation) {
-    if (rotation === 90 || rotation === 270) {
+    const rot = ((rotation % 360) + 360) % 360;
+    if (rot === 90 || rot === 270) {
         return { rawW: h, rawH: w };
     }
     return { rawW: w, rawH: h };
+}
+
+/**
+ * Get placement (x, y, rotation) for drawing an upright or rotated element (image/rectangle)
+ * onto a PDF page that may have /Rotate set.
+ *
+ * @param {number} visX - Visual bottom-left X
+ * @param {number} visY - Visual bottom-left Y
+ * @param {number} visW - Visual width
+ * @param {number} visH - Visual height
+ * @param {number} effW - Effective visual page width
+ * @param {number} effH - Effective visual page height
+ * @param {number} pageRotation - Page /Rotate angle in degrees
+ * @param {number} [objAngle=0] - Additional clockwise rotation angle of the object in degrees
+ * @returns {{ x: number, y: number, width: number, height: number, rotate: import('pdf-lib').Rotation }}
+ */
+export function getRawPlacement(visX, visY, visW, visH, effW, effH, pageRotation, objAngle = 0) {
+    const rot = ((pageRotation % 360) + 360) % 360;
+    const combinedAngle = (rot - (objAngle || 0));
+
+    let x = visX;
+    let y = visY;
+
+    switch (rot) {
+        case 90:
+            x = effH - visY;
+            y = visX;
+            break;
+        case 180:
+            x = effW - visX;
+            y = effH - visY;
+            break;
+        case 270:
+            x = visY;
+            y = effW - visX;
+            break;
+        default:
+            x = visX;
+            y = visY;
+            break;
+    }
+
+    return {
+        x,
+        y,
+        width: visW,
+        height: visH,
+        rotateDegrees: combinedAngle,
+    };
 }
 

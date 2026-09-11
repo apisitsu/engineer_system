@@ -10,7 +10,10 @@ export default function useFabricTools({
     pushHistory,
     userName,
     stampData,
-    fabricCanvasRefs
+    fabricCanvasRefs,
+    pageHighlights,
+    setPageHighlights,
+    canvasSize,
 }) {
     useEffect(() => {
         const fc = fabricCanvasRefs.current[pageNum];
@@ -406,6 +409,30 @@ export default function useFabricTools({
                     fc.remove(opt.target);
                     fc.discardActiveObject();
                     fc.renderAll();
+                    return;
+                }
+                if (setPageHighlights && pageHighlights) {
+                    const pointer = opt.scenePoint || opt.pointer;
+                    const cssW = canvasSize?.width || fc.width;
+                    const cssH = canvasSize?.height || fc.height;
+                    if (pointer && cssW > 0 && cssH > 0) {
+                        const highlights = pageHighlights[pageNum] || [];
+                        const hitIdx = highlights.findIndex(hl => {
+                            const hx = hl.normX * cssW;
+                            const hy = hl.normY * cssH;
+                            const hw = hl.normW * cssW;
+                            const hh = hl.normH * cssH;
+                            return pointer.x >= hx && pointer.x <= hx + hw && pointer.y >= hy && pointer.y <= hy + hh;
+                        });
+                        if (hitIdx !== -1) {
+                            pushHistory(pageNum);
+                            setPageHighlights(prev => {
+                                const updated = [...(prev[pageNum] || [])];
+                                updated.splice(hitIdx, 1);
+                                return { ...prev, [pageNum]: updated };
+                            });
+                        }
+                    }
                 }
                 return;
             }

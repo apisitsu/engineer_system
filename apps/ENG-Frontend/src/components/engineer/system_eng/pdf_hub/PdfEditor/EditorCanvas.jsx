@@ -490,6 +490,9 @@ const EditorCanvas = ({
         userName,
         stampData,
         fabricCanvasRefs,
+        pageHighlights,
+        setPageHighlights,
+        canvasSize,
     });
 
 
@@ -578,7 +581,7 @@ const EditorCanvas = ({
     });
 
     // Determine if a text-selection drag tool is active
-    const isDragTool = ['highlight', 'underline', 'strikethrough', 'eraser'].includes(store.activeTool);
+    const isDragTool = ['highlight', 'underline', 'strikethrough'].includes(store.activeTool);
 
     // ── Mouse tracking for tool preview ──
     const handleContainerMouseMove = useCallback((e) => {

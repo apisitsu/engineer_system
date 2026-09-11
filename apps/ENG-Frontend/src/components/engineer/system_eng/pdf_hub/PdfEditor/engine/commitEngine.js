@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, degrees, BlendMode } from 'pdf-lib';
-import { hexToRgb, toPdf, toPdfY, getFont, embedImage } from './commitHelpers';
+import { hexToRgb, toPdf, toPdfY, getFont, embedImage, getEffectivePageSize, visualToRawPdfCoords, visualToRawSize, getRawPlacement } from './commitHelpers';
 
 /**
  * commitEngine.js — Serializes Fabric.js canvas objects into pdf-lib operations.
@@ -21,31 +21,6 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
     const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pages = doc.getPages();
 
-    // ══════════════════════════════════════════════════════════════════
-    // PRE-PASS: Normalize page rotation
-    //
-    // Landscape PDFs are often stored as portrait MediaBox + /Rotate 90.
-    // PDF.js viewport accounts for this → Fabric canvas is landscape.
-    // But pdf-lib draws on raw MediaBox which is still portrait.
-    //
-    // FIX: For any rotated page, adjust the MediaBox to match the visual
-    // dimensions and set rotation to 0.  This makes the raw coordinate
-    // space identical to the visual space, so all existing coordinate
-    // math (toPdf, toPdfY) works correctly without further changes.
-    // ══════════════════════════════════════════════════════════════════
-    for (const page of pages) {
-        const rotation = page.getRotation().angle || 0;
-        const normalizedRotation = ((rotation % 360) + 360) % 360;
-
-        // Only normalize dimensions and reset rotation for 90/270 degree pages
-        // to match the visual aspect ratio without corrupting 180 degree upside-down orientation
-        if (normalizedRotation === 90 || normalizedRotation === 270) {
-            const { width, height } = page.getSize();
-            page.setSize(height, width);
-            page.setRotation(degrees(0));
-        }
-    }
-
     // ── Commit highlights per page (drawn first so text stays on top) ──
     if (pageHighlights) {
         for (const [pageNumStr, highlights] of Object.entries(pageHighlights)) {
@@ -53,35 +28,41 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
             if (isNaN(pageIdx) || pageIdx < 0 || pageIdx >= pages.length || !highlights?.length) continue;
 
             const page = pages[pageIdx];
-            const { width: pW, height: pH } = page.getSize();
+            const { width: effW, height: effH, rotation } = getEffectivePageSize(page);
 
             // Get canvas dimensions from the annotation data for this page, or use PDF dims
             const fabricData = pageAnnotations[pageNumStr];
-            const cW = fabricData?._canvasWidth || pW;
-            const cH = fabricData?._canvasHeight || pH;
+            const cW = fabricData?._canvasWidth || effW;
+            const cH = fabricData?._canvasHeight || effH;
 
             for (const hl of highlights) {
                 const color = hexToRgb(hl.color || '#ffeb3b');
                 if (!color) continue;
 
-                let x, y, w, h;
+                let visX, visY, visW, visH;
                 if (hl.normX !== undefined) {
-                    x = hl.normX * pW;
-                    y = pH - ((hl.normY + hl.normH) * pH);
-                    w = hl.normW * pW;
-                    h = hl.normH * pH;
+                    visX = hl.normX * effW;
+                    visY = effH - ((hl.normY + hl.normH) * effH);
+                    visW = hl.normW * effW;
+                    visH = hl.normH * effH;
                 } else {
-                    x = toPdf(hl.x, cW, pW);
-                    y = toPdfY(hl.y + hl.height, cH, pH);
-                    w = toPdf(hl.width, cW, pW);
-                    h = toPdf(hl.height, cH, pH);
+                    visX = toPdf(hl.x, cW, effW);
+                    visY = toPdfY(hl.y + hl.height, cH, effH);
+                    visW = toPdf(hl.width, cW, effW);
+                    visH = toPdf(hl.height, cH, effH);
                 }
 
+                const rawPlacement = getRawPlacement(visX, visY, visW, visH, effW, effH, rotation);
+
                 page.drawRectangle({
-                    x, y, width: w, height: h,
+                    x: rawPlacement.x,
+                    y: rawPlacement.y,
+                    width: rawPlacement.width,
+                    height: rawPlacement.height,
                     color,
                     opacity: 0.5,
                     blendMode: BlendMode.Multiply,
+                    rotate: degrees(rawPlacement.rotateDegrees),
                 });
             }
         }
@@ -93,15 +74,15 @@ export async function commitAllToPdf(pdfBytes, pageAnnotations, formValues = nul
         if (isNaN(pageIdx) || pageIdx < 0 || pageIdx >= pages.length) continue;
 
         const page = pages[pageIdx];
-        const { width: pW, height: pH } = page.getSize();
-        const cW = fabricData._canvasWidth || pW;
-        const cH = fabricData._canvasHeight || pH;
+        const { width: effW, height: effH, rotation } = getEffectivePageSize(page);
+        const cW = fabricData._canvasWidth || effW;
+        const cH = fabricData._canvasHeight || effH;
 
         if (!fabricData.objects) continue;
 
         for (const obj of fabricData.objects) {
             try {
-                await commitObject(doc, page, obj, cW, cH, pW, pH);
+                await commitObject(doc, page, obj, cW, cH, effW, effH, rotation);
             } catch (err) {
                 console.warn('Commit object error:', err, obj);
             }
@@ -221,7 +202,7 @@ export function wrapTextToWidth(text, font, fontSize, maxWidth) {
 /**
  * Commit a single Fabric.js object into a PDF page.
  */
-async function commitObject(doc, page, obj, cW, cH, pW, pH) {
+async function commitObject(doc, page, obj, cW, cH, effW, effH, rotation = 0) {
     if (!obj) return;
     // eslint-disable-next-line no-unused-vars
     const type = obj.customData?.type || obj.type;
@@ -255,27 +236,29 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
         };
     };
 
-
-
     switch (fabricType) {
         case 'rect': {
             const bl = rotatePoint(leftEdge, topEdge + objH);
-            const x = toPdf(bl.x, cW, pW);
-            const y = toPdfY(bl.y, cH, pH);
-            const w = toPdf(objW, cW, pW);
-            const h = toPdf(objH, cH, pH);
+            const visX = toPdf(bl.x, cW, effW);
+            const visY = toPdfY(bl.y, cH, effH);
+            const w = toPdf(objW, cW, effW);
+            const h = toPdf(objH, cH, effH);
+            const raw = visualToRawPdfCoords(visX, visY, effW, effH, rotation);
 
             const fillColor = hexToRgb(obj.fill);
             const strokeColor = hexToRgb(obj.stroke);
 
             page.drawRectangle({
-                x, y, width: w, height: h,
+                x: raw.rawX,
+                y: raw.rawY,
+                width: w,
+                height: h,
                 color: fillColor || undefined,
                 opacity: obj.opacity ?? 1,
                 borderColor: strokeColor || undefined,
-                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth, cW, pW) : undefined,
+                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth, cW, effW) : undefined,
                 borderOpacity: obj.opacity ?? 1,
-                rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                rotate: degrees(rotation - (obj.angle || 0)),
             });
             break;
         }
@@ -286,21 +269,28 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             const rxRaw = obj.rx !== undefined ? obj.rx : radius;
             const ryRaw = obj.ry !== undefined ? obj.ry : radius;
             
-            const rx = toPdf(rxRaw * scaleObjX, cW, pW);
-            const ry = toPdf(ryRaw * scaleObjY, cH, pH);
+            const rx = toPdf(rxRaw * scaleObjX, cW, effW);
+            const ry = toPdf(ryRaw * scaleObjY, cH, effH);
             
             const cxUnrotated = leftEdge + rxRaw * scaleObjX;
             const cyUnrotated = topEdge + ryRaw * scaleObjY;
             const centerPoint = rotatePoint(cxUnrotated, cyUnrotated);
 
+            const visX = toPdf(centerPoint.x, cW, effW);
+            const visY = toPdfY(centerPoint.y, cH, effH);
+            const rawCenter = visualToRawPdfCoords(visX, visY, effW, effH, rotation);
+            const rawSize = visualToRawSize(rx, ry, rotation);
+
             page.drawEllipse({
-                x: toPdf(centerPoint.x, cW, pW),
-                y: toPdfY(centerPoint.y, cH, pH),
-                xScale: rx, yScale: ry,
+                x: rawCenter.rawX,
+                y: rawCenter.rawY,
+                xScale: rawSize.rawW,
+                yScale: rawSize.rawH,
                 color: hexToRgb(obj.fill) || undefined,
                 borderColor: hexToRgb(obj.stroke) || undefined,
-                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, pW) : undefined,
+                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, effW) : undefined,
                 opacity: obj.opacity ?? 1,
+                rotate: degrees(rotation - (obj.angle || 0)),
             });
             break;
         }
@@ -311,12 +301,16 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             const p2 = rotatePoint(leftEdge, topEdge + objH);
             const p3 = rotatePoint(leftEdge + objW, topEdge + objH);
 
-            const path = `M ${toPdf(p1.x, cW, pW)},${toPdfY(p1.y, cH, pH)} L ${toPdf(p2.x, cW, pW)},${toPdfY(p2.y, cH, pH)} L ${toPdf(p3.x, cW, pW)},${toPdfY(p3.y, cH, pH)} Z`;
+            const rawP1 = visualToRawPdfCoords(toPdf(p1.x, cW, effW), toPdfY(p1.y, cH, effH), effW, effH, rotation);
+            const rawP2 = visualToRawPdfCoords(toPdf(p2.x, cW, effW), toPdfY(p2.y, cH, effH), effW, effH, rotation);
+            const rawP3 = visualToRawPdfCoords(toPdf(p3.x, cW, effW), toPdfY(p3.y, cH, effH), effW, effH, rotation);
+
+            const path = `M ${rawP1.rawX},${rawP1.rawY} L ${rawP2.rawX},${rawP2.rawY} L ${rawP3.rawX},${rawP3.rawY} Z`;
 
             page.drawSvgPath(path, {
                 color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                 borderColor: hexToRgb(obj.stroke) || undefined,
-                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, pW) : undefined,
+                borderWidth: obj.strokeWidth ? toPdf(obj.strokeWidth * Math.max(scaleObjX, scaleObjY), cW, effW) : undefined,
                 opacity: obj.opacity ?? 1,
             });
             break;
@@ -334,10 +328,13 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             const p1 = rotatePoint(startX, startY);
             const p2 = rotatePoint(endX, endY);
 
+            const rawP1 = visualToRawPdfCoords(toPdf(p1.x, cW, effW), toPdfY(p1.y, cH, effH), effW, effH, rotation);
+            const rawP2 = visualToRawPdfCoords(toPdf(p2.x, cW, effW), toPdfY(p2.y, cH, effH), effW, effH, rotation);
+
             page.drawLine({
-                start: { x: toPdf(p1.x, cW, pW), y: toPdfY(p1.y, cH, pH) },
-                end: { x: toPdf(p2.x, cW, pW), y: toPdfY(p2.y, cH, pH) },
-                thickness: toPdf((obj.strokeWidth * scaleObjY) || 2, cW, pW),
+                start: { x: rawP1.rawX, y: rawP1.rawY },
+                end: { x: rawP2.rawX, y: rawP2.rawY },
+                thickness: toPdf((obj.strokeWidth * scaleObjY) || 2, cW, effW),
                 color: hexToRgb(obj.stroke) || rgb(0, 0, 0),
                 opacity: obj.opacity ?? 1,
             });
@@ -351,23 +348,24 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             
             if (obj.backgroundColor) {
                 const bgBl = rotatePoint(leftEdge, topEdge + objH);
-                const bgX = toPdf(bgBl.x, cW, pW);
-                const bgY = toPdfY(bgBl.y, cH, pH);
-                const bgW = toPdf(objW, cW, pW);
-                const bgH = toPdf(objH, cH, pH);
+                const bgVisX = toPdf(bgBl.x, cW, effW);
+                const bgVisY = toPdfY(bgBl.y, cH, effH);
+                const bgRaw = visualToRawPdfCoords(bgVisX, bgVisY, effW, effH, rotation);
+                const bgW = toPdf(objW, cW, effW);
+                const bgH = toPdf(objH, cH, effH);
                 const bgColor = hexToRgb(obj.backgroundColor);
                 if (bgColor) {
                     page.drawRectangle({
-                        x: bgX, y: bgY, width: bgW, height: bgH,
+                        x: bgRaw.rawX, y: bgRaw.rawY, width: bgW, height: bgH,
                         color: bgColor, opacity: obj.opacity ?? 1,
-                        rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                        rotate: degrees(rotation - (obj.angle || 0)),
                     });
                 }
             }
             
             const font = await getFont(doc, obj.fontFamily, obj.fontWeight, obj.fontStyle);
-            const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, pH);
-            const boxWidthPdf = toPdf(objW, cW, pW);
+            const size = toPdf((obj.fontSize || 14) * scaleObjY, cH, effH);
+            const boxWidthPdf = toPdf(objW, cW, effW);
 
             const lines = [];
             if (obj.textLines && Array.isArray(obj.textLines) && obj.textLines.length > 0) {
@@ -408,33 +406,34 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
 
                 const lineBaseY = topEdge + ((obj.fontSize || 14) * scaleObjY) + (i * ((obj.fontSize || 14) * scaleObjY * lineSpacingMult));
                 const bl = rotatePoint(leftEdge, lineBaseY);
-                const xPdf = toPdf(bl.x, cW, pW);
-                const yPdf = toPdfY(bl.y, cH, pH);
+                const xPdf = toPdf(bl.x, cW, effW);
+                const yPdf = toPdfY(bl.y, cH, effH);
 
                 const rad = obj.angle ? obj.angle * Math.PI / 180 : 0;
-                const finalX = xPdf + alignOffsetPdf * Math.cos(rad);
-                const finalY = yPdf - alignOffsetPdf * Math.sin(rad);
+                const finalVisX = xPdf + alignOffsetPdf * Math.cos(rad);
+                const finalVisY = yPdf - alignOffsetPdf * Math.sin(rad);
+                const rawTextPt = visualToRawPdfCoords(finalVisX, finalVisY, effW, effH, rotation);
 
                 if (lineText) {
                     try {
                         page.drawText(lineText, {
-                            x: finalX, 
-                            y: finalY,
+                            x: rawTextPt.rawX, 
+                            y: rawTextPt.rawY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                             opacity: obj.opacity ?? 1,
-                            rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                            rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     } catch (fontErr) {
-                        console.warn('drawText encoding error, attempting sanitized fallback:', fontErr);
+                        // eslint-disable-next-line no-control-regex
                         const sanitized = lineText.replace(/[^\x00-\x7F]/g, '?');
                         page.drawText(sanitized, {
-                            x: finalX, 
-                            y: finalY,
+                            x: rawTextPt.rawX, 
+                            y: rawTextPt.rawY,
                             size, font,
                             color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                             opacity: obj.opacity ?? 1,
-                            rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                            rotate: degrees(rotation - (obj.angle || 0)),
                         });
                     }
                 }
@@ -442,14 +441,17 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                 if (obj.underline) {
                     const lineThick = Math.max(1, size * 0.08);
                     const dUnder = size * 0.15;
-                    const underStartX = finalX - dUnder * Math.sin(rad);
-                    const underStartY = finalY - dUnder * Math.cos(rad);
+                    const underStartX = finalVisX - dUnder * Math.sin(rad);
+                    const underStartY = finalVisY - dUnder * Math.cos(rad);
                     const underEndX = underStartX + textWidthPdf * Math.cos(rad);
                     const underEndY = underStartY - textWidthPdf * Math.sin(rad);
 
+                    const rawUnderStart = visualToRawPdfCoords(underStartX, underStartY, effW, effH, rotation);
+                    const rawUnderEnd = visualToRawPdfCoords(underEndX, underEndY, effW, effH, rotation);
+
                     page.drawLine({
-                        start: { x: underStartX, y: underStartY },
-                        end: { x: underEndX, y: underEndY },
+                        start: { x: rawUnderStart.rawX, y: rawUnderStart.rawY },
+                        end: { x: rawUnderEnd.rawX, y: rawUnderEnd.rawY },
                         thickness: lineThick,
                         color: hexToRgb(obj.fill) || rgb(0, 0, 0),
                         opacity: obj.opacity ?? 1,
@@ -463,15 +465,16 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             if (!obj.src) break;
             const img = await embedImage(doc, obj.src);
             const bl = rotatePoint(leftEdge, topEdge + objH);
-            const x = toPdf(bl.x, cW, pW);
-            const y = toPdfY(bl.y, cH, pH);
-            const w = toPdf(objW, cW, pW);
-            const h = toPdf(objH, cH, pH);
+            const visX = toPdf(bl.x, cW, effW);
+            const visY = toPdfY(bl.y, cH, effH);
+            const raw = visualToRawPdfCoords(visX, visY, effW, effH, rotation);
+            const w = toPdf(objW, cW, effW);
+            const h = toPdf(objH, cH, effH);
 
             page.drawImage(img, { 
-                x, y, width: w, height: h, 
+                x: raw.rawX, y: raw.rawY, width: w, height: h, 
                 opacity: obj.opacity ?? 1,
-                rotate: obj.angle ? degrees(-obj.angle) : undefined,
+                rotate: degrees(rotation - (obj.angle || 0)),
             });
             break;
         }
@@ -480,9 +483,20 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
             // Freehand drawing — parse Fabric.js SVG path commands properly
             if (obj.path) {
                 const color = hexToRgb(obj.stroke) || rgb(0, 0, 0);
-                const thickness = toPdf(obj.strokeWidth || 2, cW, pW);
-                const offsetX = obj.left || 0;
-                const offsetY = obj.top || 0;
+                const thickness = toPdf(obj.strokeWidth || 2, cW, effW);
+                const pathOffsetX = obj.pathOffset ? obj.pathOffset.x : 0;
+                const pathOffsetY = obj.pathOffset ? obj.pathOffset.y : 0;
+                const scaleX = obj.scaleX || 1;
+                const scaleY = obj.scaleY || 1;
+
+                const mapToRaw = (px, py) => {
+                    const canvasX = (obj.left || 0) + (px - pathOffsetX) * scaleX;
+                    const canvasY = (obj.top || 0) + (py - pathOffsetY) * scaleY;
+                    const pt = rotatePoint(canvasX, canvasY);
+                    const visX = toPdf(pt.x, cW, effW);
+                    const visY = toPdfY(pt.y, cH, effH);
+                    return visualToRawPdfCoords(visX, visY, effW, effH, rotation);
+                };
 
                 let curX = 0, curY = 0;
 
@@ -496,14 +510,12 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             break;
 
                         case 'L': { // LineTo
-                            const x1 = toPdf(curX + offsetX, cW, pW);
-                            const y1 = toPdfY(curY + offsetY, cH, pH);
-                            const x2 = toPdf(seg[1] + offsetX, cW, pW);
-                            const y2 = toPdfY(seg[2] + offsetY, cH, pH);
+                            const p1 = mapToRaw(curX, curY);
+                            const p2 = mapToRaw(seg[1], seg[2]);
 
                             page.drawLine({
-                                start: { x: x1, y: y1 },
-                                end: { x: x2, y: y2 },
+                                start: { x: p1.rawX, y: p1.rawY },
+                                end: { x: p2.rawX, y: p2.rawY },
                                 thickness, color,
                                 opacity: obj.opacity ?? 1,
                             });
@@ -516,7 +528,6 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             const cpX = seg[1], cpY = seg[2];
                             const endQX = seg[3], endQY = seg[4];
 
-                            // Dynamically calculate steps based on distance (#21)
                             const distQ = Math.hypot(endQX - curX, endQY - curY);
                             const stepsQ = Math.max(4, Math.min(32, Math.ceil(distQ / 10)));
 
@@ -524,13 +535,15 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             for (let t = 1; t <= stepsQ; t++) {
                                 const s = t / stepsQ;
                                 const inv = 1 - s;
-                                // Quadratic Bézier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
                                 const px = inv*inv*curX + 2*inv*s*cpX + s*s*endQX;
                                 const py = inv*inv*curY + 2*inv*s*cpY + s*s*endQY;
 
+                                const p1 = mapToRaw(prevPxQ, prevPyQ);
+                                const p2 = mapToRaw(px, py);
+
                                 page.drawLine({
-                                    start: { x: toPdf(prevPxQ + offsetX, cW, pW), y: toPdfY(prevPyQ + offsetY, cH, pH) },
-                                    end: { x: toPdf(px + offsetX, cW, pW), y: toPdfY(py + offsetY, cH, pH) },
+                                    start: { x: p1.rawX, y: p1.rawY },
+                                    end: { x: p2.rawX, y: p2.rawY },
                                     thickness, color, opacity: obj.opacity ?? 1,
                                 });
                                 prevPxQ = px;
@@ -546,7 +559,6 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             const cp2X = seg[3], cp2Y = seg[4];
                             const endCX = seg[5], endCY = seg[6];
 
-                            // Dynamically calculate steps based on distance (#21)
                             const distC = Math.hypot(endCX - curX, endCY - curY);
                             const stepsC = Math.max(6, Math.min(64, Math.ceil(distC / 10)));
 
@@ -554,13 +566,15 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             for (let t = 1; t <= stepsC; t++) {
                                 const s = t / stepsC;
                                 const inv = 1 - s;
-                                // Cubic Bézier formula: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
                                 const px = inv*inv*inv*curX + 3*inv*inv*s*cp1X + 3*inv*s*s*cp2X + s*s*s*endCX;
                                 const py = inv*inv*inv*curY + 3*inv*inv*s*cp1Y + 3*inv*s*s*cp2Y + s*s*s*endCY;
 
+                                const p1 = mapToRaw(prevPxC, prevPyC);
+                                const p2 = mapToRaw(px, py);
+
                                 page.drawLine({
-                                    start: { x: toPdf(prevPxC + offsetX, cW, pW), y: toPdfY(prevPyC + offsetY, cH, pH) },
-                                    end: { x: toPdf(px + offsetX, cW, pW), y: toPdfY(py + offsetY, cH, pH) },
+                                    start: { x: p1.rawX, y: p1.rawY },
+                                    end: { x: p2.rawX, y: p2.rawY },
                                     thickness, color, opacity: obj.opacity ?? 1,
                                 });
                                 prevPxC = px;
@@ -571,20 +585,17 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                             break;
                         }
 
-                        case 'Z': // ClosePath — line back to start (rarely used in freehand)
+                        case 'Z':
                         case 'z':
                             break;
 
                         default:
-                            // Fallback: treat last two values as endpoint
                             if (seg.length >= 3) {
-                                const fx1 = toPdf(curX + offsetX, cW, pW);
-                                const fy1 = toPdfY(curY + offsetY, cH, pH);
-                                const fx2 = toPdf(seg[seg.length - 2] + offsetX, cW, pW);
-                                const fy2 = toPdfY(seg[seg.length - 1] + offsetY, cH, pH);
+                                const p1 = mapToRaw(curX, curY);
+                                const p2 = mapToRaw(seg[seg.length - 2], seg[seg.length - 1]);
                                 page.drawLine({
-                                    start: { x: fx1, y: fy1 },
-                                    end: { x: fx2, y: fy2 },
+                                    start: { x: p1.rawX, y: p1.rawY },
+                                    end: { x: p2.rawX, y: p2.rawY },
                                     thickness, color, opacity: obj.opacity ?? 1,
                                 });
                                 curX = seg[seg.length - 2];
@@ -627,7 +638,7 @@ async function commitObject(doc, page, obj, cW, cH, pW, pH) {
                         scaleY: (child.scaleY || 1) * scaleObjY,
                         angle: (child.angle || 0) + (obj.angle || 0),
                     };
-                    await commitObject(doc, page, adjustedChild, cW, cH, pW, pH);
+                    await commitObject(doc, page, adjustedChild, cW, cH, effW, effH, rotation);
                 }
             }
             break;

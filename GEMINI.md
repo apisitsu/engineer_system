@@ -4,8 +4,8 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-10
-- **Active Goal:** System verification and User Management audit tracking operational.
+- **Last Update:** 2026-09-11
+- **Active Goal:** PDF Hub (PdfEditor, SignStamp, PdfCommitEngine) architectural bug fixes and coordinate stabilization completed.
 
 ### Recent Changes
 - **User Management Refactoring & Audit Trail System (2026-09-10):**
@@ -33,3 +33,15 @@
       - `GET /api/system/user-management/audit-logs` (filtering, pagination, search).
       - `GET /api/system/user-management/audit-logs/stats` (metrics, category breakdown, top actors).
   - **Verification:** Verified 0 compile/syntax errors with `npm run build` and validated full UI and diff viewer in browser.
+
+- **PDF Hub Engine Stabilization & Bug Fixes (2026-09-11):**
+  - **PDF Rotation Preservation:** Eliminated destructive `setRotation(degrees(0))` and `setSize()` pre-pass from `commitEngine.js` and `useSignStamp.js`. Implemented `getRawPlacement` and updated `visualToRawPdfCoords` to properly map elements onto rotated pages (0°, 90°, 180°, 270°) without corrupting or clipping original PDF content.
+  - **Watermark Multi-Page Omission:** Resolved issue where watermarks only applied to active viewed pages in `WatermarkManagerModal.jsx` and `PdfEditorTool.jsx` by directly serializing annotations across unmounted pages into `pageAnnotations` state. Fixed typo `handleCreate` -> `handleSave`.
+  - **Freehand Path Drift & Scaling:** Corrected Fabric v6 `pathOffset.x/y` and `scaleX/scaleY` mapping in `commitEngine.js` for freehand drawing strokes.
+  - **Eraser Tool Interception:** Removed `'eraser'` from `isDragTool` in `EditorCanvas.jsx` to prevent the text selection layer from blocking cursor clicks, and enabled Fabric object removal and highlight hit-testing in `useFabricTools.js`.
+  - **Signature Pad Decoupling:** Decoupled canvas sizing from `penColor`/`penWidth` in `SignaturePad.jsx` to prevent erasing user signatures upon palette selection, and added unique element IDs to font `<link>` tags.
+  - **Thumbnail Observer Loop:** Broke circular dependency loop in `ThumbnailPanel.jsx` by caching `thumbnails` in `thumbnailsRef`, stabilizing `renderThumbnail` and stopping observer thrashing.
+  - **Merge DnD Missing UID:** Enforced unique `uid` and resilient array buffer generation in `PdfEditorTool.jsx` for newly added merge files.
+  - **Export Image Background:** Added white canvas fill before PDF rendering in `exportEngine.js` to eliminate black background artifacts on JPEG exports.
+  - **Data-URL Prefix Safety:** Ensured safe handling of Base64 strings in `SignStamp/PdfCanvas.jsx` and `ToolPreview.jsx` to prevent double-prefixing `data:image/png;base64,`.
+  - **Verification:** 100% passed on automated tests in `PdfCommitEngine.test.js` (including newly added page rotation preservation test) and zero-error production build via `npm run build`.
