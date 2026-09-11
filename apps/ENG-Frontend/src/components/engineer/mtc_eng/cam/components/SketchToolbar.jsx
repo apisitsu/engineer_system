@@ -271,6 +271,37 @@ function ConstraintsPanel() {
   );
 }
 
+// `InputNumber`'s `addonAfter` is deprecated in this antd version in favour of
+// `Space.Compact` — this is that replacement: the input plus a plain span
+// styled to match antd's own addon look, reused everywhere a value needs a
+// unit suffix (dimension entry, chamfer/fillet, offset).
+function UnitInput({
+  value, onChange, onPressEnter, unit, width = 96, autoFocus,
+}) {
+  return (
+    <Space.Compact>
+      <InputNumber
+        controls={false}
+        autoFocus={autoFocus}
+        size="small"
+        value={value}
+        onChange={onChange}
+        onPressEnter={onPressEnter}
+        style={{ width }}
+      />
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', padding: '0 8px',
+        border: `1px solid ${CAD.border}`, borderLeft: 'none',
+        borderRadius: '0 4px 4px 0', background: CAD.glass, color: CAD.muted,
+        fontSize: 12, whiteSpace: 'nowrap',
+      }}
+      >
+        {unit}
+      </span>
+    </Space.Compact>
+  );
+}
+
 /**
  * Inline dimension value entry — appears under the toolbar when a dimension-mode
  * empty-click captured a dimensionable selection (`dimensionPending`). Replaces
@@ -334,14 +365,12 @@ function DimensionInput() {
           />
         </Tooltip>
       )}
-      <InputNumber controls={false}
+      <UnitInput
         autoFocus
-        size="small"
         value={val}
         onChange={(v) => setVal(v ?? 0)}
         onPressEnter={apply}
-        style={{ width: 96 }}
-        addonAfter={dimensionPending.unit ?? 'mm'}
+        unit={dimensionPending.unit ?? 'mm'}
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
       <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelDimension}>✕</Button>
@@ -383,14 +412,12 @@ function EditDimensionInput() {
       }}
     >
       <Text style={{ color: CAD.icon, fontSize: 12 }}>Edit {editingConstraint.label}</Text>
-      <InputNumber controls={false}
+      <UnitInput
         autoFocus
-        size="small"
         value={val}
         onChange={(v) => setVal(v ?? 0)}
         onPressEnter={apply}
-        style={{ width: 96 }}
-        addonAfter={editingConstraint.angular ? '°' : 'mm'}
+        unit={editingConstraint.angular ? '°' : 'mm'}
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
       <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelEditConstraint}>✕</Button>
@@ -478,14 +505,12 @@ function ChamferInput() {
           <Tag color="orange" style={{ margin: 0 }}>R</Tag>
         </Tooltip>
       )}
-      <InputNumber controls={false}
+      <UnitInput
         autoFocus
-        size="small"
         value={val}
         onChange={(v) => setVal(v ?? 0)}
         onPressEnter={apply}
-        style={{ width: 96 }}
-        addonAfter={rounded ? 'R mm' : 'mm'}
+        unit={rounded ? 'R mm' : 'mm'}
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
     </div>
@@ -517,14 +542,12 @@ function OffsetInput() {
       }}
     >
       <Text style={{ color: CAD.icon, fontSize: 12 }}>Offset</Text>
-      <InputNumber controls={false}
+      <UnitInput
         autoFocus
-        size="small"
         value={val}
         onChange={(v) => setVal(v ?? 0)}
         onPressEnter={apply}
-        style={{ width: 96 }}
-        addonAfter="mm"
+        unit="mm"
       />
       <Button size="small" type="primary" onClick={apply}>Set</Button>
       <Button size="small" type="text" style={{ color: CAD.label }} onClick={cancelOffset}>✕</Button>
