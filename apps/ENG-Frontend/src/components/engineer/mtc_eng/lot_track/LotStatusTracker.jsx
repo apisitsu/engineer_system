@@ -223,8 +223,7 @@ function StatusStrip({ data }) {
   const { header, summary } = data;
   const tags = [];
   if (header.isCancelled) tags.push(<Tag key="c" color="error">Cancelled / closed</Tag>);
-  const di = dueInfo(header.compPlanDate, header.compDate);
-  if (di && di.color !== 'green' && di.color !== 'success') tags.push(<Tag key="d" color={di.color}>{di.text}</Tag>);
+  // The overdue/due tag now shows only once, under the progress dashboard below.
   const idleH = hoursBetween(data.lotUpdatedAt, data.syncAsOf);
   if (!header.isCancelled && summary.hasCurrent && idleH != null && idleH > 26) {
     tags.push(<Tag key="i" color="gold">idle {Math.round(idleH / 24)} d @ {summary.currentStepName}</Tag>);
@@ -331,7 +330,6 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
   const { data } = st;
   const { header, summary } = data;
   const di = dueInfo(header.compPlanDate, header.compDate);
-  const dl = !header.isCancelled && !header.compDate ? daysUntil(header.compPlanDate) : null;
 
   return wrap(
     <>
@@ -369,17 +367,6 @@ function LotColumn({ entry, state, single, onOpenDetail, onRemove, onReload, onR
         <div style={{ fontSize: 11.5, color: '#8c8c8c', marginBottom: 8 }}>
           Issued {header.entryDate || '—'}
         </div>
-
-        {dl != null && dl <= DUE_SOON_DAYS ? (
-          <Alert
-            banner
-            type={dl < 0 ? 'error' : 'warning'}
-            message={dl < 0
-              ? `Behind plan by ${-dl} day(s) — ${summary.remainingSteps} step(s) left`
-              : `Due in ${dl} day(s) — ${summary.remainingSteps} step(s) left`}
-            style={{ marginBottom: 8, padding: '4px 8px', fontSize: 12 }}
-          />
-        ) : null}
       </div>
 
       <div ref={paneRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
