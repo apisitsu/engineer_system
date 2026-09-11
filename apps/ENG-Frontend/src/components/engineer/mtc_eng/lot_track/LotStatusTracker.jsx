@@ -171,7 +171,7 @@ function Roadmap({ steps, issuedDate }) {
                   color={waitChip.days >= 7 ? 'warning' : 'default'}
                   style={{ margin: 0, fontSize: 11, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }}
                 >
-                  ⏳ {waitChip.ongoing ? `Waiting ${fmtDays(waitChip.days)} so far` : `Wait in process ${fmtDays(waitChip.days)}`}
+                  ⏳ {waitChip.ongoing ? `WIP ${waitChip.days === 0 ? 'same day' : `${waitChip.days} days`}` : `Wait in process ${fmtDays(waitChip.days)}`}
                 </Tag>
               </div>
             ) : <div style={{ height: 12 }} />}
