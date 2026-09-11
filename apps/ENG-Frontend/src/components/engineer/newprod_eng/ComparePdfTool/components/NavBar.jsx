@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCompare } from '../context/CompareContext';
 
 export default function NavBar() {
@@ -6,37 +6,84 @@ export default function NavBar() {
   const { viewer, comparison } = state;
   const { currentPage, totalPages, zoom } = viewer;
 
+  // Local draft states for editable inputs
+  const [pageText, setPageText] = useState(currentPage.toString());
+  const [zoomText, setZoomText] = useState(Math.round(zoom * 100).toString());
+  const [sensText, setSensText] = useState(
+    Math.round((1 - comparison.threshold * 2) * 100).toString()
+  );
+
+  useEffect(() => {
+    setPageText(currentPage.toString());
+  }, [currentPage]);
+
+  useEffect(() => {
+    setZoomText(Math.round(zoom * 100).toString());
+  }, [zoom]);
+
+  useEffect(() => {
+    setSensText(Math.round((1 - comparison.threshold * 2) * 100).toString());
+  }, [comparison.threshold]);
+
   if (!comparison.hasResults) return null;
 
   const goToPage = (page) => {
-    dispatch({ type: 'SET_PAGE', payload: page });
+    const valid = Math.max(1, Math.min(totalPages, page));
+    dispatch({ type: 'SET_PAGE', payload: valid });
+    setPageText(valid.toString());
   };
 
-  const handlePageInput = (e) => {
-    const val = parseInt(e.target.value, 10);
-    if (!isNaN(val)) goToPage(val);
+  const handlePageCommit = () => {
+    const val = parseInt(pageText, 10);
+    if (!isNaN(val)) {
+      goToPage(val);
+    } else {
+      setPageText(currentPage.toString());
+    }
   };
 
-  const handleZoom = (val) => {
-    dispatch({ type: 'SET_ZOOM', payload: parseFloat(val) });
+  const handleZoomCommit = () => {
+    let val = parseInt(zoomText, 10);
+    if (!isNaN(val)) {
+      val = Math.max(25, Math.min(400, val));
+      dispatch({ type: 'SET_ZOOM', payload: val / 100 });
+      setZoomText(val.toString());
+    } else {
+      setZoomText(Math.round(zoom * 100).toString());
+    }
+  };
+
+  const handleSensCommit = () => {
+    let val = parseInt(sensText, 10);
+    if (!isNaN(val)) {
+      val = Math.max(0, Math.min(100, val));
+      const t = (100 - val) / 200;
+      dispatch({ type: 'SET_THRESHOLD', payload: t });
+      setSensText(val.toString());
+    } else {
+      setSensText(Math.round((1 - comparison.threshold * 2) * 100).toString());
+    }
   };
 
   return (
     <div className="nav-bar">
+      {/* Page Navigation */}
       <div className="page-nav">
         <button
           className="btn btn-icon btn-ghost"
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage <= 1}
-          data-tooltip="Previous page"
+          data-tooltip="Previous page ([)"
         >
           ◀
         </button>
         <input
           className="page-input"
           type="number"
-          value={currentPage}
-          onChange={handlePageInput}
+          value={pageText}
+          onChange={(e) => setPageText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handlePageCommit()}
+          onBlur={handlePageCommit}
           min={1}
           max={totalPages}
         />
@@ -45,7 +92,7 @@ export default function NavBar() {
           className="btn btn-icon btn-ghost"
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          data-tooltip="Next page"
+          data-tooltip="Next page (])"
         >
           ▶
         </button>
@@ -53,10 +100,11 @@ export default function NavBar() {
 
       <div className="nav-separator" />
 
+      {/* Zoom Controls */}
       <div className="zoom-control">
         <button
           className="btn btn-icon btn-ghost"
-          onClick={() => handleZoom(Math.max(0.25, zoom - 0.25))}
+          onClick={() => dispatch({ type: 'SET_ZOOM', payload: Math.max(0.25, zoom - 0.25) })}
           data-tooltip="Zoom out"
         >
           −
@@ -65,14 +113,14 @@ export default function NavBar() {
           className="zoom-slider"
           type="range"
           min="0.25"
-          max="3"
+          max="3.0"
           step="0.25"
           value={zoom}
-          onChange={(e) => handleZoom(e.target.value)}
+          onChange={(e) => dispatch({ type: 'SET_ZOOM', payload: parseFloat(e.target.value) })}
         />
         <button
           className="btn btn-icon btn-ghost"
-          onClick={() => handleZoom(Math.min(3, zoom + 0.25))}
+          onClick={() => dispatch({ type: 'SET_ZOOM', payload: Math.min(3.0, zoom + 0.25) })}
           data-tooltip="Zoom in"
         >
           +
@@ -81,22 +129,28 @@ export default function NavBar() {
           type="number"
           className="zoom-input"
           min="25"
-          max="300"
+          max="400"
           step="25"
-          value={Math.round(zoom * 100)}
-          onChange={(e) => {
-            let z = parseInt(e.target.value, 10);
-            if (isNaN(z)) return;
-            z = Math.max(25, Math.min(300, z));
-            handleZoom(z / 100);
-          }}
-          style={{ width: '60px', marginLeft: '8px', textAlign: 'right' }}
+          value={zoomText}
+          onChange={(e) => setZoomText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleZoomCommit()}
+          onBlur={handleZoomCommit}
+          style={{ width: '58px', marginLeft: '6px', textAlign: 'right' }}
         />
         <span className="zoom-label">%</span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => dispatch({ type: 'SET_ZOOM', payload: 1.0 })}
+          title="Reset Zoom to 100%"
+          style={{ marginLeft: '4px', fontSize: '11px' }}
+        >
+          100%
+        </button>
       </div>
 
       <div className="nav-separator" />
 
+      {/* Threshold / Sensitivity */}
       <div className="threshold-control">
         <span className="threshold-label">Sensitivity</span>
         <input
@@ -115,22 +169,18 @@ export default function NavBar() {
           className="threshold-input"
           min="0"
           max="100"
-          value={Math.round((1 - comparison.threshold * 2) * 100)}
-          onChange={(e) => {
-            let p = parseInt(e.target.value, 10);
-            if (isNaN(p)) return;
-            p = Math.max(0, Math.min(100, p));
-            const t = (100 - p) / 200;
-            dispatch({ type: 'SET_THRESHOLD', payload: t });
-          }}
-          style={{ width: '60px', marginLeft: '8px', textAlign: 'right' }}
+          value={sensText}
+          onChange={(e) => setSensText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSensCommit()}
+          onBlur={handleSensCommit}
+          style={{ width: '56px', marginLeft: '6px', textAlign: 'right' }}
         />
         <span className="threshold-value">%</span>
         <button
           className="btn btn-sm btn-primary"
-          style={{ marginLeft: '12px' }}
+          style={{ marginLeft: '10px' }}
           onClick={() => dispatch({ type: 'START_COMPARISON' })}
-          title="Apply new sensitivity and re-compare"
+          title="Re-run comparison across document with new sensitivity"
         >
           Re-analyze
         </button>
@@ -138,3 +188,4 @@ export default function NavBar() {
     </div>
   );
 }
+

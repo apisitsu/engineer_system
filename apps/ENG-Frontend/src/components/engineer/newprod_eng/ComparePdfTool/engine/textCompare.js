@@ -1,11 +1,11 @@
 /**
  * Text Comparison Engine
- * Extracts text with positions from PDF pages using pdfjs-dist
- * and computes word-level diffs using the Myers diff algorithm.
+ * Extracts text with positions from PDF pages using pdfjs-dist,
+ * sorts them in visual reading order, and computes diffs reliably.
  */
 
 /**
- * Extracts text items with their positions from a PDF page.
+ * Extracts text items with their positions from a PDF page and sorts geometrically.
  * @param {PDFDocumentProxy} pdfDoc
  * @param {number} pageNum - 1-indexed
  * @returns {Promise<Array<{text: string, x: number, y: number, width: number, height: number}>>}
@@ -15,7 +15,7 @@ export async function extractPageText(pdfDoc, pageNum) {
   const textContent = await page.getTextContent();
   const viewport = page.getViewport({ scale: 1.0 });
 
-  const items = [];
+  const rawItems = [];
   for (const item of textContent.items) {
     if (!item.str || item.str.trim() === '') continue;
 
@@ -24,19 +24,27 @@ export async function extractPageText(pdfDoc, pageNum) {
     const x = tx[4];
     // PDF y-origin is bottom-left, convert to top-left
     const y = viewport.height - tx[5];
-    const width = item.width;
+    const width = item.width || 10;
     const height = item.height || Math.abs(tx[3]) || 12;
 
-    items.push({
+    rawItems.push({
       text: item.str,
-      x,
-      y: y - height,  // Adjust so y is the top of the text
-      width,
-      height,
+      x: Math.round(x * 10) / 10,
+      y: Math.round((y - height) * 10) / 10,  // y is the top of the text
+      width: Math.round(width * 10) / 10,
+      height: Math.round(height * 10) / 10,
     });
   }
 
-  return items;
+  // Geometric sort: Group by line (tolerance 4px), then sort left-to-right by x
+  rawItems.sort((a, b) => {
+    if (Math.abs(a.y - b.y) <= 4) {
+      return a.x - b.x;
+    }
+    return a.y - b.y;
+  });
+
+  return rawItems;
 }
 
 /**
@@ -52,12 +60,12 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
     extractPageText(comparePdf, pageNum),
   ]);
 
-  // Build full text strings and word mappings
+  // Build word mappings
   const baseWords = tokenizeItems(baseItems);
   const compareWords = tokenizeItems(compareItems);
 
-  // Run Myers diff on the word sequences
-  const diffs = myersDiff(
+  // Run fast token diff
+  const diffs = computeTokenDiff(
     baseWords.map(w => w.text),
     compareWords.map(w => w.text)
   );
@@ -68,7 +76,6 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
   let compIdx = 0;
 
   for (const op of diffs) {
-    // eslint-disable-next-line default-case
     switch (op.type) {
       case 'equal':
         baseIdx += op.count;
@@ -76,7 +83,6 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
         break;
 
       case 'delete': {
-        // Words removed in Rev 2
         for (let i = 0; i < op.count; i++) {
           const word = baseWords[baseIdx + i];
           if (word) {
@@ -97,7 +103,6 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
       }
 
       case 'insert': {
-        // Words added in Rev 2
         for (let i = 0; i < op.count; i++) {
           const word = compareWords[compIdx + i];
           if (word) {
@@ -116,37 +121,61 @@ export async function comparePageText(basePdf, comparePdf, pageNum) {
         compIdx += op.count;
         break;
       }
+
+      default:
+        break;
     }
   }
 
-  // Merge adjacent changes into "modified" where applicable
+  // Merge adjacent changes into "modified"
   return mergeAdjacentChanges(changes);
 }
 
 /**
- * Tokenize text items into individual words with positions.
+ * Tokenize text items into individual words with accurate proportional bounding boxes.
  */
 function tokenizeItems(items) {
   const words = [];
-  for (const item of items) {
-    const parts = item.text.split(/(\s+)/);
-    let offsetX = 0;
-    const charWidth = item.width / Math.max(item.text.length, 1);
 
-    for (const part of parts) {
-      const trimmed = part.trim();
+  for (const item of items) {
+    const text = item.text;
+    const parts = text.split(/(\s+)/);
+
+    if (parts.length <= 1) {
+      const trimmed = text.trim();
       if (trimmed) {
         words.push({
           text: trimmed,
-          x: item.x + offsetX,
+          x: item.x,
           y: item.y,
-          width: charWidth * part.length,
+          width: item.width,
           height: item.height,
         });
       }
-      offsetX += charWidth * part.length;
+      continue;
+    }
+
+    let offsetX = 0;
+    const totalChars = Math.max(text.length, 1);
+
+    for (const part of parts) {
+      const partLen = part.length;
+      const partW = (item.width * partLen) / totalChars;
+      const trimmed = part.trim();
+
+      if (trimmed) {
+        words.push({
+          text: trimmed,
+          x: Math.round((item.x + offsetX) * 10) / 10,
+          y: item.y,
+          width: Math.round(partW * 10) / 10,
+          height: item.height,
+        });
+      }
+      offsetX += partW;
     }
   }
+
   return words;
 }
 
@@ -162,16 +191,15 @@ function mergeAdjacentChanges(changes) {
       i + 1 < changes.length &&
       changes[i].type === 'removed' &&
       changes[i + 1].type === 'added' &&
-      Math.abs(changes[i].y - changes[i + 1].y) < 5
+      Math.abs(changes[i].y - changes[i + 1].y) <= 8
     ) {
-      // Merge into modified
       merged.push({
         type: 'modified',
         text: changes[i].text,
         newText: changes[i + 1].newText,
         x: Math.min(changes[i].x, changes[i + 1].x),
         y: Math.min(changes[i].y, changes[i + 1].y),
-        width: Math.max(changes[i].width, changes[i + 1].width),
+        width: Math.max(changes[i].x + changes[i].width, changes[i + 1].x + changes[i + 1].width) - Math.min(changes[i].x, changes[i + 1].x),
         height: Math.max(changes[i].height, changes[i + 1].height),
         page: changes[i].page,
       });
@@ -185,110 +213,73 @@ function mergeAdjacentChanges(changes) {
   return merged;
 }
 
-// ═══════════════════════════════════════════════════════
-// Myers Diff Algorithm — word-level
-// ═══════════════════════════════════════════════════════
-
 /**
- * Implementation of the Myers diff algorithm.
- * Returns an array of operations: { type: 'equal'|'delete'|'insert', count: number }
- *
- * @param {string[]} a - original sequence
- * @param {string[]} b - new sequence
- * @returns {Array<{type: string, count: number}>}
+ * High-performance lookahead token diff algorithm.
+ * Guarantees no stack overflow and handles common words without deleting them.
  */
-function myersDiff(a, b) {
-  const N = a.length;
-  const M = b.length;
-  const MAX = N + M;
-
-  if (MAX === 0) return [];
-
-  // For very large documents, fall back to a simpler LCS approach
-  if (MAX > 10000) {
-    return simpleDiff(a, b);
-  }
-
-  const V = new Array(2 * MAX + 1);
-  V[MAX + 1] = 0;
-
-  const trace = [];
-
-  for (let d = 0; d <= MAX; d++) {
-    const newV = [...V];
-    trace.push([...V]);
-
-    for (let k = -d; k <= d; k += 2) {
-      let x;
-      if (k === -d || (k !== d && V[MAX + k - 1] < V[MAX + k + 1])) {
-        x = V[MAX + k + 1];
-      } else {
-        x = V[MAX + k - 1] + 1;
-      }
-
-      let y = x - k;
-
-      while (x < N && y < M && a[x] === b[y]) {
-        x++;
-        y++;
-      }
-
-      newV[MAX + k] = x;
-
-      if (x >= N && y >= M) {
-        trace.push([...newV]);
-        return backtrack(trace, a, b, MAX);
-      }
-    }
-
-    for (let i = 0; i < newV.length; i++) {
-      V[i] = newV[i];
-    }
-  }
-
-  return simpleDiff(a, b);
-}
-
-function backtrack(trace, a, b, MAX) {
+function computeTokenDiff(a, b) {
   const ops = [];
-  let x = a.length;
-  let y = b.length;
+  let ai = 0;
+  let bi = 0;
 
-  for (let d = trace.length - 2; d >= 0; d--) {
-    const V = trace[d];
-    const k = x - y;
-
-    let prevK;
-    if (k === -d || (k !== d && V[MAX + k - 1] < V[MAX + k + 1])) {
-      prevK = k + 1;
-    } else {
-      prevK = k - 1;
+  while (ai < a.length && bi < b.length) {
+    if (a[ai] === b[bi]) {
+      ops.push({ type: 'equal', count: 1 });
+      ai++;
+      bi++;
+      continue;
     }
 
-    const prevX = V[MAX + prevK];
-    const prevY = prevX - prevK;
+    // Lookahead search window up to 40 tokens
+    const maxLookahead = 40;
+    let foundA = -1;
+    let foundB = -1;
 
-    // Diagonal moves (equal)
-    while (x > prevX && y > prevY) {
-      ops.unshift({ type: 'equal', count: 1 });
-      x--;
-      y--;
-    }
+    const limitA = Math.min(ai + maxLookahead, a.length);
+    const limitB = Math.min(bi + maxLookahead, b.length);
 
-    if (d > 0) {
-      if (x === prevX) {
-        // Insert
-        ops.unshift({ type: 'insert', count: 1 });
-        y--;
-      } else {
-        // Delete
-        ops.unshift({ type: 'delete', count: 1 });
-        x--;
+    for (let k = 1; ai + k < limitA; k++) {
+      if (a[ai + k] === b[bi]) {
+        foundA = k;
+        break;
       }
+    }
+
+    for (let k = 1; bi + k < limitB; k++) {
+      if (b[bi + k] === a[ai]) {
+        foundB = k;
+        break;
+      }
+    }
+
+    if (foundA !== -1 && (foundB === -1 || foundA <= foundB)) {
+      for (let k = 0; k < foundA; k++) {
+        ops.push({ type: 'delete', count: 1 });
+        ai++;
+      }
+    } else if (foundB !== -1) {
+      for (let k = 0; k < foundB; k++) {
+        ops.push({ type: 'insert', count: 1 });
+        bi++;
+      }
+    } else {
+      ops.push({ type: 'delete', count: 1 });
+      ops.push({ type: 'insert', count: 1 });
+      ai++;
+      bi++;
     }
   }
 
-  // Compress consecutive ops of the same type
+  while (ai < a.length) {
+    ops.push({ type: 'delete', count: 1 });
+    ai++;
+  }
+
+  while (bi < b.length) {
+    ops.push({ type: 'insert', count: 1 });
+    bi++;
+  }
+
   return compressOps(ops);
 }
 
@@ -306,42 +297,3 @@ function compressOps(ops) {
   return compressed;
 }
 
-/**
- * Simple fallback diff for very large documents.
- */
-function simpleDiff(a, b) {
-  const ops = [];
-  const setB = new Set(b);
-  const setA = new Set(a);
-
-  let ai = 0, bi = 0;
-
-  while (ai < a.length && bi < b.length) {
-    if (a[ai] === b[bi]) {
-      ops.push({ type: 'equal', count: 1 });
-      ai++;
-      bi++;
-    } else if (!setB.has(a[ai])) {
-      ops.push({ type: 'delete', count: 1 });
-      ai++;
-    } else if (!setA.has(b[bi])) {
-      ops.push({ type: 'insert', count: 1 });
-      bi++;
-    } else {
-      ops.push({ type: 'delete', count: 1 });
-      ai++;
-    }
-  }
-
-  while (ai < a.length) {
-    ops.push({ type: 'delete', count: 1 });
-    ai++;
-  }
-
-  while (bi < b.length) {
-    ops.push({ type: 'insert', count: 1 });
-    bi++;
-  }
-
-  return compressOps(ops);
-}

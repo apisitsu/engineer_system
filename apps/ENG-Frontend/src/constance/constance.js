@@ -1,15 +1,15 @@
-﻿export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
+export const NETWORK_CONNECTION_MESSAGE = "Cannot connect to server, Please try again.";
 export const NETWORK_TIMEOUT_MESSAGE = "A network timeout has occurred, Please try again.";
 export const UPLOAD_PHOTO_FAIL_MESSAGE = "An error has occurred. The photo was unable to upload.";
 export const NOT_CONNECT_NETWORK = "NOT_CONNECT_NETWORK";
 
 // // // ----------- PROD -----------
-export const apiUrl = "http://plbmp130:2005/";
+// export const apiUrl = "http://plbmp130.lb.minebea.local:2005/";
 
 
 // // // ----------- DEV -----------
 // export const apiUrl = "http://localhost:2005/";
-// export const apiUrl = "http://plbmp129:2005/";
+export const apiUrl = "http://plbmp129:2005/";
 // export const apiUrl = "http://10.121.50.38:2005/";
 // export const apiUrl = "http://plbmp118:2005/";
 
@@ -176,12 +176,16 @@ export const server = {
   USER_GET_ALL: `${apiUrl}api/get-all-users`,  // Alias
   UPDATE_USER_THEME: `${apiUrl}api/update-user-theme`,
   UPDATE_USER_PROFILE: `${apiUrl}api/update-user-profile`,
-  GET_USER_INFO: `${apiUrl}api/get-user-info`,
   USER_MANAGEMENT_SCHEMA: `${apiUrl}api/system/user-management/schema`,
   USER_MANAGEMENT_USERS: `${apiUrl}api/system/user-management/users`,
   USER_MANAGEMENT_EXTERNAL_USERS: `${apiUrl}api/system/user-management/external-users`,
   USER_MANAGEMENT_ADD_COLUMN: `${apiUrl}api/system/user-management/schema/add-column`,
   USER_MANAGEMENT_DROP_COLUMN: `${apiUrl}api/system/user-management/schema/drop-column`,
+  USER_MANAGEMENT_SKILLS: `${apiUrl}api/system/user-management/skills`,
+  USER_MANAGEMENT_QUALIFICATIONS: `${apiUrl}api/system/user-management/qualifications`,
+  USER_MANAGEMENT_CRITERIA: `${apiUrl}api/system/qualification-criteria`,
+  USER_MANAGEMENT_AUDIT_LOGS: `${apiUrl}api/system/user-management/audit-logs`,
+  USER_MANAGEMENT_AUDIT_STATS: `${apiUrl}api/system/user-management/audit-logs/stats`,
 
   //--------------------Kanban--------------------//
   KANBAN_USERS: `${apiUrl}api/kanban/users`,
@@ -220,8 +224,6 @@ export const server = {
   ACTIVITY_MODULES: `${apiUrl}api/activity/modules`,
   ACTIVITY_USER: `${apiUrl}api/activity/user`,
   ACTIVITY_USERS_PRESENCE: `${apiUrl}api/activity/users-presence`,
-  ACTIVITY_USER_TIMELINE: `${apiUrl}api/activity/user-timeline`,
-
 };
 
 export const key_constance = {

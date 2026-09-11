@@ -94,6 +94,8 @@ function getFriendlyTitle(routePath) {
 
     // Overall Engineer & Viewer
     if (routePath.includes('/overall_eng/eng-record') || routePath.includes('/viewer/eng-record')) return 'Overall: Engineer Record';
+    if (routePath.includes('/overall_eng/organization')) return 'Overall: Organization';
+    if (routePath.includes('/overall_eng/tools')) return 'Overall: Tool Gallery';
     if (routePath.startsWith('/eng/overall_eng')) return 'Overall Engineer';
 
     // General Tools & PDF Hub

@@ -1,8 +1,8 @@
 /**
- * Comparison Runner — orchestrates the full page-by-page comparison pipeline.
- * Runs on the main thread but yields to the event loop between pages for responsiveness.
+ * Comparison Runner — orchestrates page-by-page comparison pipeline.
+ * Keeps memory footprint minimal by storing metadata only, releasing canvas buffers immediately.
  */
-import { comparePagePixels, renderPageToImageData } from './pixelCompare.js';
+import { comparePagePixels } from './pixelCompare.js';
 import { comparePageText } from './textCompare.js';
 
 /**
@@ -14,13 +14,13 @@ import { comparePageText } from './textCompare.js';
  * @param {string} options.mode - 'pixel' | 'text' | 'both'
  * @param {number} options.threshold - pixel sensitivity (0-1)
  * @param {function} options.onProgress - callback(progress, text)
- * @param {function} options.onCancel - returns true if cancelled
+ * @param {function} options.isCancelled - returns true if cancelled
  * @returns {Promise<{results: Map, diffs: Array}>}
  */
 export async function runComparison(basePdf, comparePdf, options = {}) {
   const {
-    mode = 'pixel',
-    threshold = 0.1,
+    mode = 'both',
+    threshold = 0.15,
     onProgress = () => {},
     isCancelled = () => false,
   } = options;
@@ -40,22 +40,24 @@ export async function runComparison(basePdf, comparePdf, options = {}) {
     const progress = Math.round(((page - 1) / totalPages) * 100);
     onProgress(progress, `Comparing page ${page} of ${totalPages}...`);
 
-    // Yield to event loop
+    // Yield to event loop to keep UI responsive
     await new Promise(resolve => setTimeout(resolve, 0));
-
-    const pageResult = {
-      pixelDiffs: null,
-      textDiffs: null,
-      diffImageData: null,
-      diffCanvas: null,
-      baseCanvas: null,
-      compareCanvas: null,
-    };
 
     const hasBasePage = page <= basePages;
     const hasComparePage = page <= comparePages;
 
-    // Pixel comparison
+    const pageResult = {
+      page,
+      hasBasePage,
+      hasComparePage,
+      pixelDiffs: null,
+      textDiffs: null,
+    };
+
+    let pagePixelRegions = [];
+    let pageTextChanges = [];
+
+    // 1. Pixel comparison
     if ((mode === 'pixel' || mode === 'both') && hasBasePage && hasComparePage) {
       try {
         const pixelResult = await comparePagePixels(basePdf, comparePdf, page, {
@@ -64,94 +66,185 @@ export async function runComparison(basePdf, comparePdf, options = {}) {
         });
 
         pageResult.pixelDiffs = pixelResult;
-        pageResult.diffImageData = pixelResult.diffImageData;
-        pageResult.diffCanvas = pixelResult.diffCanvas;
-        pageResult.baseCanvas = pixelResult.baseCanvas;
-        pageResult.compareCanvas = pixelResult.compareCanvas;
-
-        // Add pixel regions as diff items
-        for (const region of pixelResult.regions) {
-          allDiffs.push({
-            type: 'pixel',
-            page,
-            bbox: { x: region.x, y: region.y, width: region.width, height: region.height },
-            description: `Visual change detected (${region.pixelCount} pixels)`,
-            pixelCount: region.pixelCount,
-          });
-        }
+        pagePixelRegions = pixelResult.regions || [];
       } catch (err) {
         console.error(`Pixel comparison failed for page ${page}:`, err);
       }
     }
 
-    // Text comparison
+    // 2. Text comparison
     if ((mode === 'text' || mode === 'both') && hasBasePage && hasComparePage) {
       try {
         const textDiffs = await comparePageText(basePdf, comparePdf, page);
         pageResult.textDiffs = textDiffs;
-
-        // Render canvases if we don't have them from pixel compare
-        if (!pageResult.baseCanvas && hasBasePage) {
-          const r = await renderPageToImageData(basePdf, page, 2.0);
-          pageResult.baseCanvas = r.canvas;
-        }
-        if (!pageResult.compareCanvas && hasComparePage) {
-          const r = await renderPageToImageData(comparePdf, page, 2.0);
-          pageResult.compareCanvas = r.canvas;
-        }
-
-        // Add text changes as diff items
-        for (const change of textDiffs) {
-          let description = '';
-          if (change.type === 'added') {
-            description = `Added: "${change.newText}"`;
-          } else if (change.type === 'removed') {
-            description = `Removed: "${change.text}"`;
-          } else if (change.type === 'modified') {
-            description = `Changed: "${change.text}" → "${change.newText}"`;
-          }
-
-          allDiffs.push({
-            type: `text-${change.type}`,
-            page,
-            bbox: { x: change.x, y: change.y, width: change.width, height: change.height },
-            description,
-            textOld: change.text,
-            textNew: change.newText,
-          });
-        }
+        pageTextChanges = textDiffs || [];
       } catch (err) {
         console.error(`Text comparison failed for page ${page}:`, err);
       }
     }
 
-    // Handle missing pages (page only in one doc)
+    // 3. Reconcile & Deduplicate diffs for this page
+    if (mode === 'both') {
+      const { mergedDiffs } = deduplicateDiffs(page, pagePixelRegions, pageTextChanges);
+      allDiffs.push(...mergedDiffs);
+    } else if (mode === 'pixel') {
+      for (const region of pagePixelRegions) {
+        allDiffs.push({
+          type: 'pixel',
+          page,
+          bbox: { x: region.x, y: region.y, width: region.width, height: region.height },
+          description: `Visual change detected (${region.pixelCount} pixels)`,
+          pixelCount: region.pixelCount,
+        });
+      }
+    } else if (mode === 'text') {
+      for (const change of pageTextChanges) {
+        allDiffs.push({
+          type: `text-${change.type}`,
+          page,
+          bbox: { x: change.x, y: change.y, width: change.width, height: change.height },
+          description: formatTextDescription(change),
+          textOld: change.text,
+          textNew: change.newText,
+        });
+      }
+    }
+
+    // 4. Handle pages present in only one document
     if (!hasBasePage && hasComparePage) {
-      const r = await renderPageToImageData(comparePdf, page, 2.0);
-      pageResult.compareCanvas = r.canvas;
-      allDiffs.push({
-        type: 'page-added',
-        page,
-        bbox: { x: 0, y: 0, width: 100, height: 100 },
-        description: `Page ${page} added in Rev 2 (not in Rev 1)`,
-      });
+      try {
+        const p = await comparePdf.getPage(page);
+        const vp = p.getViewport({ scale: 1.0 });
+        allDiffs.push({
+          type: 'page-added',
+          page,
+          bbox: { x: 0, y: 0, width: Math.round(vp.width), height: Math.round(vp.height) },
+          description: `Page ${page} added in Rev 2 (not in Rev 1)`,
+        });
+      } catch {
+        allDiffs.push({
+          type: 'page-added',
+          page,
+          bbox: { x: 0, y: 0, width: 595, height: 842 },
+          description: `Page ${page} added in Rev 2 (not in Rev 1)`,
+        });
+      }
     }
 
     if (hasBasePage && !hasComparePage) {
-      const r = await renderPageToImageData(basePdf, page, 2.0);
-      pageResult.baseCanvas = r.canvas;
-      allDiffs.push({
-        type: 'page-removed',
-        page,
-        bbox: { x: 0, y: 0, width: 100, height: 100 },
-        description: `Page ${page} removed in Rev 2 (was in Rev 1)`,
-      });
+      try {
+        const p = await basePdf.getPage(page);
+        const vp = p.getViewport({ scale: 1.0 });
+        allDiffs.push({
+          type: 'page-removed',
+          page,
+          bbox: { x: 0, y: 0, width: Math.round(vp.width), height: Math.round(vp.height) },
+          description: `Page ${page} removed in Rev 2 (was in Rev 1)`,
+        });
+      } catch {
+        allDiffs.push({
+          type: 'page-removed',
+          page,
+          bbox: { x: 0, y: 0, width: 595, height: 842 },
+          description: `Page ${page} removed in Rev 2 (was in Rev 1)`,
+        });
+      }
     }
 
     results.set(page, pageResult);
   }
 
   onProgress(100, 'Comparison complete!');
-
   return { results, diffs: allDiffs };
 }
+
+/**
+ * Format user-friendly description for text changes.
+ */
+function formatTextDescription(change) {
+  if (change.type === 'added') {
+    return `Added: "${change.newText}"`;
+  }
+  if (change.type === 'removed') {
+    return `Removed: "${change.text}"`;
+  }
+  if (change.type === 'modified') {
+    return `Changed: "${change.text}" → "${change.newText}"`;
+  }
+  return 'Text difference';
+}
+
+/**
+ * Deduplicates overlapping pixel and text diffs on a single page.
+ */
+function deduplicateDiffs(page, pixelRegions, textChanges) {
+  const mergedDiffs = [];
+  const claimedPixelIndices = new Set();
+
+  // First pass: Match text changes to any overlapping pixel regions
+  for (const textChange of textChanges) {
+    const textBbox = {
+      x: textChange.x,
+      y: textChange.y,
+      width: textChange.width,
+      height: textChange.height,
+    };
+
+    let matchedPixel = null;
+
+    for (let i = 0; i < pixelRegions.length; i++) {
+      if (claimedPixelIndices.has(i)) continue;
+      const pix = pixelRegions[i];
+
+      if (bboxesOverlapOrNear(textBbox, pix, 10)) {
+        claimedPixelIndices.add(i);
+        matchedPixel = pix;
+        break;
+      }
+    }
+
+    // Expand bounding box if pixel region was larger
+    const finalBbox = matchedPixel ? {
+      x: Math.min(textBbox.x, matchedPixel.x),
+      y: Math.min(textBbox.y, matchedPixel.y),
+      width: Math.max(textBbox.x + textBbox.width, matchedPixel.x + matchedPixel.width) - Math.min(textBbox.x, matchedPixel.x),
+      height: Math.max(textBbox.y + textBbox.height, matchedPixel.y + matchedPixel.height) - Math.min(textBbox.y, matchedPixel.y),
+    } : textBbox;
+
+    mergedDiffs.push({
+      type: `text-${textChange.type}`,
+      page,
+      bbox: finalBbox,
+      description: formatTextDescription(textChange),
+      textOld: textChange.text,
+      textNew: textChange.newText,
+      pixelCount: matchedPixel?.pixelCount || 0,
+    });
+  }
+
+  // Second pass: Add remaining unclaimed pixel regions (graphic/drawing changes)
+  for (let i = 0; i < pixelRegions.length; i++) {
+    if (!claimedPixelIndices.has(i)) {
+      const region = pixelRegions[i];
+      mergedDiffs.push({
+        type: 'pixel',
+        page,
+        bbox: { x: region.x, y: region.y, width: region.width, height: region.height },
+        description: `Visual change detected (${region.pixelCount} pixels)`,
+        pixelCount: region.pixelCount,
+      });
+    }
+  }
+
+  return { mergedDiffs };
+}
+
+function bboxesOverlapOrNear(a, b, margin) {
+  return !(
+    a.x + a.width + margin < b.x ||
+    b.x + b.width + margin < a.x ||
+    a.y + a.height + margin < b.y ||
+    b.y + b.height + margin < a.y
+  );
+}
+

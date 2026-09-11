@@ -17,6 +17,8 @@ export default function ExportDialog() {
       const fileInfo = {
         baseName: files.base?.name || 'base.pdf',
         compareName: files.compare?.name || 'compare.pdf',
+        baseDoc: files.base?.pdfDoc,
+        compareDoc: files.compare?.pdfDoc,
       };
 
       if (selectedFormat === 'pdf') {
