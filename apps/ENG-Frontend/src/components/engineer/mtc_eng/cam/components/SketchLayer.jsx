@@ -400,6 +400,7 @@ export default function SketchLayer() {
   // is just a selection click. Refs (not state) so the handlers don't churn.
   const dragId = useRef(null);
   const swallowClick = useRef(false); // eat the synthetic click after a no-move grab
+  const lastMovePoint = useRef(null); // last good pointermove sample — see the jump-reject note below
   useEffect(() => {
     const onUp = () => {
       if (dragId.current != null) {
@@ -549,6 +550,26 @@ export default function SketchLayer() {
           }}
           onPointerMove={(e) => {
             const p = localPoint(e);
+            // Reject a raycast that jumped far more than the pointer's own screen
+            // movement could account for. Confirmed by debug logging: some
+            // pointermove/pointerdown events from R3F resolve to a world point
+            // that isn't derived from this event's (correctly read) clientX/clientY
+            // at all — it lands, consistently, near the world position of the
+            // canvas's own top-left corner (NDC (-1, 1)) regardless of where the
+            // pointer actually is. Root cause sits inside R3F's event pipeline, not
+            // reproduced from our own code; this rejects the bad sample instead of
+            // acting on it; the very next (good) move corrects the rubber-band
+            // within a frame, which reads as nothing happening rather than a jump.
+            const prevMove = lastMovePoint.current;
+            if (prevMove) {
+              const clientDist = Math.hypot(e.clientX - prevMove.clientX, e.clientY - prevMove.clientY);
+              const worldDist = Math.hypot(p.x - prevMove.x, p.y - prevMove.y);
+              // ~expected world units per screen pixel, from the already-screen-
+              // constant pickTol (9 px worth of world units at the current zoom).
+              const expected = (clientDist * (pickTol / 9)) + 0.001;
+              if (worldDist > expected * 8 && worldDist > 5) return;
+            }
+            lastMovePoint.current = { clientX: e.clientX, clientY: e.clientY, x: p.x, y: p.y };
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
             if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
