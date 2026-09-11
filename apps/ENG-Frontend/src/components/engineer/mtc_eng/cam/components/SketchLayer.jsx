@@ -401,6 +401,7 @@ export default function SketchLayer() {
   const dragId = useRef(null);
   const swallowClick = useRef(false); // eat the synthetic click after a no-move grab
   const lastMovePoint = useRef(null); // last good pointermove sample — see the jump-reject note below
+  const rejectStreak = useRef(0); // consecutive rejections — forces a resync so a bad sample can't get stuck as the baseline forever
   useEffect(() => {
     const onUp = () => {
       if (dragId.current != null) {
@@ -561,7 +562,7 @@ export default function SketchLayer() {
             // acting on it; the very next (good) move corrects the rubber-band
             // within a frame, which reads as nothing happening rather than a jump.
             const prevMove = lastMovePoint.current;
-            if (prevMove) {
+            if (prevMove && rejectStreak.current < 2) {
               const clientDist = Math.hypot(e.clientX - prevMove.clientX, e.clientY - prevMove.clientY);
               const worldDist = Math.hypot(p.x - prevMove.x, p.y - prevMove.y);
               // ~expected world units per screen pixel, from the already-screen-
@@ -573,8 +574,18 @@ export default function SketchLayer() {
               // zoom is), so it stays a huge multiple of `expected` even during a
               // fast, legitimate drag — a looser margin was still letting some
               // through on exactly those frames.
-              if (worldDist > expected * 3 && worldDist > 5) return;
+              if (worldDist > expected * 3 && worldDist > 5) {
+                rejectStreak.current += 1;
+                return;
+              }
             }
+            // Accepted — either it looked fine, or two straight rejections means the
+            // *baseline* itself was the bad sample (its very first reading, with no
+            // prior point to check it against, sails through unrejected — see
+            // above), which was then rejecting every real, correct move after it as
+            // "too big a jump" forever. Two strikes forces a resync onto whatever
+            // the pointer is doing right now instead of getting stuck there.
+            rejectStreak.current = 0;
             lastMovePoint.current = { clientX: e.clientX, clientY: e.clientY, x: p.x, y: p.y };
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
