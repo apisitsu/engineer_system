@@ -400,8 +400,32 @@ export default function SketchLayer() {
   // is just a selection click. Refs (not state) so the handlers don't churn.
   const dragId = useRef(null);
   const swallowClick = useRef(false); // eat the synthetic click after a no-move grab
-  const lastMovePoint = useRef(null); // last good pointermove sample — see the jump-reject note below
-  const rejectStreak = useRef(0); // consecutive rejections — forces a resync so a bad sample can't get stuck as the baseline forever
+  const planeMeshRef = useRef(null); // the pick-plane mesh — see resolveBadCornerPoint below
+  const cornerRaycaster = useRef(null);
+  if (!cornerRaycaster.current) cornerRaycaster.current = new THREE.Raycaster();
+  const cornerNdc = useRef(null);
+  if (!cornerNdc.current) cornerNdc.current = new THREE.Vector2(-1, 1);
+  const threeCamera = useThree((s) => s.camera);
+
+  /**
+   * The world/local point some pointermove and pointerdown events resolve to
+   * instead of the real cursor position — see the jump-reject note at the
+   * pick-plane's handlers. Traced with debug logging to the world position of
+   * NDC (-1, 1): the canvas's own top-left corner, independent of where the
+   * pointer actually is. Computed fresh off the *live* camera on every check
+   * (not cached, not compared against history) precisely so the check can
+   * never itself get stuck trusting a bad sample as a baseline — that was the
+   * failure of the first version of this fix (comparing each move only to the
+   * last one), which meant one bad first sample turned every subsequent
+   * correct move into what looked like the anomaly.
+   */
+  const resolveBadCornerPoint = () => {
+    if (!planeMeshRef.current) return null;
+    cornerRaycaster.current.setFromCamera(cornerNdc.current, threeCamera);
+    const hits = cornerRaycaster.current.intersectObject(planeMeshRef.current);
+    if (!hits.length) return null;
+    return localPoint({ point: hits[0].point, object: planeMeshRef.current });
+  };
   useEffect(() => {
     const onUp = () => {
       if (dragId.current != null) {
@@ -536,6 +560,7 @@ export default function SketchLayer() {
           Select is active so the drag is ours). */}
       {(drawing || picking) && (
         <mesh
+          ref={planeMeshRef}
           onPointerDown={(e) => {
             if (drawing) {
               e.stopPropagation();
@@ -551,42 +576,19 @@ export default function SketchLayer() {
           }}
           onPointerMove={(e) => {
             const p = localPoint(e);
-            // Reject a raycast that jumped far more than the pointer's own screen
-            // movement could account for. Confirmed by debug logging: some
-            // pointermove/pointerdown events from R3F resolve to a world point
-            // that isn't derived from this event's (correctly read) clientX/clientY
-            // at all — it lands, consistently, near the world position of the
-            // canvas's own top-left corner (NDC (-1, 1)) regardless of where the
-            // pointer actually is. Root cause sits inside R3F's event pipeline, not
-            // reproduced from our own code; this rejects the bad sample instead of
-            // acting on it; the very next (good) move corrects the rubber-band
-            // within a frame, which reads as nothing happening rather than a jump.
-            const prevMove = lastMovePoint.current;
-            if (prevMove && rejectStreak.current < 2) {
-              const clientDist = Math.hypot(e.clientX - prevMove.clientX, e.clientY - prevMove.clientY);
-              const worldDist = Math.hypot(p.x - prevMove.x, p.y - prevMove.y);
-              // ~expected world units per screen pixel, from the already-screen-
-              // constant pickTol (9 px worth of world units at the current zoom).
-              const expected = (clientDist * (pickTol / 9)) + 0.001;
-              // A margin of 3x (not a looser one) matters: the bad sample's own
-              // magnitude scales with pickTol the same way `expected` does (it's
-              // the world size of the canvas itself, at whatever the current
-              // zoom is), so it stays a huge multiple of `expected` even during a
-              // fast, legitimate drag — a looser margin was still letting some
-              // through on exactly those frames.
-              if (worldDist > expected * 3 && worldDist > 5) {
-                rejectStreak.current += 1;
-                return;
-              }
+            // Reject this sample if it's suspiciously close to the known-bad
+            // corner point (see `resolveBadCornerPoint`), computed fresh off the
+            // live camera every time — not compared against a remembered
+            // "previous" point, which was the bug in the first version of this
+            // fix: a bad *first* sample had nothing to compare against, became
+            // the trusted baseline, and then rejected every correct move after
+            // it forever. This check can't get stuck the same way, because
+            // nothing about it depends on what happened on the last event.
+            const badCorner = resolveBadCornerPoint();
+            if (badCorner) {
+              const tol = Math.max(pickTol * 5, 5);
+              if (Math.hypot(p.x - badCorner.x, p.y - badCorner.y) < tol) return;
             }
-            // Accepted — either it looked fine, or two straight rejections means the
-            // *baseline* itself was the bad sample (its very first reading, with no
-            // prior point to check it against, sails through unrejected — see
-            // above), which was then rejecting every real, correct move after it as
-            // "too big a jump" forever. Two strikes forces a resync onto whatever
-            // the pointer is doing right now instead of getting stuck there.
-            rejectStreak.current = 0;
-            lastMovePoint.current = { clientX: e.clientX, clientY: e.clientY, x: p.x, y: p.y };
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
             if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
