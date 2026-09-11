@@ -567,7 +567,13 @@ export default function SketchLayer() {
               // ~expected world units per screen pixel, from the already-screen-
               // constant pickTol (9 px worth of world units at the current zoom).
               const expected = (clientDist * (pickTol / 9)) + 0.001;
-              if (worldDist > expected * 8 && worldDist > 5) return;
+              // A margin of 3x (not a looser one) matters: the bad sample's own
+              // magnitude scales with pickTol the same way `expected` does (it's
+              // the world size of the canvas itself, at whatever the current
+              // zoom is), so it stays a huge multiple of `expected` even during a
+              // fast, legitimate drag — a looser margin was still letting some
+              // through on exactly those frames.
+              if (worldDist > expected * 3 && worldDist > 5) return;
             }
             lastMovePoint.current = { clientX: e.clientX, clientY: e.clientY, x: p.x, y: p.y };
             // A drag in progress steers the pinned point; check the store live so
