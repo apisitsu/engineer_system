@@ -5,34 +5,31 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-11
-- **Active Goal:** PDF Hub (PdfEditor, SignStamp, PdfCommitEngine) architectural bug fixes and coordinate stabilization completed.
+- **Active Goal:** PDF Hub (PdfEditor, SignStamp, PdfCommitEngine) architectural bug fixes, shortcuts, and Undo/Redo stabilization completed.
 
 ### Recent Changes
-- **User Management Refactoring & Audit Trail System (2026-09-10):**
-  - **Frontend Refactor:** Deconstructed monolithic `UserManagement.jsx` (originally 2,886 lines) into modular subcomponents:
-    - `constants/userConstants.js`: Centralized constants, options, styling helpers, and data mappers.
-    - `components/UserManagementHeader.jsx`: Portal header, quick actions, export buttons, and Change History trigger.
-    - `components/UserStatsOverview.jsx`: Metrics cards (Registered, Active, Leaders, Avg Team Powers).
-    - `components/UserFilterBar.jsx`: Multi-criteria search, department/role/auth filters, sorters, Cards/Table toggle.
-    - `components/UserCardView.jsx`: Responsive engineer cards with RPG power stats and action menus.
-    - `components/UserTableView.jsx`: High-density table view with inline power bars.
-    - `components/UserDetailsModal.jsx`: Modern card-based user profile inspector with combat attributes and change log shortcut.
-    - `components/UserFormModal.jsx`: Dynamic user creation/editing modal supporting RODPC auto-fetch and custom schema columns.
-    - `components/SchemaModals.jsx`: Add/Drop database column modal guards for Super Admin.
-    - `components/UserAuditLogDrawer.jsx`: Comprehensive change history drawer featuring stats banner, category/user filters, CSV export, and field-by-field Visual Diff Modal (`Before` vs `After`).
-  - **Backend & Database Audit Trail:**
-    - Upgraded `system_logs` in PostgreSQL `eng_system` with structured columns: `actor_name`, `category`, `target_id`, `target_name`, `old_data`, `new_data`, `changes`, `ip_address` with performance indexes.
-    - Implemented deep diff logging in `apps/ENG-Backend/api/user/userManagementModel.js` across:
-      - Profile updates (`USER_PROFILE`) with field-by-field comparison.
-      - User creation (`USER_CREATE`) & deletion (`USER_DELETE`) with archive snapshots.
-      - Skill scoring and power calibration (`SKILLS_CALIBRATION`) logging ATK/DEF/HP/MP deltas.
-      - Qualification badges (`QUALIFICATIONS`).
-      - Evaluation criteria rules (`CRITERIA`).
-      - Dynamic schema alterations (`DATABASE_SCHEMA`).
-    - Added API endpoints:
-      - `GET /api/system/user-management/audit-logs` (filtering, pagination, search).
-      - `GET /api/system/user-management/audit-logs/stats` (metrics, category breakdown, top actors).
-  - **Verification:** Verified 0 compile/syntax errors with `npm run build` and validated full UI and diff viewer in browser.
+- **PDF Hub Fabric.js Stabilization, Hotkeys, Role Presets & Arrowhead Sizing (2026-09-11):**
+  - **Role Preset Color Application Fix:**
+    - Eliminated accidental `handleSetFillColor(null)` call on Role Preset selection in `ShapesPanel.jsx`, which previously wiped text font color and shape backgrounds to transparent.
+    - Added `handleApplyRolePreset(roleName, color)` to properly apply preset colors (`Drawer`: `#3498db`, `Checker`: `#e74c3c`, `Approver`: `#000000`) across all selected annotation types (Text font fill, Arrow shaft and head, Shape strokes, and Stamps) while recording undo history.
+  - **Draw Arrow Arrowhead Size Customization:**
+    - Added `arrowHeadSize` (default: 16, range: 6-60) to `usePdfEditorStore.js` and drawing configuration in `useFabricTools.js`.
+    - Implemented live arrowhead resizing in `updateSelectedObjectProperty` with Fabric v6 `group.triggerLayout()` and bounding box re-indexing.
+    - Synchronized selected arrow properties in `EditorCanvas.jsx` and added dedicated Slider + InputNumber controls with `px` suffix in `ShapesPanel.jsx`.
+  - **Ctrl+C / Paste Crash Elimination:**
+    - Resolved `TypeError: Cannot read properties of undefined (reading 'split')` by creating `fabricSafeguard.js` as a global prototype guard on `FabricText.prototype._splitTextIntoLines`, ensuring undefined/null text never crashes `_splitText` during asynchronous `clone()` and `Promise.all` object enlivening.
+    - Added fallback character guards (`char || ' '`) to `stampUserDate` in `useFabricTools.js`.
+    - Sanitized `Ctrl+C` and `Ctrl+V` in `ShortcutsHandler.jsx` with strict property whitelisting (`['id', 'customData', 'text', 'textLines', 'fill', 'stroke', 'strokeWidth', 'fontSize', 'fontFamily', 'fontWeight']`) and robust error handling.
+  - **Edit Text Content Synchronization:**
+    - Resolved `TypeError: store.updateSelectedTextContent is not a function` by adding `updateSelectedTextContent` to `usePdfEditorStore.js` and routing to `updateSelectedObjectProperty`.
+    - Extended `updateSelectedObjectProperty` to support `FabricText` (Fabric v6 PascalCase) alongside `textbox`, `i-text`, and `text`. Added `initDimensions()` and `setCoords()` for live bounding box updating.
+    - Added history push on text input focus (`handleTextFocus`) in `ShapesPanel.jsx` and guarded property change setters to preserve history.
+  - **Undo / Redo Engine Stabilization:**
+    - Inverted freehand drawing history capture: moved `pushHistory(pageNum)` from `onPathCreated` to `onMouseDown` so strokes can be cleanly undone.
+    - Fixed visual blank-canvas bug in `_applyStateToCanvases`: ensured `fc.renderAll()` is called whenever `fc.clear()` executes during undo/redo to refresh the display buffer.
+    - Cleared active selections in store during history state restoration to avoid stale selection handles.
+    - Passed `pushHistory` through `PdfEditorTool.jsx` to `<ShortcutsHandler>` and `<PropertiesPanel>`, enabling undo for paste and shape property adjustments.
+  - **Verification:** 100% passed on 18 automated test suites (11 in `FabricClone.test.js` and 7 in `PdfCommitEngine.test.js`) and verified with 0-error production build (`npm run build`).
 
 - **PDF Hub Engine Stabilization & Bug Fixes (2026-09-11):**
   - **PDF Rotation Preservation:** Eliminated destructive `setRotation(degrees(0))` and `setSize()` pre-pass from `commitEngine.js` and `useSignStamp.js`. Implemented `getRawPlacement` and updated `visualToRawPdfCoords` to properly map elements onto rotated pages (0°, 90°, 180°, 270°) without corrupting or clipping original PDF content.

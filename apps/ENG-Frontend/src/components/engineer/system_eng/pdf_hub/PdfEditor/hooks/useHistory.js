@@ -19,7 +19,21 @@ export default function useHistory(setPageAnnotations, setPageHighlights) {
 
     const saveCurrentPageState = useCallback((pageNum, canvas, highlightsState) => {
         if (!canvas) return;
-        const json = canvas.toObject ? canvas.toObject(['id', 'customData', 'textLines']) : canvas.toJSON(['id', 'customData', 'textLines']);
+        const propertiesToInclude = [
+            'customData', 'textLines', 'id', 'text', 'fontSize', 'fontFamily', 
+            'fontWeight', 'fontStyle', 'underline', 'textAlign', 'fill', 'stroke', 
+            'strokeWidth', 'opacity'
+        ];
+        const json = canvas.toObject ? canvas.toObject(propertiesToInclude) : canvas.toJSON(propertiesToInclude);
+        if (json && Array.isArray(json.objects)) {
+            json.objects.forEach(obj => {
+                if (obj && (obj.type === 'FabricText' || obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                    if (obj.text === undefined || obj.text === null) {
+                        obj.text = '';
+                    }
+                }
+            });
+        }
         json._canvasWidth = canvas.width;
         json._canvasHeight = canvas.height;
 

@@ -806,6 +806,7 @@ const PdfEditorTool = () => {
                 onSave={handleApplyAndDownload}
                 fabricCanvasRefs={fabricCanvasRefs}
                 currentPage={currentPage}
+                pushHistory={pushHistory}
             />
 
             {/* ── Signature Pad Modal ── */}
@@ -970,6 +971,7 @@ const PdfEditorTool = () => {
                         onClearOverlay={handleClearOverlay}
                         fabricCanvasRefs={fabricCanvasRefs}
                         currentPage={currentPage}
+                        pushHistory={pushHistory}
                     />
                 )}
             </div>

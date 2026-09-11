@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import * as fabric from 'fabric';
+import '../../engine/fabricSafeguard';
 
 /**
  * useFabricTools — Handles mouse events for drawing shapes and objects on the Fabric canvas.
@@ -192,7 +193,7 @@ export default function useFabricTools({
                     const nameObjects = nameChars.map((char, i) => {
                         const a = startA - (i * charAngle);
                         const rad = a * (Math.PI / 180);
-                        return new fabric.FabricText(char, {
+                        return new fabric.FabricText(char || ' ', {
                             ...fontProps,
                             fontSize: 12,
                             left: nameRadius * Math.cos(rad),
@@ -400,7 +401,11 @@ export default function useFabricTools({
 
         const onMouseDown = (opt) => {
             const tool = store.activeTool;
-            if (!tool || tool === 'select' || tool === 'pan' || tool === 'freehand') return;
+            if (!tool || tool === 'select' || tool === 'pan') return;
+            if (tool === 'freehand') {
+                if (pushHistory) pushHistory(pageNum);
+                return;
+            }
             if (['highlight', 'underline', 'strikethrough'].includes(tool)) return;
 
             if (tool === 'eraser') {
@@ -543,7 +548,7 @@ export default function useFabricTools({
                 const x1 = tempObj.x1, y1 = tempObj.y1;
                 const x2 = tempObj.x2, y2 = tempObj.y2;
                 const angle = Math.atan2(y2 - y1, x2 - x1);
-                const headLen = currentSettings.fontSize || 16;
+                const headLen = currentSettings.arrowHeadSize || currentSettings.fontSize || 16;
 
                 const arrowHead = new fabric.Triangle({
                     left: x2,
@@ -560,7 +565,7 @@ export default function useFabricTools({
                 });
 
                 const group = new fabric.Group([tempObj, arrowHead], {
-                    customData: { type: 'arrow' },
+                    customData: { type: 'arrow', arrowHeadSize: headLen },
                     selectable: true,
                     evented: true,
                 });
@@ -625,7 +630,6 @@ export default function useFabricTools({
         const onPathCreated = (opt) => {
             if (opt.path) {
                 opt.path.set('customData', { type: 'freehand' });
-                pushHistory(pageNum);
             }
         };
 

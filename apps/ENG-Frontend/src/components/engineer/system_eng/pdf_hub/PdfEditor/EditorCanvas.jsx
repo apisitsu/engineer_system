@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as fabric from 'fabric';
+import './engine/fabricSafeguard';
 import * as pdfjsLib from 'pdfjs-dist';
 import '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -96,8 +97,12 @@ const EditorCanvas = ({
         const handleSelection = (e) => {
             const obj = e.selected?.[0];
             if (obj) {
-                if (!obj.id) obj.id = `shape_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                
+                let arrowHeadSize = 16;
+                if (obj.customData?.type === 'arrow') {
+                    const headChild = obj.getObjects?.().find(c => c.type?.toLowerCase() === 'triangle' || c.customData?.type === 'arrowhead');
+                    arrowHeadSize = headChild ? Math.round(headChild.width * (headChild.scaleX || 1)) : (obj.customData?.arrowHeadSize || 16);
+                }
+
                 store.setSelectedObject(obj.id, {
                     type: obj.type,
                     fill: obj.fill,
@@ -105,6 +110,7 @@ const EditorCanvas = ({
                     strokeWidth: obj.strokeWidth,
                     opacity: obj.opacity,
                     fontSize: obj.fontSize,
+                    arrowHeadSize: obj.customData?.type === 'arrow' ? arrowHeadSize : undefined,
                     fontFamily: obj.fontFamily,
                     text: obj.text,
                     customData: obj.customData,
@@ -114,7 +120,7 @@ const EditorCanvas = ({
                 // Target the object's OWN tool type so we don't pollute 'select'/'pan' settings
                 // which would cause stale colors to be force-applied on re-selection.
                 const objToolType = obj.customData?.type || obj.type;
-                const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text';
+                const isText = obj.type === 'i-text' || obj.type === 'textbox' || obj.type === 'text' || obj.type === 'FabricText';
                 const isStamp = obj.customData?.type && obj.customData.type.startsWith('stamp');
 
                 // Determine the target tool to update settings for
@@ -158,6 +164,23 @@ const EditorCanvas = ({
                             store.setToolSetting('select', 'strokeColor', obj.fill);
                         }
                     }
+                } else if (obj.customData?.type === 'arrow') {
+                    let arrowColor = '#e74c3c';
+                    let arrowWidth = 2;
+                    obj.getObjects?.().forEach(child => {
+                        if (child.stroke) {
+                            arrowColor = child.stroke;
+                            arrowWidth = child.strokeWidth || arrowWidth;
+                        } else if (child.fill && child.fill !== 'transparent') {
+                            arrowColor = child.fill;
+                        }
+                    });
+                    store.setToolSetting(targetTool, 'strokeColor', arrowColor);
+                    store.setToolSetting('select', 'strokeColor', arrowColor);
+                    store.setToolSetting(targetTool, 'strokeWidth', arrowWidth);
+                    store.setToolSetting('select', 'strokeWidth', arrowWidth);
+                    store.setToolSetting(targetTool, 'arrowHeadSize', arrowHeadSize);
+                    store.setToolSetting('select', 'arrowHeadSize', arrowHeadSize);
                 } else {
                     if (obj.stroke) {
                         store.setToolSetting(targetTool, 'strokeColor', obj.stroke);

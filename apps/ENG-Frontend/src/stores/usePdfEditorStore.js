@@ -29,7 +29,7 @@ export const usePdfEditorStore = create((set, get) => ({
     toolSettings: {
         rect: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
         circle: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
-        arrow: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
+        arrow: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0, arrowHeadSize: 16 },
         line: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
         freehand: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
         highlight: { highlightColor: '#ffeb3b', opacity: 0.5 },
@@ -44,7 +44,7 @@ export const usePdfEditorStore = create((set, get) => ({
         stampUserDate: { strokeColor: '#e74c3c', fontSize: 12 },
         addImage: { opacity: 1.0 },
         // Fallback for missing tools
-        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
+        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, arrowHeadSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
     },
 
     // ── Selected Object ──
@@ -118,6 +118,7 @@ export const usePdfEditorStore = create((set, get) => ({
     setFillColor: (c) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fillColor: c } } })),
     setStrokeWidth: (w) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), strokeWidth: w } } })),
     setFontSize: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontSize: s } } })),
+    setArrowHeadSize: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), arrowHeadSize: s } } })),
     setFontFamily: (f) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontFamily: f } } })),
     setFontWeight: (w) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontWeight: w } } })),
     setFontStyle: (s) => set(state => ({ toolSettings: { ...state.toolSettings, [state.activeTool]: { ...(state.toolSettings[state.activeTool] || state.toolSettings.default), fontStyle: s } } })),
@@ -159,17 +160,24 @@ export const usePdfEditorStore = create((set, get) => ({
         return { toolSettings: newSettings, currentDwgRole: roleName };
     }),
 
+    // Update Text Content directly
+    updateSelectedTextContent: (value, fabricCanvasRefs, currentPage) => {
+        get().updateSelectedObjectProperty('text', value, fabricCanvasRefs, currentPage);
+    },
+
     // Update Text Content or Any Property
     updateSelectedObjectProperty: (key, value, fabricCanvasRefs, currentPage) => set(state => {
         const fc = fabricCanvasRefs?.current?.[currentPage];
         if (fc && state.selectedObjectId) {
             const obj = fc.getObjects().find(o => (o.id === state.selectedObjectId || o.__uid === state.selectedObjectId));
             if (obj) {
-                if (key === 'text' && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
-                    obj.set('text', value);
+                if (key === 'text' && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text' || obj.type === 'FabricText')) {
+                    obj.set('text', value ?? '');
+                    if (typeof obj.initDimensions === 'function') obj.initDimensions();
                 } else if (key === 'strokeColor') {
-                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') obj.set('fill', value);
-                    else if (obj.customData?.type?.startsWith('stamp')) {
+                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox' || obj.type === 'FabricText') {
+                        obj.set('fill', value);
+                    } else if (obj.customData?.type?.startsWith('stamp')) {
                         if (obj.type === 'group') {
                             obj.getObjects().forEach(child => {
                                 if (child.stroke) child.set('stroke', value);
@@ -182,7 +190,9 @@ export const usePdfEditorStore = create((set, get) => ({
                     } else if (obj.type === 'group') {
                         obj.getObjects().forEach(child => {
                             if (child.stroke) child.set('stroke', value);
-                            if (child.type === 'triangle' && child.fill) child.set('fill', value);
+                            if (child.type?.toLowerCase() === 'triangle' || child.customData?.type === 'arrowhead') {
+                                child.set('fill', value);
+                            }
                         });
                     } else {
                         if (obj.stroke !== undefined) obj.set('stroke', value);
@@ -192,18 +202,33 @@ export const usePdfEditorStore = create((set, get) => ({
                 } else if (key === 'strokeWidth') {
                     if (obj.type === 'group' && !obj.customData?.type?.startsWith('stamp')) {
                         obj.getObjects().forEach(child => {
-                            if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type)) child.set('strokeWidth', value);
+                            if (['line', 'rect', 'circle', 'ellipse', 'path'].includes(child.type?.toLowerCase())) child.set('strokeWidth', value);
                         });
                     } else if (obj.strokeWidth !== undefined) {
                         obj.set('strokeWidth', value);
+                    }
+                } else if (key === 'arrowHeadSize') {
+                    if (obj.customData?.type === 'arrow' && obj.type === 'group') {
+                        const headChild = obj.getObjects().find(c => c.type?.toLowerCase() === 'triangle' || c.customData?.type === 'arrowhead');
+                        if (headChild) {
+                            headChild.set({ width: value, height: value, scaleX: 1, scaleY: 1 });
+                            if (typeof obj.triggerLayout === 'function') obj.triggerLayout();
+                        }
+                        obj.customData = { ...obj.customData, arrowHeadSize: value };
                     }
                 } else if (key === 'fontSize') {
                     if (obj.fontSize !== undefined) obj.set('fontSize', value);
                     else if (obj.type === 'group' && !obj.customData?.type?.startsWith('stamp')) {
                         obj.getObjects().forEach(child => {
-                            if (child.type === 'i-text' || child.type === 'text') child.set('fontSize', value);
-                            if (child.type === 'triangle') child.set({ width: value, height: value });
+                            if (child.type === 'i-text' || child.type === 'text' || child.type === 'FabricText') child.set('fontSize', value);
+                            if (child.type?.toLowerCase() === 'triangle' || child.customData?.type === 'arrowhead') {
+                                child.set({ width: value, height: value, scaleX: 1, scaleY: 1 });
+                            }
                         });
+                        if (typeof obj.triggerLayout === 'function') obj.triggerLayout();
+                        if (obj.customData?.type === 'arrow') {
+                            obj.customData = { ...obj.customData, arrowHeadSize: value };
+                        }
                     } else if (obj.customData?.type?.startsWith('stamp')) {
                         if (obj.customData.type === 'stampCheckmark' || obj.customData.type === 'stampCross') obj.set('fontSize', value * 2.5);
                         else if (obj.customData.type === 'stampCircle') obj.set('radius', value);
@@ -216,7 +241,7 @@ export const usePdfEditorStore = create((set, get) => ({
                         }
                     }
                 } else if (key === 'fontFamily' || key === 'fontWeight' || key === 'fontStyle' || key === 'underline' || key === 'textAlign') {
-                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox') obj.set(key, value);
+                    if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox' || obj.type === 'FabricText') obj.set(key, value);
                     else if (key === 'fontFamily' && obj.fontFamily !== undefined) obj.set('fontFamily', value);
                 } else if (key === 'opacity') {
                     if (obj.opacity !== undefined) obj.set('opacity', value);
@@ -226,7 +251,16 @@ export const usePdfEditorStore = create((set, get) => ({
                 obj.setCoords();
                 fc.renderAll();
 
-                return { selectedObjectProps: { ...state.selectedObjectProps, [key]: value } };
+                const extraProps = {};
+                if (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox' || obj.type === 'FabricText') {
+                    if (key === 'strokeColor') extraProps.fill = value;
+                    if (key === 'fillColor') extraProps.strokeColor = value;
+                }
+                if (key === 'arrowHeadSize') {
+                    extraProps.arrowHeadSize = value;
+                }
+
+                return { selectedObjectProps: { ...state.selectedObjectProps, [key]: value, ...extraProps } };
             }
         }
         return state;
