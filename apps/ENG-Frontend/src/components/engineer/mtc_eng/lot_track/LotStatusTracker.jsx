@@ -136,9 +136,15 @@ function Roadmap({ steps, issuedDate }) {
         // ("WIP N days" — how long it has held the lot so far).
         const prev = i > 0 ? steps[i - 1] : null;
         // >= 0, not > 0: a same-day handoff still gets its own "Wait in process
-        // 0 d" chip rather than being silently dropped.
+        // 0 d" chip rather than being silently dropped. A NEGATIVE dwellDays
+        // means the previous step's own comp_date recorded later than steps
+        // after it in the plan (source-data ordering issue, e.g. a late/rework
+        // update) — flag it instead of just going quiet.
         const headerWait = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays >= 0
           ? prev.dwellDays
+          : null;
+        const headerAnomaly = prev && prev.status === 'done' && prev.dwellDays != null && prev.dwellDays < 0
+          ? prev
           : null;
         let soFarDays = null;
         if (s.status === 'current' && s.startDate) {
@@ -170,6 +176,13 @@ function Roadmap({ steps, issuedDate }) {
                   <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
                     ⏳ Wait in process {headerWait} d
                   </Tag>
+                ) : null}
+                {headerAnomaly ? (
+                  <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
+                    <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
+                      ⚠ Date out of order
+                    </Tag>
+                  </Tooltip>
                 ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
               </Space>
