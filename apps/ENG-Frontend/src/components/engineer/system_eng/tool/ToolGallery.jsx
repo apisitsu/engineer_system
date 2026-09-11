@@ -8,7 +8,6 @@ import {
   SearchOutlined,
   ToolOutlined,
   ArrowRightOutlined,
-  DeploymentUnitOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
@@ -75,28 +74,6 @@ const ToolGallery = () => {
       category: 'Tracking',
       status: 'Active',
       tags: ['Production', 'Status']
-    },
-    {
-      id: 'lot-status-tracker',
-      title: 'Lot Status Tracker',
-      description: 'Track production lots by number — which process each is at now, what it has passed, how many steps remain, and how it stands against plan. Watch several lots side by side and star the view.',
-      icon: <SearchOutlined style={{ fontSize: '32px', color: '#13c2c2' }} />,
-      path: '/eng/mtc_eng/lot-track',
-      category: 'Tracking',
-      status: 'Active',
-      newTab: true,
-      tags: ['Production', 'Lot', 'Status']
-    },
-    {
-      id: 'cad-cam',
-      title: 'Engineer CAD/CAM',
-      description: 'In-browser 2D sketch and CAM workspace — draw geometry, generate toolpaths, and save your work to a personal or shared library.',
-      icon: <DeploymentUnitOutlined style={{ fontSize: '32px', color: '#2f54eb' }} />,
-      path: '/eng/mtc_eng/cam',
-      category: 'Engineering',
-      status: 'Active',
-      newTab: true,
-      tags: ['CAD', 'CAM', 'Sketch']
     }
   ];
 
