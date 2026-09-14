@@ -468,6 +468,7 @@ export default function LotStatusTracker() {
   const [saveMode, setSaveMode] = useState('new');     // 'new' | 'update'
   const [busy, setBusy] = useState(false);
   const [exportingId, setExportingId] = useState(null); // saved-track id currently exporting
+  const [exportingAll, setExportingAll] = useState(false);
 
   const patchState = (key, patch) =>
     setStateByKey((m) => ({ ...m, [key]: { ...(m[key] || {}), ...patch } }));
@@ -604,34 +605,78 @@ export default function LotStatusTracker() {
     } catch (e) { message.error(e.response?.data?.error || e.message); }
   };
 
-  // Export ONE saved track's lots — fetched fresh, independent of whatever is
-  // currently on screen — as one CSV (one row per process step), uploaded to
-  // the same Drive folder Tooling Inspection's "Update data" writes to.
-  const exportSavedCsv = async (track) => {
+  // Build one CSV file (fileName + base64) for ONE saved track — fetched fresh,
+  // independent of whatever is currently on screen — one row per process step.
+  // Returns { empty: true, skipped } instead when there's nothing to write.
+  const buildTrackCsvFile = async (track) => {
     const lots = track.lots || [];
-    if (!lots.length) { message.info('This track has no lots'); return; }
+    if (!lots.length) return { empty: true, skipped: 0 };
+    const responses = await Promise.all(lots.map((l) =>
+      axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
+        params: l.controlNo ? { control_no: l.controlNo } : {},
+      }).then((r) => r.data).catch(() => null),
+    ));
+    const rows = [CSV_HEADER];
+    let skipped = 0;
+    responses.forEach((d) => {
+      if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
+      (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
+    });
+    if (rows.length === 1) return { empty: true, skipped };
+    return { fileName: sanitizeCsvName(track.name, track.id), base64Data: utf8ToBase64(toCsv(rows)), skipped };
+  };
+
+  // One saved track → one CSV, uploaded to the same Drive folder Tooling
+  // Inspection's "Update data" writes to.
+  const exportSavedCsv = async (track) => {
     setExportingId(track.id);
     try {
-      const responses = await Promise.all(lots.map((l) =>
-        axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
-          params: l.controlNo ? { control_no: l.controlNo } : {},
-        }).then((r) => r.data).catch(() => null),
-      ));
-      const rows = [CSV_HEADER];
-      let skipped = 0;
-      responses.forEach((d) => {
-        if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
-        (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
-      });
-      if (rows.length === 1) { message.warning('No process data to export'); return; }
-
-      const fileName = sanitizeCsvName(track.name, track.id);
-      await uploadTiCsvViaGas([{ fileName, base64Data: utf8ToBase64(toCsv(rows)) }]);
-      message.success(`Exported "${fileName}" to Drive${skipped ? ` (${skipped} lot(s) skipped — not found/ambiguous)` : ''}`);
+      const file = await buildTrackCsvFile(track);
+      if (file.empty) {
+        message.warning((track.lots || []).length ? 'No process data to export' : 'This track has no lots');
+        return;
+      }
+      await uploadTiCsvViaGas([{ fileName: file.fileName, base64Data: file.base64Data }]);
+      message.success(`Exported "${file.fileName}" to Drive${file.skipped ? ` (${file.skipped} lot(s) skipped — not found/ambiguous)` : ''}`);
     } catch (e) {
       message.error(e.response?.data?.error || e.message || 'Export failed');
     } finally {
       setExportingId(null);
+    }
+  };
+
+  // ALL saved tracks → one CSV each, uploaded together in a single GAS call.
+  const exportAllSavedCsv = async () => {
+    if (!saved.length) { message.info('No saved tracks yet'); return; }
+    setExportingAll(true);
+    try {
+      const built = await Promise.all(saved.map((t) => buildTrackCsvFile(t)));
+      // Two tracks whose names sanitize to the same string would otherwise
+      // silently overwrite one another on Drive (the GAS script updates
+      // in place by filename) — de-dup with a numeric suffix.
+      const seen = new Map();
+      const files = [];
+      let emptyCount = 0;
+      let skippedTotal = 0;
+      built.forEach((f) => {
+        if (!f || f.empty) { emptyCount += 1; return; }
+        const n = (seen.get(f.fileName) || 0) + 1;
+        seen.set(f.fileName, n);
+        const fileName = n > 1 ? f.fileName.replace(/\.csv$/, `_${n}.csv`) : f.fileName;
+        files.push({ fileName, base64Data: f.base64Data });
+        skippedTotal += f.skipped;
+      });
+      if (!files.length) { message.warning('No process data to export across any saved track'); return; }
+      await uploadTiCsvViaGas(files);
+      message.success(
+        `Exported ${files.length} track(s) to Drive`
+        + (emptyCount ? ` · ${emptyCount} track(s) had no data` : '')
+        + (skippedTotal ? ` · ${skippedTotal} lot(s) skipped` : ''),
+      );
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Export failed');
+    } finally {
+      setExportingAll(false);
     }
   };
 
@@ -642,35 +687,47 @@ export default function LotStatusTracker() {
       {saved.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No saved tracks yet" />
       ) : (
-        <List
-          size="small"
-          dataSource={saved}
-          renderItem={(t) => (
-            <List.Item
-              style={{ padding: '6px 0' }}
-              actions={[
-                <Tooltip key="csv" title="Export this track's process detail as CSV to the Tooling Inspection Drive folder">
-                  <Button
-                    type="link" size="small" icon={<ExportOutlined />}
-                    loading={exportingId === t.id}
-                    onClick={() => exportSavedCsv(t)}
-                  >
-                    CSV
-                  </Button>
-                </Tooltip>,
-                <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
-                <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
-                  <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>,
-              ]}
-            >
-              <Space size={6}>
-                <Text strong>{t.name}</Text>
-                <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
-              </Space>
-            </List.Item>
-          )}
-        />
+        <>
+          <Button
+            block type="dashed" size="small" icon={<ExportOutlined />}
+            loading={exportingAll}
+            disabled={!!exportingId}
+            onClick={exportAllSavedCsv}
+            style={{ marginBottom: 8 }}
+          >
+            Export all ({saved.length}) as CSV
+          </Button>
+          <List
+            size="small"
+            dataSource={saved}
+            renderItem={(t) => (
+              <List.Item
+                style={{ padding: '6px 0' }}
+                actions={[
+                  <Tooltip key="csv" title="Export this track's process detail as CSV to the Tooling Inspection Drive folder">
+                    <Button
+                      type="link" size="small" icon={<ExportOutlined />}
+                      loading={exportingId === t.id}
+                      disabled={exportingAll || (!!exportingId && exportingId !== t.id)}
+                      onClick={() => exportSavedCsv(t)}
+                    >
+                      CSV
+                    </Button>
+                  </Tooltip>,
+                  <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
+                  <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
+                    <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>,
+                ]}
+              >
+                <Space size={6}>
+                  <Text strong>{t.name}</Text>
+                  <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
+                </Space>
+              </List.Item>
+            )}
+          />
+        </>
       )}
     </div>
   );
