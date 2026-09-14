@@ -285,31 +285,6 @@ const localPoint = (e) => {
   return e.object?.parent ? e.object.worldToLocal(p) : p;
 };
 
-/**
- * Sketch coordinates for a **click** — a pointer-down or pick that is about to
- * place or select something, as opposed to a plain hover.
- *
- * Prefers `sketchStore`'s `cursor` (refreshed on every pointermove, so it
- * always matches whatever the rubber-band / hover indicators are actually
- * showing on screen) over `localPoint(e)`'s own fresh raycast. The two
- * should always agree — the mouse doesn't teleport between the last move and
- * a click at the same spot — but for some pointerdown events R3F's own
- * raycasting has been observed to return a wildly wrong world point (tens to
- * hundreds of mm off) even though clientX/clientY and the camera exactly
- * match the immediately preceding, correct pointermove. Root cause not
- * pinned down; the store's cursor is the value actually rendered as the
- * click target, so trusting it instead makes the click land where the
- * operator can see it landing regardless. Falls back to the raycast only
- * when there is no prior hover yet (the very first click after selecting a
- * tool, before the pointer has moved over the plane).
- */
-const resolveClickPoint = (e) => {
-  const cursor = useSketchStore.getState().cursor;
-  if (cursor) return [cursor.x, cursor.y];
-  const p = localPoint(e);
-  return [p.x, p.y];
-};
-
 export default function SketchLayer() {
   const version = useSketchStore((s) => s.version);
   const sk = useSketchStore((s) => s.sk);
@@ -400,30 +375,37 @@ export default function SketchLayer() {
   // is just a selection click. Refs (not state) so the handlers don't churn.
   const dragId = useRef(null);
   const swallowClick = useRef(false); // eat the synthetic click after a no-move grab
-  const planeMeshRef = useRef(null); // the pick-plane mesh — see resolveBadCornerPoint below
-  const cornerRaycaster = useRef(null);
-  if (!cornerRaycaster.current) cornerRaycaster.current = new THREE.Raycaster();
-  const cornerNdc = useRef(null);
-  if (!cornerNdc.current) cornerNdc.current = new THREE.Vector2(-1, 1);
-  const threeCamera = useThree((s) => s.camera);
+  const planeMeshRef = useRef(null); // the pick-plane mesh — see resolvePointerPoint below
+  const ownRaycaster = useRef(null);
+  if (!ownRaycaster.current) ownRaycaster.current = new THREE.Raycaster();
+  const ownNdc = useRef(null);
+  if (!ownNdc.current) ownNdc.current = new THREE.Vector2();
+  const { camera: threeCamera, gl } = useThree();
 
   /**
-   * The world/local point some pointermove and pointerdown events resolve to
-   * instead of the real cursor position — see the jump-reject note at the
-   * pick-plane's handlers. Traced with debug logging to the world position of
-   * NDC (-1, 1): the canvas's own top-left corner, independent of where the
-   * pointer actually is. Computed fresh off the *live* camera on every check
-   * (not cached, not compared against history) precisely so the check can
-   * never itself get stuck trusting a bad sample as a baseline — that was the
-   * failure of the first version of this fix (comparing each move only to the
-   * last one), which meant one bad first sample turned every subsequent
-   * correct move into what looked like the anomaly.
+   * Sketch coordinates for a pointer event, computed independently of R3F's
+   * own `event.point` — reject-the-bad-sample was tried three ways (compare
+   * to the last accepted point; force a resync after N rejections; compare to
+   * a live-computed "known bad corner" point) and every one of them either
+   * missed real bad samples or, worse, could reject good ones and then have
+   * nothing left to accept ever again, since a history-based check has no way
+   * back once its own baseline is wrong.
+   *
+   * This sidesteps the question of *why* `event.point` is sometimes wrong
+   * (never pinned down — inside R3F's event pipeline, not this file) by never
+   * reading it: `clientX`/`clientY` plus the canvas's own bounding rect give
+   * NDC directly, and raycasting that against the *live* camera and the same
+   * pick-plane mesh is the same math R3F uses internally, just done here
+   * where it can't be stale. No history, no state, nothing to get stuck on.
    */
-  const resolveBadCornerPoint = () => {
-    if (!planeMeshRef.current) return null;
-    cornerRaycaster.current.setFromCamera(cornerNdc.current, threeCamera);
-    const hits = cornerRaycaster.current.intersectObject(planeMeshRef.current);
-    if (!hits.length) return null;
+  const resolvePointerPoint = (e) => {
+    if (!planeMeshRef.current) return localPoint(e);
+    const rect = gl.domElement.getBoundingClientRect();
+    ownNdc.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    ownNdc.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    ownRaycaster.current.setFromCamera(ownNdc.current, threeCamera);
+    const hits = ownRaycaster.current.intersectObject(planeMeshRef.current);
+    if (!hits.length) return localPoint(e);
     return localPoint({ point: hits[0].point, object: planeMeshRef.current });
   };
   useEffect(() => {
@@ -564,31 +546,19 @@ export default function SketchLayer() {
           onPointerDown={(e) => {
             if (drawing) {
               e.stopPropagation();
-              clickAt(...resolveClickPoint(e));
+              const p = resolvePointerPoint(e);
+              clickAt(p.x, p.y);
               return;
             }
             // Arm a marquee. No stopPropagation: a bare press must still reach
             // `onClick` for a tap-select.
             if (tool === 'select') {
-              const p = localPoint(e);
+              const p = resolvePointerPoint(e);
               beginBoxSelect(p.x, p.y);
             }
           }}
           onPointerMove={(e) => {
-            const p = localPoint(e);
-            // Reject this sample if it's suspiciously close to the known-bad
-            // corner point (see `resolveBadCornerPoint`), computed fresh off the
-            // live camera every time — not compared against a remembered
-            // "previous" point, which was the bug in the first version of this
-            // fix: a bad *first* sample had nothing to compare against, became
-            // the trusted baseline, and then rejected every correct move after
-            // it forever. This check can't get stuck the same way, because
-            // nothing about it depends on what happened on the last event.
-            const badCorner = resolveBadCornerPoint();
-            if (badCorner) {
-              const tol = Math.max(pickTol * 5, 5);
-              if (Math.hypot(p.x - badCorner.x, p.y - badCorner.y) < tol) return;
-            }
+            const p = resolvePointerPoint(e);
             // A drag in progress steers the pinned point; check the store live so
             // we never miss a move to a stale render.
             if (useSketchStore.getState().dragging) { dragTo(p.x, p.y); return; }
@@ -610,7 +580,8 @@ export default function SketchLayer() {
             if (!picking) return;
             e.stopPropagation();
             if (swallowClick.current) { swallowClick.current = false; return; }
-            clickAt(...resolveClickPoint(e));
+            const p = resolvePointerPoint(e);
+            clickAt(p.x, p.y);
           }}
         >
           {/* Large enough that clicks still land on the plane when zoomed far out. */}
