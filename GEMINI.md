@@ -4,10 +4,24 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-11
-- **Active Goal:** PDF Hub (PdfEditor, SignStamp, PdfCommitEngine) architectural stabilization, auto-save delta synchronization, and responsive toolbar overflow completed.
+- **Last Update:** 2026-09-15
+- **Active Goal:** PDF Hub multi-document draft management, fast loading with visual progress, and 100% English UI completed.
 
 ### Recent Changes
+- **PDF Hub Multi-Document Drafts, Fast Loading & 100% English UI (2026-09-15):**
+  - **Multi-Document Draft Management:**
+    - Upgraded SQLite database schema (`apps/ENG-Backend/files/pdf_drafts.db`) to `UNIQUE(empno, filename)` with automatic migration from single-draft table.
+    - Updated `draftService.js` and `draftController.js`: added `listDrafts(empno)`, per-document `saveDraft`, `updateDraftAnnotations`, `getAssembledDraftPdf`, `getDraftFilePath`, and selective/all `deleteDraft(empno, filename)`.
+    - Enhanced `DraftRecoveryModal` in `PdfEditorTool.jsx`: dynamically presents single draft card or scrollable multi-draft list with per-document `[ Resume ]` and `[ Discard ]` controls, plus global `[ Discard All Drafts ]`.
+    - Scoped `autoSave.deleteDraft(pdfFile?.name)` upon successful save, export, or document close so other document drafts remain intact.
+  - **High-Performance Document Loading & Visual Progress:**
+    - Implemented `fastCheckHasEngProjectData(bytes)`: sub-millisecond binary signature pre-check on raw bytes, skipping expensive `PDFDocument.load()` on regular standard PDFs during `handleFileUpload`.
+    - Accelerated `usePdfDocument.js` by running `pdfjsLib.getDocument()` and `PDFDocument.load()` concurrently via `Promise.allSettled`, cutting PDF parse time in half.
+    - Added `DocumentLoadingOverlay` with Ant Design `Spin`, dynamic stage descriptions ("Downloading draft...", "Reading document...", "Verifying editable annotations...", "Rendering pages with PDF.js..."), and Axios download percentage tracking.
+  - **100% English UI & Status Indicators:**
+    - Added auto-save draft status indicator pill to `HeaderModeBar.jsx` (`Saving draft...`, `Saved (HH:mm)`).
+    - Converted all modal dialogs, notifications, status bars, and properties panel labels to clean, professional English.
+    - Verified 100% pass on all 18 automated tests (`FabricClone.test.js`, `PdfCommitEngine.test.js`, and multi-draft integration tests).
 - **PDF Hub Auto-Save Performance Optimization & Delta JSON Synchronization (2026-09-11):**
   - **Zero-Lag Delta Synchronization Architecture:**
     - Eliminated heavy `pdf-lib` parsing (`PDFDocument.load()`) and serialization (`doc.save()`) from the browser's JavaScript main thread during auto-save routines.

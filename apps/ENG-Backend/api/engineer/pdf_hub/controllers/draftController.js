@@ -5,7 +5,7 @@ const fs = require('fs');
 const draftService = require('../services/draftService');
 
 /**
- * GET /draft — Check if a user has a pending temporary draft
+ * GET /draft — Check if a user has pending temporary drafts
  */
 async function checkDraft(req, res) {
     try {
@@ -14,21 +14,29 @@ async function checkDraft(req, res) {
             return res.status(400).json({ result: 'false', message: 'empno is required' });
         }
 
-        const draft = await draftService.getDraft(empno);
-        if (!draft) {
-            return res.json({ result: 'true', hasDraft: false });
-        }
+        const drafts = await draftService.listDrafts(empno);
+        const hasDraft = drafts && drafts.length > 0;
 
         res.json({
             result: 'true',
-            hasDraft: true,
-            draft: {
-                empno: draft.empno,
-                filename: draft.filename,
-                original_filename: draft.original_filename,
-                file_size: draft.file_size,
-                updated_at: draft.updated_at
-            }
+            hasDraft,
+            count: drafts.length,
+            drafts: drafts.map(d => ({
+                id: d.id,
+                empno: d.empno,
+                filename: d.filename,
+                original_filename: d.original_filename,
+                file_size: d.file_size,
+                updated_at: d.updated_at
+            })),
+            draft: hasDraft ? {
+                id: drafts[0].id,
+                empno: drafts[0].empno,
+                filename: drafts[0].filename,
+                original_filename: drafts[0].original_filename,
+                file_size: drafts[0].file_size,
+                updated_at: drafts[0].updated_at
+            } : null
         });
     } catch (err) {
         console.error('[DraftController] checkDraft error:', err.message);
@@ -42,7 +50,7 @@ async function checkDraft(req, res) {
 async function saveDraft(req, res) {
     try {
         const empno = req.body.empno || req.user?.empNo || req.user?.empno;
-        const filename = req.body.filename || 'draft.pdf';
+        const filename = req.body.filename || req.file?.originalname || 'draft.pdf';
         const originalFilename = req.body.original_filename || req.body.originalFilename || filename;
         const projectData = req.body.project_data || req.body.projectData || null;
 
@@ -88,13 +96,14 @@ async function saveDraft(req, res) {
 async function updateAnnotations(req, res) {
     try {
         const empno = req.body.empno || req.user?.empNo || req.user?.empno;
+        const filename = req.body.filename || null;
         const projectData = req.body.project_data || req.body.projectData;
 
         if (!empno) {
             return res.status(400).json({ result: 'false', message: 'empno is required' });
         }
 
-        const result = await draftService.updateDraftAnnotations({ empno, projectData });
+        const result = await draftService.updateDraftAnnotations({ empno, filename, projectData });
         if (!result.updated) {
             return res.status(404).json({ result: 'false', message: 'No active draft found. Please save base PDF first.' });
         }
@@ -117,11 +126,13 @@ async function updateAnnotations(req, res) {
 async function downloadDraft(req, res) {
     try {
         const empno = req.query.empno || req.user?.empNo || req.user?.empno;
+        const filename = req.query.filename || null;
+
         if (!empno) {
             return res.status(400).json({ result: 'false', message: 'empno is required' });
         }
 
-        const result = await draftService.getAssembledDraftPdf(empno);
+        const result = await draftService.getAssembledDraftPdf(empno, filename);
         if (!result) {
             return res.status(404).json({ result: 'false', message: 'Draft not found' });
         }
@@ -141,16 +152,18 @@ async function downloadDraft(req, res) {
 }
 
 /**
- * DELETE /draft — Delete the temporary draft from server & SQLite DB
+ * DELETE /draft — Delete temporary draft(s) from server & SQLite DB
  */
 async function deleteDraft(req, res) {
     try {
         const empno = req.query.empno || req.body.empno || req.user?.empNo || req.user?.empno;
+        const filename = req.query.filename || req.body.filename || null;
+
         if (!empno) {
             return res.status(400).json({ result: 'false', message: 'empno is required' });
         }
 
-        await draftService.deleteDraft(empno);
+        await draftService.deleteDraft(empno, filename);
         res.json({ result: 'true', message: 'Draft deleted successfully' });
     } catch (err) {
         console.error('[DraftController] deleteDraft error:', err.message);

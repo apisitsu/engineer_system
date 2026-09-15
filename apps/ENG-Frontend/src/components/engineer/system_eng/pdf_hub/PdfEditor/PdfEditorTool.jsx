@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-    Segmented, Button, Tooltip, Upload, Typography, Space, message, Modal
+    Segmented, Button, Tooltip, Upload, Typography, Space, message, Modal, Spin, Progress
 } from 'antd';
 import {
-    DashboardOutlined, ToolOutlined, SaveOutlined
+    DashboardOutlined, ToolOutlined, SaveOutlined, FilePdfOutlined, DeleteOutlined, FolderOpenOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -130,7 +130,14 @@ const PdfEditorTool = () => {
 
     // ── Temporary Draft Auto-Save & Recovery ──
     const [draftModalOpen, setDraftModalOpen] = useState(false);
-    const [pendingDraft, setPendingDraft] = useState(null);
+    const [pendingDrafts, setPendingDrafts] = useState([]);
+    const [resumingFilename, setResumingFilename] = useState(null);
+    const [documentLoadingState, setDocumentLoadingState] = useState({
+        loading: false,
+        stage: '',
+        percent: 0,
+        filename: ''
+    });
 
     const autoSave = useAutoSaveDraft({
         pdfBytes,
@@ -144,12 +151,12 @@ const PdfEditorTool = () => {
     });
     const { checkDraft } = autoSave;
 
-    // Check for pending temporary draft on mount
+    // Check for pending temporary draft(s) on mount
     useEffect(() => {
         if (!empNo || pdfBytes) return;
         checkDraft().then(res => {
-            if (res && res.hasDraft && res.draft) {
-                setPendingDraft(res.draft);
+            if (res && res.hasDraft && res.drafts && res.drafts.length > 0) {
+                setPendingDrafts(res.drafts);
                 setDraftModalOpen(true);
             }
         });
@@ -229,35 +236,95 @@ const PdfEditorTool = () => {
     }, [store.activeMode]);
 
     // ══════════════════════════════════════════════════════════════════
+    // Fast Binary Pre-Check for EngProjectData
+    // ══════════════════════════════════════════════════════════════════
+    const fastCheckHasEngProjectData = (bytes) => {
+        if (!bytes || bytes.length < 30) return false;
+        const len = bytes.length;
+        // Check tail 128KB first (where trailer/EOF append resides)
+        const tailStart = Math.max(0, len - 131072);
+        for (let i = tailStart; i <= len - 14; i++) {
+            if (bytes[i] === 69 && bytes[i + 1] === 110 && bytes[i + 2] === 103 && bytes[i + 3] === 80) {
+                return true;
+            }
+        }
+        // Check head 64KB (where catalog/info dict might reside)
+        const headEnd = Math.min(len, 65536);
+        for (let i = 0; i <= headEnd - 14; i++) {
+            if (bytes[i] === 69 && bytes[i + 1] === 110 && bytes[i + 2] === 103 && bytes[i + 3] === 80) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // ══════════════════════════════════════════════════════════════════
     // Draft Resume / Discard Handlers
     // ══════════════════════════════════════════════════════════════════
-    const handleResumeDraft = async () => {
+    const handleResumeDraft = async (targetDraft) => {
+        const draftToLoad = targetDraft || pendingDrafts[0];
+        if (!draftToLoad) return;
+
+        const filename = draftToLoad.filename;
+        setResumingFilename(filename);
+        setDocumentLoadingState({
+            loading: true,
+            stage: 'Downloading draft document from server...',
+            percent: 0,
+            filename: draftToLoad.original_filename || filename
+        });
+
         try {
-            message.loading({ content: 'กำลังโหลดไฟล์ร่าง...', key: 'draft_load' });
-            const file = await autoSave.fetchDraftFile();
+            const file = await autoSave.fetchDraftFile(filename, (percent) => {
+                setDocumentLoadingState(prev => ({
+                    ...prev,
+                    percent: percent || prev.percent,
+                    stage: percent < 100 ? `Downloading draft document (${percent}%)...` : 'Processing document...'
+                }));
+            });
+
             if (file) {
                 setDraftModalOpen(false);
-                setPendingDraft(null);
+                setPendingDrafts([]);
+                setDocumentLoadingState(prev => ({ ...prev, stage: 'Rendering pages with PDF.js...' }));
                 await handleFileUpload(file);
                 autoSave.markBaseUploaded?.(true);
-                message.success({ content: 'โหลดไฟล์ร่างสำเร็จ!', key: 'draft_load' });
+                message.success('Draft document loaded successfully!');
             } else {
-                message.error({ content: 'ไม่พบไฟล์ร่างบนเซิร์ฟเวอร์', key: 'draft_load' });
+                message.error('Draft not found on server.');
             }
         } catch (e) {
             console.error('Failed to resume draft:', e);
-            message.error({ content: 'เกิดข้อผิดพลาดในการโหลดไฟล์ร่าง', key: 'draft_load' });
+            message.error('Failed to load draft document.');
+        } finally {
+            setResumingFilename(null);
+            setDocumentLoadingState({ loading: false, stage: '', percent: 0, filename: '' });
         }
     };
 
-    const handleDiscardDraft = async () => {
+    const handleDiscardDraft = async (filename) => {
+        const targetFilename = filename || (pendingDrafts[0]?.filename);
         try {
-            await autoSave.deleteDraft();
-            setDraftModalOpen(false);
-            setPendingDraft(null);
-            message.success('ลบไฟล์ร่างเรียบร้อยแล้ว');
+            await autoSave.deleteDraft(targetFilename);
+            const remaining = pendingDrafts.filter(d => d.filename !== targetFilename);
+            setPendingDrafts(remaining);
+            if (remaining.length === 0) {
+                setDraftModalOpen(false);
+            }
+            message.success('Draft discarded successfully.');
         } catch (e) {
-            message.error('ไม่สามารถลบไฟล์ร่างได้');
+            message.error('Failed to discard draft.');
+        }
+    };
+
+    const handleDiscardAllDrafts = async () => {
+        try {
+            await autoSave.deleteDraft('__ALL__');
+            setPendingDrafts([]);
+            setDraftModalOpen(false);
+            message.success('All drafts discarded.');
+        } catch (e) {
+            message.error('Failed to discard drafts.');
         }
     };
 
@@ -297,6 +364,13 @@ const PdfEditorTool = () => {
             fabricCanvasRefs.current = {};
         }
 
+        setDocumentLoadingState({
+            loading: true,
+            stage: 'Reading document...',
+            percent: 0,
+            filename: file.name
+        });
+
         try {
             const buffer = await file.arrayBuffer();
             const bytes = new Uint8Array(buffer);
@@ -304,53 +378,61 @@ const PdfEditorTool = () => {
             let projectData = null;
             let originalPdfBytes = bytes;
             
-            // 1. Try to read from pdf-lib Custom Metadata first
-            try {
-                const { PDFDocument } = await import('pdf-lib');
-                const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-                const infoDict = doc.getInfoDict();
-                const engDataObj = infoDict.get(doc.context.obj('EngProjectData'));
-                if (engDataObj) {
-                    const rawStr = typeof engDataObj.asString === 'function' ? engDataObj.asString() : (engDataObj.value || '');
-                    if (rawStr) {
-                        try {
-                            const jsonStr = base64ToUtf8(rawStr);
-                            projectData = JSON.parse(jsonStr);
-                        } catch {
-                            const jsonStr = decodeURIComponent(escape(window.atob(rawStr)));
-                            projectData = JSON.parse(jsonStr);
+            // Fast binary check: only parse metadata if 'EngProjectData' signature exists in file!
+            const hasProjectSignature = fastCheckHasEngProjectData(bytes);
+
+            if (hasProjectSignature) {
+                setDocumentLoadingState(prev => ({ ...prev, stage: 'Verifying editable annotations...' }));
+                // 1. Try to read from pdf-lib Custom Metadata first
+                try {
+                    const { PDFDocument } = await import('pdf-lib');
+                    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+                    const infoDict = doc.getInfoDict();
+                    const engDataObj = infoDict.get(doc.context.obj('EngProjectData'));
+                    if (engDataObj) {
+                        const rawStr = typeof engDataObj.asString === 'function' ? engDataObj.asString() : (engDataObj.value || '');
+                        if (rawStr) {
+                            try {
+                                const jsonStr = base64ToUtf8(rawStr);
+                                projectData = JSON.parse(jsonStr);
+                            } catch {
+                                const jsonStr = decodeURIComponent(escape(window.atob(rawStr)));
+                                projectData = JSON.parse(jsonStr);
+                            }
                         }
                     }
+                } catch (e) {
+                    console.warn('No valid pdf-lib metadata found, checking legacy EOF...', e);
                 }
-            } catch (e) {
-                console.warn('No valid pdf-lib metadata found, checking legacy EOF...', e);
-            }
-            
-            // 2. Fallback to Legacy EOF Appending if not found
-            if (!projectData) {
-                const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
-                let sigIndex = -1;
-                for (let i = bytes.length - signature.length; i >= 0; i--) {
-                    let match = true;
-                    for (let j = 0; j < signature.length; j++) {
-                        if (bytes[i + j] !== signature[j]) {
-                            match = false;
+                
+                // 2. Fallback to Legacy EOF Appending if not found
+                if (!projectData) {
+                    const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
+                    let sigIndex = -1;
+                    for (let i = bytes.length - signature.length; i >= 0; i--) {
+                        let match = true;
+                        for (let j = 0; j < signature.length; j++) {
+                            if (bytes[i + j] !== signature[j]) {
+                                match = false;
+                                break;
+                            }
+                        }
+                        if (match) {
+                            sigIndex = i;
                             break;
                         }
                     }
-                    if (match) {
-                        sigIndex = i;
-                        break;
+        
+                    if (sigIndex !== -1) {
+                        const jsonBytes = bytes.slice(sigIndex + signature.length);
+                        const jsonStr = new TextDecoder().decode(jsonBytes);
+                        projectData = JSON.parse(jsonStr);
+                        originalPdfBytes = bytes.slice(0, sigIndex);
                     }
                 }
-    
-                if (sigIndex !== -1) {
-                    const jsonBytes = bytes.slice(sigIndex + signature.length);
-                    const jsonStr = new TextDecoder().decode(jsonBytes);
-                    projectData = JSON.parse(jsonStr);
-                    originalPdfBytes = bytes.slice(0, sigIndex);
-                }
             }
+
+            setDocumentLoadingState(prev => ({ ...prev, stage: 'Rendering pages with PDF.js...' }));
 
             if (projectData) {
                 await loadPdfFromBytes(originalPdfBytes, file.name);
@@ -358,12 +440,16 @@ const PdfEditorTool = () => {
                 if (projectData.highlights) setPageHighlights(projectData.highlights);
                 message.success('Editable project loaded successfully!');
                 return false;
+            } else {
+                await loadPdf(file);
             }
         } catch (e) {
             console.error('Failed to parse editable project:', e);
+            message.error('Failed to load document. File may be corrupted or invalid.');
+        } finally {
+            setDocumentLoadingState({ loading: false, stage: '', percent: 0, filename: '' });
         }
 
-        loadPdf(file);
         return false;
     };
 
@@ -484,7 +570,7 @@ const PdfEditorTool = () => {
             
             // Delete server temporary draft on successful user save
             if (autoSave && autoSave.deleteDraft) {
-                await autoSave.deleteDraft();
+                await autoSave.deleteDraft(pdfFile?.name);
             }
 
             logPdfUsage('export_editable_pdf');
@@ -509,7 +595,7 @@ const PdfEditorTool = () => {
             URL.revokeObjectURL(url);
             
             if (autoSave && autoSave.deleteDraft) {
-                await autoSave.deleteDraft();
+                await autoSave.deleteDraft(pdfFile?.name);
             }
 
             logPdfUsage('export_editable_pdf');
@@ -552,7 +638,7 @@ const PdfEditorTool = () => {
 
             // Clean up temporary draft after successful apply & download
             if (autoSave && autoSave.deleteDraft) {
-                await autoSave.deleteDraft();
+                await autoSave.deleteDraft(pdfFile?.name);
             }
 
             logPdfUsage('export_pdf');
@@ -565,7 +651,7 @@ const PdfEditorTool = () => {
 
     const handleClosePdf = useCallback(async () => {
         if (autoSave && autoSave.deleteDraft) {
-            await autoSave.deleteDraft();
+            await autoSave.deleteDraft(pdfFile?.name);
         }
         setPageAnnotations({});
         setPageHighlights({});
@@ -581,7 +667,7 @@ const PdfEditorTool = () => {
         }
         closePdf();
         message.info('Document closed');
-    }, [closePdf, clearHistory, store, fabricCanvasRefs, setPageAnnotations, setPageHighlights, autoSave]);
+    }, [closePdf, clearHistory, store, fabricCanvasRefs, setPageAnnotations, setPageHighlights, autoSave, pdfFile]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -830,52 +916,190 @@ const PdfEditorTool = () => {
         '--ws-primary-light': `${theme.colors.primary}18`,
     };
 
-    // ── Draft Recovery Modal Element ──
+    // ── Document Loading Progress Overlay ──
+    const DocumentLoadingOverlay = documentLoadingState.loading ? (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 99999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            userSelect: 'none'
+        }}>
+            <div style={{
+                background: '#ffffff',
+                borderRadius: 16,
+                padding: '30px 40px',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                maxWidth: 420,
+                width: '90%',
+                textAlign: 'center'
+            }}>
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 44, color: theme.colors.primary }} spin />} />
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginTop: 18 }}>
+                    Loading Document
+                </div>
+                {documentLoadingState.filename && (
+                    <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {documentLoadingState.filename}
+                    </div>
+                )}
+                <div style={{ fontSize: 12.5, color: '#0284c7', marginTop: 10, fontWeight: 500 }}>
+                    {documentLoadingState.stage || 'Processing...'}
+                </div>
+                {documentLoadingState.percent > 0 && documentLoadingState.percent < 100 && (
+                    <div style={{ width: '100%', marginTop: 14 }}>
+                        <Progress percent={documentLoadingState.percent} size="small" strokeColor={theme.colors.primary} />
+                    </div>
+                )}
+            </div>
+        </div>
+    ) : null;
+
+    // ── Draft Recovery Modal Element (Supports Single & Multiple Drafts) ──
+    const isMultiDraft = pendingDrafts.length > 1;
     const DraftRecoveryModal = (
         <Modal
             title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <SaveOutlined style={{ color: theme.colors.primary, fontSize: 18 }} />
-                    <span style={{ fontWeight: 600 }}>พบไฟล์ร่างที่ยังไม่ได้บันทึก (Unsaved Draft Found)</span>
+                    <span style={{ fontWeight: 600 }}>
+                        {isMultiDraft ? `Unsaved Drafts Found (${pendingDrafts.length})` : 'Unsaved Draft Found'}
+                    </span>
                 </div>
             }
             open={draftModalOpen}
             closable={false}
             maskClosable={false}
             centered
-            footer={[
-                <Button key="discard" danger onClick={handleDiscardDraft} style={{ borderRadius: 6 }}>
-                    ลบไฟล์ร่างนี้ (Discard)
-                </Button>,
-                <Button key="cancel" onClick={() => setDraftModalOpen(false)} style={{ borderRadius: 6 }}>
-                    ปิด (Close)
-                </Button>,
-                <Button key="resume" type="primary" onClick={handleResumeDraft} style={{ borderRadius: 6, fontWeight: 600 }}>
-                    ทำงานต่อ (Resume)
-                </Button>
-            ]}
+            width={isMultiDraft ? 620 : 480}
+            footer={
+                isMultiDraft ? [
+                    <Button key="discardAll" danger onClick={handleDiscardAllDrafts} style={{ borderRadius: 6, marginRight: 'auto' }}>
+                        Discard All Drafts
+                    </Button>,
+                    <Button key="cancel" onClick={() => setDraftModalOpen(false)} style={{ borderRadius: 6 }}>
+                        Close
+                    </Button>
+                ] : [
+                    <Button key="discard" danger onClick={() => handleDiscardDraft(pendingDrafts[0]?.filename)} style={{ borderRadius: 6 }}>
+                        Discard Draft
+                    </Button>,
+                    <Button key="cancel" onClick={() => setDraftModalOpen(false)} style={{ borderRadius: 6 }}>
+                        Close
+                    </Button>,
+                    <Button 
+                        key="resume" 
+                        type="primary" 
+                        loading={resumingFilename === pendingDrafts[0]?.filename} 
+                        onClick={() => handleResumeDraft(pendingDrafts[0])} 
+                        style={{ borderRadius: 6, fontWeight: 600 }}
+                    >
+                        Resume Working
+                    </Button>
+                ]
+            }
         >
-            <p style={{ marginBottom: 12 }}>ระบบตรวจพบไฟล์ร่างของคุณที่เคยเปิดทำงานค้างไว้:</p>
-            <div style={{
-                background: '#f8fafc',
-                padding: '12px 16px',
-                borderRadius: 8,
-                border: '1px solid #e2e8f0',
-                marginBottom: 14
-            }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
-                    {pendingDraft?.original_filename || pendingDraft?.filename || 'document.pdf'}
-                </div>
-                <div style={{ marginTop: 6, color: '#64748b', fontSize: 12 }}>
-                    <strong>บันทึกล่าสุด:</strong> {pendingDraft?.updated_at ? new Date(pendingDraft.updated_at).toLocaleString('th-TH') : '-'}
-                </div>
-                <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
-                    <strong>ขนาดไฟล์:</strong> {pendingDraft?.file_size ? `${(pendingDraft.file_size / 1024).toFixed(1)} KB` : '-'}
-                </div>
-            </div>
-            <p style={{ color: '#64748b', fontSize: 12.5, marginBottom: 0 }}>
-                คุณต้องการโหลดไฟล์ร่างนี้เพื่อทำงานต่อ หรือต้องการลบทิ้งเพื่อไม่ให้แจ้งเตือนอีก?
-            </p>
+            {isMultiDraft ? (
+                <>
+                    <p style={{ marginBottom: 12, color: '#334155' }}>
+                        The system found <strong>{pendingDrafts.length}</strong> unsaved draft documents from your previous editing sessions. Select a draft to resume or discard:
+                    </p>
+                    <div style={{
+                        maxHeight: 340,
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        paddingRight: 4,
+                        marginBottom: 8
+                    }}>
+                        {pendingDrafts.map((draft, idx) => (
+                            <div key={draft.filename || idx} style={{
+                                background: '#f8fafc',
+                                padding: '12px 16px',
+                                borderRadius: 8,
+                                border: '1px solid #e2e8f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 12
+                            }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <FilePdfOutlined style={{ color: '#ef4444', flexShrink: 0 }} />
+                                        <span title={draft.original_filename || draft.filename} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {draft.original_filename || draft.filename}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
+                                        Last Saved: {draft.updated_at ? new Date(draft.updated_at).toLocaleString('en-US') : '-'}
+                                        <span style={{ margin: '0 6px' }}>•</span>
+                                        Size: {draft.file_size ? `${(draft.file_size / 1024).toFixed(1)} KB` : '-'}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                    <Button 
+                                        size="small" 
+                                        danger 
+                                        icon={<DeleteOutlined />} 
+                                        onClick={() => handleDiscardDraft(draft.filename)} 
+                                        title="Discard this draft"
+                                        style={{ borderRadius: 6 }}
+                                    />
+                                    <Button 
+                                        size="small" 
+                                        type="primary" 
+                                        icon={<FolderOpenOutlined />} 
+                                        loading={resumingFilename === draft.filename}
+                                        onClick={() => handleResumeDraft(draft)}
+                                        style={{ borderRadius: 6, fontWeight: 500 }}
+                                    >
+                                        Resume
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            ) : (
+                <>
+                    <p style={{ marginBottom: 12, color: '#334155' }}>The system found an unsaved draft document from your previous editing session:</p>
+                    <div style={{
+                        background: '#f8fafc',
+                        padding: '14px 18px',
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        marginBottom: 14
+                    }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <FilePdfOutlined style={{ color: '#ef4444', fontSize: 16 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {pendingDrafts[0]?.original_filename || pendingDrafts[0]?.filename || 'document.pdf'}
+                            </span>
+                        </div>
+                        <div style={{ marginTop: 8, color: '#64748b', fontSize: 12 }}>
+                            <strong>Last Saved:</strong> {pendingDrafts[0]?.updated_at ? new Date(pendingDrafts[0].updated_at).toLocaleString('en-US') : '-'}
+                        </div>
+                        <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                            <strong>File Size:</strong> {pendingDrafts[0]?.file_size ? `${(pendingDrafts[0].file_size / 1024).toFixed(1)} KB` : '-'}
+                        </div>
+                    </div>
+                    <p style={{ color: '#64748b', fontSize: 12.5, marginBottom: 0 }}>
+                        Would you like to resume working on this draft, or discard it to avoid further prompts?
+                    </p>
+                </>
+            )}
         </Modal>
     );
 
@@ -940,6 +1164,7 @@ const PdfEditorTool = () => {
                 />
 
                 {DraftRecoveryModal}
+                {DocumentLoadingOverlay}
 
                 <UploadLanding 
                     pdfLoading={pdfLoading}
@@ -957,6 +1182,7 @@ const PdfEditorTool = () => {
             <ScrollbarStyle primary={theme.colors.primary} />
 
             {DraftRecoveryModal}
+            {DocumentLoadingOverlay}
 
             <ShortcutsHandler
                 onUndo={undo}

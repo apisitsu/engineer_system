@@ -48,12 +48,17 @@ export default function useAutoSaveDraft({
     }, []);
 
     /**
-     * Delete the draft from server & SQLite database
+     * Delete draft(s) from server & SQLite database.
+     * @param {string} [filename] - Specific file to delete, or omit to delete all drafts for user.
      */
-    const deleteDraft = useCallback(async () => {
+    const deleteDraft = useCallback(async (filename) => {
         if (!empNo) return;
         try {
-            await axios.delete(`${server.PDF_HUB_DRAFT}?empno=${encodeURIComponent(empNo)}`);
+            let url = `${server.PDF_HUB_DRAFT}?empno=${encodeURIComponent(empNo)}`;
+            if (filename) {
+                url += `&filename=${encodeURIComponent(filename)}`;
+            }
+            await axios.delete(url);
             setDraftStatus('idle');
             setLastSavedTime(null);
             hasUploadedBaseRef.current = false;
@@ -64,34 +69,53 @@ export default function useAutoSaveDraft({
     }, [empNo]);
 
     /**
-     * Check if user has an active draft on the server
+     * Check if user has active draft(s) on the server.
+     * Returns list of drafts and primary draft.
      */
     const checkDraft = useCallback(async () => {
-        if (!empNo) return { hasDraft: false, draft: null };
+        if (!empNo) return { hasDraft: false, count: 0, drafts: [], draft: null };
         try {
             const res = await axios.get(`${server.PDF_HUB_DRAFT}?empno=${encodeURIComponent(empNo)}`);
             if (res.data && res.data.result === 'true') {
-                return { hasDraft: !!res.data.hasDraft, draft: res.data.draft };
+                const drafts = res.data.drafts || (res.data.draft ? [res.data.draft] : []);
+                return {
+                    hasDraft: !!res.data.hasDraft,
+                    count: res.data.count || drafts.length,
+                    drafts,
+                    draft: res.data.draft || drafts[0] || null
+                };
             }
-            return { hasDraft: false, draft: null };
+            return { hasDraft: false, count: 0, drafts: [], draft: null };
         } catch (err) {
             console.warn('[AutoSaveDraft] Failed to check draft:', err.message);
-            return { hasDraft: false, draft: null };
+            return { hasDraft: false, count: 0, drafts: [], draft: null };
         }
     }, [empNo]);
 
     /**
-     * Fetch draft PDF as a File object for resumption
+     * Fetch draft PDF as a File object for resumption with optional progress callback
+     * @param {string} [filename]
+     * @param {Function} [onProgress] - (percent, loaded, total) => void
      */
-    const fetchDraftFile = useCallback(async () => {
+    const fetchDraftFile = useCallback(async (filename, onProgress) => {
         if (!empNo) return null;
         try {
-            const res = await axios.get(`${server.PDF_HUB_DRAFT}/download?empno=${encodeURIComponent(empNo)}`, {
-                responseType: 'blob'
+            let url = `${server.PDF_HUB_DRAFT}/download?empno=${encodeURIComponent(empNo)}`;
+            if (filename) {
+                url += `&filename=${encodeURIComponent(filename)}`;
+            }
+            const res = await axios.get(url, {
+                responseType: 'blob',
+                onDownloadProgress: (progressEvent) => {
+                    if (onProgress && progressEvent.total) {
+                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        onProgress(percent, progressEvent.loaded, progressEvent.total);
+                    }
+                }
             });
             const blob = res.data;
             const contentDisp = res.headers['content-disposition'] || '';
-            let fileName = 'recovered_draft.pdf';
+            let fileName = filename || 'recovered_draft.pdf';
             const match = contentDisp.match(/filename="?([^";]+)"?/i);
             if (match && match[1]) {
                 fileName = decodeURIComponent(match[1]);
@@ -110,6 +134,8 @@ export default function useAutoSaveDraft({
     const saveDraftNow = useCallback(async () => {
         if (!empNo || !pdfFile || isSavingRef.current) return;
         if (!pdfBytes && !(pdfFile instanceof File)) return;
+
+        const docFilename = pdfFile.name || 'draft.pdf';
 
         try {
             isSavingRef.current = true;
@@ -142,14 +168,14 @@ export default function useAutoSaveDraft({
                 // ── STEP 1: Upload raw base PDF once (streamed directly, 0ms CPU) ──
                 const formData = new FormData();
                 if (pdfFile instanceof File) {
-                    formData.append('file', pdfFile, pdfFile.name || 'draft.pdf');
+                    formData.append('file', pdfFile, docFilename);
                 } else if (pdfBytes) {
                     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                    formData.append('file', blob, pdfFile.name || 'draft.pdf');
+                    formData.append('file', blob, docFilename);
                 }
                 formData.append('empno', empNo);
-                formData.append('filename', pdfFile.name || 'draft.pdf');
-                formData.append('original_filename', pdfFile.name || 'draft.pdf');
+                formData.append('filename', docFilename);
+                formData.append('original_filename', docFilename);
                 formData.append('project_data', jsonStr);
 
                 await axios.post(server.PDF_HUB_DRAFT, formData, {
@@ -162,6 +188,7 @@ export default function useAutoSaveDraft({
                 // ── STEP 2: Delta Sync — send ONLY lightweight JSON delta (~5KB) ──
                 await axios.post(`${server.PDF_HUB_DRAFT}/annotations`, {
                     empno: empNo,
+                    filename: docFilename,
                     project_data: jsonStr
                 });
 

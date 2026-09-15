@@ -134,19 +134,19 @@ export default function HeaderModeBar({
             {/* Auto-save draft status indicator */}
             {draftStatus === 'saving' && (
                 <span style={{ fontSize: 11, color: '#d97706', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', padding: '2px 8px', background: '#fef3c7', borderRadius: 12, flexShrink: 0 }}>
-                    <LoadingOutlined spin /> กำลังบันทึกร่าง...
+                    <LoadingOutlined spin /> Auto-saving draft...
                 </span>
             )}
             {draftStatus === 'saved' && (
                 <span style={{ fontSize: 11, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', padding: '2px 8px', background: '#ecfdf5', borderRadius: 12, flexShrink: 0 }}>
-                    <CheckCircleOutlined /> บันทึกร่างแล้ว {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : ''}
+                    <CheckCircleOutlined /> Draft saved {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : ''}
                 </span>
             )}
 
             {/* Scroll indicators when toolbar overflows viewport */}
             {(canScrollLeft || canScrollRight) && (
                 <div style={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
-                    <Tooltip title="เลื่อนแถบเครื่องมือไปทางซ้าย">
+                    <Tooltip title="Scroll toolbar left">
                         <Button 
                             size="small" 
                             icon={<LeftOutlined style={{ fontSize: 10 }} />} 
@@ -155,7 +155,7 @@ export default function HeaderModeBar({
                             style={{ width: 22, height: 22, padding: 0, borderRadius: 4 }} 
                         />
                     </Tooltip>
-                    <Tooltip title="เลื่อนแถบเครื่องมือไปทางขวา">
+                    <Tooltip title="Scroll toolbar right">
                         <Button 
                             size="small" 
                             icon={<RightOutlined style={{ fontSize: 10 }} />} 
@@ -283,6 +283,22 @@ export default function HeaderModeBar({
                         onClick={() => setLeftCollapsed(!leftCollapsed)}
                         style={{ borderRadius: 7 }} />
                 </Tooltip>
+
+                {/* Auto-save status */}
+                {draftStatus === 'saving' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.colors.textSecondary, padding: '0 6px' }}>
+                        <LoadingOutlined spin style={{ color: theme.colors.primary }} />
+                        <span>Saving draft...</span>
+                    </div>
+                )}
+                {draftStatus === 'saved' && (
+                    <Tooltip title={`Auto-saved to temporary draft at ${lastSavedTime || 'recently'}`}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#52c41a', padding: '0 6px', cursor: 'default' }}>
+                            <CheckCircleOutlined />
+                            <span>Saved {lastSavedTime ? `(${lastSavedTime})` : ''}</span>
+                        </div>
+                    </Tooltip>
+                )}
 
                 {/* Save/Download */}
                 <Tooltip title="Save Editable PDF">

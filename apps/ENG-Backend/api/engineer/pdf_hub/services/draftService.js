@@ -3,6 +3,7 @@
  *
  * Stores draft metadata in files/pdf_drafts.db (SQLite)
  * Stores draft binary files in files/pdf_temp_drafts/
+ * Supports multiple distinct document drafts per user.
  */
 const path = require('path');
 const fs = require('fs');
@@ -26,57 +27,151 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
     if (err) {
         console.error('[DraftService] Failed to connect to SQLite draft DB:', err.message);
     } else {
-        db.run(`
-            CREATE TABLE IF NOT EXISTS pdf_temp_drafts (
-                empno TEXT PRIMARY KEY,
-                filename TEXT NOT NULL,
-                original_filename TEXT,
-                filepath TEXT NOT NULL,
-                file_size INTEGER,
-                project_data TEXT,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        `, (createErr) => {
-            if (createErr) {
-                console.error('[DraftService] Error creating pdf_temp_drafts table:', createErr.message);
-            } else {
-                // Ensure project_data column exists on older DB files
-                db.run(`ALTER TABLE pdf_temp_drafts ADD COLUMN project_data TEXT`, () => {
-                    // Ignore column already exists error
-                });
-                console.log('[DraftService] SQLite draft database ready at:', DB_PATH);
-            }
-        });
+        initSchema();
     }
 });
 
 /**
- * Get draft metadata for a user
- * @param {string} empno
- * @returns {Promise<Object|null>}
+ * Initialize SQLite table schema and automatically migrate if upgrading from legacy single-draft schema
  */
-function getDraft(empno) {
+function initSchema() {
+    db.serialize(() => {
+        db.all(`PRAGMA table_info(pdf_temp_drafts)`, (err, cols) => {
+            if (err) {
+                console.error('[DraftService] PRAGMA table_info error:', err);
+                return;
+            }
+
+            const hasTable = cols && cols.length > 0;
+            const hasId = cols && cols.some(c => c.name === 'id');
+
+            if (!hasTable) {
+                // Table doesn't exist yet: create new schema supporting multiple drafts per user
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS pdf_temp_drafts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        empno TEXT NOT NULL,
+                        filename TEXT NOT NULL,
+                        original_filename TEXT,
+                        filepath TEXT NOT NULL,
+                        file_size INTEGER,
+                        project_data TEXT,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(empno, filename)
+                    )
+                `, (createErr) => {
+                    if (createErr) {
+                        console.error('[DraftService] Error creating pdf_temp_drafts table:', createErr.message);
+                    } else {
+                        console.log('[DraftService] SQLite draft database ready (Multi-Draft Schema) at:', DB_PATH);
+                    }
+                });
+            } else if (!hasId) {
+                // Legacy schema with empno PRIMARY KEY: Migrate to multi-draft schema with UNIQUE(empno, filename)
+                console.log('[DraftService] Migrating pdf_temp_drafts table to support multiple drafts...');
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS pdf_temp_drafts_v2 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        empno TEXT NOT NULL,
+                        filename TEXT NOT NULL,
+                        original_filename TEXT,
+                        filepath TEXT NOT NULL,
+                        file_size INTEGER,
+                        project_data TEXT,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(empno, filename)
+                    )
+                `, (v2Err) => {
+                    if (v2Err) return console.error('[DraftService] Migration v2 table error:', v2Err);
+                    db.run(`
+                        INSERT OR IGNORE INTO pdf_temp_drafts_v2 (empno, filename, original_filename, filepath, file_size, project_data, updated_at)
+                        SELECT empno, filename, original_filename, filepath, file_size, project_data, updated_at FROM pdf_temp_drafts
+                    `, (insErr) => {
+                        if (insErr) return console.error('[DraftService] Migration copy error:', insErr);
+                        db.run(`DROP TABLE pdf_temp_drafts`, (dropErr) => {
+                            if (dropErr) return console.error('[DraftService] Migration drop error:', dropErr);
+                            db.run(`ALTER TABLE pdf_temp_drafts_v2 RENAME TO pdf_temp_drafts`, (renameErr) => {
+                                if (renameErr) return console.error('[DraftService] Migration rename error:', renameErr);
+                                console.log('[DraftService] Multi-Draft migration completed successfully.');
+                            });
+                        });
+                    });
+                });
+            } else {
+                console.log('[DraftService] SQLite draft database ready at:', DB_PATH);
+            }
+        });
+    });
+}
+
+/**
+ * List all active drafts for a user
+ * @param {string} empno
+ * @returns {Promise<Array>}
+ */
+function listDrafts(empno) {
     return new Promise((resolve, reject) => {
-        if (!empno) return resolve(null);
-        db.get(
-            `SELECT empno, filename, original_filename, filepath, file_size, project_data, updated_at 
+        if (!empno) return resolve([]);
+        db.all(
+            `SELECT id, empno, filename, original_filename, filepath, file_size, updated_at 
              FROM pdf_temp_drafts 
-             WHERE empno = ?`,
+             WHERE empno = ? 
+             ORDER BY updated_at DESC`,
             [empno],
-            (err, row) => {
+            (err, rows) => {
                 if (err) return reject(err);
-                if (!row) return resolve(null);
+                if (!rows || rows.length === 0) return resolve([]);
 
-                // Verify file still exists on disk
-                if (!fs.existsSync(row.filepath)) {
-                    // Stale DB record, clean it up
-                    deleteDraft(empno).catch(() => {});
-                    return resolve(null);
+                // Verify files still exist on disk
+                const validRows = [];
+                for (const row of rows) {
+                    if (fs.existsSync(row.filepath)) {
+                        validRows.push(row);
+                    } else {
+                        // Stale DB record, clean it up asynchronously
+                        deleteDraft(empno, row.filename).catch(() => {});
+                    }
                 }
-
-                resolve(row);
+                resolve(validRows);
             }
         );
+    });
+}
+
+/**
+ * Get draft metadata for a user and specific document (or most recent)
+ * @param {string} empno
+ * @param {string} [filename]
+ * @returns {Promise<Object|null>}
+ */
+function getDraft(empno, filename) {
+    return new Promise((resolve, reject) => {
+        if (!empno) return resolve(null);
+
+        let sql = `SELECT id, empno, filename, original_filename, filepath, file_size, project_data, updated_at 
+                   FROM pdf_temp_drafts 
+                   WHERE empno = ?`;
+        const params = [empno];
+
+        if (filename) {
+            sql += ` AND filename = ?`;
+            params.push(filename);
+        } else {
+            sql += ` ORDER BY updated_at DESC LIMIT 1`;
+        }
+
+        db.get(sql, params, (err, row) => {
+            if (err) return reject(err);
+            if (!row) return resolve(null);
+
+            // Verify file still exists on disk
+            if (!fs.existsSync(row.filepath)) {
+                deleteDraft(empno, row.filename).catch(() => {});
+                return resolve(null);
+            }
+
+            resolve(row);
+        });
     });
 }
 
@@ -92,8 +187,10 @@ function saveDraft({ empno, filename, originalFilename, buffer, projectData }) {
         }
 
         const safeEmpNo = empno.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const draftFileName = `${safeEmpNo}_draft.pdf`;
-        const filePath = path.join(DRAFTS_DIR, draftFileName);
+        const targetFilename = filename || 'draft.pdf';
+        const safeFileName = targetFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const draftDiskFileName = `${safeEmpNo}_${safeFileName}`;
+        const filePath = path.join(DRAFTS_DIR, draftDiskFileName);
 
         fs.writeFile(filePath, buffer, (writeErr) => {
             if (writeErr) return reject(writeErr);
@@ -103,8 +200,7 @@ function saveDraft({ empno, filename, originalFilename, buffer, projectData }) {
             const sql = `
                 INSERT INTO pdf_temp_drafts (empno, filename, original_filename, filepath, file_size, project_data, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(empno) DO UPDATE SET
-                    filename = excluded.filename,
+                ON CONFLICT(empno, filename) DO UPDATE SET
                     original_filename = excluded.original_filename,
                     filepath = excluded.filepath,
                     file_size = excluded.file_size,
@@ -112,12 +208,12 @@ function saveDraft({ empno, filename, originalFilename, buffer, projectData }) {
                     updated_at = CURRENT_TIMESTAMP
             `;
 
-            db.run(sql, [empno, filename || draftFileName, originalFilename || filename, filePath, fileSize, jsonStr], function (dbErr) {
+            db.run(sql, [empno, targetFilename, originalFilename || targetFilename, filePath, fileSize, jsonStr], function (dbErr) {
                 if (dbErr) return reject(dbErr);
                 resolve({
                     empno,
-                    filename: filename || draftFileName,
-                    original_filename: originalFilename || filename,
+                    filename: targetFilename,
+                    original_filename: originalFilename || targetFilename,
                     filepath: filePath,
                     file_size: fileSize,
                     updated_at: new Date().toISOString()
@@ -130,21 +226,27 @@ function saveDraft({ empno, filename, originalFilename, buffer, projectData }) {
 /**
  * Lightweight delta update of draft annotations JSON.
  * Takes ~1ms with zero file re-writing.
- * @param {Object} params - { empno, projectData }
+ * @param {Object} params - { empno, filename, projectData }
  * @returns {Promise<Object>}
  */
-function updateDraftAnnotations({ empno, projectData }) {
+function updateDraftAnnotations({ empno, filename, projectData }) {
     return new Promise((resolve, reject) => {
         if (!empno) return reject(new Error('empno is required'));
 
         const jsonStr = typeof projectData === 'object' ? JSON.stringify(projectData) : (projectData || null);
-        const sql = `
+        let sql = `
             UPDATE pdf_temp_drafts
             SET project_data = ?, updated_at = CURRENT_TIMESTAMP
             WHERE empno = ?
         `;
+        const params = [jsonStr, empno];
 
-        db.run(sql, [jsonStr, empno], function (dbErr) {
+        if (filename) {
+            sql += ` AND filename = ?`;
+            params.push(filename);
+        }
+
+        db.run(sql, params, function (dbErr) {
             if (dbErr) return reject(dbErr);
             if (this.changes === 0) {
                 return resolve({ updated: false, message: 'Draft not found to update' });
@@ -152,6 +254,7 @@ function updateDraftAnnotations({ empno, projectData }) {
             resolve({
                 updated: true,
                 empno,
+                filename,
                 updated_at: new Date().toISOString()
             });
         });
@@ -162,10 +265,11 @@ function updateDraftAnnotations({ empno, projectData }) {
  * Get assembled draft PDF for resumption download.
  * If project_data was modified via delta updates, Node.js embeds it into the PDF.
  * @param {string} empno
+ * @param {string} [filename]
  * @returns {Promise<Object|null>} - { type: 'buffer'|'file', buffer, filePath, filename }
  */
-async function getAssembledDraftPdf(empno) {
-    const draft = await getDraft(empno);
+async function getAssembledDraftPdf(empno, filename) {
+    const draft = await getDraft(empno, filename);
     if (!draft || !fs.existsSync(draft.filepath)) return null;
 
     const downloadName = draft.original_filename || draft.filename || 'draft.pdf';
@@ -206,35 +310,57 @@ async function getAssembledDraftPdf(empno) {
 /**
  * Get the file path of a draft for streaming
  * @param {string} empno
+ * @param {string} [filename]
  * @returns {Promise<string|null>}
  */
-async function getDraftFilePath(empno) {
-    const draft = await getDraft(empno);
+async function getDraftFilePath(empno, filename) {
+    const draft = await getDraft(empno, filename);
     if (!draft || !fs.existsSync(draft.filepath)) return null;
     return draft.filepath;
 }
 
 /**
- * Delete a user's temporary draft from disk and SQLite
+ * Delete a user's temporary draft (specific file or all files) from disk and SQLite
  * @param {string} empno
+ * @param {string} [filename] - If omitted or '__ALL__', deletes all drafts for user
  * @returns {Promise<boolean>}
  */
-function deleteDraft(empno) {
+function deleteDraft(empno, filename) {
     return new Promise((resolve, reject) => {
         if (!empno) return resolve(false);
 
-        db.get(`SELECT filepath FROM pdf_temp_drafts WHERE empno = ?`, [empno], (err, row) => {
+        const isDeleteAll = !filename || filename === '__ALL__' || filename === 'all';
+
+        let selectSql = `SELECT filepath FROM pdf_temp_drafts WHERE empno = ?`;
+        const selectParams = [empno];
+        if (!isDeleteAll) {
+            selectSql += ` AND filename = ?`;
+            selectParams.push(filename);
+        }
+
+        db.all(selectSql, selectParams, (err, rows) => {
             if (err) return reject(err);
 
-            if (row && row.filepath && fs.existsSync(row.filepath)) {
-                try {
-                    fs.unlinkSync(row.filepath);
-                } catch (unlinkErr) {
-                    console.warn(`[DraftService] Could not unlink ${row.filepath}:`, unlinkErr.message);
-                }
+            if (rows && rows.length > 0) {
+                rows.forEach(row => {
+                    if (row && row.filepath && fs.existsSync(row.filepath)) {
+                        try {
+                            fs.unlinkSync(row.filepath);
+                        } catch (unlinkErr) {
+                            console.warn(`[DraftService] Could not unlink ${row.filepath}:`, unlinkErr.message);
+                        }
+                    }
+                });
             }
 
-            db.run(`DELETE FROM pdf_temp_drafts WHERE empno = ?`, [empno], function (delErr) {
+            let delSql = `DELETE FROM pdf_temp_drafts WHERE empno = ?`;
+            const delParams = [empno];
+            if (!isDeleteAll) {
+                delSql += ` AND filename = ?`;
+                delParams.push(filename);
+            }
+
+            db.run(delSql, delParams, function (delErr) {
                 if (delErr) return reject(delErr);
                 resolve(true);
             });
@@ -243,6 +369,7 @@ function deleteDraft(empno) {
 }
 
 module.exports = {
+    listDrafts,
     getDraft,
     saveDraft,
     updateDraftAnnotations,

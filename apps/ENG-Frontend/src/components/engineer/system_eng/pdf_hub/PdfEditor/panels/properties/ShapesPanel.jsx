@@ -314,7 +314,7 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage, pushHistory
                                 </div>
 
                                 <div className="pdf-ws-prop-section">
-                                    <SectionTitle>Arrowhead Size (ขนาดหัวลูกศร)</SectionTitle>
+                                    <SectionTitle>Arrowhead Size</SectionTitle>
                                     <PropRow label="Head Size">
                                         <InputNumber
                                             min={4} max={60} step={1}

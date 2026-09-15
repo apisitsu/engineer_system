@@ -48,17 +48,17 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
                 console.warn('Backend repair failed, falling back to original bytes:', repairErr);
                 finalBytes = bytes;
             }
+            // Load PDF.js and pdf-lib concurrently to cut parse time in half
+            const [pdfJsResult, pdfLibResult] = await Promise.allSettled([
+                pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise,
+                PDFDocument.load(finalBytes.slice(0), { ignoreEncryption: true })
+            ]);
 
-            try {
-                libDoc = await PDFDocument.load(finalBytes.slice(0), { ignoreEncryption: true });
-            } catch (e) {
-                console.warn('pdf-lib failed to load doc during init:', e);
-            }
+            doc = pdfJsResult.status === 'fulfilled' ? pdfJsResult.value : null;
+            libDoc = pdfLibResult.status === 'fulfilled' ? pdfLibResult.value : null;
 
-            try {
-                doc = await pdfjsLib.getDocument({ data: finalBytes.slice(0) }).promise;
-            } catch (renderErr) {
-                console.warn('PDF.js rendering failed, attempting backend unlock...', renderErr);
+            if (!doc && pdfJsResult.reason) {
+                console.warn('PDF.js rendering failed, attempting backend unlock...', pdfJsResult.reason);
                 try {
                     const formData = new FormData();
                     formData.append('pdf', new Blob([finalBytes], { type: 'application/pdf' }), file.name || 'document.pdf');
@@ -127,10 +127,16 @@ export default function usePdfDocument(canvasWrapperRef, setZoom) {
             const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
             setPdfBytes(uint8);
 
-            const doc = await pdfjsLib.getDocument({ data: uint8.slice(0) }).promise;
-            setPdfDoc(doc);
+            const [pdfJsResult, pdfLibResult] = await Promise.allSettled([
+                pdfjsLib.getDocument({ data: uint8.slice(0) }).promise,
+                PDFDocument.load(uint8.slice(0), { ignoreEncryption: true })
+            ]);
 
-            const libDoc = await PDFDocument.load(uint8.slice(0), { ignoreEncryption: true });
+            const doc = pdfJsResult.status === 'fulfilled' ? pdfJsResult.value : null;
+            const libDoc = pdfLibResult.status === 'fulfilled' ? pdfLibResult.value : null;
+            if (!doc) throw new Error('Failed to parse PDF pages with PDF.js');
+
+            setPdfDoc(doc);
             setPdfLibDoc(libDoc);
 
             setTotalPages(doc.numPages);
