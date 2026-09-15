@@ -34,7 +34,6 @@ const ToolGallery = () => {
       path: '/eng/mtc_eng/lot-track',
       category: 'Tracking',
       status: 'Active',
-      newTab: true,
       tags: ['Production', 'Lot', 'Status']
     },
     {
