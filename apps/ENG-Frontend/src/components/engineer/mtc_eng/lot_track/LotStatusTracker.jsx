@@ -7,10 +7,13 @@ import {
 import {
   SearchOutlined, ReloadOutlined, SyncOutlined, PlusOutlined, CloseOutlined,
   StarFilled, StarOutlined, DeleteOutlined, DownOutlined, ProfileOutlined, CheckCircleFilled,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { SystemVersionBadge } from '../SystemVersionBadge';
+import { MenuTemplate } from '../../../menu_sidebar/menu_template';
 import { server } from '../../../../constance/constance';
 import { httpClient as axios } from '../../../../utils/HttpClient';
+import { uploadTiCsvViaGas } from '../../../../utils/uploadTiCsvViaGas';
 
 const { Content } = Layout;
 const { Text, Title } = Typography;
@@ -58,6 +61,43 @@ const STATUS_META = {
   done: { step: 'finish', tag: 'success', label: 'Done' },
   current: { step: 'process', tag: 'processing', label: 'In progress' },
   pending: { step: 'wait', tag: 'default', label: 'Waiting' },
+};
+
+// ── CSV export (Saved tracks → Drive, same folder as Tooling Inspection) ─────
+const CSV_HEADER = [
+  'Lot No', 'Control No', 'Part No', '#', 'Process', 'Code', 'Status',
+  'Machine / WC', 'good / ng', 'Cycle', 'Setup', 'Run time', 'Done', 'Total time inprocess',
+];
+// One row per process step, mirroring the Process detail table exactly —
+// same labels and formatting the user already sees on screen.
+const stepToCsvRow = (h, s) => [
+  h.lotNo, h.controlNo, h.partsNo,
+  s.order, s.nameEn, s.processCode, (STATUS_META[s.status] || STATUS_META.pending).label,
+  s.machineLabel ? `${s.machineLabel}${s.wc ? ` · WC ${s.wc}` : ''}` : '—',
+  s.goodQty == null ? '—' : `${s.goodQty}${s.badQty ? ` / ${s.badQty} ng` : ''}`,
+  s.cycleSec ? `${s.cycleSec}s` : '—',
+  s.setupSec ? fmtMinutes(Math.round(s.setupSec / 60)) : '—',
+  s.runMinutes == null ? '—' : fmtMinutes(s.runMinutes),
+  s.compDate || '—',
+  fmtDays(s.dwellDays),
+];
+const csvEscape = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (rows) => rows.map((r) => r.map(csvEscape).join(',')).join('\r\n');
+// The deployed GAS uploader only accepts /^[A-Za-z0-9_-]+\.csv$/ (see
+// gas_ti_csv_doPost.gs) — a Thai-only save name has nothing left after
+// stripping, so it falls back to the track id rather than an empty name.
+const sanitizeCsvName = (name, fallbackId) => {
+  const base = String(name || '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+  return `${base || `track_${fallbackId}`}.csv`;
+};
+const utf8ToBase64 = (str) => {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
 };
 
 // normalized [{lotNo, controlNo|null}] → stable JSON for change detection
@@ -172,22 +212,28 @@ function Roadmap({ steps, issuedDate }) {
                 <Text strong style={{ fontSize: 13 }}>{s.order}. {s.nameEn}</Text>
                 <Tag style={{ marginInlineEnd: 0 }}>{s.processCode}</Tag>
                 <Tag color={meta.tag} style={{ marginInlineEnd: 0 }}>{meta.label}</Tag>
-                {headerWait != null ? (
-                  <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
-                    ⏳ Wait in process {headerWait} d
-                  </Tag>
-                ) : null}
-                {headerAnomaly ? (
-                  <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
-                    <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
-                      ⚠ Date out of order
-                    </Tag>
-                  </Tooltip>
-                ) : null}
                 {s.offPlan ? <Tag color="warning" style={{ marginInlineEnd: 0 }}>off-plan</Tag> : null}
               </Space>
+              {/* own row, always — so it lands on the same line in every block
+                  instead of wrapping onto the title row only when it happens to fit */}
+              {headerWait != null || headerAnomaly ? (
+                <div style={{ marginTop: 4 }}>
+                  {headerWait != null ? (
+                    <Tag color={headerWait >= 7 ? 'warning' : 'default'} style={{ marginInlineEnd: 0 }}>
+                      ⏳ Wait in process {headerWait} d
+                    </Tag>
+                  ) : null}
+                  {headerAnomaly ? (
+                    <Tooltip title={`"${headerAnomaly.order}. ${headerAnomaly.nameEn}" recorded done ${headerAnomaly.compDate} — that's AFTER this step (and possibly others between them) already finished. Wait time can't be computed across that gap; check its comp_date in pc_production.`}>
+                      <Tag color="red" style={{ marginInlineEnd: 0, cursor: 'help' }}>
+                        ⚠ Date out of order
+                      </Tag>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              ) : null}
               {bits.length ? (
-                <div><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
+                <div style={{ marginTop: 4 }}><Text type="secondary" style={{ fontSize: 11.5 }}>{bits.join('  ·  ')}</Text></div>
               ) : null}
             </div>
             {soFarDays != null ? (
@@ -210,9 +256,8 @@ function Roadmap({ steps, issuedDate }) {
 // ── process detail — the full per-step table (scrolls inside the card) ───────
 const detailColumns = [
   { title: '#', dataIndex: 'order', width: 40, fixed: 'left' },
-  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v, r) => (
-    <span style={{ whiteSpace: 'nowrap' }}><Text strong>{v}</Text> <Tag>{r.processCode}</Tag></span>
-  ) },
+  { title: 'Process', dataIndex: 'nameEn', width: 170, render: (v) => <Text strong>{v}</Text> },
+  { title: 'Code', dataIndex: 'processCode', width: 64, render: (v) => <Tag style={{ marginInlineEnd: 0 }}>{v}</Tag> },
   { title: 'Status', dataIndex: 'status', width: 108, render: (v) => {
     const m = STATUS_META[v] || STATUS_META.pending;
     return <Tag color={m.tag}>{m.label}</Tag>;
@@ -225,7 +270,7 @@ const detailColumns = [
   { title: 'Setup', dataIndex: 'setupSec', width: 90, align: 'right', render: (v) => (v ? fmtMinutes(Math.round(v / 60)) : '—') },
   { title: 'Run time', dataIndex: 'runMinutes', width: 104, align: 'right', render: (v) => (v == null ? '—' : fmtMinutes(v)) },
   // No 'Started' column: pc_production records only the completion date per step.
-  { title: 'Done', dataIndex: 'compDate', width: 104, render: (v) => v || '—' },
+  { title: 'Done', dataIndex: 'compDate', width: 86, render: (v) => v || '—' },
   { title: 'Total time inprocess', dataIndex: 'dwellDays', width: 140, align: 'right', render: (v) => fmtDays(v) },
 ];
 
@@ -237,7 +282,7 @@ function ProcessDetail({ steps }) {
       columns={detailColumns}
       dataSource={steps}
       pagination={false}
-      scroll={{ x: 1128 }}
+      scroll={{ x: 1174 }}
       rowClassName={(r) => (r.status === 'current' ? 'lot-track-current-row' : '')}
     />
   );
@@ -422,6 +467,8 @@ export default function LotStatusTracker() {
   const [saveName, setSaveName] = useState('');
   const [saveMode, setSaveMode] = useState('new');     // 'new' | 'update'
   const [busy, setBusy] = useState(false);
+  const [exportingId, setExportingId] = useState(null); // saved-track id currently exporting
+  const [exportingAll, setExportingAll] = useState(false);
 
   const patchState = (key, patch) =>
     setStateByKey((m) => ({ ...m, [key]: { ...(m[key] || {}), ...patch } }));
@@ -558,43 +605,140 @@ export default function LotStatusTracker() {
     } catch (e) { message.error(e.response?.data?.error || e.message); }
   };
 
+  // Build one CSV file (fileName + base64) for ONE saved track — fetched fresh,
+  // independent of whatever is currently on screen — one row per process step.
+  // Returns { empty: true, skipped } instead when there's nothing to write.
+  const buildTrackCsvFile = async (track) => {
+    const lots = track.lots || [];
+    if (!lots.length) return { empty: true, skipped: 0 };
+    const responses = await Promise.all(lots.map((l) =>
+      axios.get(`${server.MTC_LOT_TRACK}/${encodeURIComponent(l.lotNo)}`, {
+        params: l.controlNo ? { control_no: l.controlNo } : {},
+      }).then((r) => r.data).catch(() => null),
+    ));
+    const rows = [CSV_HEADER];
+    let skipped = 0;
+    responses.forEach((d) => {
+      if (!d || !d.found || d.ambiguous) { skipped += 1; return; }
+      (d.steps || []).forEach((s) => rows.push(stepToCsvRow(d.header, s)));
+    });
+    if (rows.length === 1) return { empty: true, skipped };
+    return { fileName: sanitizeCsvName(track.name, track.id), base64Data: utf8ToBase64(toCsv(rows)), skipped };
+  };
+
+  // One saved track → one CSV, uploaded to the same Drive folder Tooling
+  // Inspection's "Update data" writes to.
+  const exportSavedCsv = async (track) => {
+    setExportingId(track.id);
+    try {
+      const file = await buildTrackCsvFile(track);
+      if (file.empty) {
+        message.warning((track.lots || []).length ? 'No process data to export' : 'This track has no lots');
+        return;
+      }
+      await uploadTiCsvViaGas([{ fileName: file.fileName, base64Data: file.base64Data }]);
+      message.success(`Exported "${file.fileName}" to Drive${file.skipped ? ` (${file.skipped} lot(s) skipped — not found/ambiguous)` : ''}`);
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Export failed');
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  // ALL saved tracks → one CSV each, uploaded together in a single GAS call.
+  const exportAllSavedCsv = async () => {
+    if (!saved.length) { message.info('No saved tracks yet'); return; }
+    setExportingAll(true);
+    try {
+      const built = await Promise.all(saved.map((t) => buildTrackCsvFile(t)));
+      // Two tracks whose names sanitize to the same string would otherwise
+      // silently overwrite one another on Drive (the GAS script updates
+      // in place by filename) — de-dup with a numeric suffix.
+      const seen = new Map();
+      const files = [];
+      let emptyCount = 0;
+      let skippedTotal = 0;
+      built.forEach((f) => {
+        if (!f || f.empty) { emptyCount += 1; return; }
+        const n = (seen.get(f.fileName) || 0) + 1;
+        seen.set(f.fileName, n);
+        const fileName = n > 1 ? f.fileName.replace(/\.csv$/, `_${n}.csv`) : f.fileName;
+        files.push({ fileName, base64Data: f.base64Data });
+        skippedTotal += f.skipped;
+      });
+      if (!files.length) { message.warning('No process data to export across any saved track'); return; }
+      await uploadTiCsvViaGas(files);
+      message.success(
+        `Exported ${files.length} track(s) to Drive`
+        + (emptyCount ? ` · ${emptyCount} track(s) had no data` : '')
+        + (skippedTotal ? ` · ${skippedTotal} lot(s) skipped` : ''),
+      );
+    } catch (e) {
+      message.error(e.response?.data?.error || e.message || 'Export failed');
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
   const single = entries.length <= 1;
 
   const savedPanel = (
-    <div style={{ width: 320 }}>
+    <div style={{ width: 380 }}>
       {saved.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No saved tracks yet" />
       ) : (
-        <List
-          size="small"
-          dataSource={saved}
-          renderItem={(t) => (
-            <List.Item
-              style={{ padding: '6px 0' }}
-              actions={[
-                <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
-                <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
-                  <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>,
-              ]}
-            >
-              <Space size={6}>
-                <Text strong>{t.name}</Text>
-                <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
-              </Space>
-            </List.Item>
-          )}
-        />
+        <>
+          <Button
+            block type="dashed" size="small" icon={<ExportOutlined />}
+            loading={exportingAll}
+            disabled={!!exportingId}
+            onClick={exportAllSavedCsv}
+            style={{ marginBottom: 8 }}
+          >
+            Export all ({saved.length}) as CSV
+          </Button>
+          <List
+            size="small"
+            dataSource={saved}
+            renderItem={(t) => (
+              <List.Item
+                style={{ padding: '6px 0' }}
+                actions={[
+                  <Tooltip key="csv" title="Export this track's process detail as CSV to the Tooling Inspection Drive folder">
+                    <Button
+                      type="link" size="small" icon={<ExportOutlined />}
+                      loading={exportingId === t.id}
+                      disabled={exportingAll || (!!exportingId && exportingId !== t.id)}
+                      onClick={() => exportSavedCsv(t)}
+                    >
+                      CSV
+                    </Button>
+                  </Tooltip>,
+                  <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
+                  <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
+                    <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>,
+                ]}
+              >
+                <Space size={6}>
+                  <Text strong>{t.name}</Text>
+                  <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
+                </Space>
+              </List.Item>
+            )}
+          />
+        </>
       )}
     </div>
   );
 
-  // Standalone workspace — opened in its own tab from the Tools gallery, so it
-  // renders full-window with no app header or sidebar.
+  // Reached via in-app navigation (Overall Engineering ▸ Tools Portal), so it
+  // renders inside MainLayout with the same "ALL" sidebar as that section.
   return (
-    <Layout style={{ height: '100vh' }}>
+    <Layout style={{ height: '100%' }}>
+      <MenuTemplate type={"ALL"} />
       <Layout>
-        <Content className="kb-vscroll" style={{ height: '100vh', overflowY: 'auto', padding: '16px 20px' }}>
+        <Content className="kb-vscroll" style={{ height: '100%', overflowY: 'auto', padding: '16px 20px' }}>
           <div style={{ marginBottom: 12 }}>
             <Title level={4} style={{ margin: 0 }}>
               Lot Status Tracker

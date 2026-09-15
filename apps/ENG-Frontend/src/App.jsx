@@ -311,10 +311,12 @@ const AppContent = () => {
               </Route>
 
               <Route element={<ProtectedRoute allowedRoles={['AD', 'ENG', 'QA']} />}>
-                {/* CAD/CAM and Lot Status Tracker are standalone workspaces opened
-                    in their own tab (from the Tools gallery), so they render
-                    outside MainLayout — no app header, no sidebar, the whole
-                    window is the viewport. */}
+                {/* CAD/CAM is a standalone workspace opened in its own tab (from
+                    the MTC sidebar), so it renders outside MainLayout — no app
+                    header, no sidebar, the whole window is the viewport. Lot
+                    Status Tracker used to live here too, but it is reached via
+                    in-app navigation (the Overall Engineering Tools Portal), so
+                    it goes inside MainLayout below and renders its own sidebar. */}
                 <Route
                   path={MTC_PATHS.CAM}
                   element={(
@@ -323,9 +325,10 @@ const AppContent = () => {
                     </React.Suspense>
                   )}
                 />
-                <Route path={MTC_PATHS.LOT_TRACK} element={<LotStatusTracker />} />
 
                 <Route element={<MainLayout />}>
+                  <Route path={MTC_PATHS.LOT_TRACK} element={<LotStatusTracker />} />
+
                   {/* ------------ User Settings ------------ */}
                   <Route path="/user/settings" element={<UserSetting />} />
 
