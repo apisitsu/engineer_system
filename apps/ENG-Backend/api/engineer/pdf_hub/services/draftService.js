@@ -283,19 +283,12 @@ async function getAssembledDraftPdf(empno, filename) {
         };
     }
 
-    // Embed project_data into base PDF using pdf-lib on server
+    // Embed project_data into base PDF using instant buffer concatenation (<1ms)
     try {
         const basePdfBytes = fs.readFileSync(draft.filepath);
-        const doc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
         const base64Str = Buffer.from(draft.project_data, 'utf8').toString('base64');
-        doc.getInfoDict().set(doc.context.obj('EngProjectData'), PDFString.of(base64Str));
-        
-        // Save with useObjectStreams: false so info dict is uncompressed in PDF objects
-        const finalPdfBytes = await doc.save({ useObjectStreams: false });
-
-        // Append %ENG_PROJECT_DATA: comment trailer for instant sub-millisecond detection
         const marker = Buffer.from('\n%ENG_PROJECT_DATA:' + base64Str + '\n');
-        const combined = Buffer.concat([Buffer.from(finalPdfBytes), marker]);
+        const combined = Buffer.concat([basePdfBytes, marker]);
 
         return {
             type: 'buffer',

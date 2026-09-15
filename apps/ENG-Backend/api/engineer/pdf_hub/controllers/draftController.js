@@ -141,7 +141,7 @@ async function downloadDraft(req, res) {
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.filename)}"`);
-        if (result.projectData) {
+        if (result.projectData && Buffer.byteLength(result.projectData, 'utf8') < 4000) {
             res.setHeader('X-Eng-Project-Data', Buffer.from(result.projectData, 'utf8').toString('base64'));
         }
         res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Eng-Project-Data');

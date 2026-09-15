@@ -82,6 +82,15 @@ export default function HeaderModeBar({
         }
     };
 
+    const formatSavedTime = (time) => {
+        if (!time) return '';
+        if (typeof time === 'string') return time;
+        if (time instanceof Date && !isNaN(time.getTime())) {
+            return `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+        }
+        return '';
+    };
+
     return (
         <div 
             ref={barRef}
@@ -139,7 +148,7 @@ export default function HeaderModeBar({
             )}
             {draftStatus === 'saved' && (
                 <span style={{ fontSize: 11, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', padding: '2px 8px', background: '#ecfdf5', borderRadius: 12, flexShrink: 0 }}>
-                    <CheckCircleOutlined /> Draft saved {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : ''}
+                    <CheckCircleOutlined /> Draft saved {formatSavedTime(lastSavedTime)}
                 </span>
             )}
 
@@ -283,22 +292,6 @@ export default function HeaderModeBar({
                         onClick={() => setLeftCollapsed(!leftCollapsed)}
                         style={{ borderRadius: 7 }} />
                 </Tooltip>
-
-                {/* Auto-save status */}
-                {draftStatus === 'saving' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.colors.textSecondary, padding: '0 6px' }}>
-                        <LoadingOutlined spin style={{ color: theme.colors.primary }} />
-                        <span>Saving draft...</span>
-                    </div>
-                )}
-                {draftStatus === 'saved' && (
-                    <Tooltip title={`Auto-saved to temporary draft at ${lastSavedTime || 'recently'}`}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#52c41a', padding: '0 6px', cursor: 'default' }}>
-                            <CheckCircleOutlined />
-                            <span>Draft saved {lastSavedTime || ''}</span>
-                        </div>
-                    </Tooltip>
-                )}
 
                 {/* Save/Download */}
                 <Tooltip title="Save Editable PDF">
