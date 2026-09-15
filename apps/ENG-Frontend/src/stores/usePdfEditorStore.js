@@ -29,7 +29,7 @@ export const usePdfEditorStore = create((set, get) => ({
     toolSettings: {
         rect: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
         circle: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, opacity: 1.0 },
-        arrow: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0, arrowHeadSize: 16 },
+        arrow: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0, arrowHeadSize: 10 },
         line: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
         freehand: { strokeColor: '#e74c3c', strokeWidth: 2, opacity: 1.0 },
         highlight: { highlightColor: '#ffeb3b', opacity: 0.5 },
@@ -44,7 +44,7 @@ export const usePdfEditorStore = create((set, get) => ({
         stampUserDate: { strokeColor: '#e74c3c', fontSize: 12 },
         addImage: { opacity: 1.0 },
         // Fallback for missing tools
-        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, arrowHeadSize: 16, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
+        default: { strokeColor: '#e74c3c', fillColor: 'transparent', strokeWidth: 2, fontSize: 16, arrowHeadSize: 10, fontFamily: 'Helvetica', opacity: 1.0, highlightColor: '#ffeb3b' }
     },
 
     // ── Selected Object ──

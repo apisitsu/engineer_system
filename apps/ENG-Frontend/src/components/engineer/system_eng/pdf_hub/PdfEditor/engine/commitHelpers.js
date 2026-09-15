@@ -5,6 +5,33 @@ import fontkit from '@pdf-lib/fontkit';
  * commitHelpers.js — Utilities for PDF manipulation.
  */
 
+export const FABRIC_SERIALIZE_PROPS = [
+    'id', 'customData', 'textLines', 'arrowHeadSize', 'lineCoords',
+    'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle',
+    'underline', 'textAlign', 'fill', 'stroke', 'strokeWidth',
+    'opacity', 'strokeDashArray', 'rx', 'ry', 'angle', 'scaleX', 'scaleY',
+    'selectable', 'evented'
+];
+
+export function utf8ToBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+export function base64ToUtf8(b64) {
+    const binary = window.atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+}
+
 // ── Color conversion ──
 export function hexToRgb(color) {
     if (!color || color === 'transparent') return null;

@@ -97,10 +97,10 @@ const EditorCanvas = ({
         const handleSelection = (e) => {
             const obj = e.selected?.[0];
             if (obj) {
-                let arrowHeadSize = 16;
+                let arrowHeadSize = 10;
                 if (obj.customData?.type === 'arrow') {
                     const headChild = obj.getObjects?.().find(c => c.type?.toLowerCase() === 'triangle' || c.customData?.type === 'arrowhead');
-                    arrowHeadSize = headChild ? Math.round(headChild.width * (headChild.scaleX || 1)) : (obj.customData?.arrowHeadSize || 16);
+                    arrowHeadSize = headChild ? Math.round(headChild.width * (headChild.scaleX || 1)) : (obj.customData?.arrowHeadSize || 10);
                 }
 
                 store.setSelectedObject(obj.id, {
@@ -363,33 +363,39 @@ const EditorCanvas = ({
     // ══════════════════════════════════════════════════════════════════
     // Re-hydrate Annotations (Layer 2) when data arrives
     // ══════════════════════════════════════════════════════════════════
+    const lastLoadedAnnotRef = useRef(null);
     useEffect(() => {
         const fc = fabricCanvasRefs.current[pageNum];
         if (!fc || !pageAnnotations[pageNum] || !pageAnnotations[pageNum].objects?.length) return;
+        if (canvasSize.width <= 0) return;
 
-        // Only load if canvas is currently empty (initial load)
-        if (fc.getObjects().length === 0 && canvasSize.width > 0) {
-            let isMounted = true;
-            fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
-                if (!isMounted) return;
-                const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
-                const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
-                const initScaleX = canvasSize.width / savedW;
-                const initScaleY = canvasSize.height / savedH;
-                if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
-                    fc.getObjects().forEach(obj => {
-                        obj.set({
-                            left: obj.left * initScaleX, top: obj.top * initScaleY,
-                            scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
-                        });
-                        obj.setCoords();
-                    });
-                }
-                fc.renderAll();
-            }).catch(e => console.error("loadFromJSON Error:", e));
-            return () => { isMounted = false; };
+        // If this exact annotation payload was already loaded into this canvas, skip to avoid overwriting user edits
+        if (lastLoadedAnnotRef.current === pageAnnotations[pageNum] && fc.getObjects().length > 0) {
+            return;
         }
-    }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs]);
+
+        let isMounted = true;
+        fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
+            if (!isMounted) return;
+            lastLoadedAnnotRef.current = pageAnnotations[pageNum];
+            const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
+            const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
+            const initScaleX = canvasSize.width / savedW;
+            const initScaleY = canvasSize.height / savedH;
+            if (Math.abs(initScaleX - 1) > 0.01 || Math.abs(initScaleY - 1) > 0.01) {
+                fc.getObjects().forEach(obj => {
+                    obj.set({
+                        left: obj.left * initScaleX, top: obj.top * initScaleY,
+                        scaleX: (obj.scaleX || 1) * initScaleX, scaleY: (obj.scaleY || 1) * initScaleY,
+                    });
+                    obj.setCoords();
+                });
+            }
+            fc.renderAll();
+            store.setCanvasObjectCount(pageNum, fc.getObjects().length);
+        }).catch(e => console.error("loadFromJSON Error:", e));
+        return () => { isMounted = false; };
+    }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs, store]);
 
     // ══════════════════════════════════════════════════════════════════
     // Render Overlay PDF (Layer 1.5)

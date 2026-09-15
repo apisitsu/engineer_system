@@ -316,21 +316,13 @@ export default function ShapesPanel({ fabricCanvasRefs, currentPage, pushHistory
                                 <div className="pdf-ws-prop-section">
                                     <SectionTitle>Arrowhead Size (ขนาดหัวลูกศร)</SectionTitle>
                                     <PropRow label="Head Size">
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                                            <Slider
-                                                min={6} max={60} step={1}
-                                                value={currentArrowHeadSize}
-                                                onChange={handleSetArrowHeadSize}
-                                                style={{ flex: 1, margin: '0 4px' }}
-                                            />
-                                            <InputNumber
-                                                min={6} max={60} step={1}
-                                                value={currentArrowHeadSize}
-                                                onChange={handleSetArrowHeadSize}
-                                                size="small" style={{ width: 70 }}
-                                                addonAfter="px"
-                                            />
-                                        </div>
+                                        <InputNumber
+                                            min={4} max={60} step={1}
+                                            value={currentArrowHeadSize}
+                                            onChange={handleSetArrowHeadSize}
+                                            size="small" style={{ width: 90 }}
+                                            addonAfter="px"
+                                        />
                                     </PropRow>
                                 </div>
                             </>

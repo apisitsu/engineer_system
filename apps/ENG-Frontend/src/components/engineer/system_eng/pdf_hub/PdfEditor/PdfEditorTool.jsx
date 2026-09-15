@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-    Segmented, Button, Tooltip, Upload, Typography, Space, message,
+    Segmented, Button, Tooltip, Upload, Typography, Space, message, Modal
 } from 'antd';
 import {
-    DashboardOutlined, ToolOutlined
+    DashboardOutlined, ToolOutlined, SaveOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../theme';
 import { usePdfEditorStore } from '../../../../../stores/usePdfEditorStore';
@@ -22,6 +22,8 @@ import PhysicalRuler from './canvas/PhysicalRuler';
 import PdfUsageDashboard from './wrappers/PdfUsageDashboard.jsx';
 import WatermarkManagerModal from './wrappers/WatermarkManagerModal.jsx';
 import { MODE_OPTIONS } from './constants.jsx';
+import useAutoSaveDraft from './hooks/useAutoSaveDraft';
+import { FABRIC_SERIALIZE_PROPS, utf8ToBase64, base64ToUtf8 } from './engine/commitHelpers';
 
 // UI Extract Components
 import UploadLanding from './ui/UploadLanding';
@@ -85,7 +87,7 @@ const PdfEditorTool = () => {
         getAnnotationCount, totalAnnotations,
         pageHighlights, setPageHighlights,
         // eslint-disable-next-line no-unused-vars
-        pushHistory, undo, redo, canUndo, canRedo, historyVersion,
+        pushHistory, undo, redo, clearHistory, canUndo, canRedo, historyVersion,
         mergeFiles, setMergeFiles,
         exportedImages, setExportedImages,
         thumbnails, setThumbnails,
@@ -125,6 +127,33 @@ const PdfEditorTool = () => {
     const [overlayPdfDoc, setOverlayPdfDoc] = useState(null);
     const [overlayFile, setOverlayFile] = useState(null);
     const [mergeRotations, setMergeRotations] = useState({});
+
+    // ── Temporary Draft Auto-Save & Recovery ──
+    const [draftModalOpen, setDraftModalOpen] = useState(false);
+    const [pendingDraft, setPendingDraft] = useState(null);
+
+    const autoSave = useAutoSaveDraft({
+        pdfBytes,
+        pdfFile,
+        empNo,
+        pageAnnotations,
+        pageHighlights,
+        fabricCanvasRefs,
+        historyVersion,
+        saveCurrentPageState,
+    });
+    const { checkDraft } = autoSave;
+
+    // Check for pending temporary draft on mount
+    useEffect(() => {
+        if (!empNo || pdfBytes) return;
+        checkDraft().then(res => {
+            if (res && res.hasDraft && res.draft) {
+                setPendingDraft(res.draft);
+                setDraftModalOpen(true);
+            }
+        });
+    }, [empNo, pdfBytes, checkDraft]);
 
     // ── Continuous Scroll Observer ──
     useEffect(() => {
@@ -200,6 +229,39 @@ const PdfEditorTool = () => {
     }, [store.activeMode]);
 
     // ══════════════════════════════════════════════════════════════════
+    // Draft Resume / Discard Handlers
+    // ══════════════════════════════════════════════════════════════════
+    const handleResumeDraft = async () => {
+        try {
+            message.loading({ content: 'กำลังโหลดไฟล์ร่าง...', key: 'draft_load' });
+            const file = await autoSave.fetchDraftFile();
+            if (file) {
+                setDraftModalOpen(false);
+                setPendingDraft(null);
+                await handleFileUpload(file);
+                autoSave.markBaseUploaded?.(true);
+                message.success({ content: 'โหลดไฟล์ร่างสำเร็จ!', key: 'draft_load' });
+            } else {
+                message.error({ content: 'ไม่พบไฟล์ร่างบนเซิร์ฟเวอร์', key: 'draft_load' });
+            }
+        } catch (e) {
+            console.error('Failed to resume draft:', e);
+            message.error({ content: 'เกิดข้อผิดพลาดในการโหลดไฟล์ร่าง', key: 'draft_load' });
+        }
+    };
+
+    const handleDiscardDraft = async () => {
+        try {
+            await autoSave.deleteDraft();
+            setDraftModalOpen(false);
+            setPendingDraft(null);
+            message.success('ลบไฟล์ร่างเรียบร้อยแล้ว');
+        } catch (e) {
+            message.error('ไม่สามารถลบไฟล์ร่างได้');
+        }
+    };
+
+    // ══════════════════════════════════════════════════════════════════
     // File Upload Handler
     // ══════════════════════════════════════════════════════════════════
     const handleFileUpload = async (file) => {
@@ -221,6 +283,19 @@ const PdfEditorTool = () => {
         setMergeFiles([]);
         setLeftCollapsed(false);
         setRightCollapsed(false);
+        setPageAnnotations({});
+        setPageHighlights({});
+        clearHistory();
+
+        // Clear existing Fabric canvas objects
+        if (fabricCanvasRefs?.current) {
+            Object.values(fabricCanvasRefs.current).forEach(fc => {
+                if (fc && !fc.isDisposed) {
+                    try { fc.clear(); } catch (e) {}
+                }
+            });
+            fabricCanvasRefs.current = {};
+        }
 
         try {
             const buffer = await file.arrayBuffer();
@@ -235,14 +310,20 @@ const PdfEditorTool = () => {
                 const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
                 const infoDict = doc.getInfoDict();
                 const engDataObj = infoDict.get(doc.context.obj('EngProjectData'));
-                if (engDataObj && engDataObj.value) {
-                    const base64Str = engDataObj.value;
-                    const jsonStr = decodeURIComponent(escape(window.atob(base64Str)));
-                    projectData = JSON.parse(jsonStr);
-                    // The PDF is perfectly valid as is, no slicing needed
+                if (engDataObj) {
+                    const rawStr = typeof engDataObj.asString === 'function' ? engDataObj.asString() : (engDataObj.value || '');
+                    if (rawStr) {
+                        try {
+                            const jsonStr = base64ToUtf8(rawStr);
+                            projectData = JSON.parse(jsonStr);
+                        } catch {
+                            const jsonStr = decodeURIComponent(escape(window.atob(rawStr)));
+                            projectData = JSON.parse(jsonStr);
+                        }
+                    }
                 }
             } catch (e) {
-                console.warn('No valid pdf-lib metadata found, checking legacy EOF...');
+                console.warn('No valid pdf-lib metadata found, checking legacy EOF...', e);
             }
             
             // 2. Fallback to Legacy EOF Appending if not found
@@ -273,13 +354,9 @@ const PdfEditorTool = () => {
 
             if (projectData) {
                 await loadPdfFromBytes(originalPdfBytes, file.name);
-                
-                setTimeout(() => {
-                    if (projectData.annotations) setPageAnnotations(projectData.annotations);
-                    if (projectData.highlights) setPageHighlights(projectData.highlights);
-                    message.success('Editable project loaded successfully!');
-                }, 300);
-                
+                if (projectData.annotations) setPageAnnotations(projectData.annotations);
+                if (projectData.highlights) setPageHighlights(projectData.highlights);
+                message.success('Editable project loaded successfully!');
                 return false;
             }
         } catch (e) {
@@ -365,12 +442,12 @@ const PdfEditorTool = () => {
 
         const finalAnnotations = { ...pageAnnotations };
         Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
-            if (fc) {
+            if (fc && !fc.isDisposed) {
                 if (fc.discardActiveObject) {
                     fc.discardActiveObject();
                     fc.renderAll?.();
                 }
-                const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
+                const json = fc.toObject ? fc.toObject(FABRIC_SERIALIZE_PROPS) : fc.toJSON(FABRIC_SERIALIZE_PROPS);
                 json._canvasWidth = fc.width;
                 json._canvasHeight = fc.height;
                 finalAnnotations[pageNumStr] = json;
@@ -379,7 +456,7 @@ const PdfEditorTool = () => {
 
         const projectData = {
             annotations: finalAnnotations,
-            highlights: pageHighlights,
+            highlights: pageHighlights || {},
         };
         const jsonStr = JSON.stringify(projectData);
         
@@ -388,8 +465,8 @@ const PdfEditorTool = () => {
             const { PDFDocument, PDFString } = await import('pdf-lib');
             const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             
-            // Encode JSON to Base64 to safely store in PDFString (which expects ASCII)
-            const base64Str = window.btoa(unescape(encodeURIComponent(jsonStr)));
+            // Safe UTF-8 Base64 encoding
+            const base64Str = utf8ToBase64(jsonStr);
             
             // Set custom Document Info Dictionary property
             doc.getInfoDict().set(doc.context.obj('EngProjectData'), PDFString.of(base64Str));
@@ -405,6 +482,11 @@ const PdfEditorTool = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
             
+            // Delete server temporary draft on successful user save
+            if (autoSave && autoSave.deleteDraft) {
+                await autoSave.deleteDraft();
+            }
+
             logPdfUsage('export_editable_pdf');
             message.success('Editable PDF saved! You can load it back to edit annotations.');
         } catch (e) {
@@ -426,11 +508,14 @@ const PdfEditorTool = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
             
+            if (autoSave && autoSave.deleteDraft) {
+                await autoSave.deleteDraft();
+            }
+
             logPdfUsage('export_editable_pdf');
             message.success('Editable PDF saved (Legacy Mode)!');
         }
-    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
-
+    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage, autoSave]);
 
     const handleApplyAndDownload = useCallback(async () => {
         if (!pdfBytes) return;
@@ -442,12 +527,12 @@ const PdfEditorTool = () => {
             const finalAnnotations = { ...pageAnnotations };
             // Include all active canvases
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
-                if (fc) {
+                if (fc && !fc.isDisposed) {
                     if (fc.discardActiveObject) {
                         fc.discardActiveObject();
                         fc.renderAll?.();
                     }
-                    const json = fc.toObject ? fc.toObject(['customData', 'textLines', 'id']) : fc.toJSON(['customData', 'textLines', 'id']);
+                    const json = fc.toObject ? fc.toObject(FABRIC_SERIALIZE_PROPS) : fc.toJSON(FABRIC_SERIALIZE_PROPS);
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     finalAnnotations[pageNumStr] = json;
@@ -465,13 +550,38 @@ const PdfEditorTool = () => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
+            // Clean up temporary draft after successful apply & download
+            if (autoSave && autoSave.deleteDraft) {
+                await autoSave.deleteDraft();
+            }
+
             logPdfUsage('export_pdf');
             message.success('PDF downloaded successfully!');
         } catch (err) {
             console.error('Commit error:', err);
             message.error('Failed to apply annotations to PDF.');
         }
-    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage]);
+    }, [pdfBytes, pageAnnotations, pageHighlights, fabricCanvasRefs, pdfFile, saveCurrentPageState, logPdfUsage, autoSave]);
+
+    const handleClosePdf = useCallback(async () => {
+        if (autoSave && autoSave.deleteDraft) {
+            await autoSave.deleteDraft();
+        }
+        setPageAnnotations({});
+        setPageHighlights({});
+        clearHistory();
+        store.clearSelection();
+        if (fabricCanvasRefs?.current) {
+            Object.values(fabricCanvasRefs.current).forEach(fc => {
+                if (fc && !fc.isDisposed) {
+                    try { fc.clear(); } catch (e) {}
+                }
+            });
+            fabricCanvasRefs.current = {};
+        }
+        closePdf();
+        message.info('Document closed');
+    }, [closePdf, clearHistory, store, fabricCanvasRefs, setPageAnnotations, setPageHighlights, autoSave]);
 
     // ══════════════════════════════════════════════════════════════════
     // Merge Handler
@@ -720,6 +830,55 @@ const PdfEditorTool = () => {
         '--ws-primary-light': `${theme.colors.primary}18`,
     };
 
+    // ── Draft Recovery Modal Element ──
+    const DraftRecoveryModal = (
+        <Modal
+            title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <SaveOutlined style={{ color: theme.colors.primary, fontSize: 18 }} />
+                    <span style={{ fontWeight: 600 }}>พบไฟล์ร่างที่ยังไม่ได้บันทึก (Unsaved Draft Found)</span>
+                </div>
+            }
+            open={draftModalOpen}
+            closable={false}
+            maskClosable={false}
+            centered
+            footer={[
+                <Button key="discard" danger onClick={handleDiscardDraft} style={{ borderRadius: 6 }}>
+                    ลบไฟล์ร่างนี้ (Discard)
+                </Button>,
+                <Button key="cancel" onClick={() => setDraftModalOpen(false)} style={{ borderRadius: 6 }}>
+                    ปิด (Close)
+                </Button>,
+                <Button key="resume" type="primary" onClick={handleResumeDraft} style={{ borderRadius: 6, fontWeight: 600 }}>
+                    ทำงานต่อ (Resume)
+                </Button>
+            ]}
+        >
+            <p style={{ marginBottom: 12 }}>ระบบตรวจพบไฟล์ร่างของคุณที่เคยเปิดทำงานค้างไว้:</p>
+            <div style={{
+                background: '#f8fafc',
+                padding: '12px 16px',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                marginBottom: 14
+            }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
+                    {pendingDraft?.original_filename || pendingDraft?.filename || 'document.pdf'}
+                </div>
+                <div style={{ marginTop: 6, color: '#64748b', fontSize: 12 }}>
+                    <strong>บันทึกล่าสุด:</strong> {pendingDraft?.updated_at ? new Date(pendingDraft.updated_at).toLocaleString('th-TH') : '-'}
+                </div>
+                <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                    <strong>ขนาดไฟล์:</strong> {pendingDraft?.file_size ? `${(pendingDraft.file_size / 1024).toFixed(1)} KB` : '-'}
+                </div>
+            </div>
+            <p style={{ color: '#64748b', fontSize: 12.5, marginBottom: 0 }}>
+                คุณต้องการโหลดไฟล์ร่างนี้เพื่อทำงานต่อ หรือต้องการลบทิ้งเพื่อไม่ให้แจ้งเตือนอีก?
+            </p>
+        </Modal>
+    );
+
     // ══════════════════════════════════════════════════════════════════
     // Upload Landing (no PDF loaded)
     // ══════════════════════════════════════════════════════════════════
@@ -780,6 +939,8 @@ const PdfEditorTool = () => {
                     onClose={() => setDashboardOpen(false)} 
                 />
 
+                {DraftRecoveryModal}
+
                 <UploadLanding 
                     pdfLoading={pdfLoading}
                     onFileUpload={handleFileUpload}
@@ -794,6 +955,8 @@ const PdfEditorTool = () => {
     return (
         <div className="pdf-ws" style={cssVars}>
             <ScrollbarStyle primary={theme.colors.primary} />
+
+            {DraftRecoveryModal}
 
             <ShortcutsHandler
                 onUndo={undo}
@@ -823,7 +986,7 @@ const PdfEditorTool = () => {
                 onSavePageState={saveCurrentPageState}
                 onPrevPage={handlePrevPage}
                 onNextPage={handleNextPage}
-                onClosePdf={closePdf}
+                onClosePdf={handleClosePdf}
                 currentPage={currentPage}
                 totalPages={totalPages}
                 zoom={zoom}
@@ -847,6 +1010,8 @@ const PdfEditorTool = () => {
                 usedToolsRef={usedToolsRef}
                 canvasWrapperRef={canvasWrapperRef}
                 pdfDoc={pdfDoc}
+                draftStatus={autoSave.draftStatus}
+                lastSavedTime={autoSave.lastSavedTime}
             />
 
             {/* ── Mode-Specific Toolbar ── */}

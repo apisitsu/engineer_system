@@ -14,9 +14,18 @@ const stampCtrl = require('./controllers/stampController');
 const usageCtrl = require('./controllers/usageController');
 const watermarkCtrl = require('./controllers/watermarkController');
 const pdfToolsCtrl = require('./controllers/pdfToolsController');
+const draftCtrl = require('./controllers/draftController');
 
 const router = express.Router();
 const upload = multer({ dest: os.tmpdir() });
+
+// ── Temporary Drafts / Auto-Save ──
+router.get('/draft', draftCtrl.checkDraft);
+router.post('/draft', upload.single('file'), draftCtrl.saveDraft);
+router.post('/draft/annotations', express.json({ limit: '50mb' }), draftCtrl.updateAnnotations);
+router.patch('/draft', express.json({ limit: '50mb' }), draftCtrl.updateAnnotations);
+router.get('/draft/download', draftCtrl.downloadDraft);
+router.delete('/draft', draftCtrl.deleteDraft);
 
 // ── Stamp & Signature ──
 router.get('/stamps', stampCtrl.listStamps);

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button, Segmented, Space, Tooltip, Select, Upload } from 'antd';
 import {
     ToolOutlined, DashboardOutlined, AppstoreOutlined, InsertRowAboveOutlined,
     LeftOutlined, RightOutlined, ZoomOutOutlined, ZoomInOutlined,
     UndoOutlined, RedoOutlined, DeleteOutlined, MenuUnfoldOutlined, MenuFoldOutlined,
-    DownloadOutlined, FilePdfOutlined, ClearOutlined, SaveOutlined, CloseOutlined
+    DownloadOutlined, FilePdfOutlined, ClearOutlined, SaveOutlined, CloseOutlined,
+    CheckCircleOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { useTheme } from '../../../../../../theme';
 import { usePdfEditorStore } from '../../../../../../stores/usePdfEditorStore';
@@ -39,16 +40,58 @@ export default function HeaderModeBar({
     onFileUpload,
     usedToolsRef,
     canvasWrapperRef,
-    pdfDoc
+    pdfDoc,
+    draftStatus,
+    lastSavedTime,
 }) {
     const { theme } = useTheme();
     const store = usePdfEditorStore();
+    const barRef = useRef(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+
+    const checkScroll = useCallback(() => {
+        if (barRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = barRef.current;
+            setCanScrollLeft(scrollLeft > 5);
+            setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
+        }
+    }, []);
+
+    useEffect(() => {
+        const el = barRef.current;
+        if (!el) return;
+        checkScroll();
+        el.addEventListener('scroll', checkScroll, { passive: true });
+        window.addEventListener('resize', checkScroll);
+        return () => {
+            el.removeEventListener('scroll', checkScroll);
+            window.removeEventListener('resize', checkScroll);
+        };
+    }, [checkScroll]);
+
+    const handleWheelScroll = (e) => {
+        if (barRef.current && e.deltaY) {
+            barRef.current.scrollLeft += e.deltaY;
+        }
+    };
+
+    const scrollByAmount = (amt) => {
+        if (barRef.current) {
+            barRef.current.scrollBy({ left: amt, behavior: 'smooth' });
+        }
+    };
 
     return (
-        <div className="pdf-ws-modebar" style={{
-            background: theme.colors.surface,
-            borderColor: theme.colors.border,
-        }}>
+        <div 
+            ref={barRef}
+            className="pdf-ws-modebar" 
+            onWheel={handleWheelScroll}
+            style={{
+                background: theme.colors.surface,
+                borderColor: theme.colors.border,
+            }}
+        >
             <div className="pdf-ws-modebar-logo">
                 <div className="pdf-ws-modebar-logo-icon"
                     style={{ background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.primary}cc)` }}>
@@ -86,10 +129,46 @@ export default function HeaderModeBar({
                 }))}
             />
 
-            <div style={{ flex: 1 }} />
+            <div style={{ flex: 1, minWidth: 16 }} />
+
+            {/* Auto-save draft status indicator */}
+            {draftStatus === 'saving' && (
+                <span style={{ fontSize: 11, color: '#d97706', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', padding: '2px 8px', background: '#fef3c7', borderRadius: 12, flexShrink: 0 }}>
+                    <LoadingOutlined spin /> กำลังบันทึกร่าง...
+                </span>
+            )}
+            {draftStatus === 'saved' && (
+                <span style={{ fontSize: 11, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', padding: '2px 8px', background: '#ecfdf5', borderRadius: 12, flexShrink: 0 }}>
+                    <CheckCircleOutlined /> บันทึกร่างแล้ว {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : ''}
+                </span>
+            )}
+
+            {/* Scroll indicators when toolbar overflows viewport */}
+            {(canScrollLeft || canScrollRight) && (
+                <div style={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
+                    <Tooltip title="เลื่อนแถบเครื่องมือไปทางซ้าย">
+                        <Button 
+                            size="small" 
+                            icon={<LeftOutlined style={{ fontSize: 10 }} />} 
+                            disabled={!canScrollLeft} 
+                            onClick={() => scrollByAmount(-200)} 
+                            style={{ width: 22, height: 22, padding: 0, borderRadius: 4 }} 
+                        />
+                    </Tooltip>
+                    <Tooltip title="เลื่อนแถบเครื่องมือไปทางขวา">
+                        <Button 
+                            size="small" 
+                            icon={<RightOutlined style={{ fontSize: 10 }} />} 
+                            disabled={!canScrollRight} 
+                            onClick={() => scrollByAmount(200)} 
+                            style={{ width: 22, height: 22, padding: 0, borderRadius: 4 }} 
+                        />
+                    </Tooltip>
+                </div>
+            )}
 
             {/* ── Global actions ── */}
-            <Space size={4}>
+            <Space size={4} style={{ flexShrink: 0 }}>
                 <Tooltip title="Usage Dashboard">
                     <Button 
                         type="text" 

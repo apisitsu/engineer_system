@@ -23,6 +23,27 @@
     background: var(--ws-surface, #fff);
     flex-shrink: 0;
     z-index: 10;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+}
+
+.pdf-ws-modebar::-webkit-scrollbar {
+    height: 3px;
+}
+
+.pdf-ws-modebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pdf-ws-modebar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+}
+
+.pdf-ws-modebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .pdf-ws-modebar-logo {
@@ -66,6 +87,7 @@
     border-radius: 10px !important;
     padding: 2px !important;
     font-weight: 600 !important;
+    flex-shrink: 0;
 }
 
 .pdf-ws-modebar .ant-segmented-item {
@@ -97,14 +119,36 @@
     border-bottom: 1px solid var(--ws-border, #e5e7eb);
     background: var(--ws-surface, #fff);
     flex-shrink: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
     min-height: 44px;
+    scrollbar-width: thin;
+}
+
+.pdf-ws-toolbar::-webkit-scrollbar {
+    height: 3px;
+}
+
+.pdf-ws-toolbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pdf-ws-toolbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+}
+
+.pdf-ws-toolbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .pdf-ws-toolbar-group {
     display: flex;
     align-items: center;
     gap: 3px;
+    flex-shrink: 0;
 }
 
 .pdf-ws-toolbar-divider {
@@ -489,6 +533,20 @@
     .pdf-ws-right-panel {
         width: 220px;
         min-width: 220px;
+    }
+}
+
+@media (max-width: 1280px) {
+    .pdf-ws-modebar-subtitle {
+        display: none;
+    }
+    .pdf-ws-modebar-logo {
+        padding-right: 8px;
+        margin-right: 0px;
+    }
+    .pdf-ws-modebar {
+        gap: 8px;
+        padding: 6px 10px;
     }
 }
 

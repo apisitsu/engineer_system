@@ -153,6 +153,7 @@ export const server = {
   PDF_WATERMARK_LOG: `${apiUrl}api/engineer/pdf-hub/watermark-log`,
   PDF_WATERMARK_HISTORY: `${apiUrl}api/engineer/pdf-hub/watermark-history`,
   PDF_TO_IMAGE: `${apiUrl}api/engineer/pdf-hub/pdf-to-image`,
+  PDF_HUB_DRAFT: `${apiUrl}api/engineer/pdf-hub/draft`,
 
   GMAIL_CONNECT: `${apiUrl}auth/google`,
   GMAIL_STATUS: `${apiUrl}api/gmail-status`,

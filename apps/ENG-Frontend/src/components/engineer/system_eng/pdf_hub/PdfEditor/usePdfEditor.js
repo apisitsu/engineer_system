@@ -11,7 +11,9 @@ import useExport from './hooks/useExport';
  * usePdfEditor — Master Composition Hook
  * Composes individual domain hooks into a single interface for PdfEditorTool.
  */
-export default function usePdfEditor() {
+import { FABRIC_SERIALIZE_PROPS } from './engine/commitHelpers';
+
+export default function usePdfEditor(onSaveSuccess) {
     // ── Container ref for fit-to-width calculation ──
     const canvasWrapperRef = useRef(null);
     const fabricCanvasRefs = useRef({});
@@ -48,12 +50,7 @@ export default function usePdfEditor() {
         if (!fc) return null;
         // Do not call discardActiveObject here, as doing so during an active transform
         // causes Fabric to recursively re-invoke endCurrentTransform and crash the call stack.
-        const propertiesToInclude = [
-            'customData', 'textLines', 'id', 'text', 'fontSize', 'fontFamily', 
-            'fontWeight', 'fontStyle', 'underline', 'textAlign', 'fill', 'stroke', 
-            'strokeWidth', 'opacity'
-        ];
-        const json = fc.toObject ? fc.toObject(propertiesToInclude) : fc.toJSON(propertiesToInclude);
+        const json = fc.toObject ? fc.toObject(FABRIC_SERIALIZE_PROPS) : fc.toJSON(FABRIC_SERIALIZE_PROPS);
         json._canvasWidth = fc.width;
         json._canvasHeight = fc.height;
         if (json && Array.isArray(json.objects)) {
