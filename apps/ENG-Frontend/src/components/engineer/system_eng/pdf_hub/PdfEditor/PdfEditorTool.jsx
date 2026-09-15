@@ -238,27 +238,6 @@ const PdfEditorTool = () => {
     // ══════════════════════════════════════════════════════════════════
     // Fast Binary Pre-Check for EngProjectData
     // ══════════════════════════════════════════════════════════════════
-    const fastCheckHasEngProjectData = (bytes) => {
-        if (!bytes || bytes.length < 30) return false;
-        const len = bytes.length;
-        // Check tail 128KB first (where trailer/EOF append resides)
-        const tailStart = Math.max(0, len - 131072);
-        for (let i = tailStart; i <= len - 14; i++) {
-            if (bytes[i] === 69 && bytes[i + 1] === 110 && bytes[i + 2] === 103 && bytes[i + 3] === 80) {
-                return true;
-            }
-        }
-        // Check head 64KB (where catalog/info dict might reside)
-        const headEnd = Math.min(len, 65536);
-        for (let i = 0; i <= headEnd - 14; i++) {
-            if (bytes[i] === 69 && bytes[i + 1] === 110 && bytes[i + 2] === 103 && bytes[i + 3] === 80) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    // ══════════════════════════════════════════════════════════════════
     // Draft Resume / Discard Handlers
     // ══════════════════════════════════════════════════════════════════
     const handleResumeDraft = async (targetDraft) => {
@@ -284,6 +263,16 @@ const PdfEditorTool = () => {
             });
 
             if (file) {
+                // Ensure annotations stored in SQLite are directly attached to the file object
+                if (draftToLoad.project_data && !file._projectData) {
+                    try {
+                        file._projectData = typeof draftToLoad.project_data === 'string'
+                            ? JSON.parse(draftToLoad.project_data)
+                            : draftToLoad.project_data;
+                    } catch (e) {
+                        console.warn('Failed to parse targetDraft project_data:', e);
+                    }
+                }
                 setDraftModalOpen(false);
                 setPendingDrafts([]);
                 setDocumentLoadingState(prev => ({ ...prev, stage: 'Rendering pages with PDF.js...' }));
@@ -375,15 +364,40 @@ const PdfEditorTool = () => {
             const buffer = await file.arrayBuffer();
             const bytes = new Uint8Array(buffer);
             
-            let projectData = null;
+            let projectData = file._projectData || null;
             let originalPdfBytes = bytes;
             
-            // Fast binary check: only parse metadata if 'EngProjectData' signature exists in file!
-            const hasProjectSignature = fastCheckHasEngProjectData(bytes);
+            // 1. Instant binary check: look for %ENG_PROJECT_DATA: comment trailer (<1ms)
+            if (!projectData && bytes.length > 20) {
+                const tailLen = Math.min(bytes.length, 2097152); // Inspect tail 2MB
+                const tailBytes = bytes.subarray(bytes.length - tailLen);
+                const tailText = new TextDecoder('latin1').decode(tailBytes);
+                
+                const sig = 'ENG_PROJECT_DATA:';
+                const sigIdx = tailText.lastIndexOf(sig);
+                if (sigIdx !== -1) {
+                    try {
+                        const b64 = tailText.slice(sigIdx + sig.length).trim();
+                        const cleanB64 = b64.split(/[\r\n\s]/)[0];
+                        const jsonStr = base64ToUtf8(cleanB64);
+                        projectData = JSON.parse(jsonStr);
+                        
+                        // Strip comment marker from originalPdfBytes so PDF is completely clean
+                        const rawSigIdx = bytes.length - tailLen + sigIdx;
+                        let cutIdx = rawSigIdx;
+                        if (cutIdx > 0 && bytes[cutIdx - 1] === 37) cutIdx--; // '%'
+                        if (cutIdx > 0 && bytes[cutIdx - 1] === 10) cutIdx--; // '\n'
+                        if (cutIdx > 0 && bytes[cutIdx - 1] === 13) cutIdx--; // '\r'
+                        originalPdfBytes = bytes.subarray(0, Math.max(0, cutIdx));
+                    } catch (e) {
+                        console.warn('Failed to parse EOF project data:', e);
+                    }
+                }
+            }
 
-            if (hasProjectSignature) {
+            // 2. Fallback: Parse pdf-lib Custom Metadata if not found at EOF
+            if (!projectData) {
                 setDocumentLoadingState(prev => ({ ...prev, stage: 'Verifying editable annotations...' }));
-                // 1. Try to read from pdf-lib Custom Metadata first
                 try {
                     const { PDFDocument } = await import('pdf-lib');
                     const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
@@ -402,33 +416,7 @@ const PdfEditorTool = () => {
                         }
                     }
                 } catch (e) {
-                    console.warn('No valid pdf-lib metadata found, checking legacy EOF...', e);
-                }
-                
-                // 2. Fallback to Legacy EOF Appending if not found
-                if (!projectData) {
-                    const signature = new TextEncoder().encode('\nENG_PROJECT_DATA:');
-                    let sigIndex = -1;
-                    for (let i = bytes.length - signature.length; i >= 0; i--) {
-                        let match = true;
-                        for (let j = 0; j < signature.length; j++) {
-                            if (bytes[i + j] !== signature[j]) {
-                                match = false;
-                                break;
-                            }
-                        }
-                        if (match) {
-                            sigIndex = i;
-                            break;
-                        }
-                    }
-        
-                    if (sigIndex !== -1) {
-                        const jsonBytes = bytes.slice(sigIndex + signature.length);
-                        const jsonStr = new TextDecoder().decode(jsonBytes);
-                        projectData = JSON.parse(jsonStr);
-                        originalPdfBytes = bytes.slice(0, sigIndex);
-                    }
+                    console.warn('No valid pdf-lib metadata found:', e);
                 }
             }
 
@@ -444,7 +432,7 @@ const PdfEditorTool = () => {
                 await loadPdf(file);
             }
         } catch (e) {
-            console.error('Failed to parse editable project:', e);
+            console.error('Failed to parse document:', e);
             message.error('Failed to load document. File may be corrupted or invalid.');
         } finally {
             setDocumentLoadingState({ loading: false, stage: '', percent: 0, filename: '' });
@@ -557,8 +545,16 @@ const PdfEditorTool = () => {
             // Set custom Document Info Dictionary property
             doc.getInfoDict().set(doc.context.obj('EngProjectData'), PDFString.of(base64Str));
             
-            const finalBytes = await doc.save();
-            const blob = new Blob([finalBytes], { type: 'application/pdf' });
+            // Save with useObjectStreams: false so info dict is uncompressed in PDF objects
+            const finalPdfBytes = await doc.save({ useObjectStreams: false });
+
+            // Append %ENG_PROJECT_DATA: comment trailer for instant sub-millisecond detection
+            const marker = new TextEncoder().encode('\n%ENG_PROJECT_DATA:' + base64Str + '\n');
+            const combined = new Uint8Array(finalPdfBytes.length + marker.length);
+            combined.set(finalPdfBytes);
+            combined.set(marker, finalPdfBytes.length);
+
+            const blob = new Blob([combined], { type: 'application/pdf' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -579,7 +575,7 @@ const PdfEditorTool = () => {
             console.error('Failed to save editable PDF using pdf-lib, falling back to raw appending:', e);
             
             // Fallback (Legacy EOF Appending)
-            const jsonBytes = new TextEncoder().encode('\nENG_PROJECT_DATA:' + jsonStr);
+            const jsonBytes = new TextEncoder().encode('\n%ENG_PROJECT_DATA:' + utf8ToBase64(jsonStr) + '\n');
             const finalBytes = new Uint8Array(pdfBytes.length + jsonBytes.length);
             finalBytes.set(pdfBytes);
             finalBytes.set(jsonBytes, pdfBytes.length);

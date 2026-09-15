@@ -27,6 +27,7 @@ async function checkDraft(req, res) {
                 filename: d.filename,
                 original_filename: d.original_filename,
                 file_size: d.file_size,
+                project_data: d.project_data,
                 updated_at: d.updated_at
             })),
             draft: hasDraft ? {
@@ -35,6 +36,7 @@ async function checkDraft(req, res) {
                 filename: drafts[0].filename,
                 original_filename: drafts[0].original_filename,
                 file_size: drafts[0].file_size,
+                project_data: drafts[0].project_data,
                 updated_at: drafts[0].updated_at
             } : null
         });
@@ -139,6 +141,10 @@ async function downloadDraft(req, res) {
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.filename)}"`);
+        if (result.projectData) {
+            res.setHeader('X-Eng-Project-Data', Buffer.from(result.projectData, 'utf8').toString('base64'));
+        }
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Eng-Project-Data');
 
         if (result.type === 'buffer') {
             res.send(result.buffer);

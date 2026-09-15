@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { server } from '../../../../../../constance/constance';
-import { FABRIC_SERIALIZE_PROPS } from '../engine/commitHelpers';
+import { FABRIC_SERIALIZE_PROPS, base64ToUtf8 } from '../engine/commitHelpers';
 
 /**
  * useAutoSaveDraft — Ultra-fast, memory-efficient debounced auto-saving of temporary drafts.
@@ -120,7 +120,19 @@ export default function useAutoSaveDraft({
             if (match && match[1]) {
                 fileName = decodeURIComponent(match[1]);
             }
-            return new File([blob], fileName, { type: 'application/pdf' });
+            const fileObj = new File([blob], fileName, { type: 'application/pdf' });
+
+            // Extract X-Eng-Project-Data header if sent by server for instant zero-loss hydration
+            const rawHeader = res.headers['x-eng-project-data'];
+            if (rawHeader) {
+                try {
+                    fileObj._projectData = JSON.parse(base64ToUtf8(rawHeader));
+                } catch (e) {
+                    console.warn('[AutoSaveDraft] Could not parse X-Eng-Project-Data header:', e);
+                }
+            }
+
+            return fileObj;
         } catch (err) {
             console.error('[AutoSaveDraft] Failed to download draft:', err.message);
             return null;
@@ -146,6 +158,15 @@ export default function useAutoSaveDraft({
             Object.entries(fabricCanvasRefs?.current || {}).forEach(([pageNumStr, fc]) => {
                 if (fc && !fc.isDisposed) {
                     const json = fc.toObject ? fc.toObject(FABRIC_SERIALIZE_PROPS) : fc.toJSON(FABRIC_SERIALIZE_PROPS);
+                    if (json && Array.isArray(json.objects)) {
+                        json.objects.forEach(obj => {
+                            if (obj && (obj.type === 'FabricText' || obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
+                                if (obj.text === undefined || obj.text === null) {
+                                    obj.text = '';
+                                }
+                            }
+                        });
+                    }
                     json._canvasWidth = fc.width;
                     json._canvasHeight = fc.height;
                     finalAnnotations[pageNumStr] = json;
@@ -195,8 +216,10 @@ export default function useAutoSaveDraft({
                 lastSavedJsonRef.current = jsonStr;
             }
 
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
             setDraftStatus('saved');
-            setLastSavedTime(new Date());
+            setLastSavedTime(timeStr);
         } catch (err) {
             console.error('[AutoSaveDraft] Error saving draft:', err);
             // If delta update failed because draft row was missing on server, retry by re-uploading base

@@ -295,7 +295,7 @@ export default function HeaderModeBar({
                     <Tooltip title={`Auto-saved to temporary draft at ${lastSavedTime || 'recently'}`}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#52c41a', padding: '0 6px', cursor: 'default' }}>
                             <CheckCircleOutlined />
-                            <span>Saved {lastSavedTime ? `(${lastSavedTime})` : ''}</span>
+                            <span>Draft saved {lastSavedTime || ''}</span>
                         </div>
                     </Tooltip>
                 )}

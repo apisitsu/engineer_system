@@ -289,11 +289,18 @@ async function getAssembledDraftPdf(empno, filename) {
         const doc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
         const base64Str = Buffer.from(draft.project_data, 'utf8').toString('base64');
         doc.getInfoDict().set(doc.context.obj('EngProjectData'), PDFString.of(base64Str));
-        const finalPdfBytes = await doc.save();
+        
+        // Save with useObjectStreams: false so info dict is uncompressed in PDF objects
+        const finalPdfBytes = await doc.save({ useObjectStreams: false });
+
+        // Append %ENG_PROJECT_DATA: comment trailer for instant sub-millisecond detection
+        const marker = Buffer.from('\n%ENG_PROJECT_DATA:' + base64Str + '\n');
+        const combined = Buffer.concat([Buffer.from(finalPdfBytes), marker]);
 
         return {
             type: 'buffer',
-            buffer: Buffer.from(finalPdfBytes),
+            buffer: combined,
+            projectData: draft.project_data,
             filename: downloadName
         };
     } catch (err) {
@@ -302,6 +309,7 @@ async function getAssembledDraftPdf(empno, filename) {
         return {
             type: 'file',
             filePath: draft.filepath,
+            projectData: draft.project_data,
             filename: downloadName
         };
     }
