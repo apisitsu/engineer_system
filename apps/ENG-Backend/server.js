@@ -251,6 +251,9 @@ app.route('/api/ecnt/config')
   .get(verifyToken, engEcntV2.getEcntConfig)
   .post(verifyToken, engEcntV2.updateEcntConfig);
 
+// User candidates for Stage PIC & Manager assignment (excludes nickname 'Admin')
+app.route('/api/ecnt/user-candidates').get(verifyToken, engEcntV2.getUserCandidates);
+
 // --------- Tumble System API ---------
 // Tumble Model
 app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);

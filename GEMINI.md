@@ -8,6 +8,21 @@
 - **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
 
 ### Recent Changes
+- **ECNT V2 Stage PICs & Managers Dynamic User Selection (Excluding 'Admin' Nickname) (2026-09-16):**
+  - **Backend Registered Non-Admin Candidate API (`/api/ecnt/user-candidates`):**
+    - Added `getUserCandidates` controller in `eng_ecnt_v2.js` querying `m_user_profile` where `LOWER(COALESCE(u_nickname, '')) != 'admin'`, ordered by `u_department`, `role`, and `u_name`.
+    - Verified via automated test: out of 40 users in `m_user_profile`, exactly 27 real personnel are returned and 0 users with nickname `'Admin'` are exposed.
+  - **Interactive Candidate Pickers in System Settings (`EcntSettingsModal.jsx`):**
+    - Tab 1 ("Stage PICs & Managers"): Replaced raw manual input with searchable Ant Design `<Select>` dropdowns showing `[EmpNo] FullName (Nickname) - Dept / Position` for Engineering Manager, Default QC PIC, and all Department Managers (`ENG`, `QA`, `QC`, `PD1`, `PD2`, `MC`, `MM`, `PC`, `TOP`).
+    - Added auto-population for Full Name, Emp ID, and Email (`gmail_email` with fallback) while maintaining full manual override capability.
+    - Tab 2 ("Concerned Depts"): Added PIC selection dropdown column for all concern departments.
+    - Tab 4 ("Authorized Admins"): Candidate options integrated into admin tag picker.
+    - Added secondary defensive client-side filtering `filter(u => (u.u_nickname || '').toLowerCase() !== 'admin')`.
+  - **Dynamic Engineer Assignment in Workflow Action Card (`WorkflowActionCard.jsx`):**
+    - In Block 4 (Assign Engineer), dynamically queries `/api/ecnt/user-candidates` to present non-admin engineers for assignment, removing legacy hardcoded options.
+  - **Live Web Browser Verification (`browser_subagent`):**
+    - Verified live dropdown interactions across all modal tabs, recorded session video `user_picker_verification_1789547456337.webp`, and captured screenshots.
+    - Verified clean production build (`npm run build`) with zero errors and zero warnings.
 - **ECNT V2 Multi-User Persona Live Web Testing & Full Stage Verification (2026-09-16):**
   - **12 User Persona Authentication & Role Mapping (`m_user_profile`):**
     - Authenticated all 12 requested users (`mc_admin`, `pd1_admin`, `pd2_admin`, `qc_admin`, `jp_mgr`, `thai_mgr`, `eng_mgr`, `eng_admin`, `mm_admin`, `pc_admin`, `pe_user`, `qa_admin`) with password `"password"` and verified their respective roles (`PE`, `MGR`, `STAFF`, `QC`, `QA`, `PC`, `PD1`, `PD2`, `MC`, `MM`, `TOP`).

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, Tabs, Form, Input, Button, Switch, Table, Space, 
-    Typography, Tag, Select, App, Card, Row, Col 
+    Typography, Tag, Select, App, Card, Row, Col, Alert 
 } from 'antd';
 import { 
     SettingOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, 
-    SafetyCertificateOutlined, MailOutlined, TeamOutlined, ControlOutlined 
+    SafetyCertificateOutlined, MailOutlined, TeamOutlined, ControlOutlined,
+    UserOutlined 
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
@@ -22,9 +23,27 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
     const [concernDepts, setConcernDepts] = useState([]);
     const [systemAdmins, setSystemAdmins] = useState([]);
+    const [userCandidates, setUserCandidates] = useState([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+
+    // Fetch registered users from backend (excluding users with nickname 'Admin')
+    const fetchUserCandidates = async () => {
+        setLoadingUsers(true);
+        try {
+            const res = await axios.get(`${server.URL}/api/ecnt/user-candidates`, { withCredentials: true });
+            const list = (res.data?.data || []).filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
+            setUserCandidates(list);
+        } catch (err) {
+            console.error("Fetch user candidates error:", err);
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
 
     useEffect(() => {
         if (open) {
+            fetchUserCandidates();
+
             const assignees = currentConfig.stage_assignees || {};
             const email = currentConfig.email_settings || {};
             const depts = currentConfig.concern_depts || [];
@@ -35,11 +54,13 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
             form.setFieldsValue({
                 // Eng Mgr
-                eng_mgr_emp: assignees.eng_mgr?.emp_no || 'eng_mgr',
-                eng_mgr_name: assignees.eng_mgr?.name || 'ENG Manager',
-                eng_mgr_email: assignees.eng_mgr?.email || 'eng.mgr@minebea.co.th',
+                eng_mgr_select: assignees.eng_mgr?.emp_no || undefined,
+                eng_mgr_emp: assignees.eng_mgr?.emp_no || 'LB371',
+                eng_mgr_name: assignees.eng_mgr?.name || 'Teerapol Kantapoom',
+                eng_mgr_email: assignees.eng_mgr?.email || 'teerapol.k@minebea.co.th',
 
                 // QC PIC
+                qc_pic_select: assignees.default_qc_pic?.emp_no || undefined,
                 qc_pic_emp: assignees.default_qc_pic?.emp_no || 'qc_admin',
                 qc_pic_name: assignees.default_qc_pic?.name || 'QC User',
                 qc_pic_email: assignees.default_qc_pic?.email || 'qc.pic@minebea.co.th',
@@ -47,6 +68,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                 // Dept Mgr mappings
                 ...ALL_DEPTS.reduce((acc, d) => {
                     const mapped = assignees.dept_mgr_mapping?.[d] || {};
+                    acc[`dept_mgr_${d}_select`] = mapped.emp_no || undefined;
                     acc[`dept_mgr_${d}_emp`] = mapped.emp_no || '';
                     acc[`dept_mgr_${d}_name`] = mapped.name || '';
                     acc[`dept_mgr_${d}_email`] = mapped.email || '';
@@ -62,6 +84,37 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
             });
         }
     }, [open, currentConfig, form]);
+
+    const handleSelectCandidate = (uCode, fieldPrefix) => {
+        if (!uCode) {
+            form.setFieldsValue({
+                [`${fieldPrefix}_select`]: undefined,
+                [`${fieldPrefix}_name`]: '',
+                [`${fieldPrefix}_emp`]: '',
+                [`${fieldPrefix}_email`]: ''
+            });
+            return;
+        }
+
+        const user = userCandidates.find(u => u.u_code === uCode);
+        if (user) {
+            const defaultEmail = user.gmail_email || `${user.u_code.toLowerCase()}@minebea.co.th`;
+            form.setFieldsValue({
+                [`${fieldPrefix}_select`]: user.u_code,
+                [`${fieldPrefix}_name`]: user.u_name,
+                [`${fieldPrefix}_emp`]: user.u_code,
+                [`${fieldPrefix}_email`]: defaultEmail
+            });
+        }
+    };
+
+    const formatUserOptionLabel = (u) => {
+        const nicknamePart = u.u_nickname ? ` "${u.u_nickname}",` : '';
+        const deptPart = u.u_department ? ` - ${u.u_department}` : '';
+        const rolePart = u.position || u.role ? ` [${u.position || u.role}]` : '';
+        return `${u.u_name} (${u.u_code}${nicknamePart})${deptPart}${rolePart}`;
+    };
+
 
     const handleSave = async () => {
         try {
@@ -167,7 +220,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
         {
             title: 'Dept Code',
             dataIndex: 'dept_code',
-            width: 100,
+            width: 90,
             render: (val, record, idx) => (
                 <Input 
                     value={val} 
@@ -179,7 +232,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
         {
             title: 'Department Name / Label',
             dataIndex: 'dept_label',
-            width: 200,
+            width: 170,
             render: (val, record, idx) => (
                 <Input 
                     value={val} 
@@ -188,9 +241,45 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
             )
         },
         {
+            title: 'Select PIC (Registered User)',
+            dataIndex: 'emp_no',
+            width: 220,
+            render: (val, record, idx) => (
+                <Select
+                    size="small"
+                    showSearch
+                    placeholder="Choose PIC..."
+                    value={val || undefined}
+                    style={{ width: '100%' }}
+                    allowClear
+                    loading={loadingUsers}
+                    onChange={(selectedEmp) => {
+                        if (!selectedEmp) {
+                            handleUpdateConcernDept(idx, 'emp_no', '');
+                            handleUpdateConcernDept(idx, 'default_pic', '');
+                            return;
+                        }
+                        const user = userCandidates.find(u => u.u_code === selectedEmp);
+                        if (user) {
+                            handleUpdateConcernDept(idx, 'emp_no', user.u_code);
+                            handleUpdateConcernDept(idx, 'default_pic', user.u_name);
+                            handleUpdateConcernDept(idx, 'email', user.gmail_email || `${user.u_code.toLowerCase()}@minebea.co.th`);
+                        }
+                    }}
+                    filterOption={(input, option) =>
+                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={userCandidates.map(u => ({
+                        value: u.u_code,
+                        label: formatUserOptionLabel(u)
+                    }))}
+                />
+            )
+        },
+        {
             title: 'Default PIC Name',
             dataIndex: 'default_pic',
-            width: 180,
+            width: 150,
             render: (val, record, idx) => (
                 <Input 
                     value={val} 
@@ -199,20 +288,9 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
             )
         },
         {
-            title: 'Emp No',
-            dataIndex: 'emp_no',
-            width: 110,
-            render: (val, record, idx) => (
-                <Input 
-                    value={val} 
-                    onChange={e => handleUpdateConcernDept(idx, 'emp_no', e.target.value.toLowerCase())}
-                />
-            )
-        },
-        {
             title: 'Email',
             dataIndex: 'email',
-            width: 200,
+            width: 180,
             render: (val, record, idx) => (
                 <Input 
                     value={val} 
@@ -221,9 +299,9 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
             )
         },
         {
-            title: 'Default Needed',
+            title: 'Needed',
             dataIndex: 'is_needed',
-            width: 90,
+            width: 75,
             align: 'center',
             render: (val, record, idx) => (
                 <Switch 
@@ -258,7 +336,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                     <span style={{ fontSize: 16, fontWeight: 700 }}>ECNT V2 System Settings & Dynamic Stage Configuration</span>
                 </Space>
             }
-            width={900}
+            width={960}
             footer={[
                 <Button key="cancel" onClick={onClose}>
                     Cancel
@@ -284,74 +362,184 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                             key: 'stage_pics',
                             label: <span><TeamOutlined /> Stage PICs & Managers</span>,
                             children: (
-                                <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
-                                    <Card size="small" title={<Text strong>Global Engineering & QC Assignees</Text>} style={{ marginBottom: 16, borderRadius: 8 }}>
-                                        <Row gutter={16}>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="eng_mgr_name" label="Engineering Manager Name" rules={[{ required: true }]}>
-                                                    <Input placeholder="e.g. TEERAPOL KANTAPOOM" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="eng_mgr_emp" label="Eng Mgr Emp No" rules={[{ required: true }]}>
-                                                    <Input placeholder="e.g. eng_mgr" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="eng_mgr_email" label="Eng Mgr Email" rules={[{ required: true, type: 'email' }]}>
-                                                    <Input placeholder="e.g. eng.mgr@minebea.co.th" />
-                                                </Form.Item>
-                                            </Col>
-                                        </Row>
-                                        <Row gutter={16}>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="qc_pic_name" label="Default QC MSA/FAI PIC" rules={[{ required: true }]}>
-                                                    <Input placeholder="e.g. SUPARAT KATSANUK" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="qc_pic_emp" label="QC PIC Emp No" rules={[{ required: true }]}>
-                                                    <Input placeholder="e.g. qc_admin" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} md={8}>
-                                                <Form.Item name="qc_pic_email" label="QC PIC Email" rules={[{ required: true, type: 'email' }]}>
-                                                    <Input placeholder="e.g. qc.pic@minebea.co.th" />
-                                                </Form.Item>
-                                            </Col>
-                                        </Row>
+                                <div style={{ maxHeight: '62vh', overflowY: 'auto', paddingRight: 8 }}>
+                                    <Alert
+                                        message="Registered Personnel Selection"
+                                        description="You can select personnel directly from registered company users (test accounts with nickname 'Admin' are automatically filtered out). Selecting a user automatically populates Name, Emp No, and Email."
+                                        type="info"
+                                        showIcon
+                                        style={{ marginBottom: 16 }}
+                                    />
+
+                                    {/* 1. Global Engineering & QC Assignees */}
+                                    <Card 
+                                        size="small" 
+                                        title={<Space><UserOutlined style={{ color: '#1890ff' }} /><Text strong>Global Engineering & QC Assignees</Text></Space>} 
+                                        style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+                                    >
+                                        {/* Engineering Manager */}
+                                        <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+                                            <Row gutter={12} align="bottom">
+                                                <Col xs={24} md={10}>
+                                                    <Form.Item 
+                                                        name="eng_mgr_select" 
+                                                        label={<Text strong>Select Engineering Manager</Text>}
+                                                        style={{ marginBottom: 4 }}
+                                                    >
+                                                        <Select
+                                                            showSearch
+                                                            placeholder="🔍 Pick from registered users..."
+                                                            allowClear
+                                                            loading={loadingUsers}
+                                                            onChange={(val) => handleSelectCandidate(val, 'eng_mgr')}
+                                                            filterOption={(input, option) =>
+                                                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                                            }
+                                                            options={userCandidates.map(u => ({
+                                                                value: u.u_code,
+                                                                label: formatUserOptionLabel(u)
+                                                            }))}
+                                                        />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={5}>
+                                                    <Form.Item name="eng_mgr_name" label="Manager Name" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Full Name" />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={4}>
+                                                    <Form.Item name="eng_mgr_emp" label="Emp ID" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Emp No" />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={5}>
+                                                    <Form.Item name="eng_mgr_email" label="Email" rules={[{ required: true, type: 'email' }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Email" />
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                        </div>
+
+                                        {/* Default QC PIC */}
+                                        <div>
+                                            <Row gutter={12} align="bottom">
+                                                <Col xs={24} md={10}>
+                                                    <Form.Item 
+                                                        name="qc_pic_select" 
+                                                        label={<Text strong>Select Default QC MSA/FAI PIC</Text>}
+                                                        style={{ marginBottom: 4 }}
+                                                    >
+                                                        <Select
+                                                            showSearch
+                                                            placeholder="🔍 Pick from registered users..."
+                                                            allowClear
+                                                            loading={loadingUsers}
+                                                            onChange={(val) => handleSelectCandidate(val, 'qc_pic')}
+                                                            filterOption={(input, option) =>
+                                                                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                                            }
+                                                            options={userCandidates.map(u => ({
+                                                                value: u.u_code,
+                                                                label: formatUserOptionLabel(u)
+                                                            }))}
+                                                        />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={5}>
+                                                    <Form.Item name="qc_pic_name" label="QC PIC Name" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Full Name" />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={4}>
+                                                    <Form.Item name="qc_pic_emp" label="Emp ID" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Emp No" />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} md={5}>
+                                                    <Form.Item name="qc_pic_email" label="Email" rules={[{ required: true, type: 'email' }]} style={{ marginBottom: 4 }}>
+                                                        <Input placeholder="Email" />
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                        </div>
                                     </Card>
 
-                                    <Card size="small" title={<Text strong>Department Managers Mapping (Block 3 Approval)</Text>} style={{ borderRadius: 8 }}>
-                                        <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                                            When an ECR is created for a specific department, its Block 3 approval request will be routed to the respective manager configured below.
+                                    {/* 2. Department Managers Mapping */}
+                                    <Card 
+                                        size="small" 
+                                        title={<Space><TeamOutlined style={{ color: '#52c41a' }} /><Text strong>Department Managers Mapping (Block 3 Approval Routing)</Text></Space>} 
+                                        style={{ borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+                                    >
+                                        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
+                                            When an ECR is created for a specific department, its Block 3 approval request is dispatched to the manager configured below.
                                         </Paragraph>
-                                        <Row gutter={[16, 8]}>
-                                            {ALL_DEPTS.map(dept => (
-                                                <Col xs={24} sm={12} md={12} key={dept} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8, marginBottom: 8 }}>
-                                                    <div style={{ fontWeight: 600, color: '#1890ff', marginBottom: 4 }}>
-                                                        Department: <Tag color="blue">{dept}</Tag>
-                                                    </div>
-                                                    <Row gutter={8}>
-                                                        <Col span={10}>
+
+                                        {ALL_DEPTS.map(dept => {
+                                            // Pre-sort candidates so users of this department appear first
+                                            const deptSortedCandidates = [...userCandidates].sort((a, b) => {
+                                                const aMatch = a.u_department === dept ? -1 : 1;
+                                                const bMatch = b.u_department === dept ? -1 : 1;
+                                                return aMatch - bMatch;
+                                            });
+
+                                            return (
+                                                <div 
+                                                    key={dept} 
+                                                    style={{ 
+                                                        borderBottom: '1px solid #f0f0f0', 
+                                                        paddingBottom: 8, 
+                                                        marginBottom: 8,
+                                                        background: '#fafafa',
+                                                        borderRadius: 6,
+                                                        padding: '8px 12px'
+                                                    }}
+                                                >
+                                                    <Row gutter={10} align="middle">
+                                                        <Col xs={24} md={3}>
+                                                            <div style={{ fontWeight: 700, color: '#1890ff' }}>
+                                                                <Tag color="blue" style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px' }}>
+                                                                    {dept}
+                                                                </Tag>
+                                                            </div>
+                                                        </Col>
+                                                        <Col xs={24} md={8}>
+                                                            <Form.Item name={`dept_mgr_${dept}_select`} label="Select Manager" style={{ marginBottom: 4 }}>
+                                                                <Select
+                                                                    size="small"
+                                                                    showSearch
+                                                                    placeholder={`Pick ${dept} Manager...`}
+                                                                    allowClear
+                                                                    loading={loadingUsers}
+                                                                    onChange={(val) => handleSelectCandidate(val, `dept_mgr_${dept}`)}
+                                                                    filterOption={(input, option) =>
+                                                                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                                                    }
+                                                                    options={deptSortedCandidates.map(u => ({
+                                                                        value: u.u_code,
+                                                                        label: formatUserOptionLabel(u)
+                                                                    }))}
+                                                                />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col xs={24} md={5}>
                                                             <Form.Item name={`dept_mgr_${dept}_name`} label="Manager Name" style={{ marginBottom: 4 }}>
                                                                 <Input size="small" placeholder="Manager Name" />
                                                             </Form.Item>
                                                         </Col>
-                                                        <Col span={6}>
-                                                            <Form.Item name={`dept_mgr_${dept}_emp`} label="Emp No" style={{ marginBottom: 4 }}>
+                                                        <Col xs={24} md={3}>
+                                                            <Form.Item name={`dept_mgr_${dept}_emp`} label="Emp ID" style={{ marginBottom: 4 }}>
                                                                 <Input size="small" placeholder="Emp ID" />
                                                             </Form.Item>
                                                         </Col>
-                                                        <Col span={8}>
+                                                        <Col xs={24} md={5}>
                                                             <Form.Item name={`dept_mgr_${dept}_email`} label="Email" style={{ marginBottom: 4 }}>
-                                                                <Input size="small" placeholder="email@minebea.co.th" />
+                                                                <Input size="small" placeholder="Email" />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
-                                                </Col>
-                                            ))}
-                                        </Row>
+                                                </div>
+                                            );
+                                        })}
                                     </Card>
                                 </div>
                             )
@@ -380,7 +568,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                         rowKey={(r, idx) => `${r.dept_code}_${idx}`}
                                         pagination={false}
                                         size="small"
-                                        scroll={{ x: 800 }}
+                                        scroll={{ x: 920 }}
                                     />
                                 </div>
                             )
@@ -450,7 +638,11 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                                         style={{ width: '100%', marginBottom: 16 }}
                                         value={systemAdmins}
                                         onChange={setSystemAdmins}
-                                        placeholder="Enter employee IDs (e.g. admin, eng_mgr)"
+                                        placeholder="Select or enter employee IDs (e.g. admin, eng_mgr)"
+                                        options={userCandidates.map(u => ({
+                                            value: u.u_code,
+                                            label: `${u.u_name} (${u.u_code}) - ${u.u_department}`
+                                        }))}
                                     />
                                     <Card size="small" style={{ borderRadius: 8, background: '#f6ffed', border: '1px solid #b7eb8f' }}>
                                         <Text strong style={{ color: '#389e0d' }}>🛡️ Built-in RBAC Protection:</Text>

@@ -53,10 +53,22 @@ export default function WorkflowActionCard({
     const [deptTasks, setDeptTasks] = useState(
         getActiveDepartments().map(d => ({ ...d, is_needed: true }))
     );
+    const [engineerCandidates, setEngineerCandidates] = useState([]);
 
     useEffect(() => {
         setDeptTasks(getActiveDepartments().map(d => ({ ...d, is_needed: true })));
     }, [getActiveDepartments]);
+
+    useEffect(() => {
+        if (currentBlock === 4) {
+            axios.get(`${server.URL}/api/ecnt/user-candidates`, { withCredentials: true })
+                .then(res => {
+                    const list = (res.data?.data || []).filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
+                    setEngineerCandidates(list);
+                })
+                .catch(err => console.warn("Fetch candidates error:", err));
+        }
+    }, [currentBlock]);
 
     const isIssueEcn = Form.useWatch(['details', 'is_issue_ecn'], form);
     const faiDecision = Form.useWatch(['details', 'decision'], form);
@@ -64,9 +76,10 @@ export default function WorkflowActionCard({
     useEffect(() => {
         form.resetFields();
         if (currentBlock === 4) {
+            const defaultEng = systemConfig?.stage_assignees?.default_assigned_engineer?.name || 'NATHAPORN YAMMANUS';
             form.setFieldsValue({
                 details: { is_issue_ecn: true },
-                assigned_to: 'NATHAPORN YAMMANUS'
+                assigned_to: defaultEng
             });
         } else if (currentBlock === 7) {
             form.setFieldsValue({ details: { decision: 'NOT_REQUIRE' } });
@@ -75,6 +88,7 @@ export default function WorkflowActionCard({
         } else if (currentBlock === 9) {
             form.setFieldsValue({ details: { fai_approved_confirmed: true } });
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentBlock, documentId, form]);
 
     if (processStatus === 'Draft' || processStatus === 'ECR Only Closed' || processStatus === 'ECN Effective' || processStatus === 'Denied') {
@@ -199,11 +213,27 @@ export default function WorkflowActionCard({
                         {isIssueEcn ? (
                             <Col span={12}>
                                 <Form.Item name="assigned_to" label="Assign Engineer (Eng. Assigned)" rules={[{ required: true }]}>
-                                    <Select placeholder="Select engineer..." showSearch allowClear>
-                                        <Option value="NATHAPORN YAMMANUS">NATHAPORN YAMMANUS (ENG)</Option>
-                                        <Option value="TEERAPOL KANTAPOOM">TEERAPOL KANTAPOOM (ENG MGR)</Option>
-                                        <Option value="TASANEE CHUDUANG">TASANEE CHUDUANG (PC)</Option>
-                                        <Option value="Admin">Admin (System AD)</Option>
+                                    <Select 
+                                        placeholder="Select registered engineer..." 
+                                        showSearch 
+                                        allowClear
+                                        filterOption={(input, option) =>
+                                            (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                                        }
+                                    >
+                                        {engineerCandidates.length > 0 ? (
+                                            engineerCandidates.map(u => (
+                                                <Option key={u.u_code} value={u.u_name}>
+                                                    {u.u_name} ({u.u_code}{u.u_nickname ? ` "${u.u_nickname}"` : ''}) - {u.u_department} [{u.position || u.role}]
+                                                </Option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <Option value="NATHAPORN YAMMANUS">NATHAPORN YAMMANUS (ENG)</Option>
+                                                <Option value="TEERAPOL KANTAPOOM">TEERAPOL KANTAPOOM (ENG MGR)</Option>
+                                                <Option value="TASANEE CHUDUANG">TASANEE CHUDUANG (PC)</Option>
+                                            </>
+                                        )}
                                     </Select>
                                 </Form.Item>
                             </Col>

@@ -1137,6 +1137,25 @@ const updateEcntConfig = async (req, res) => {
     }
 };
 
+/**
+ * Fetch registered users from m_user_profile for stage PIC & Manager assignment,
+ * explicitly excluding any user whose nickname is 'Admin'.
+ */
+const getUserCandidates = async (req, res) => {
+    try {
+        const result = await engPool.query(`
+            SELECT u_code, u_name, u_nickname, u_department, role, position, section, gmail_email
+            FROM m_user_profile
+            WHERE LOWER(COALESCE(u_nickname, '')) != 'admin'
+            ORDER BY u_department ASC, role ASC, u_name ASC
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        console.error("getUserCandidates Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     createEcr,
     resubmitEcr,
@@ -1158,5 +1177,7 @@ module.exports = {
     getGanttSummary,
     getAuditTrail,
     getEcntConfig,
-    updateEcntConfig
+    updateEcntConfig,
+    getUserCandidates
 };
+
