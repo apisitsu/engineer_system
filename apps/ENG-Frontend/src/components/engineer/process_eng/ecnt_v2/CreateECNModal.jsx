@@ -5,11 +5,12 @@ import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
 import AttachableField from './components/AttachableField';
+import { dispatchStageWorkflowEmail } from '../../../../services/ecntEmailService';
 
 const { TextArea } = Input;
 const { Text } = Typography;
 
-export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) {
+export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onClose, onSuccess }) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
@@ -61,9 +62,29 @@ export default function CreateECNModal({ open, linkedEcr, onClose, onSuccess }) 
                 department: linkedEcr.department
             };
 
-            await axios.post(`${server.URL}/api/ecnt/ecn`, payload, { withCredentials: true });
+            const res = await axios.post(`${server.URL}/api/ecnt/ecn`, payload, { withCredentials: true });
             
             antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
+
+            // Fire-and-forget email notification to Eng Mgr
+            try {
+                const ecnId = res.data?.id || res.data?.data?.id;
+                dispatchStageWorkflowEmail({
+                    stageCode: 'STAGE_3',
+                    docData: {
+                        id: ecnId,
+                        ecn_no: values.ecn_no,
+                        title_of_change: linkedEcr.title_of_change,
+                        customer_name: linkedEcr.customer_name,
+                        department: linkedEcr.department,
+                        request_by_name: linkedEcr.request_by_name
+                    },
+                    documentType: 'ECN',
+                    actionTaken: 'FORMULATE_ECN',
+                    systemConfig
+                }).catch(e => console.warn("[CreateECNModal] Email dispatch background error:", e));
+            } catch(e) {}
+
             form.resetFields();
             if (onSuccess) onSuccess();
         } catch (error) {

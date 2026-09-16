@@ -6,7 +6,8 @@ import {
 import { App } from 'antd';
 import { 
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
-    EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined 
+    EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
+    CopyOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -24,6 +25,7 @@ const { Title, Text, Paragraph } = Typography;
 export default function EcntWorkspaceView({ 
     documentType, 
     documentId, 
+    systemConfig = {},
     onBack, 
     onOpenInvestigation,
     onOpenGantt,
@@ -97,6 +99,33 @@ export default function EcntWorkspaceView({
         }
     };
 
+    const handleCopyLink = () => {
+        const directUrl = `${window.location.origin}/eng/process_eng/ecnt_v2?docType=${documentType}&id=${documentId}&view=workspace`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(directUrl).then(() => {
+                antdMessage.success(`Direct Link copied to clipboard! Ready to share via email or chat.`);
+            }).catch(() => fallbackCopy(directUrl));
+        } else {
+            fallbackCopy(directUrl);
+        }
+    };
+
+    const fallbackCopy = (text) => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            antdMessage.success(`Direct Link copied to clipboard! Ready to share via email or chat.`);
+        } catch(err) {
+            antdMessage.info(`URL: ${text}`);
+        }
+    };
+
     const isRequester = docData?.request_by === empNo || !docData?.request_by;
     const isReworkActive = (docData?.process_status === 'Require More Detail' || (docData?.current_stage_code || '').includes('_R'));
     const canResubmit = documentType === 'ECR' && isReworkActive && isRequester;
@@ -123,6 +152,14 @@ export default function EcntWorkspaceView({
                     </Space>
 
                     <Space size="middle">
+                        <Button 
+                            icon={<CopyOutlined />} 
+                            onClick={handleCopyLink}
+                            style={{ borderColor: '#1890ff', color: '#1890ff' }}
+                        >
+                            Share Link
+                        </Button>
+
                         <Button 
                             icon={<CalendarOutlined />} 
                             onClick={() => onOpenGantt({ id: documentId, type: documentType })}
@@ -516,6 +553,8 @@ export default function EcntWorkspaceView({
                                 currentBlock={docData.current_block} 
                                 processStatus={docData.process_status} 
                                 tasksData={tasksData}
+                                systemConfig={systemConfig}
+                                docData={docData}
                                 onSuccess={fetchDetail} 
                             />
                         </Col>
@@ -527,6 +566,7 @@ export default function EcntWorkspaceView({
             <CreateECNModal 
                 open={isCreateEcnOpen}
                 linkedEcr={docData}
+                systemConfig={systemConfig}
                 onClose={() => setIsCreateEcnOpen(false)}
                 onSuccess={() => {
                     setIsCreateEcnOpen(false);

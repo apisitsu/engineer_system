@@ -5,12 +5,13 @@ import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 
 const { TextArea } = Input;
 const { Option } = Select;
 const { Text } = Typography;
 
-const DEPARTMENTS = [
+const DEFAULT_DEPARTMENTS = [
     { dept_code: 'PC', dept_label: 'PC (Production Control)', default_pic: 'TASANEE CHUDUANG' },
     { dept_code: 'QA', dept_label: 'QA (Quality Assurance)', default_pic: 'CHUANPIT KHATTIYA' },
     { dept_code: 'QC', dept_label: 'QC (Quality Control)', default_pic: 'SUPARAT KATSANUK' },
@@ -26,15 +27,36 @@ export default function WorkflowActionCard({
     currentBlock, 
     processStatus, 
     tasksData = [], 
+    systemConfig = {},
+    docData = null,
     onSuccess 
 }) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const { userName, empNo, userRole, userDepartment } = useAuthStore();
+
+    // Dynamically derive active concern departments from systemConfig
+    const getActiveDepartments = React.useCallback(() => {
+        if (systemConfig?.concern_depts && Array.isArray(systemConfig.concern_depts) && systemConfig.concern_depts.length > 0) {
+            return systemConfig.concern_depts
+                .filter(d => d.enabled !== false)
+                .map(d => ({
+                    dept_code: d.dept_code,
+                    dept_label: d.dept_name ? `${d.dept_code} (${d.dept_name})` : d.dept_code,
+                    default_pic: d.default_pic || ''
+                }));
+        }
+        return DEFAULT_DEPARTMENTS;
+    }, [systemConfig]);
+
     const [deptTasks, setDeptTasks] = useState(
-        DEPARTMENTS.map(d => ({ ...d, is_needed: true }))
+        getActiveDepartments().map(d => ({ ...d, is_needed: true }))
     );
+
+    useEffect(() => {
+        setDeptTasks(getActiveDepartments().map(d => ({ ...d, is_needed: true })));
+    }, [getActiveDepartments]);
 
     const isIssueEcn = Form.useWatch(['details', 'is_issue_ecn'], form);
     const faiDecision = Form.useWatch(['details', 'decision'], form);
@@ -92,6 +114,36 @@ export default function WorkflowActionCard({
             await axios.put(`${server.URL}${endpoint}`, payload, { withCredentials: true });
 
             antdMessage.success(`Action '${selectedAction}' completed successfully.`);
+
+            // Trigger Google Apps Script Email Notification asynchronously
+            try {
+                let nextStage = '';
+                if (selectedAction === 'REQUEST_MORE_DETAIL') {
+                    nextStage = currentBlock === 3 ? 'STAGE_2_R1' : (currentBlock === 4 ? 'STAGE_3_R1' : 'STAGE_5_R1');
+                } else if (selectedAction === 'APPROVE') {
+                    if (documentType === 'ECR') {
+                        nextStage = currentBlock === 3 ? 'STAGE_3' : 'STAGE_4';
+                    } else {
+                        const nextMap = { 6: 'STAGE_7', 7: 'STAGE_7', 8: 'STAGE_9', 9: 'STAGE_9', 10: 'STAGE_10', 11: 'STAGE_10' };
+                        nextStage = nextMap[currentBlock] || 'STAGE_10';
+                    }
+                }
+
+                if (nextStage) {
+                    dispatchStageWorkflowEmail({
+                        stageCode: nextStage,
+                        docData: docData || { id: documentId },
+                        documentType,
+                        actionTaken: selectedAction,
+                        comment: values.comment || values.request_to_requester || values.deny_reason || '',
+                        assignedPicName: values.assigned_to || '',
+                        systemConfig
+                    }).catch(emailErr => console.warn("[WorkflowActionCard] Email dispatch background error:", emailErr));
+                }
+            } catch (notifyErr) {
+                console.warn("[WorkflowActionCard] Notification trigger failed:", notifyErr);
+            }
+
             form.resetFields();
             if (onSuccess) onSuccess();
         } catch (error) {
@@ -126,10 +178,11 @@ export default function WorkflowActionCard({
 
         // Block 4: Eng Dept Mgr
         if (documentType === 'ECR' && currentBlock === 4) {
+            const engMgrName = systemConfig?.stage_assignees?.eng_mgr?.name || 'TEERAPOL KANTAPOOM';
             return (
                 <div style={{ marginBottom: 16 }}>
                     <Alert 
-                        message="Block 4: Engineer Department Manager Decision (TEERAPOL KANTAPOOM)" 
+                        message={`Block 4: Engineer Department Manager Decision (${engMgrName})`}
                         type="info" 
                         showIcon 
                         style={{ marginBottom: 16 }}
@@ -146,9 +199,11 @@ export default function WorkflowActionCard({
                         {isIssueEcn ? (
                             <Col span={12}>
                                 <Form.Item name="assigned_to" label="Assign Engineer (Eng. Assigned)" rules={[{ required: true }]}>
-                                    <Select placeholder="Select engineer...">
-                                        <Option value="NATHAPORN YAMMANUS">NATHAPORN YAMMANUS</Option>
-                                        <Option value="TEERAPOL KANTAPOOM">TEERAPOL KANTAPOOM</Option>
+                                    <Select placeholder="Select engineer..." showSearch allowClear>
+                                        <Option value="NATHAPORN YAMMANUS">NATHAPORN YAMMANUS (ENG)</Option>
+                                        <Option value="TEERAPOL KANTAPOOM">TEERAPOL KANTAPOOM (ENG MGR)</Option>
+                                        <Option value="TASANEE CHUDUANG">TASANEE CHUDUANG (PC)</Option>
+                                        <Option value="Admin">Admin (System AD)</Option>
                                     </Select>
                                 </Form.Item>
                             </Col>
@@ -166,10 +221,11 @@ export default function WorkflowActionCard({
 
         // Block 6: Eng Dept Mgr Approve ECN
         if (documentType === 'ECN' && currentBlock === 6) {
+            const engMgrName = systemConfig?.stage_assignees?.eng_mgr?.name || 'TEERAPOL KANTAPOOM';
             return (
                 <div style={{ marginBottom: 16 }}>
                     <Alert 
-                        message="Block 6: Engineer Dept Manager Approve ECN" 
+                        message={`Block 6: Engineer Dept Manager Approve ECN (${engMgrName})`}
                         description="Approving will transition to QC evaluation and authorize starting drawing & document revisions."
                         type="info" 
                         showIcon 
@@ -181,9 +237,10 @@ export default function WorkflowActionCard({
 
         // Block 7: QC Decision for MSA
         if (documentType === 'ECN' && currentBlock === 7) {
+            const qcPicName = systemConfig?.stage_assignees?.default_qc_pic?.name || 'PATCHARAYADA WAIYABOON';
             return (
                 <div style={{ marginBottom: 16 }}>
-                    <Alert message="Block 7: QC Decision for MSA (PATCHARAYADA WAIYABOON)" type="info" showIcon style={{ marginBottom: 16 }} />
+                    <Alert message={`Block 7: QC Decision for MSA (${qcPicName})`} type="info" showIcon style={{ marginBottom: 16 }} />
                     <Row gutter={16}>
                         <Col span={12}>
                             <Form.Item name={['details', 'decision']} label="MSA Decision" rules={[{ required: true }]}>
@@ -205,9 +262,10 @@ export default function WorkflowActionCard({
 
         // Block 8: QC Decision for FAI
         if (documentType === 'ECN' && currentBlock === 8) {
+            const qcPicName = systemConfig?.stage_assignees?.default_qc_pic?.name || 'PATCHARAYADA WAIYABOON';
             return (
                 <div style={{ marginBottom: 16 }}>
-                    <Alert message="Block 8: QC Decision for FAI (PATCHARAYADA WAIYABOON)" type="info" showIcon style={{ marginBottom: 16 }} />
+                    <Alert message={`Block 8: QC Decision for FAI (${qcPicName})`} type="info" showIcon style={{ marginBottom: 16 }} />
                     <Row gutter={16}>
                         <Col span={12}>
                             <Form.Item name={['details', 'decision']} label="FAI Decision" rules={[{ required: true }]}>

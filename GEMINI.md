@@ -5,9 +5,29 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-16
-- **Active Goal:** ECNT V2 11-Block Enterprise Refactor completed: 10-Stage Architecture with explicit return loops, 4-view UI/UX, interactive Gantt chart, threaded discussion hub, and full field-level audit trail.
+- **Active Goal:** ECNT V2 Enterprise Platform: Personal Actionable Tasks Queue, Dynamic Stage/Dept Assignees Config, URL Deep Linking, and Client-Side Google Apps Script (GAS) Enterprise Email Dispatch Engine.
 
 ### Recent Changes
+- **ECNT V2 Personal Responsibility Queue, Dynamic System Config, Deep Linking & GAS Email Engine (2026-09-16):**
+  - **Admin User Verification & Authentication (`u_nickname: 'Admin'`):**
+    - Identified Admin profile in PostgreSQL `m_user_profile`: `u_code: 'admin'`, `u_nickname: 'Admin'`, `role: 'AD'`. Verified bcrypt hash with password `"password"`.
+  - **Dynamic System Settings & RBAC Management (`ecnt2_system_config`):**
+    - Created database table `ecnt2_system_config` storing dynamic mappings for `stage_assignees` (Dept Managers, Eng Manager, QC PIC, Default Engineer), `concern_depts` (with toggle/edit/delete/add), `email_settings` (GAS Web App endpoint, global enable toggle), and `system_admins`.
+    - Added Backend APIs `GET /api/ecnt/config` and `POST /api/ecnt/config` protected by multi-tier RBAC (`AD`, `ENG MGR`, `ENG Coordinator`, and configured `system_admins`).
+    - Built comprehensive 4-tab ⚙️ Settings Modal (`EcntSettingsModal.jsx`) directly accessible from the master dashboard bar for authorized roles.
+  - **Personal Actionable Queue ("My Responsible Tasks"):**
+    - Built role/dept/stage-matching algorithm in `EcntDashboardView.jsx` detecting exact reasons why any document requires attention from the logged-in user (Requester Revision, Dept Mgr Approval, Eng Mgr Assignment, ECN Formulation, QC Evaluation, Concern Sign-off, Final Release).
+    - Integrated interactive KPI card and Toolbar Switcher (`[ All Workflows (N) ]` vs `[ 🔥 My Responsible Tasks (M) ]`) with immediate Kanban card filtering and distinct highlighted action callout tags.
+  - **URL Deep Linking & Instant Link Sharing:**
+    - Full query-param routing support (`/eng/process_eng/ecnt_v2?docType=...&id=...&view=...&stage=...`) in `Dashboard.jsx`.
+    - Added "🔗 Copy Direct Link" / "Share Link" buttons on each Kanban card and on the active Workspace header, providing instant clipboard copy with user feedback.
+  - **Google Apps Script Enterprise Email Engine (`gas_enterprise_email_engine.gs` & `ecntEmailService.js`):**
+    - Built frontend email dispatch service invoking Google Apps Script Web App via `fetch(..., { mode: 'no-cors' })` with silent iframe fallback, eliminating corporate firewall blocks caused by Node backend outbound restrictions.
+    - Provided reusable corporate HTML email notification template with direct action CTA buttons, stage badges, and multi-system flexibility.
+    - Automated email triggers wired into ECR creation, Dept Mgr review, Rework clarification loops, Eng Mgr assignment, ECN formulation, and final approval sign-offs.
+  - **End-to-End Automated Verification:**
+    - Ran comprehensive 15-stage lifecycle test (`test_e2e_full_workflow.js`): Admin login -> ECR creation -> Return-loop `STAGE_2_R1` -> Resubmit -> Dept Mgr Approval -> Eng Mgr PIC Assignment -> ECN Formulation -> Eng Mgr Approval -> QC MSA -> QC FAI -> Concern Dept Tasks Setup -> Concern Sign-offs -> Final Release to `ECN Effective` (100% pass).
+    - Verified clean production build (`npm run build`) with zero errors and zero ESLint warnings on all ECNT V2 components.
 - **ECNT V2 Sidebar, Scrollbar & Layout Architecture Fix (2026-09-16):**
   - **Sidebar Navigation Restoration:** Embedded `<MenuTemplate type="Process" selectedKeys={["ecnt_v2"]} defaultSelectedKeys={["ecnt_v2"]} />` inside `<Layout hasSider>` in `Dashboard.jsx`. Updated `menu_template.jsx` with automatic route matching fallback for `/eng/process_eng/ecnt_v2`.
   - **Vertical Scrollbar Restoration & Overflow Management:** Wrapped views in `<Content className="kb-vscroll" style={{ overflowY: 'auto', padding: '20px 24px', flex: 1 }}>` with height bounded by `MainLayout`'s `calc(100vh - 64px)`.

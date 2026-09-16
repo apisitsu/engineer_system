@@ -246,6 +246,11 @@ app.route('/api/ecnt/gantt-summary').get(verifyToken, engEcntV2.getGanttSummary)
 // Field-Level Audit Trail
 app.route('/api/ecnt/audit-trail/:docType/:docId').get(verifyToken, engEcntV2.getAuditTrail);
 
+// Dynamic System Configuration & Settings
+app.route('/api/ecnt/config')
+  .get(verifyToken, engEcntV2.getEcntConfig)
+  .post(verifyToken, engEcntV2.updateEcntConfig);
+
 // --------- Tumble System API ---------
 // Tumble Model
 app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);

@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layout, Spin, Button, Typography, Space, Tag, Segmented } from 'antd';
 import { 
     AppstoreOutlined, CalendarOutlined, PlusCircleOutlined, 
-    FileTextOutlined, MessageOutlined, SyncOutlined 
+    FileTextOutlined, MessageOutlined, SyncOutlined, SettingOutlined 
 } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../constance/constance';
 import { useTheme } from '../../../../theme';
+import { useAuthStore } from '../../../../stores/authStore';
 import ScrollbarStyle from '../../../common/scrollbar';
 import { MenuTemplate } from '../../../menu_sidebar/menu_template';
+import EcntSettingsModal from './components/EcntSettingsModal';
 
 // 4 Dedicated Core Views
 import EcntDashboardView from './views/EcntDashboardView';
@@ -22,10 +25,15 @@ const { Title, Text } = Typography;
 
 export default function Dashboard() {
     const { theme } = useTheme();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { userRole, userDepartment, empNo, position } = useAuthStore();
+
     const [loading, setLoading] = useState(false);
     const [ecrData, setEcrData] = useState([]);
     const [ecnData, setEcnData] = useState([]);
     const [myTasks, setMyTasks] = useState({ ecrTasks: [], ecnTasks: [] });
+    const [systemConfig, setSystemConfig] = useState({});
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
     // Active View Mode: 'dashboard' | 'gantt' | 'require' | 'workspace' | 'investigation'
     const [currentView, setCurrentView] = useState('dashboard');
@@ -53,9 +61,55 @@ export default function Dashboard() {
         }
     };
 
+    const fetchConfig = async () => {
+        try {
+            const res = await axios.get(`${server.URL}/api/ecnt/config`, { withCredentials: true });
+            if (res.data?.data) {
+                setSystemConfig(res.data.data);
+            }
+        } catch (err) {
+            console.error("Fetch Config Error:", err);
+        }
+    };
+
     useEffect(() => {
         fetchData();
+        fetchConfig();
     }, []);
+
+    // URL Deep Linking: Read params from URL and navigate automatically
+    useEffect(() => {
+        const urlDocType = searchParams.get('docType');
+        const urlId = searchParams.get('id');
+        const urlView = searchParams.get('view');
+
+        if (urlId) {
+            const numId = Number(urlId);
+            setActiveDocId(numId);
+            const type = urlDocType || 'ECR';
+            setActiveDocType(type);
+            const list = type === 'ECR' ? ecrData : ecnData;
+            const found = list.find(d => d.id === numId);
+            if (found) setActiveDocData(found);
+            if (urlView) {
+                setCurrentView(urlView);
+            } else {
+                setCurrentView('workspace');
+            }
+        }
+    }, [searchParams, ecrData, ecnData]);
+
+    const updateUrl = (type, id, view) => {
+        const p = new URLSearchParams();
+        if (type && id) {
+            p.set('docType', type);
+            p.set('id', String(id));
+        }
+        if (view && view !== 'dashboard') {
+            p.set('view', view);
+        }
+        setSearchParams(p, { replace: true });
+    };
 
     const handleOpenDoc = (id, type) => {
         setActiveDocId(id);
@@ -64,21 +118,31 @@ export default function Dashboard() {
         const found = list.find(d => d.id === id);
         setActiveDocData(found || null);
         setCurrentView('workspace');
+        updateUrl(type, id, 'workspace');
     };
 
     const handleOpenInvestigation = (doc) => {
         if (doc) {
             setActiveDocId(doc.id);
-            setActiveDocType(doc.doc_type || activeDocType);
+            const type = doc.doc_type || activeDocType;
+            setActiveDocType(type);
             setActiveDocData(doc);
+            setCurrentView('investigation');
+            updateUrl(type, doc.id, 'investigation');
+        } else {
+            setCurrentView('investigation');
+            updateUrl(activeDocType, activeDocId, 'investigation');
         }
-        setCurrentView('investigation');
     };
 
     const handleOpenGantt = (doc) => {
         if (doc) {
             setActiveDocId(doc.id);
-            setActiveDocType(doc.doc_type || doc.type || activeDocType);
+            const type = doc.doc_type || doc.type || activeDocType;
+            setActiveDocType(type);
+            updateUrl(type, doc.id, 'gantt');
+        } else {
+            updateUrl(null, null, 'gantt');
         }
         setCurrentView('gantt');
     };
@@ -86,12 +150,26 @@ export default function Dashboard() {
     const handleRequireNew = () => {
         setActiveDocData(null);
         setCurrentView('require');
+        updateUrl(null, null, 'require');
     };
 
     const handleEditEcr = (doc) => {
         setActiveDocData(doc);
         setCurrentView('require');
+        updateUrl('ECR', doc.id, 'require');
     };
+
+    const handleBackToDashboard = () => {
+        setCurrentView('dashboard');
+        updateUrl(null, null, 'dashboard');
+    };
+
+    // RBAC check for System Settings button
+    const isSettingsAuthorized = 
+        userRole === 'AD' || 
+        userDepartment === 'AD' || 
+        (userDepartment === 'ENG' && (userRole === 'MGR' || (position && position.toLowerCase().includes('coord')))) ||
+        (systemConfig.system_admins && Array.isArray(systemConfig.system_admins) && systemConfig.system_admins.map(String).map(s => s.toLowerCase()).includes((empNo || '').toLowerCase()));
 
     return (
         <Layout hasSider style={{ display: 'flex', flexDirection: 'row', height: '100%', overflow: 'hidden' }}>
@@ -202,11 +280,21 @@ export default function Dashboard() {
 
                     <Button 
                         icon={<SyncOutlined spin={loading} />} 
-                        onClick={fetchData}
+                        onClick={() => { fetchData(); fetchConfig(); }}
                         style={{ borderRadius: 8 }}
                     >
                         Refresh
                     </Button>
+
+                    {isSettingsAuthorized && (
+                        <Button 
+                            icon={<SettingOutlined />} 
+                            onClick={() => setIsSettingsModalOpen(true)}
+                            style={{ borderRadius: 8, borderColor: '#1890ff', color: '#1890ff', fontWeight: 600 }}
+                        >
+                            Settings
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -217,9 +305,10 @@ export default function Dashboard() {
                         ecrData={ecrData} 
                         ecnData={ecnData} 
                         myTasks={myTasks}
+                        systemConfig={systemConfig}
                         onOpenDoc={handleOpenDoc}
                         onNavigateToRequire={handleRequireNew}
-                        onNavigateToGantt={() => setCurrentView('gantt')}
+                        onNavigateToGantt={() => handleOpenGantt(null)}
                     />
                 )}
 
@@ -228,7 +317,7 @@ export default function Dashboard() {
                         ecrData={ecrData} 
                         ecnData={ecnData} 
                         selectedDocInitial={activeDocId ? { id: activeDocId, type: activeDocType } : null}
-                        onBackToDashboard={() => setCurrentView('dashboard')}
+                        onBackToDashboard={handleBackToDashboard}
                         onOpenDoc={handleOpenDoc}
                     />
                 )}
@@ -236,10 +325,11 @@ export default function Dashboard() {
                 {currentView === 'require' && (
                     <EcrRequireView 
                         initialData={activeDocData}
-                        onBack={() => setCurrentView('dashboard')}
+                        systemConfig={systemConfig}
+                        onBack={handleBackToDashboard}
                         onSuccess={() => {
                             fetchData();
-                            setCurrentView('dashboard');
+                            handleBackToDashboard();
                         }}
                     />
                 )}
@@ -248,7 +338,8 @@ export default function Dashboard() {
                     <EcntWorkspaceView 
                         documentType={activeDocType}
                         documentId={activeDocId}
-                        onBack={() => setCurrentView('dashboard')}
+                        systemConfig={systemConfig}
+                        onBack={handleBackToDashboard}
                         onOpenInvestigation={handleOpenInvestigation}
                         onOpenGantt={handleOpenGantt}
                         onEditEcr={handleEditEcr}
@@ -260,11 +351,21 @@ export default function Dashboard() {
                         documentType={activeDocType}
                         documentId={activeDocId}
                         docData={activeDocData}
-                        onBack={() => setCurrentView('workspace')}
-                        onOpenWorkspace={() => setCurrentView('workspace')}
+                        onBack={() => handleOpenDoc(activeDocId, activeDocType)}
+                        onOpenWorkspace={() => handleOpenDoc(activeDocId, activeDocType)}
                     />
                 )}
             </Spin>
+
+            <EcntSettingsModal
+                open={isSettingsModalOpen}
+                onClose={() => setIsSettingsModalOpen(false)}
+                currentConfig={systemConfig}
+                onConfigUpdated={(cfg) => {
+                    setSystemConfig(cfg);
+                    fetchConfig();
+                }}
+            />
             </Content>
         </Layout>
     </Layout>

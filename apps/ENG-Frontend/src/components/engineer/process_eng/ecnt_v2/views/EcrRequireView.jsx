@@ -9,11 +9,12 @@ import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 import AttachableField from '../components/AttachableField';
+import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-export default function EcrRequireView({ initialData = null, onBack, onSuccess }) {
+export default function EcrRequireView({ initialData = null, systemConfig = {}, onBack, onSuccess }) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
@@ -89,12 +90,39 @@ export default function EcrRequireView({ initialData = null, onBack, onSuccess }
                 department: userDepartment || localStorage.getItem('u_department') || 'ENG'
             };
 
+            let createdId = null;
+            let createdNo = null;
+
             if (isEditMode) {
                 await axios.put(`${server.URL}/api/ecnt/ecr/${initialData.id}/resubmit`, payload, { withCredentials: true });
                 antdMessage.success("ECR Details Successfully Resubmitted to Department Manager");
+                createdId = initialData.id;
+                createdNo = initialData.ecr_no;
             } else {
                 const res = await axios.post(`${server.URL}/api/ecnt/ecr`, payload, { withCredentials: true });
-                antdMessage.success(`ECR Initiated Successfully: ${res.data.ecr_no || 'Assigned'} (Forwarded to Dept Manager)`);
+                createdId = res.data?.id || res.data?.data?.id;
+                createdNo = res.data?.ecr_no || res.data?.data?.ecr_no || 'Assigned';
+                antdMessage.success(`ECR Initiated Successfully: ${createdNo} (Forwarded to Dept Manager)`);
+            }
+
+            // Fire-and-forget email dispatch via Google Apps Script
+            try {
+                dispatchStageWorkflowEmail({
+                    stageCode: 'STAGE_2',
+                    docData: {
+                        id: createdId,
+                        ecr_no: createdNo,
+                        title_of_change: values.title_of_change,
+                        customer_name: values.customer_name,
+                        department: payload.department,
+                        request_by_name: payload.request_by_name
+                    },
+                    documentType: 'ECR',
+                    actionTaken: isEditMode ? 'RESUBMIT' : 'CREATE',
+                    systemConfig
+                }).catch(e => console.warn("[EcrRequireView] Email dispatch background error:", e));
+            } catch (notifyErr) {
+                console.warn("[EcrRequireView] Email notify failed:", notifyErr);
             }
 
             form.resetFields();

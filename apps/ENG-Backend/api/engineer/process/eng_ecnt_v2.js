@@ -784,17 +784,17 @@ const actionEcn = async (req, res) => {
             }
         }
         // Block 11 (Official Close)
-        else if (block_number === 11 && action === 'CLOSE') {
+        else if (block_number === 11 && (action === 'CLOSE' || action === 'APPROVE')) {
             nextStatus = 'ECN Effective';
             currentBlock = 11;
-            nextStageCode = 'COMPLETED';
+            nextStageCode = 'STAGE_10';
             
             await client.query(`
                 UPDATE ecnt2_ecn SET closed_by = $1, closed_by_name = $2, closed_date = NOW(), process_status = $3, current_block = $4, current_stage_code = $5, updated_at = NOW()
                 WHERE id = $6
             `, [userEmpno, userName, nextStatus, currentBlock, nextStageCode, id]);
 
-            await transitionStage(client, 'ECN', id, null, 'CLOSE', userEmpno, userName, comment || 'Officially closed & effective');
+            await transitionStage(client, 'ECN', id, nextStageCode, 'CLOSE', userEmpno, userName, comment || 'Officially closed & effective');
         }
         
         // Log action
@@ -1072,6 +1072,71 @@ const deleteAttachment = async (req, res) => {
     }
 };
 
+// ==========================================
+// Dynamic System Settings & Configurations
+// ==========================================
+
+const getEcntConfig = async (req, res) => {
+    try {
+        const result = await engPool.query(`SELECT key, value, description, updated_by, updated_at FROM ecnt2_system_config`);
+        const configMap = {};
+        result.rows.forEach(r => {
+            configMap[r.key] = r.value;
+        });
+        res.json({ success: true, data: configMap, meta: result.rows });
+    } catch (err) {
+        console.error("getEcntConfig Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const updateEcntConfig = async (req, res) => {
+    const userRole = (req.user?.role || req.user?.u_role || '').toUpperCase();
+    const userDept = (req.user?.department || req.user?.u_department || '').toUpperCase();
+    const empno = (req.user?.empno || req.user?.u_code || '').toLowerCase();
+    const position = (req.user?.position || '').toLowerCase();
+
+    try {
+        // Fetch current system_admins
+        const adminConfig = await engPool.query(`SELECT value FROM ecnt2_system_config WHERE key = 'system_admins'`);
+        const adminsList = (adminConfig.rows[0]?.value || ["admin", "eng_mgr"]).map(a => String(a).toLowerCase());
+
+        const isAuthorized = 
+            userRole === 'AD' || 
+            userDept === 'AD' || 
+            (userDept === 'ENG' && (userRole === 'MGR' || position.includes('coord') || position.includes('mgr'))) ||
+            adminsList.includes(empno);
+
+        if (!isAuthorized) {
+            return res.status(403).json({ 
+                error: "Access Denied: Only ECNT Admins, System Admins, or ENG Managers/Coordinators can modify system configurations." 
+            });
+        }
+
+        const key = req.body.key || req.body.config_key;
+        const value = req.body.value !== undefined ? req.body.value : req.body.config_value;
+        const description = req.body.description || req.body.config_description;
+        if (!key || value === undefined) {
+            return res.status(400).json({ error: "key and value are required" });
+        }
+
+        await engPool.query(`
+            INSERT INTO ecnt2_system_config (key, value, description, updated_by, updated_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (key) DO UPDATE SET
+                value = EXCLUDED.value,
+                description = COALESCE(EXCLUDED.description, ecnt2_system_config.description),
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+        `, [key, JSON.stringify(value), description || null, empno || req.user?.name || 'ADMIN']);
+
+        res.json({ success: true, message: `Configuration '${key}' updated successfully` });
+    } catch (err) {
+        console.error("updateEcntConfig Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     createEcr,
     resubmitEcr,
@@ -1091,5 +1156,7 @@ module.exports = {
     postDiscussion,
     getStageHistory,
     getGanttSummary,
-    getAuditTrail
+    getAuditTrail,
+    getEcntConfig,
+    updateEcntConfig
 };
