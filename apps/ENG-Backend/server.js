@@ -235,6 +235,17 @@ app.route('/api/ecnt/attachment').post(verifyToken, engEcntV2.saveAttachment);
 app.route('/api/ecnt/attachment/:type/:id').get(verifyToken, engEcntV2.getAttachments);
 app.route('/api/ecnt/attachment/:id').delete(verifyToken, engEcntV2.deleteAttachment);
 
+// Discussions & Problem Investigation
+app.route('/api/ecnt/discussions/:docType/:docId').get(verifyToken, engEcntV2.getDiscussions);
+app.route('/api/ecnt/discussions').post(verifyToken, engEcntV2.postDiscussion);
+
+// Stage History & Gantt Summary
+app.route('/api/ecnt/stage-history/:docType/:docId').get(verifyToken, engEcntV2.getStageHistory);
+app.route('/api/ecnt/gantt-summary').get(verifyToken, engEcntV2.getGanttSummary);
+
+// Field-Level Audit Trail
+app.route('/api/ecnt/audit-trail/:docType/:docId').get(verifyToken, engEcntV2.getAuditTrail);
+
 // --------- Tumble System API ---------
 // Tumble Model
 app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);

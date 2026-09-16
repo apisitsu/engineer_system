@@ -1,9 +1,9 @@
 import React from 'react';
-import { Image, Tag, Typography, Space } from 'antd';
+import { Image, Tag, Typography } from 'antd';
 import { FileOutlined, DownloadOutlined } from '@ant-design/icons';
 import { server } from '../../../../../constance/constance';
 
-const { Link, Text } = Typography;
+const { Link } = Typography;
 
 const isImageFile = (file) => {
     if (!file) return false;

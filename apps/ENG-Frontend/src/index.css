@@ -95,13 +95,16 @@ button {
   width: 7px;
   height: 7px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.4);
   border-radius: 6px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.7);
 }
@@ -111,19 +114,23 @@ button {
   scrollbar-width: thin;
   scrollbar-color: #3b4562 rgba(18, 22, 34, 0.4);
 }
+
 .themed-scrollbar-dark::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 .themed-scrollbar-dark::-webkit-scrollbar-track {
   background: rgba(18, 22, 34, 0.4);
   border-radius: 6px;
 }
+
 .themed-scrollbar-dark::-webkit-scrollbar-thumb {
   background: #3b4562;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
 .themed-scrollbar-dark::-webkit-scrollbar-thumb:hover {
   background: #4f5d84;
 }
@@ -132,18 +139,22 @@ button {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
 }
+
 .themed-scrollbar-light::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 .themed-scrollbar-light::-webkit-scrollbar-track {
   background: #f1f5f9;
   border-radius: 6px;
 }
+
 .themed-scrollbar-light::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 6px;
 }
+
 .themed-scrollbar-light::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
@@ -154,7 +165,12 @@ button {
   width: 0 !important;
   height: 0 !important;
 }
+
 .no-scrollbar {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
+}
+
+label {
+  margin-bottom: 0rem;
 }

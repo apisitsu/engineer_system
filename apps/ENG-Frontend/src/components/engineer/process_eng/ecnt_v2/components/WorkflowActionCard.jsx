@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Space, Typography } from 'antd';
+import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Typography } from 'antd';
 import { App } from 'antd';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
-import { CheckCircleOutlined, ClockCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -37,7 +37,6 @@ export default function WorkflowActionCard({
     );
 
     const isIssueEcn = Form.useWatch(['details', 'is_issue_ecn'], form);
-    const msaDecision = Form.useWatch(['details', 'decision'], form);
     const faiDecision = Form.useWatch(['details', 'decision'], form);
 
     useEffect(() => {
@@ -454,10 +453,18 @@ export default function WorkflowActionCard({
                             {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
                                 <Button 
                                     size="large"
-                                    onClick={() => handleSubmit('REQUEST_MORE_DETAIL')} 
+                                    style={{ background: '#fff7e6', borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
+                                    onClick={() => {
+                                        const rmdText = form.getFieldValue('request_to_requester');
+                                        if (!rmdText || !rmdText.trim()) {
+                                            antdMessage.warning("Please specify the required changes in 'Detail Requested from Requester / Engineer' above.");
+                                            return;
+                                        }
+                                        handleSubmit('REQUEST_MORE_DETAIL');
+                                    }} 
                                     loading={loading}
                                 >
-                                    Request More Detail
+                                    Request More Detail (Return for Rework)
                                 </Button>
                             )}
                         </>

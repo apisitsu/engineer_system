@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Form, Input, Upload, Button, Image, Space, Typography, Tooltip, Tag, Spin } from 'antd';
-import { PaperClipOutlined, DeleteOutlined, DownloadOutlined, FileOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Form, Input, Upload, Button, Image, Space, Typography, Tag, Spin } from 'antd';
+import { PaperClipOutlined, FileOutlined, LoadingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 

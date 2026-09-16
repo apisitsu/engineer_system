@@ -16,13 +16,79 @@ const generateEcrNo = async () => {
     return `${prefix}${seq.toString().padStart(2, '0')}`;
 };
 
+// Stage Definition Lookup
+const STAGE_META = {
+    STAGE_1: { title: '1. ECR Initiation', type: 'STANDARD', picRole: 'Requester' },
+    STAGE_2: { title: '2. Dept Mgr Review', type: 'DECISION', picRole: 'Dept Manager' },
+    STAGE_2_R1: { title: '2-R1. Dept Mgr Clarification (Requester Rework)', type: 'RETURN_LOOP', picRole: 'Requester' },
+    STAGE_3: { title: '3. Eng Dept Mgr ECR Review', type: 'DECISION', picRole: 'Eng. Dept Manager', defaultPic: 'TEERAPOL KANTAPOOM' },
+    STAGE_3_R1: { title: '3-R1. Eng Mgr Clarification (Requester Rework)', type: 'RETURN_LOOP', picRole: 'Requester' },
+    STAGE_4: { title: '4. ECN Creation & Impact Assessment', type: 'STANDARD', picRole: 'Eng. Assigned', defaultPic: 'NATHAPORN YAMMANUS' },
+    STAGE_5: { title: '5. Eng Dept Mgr ECN Review', type: 'DECISION', picRole: 'Eng. Dept Manager', defaultPic: 'TEERAPOL KANTAPOOM' },
+    STAGE_5_R1: { title: '5-R1. Eng Mgr ECN Clarification (Engineer Rework)', type: 'RETURN_LOOP', picRole: 'Eng. Assigned', defaultPic: 'NATHAPORN YAMMANUS' },
+    STAGE_6: { title: '6. QC MSA Decision', type: 'DECISION', picRole: 'QC MSA', defaultPic: 'PATCHARAYADA WAIYABOON' },
+    STAGE_7: { title: '7. QC FAI Decision', type: 'DECISION', picRole: 'QC FAI', defaultPic: 'PATCHARAYADA WAIYABOON' },
+    STAGE_8: { title: '8. Eng Summary & Concern Setup', type: 'STANDARD', picRole: 'Eng. Assigned', defaultPic: 'NATHAPORN YAMMANUS' },
+    STAGE_9: { title: '9. Concern Multi-Dept Sign-off', type: 'CONCERN_PARALLEL', picRole: 'Concern Departments' },
+    STAGE_10: { title: '10. Official Close & ECN Effective', type: 'DECISION', picRole: 'Eng. Dept Manager', defaultPic: 'TEERAPOL KANTAPOOM' }
+};
+
+// Helper: Transition Stage History
+const transitionStage = async (client, docType, docId, nextStageCode, actionTaken, actionBy, actionByName, notes = '', returnTarget = null) => {
+    // 1. Complete any active stage
+    const activeStageRes = await client.query(`
+        SELECT id, started_at, stage_code FROM ecnt2_stage_history 
+        WHERE document_type = $1 AND document_id = $2 AND status = 'ACTIVE' 
+        ORDER BY id DESC LIMIT 1
+    `, [docType, docId]);
+
+    if (activeStageRes.rows.length > 0) {
+        const active = activeStageRes.rows[0];
+        const now = new Date();
+        const start = new Date(active.started_at);
+        const durationHours = Math.max(0.1, Number(((now - start) / (1000 * 60 * 60)).toFixed(2)));
+
+        const finalStatus = actionTaken === 'REQUEST_MORE_DETAIL' ? 'RETURNED' : 'COMPLETED';
+
+        await client.query(`
+            UPDATE ecnt2_stage_history SET 
+                completed_at = NOW(),
+                duration_hours = $1,
+                status = $2,
+                action_taken = $3,
+                action_by = $4,
+                action_by_name = $5,
+                notes = $6,
+                return_target = $7
+            WHERE id = $8
+        `, [durationHours, finalStatus, actionTaken, actionBy, actionByName, notes, returnTarget, active.id]);
+    }
+
+    // 2. If next stage is defined, open new active stage
+    if (nextStageCode && STAGE_META[nextStageCode]) {
+        const meta = STAGE_META[nextStageCode];
+        await client.query(`
+            INSERT INTO ecnt2_stage_history (
+                document_type, document_id, stage_code, stage_title, stage_type, 
+                assigned_role, assigned_pic, started_at, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'ACTIVE')
+        `, [
+            docType, docId, nextStageCode, meta.title, meta.type,
+            meta.picRole, meta.defaultPic || null
+        ]);
+    }
+};
+
 // ==========================================
 // ECR (Blocks 1-4)
 // ==========================================
 
 const createEcr = async (req, res) => {
     const data = req.body;
+    const client = await engPool.connect();
     try {
+        await client.query('BEGIN');
+
         const requestBy = req.user?.empno || data.request_by || 'Unknown';
         const requestByName = req.user?.name || data.request_by_name || 'Unknown';
         const department = req.user?.department || data.department || 'ENG';
@@ -41,7 +107,7 @@ const createEcr = async (req, res) => {
                 tool_current_no, tool_current_usage, tool_new_no, tool_new_usage,
                 prog_before_change, prog_condition_before, prog_after_change, prog_condition_after,
                 usage_setup_no, usage_part_no, usage_cn, usage_process, usage_program_no, usage_mc_no, usage_cycle_time_before, usage_cycle_time_after, usage_before_change, usage_after_change,
-                process_status, current_block
+                process_status, current_block, current_stage_code
             ) VALUES (
                 $1, $2, $3, $4, $5, 
                 $6, $7, $8, 
@@ -52,7 +118,7 @@ const createEcr = async (req, res) => {
                 $23, $24, $25, $26,
                 $27, $28, $29, $30,
                 $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-                'Pending Dept Mgr', 3
+                'Pending Dept Mgr', 3, 'STAGE_2'
             ) RETURNING id, ecr_no
         `;
         
@@ -69,19 +135,40 @@ const createEcr = async (req, res) => {
             data.usage_setup_no, data.usage_part_no, data.usage_cn, data.usage_process, data.usage_program_no, data.usage_mc_no, data.usage_cycle_time_before, data.usage_cycle_time_after, data.usage_before_change, data.usage_after_change
         ];
 
-        const result = await engPool.query(sql, params);
+        const result = await client.query(sql, params);
         const newId = result.rows[0].id;
         
         // Log initial creation
-        await engPool.query(`
+        await client.query(`
             INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
             VALUES ('ECR', $1, 1, 'Block 1 & 2: ECR Request', 'SUBMIT', $2, $3, 'Requester', 'Initiated ECR Request')
         `, [newId, requestBy, requestByName]);
 
+        // Stage history: Stage 1 (instant) -> Stage 2 (active)
+        await client.query(`
+            INSERT INTO ecnt2_stage_history (
+                document_type, document_id, stage_code, stage_title, stage_type, 
+                assigned_role, assigned_dept, assigned_pic, started_at, completed_at, duration_hours, status, action_taken, action_by, action_by_name
+            ) VALUES (
+                'ECR', $1, 'STAGE_1', '1. ECR Initiation', 'STANDARD', 
+                'Requester', $2, $3, NOW(), NOW(), 0.1, 'COMPLETED', 'SUBMIT', $4, $3
+            )
+        `, [newId, department, requestByName, requestBy]);
+
+        await client.query(`
+            INSERT INTO ecnt2_stage_history (
+                document_type, document_id, stage_code, stage_title, stage_type, 
+                assigned_role, assigned_dept, started_at, status
+            ) VALUES (
+                'ECR', $1, 'STAGE_2', '2. Dept Mgr Review', 'DECISION', 
+                'Dept Manager', $2, NOW(), 'ACTIVE'
+            )
+        `, [newId, department]);
+
         // Insert field attachments if provided
         if (data.attachments && Array.isArray(data.attachments)) {
             for (const att of data.attachments) {
-                await engPool.query(`
+                await client.query(`
                     INSERT INTO ecnt2_attachment (
                         document_type, document_id, block_number, field_name,
                         file_name, file_url, file_type, file_size, uploaded_by
@@ -94,19 +181,59 @@ const createEcr = async (req, res) => {
             }
         }
 
+        await client.query('COMMIT');
         res.json({ message: "ECR Created Successfully", id: newId, ecr_no: result.rows[0].ecr_no });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error("createEcr Error:", err.message);
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 
 const resubmitEcr = async (req, res) => {
     const { id } = req.params;
     const data = req.body;
+    const client = await engPool.connect();
     try {
+        await client.query('BEGIN');
+
         const actionBy = req.user?.empno || data.request_by || 'Unknown';
         const actionByName = req.user?.name || data.request_by_name || 'Unknown';
+
+        // 1. Fetch existing ECR to compute field diffs for audit trail
+        const oldEcrRes = await client.query(`SELECT * FROM ecnt2_ecr WHERE id = $1`, [id]);
+        if (oldEcrRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "ECR Not Found" });
+        }
+        const old = oldEcrRes.rows[0];
+
+        // Track changes
+        const auditFields = [
+            'dwg_part_no', 'dwg_cn', 'dwg_revision', 'dwg_reason_of_change', 'dwg_before_change', 'dwg_after_change',
+            'tool_current_no', 'tool_current_usage', 'tool_new_no', 'tool_new_usage',
+            'prog_before_change', 'prog_condition_before', 'prog_after_change', 'prog_condition_after',
+            'usage_setup_no', 'usage_part_no', 'usage_cn', 'usage_process', 'usage_program_no', 'usage_mc_no',
+            'usage_cycle_time_before', 'usage_cycle_time_after', 'usage_before_change', 'usage_after_change',
+            'title_of_change', 'reason_of_change', 'objective'
+        ];
+
+        for (const f of auditFields) {
+            const oldVal = old[f] !== undefined && old[f] !== null ? String(old[f]).trim() : '';
+            const newVal = data[f] !== undefined && data[f] !== null ? String(data[f]).trim() : '';
+            if (oldVal !== newVal && (oldVal || newVal)) {
+                await client.query(`
+                    INSERT INTO ecnt2_field_audit (document_type, document_id, stage_code, field_name, old_value, new_value, modified_by, modified_by_name)
+                    VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7)
+                `, [id, old.current_stage_code || 'STAGE_2_R1', f, oldVal, newVal, actionBy, actionByName]);
+            }
+        }
+
+        const nextBlock = old.current_stage_code === 'STAGE_3_R1' ? 4 : 3;
+        const nextStatus = old.current_stage_code === 'STAGE_3_R1' ? 'Pending Eng Mgr' : 'Pending Dept Mgr';
+        const nextStage = old.current_stage_code === 'STAGE_3_R1' ? 'STAGE_3' : 'STAGE_2';
 
         const sql = `
             UPDATE ecnt2_ecr SET
@@ -118,8 +245,9 @@ const resubmitEcr = async (req, res) => {
                 tool_current_no = $19, tool_current_usage = $20, tool_new_no = $21, tool_new_usage = $22,
                 prog_before_change = $23, prog_condition_before = $24, prog_after_change = $25, prog_condition_after = $26,
                 usage_setup_no = $27, usage_part_no = $28, usage_cn = $29, usage_process = $30, usage_program_no = $31, usage_mc_no = $32, usage_cycle_time_before = $33, usage_cycle_time_after = $34, usage_before_change = $35, usage_after_change = $36,
-                process_status = 'Pending Dept Mgr', current_block = 3, updated_at = NOW()
-            WHERE id = $37 RETURNING *
+                process_status = $37, current_block = $38, current_stage_code = $39,
+                updated_at = NOW()
+            WHERE id = $40 RETURNING *
         `;
 
         const params = [
@@ -131,23 +259,34 @@ const resubmitEcr = async (req, res) => {
             data.tool_current_no, data.tool_current_usage, data.tool_new_no, data.tool_new_usage,
             data.prog_before_change, data.prog_condition_before, data.prog_after_change, data.prog_condition_after,
             data.usage_setup_no, data.usage_part_no, data.usage_cn, data.usage_process, data.usage_program_no, data.usage_mc_no, data.usage_cycle_time_before, data.usage_cycle_time_after, data.usage_before_change, data.usage_after_change,
+            nextStatus, nextBlock, nextStage,
             id
         ];
 
-        const result = await engPool.query(sql, params);
-        if (result.rows.length === 0) return res.status(404).json({ message: "ECR Not Found" });
+        const result = await client.query(sql, params);
+
+        // Complete the return stage and transition back to review stage
+        await transitionStage(client, 'ECR', id, nextStage, 'RESUBMIT', actionBy, actionByName, data.comment || 'Updated details after Request More Detail');
 
         // Log resubmit
-        await engPool.query(`
+        await client.query(`
             INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
-            VALUES ('ECR', $1, 1, 'Block 1 & 2: Resubmit ECR', 'RESUBMIT', $2, $3, 'Requester', 'Updated details after Request More Detail')
-        `, [id, actionBy, actionByName]);
+            VALUES ('ECR', $1, 1, 'Block 1 & 2: Resubmit ECR', 'RESUBMIT', $2, $3, 'Requester', $4)
+        `, [id, actionBy, actionByName, data.comment || 'Updated details after Request More Detail']);
+
+        // Post automatic response in discussion
+        await client.query(`
+            INSERT INTO ecnt2_discussion (
+                document_type, document_id, stage_key, category, 
+                author_empno, author_name, author_dept, author_role, message
+            ) VALUES ('ECR', $1, $2, 'REVISION_RESPONSE', $3, $4, $5, 'Requester', $6)
+        `, [id, nextStage, actionBy, actionByName, old.department || 'ENG', data.comment || 'Requester resubmitted updated specifications and documentation.']);
 
         // Insert field attachments if provided
         if (data.attachments && Array.isArray(data.attachments)) {
             for (const att of data.attachments) {
                 if (!att.id) {
-                    await engPool.query(`
+                    await client.query(`
                         INSERT INTO ecnt2_attachment (
                             document_type, document_id, block_number, field_name,
                             file_name, file_url, file_type, file_size, uploaded_by
@@ -161,10 +300,14 @@ const resubmitEcr = async (req, res) => {
             }
         }
 
+        await client.query('COMMIT');
         res.json({ message: "ECR Resubmitted Successfully", data: result.rows[0] });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error("resubmitEcr Error:", err.message);
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };
 
@@ -172,7 +315,8 @@ const getEcrList = async (req, res) => {
     try {
         const result = await engPool.query(`
             SELECT e.*, 
-                   (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id
+                   (SELECT id FROM ecnt2_ecn WHERE ecr_id = e.id LIMIT 1) as linked_ecn_id,
+                   (SELECT count(*) FROM ecnt2_discussion WHERE document_type = 'ECR' AND document_id = e.id) as discussion_count
             FROM ecnt2_ecr e 
             ORDER BY e.created_at DESC
         `);
@@ -196,11 +340,15 @@ const getEcrById = async (req, res) => {
         
         const logResult = await engPool.query(`SELECT * FROM ecnt2_approval_log WHERE document_type = 'ECR' AND document_id = $1 ORDER BY created_at ASC`, [id]);
         const attachmentResult = await engPool.query(`SELECT * FROM ecnt2_attachment WHERE document_type = 'ECR' AND document_id = $1 ORDER BY created_at ASC`, [id]);
-        
+        const stageResult = await engPool.query(`SELECT * FROM ecnt2_stage_history WHERE document_type = 'ECR' AND document_id = $1 ORDER BY started_at ASC`, [id]);
+        const auditResult = await engPool.query(`SELECT * FROM ecnt2_field_audit WHERE document_type = 'ECR' AND document_id = $1 ORDER BY modified_at DESC`, [id]);
+
         res.json({
             data: ecrResult.rows[0],
             logs: logResult.rows,
-            attachments: attachmentResult.rows
+            attachments: attachmentResult.rows,
+            stageHistory: stageResult.rows,
+            fieldAudits: auditResult.rows
         });
     } catch (err) {
         console.error("getEcrById Error:", err.message);
@@ -223,20 +371,48 @@ const actionEcr = async (req, res) => {
         
         let nextStatus = 'Draft';
         let currentBlock = block_number;
+        let nextStageCode = null;
         
         if (action === 'DENY') {
             nextStatus = 'Denied';
+            nextStageCode = null;
+            await transitionStage(client, 'ECR', id, null, 'DENY', userEmpno, userName, deny_reason || comment);
         } else if (action === 'REQUEST_MORE_DETAIL') {
             nextStatus = 'Require More Detail';
             currentBlock = 1;
+            nextStageCode = block_number === 4 ? 'STAGE_3_R1' : 'STAGE_2_R1';
+
+            // Transition stage to the explicit Return Loop stage
+            await transitionStage(client, 'ECR', id, nextStageCode, 'REQUEST_MORE_DETAIL', userEmpno, userName, request_to_requester || comment, nextStageCode);
+
+            // Automatically post a clarification request into discussions
+            await client.query(`
+                INSERT INTO ecnt2_discussion (
+                    document_type, document_id, stage_key, category, 
+                    author_empno, author_name, author_dept, author_role, message
+                ) VALUES ('ECR', $1, $2, 'CLARIFICATION', $3, $4, $5, $6, $7)
+            `, [
+                id, nextStageCode, userEmpno, userName, 
+                req.user?.department || 'ENG', userRole,
+                request_to_requester || comment || 'Clarification / additional details requested.'
+            ]);
+
+            // Increment revision counter
+            await client.query(`UPDATE ecnt2_ecr SET revision_count = COALESCE(revision_count, 0) + 1 WHERE id = $1`, [id]);
+
         } else if (action === 'APPROVE') {
             if (block_number === 3) {
                 nextStatus = 'Pending Eng Mgr';
                 currentBlock = 4;
+                nextStageCode = 'STAGE_3';
+                await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, comment);
             } else if (block_number === 4) {
                 const isIssueEcn = req.body.details?.is_issue_ecn;
                 nextStatus = isIssueEcn ? 'Issued ECN' : 'ECR Only Closed';
+                nextStageCode = isIssueEcn ? 'STAGE_4' : null;
                 
+                await transitionStage(client, 'ECR', id, nextStageCode, 'APPROVE', userEmpno, userName, comment);
+
                 // Auto-generate ECR No if missing
                 const ecrCheck = await client.query('SELECT ecr_no FROM ecnt2_ecr WHERE id = $1', [id]);
                 if (!ecrCheck.rows[0].ecr_no) {
@@ -259,16 +435,23 @@ const actionEcr = async (req, res) => {
         ]);
         
         // Update document state
-        await client.query(`UPDATE ecnt2_ecr SET process_status = $1, current_block = $2, updated_at = NOW() WHERE id = $3`, [nextStatus, currentBlock, id]);
+        await client.query(`
+            UPDATE ecnt2_ecr SET 
+                process_status = $1, 
+                current_block = $2, 
+                current_stage_code = $3, 
+                updated_at = NOW() 
+            WHERE id = $4
+        `, [nextStatus, currentBlock, nextStageCode || 'CLOSED_ECR', id]);
         
-        // Notification record (Mock email trigger)
+        // Notification record
         await client.query(`
             INSERT INTO ecnt2_notification (document_type, document_id, block_number, email_type, subject, body)
             VALUES ('ECR', $1, $2, $3, $4, $5)
-        `, [id, currentBlock, 'STATUS_UPDATE', `ECR Action: ${action} - New Status: ${nextStatus}`, `ECR has moved to block ${currentBlock}`]);
+        `, [id, currentBlock, 'STATUS_UPDATE', `ECR Action: ${action} - New Status: ${nextStatus}`, `ECR has moved to ${nextStageCode || 'Complete'}`]);
 
         await client.query('COMMIT');
-        res.json({ message: "Action successful", next_status: nextStatus });
+        res.json({ message: "Action successful", next_status: nextStatus, next_stage: nextStageCode });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("actionEcr Error:", err.message);
@@ -302,11 +485,11 @@ const createEcn = async (req, res) => {
             INSERT INTO ecnt2_ecn (
                 ecn_no, ecr_id, request_by, request_date, department, engineer_assigned,
                 title_of_change, reason_of_change, scope_of_implementation, before_change, after_change,
-                dwg_suspended, related_models, current_block, process_status
+                dwg_suspended, related_models, current_block, process_status, current_stage_code
             ) VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9, $10, $11,
-                $12, $13, 6, 'Pending Eng Mgr ECN'
+                $12, $13, 6, 'Pending Eng Mgr ECN', 'STAGE_5'
             ) RETURNING id
         `;
         
@@ -365,6 +548,27 @@ const createEcn = async (req, res) => {
             ]);
         }
 
+        // Complete Stage 4 (ECN Creation) and open Stage 5 (Eng Mgr Review)
+        await client.query(`
+            INSERT INTO ecnt2_stage_history (
+                document_type, document_id, stage_code, stage_title, stage_type, 
+                assigned_role, assigned_pic, started_at, completed_at, duration_hours, status, action_taken, action_by, action_by_name
+            ) VALUES (
+                'ECN', $1, 'STAGE_4', '4. ECN Creation & Impact Assessment', 'STANDARD', 
+                'Eng. Assigned', $2, NOW(), NOW(), 0.1, 'COMPLETED', 'SUBMIT', $3, $4
+            )
+        `, [newEcnId, engineerAssigned, req.user?.empno || engineerAssigned, req.user?.name || engineerAssigned]);
+
+        await client.query(`
+            INSERT INTO ecnt2_stage_history (
+                document_type, document_id, stage_code, stage_title, stage_type, 
+                assigned_role, assigned_pic, started_at, status
+            ) VALUES (
+                'ECN', $1, 'STAGE_5', '5. Eng Dept Mgr ECN Review', 'DECISION', 
+                'Eng. Dept Manager', 'TEERAPOL KANTAPOOM', NOW(), 'ACTIVE'
+            )
+        `, [newEcnId]);
+
         // Log action for Block 5
         await client.query(`
             INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
@@ -401,7 +605,8 @@ const createEcn = async (req, res) => {
 const getEcnList = async (req, res) => {
     try {
         const result = await engPool.query(`
-            SELECT e.*, ecr.ecr_no
+            SELECT e.*, ecr.ecr_no,
+                   (SELECT count(*) FROM ecnt2_discussion WHERE document_type = 'ECN' AND document_id = e.id) as discussion_count
             FROM ecnt2_ecn e
             LEFT JOIN ecnt2_ecr ecr ON e.ecr_id = ecr.id
             ORDER BY e.created_at DESC
@@ -430,6 +635,8 @@ const getEcnById = async (req, res) => {
         const taskResult = await engPool.query(`SELECT * FROM ecnt2_concern_task WHERE ecn_id = $1 ORDER BY id ASC`, [id]);
         const logResult = await engPool.query(`SELECT * FROM ecnt2_approval_log WHERE document_type = 'ECN' AND document_id = $1 ORDER BY created_at ASC`, [id]);
         const attachmentResult = await engPool.query(`SELECT * FROM ecnt2_attachment WHERE document_type = 'ECN' AND document_id = $1 ORDER BY created_at ASC`, [id]);
+        const stageResult = await engPool.query(`SELECT * FROM ecnt2_stage_history WHERE document_type = 'ECN' AND document_id = $1 ORDER BY started_at ASC`, [id]);
+        const auditResult = await engPool.query(`SELECT * FROM ecnt2_field_audit WHERE document_type = 'ECN' AND document_id = $1 ORDER BY modified_at DESC`, [id]);
         
         res.json({
             data: ecnResult.rows[0],
@@ -438,7 +645,9 @@ const getEcnById = async (req, res) => {
             fai: faiResult.rows[0] || null,
             tasks: taskResult.rows,
             logs: logResult.rows,
-            attachments: attachmentResult.rows
+            attachments: attachmentResult.rows,
+            stageHistory: stageResult.rows,
+            fieldAudits: auditResult.rows
         });
     } catch (err) {
         console.error("getEcnById Error:", err.message);
@@ -460,41 +669,68 @@ const actionEcn = async (req, res) => {
         
         let nextStatus = 'Pending Eng Mgr ECN';
         let currentBlock = block_number;
+        let nextStageCode = 'STAGE_5';
         
         // Block 6 (Eng Mgr Approve ECN)
         if (block_number === 6) {
             if (action === 'APPROVE') {
                 nextStatus = 'Pending QC MSA';
                 currentBlock = 7;
+                nextStageCode = 'STAGE_6';
+                await transitionStage(client, 'ECN', id, nextStageCode, 'APPROVE', userEmpno, userName, comment);
             } else if (action === 'REQUEST_MORE_DETAIL') {
                 nextStatus = 'Require More Detail';
                 currentBlock = 5;
+                nextStageCode = 'STAGE_5_R1';
+
+                await transitionStage(client, 'ECN', id, nextStageCode, 'REQUEST_MORE_DETAIL', userEmpno, userName, request_to_requester || comment, nextStageCode);
+
+                // Auto post clarification in discussion
+                await client.query(`
+                    INSERT INTO ecnt2_discussion (
+                        document_type, document_id, stage_key, category, 
+                        author_empno, author_name, author_dept, author_role, message
+                    ) VALUES ('ECN', $1, $2, 'CLARIFICATION', $3, $4, $5, $6, $7)
+                `, [
+                    id, nextStageCode, userEmpno, userName, 
+                    req.user?.department || 'ENG', userRole,
+                    request_to_requester || comment || 'ECN Clarification requested by Eng Dept Manager.'
+                ]);
+
+                await client.query(`UPDATE ecnt2_ecn SET revision_count = COALESCE(revision_count, 0) + 1 WHERE id = $1`, [id]);
             }
         }
         // Block 7 (QC MSA)
         else if (block_number === 7 && action === 'APPROVE') {
             nextStatus = 'Pending QC FAI';
             currentBlock = 8;
+            nextStageCode = 'STAGE_7';
             
             await client.query(`
                 INSERT INTO ecnt2_qc_decision (ecn_id, decision_type, decision, reason, confirmed_by, confirmed_by_name, confirmed_date)
                 VALUES ($1, 'MSA', $2, $3, $4, $5, NOW())
             `, [id, req.body.details?.decision || 'NOT_REQUIRE', req.body.details?.reason || '', userEmpno, userName]);
+
+            await transitionStage(client, 'ECN', id, nextStageCode, 'APPROVE', userEmpno, userName, comment || `MSA: ${req.body.details?.decision}`);
         }
         // Block 8 (QC FAI)
         else if (block_number === 8 && action === 'APPROVE') {
             nextStatus = 'Pending Eng Summary';
             currentBlock = 9;
+            nextStageCode = 'STAGE_8';
             
             await client.query(`
                 INSERT INTO ecnt2_qc_decision (ecn_id, decision_type, decision, fai_type, reason, confirmed_by, confirmed_by_name, confirmed_date)
                 VALUES ($1, 'FAI', $2, $3, $4, $5, $6, NOW())
             `, [id, req.body.details?.decision || 'NOT_REQUIRE', req.body.details?.fai_type || null, req.body.details?.reason || '', userEmpno, userName]);
+
+            await transitionStage(client, 'ECN', id, nextStageCode, 'APPROVE', userEmpno, userName, comment || `FAI: ${req.body.details?.decision}`);
         }
         // Block 9 (Eng Summary & Task Setup)
         else if (block_number === 9 && action === 'APPROVE') {
             nextStatus = 'Pending Concern Approval';
             currentBlock = 10;
+            nextStageCode = 'STAGE_9';
             
             const summary = req.body.details;
             await client.query(`
@@ -514,6 +750,8 @@ const actionEcn = async (req, res) => {
                     `, [id, dept.dept_code, dept.dept_label, !!dept.is_needed, dept.is_needed ? 'PENDING' : 'NOT_NEEDED']);
                 }
             }
+
+            await transitionStage(client, 'ECN', id, nextStageCode, 'APPROVE', userEmpno, userName, comment || 'Configured concern tasks');
         }
         // Block 10 (Multi-Dept Acknowledge)
         else if (block_number === 10 && action === 'ACKNOWLEDGE') {
@@ -537,20 +775,26 @@ const actionEcn = async (req, res) => {
             if (allAck) {
                 nextStatus = 'Pending Official Close';
                 currentBlock = 11;
+                nextStageCode = 'STAGE_10';
+                await transitionStage(client, 'ECN', id, nextStageCode, 'ACKNOWLEDGE_ALL', userEmpno, userName, 'All concern tasks acknowledged');
             } else {
                 nextStatus = 'Pending Concern Approval';
                 currentBlock = 10;
+                nextStageCode = 'STAGE_9';
             }
         }
         // Block 11 (Official Close)
         else if (block_number === 11 && action === 'CLOSE') {
             nextStatus = 'ECN Effective';
             currentBlock = 11;
+            nextStageCode = 'COMPLETED';
             
             await client.query(`
-                UPDATE ecnt2_ecn SET closed_by = $1, closed_by_name = $2, closed_date = NOW(), process_status = $3, current_block = $4, updated_at = NOW()
-                WHERE id = $5
-            `, [userEmpno, userName, nextStatus, currentBlock, id]);
+                UPDATE ecnt2_ecn SET closed_by = $1, closed_by_name = $2, closed_date = NOW(), process_status = $3, current_block = $4, current_stage_code = $5, updated_at = NOW()
+                WHERE id = $6
+            `, [userEmpno, userName, nextStatus, currentBlock, nextStageCode, id]);
+
+            await transitionStage(client, 'ECN', id, null, 'CLOSE', userEmpno, userName, comment || 'Officially closed & effective');
         }
         
         // Log action
@@ -561,16 +805,23 @@ const actionEcn = async (req, res) => {
             id, block_number, `Block ${block_number}`, action, userEmpno, userName, userRole, comment, deny_reason, request_to_requester, req.body.details ? JSON.stringify(req.body.details) : null
         ]);
         
-        await client.query(`UPDATE ecnt2_ecn SET process_status = $1, current_block = $2, updated_at = NOW() WHERE id = $3`, [nextStatus, currentBlock, id]);
+        await client.query(`
+            UPDATE ecnt2_ecn SET 
+                process_status = $1, 
+                current_block = $2, 
+                current_stage_code = $3, 
+                updated_at = NOW() 
+            WHERE id = $4
+        `, [nextStatus, currentBlock, nextStageCode, id]);
         
-        // Trigger Email Notification (Mock record)
+        // Trigger Email Notification
         await client.query(`
             INSERT INTO ecnt2_notification (document_type, document_id, block_number, email_type, subject, body)
             VALUES ('ECN', $1, $2, $3, $4, $5)
-        `, [id, currentBlock, 'STATUS_UPDATE', `ECN Action: ${action} - New Status: ${nextStatus}`, `ECN has moved to block ${currentBlock}`]);
+        `, [id, currentBlock, 'STATUS_UPDATE', `ECN Action: ${action} - New Status: ${nextStatus}`, `ECN moved to ${nextStageCode}`]);
 
         await client.query('COMMIT');
-        res.json({ message: "Action successful", next_status: nextStatus });
+        res.json({ message: "Action successful", next_status: nextStatus, next_stage: nextStageCode });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("actionEcn Error:", err.message);
@@ -586,6 +837,129 @@ const getMasterPic = async (req, res) => {
         res.json({ data: result.rows });
     } catch (err) {
         console.error("getMasterPic Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// ==========================================
+// Threaded Discussions & Problem Investigation
+// ==========================================
+
+const getDiscussions = async (req, res) => {
+    const { docType, docId } = req.params;
+    try {
+        const result = await engPool.query(`
+            SELECT * FROM ecnt2_discussion 
+            WHERE document_type = $1 AND document_id = $2 
+            ORDER BY created_at ASC
+        `, [docType, docId]);
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error("getDiscussions Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const postDiscussion = async (req, res) => {
+    const { document_type, document_id, stage_key, category, message, attachments, parent_id } = req.body;
+    try {
+        const authorEmpno = req.user?.empno || req.body.author_empno || 'Unknown';
+        const authorName = req.user?.name || req.body.author_name || 'User';
+        const authorDept = req.user?.department || req.body.author_dept || 'ENG';
+        const authorRole = req.user?.role || req.body.author_role || 'Staff';
+
+        if (!message || !message.trim()) {
+            return res.status(400).json({ error: "Message content cannot be empty." });
+        }
+
+        const sql = `
+            INSERT INTO ecnt2_discussion (
+                document_type, document_id, stage_key, category,
+                author_empno, author_name, author_dept, author_role,
+                message, attachments, parent_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING *
+        `;
+        const params = [
+            document_type, document_id, stage_key || null, category || 'GENERAL',
+            authorEmpno, authorName, authorDept, authorRole,
+            message.trim(), JSON.stringify(attachments || []), parent_id || null
+        ];
+
+        const result = await engPool.query(sql, params);
+        res.json({ message: "Comment posted successfully", data: result.rows[0] });
+    } catch (err) {
+        console.error("postDiscussion Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// ==========================================
+// Stage History & Gantt Summary
+// ==========================================
+
+const getStageHistory = async (req, res) => {
+    const { docType, docId } = req.params;
+    try {
+        const result = await engPool.query(`
+            SELECT * FROM ecnt2_stage_history 
+            WHERE document_type = $1 AND document_id = $2 
+            ORDER BY started_at ASC, id ASC
+        `, [docType, docId]);
+        res.json({ data: result.rows });
+    } catch (err) {
+        console.error("getStageHistory Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const getGanttSummary = async (req, res) => {
+    try {
+        // Aggregate active documents with their full stage timelines
+        const ecrRows = await engPool.query(`
+            SELECT e.id, e.ecr_no as doc_no, 'ECR' as doc_type, e.title_of_change, e.process_status, e.current_stage_code, e.created_at, e.updated_at,
+                   json_agg(s.* ORDER BY s.started_at ASC, s.id ASC) as stages
+            FROM ecnt2_ecr e
+            LEFT JOIN ecnt2_stage_history s ON s.document_type = 'ECR' AND s.document_id = e.id
+            GROUP BY e.id, e.ecr_no, e.title_of_change, e.process_status, e.current_stage_code, e.created_at, e.updated_at
+            ORDER BY e.created_at DESC
+            LIMIT 30
+        `);
+
+        const ecnRows = await engPool.query(`
+            SELECT e.id, e.ecn_no as doc_no, 'ECN' as doc_type, e.title_of_change, e.process_status, e.current_stage_code, e.created_at, e.updated_at,
+                   json_agg(s.* ORDER BY s.started_at ASC, s.id ASC) as stages
+            FROM ecnt2_ecn e
+            LEFT JOIN ecnt2_stage_history s ON s.document_type = 'ECN' AND s.document_id = e.id
+            GROUP BY e.id, e.ecn_no, e.title_of_change, e.process_status, e.current_stage_code, e.created_at, e.updated_at
+            ORDER BY e.created_at DESC
+            LIMIT 30
+        `);
+
+        res.json({
+            ecrTimeline: ecrRows.rows,
+            ecnTimeline: ecnRows.rows
+        });
+    } catch (err) {
+        console.error("getGanttSummary Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const getAuditTrail = async (req, res) => {
+    const { docType, docId } = req.params;
+    try {
+        const [logs, audits] = await Promise.all([
+            engPool.query(`SELECT * FROM ecnt2_approval_log WHERE document_type = $1 AND document_id = $2 ORDER BY created_at DESC`, [docType, docId]),
+            engPool.query(`SELECT * FROM ecnt2_field_audit WHERE document_type = $1 AND document_id = $2 ORDER BY modified_at DESC`, [docType, docId])
+        ]);
+
+        res.json({
+            logs: logs.rows,
+            fieldAudits: audits.rows
+        });
+    } catch (err) {
+        console.error("getAuditTrail Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 };
@@ -712,5 +1086,10 @@ module.exports = {
     getMyTasks,
     saveAttachment,
     getAttachments,
-    deleteAttachment
+    deleteAttachment,
+    getDiscussions,
+    postDiscussion,
+    getStageHistory,
+    getGanttSummary,
+    getAuditTrail
 };

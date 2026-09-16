@@ -4,10 +4,28 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-15
-- **Active Goal:** PDF Hub multi-document draft management, fast loading with visual progress, and 100% English UI completed.
+- **Last Update:** 2026-09-16
+- **Active Goal:** ECNT V2 11-Block Enterprise Refactor completed: 10-Stage Architecture with explicit return loops, 4-view UI/UX, interactive Gantt chart, threaded discussion hub, and full field-level audit trail.
 
 ### Recent Changes
+- **ECNT V2 Sidebar, Scrollbar & Layout Architecture Fix (2026-09-16):**
+  - **Sidebar Navigation Restoration:** Embedded `<MenuTemplate type="Process" selectedKeys={["ecnt_v2"]} defaultSelectedKeys={["ecnt_v2"]} />` inside `<Layout hasSider>` in `Dashboard.jsx`. Updated `menu_template.jsx` with automatic route matching fallback for `/eng/process_eng/ecnt_v2`.
+  - **Vertical Scrollbar Restoration & Overflow Management:** Wrapped views in `<Content className="kb-vscroll" style={{ overflowY: 'auto', padding: '20px 24px', flex: 1 }}>` with height bounded by `MainLayout`'s `calc(100vh - 64px)`.
+  - **Defensive Scrollbar Styling:** Updated `ScrollbarStyle` (`scrollbar.jsx`) to default `primary = '#1890ff'` and use fallback `color` variable, preventing CSS invalidation (`scrollbar-color: undefined transparent`).
+- **ECNT V2 Enterprise Workflow Refactor, Stage Management & Discussion Hub (2026-09-16):**
+  - **Explicit Stage Architecture & Return Loops (`STAGE_2_R1`, `STAGE_3_R1`, `STAGE_5_R1`):**
+    - Rework cycles (Request More Detail) now generate dedicated named stages rather than resetting silently.
+    - Transitions tracked in `ecnt2_stage_history` with precise duration in hours, action actor, and target stage.
+    - Automatic creation of clarification requests and revision response messages in `ecnt2_discussion`.
+  - **4-View Unified UI/UX Platform:**
+    - **View 1: Dashboard & Gantt Chart (`EcntDashboardView`, `EcntGanttChartView`):** KPI summary cards, 7-column Kanban board, and interactive Gantt Chart plotting actual past stages (green/blue), return loops (amber), and future projected milestones (dashed gray based on standard SLAs).
+    - **View 2: ECR Require & Initiation Hub (`EcrRequireView`):** Dedicated initiation wizard for Blocks 1 & 2 with change category cards (Drawing, Tooling, Program, Usage), live clipboard paste (Ctrl+V) for screenshot attachments, and side-by-side comparison tables.
+    - **View 3: Active ECNT Workspace (`EcntWorkspaceView`):** Vertical linear presentation with collapsible accordion cards, stage stepper, field-level edit restrictions, linked ECR/ECN data aggregation, and context-aware action drawer.
+    - **View 4: Problem Investigation & Discussion Hub (`EcntInvestigationHub`):** Threaded discussions with category tags (`Question`, `Clarification`, `Revision Response`, `Issue`), screenshot upload via Ctrl+V, immutable audit timeline, and field-level diff viewer (`ecnt2_field_audit`).
+  - **Security, RBAC & Edit Locking:**
+    - Replaced hardcoded AD-only barrier in `Dashboard.jsx` with dynamic RBAC so all authorized departments (Requester, Dept Mgr, Eng Mgr, Eng Assigned, QC, Concern Depts) can operate based on stage ownership.
+    - Added database schema extensions (`ecnt2_discussion`, `ecnt2_stage_history`, `ecnt2_field_audit`) and updated `menu_template.jsx`.
+    - Verified with 100% pass on end-to-end automated workflow suite and clean production build.
 - **PDF Hub Multi-Document Drafts, Ultra-Fast Loading & 100% English UI (2026-09-15):**
   - **Draft Download & Document Loading Latency Optimization (Sub-Second Resumption):**
     - **Server CPU Thrash Elimination:** Replaced heavy `pdf-lib` parsing (`PDFDocument.load`) and re-serialization (`doc.save`) in `draftService.getAssembledDraftPdf` with direct buffer concatenation of the clean `%ENG_PROJECT_DATA:<base64>\n` trailer. Server draft assembly dropped from 10,000+ ms of single-threaded blocking CPU to **1 ms** (10,000x speedup).

@@ -29,7 +29,7 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selec
     if (type === 'MTC' && !isAdmin) {
         currentItems = baseItems.filter(item => item.key !== 'admin-config');
     } else if (type === 'Process' && !isAdmin) {
-        currentItems = baseItems.filter(item => item.key !== 'ecnt_v2' && item.key !== 'ecnt');
+        currentItems = baseItems.filter(item => item.key !== 'ecnt');
     }
 
     // Determine active keys safely without nesting arrays
@@ -50,6 +50,12 @@ export const MenuTemplate = ({ type, defaultSelectedKeys, defaultOpenKeys, selec
             if (p.startsWith('/eng/overall_eng/user_management')) return ['5'];
             if (p.includes('/lot-track')) return ['6'];
             if (p.includes('/cam')) return ['7'];
+        }
+        if (type === 'Process') {
+            if (p.startsWith('/eng/process_eng/ecnt_v2')) return ['ecnt_v2'];
+            if (p.startsWith('/eng/process_eng/tumble')) return ['tumble'];
+            if (p.startsWith('/eng/process_eng/ecnt')) return ['child-1-0'];
+            if (p === '/eng/process_eng') return ['1'];
         }
         return [];
     };
