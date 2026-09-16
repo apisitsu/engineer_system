@@ -14,6 +14,14 @@
     - **Header Overflow Protection:** Guarded `X-Eng-Project-Data` HTTP header in `draftController.js` to only send when data is under 4KB, avoiding HTTP 431/header overflow errors on large annotation datasets while relying on the zero-overhead comment trailer.
     - **Client-Side Pre-Emptive Repair Elimination:** Removed unconditional `axios.post(server.PDF_REPAIR)` network round-trip from `usePdfDocument.js#loadPdf`. PDFs now parse directly via `pdfjsLib.getDocument()` inside a Web Worker, saving 5-15 seconds of redundant network upload/download per healthy document, keeping Python PyMuPDF `/repair` strictly as an error recovery fallback.
     - **Main-Thread Worker Decoupling:** Removed synchronous `PDFDocument.load` execution from `usePdfDocument.js#loadPdfFromBytes`, eliminating browser UI freezing and memory thrashing during document rendering.
+  - **EditorCanvas Infinite Re-render & RAM Explosion Resolution:**
+    - **Root Cause of Blank Canvas & Memory Surge:** Diagnosed that `EditorCanvas.jsx`'s annotation re-hydration `useEffect` included the entire reactive `store` in its dependency array. When `fc.loadFromJSON` executed for 19 objects, Fabric emitted `object:added` which called `store.setCanvasObjectCount`. Because `usePdfEditorStore.js` lacked an equality check on counts, it triggered a state mutation and re-rendered `EditorCanvas` hundreds of times per second.
+    - Each re-render re-invoked `fc.loadFromJSON` before previous invocations settled, spawning tens of thousands of Fabric objects in memory (spiking RAM into gigabytes) while repeatedly canceling the 250ms debounced `page.render()` timer (`clearTimeout(renderTimeoutId)`), leaving the page completely blank white and freezing the browser without errors.
+    - **Resolution:**
+      1. Added `isLoadingJsonRef` and set `lastLoadedAnnotRef.current = pageAnnotations[pageNum]` synchronously before asynchronous parsing to strictly block re-entry.
+      2. Removed `store` from the dependency array, routing `setCanvasObjectCount` calls through `usePdfEditorStore.getState()` with an equality check `if (state.canvasObjectCounts[pageNum] === count) return state;`.
+      3. Rendered the PDF page immediately on mount (0ms delay) using `hasRenderedOnceRef`, debouncing only subsequent user zoom changes.
+      4. Ensured `%ENG_PROJECT_DATA:` comment trailer is unconditionally stripped from `originalPdfBytes` before passing to PDF.js.
   - **Editable PDF & Draft Reassembly FlateDecode Root Cause Resolution:**
     - Saved with `{ useObjectStreams: false }` ensuring the `/EngProjectData` key remains uncompressed and directly accessible in the PDF object dictionary for standard PDF readers.
     - Appended a clean `%ENG_PROJECT_DATA:<base64>\n` comment trailer after `%%EOF`, enabling instantaneous (< 1ms) zero-CPU extraction on upload without needing heavy `PDFDocument.load()` parsing.

@@ -368,7 +368,7 @@ const PdfEditorTool = () => {
             let originalPdfBytes = bytes;
             
             // 1. Instant binary check: look for %ENG_PROJECT_DATA: comment trailer (<1ms)
-            if (!projectData && bytes.length > 20) {
+            if (bytes.length > 20) {
                 const tailLen = Math.min(bytes.length, 2097152); // Inspect tail 2MB
                 const tailBytes = bytes.subarray(bytes.length - tailLen);
                 const tailText = new TextDecoder('latin1').decode(tailBytes);
@@ -376,22 +376,24 @@ const PdfEditorTool = () => {
                 const sig = 'ENG_PROJECT_DATA:';
                 const sigIdx = tailText.lastIndexOf(sig);
                 if (sigIdx !== -1) {
-                    try {
-                        const b64 = tailText.slice(sigIdx + sig.length).trim();
-                        const cleanB64 = b64.split(/[\r\n\s]/)[0];
-                        const jsonStr = base64ToUtf8(cleanB64);
-                        projectData = JSON.parse(jsonStr);
-                        
-                        // Strip comment marker from originalPdfBytes so PDF is completely clean
-                        const rawSigIdx = bytes.length - tailLen + sigIdx;
-                        let cutIdx = rawSigIdx;
-                        if (cutIdx > 0 && bytes[cutIdx - 1] === 37) cutIdx--; // '%'
-                        if (cutIdx > 0 && bytes[cutIdx - 1] === 10) cutIdx--; // '\n'
-                        if (cutIdx > 0 && bytes[cutIdx - 1] === 13) cutIdx--; // '\r'
-                        originalPdfBytes = bytes.subarray(0, Math.max(0, cutIdx));
-                    } catch (e) {
-                        console.warn('Failed to parse EOF project data:', e);
+                    if (!projectData) {
+                        try {
+                            const b64 = tailText.slice(sigIdx + sig.length).trim();
+                            const cleanB64 = b64.split(/[\r\n\s]/)[0];
+                            const jsonStr = base64ToUtf8(cleanB64);
+                            projectData = JSON.parse(jsonStr);
+                        } catch (e) {
+                            console.warn('Failed to parse EOF project data:', e);
+                        }
                     }
+                    
+                    // Strip comment marker from originalPdfBytes so PDF is completely clean
+                    const rawSigIdx = bytes.length - tailLen + sigIdx;
+                    let cutIdx = rawSigIdx;
+                    if (cutIdx > 0 && bytes[cutIdx - 1] === 37) cutIdx--; // '%'
+                    if (cutIdx > 0 && bytes[cutIdx - 1] === 10) cutIdx--; // '\n'
+                    if (cutIdx > 0 && bytes[cutIdx - 1] === 13) cutIdx--; // '\r'
+                    originalPdfBytes = bytes.subarray(0, Math.max(0, cutIdx));
                 }
             }
 

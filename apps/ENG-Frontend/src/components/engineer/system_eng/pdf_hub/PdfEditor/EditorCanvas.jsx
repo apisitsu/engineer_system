@@ -64,6 +64,8 @@ const EditorCanvas = ({
 
     // Render task ref for proper cancellation
     const renderTaskRef = useRef(null);
+    const hasRenderedOnceRef = useRef(false);
+    const isLoadingJsonRef = useRef(false);
 
     const store = usePdfEditorStore();
     const { userName } = useAuthStore();
@@ -225,7 +227,12 @@ const EditorCanvas = ({
         });
 
         const updateObjectCount = () => {
-            store.setCanvasObjectCount(pageNum, canvas.getObjects().length);
+            if (isLoadingJsonRef.current) return;
+            const count = canvas.getObjects().length;
+            const prev = usePdfEditorStore.getState().canvasObjectCounts[pageNum];
+            if (prev !== count) {
+                usePdfEditorStore.getState().setCanvasObjectCount(pageNum, count);
+            }
         };
         canvas.on('object:added', updateObjectCount);
         canvas.on('object:removed', updateObjectCount);
@@ -305,8 +312,9 @@ const EditorCanvas = ({
                     });
                 }
 
-                // ── 2. Debounced High-Res PDF Rendering ──
+                // ── 2. PDF Rendering (Immediate on initial load, debounced on zoom) ──
                 clearTimeout(renderTimeoutId);
+                const delay = hasRenderedOnceRef.current ? 150 : 0;
                 renderTimeoutId = setTimeout(async () => {
                     if (cancelled) return;
 
@@ -315,9 +323,15 @@ const EditorCanvas = ({
                         canvas.width = viewport.width;
                         canvas.height = viewport.height;
 
+                        if (renderTaskRef.current) {
+                            try { renderTaskRef.current.cancel(); } catch (e) {}
+                            renderTaskRef.current = null;
+                        }
+
                         const renderTask = page.render({ canvasContext: ctx, viewport });
                         renderTaskRef.current = renderTask;
                         await renderTask.promise;
+                        hasRenderedOnceRef.current = true;
 
                         if (cancelled) return;
 
@@ -338,9 +352,11 @@ const EditorCanvas = ({
                             });
                         }
                     } catch (renderErr) {
-                        if (!cancelled) console.error('Render error:', renderErr);
+                        if (!cancelled && renderErr?.name !== 'RenderingCancelledException') {
+                            console.error('Render error:', renderErr);
+                        }
                     }
-                }, 250); // 250ms debounce for smooth zooming
+                }, delay);
 
             } catch (err) {
                 if (!cancelled) console.error('Page init error:', err);
@@ -369,15 +385,20 @@ const EditorCanvas = ({
         if (!fc || !pageAnnotations[pageNum] || !pageAnnotations[pageNum].objects?.length) return;
         if (canvasSize.width <= 0) return;
 
-        // If this exact annotation payload was already loaded into this canvas, skip to avoid overwriting user edits
-        if (lastLoadedAnnotRef.current === pageAnnotations[pageNum] && fc.getObjects().length > 0) {
+        // Skip if this exact annotation payload was already loaded into this canvas
+        if (lastLoadedAnnotRef.current === pageAnnotations[pageNum]) {
             return;
         }
 
+        // Set synchronously to prevent re-entrant loops
+        lastLoadedAnnotRef.current = pageAnnotations[pageNum];
+        isLoadingJsonRef.current = true;
+
         let isMounted = true;
         fc.loadFromJSON(pageAnnotations[pageNum]).then(() => {
+            isLoadingJsonRef.current = false;
             if (!isMounted) return;
-            lastLoadedAnnotRef.current = pageAnnotations[pageNum];
+
             const savedW = pageAnnotations[pageNum]._canvasWidth || canvasSize.width;
             const savedH = pageAnnotations[pageNum]._canvasHeight || canvasSize.height;
             const initScaleX = canvasSize.width / savedW;
@@ -392,10 +413,13 @@ const EditorCanvas = ({
                 });
             }
             fc.renderAll();
-            store.setCanvasObjectCount(pageNum, fc.getObjects().length);
-        }).catch(e => console.error("loadFromJSON Error:", e));
+            usePdfEditorStore.getState().setCanvasObjectCount(pageNum, fc.getObjects().length);
+        }).catch(e => {
+            isLoadingJsonRef.current = false;
+            console.error("loadFromJSON Error:", e);
+        });
         return () => { isMounted = false; };
-    }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs, store]);
+    }, [pageAnnotations, pageNum, canvasSize, fabricCanvasRefs]);
 
     // ══════════════════════════════════════════════════════════════════
     // Render Overlay PDF (Layer 1.5)

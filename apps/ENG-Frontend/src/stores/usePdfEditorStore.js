@@ -95,12 +95,15 @@ export const usePdfEditorStore = create((set, get) => ({
     
     setClipboard: (obj) => set({ clipboard: obj }),
 
-    setCanvasObjectCount: (pageNum, count) => set(state => ({
-        canvasObjectCounts: {
-            ...state.canvasObjectCounts,
-            [pageNum]: count
-        }
-    })),
+    setCanvasObjectCount: (pageNum, count) => set(state => {
+        if (state.canvasObjectCounts[pageNum] === count) return state;
+        return {
+            canvasObjectCounts: {
+                ...state.canvasObjectCounts,
+                [pageNum]: count
+            }
+        };
+    }),
 
     // Tool property setter
     setToolSetting: (tool, key, value) => set(state => {
