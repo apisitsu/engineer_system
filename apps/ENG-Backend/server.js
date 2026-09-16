@@ -183,7 +183,7 @@ const userController = require('./api/user/userModel');
 // Rate limiting for login to prevent brute force attacks
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per window
+  max: 1000, // Limit each IP to 1000 requests per window in development/testing
   message: { result: 'false', message: 'คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป โปรดลองใหม่ในอีก 15 นาที (Too many attempts)' },
   standardHeaders: true,
   legacyHeaders: false,

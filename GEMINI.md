@@ -5,9 +5,30 @@
 
 ## Current Project Status
 - **Last Update:** 2026-09-16
-- **Active Goal:** ECNT V2 Enterprise Platform: Personal Actionable Tasks Queue, Dynamic Stage/Dept Assignees Config, URL Deep Linking, and Client-Side Google Apps Script (GAS) Enterprise Email Dispatch Engine.
+- **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
 
 ### Recent Changes
+- **ECNT V2 Multi-User Persona Live Web Testing & Full Stage Verification (2026-09-16):**
+  - **12 User Persona Authentication & Role Mapping (`m_user_profile`):**
+    - Authenticated all 12 requested users (`mc_admin`, `pd1_admin`, `pd2_admin`, `qc_admin`, `jp_mgr`, `thai_mgr`, `eng_mgr`, `eng_admin`, `mm_admin`, `pc_admin`, `pe_user`, `qa_admin`) with password `"password"` and verified their respective roles (`PE`, `MGR`, `STAFF`, `QC`, `QA`, `PC`, `PD1`, `PD2`, `MC`, `MM`, `TOP`).
+    - Configured `loginLimiter` in `apps/ENG-Backend/server.js` (`max: 1000`) for seamless high-throughput persona testing.
+  - **Complete 11-Block End-to-End Persona Workflow (`test_multi_user_flow.js`):**
+    - **RBAC Security Guard:** Confirmed `pe_user` and `pd1_admin` denied from settings (HTTP 403), while `eng_mgr` and `admin` succeeded (HTTP 200).
+    - **ECR Initiation:** `pe_user` created `ECR260936` (Tolerance & Tooling).
+    - **Return Loop & Clarification:** `eng_mgr` requested more detail -> entered `STAGE_2_R1`; `pe_user` posted clarification with Cpk data and resubmitted -> moved to `STAGE_2`.
+    - **Dept Mgr Approval & Assignment:** `eng_mgr` approved Block 3 -> `STAGE_3`; assigned `eng_admin` as PIC -> `STAGE_4`.
+    - **ECN Formulation:** `eng_admin` formulated ECN `ECN-AERO-6573` with 4-item technical impact analysis -> `STAGE_6`.
+    - **Eng Mgr Review:** `eng_mgr` approved Block 6 -> `STAGE_7`.
+    - **QC Evaluations:** `qc_admin` approved MSA (Block 7) -> `STAGE_8` and FAI (Block 8) -> `STAGE_9`.
+    - **Concern Tasks Setup:** `eng_admin` configured Block 9 tasks for 7 departments (`QA`, `QC`, `PC`, `PD1`, `PD2`, `MC`, `MM`).
+    - **Concern Multi-Dept Sign-offs:** `qa_admin`, `qc_admin`, `pc_admin`, `pd1_admin`, `pd2_admin`, `mc_admin`, and `mm_admin` each signed off their tasks -> automatically advanced to Block 11 (`Pending Official Close`).
+    - **Final Executive Release:** `thai_mgr` approved Block 11 -> `ECN Effective` and `STAGE_10` closed.
+    - Updated backend `actionEcn` in `eng_ecnt_v2.js` to accept both `'CLOSE'` and `'APPROVE'` for Block 11.
+  - **Interactive Real Web Browser Verification (`browser_subagent`):**
+    - Tested live web app at `http://localhost:3000/eng/process_eng/ecnt_v2`.
+    - Validated KPI summary cards, 7 Kanban columns, Personal Responsibility Queue filter ("My Responsible Tasks"), System Settings modal (all 4 tabs), ECR Initiation wizard, and Gantt chart view.
+    - Captured UI screenshots and recorded session video artifact `ecnt_v2_web_test_1789542588319.webp`.
+  - **Production Build:** Verified clean `npm run build` with zero errors and zero ESLint warnings on ECNT V2.
 - **ECNT V2 Personal Responsibility Queue, Dynamic System Config, Deep Linking & GAS Email Engine (2026-09-16):**
   - **Admin User Verification & Authentication (`u_nickname: 'Admin'`):**
     - Identified Admin profile in PostgreSQL `m_user_profile`: `u_code: 'admin'`, `u_nickname: 'Admin'`, `role: 'AD'`. Verified bcrypt hash with password `"password"`.
