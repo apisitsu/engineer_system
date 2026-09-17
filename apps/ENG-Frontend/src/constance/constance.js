@@ -15,6 +15,7 @@ export const apiUrl = "http://plbmp129:2005/";
 
 export const server = {
   API_URL: `${apiUrl}`,
+  URL: apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl,
 
   // USER_LOGIN: `${apiUrl}login`,
 

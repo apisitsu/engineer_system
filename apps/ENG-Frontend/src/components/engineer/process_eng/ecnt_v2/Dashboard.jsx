@@ -43,13 +43,23 @@ export default function Dashboard() {
     const [activeDocType, setActiveDocType] = useState('ECR');
     const [activeDocData, setActiveDocData] = useState(null);
 
+    const getAuthConfig = () => {
+        const token = localStorage.getItem("token");
+        return {
+            withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        };
+    };
+
     const fetchData = async () => {
         setLoading(true);
         try {
+            const authConfig = getAuthConfig();
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
             const [resEcr, resEcn, resMyTasks] = await Promise.all([
-                axios.get(`${server.URL}/api/ecnt/ecr`, { withCredentials: true }),
-                axios.get(`${server.URL}/api/ecnt/ecn`, { withCredentials: true }),
-                axios.get(`${server.URL}/api/ecnt/my-tasks`, { withCredentials: true })
+                axios.get(`${baseUrl}/api/ecnt/ecr`, authConfig),
+                axios.get(`${baseUrl}/api/ecnt/ecn`, authConfig),
+                axios.get(`${baseUrl}/api/ecnt/my-tasks`, authConfig)
             ]);
             setEcrData(resEcr.data.data || []);
             setEcnData(resEcn.data.data || []);
@@ -63,7 +73,9 @@ export default function Dashboard() {
 
     const fetchConfig = async () => {
         try {
-            const res = await axios.get(`${server.URL}/api/ecnt/config`, { withCredentials: true });
+            const authConfig = getAuthConfig();
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const res = await axios.get(`${baseUrl}/api/ecnt/config`, authConfig);
             if (res.data?.data) {
                 setSystemConfig(res.data.data);
             }
@@ -75,6 +87,7 @@ export default function Dashboard() {
     useEffect(() => {
         fetchData();
         fetchConfig();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // URL Deep Linking: Read params from URL and navigate automatically

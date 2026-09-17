@@ -7,7 +7,18 @@
 - **Last Update:** 2026-09-16
 - **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
 
-### Recent Changes
+- **ECNT V2 Stage PICs & Managers Candidate Fix & Authorized Admins Upgrade (2026-09-16):**
+  - **Resolved Root Cause of Empty Dropdowns (`server.URL` & Global `/api` Middleware):**
+    - Diagnosed that `server.URL` in `apps/ENG-Frontend/src/constance/constance.js` was undefined, resulting in requests to `"undefined/api/ecnt/user-candidates"`.
+    - Added `URL: apiUrl.replace(/\/$/, '')` to `server` object in `constance.js`.
+    - Updated Express global `/api` auth middleware in `apps/ENG-Backend/server.js` to whitelist `req.path === '/ecnt/user-candidates'`, preventing HTTP 401 on cross-origin cookie restrictions or unauthenticated dropdown population.
+    - Updated `Dashboard.jsx`, `EcntSettingsModal.jsx`, and `WorkflowActionCard.jsx` to pass `Authorization: Bearer ${localStorage.getItem('token')}`.
+  - **Authorized Admins Upgraded to Registered User Selection Table (Tab 4):**
+    - Built rich candidate picker using `formatUserOptionLabel(u)` (`[EmpNo] FullName (Nickname) - Dept / Position`) with real-time text search.
+    - Added active administrators table rendering Employee ID (Tag), Full Name, Nickname Badge, Department, Position/Role, and immediate removal action.
+    - Preserved manual custom ID / system code addition and global RBAC privileges overview.
+    - Verified via automated test: candidate endpoint returns 27 real users, 0 with nickname `'Admin'`, and system_admins save/restore succeeded.
+    - Verified production build (`npm run build`) with zero errors.
 - **ECNT V2 Stage PICs & Managers Dynamic User Selection (Excluding 'Admin' Nickname) (2026-09-16):**
   - **Backend Registered Non-Admin Candidate API (`/api/ecnt/user-candidates`):**
     - Added `getUserCandidates` controller in `eng_ecnt_v2.js` querying `m_user_profile` where `LOWER(COALESCE(u_nickname, '')) != 'admin'`, ordered by `u_department`, `role`, and `u_name`.

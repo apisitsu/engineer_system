@@ -61,9 +61,15 @@ export default function WorkflowActionCard({
 
     useEffect(() => {
         if (currentBlock === 4) {
-            axios.get(`${server.URL}/api/ecnt/user-candidates`, { withCredentials: true })
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            axios.get(`${baseUrl}/api/ecnt/user-candidates`, {
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            })
                 .then(res => {
-                    const list = (res.data?.data || []).filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
+                    const rawList = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+                    const list = rawList.filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
                     setEngineerCandidates(list);
                 })
                 .catch(err => console.warn("Fetch candidates error:", err));

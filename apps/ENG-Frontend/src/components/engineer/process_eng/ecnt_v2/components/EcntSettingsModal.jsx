@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, Tabs, Form, Input, Button, Switch, Table, Space, 
-    Typography, Tag, Select, App, Card, Row, Col, Alert 
+    Typography, Tag, Select, App, Card, Row, Col, Alert, Tooltip 
 } from 'antd';
 import { 
     SettingOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, 
@@ -23,15 +23,33 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
     const [concernDepts, setConcernDepts] = useState([]);
     const [systemAdmins, setSystemAdmins] = useState([]);
+    const [customAdminCode, setCustomAdminCode] = useState('');
     const [userCandidates, setUserCandidates] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
+
+    // Robust base URL and auth headers
+    const getBaseUrl = () => {
+        if (server.URL) return server.URL.replace(/\/$/, '');
+        if (server.API_URL) return server.API_URL.replace(/\/$/, '');
+        return 'http://plbmp129:2005';
+    };
+
+    const getAuthConfig = () => {
+        const token = localStorage.getItem("token");
+        return {
+            withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        };
+    };
 
     // Fetch registered users from backend (excluding users with nickname 'Admin')
     const fetchUserCandidates = async () => {
         setLoadingUsers(true);
         try {
-            const res = await axios.get(`${server.URL}/api/ecnt/user-candidates`, { withCredentials: true });
-            const list = (res.data?.data || []).filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
+            const baseUrl = getBaseUrl();
+            const res = await axios.get(`${baseUrl}/api/ecnt/user-candidates`, getAuthConfig());
+            const rawList = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+            const list = rawList.filter(u => (u.u_nickname || '').toLowerCase() !== 'admin');
             setUserCandidates(list);
         } catch (err) {
             console.error("Fetch user candidates error:", err);
@@ -83,6 +101,7 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                 ]
             });
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, currentConfig, form]);
 
     const handleSelectCandidate = (uCode, fieldPrefix) => {
@@ -152,31 +171,34 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                 notify_on_stages: values.notify_stages
             };
 
+            const baseUrl = getBaseUrl();
+            const authConfig = getAuthConfig();
+
             // Save all to backend
             await Promise.all([
-                axios.post(`${server.URL}/api/ecnt/config`, {
+                axios.post(`${baseUrl}/api/ecnt/config`, {
                     key: 'stage_assignees',
                     value: stage_assignees,
                     description: 'Mapping of department managers and primary stage PICs'
-                }, { withCredentials: true }),
+                }, authConfig),
 
-                axios.post(`${server.URL}/api/ecnt/config`, {
+                axios.post(`${baseUrl}/api/ecnt/config`, {
                     key: 'concern_depts',
                     value: concernDepts,
                     description: 'List of concern departments and PICs for Block 9 evaluation'
-                }, { withCredentials: true }),
+                }, authConfig),
 
-                axios.post(`${server.URL}/api/ecnt/config`, {
+                axios.post(`${baseUrl}/api/ecnt/config`, {
                     key: 'email_settings',
                     value: email_settings,
                     description: 'Google Apps Script Web App email notification parameters'
-                }, { withCredentials: true }),
+                }, authConfig),
 
-                axios.post(`${server.URL}/api/ecnt/config`, {
+                axios.post(`${baseUrl}/api/ecnt/config`, {
                     key: 'system_admins',
                     value: systemAdmins,
                     description: 'Employee IDs granted administrative control over ECNT settings'
-                }, { withCredentials: true })
+                }, authConfig)
             ]);
 
             antdMessage.success("ECNT System Settings saved successfully!");
@@ -215,6 +237,97 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
     const handleDeleteConcernDept = (index) => {
         setConcernDepts(prev => prev.filter((_, i) => i !== index));
     };
+
+    const handleAddAdminUser = (uCode) => {
+        if (!uCode) return;
+        const cleanCode = uCode.trim();
+        if (!cleanCode) return;
+        if (systemAdmins.map(c => c.toLowerCase()).includes(cleanCode.toLowerCase())) {
+            antdMessage.warning(`"${cleanCode}" is already an authorized administrator.`);
+            return;
+        }
+        setSystemAdmins(prev => [...prev, cleanCode]);
+        antdMessage.success(`Added "${cleanCode}" to authorized administrators.`);
+    };
+
+    const handleRemoveAdminUser = (uCode) => {
+        setSystemAdmins(prev => prev.filter(c => c.toLowerCase() !== uCode.toLowerCase()));
+        antdMessage.info(`Removed "${uCode}" from authorized administrators.`);
+    };
+
+    const adminTableColumns = [
+        {
+            title: 'Employee ID / Code',
+            dataIndex: 'code',
+            key: 'code',
+            width: 170,
+            render: (code) => (
+                <Space>
+                    <SafetyCertificateOutlined style={{ color: '#1890ff', fontSize: 16 }} />
+                    <Tag color="blue" style={{ fontWeight: 700, fontSize: 13, padding: '2px 8px' }}>{code}</Tag>
+                </Space>
+            )
+        },
+        {
+            title: 'Full Name & Nickname',
+            key: 'name',
+            render: (_, record) => {
+                const user = userCandidates.find(u => u.u_code.toLowerCase() === record.code.toLowerCase());
+                if (user) {
+                    return (
+                        <div>
+                            <Text strong style={{ fontSize: 13 }}>{user.u_name}</Text>
+                            {user.u_nickname && (
+                                <Tag color="orange" style={{ marginLeft: 8, fontSize: 11 }}>
+                                    {user.u_nickname}
+                                </Tag>
+                            )}
+                        </div>
+                    );
+                }
+                const isSpecial = ['admin', 'eng_mgr', 'system'].includes(record.code.toLowerCase());
+                return (
+                    <Text italic type="secondary">
+                        {isSpecial ? 'Built-in System Account' : 'Custom Configured Employee ID'}
+                    </Text>
+                );
+            }
+        },
+        {
+            title: 'Department / Position',
+            key: 'dept',
+            width: 220,
+            render: (_, record) => {
+                const user = userCandidates.find(u => u.u_code.toLowerCase() === record.code.toLowerCase());
+                if (user) {
+                    return (
+                        <Space size={4} wrap>
+                            {user.u_department && <Tag color="cyan">{user.u_department}</Tag>}
+                            {(user.position || user.role) && <Tag color="default">{user.position || user.role}</Tag>}
+                        </Space>
+                    );
+                }
+                return <Tag color="purple">System Rule</Tag>;
+            }
+        },
+        {
+            title: 'Action',
+            key: 'action',
+            width: 70,
+            align: 'center',
+            render: (_, record) => (
+                <Tooltip title={`Remove ${record.code} from Admins`}>
+                    <Button 
+                        danger 
+                        type="text" 
+                        size="small"
+                        icon={<DeleteOutlined />} 
+                        onClick={() => handleRemoveAdminUser(record.code)} 
+                    />
+                </Tooltip>
+            )
+        }
+    ];
 
     const concernDeptColumns = [
         {
@@ -629,27 +742,104 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
                             key: 'system_admins',
                             label: <span><SafetyCertificateOutlined /> Authorized Admins</span>,
                             children: (
-                                <div>
-                                    <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                                        Users listed below (along with System Admins and Engineering Managers/Coordinators) have full access to modify these system settings.
-                                    </Paragraph>
-                                    <Select 
-                                        mode="tags" 
-                                        style={{ width: '100%', marginBottom: 16 }}
-                                        value={systemAdmins}
-                                        onChange={setSystemAdmins}
-                                        placeholder="Select or enter employee IDs (e.g. admin, eng_mgr)"
-                                        options={userCandidates.map(u => ({
-                                            value: u.u_code,
-                                            label: `${u.u_name} (${u.u_code}) - ${u.u_department}`
-                                        }))}
+                                <div style={{ maxHeight: '62vh', overflowY: 'auto', paddingRight: 8 }}>
+                                    <Alert
+                                        message="Authorized System Administrators"
+                                        description="Users configured below are granted full privileges to access and modify ECNT System Settings, regardless of standard stage ownership."
+                                        type="info"
+                                        showIcon
+                                        style={{ marginBottom: 16 }}
                                     />
+
+                                    {/* 1. Search & Add Administrator */}
+                                    <Card 
+                                        size="small" 
+                                        title={<Space><SafetyCertificateOutlined style={{ color: '#1890ff' }} /><Text strong>Add Authorized Administrator</Text></Space>}
+                                        style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+                                    >
+                                        <Row gutter={12} align="bottom">
+                                            <Col xs={24} md={15}>
+                                                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                                                    Pick from registered company users:
+                                                </Text>
+                                                <Select
+                                                    showSearch
+                                                    placeholder="🔍 Select user to grant admin privileges..."
+                                                    style={{ width: '100%' }}
+                                                    value={null}
+                                                    loading={loadingUsers}
+                                                    onChange={handleAddAdminUser}
+                                                    filterOption={(input, option) =>
+                                                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                                    }
+                                                    options={userCandidates.map(u => ({
+                                                        value: u.u_code,
+                                                        label: formatUserOptionLabel(u)
+                                                    }))}
+                                                />
+                                            </Col>
+                                            <Col xs={24} md={9}>
+                                                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                                                    Or add custom ID / system code:
+                                                </Text>
+                                                <Space.Compact style={{ width: '100%' }}>
+                                                    <Input
+                                                        placeholder="e.g. A5342 or custom_id"
+                                                        value={customAdminCode}
+                                                        onChange={e => setCustomAdminCode(e.target.value)}
+                                                        onPressEnter={() => {
+                                                            if (customAdminCode.trim()) {
+                                                                handleAddAdminUser(customAdminCode.trim());
+                                                                setCustomAdminCode('');
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Button 
+                                                        type="primary" 
+                                                        icon={<PlusOutlined />}
+                                                        onClick={() => {
+                                                            if (customAdminCode.trim()) {
+                                                                handleAddAdminUser(customAdminCode.trim());
+                                                                setCustomAdminCode('');
+                                                            }
+                                                        }}
+                                                    >
+                                                        Add
+                                                    </Button>
+                                                </Space.Compact>
+                                            </Col>
+                                        </Row>
+                                    </Card>
+
+                                    {/* 2. Active Authorized Admins Table */}
+                                    <Card
+                                        size="small"
+                                        title={
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <Space>
+                                                    <TeamOutlined style={{ color: '#52c41a' }} />
+                                                    <Text strong>Active Authorized Administrators ({systemAdmins.length})</Text>
+                                                </Space>
+                                            </div>
+                                        }
+                                        style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+                                    >
+                                        <Table
+                                            size="small"
+                                            dataSource={systemAdmins.map(code => ({ key: code, code }))}
+                                            columns={adminTableColumns}
+                                            pagination={false}
+                                            locale={{ emptyText: 'No specific administrators configured' }}
+                                        />
+                                    </Card>
+
+                                    {/* 3. Built-in RBAC Protection Info */}
                                     <Card size="small" style={{ borderRadius: 8, background: '#f6ffed', border: '1px solid #b7eb8f' }}>
-                                        <Text strong style={{ color: '#389e0d' }}>🛡️ Built-in RBAC Protection:</Text>
+                                        <Text strong style={{ color: '#389e0d' }}>🛡️ Built-in Global RBAC Privileges:</Text>
                                         <ul style={{ margin: '8px 0 0 18px', padding: 0, fontSize: 12, color: '#595959' }}>
                                             <li>Users with role or department <strong>AD</strong> always have administrative access.</li>
                                             <li>Users with department <strong>ENG</strong> and role <strong>MGR</strong> or position <strong>Coordinator</strong> have administrative access.</li>
-                                            <li>Any specific employee code added above is granted administrative control.</li>
+                                            <li>Any specific personnel added in the list above are granted administrative control.</li>
                                         </ul>
                                     </Card>
                                 </div>

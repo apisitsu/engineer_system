@@ -118,10 +118,10 @@ app.get('/api/health', (req, res) => {
 // --- Verify Token Middleware Setup ---
 const { verifyToken } = require('./middleware/auth');
 
-// Allow public access to login and refresh token, protect everything else under /api
+// Allow public access to login, refresh token, and user-candidates for form dropdowns, protect everything else under /api
 app.use('/api', (req, res, next) => {
   if (req.path === '/login-user' || req.path === '/refresh-token' || req.path === '/logout-user' || req.path === '/proxy/job_check' || req.path.startsWith('/public')
-      || req.path === '/activity/session/end') {  // sendBeacon can't set Auth headers
+      || req.path === '/activity/session/end' || req.path === '/ecnt/user-candidates') {  // sendBeacon or public dropdowns
     return next();
   }
 
@@ -252,7 +252,7 @@ app.route('/api/ecnt/config')
   .post(verifyToken, engEcntV2.updateEcntConfig);
 
 // User candidates for Stage PIC & Manager assignment (excludes nickname 'Admin')
-app.route('/api/ecnt/user-candidates').get(verifyToken, engEcntV2.getUserCandidates);
+app.route('/api/ecnt/user-candidates').get(engEcntV2.getUserCandidates);
 
 // --------- Tumble System API ---------
 // Tumble Model
