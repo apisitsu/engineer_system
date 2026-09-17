@@ -372,12 +372,16 @@ const ToolingImagesTab = ({ theme }) => {
 
   const handleUpload = async () => {
     const byName = matchBy === 'name';
+    const byCode = matchBy === 'code';
     if (byName && toolName.trim() && !dwgNo.trim()) {
       message.warning('Pick the Tool DWG family too — a name-matched image is scoped to one family');
       return;
     }
-    const key = byName ? (toolName.trim() && nameImgKey(dwgNo, toolName)) : dwgNo.trim();
-    if (!key) { message.warning(byName ? 'Enter Tool Name' : 'Enter Tool DWG No'); return; }
+    // "Turning Tool Code" mode: no factory DWG lookup exists for insert/holder codes,
+    // so the key is whatever the admin types — the same string that goes into that CN's
+    // Holder_Info_N cell on the Turning-style sheet (see sdsV2HeadlessController.js).
+    const key = byCode ? dwgNo.trim() : byName ? (toolName.trim() && nameImgKey(dwgNo, toolName)) : dwgNo.trim();
+    if (!key) { message.warning(byName ? 'Enter Tool Name' : byCode ? 'Enter the tool code' : 'Enter Tool DWG No'); return; }
     if (!fileList.length) { message.warning('Select an image file'); return; }
     setUploading(true);
     try {
@@ -478,9 +482,26 @@ const ToolingImagesTab = ({ theme }) => {
             <Segmented
               value={matchBy}
               onChange={setMatchBy}
-              options={[{ label: 'DWG No', value: 'dwg' }, { label: 'Tool Name', value: 'name' }]}
+              options={[{ label: 'DWG No', value: 'dwg' }, { label: 'Tool Name', value: 'name' }, { label: 'Turning Tool Code', value: 'code' }]}
             />
           </Col>
+          {matchBy === 'code' ? (
+          <Col>
+            <div style={{ marginBottom: 4 }}><Text>Tool Code</Text></div>
+            <Input
+              value={dwgNo}
+              onChange={(e) => setDwgNo(e.target.value)}
+              placeholder="e.g. MWLNR2525M08 — same code typed into Holder_Info_N"
+              allowClear
+              style={{ width: 320 }}
+            />
+            <div style={{ marginTop: 4 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                No factory lookup for turning inserts/holders — type the exact code used on the sheet
+              </Text>
+            </div>
+          </Col>
+          ) : (
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool DWG No</Text></div>
             <AutoComplete
@@ -518,6 +539,7 @@ const ToolingImagesTab = ({ theme }) => {
               </div>
             )}
           </Col>
+          )}
           {matchBy === 'name' && (
           <Col>
             <div style={{ marginBottom: 4 }}><Text>Tool Name</Text></div>

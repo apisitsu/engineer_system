@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Button, Space, Popover, Select, Tooltip, App, InputNumber, Divider, Typography,
-  Segmented, Slider, Switch, Modal, Input, Popconfirm, Tag,
+  Segmented, Slider, Switch, Modal, Input, Popconfirm, Tag, Upload,
 } from 'antd';
 import {
   BorderOutlined, BorderTopOutlined, BorderBottomOutlined, BorderLeftOutlined,
@@ -12,7 +12,7 @@ import {
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined,
   PlusOutlined, CopyOutlined, EditOutlined, DeleteOutlined, StarFilled, StarOutlined,
-  PictureOutlined,
+  PictureOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import { server } from '../../../../constance/constance';
@@ -124,7 +124,7 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
 
   const [view, setView] = useState('grid'); // grid | template | overlay
   const [tplOpacity, setTplOpacity] = useState(0.6);
-  const [gridlines, setGridlines] = useState(true);
+  const [gridlines, setGridlines] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -135,6 +135,10 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState(null);
   const [nameModal, setNameModal] = useState(null); // { mode:'new'|'duplicate'|'rename', name, targetId }
+  // A workbook with more than one sheet (a real multi-machine export routinely has
+  // 20+, one per machine) needs the admin to say which one — otherwise the upload
+  // silently imports sheet 1, which is wrong whenever the intended layout isn't first.
+  const [sheetPicker, setSheetPicker] = useState(null); // { file, sheets: [{index,name}], picked }
   const dragging = useRef(false);
   const resizing = useRef(false);
 
@@ -245,6 +249,45 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
     } catch (err) {
       message.error('Import failed: ' + (err.response?.data?.error || err.message));
     } finally { setLoading(false); }
+  };
+
+  // Actually import one sheet of an already-picked file (or the only sheet there is).
+  const importXlsxSheet = async (file, sheet) => {
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('xlsx', file);
+      if (sheet != null) fd.append('sheet', sheet);
+      const x = await axios.post(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX_UPLOAD, fd);
+      if (x.data?.grid) { pushUndo(); applyGrid(x.data.grid); message.success(`Imported ${file.name}${sheet != null ? ` (${sheet})` : ''}`); }
+    } catch (err) {
+      message.error('Import failed: ' + (err.response?.data?.error || err.message));
+    } finally { setLoading(false); }
+  };
+
+  // Import from ANY .xlsx the admin picks, not just the bundled sds_template.xlsx.
+  // `beforeUpload` returns false so antd never tries its own upload; we own the request
+  // instead. A workbook is checked for its sheet LIST first (a real multi-machine export
+  // routinely holds 20+, one per machine) — one sheet imports immediately as before;
+  // more than one opens a picker so the admin says which, instead of the app silently
+  // reading sheet 1 (which is wrong whenever the designed layout isn't first — this bit
+  // a real "Turning" upload where the finished layout sat on sheet 3 of 24).
+  const importXlsxFile = async (file) => {
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('xlsx', file);
+      const x = await axios.post(server.MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX_UPLOAD_SHEETS, fd);
+      const sheets = x.data?.sheets || [];
+      if (sheets.length > 1) {
+        setSheetPicker({ file, sheets, picked: sheets[0].name });
+      } else {
+        await importXlsxSheet(file, sheets[0]?.name);
+      }
+    } catch (err) {
+      message.error('Could not read workbook: ' + (err.response?.data?.error || err.message));
+    } finally { setLoading(false); }
+    return false;
   };
 
   const save = async () => {
@@ -870,6 +913,26 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         />
       </Modal>
 
+      <Modal
+        title="Which sheet?"
+        open={!!sheetPicker}
+        onOk={async () => { const { file, picked } = sheetPicker; setSheetPicker(null); await importXlsxSheet(file, picked); }}
+        onCancel={() => setSheetPicker(null)}
+        okText="Import"
+        destroyOnHidden
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+          This workbook has {sheetPicker?.sheets.length} sheets — pick the one to import.
+        </Text>
+        <Select
+          autoFocus
+          style={{ width: '100%' }}
+          value={sheetPicker?.picked}
+          onChange={(v) => setSheetPicker(p => ({ ...p, picked: v }))}
+          options={(sheetPicker?.sheets || []).map(s => ({ value: s.name, label: `${s.index}. ${s.name}` }))}
+        />
+      </Modal>
+
       {/* Font toolbar */}
       <Space wrap size={4} style={{ marginBottom: 8 }}>
         <Select size="small" placeholder="Font" style={{ width: 130 }}
@@ -982,6 +1045,11 @@ const SdsBlankTemplateGrid = ({ previewUrl, previewKey, onRefreshPreview }) => {
         <Text code style={{ fontSize: 11 }}>{selLabel}</Text>
         <Tooltip title="Import layout from sds_template.xlsx (overwrites unsaved edits)">
           <Button size="small" icon={<FileExcelOutlined />} onClick={importXlsx} loading={loading}>xlsx</Button>
+        </Tooltip>
+        <Tooltip title="Import layout from any .xlsx you pick (overwrites unsaved edits)">
+          <Upload accept=".xlsx" showUploadList={false} beforeUpload={importXlsxFile}>
+            <Button size="small" icon={<UploadOutlined />} loading={loading}>Upload xlsx</Button>
+          </Upload>
         </Tooltip>
         <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>Reload</Button>
         <Button size="small" icon={<SaveOutlined />} onClick={save} loading={saving}>Save</Button>

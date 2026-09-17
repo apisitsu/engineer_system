@@ -39,12 +39,10 @@ const xlsxEdge = (side) => {
   return { w: m.w, s: m.s, c: argbToHex(side.color && side.color.argb) || '#000000' };
 };
 
-/** Parse sds_template.xlsx into the editor's grid model (A1:AV56). */
-async function parseSdsXlsxGrid() {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(SDS_XLSX_TEMPLATE);
-  const ws = wb.worksheets[0];
-  const rows = 56, cols = 48;
+/** Shared xlsx → editor-grid-model conversion, used by both the fixed bundled
+ *  sds_template.xlsx (fixed A1:AV56) and an admin-uploaded workbook (its own used
+ *  range, from parseXlsxGridFromBuffer below). */
+function gridFromWorksheet(ws, rows, cols) {
   const colW = [], rowH = [], borders = {}, fills = {}, cells = {};
   for (let c = 1; c <= cols; c++) {
     const w = ws.getColumn(c).width;            // Excel char units
@@ -96,6 +94,49 @@ async function parseSdsXlsxGrid() {
     return { r1: +m[2] - 1, c1: col(m[1]), r2: +m[4] - 1, c2: col(m[3]) };
   }).filter(Boolean);
   return { rows, cols, colW, rowH, borders, fills, cells, merges };
+}
+
+/** Parse the bundled sds_template.xlsx into the editor's grid model (fixed A1:AV56 —
+ *  the file's known printable range). */
+async function parseSdsXlsxGrid() {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(SDS_XLSX_TEMPLATE);
+  return gridFromWorksheet(wb.worksheets[0], 56, 48);
+}
+
+// Bounds on an uploaded workbook's own used range, matching the editor's own
+// Rows/Cols InputNumber limits (SdsBlankTemplateGrid.jsx) — a workbook with a
+// stray far-away styled cell (a common Excel artifact) must not hand the editor
+// a grid its own size controls can't represent.
+const UPLOAD_MAX_ROWS = 120, UPLOAD_MAX_COLS = 52;
+
+/** Parse an ADMIN-UPLOADED .xlsx (any workbook, not just sds_template.xlsx) into the
+ *  same editor grid model, from an in-memory buffer — no file ever touches disk.
+ *  Uses the workbook's own used range, clamped to what the editor's own size controls
+ *  support. `sheet` selects which worksheet — by 1-based index or by exact name — and
+ *  defaults to the first when omitted, matching the original single-sheet behaviour.
+ *  A real multi-machine export routinely carries 20+ sheets (one per machine); reading
+ *  worksheet[0] unconditionally silently imports the WRONG one whenever the sheet the
+ *  admin actually designed isn't first — confirmed live: a "Turning" layout with an
+ *  added fixture section sat on sheet 3 of a 24-sheet file, and every re-upload kept
+ *  re-importing sheet 1 with zero visible error. */
+async function parseXlsxGridFromBuffer(buffer, sheet) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  let ws = wb.worksheets[0];
+  if (sheet != null && String(sheet).trim() !== '') {
+    const s = String(sheet).trim();
+    const byIndex = /^\d+$/.test(s) ? wb.worksheets[Number(s) - 1] : null;
+    ws = byIndex || wb.worksheets.find((w) => w.name === s) || ws;
+  }
+  if (!ws) throw new Error('workbook has no worksheets');
+  // ws.dimensions nests the actual used-range under .model ({top,left,bottom,right}) —
+  // reading .bottom/.right straight off ws.dimensions is always undefined and silently
+  // falls through, so go one level in before falling back to rowCount/columnCount.
+  const dim = (ws.dimensions && ws.dimensions.model) || {};
+  const rows = Math.min(UPLOAD_MAX_ROWS, Math.max(1, dim.bottom || ws.rowCount || 56));
+  const cols = Math.min(UPLOAD_MAX_COLS, Math.max(1, dim.right || ws.columnCount || 48));
+  return gridFromWorksheet(ws, rows, cols);
 }
 
 // Flush the SDS search/PDF cache (sds:* keys, 10-min TTL) after a successful
@@ -1391,6 +1432,49 @@ router.get('/template-grid/from-xlsx', isAdmin, async (req, res) => {
     res.json({ grid });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/sds/v2/admin/template-grid/from-xlsx-upload/sheets
+ *  Multipart, field "xlsx" — lists the worksheet names in an uploaded workbook (names
+ *  only, no cell parsing) so the caller can offer a picker before importing. A workbook
+ *  with only one sheet still returns a one-item list; the frontend skips the picker in
+ *  that case. A real multi-machine export routinely holds 20+ sheets, one per machine —
+ *  see the note on parseXlsxGridFromBuffer for why blindly reading sheet 1 is wrong.
+ */
+router.post('/template-grid/from-xlsx-upload/sheets', isAdmin, async (req, res) => {
+  if (!req.files || !req.files.xlsx) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
+  const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
+  if (!/\.xlsx$/i.test(file.name || '')) return res.status(400).json({ error: 'file must be .xlsx' });
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(file.data);
+    const sheets = wb.worksheets.map((ws, i) => ({ index: i + 1, name: ws.name }));
+    res.json({ sheets });
+  } catch (err) {
+    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
+  }
+});
+
+/** POST /api/sds/v2/admin/template-grid/from-xlsx-upload
+ *  Multipart, field "xlsx" (+ optional field "sheet" — worksheet name or 1-based index,
+ *  from the /sheets listing above; defaults to the first sheet) — parse an
+ *  ADMIN-SUPPLIED workbook into the same editor grid model as the fixed import above,
+ *  so a layout designed in any .xlsx (not just the bundled sds_template.xlsx) can be
+ *  brought into the Grid Editor. Parsed straight from the upload buffer
+ *  (express-fileupload, in-memory — see server.js) and never written to disk or to
+ *  sds_grid_template; the caller still has to click Save to persist it, exactly like
+ *  the existing "Import xlsx" flow.
+ */
+router.post('/template-grid/from-xlsx-upload', isAdmin, async (req, res) => {
+  if (!req.files || !req.files.xlsx) return res.status(400).json({ error: 'xlsx file is required (field: xlsx)' });
+  const file = Array.isArray(req.files.xlsx) ? req.files.xlsx[0] : req.files.xlsx;
+  if (!/\.xlsx$/i.test(file.name || '')) return res.status(400).json({ error: 'file must be .xlsx' });
+  try {
+    const grid = await parseXlsxGridFromBuffer(file.data, req.body?.sheet);
+    res.json({ grid });
+  } catch (err) {
+    res.status(400).json({ error: `Could not parse workbook: ${err.message}` });
   }
 });
 
