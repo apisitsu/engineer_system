@@ -183,6 +183,19 @@ const DeltaBadge = ({ delta, C }) => {
   );
 };
 
+// A small centered up-arrow between two stacked PrevMonthPctRow rows (or the live row and
+// the first of them) — a plain flow connector reading "this feeds into the row above",
+// not a trend indicator, so it always points up regardless of whether the % rose or fell.
+// Renders nothing until both sides exist (nothing to connect otherwise).
+const TrendArrow = ({ from, to, C }) => {
+  if (from == null || to == null) return null;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0 3px' }}>
+      <Text style={{ color: C.textSec, fontSize: 11, fontWeight: 700 }}>▲</Text>
+    </div>
+  );
+};
+
 // The previous (closed/frozen) month's own KZW/THAI/combined % row — a stable reference
 // sitting right under the live current-month row, which keeps moving until its month
 // closes. `snapshot` is { pctSaved, pct }; `label` is e.g. "Aug 26" (see `monthDelta`
@@ -413,18 +426,24 @@ export default function SdsCoverageDashboard() {
   }, [data, activePartTypes, fyeWin]);
   // One stacked dataset per configured part type — derived from activePartTypes so the
   // chart tracks the scope config instead of a fixed Ball/Race/Mecha triple.
-  const newPartsChartData = useMemo(() => ({
-    labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
-    datasets: activePartTypes.map(t => {
-      const color = PART_TYPE_COLOR[t] || C.cyan;
-      return {
-        label: partTypeLabel(t),
-        data: monthlyNewParts.map(r => r[t] || 0),
-        backgroundColor: monthlyNewParts.map(r => hexToRgba(color, r.isAvg ? 0.35 : 0.75)),
-        borderColor: color, borderWidth: 1, stack: 'np',
-      };
-    }),
-  }), [monthlyNewParts, activePartTypes]);
+  const newPartsChartData = useMemo(() => {
+    // The current month is still accumulating new CNs, so its bar is provisional —
+    // fade it the same as the prev-FY average bar (see statusChartData's `faint`).
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const faint = (r) => r.isAvg || r.month === curMonth;
+    return {
+      labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
+      datasets: activePartTypes.map(t => {
+        const color = PART_TYPE_COLOR[t] || C.cyan;
+        return {
+          label: partTypeLabel(t),
+          data: monthlyNewParts.map(r => r[t] || 0),
+          backgroundColor: monthlyNewParts.map(r => hexToRgba(color, faint(r) ? 0.35 : 0.75)),
+          borderColor: color, borderWidth: 1, stack: 'np',
+        };
+      }),
+    };
+  }, [monthlyNewParts, activePartTypes]);
   const newPartsChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
     plugins: {
@@ -560,7 +579,7 @@ export default function SdsCoverageDashboard() {
     // their offsets get. Below this floor, drop straight back to the ORIGINAL,
     // pre-this-feature look (just the % — always kept, never hidden) instead of
     // rendering shrunken, overlapping text.
-    const MIN_EXTRA_LABEL_PX = 55;
+    const MIN_EXTRA_LABEL_PX = 50;
     const showExtras = (ctx) => catPxOf(ctx) >= MIN_EXTRA_LABEL_PX;
     return {
     labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
@@ -626,9 +645,12 @@ export default function SdsCoverageDashboard() {
             },
             delta: {
               display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]) && !!monthlyStatus[ctx.dataIndex - 1] && showExtras(ctx),
+              // Returning an array renders each entry as its own stacked line — arrow
+              // above the number, rather than side by side.
               formatter: (v, ctx) => {
                 const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
-                return d > 0 ? `+${d.toLocaleString()}` : `${d.toLocaleString()}`;
+                const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '●';
+                return [arrow, Math.abs(d).toLocaleString()];
               },
               color: (ctx) => {
                 const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
@@ -924,7 +946,9 @@ export default function SdsCoverageDashboard() {
                         </div>
                       </>);
                     })()}
+                    <TrendArrow from={monthDelta?.prevTotalPct?.pct} to={data?.kpi?.completePct ?? 0} C={C} />
                     <PrevMonthPctRow label={monthDelta?.prevLabel} snapshot={monthDelta?.prevTotalPct} C={C} />
+                    <TrendArrow from={monthDelta?.prev2TotalPct?.pct} to={monthDelta?.prevTotalPct?.pct} C={C} />
                     <PrevMonthPctRow label={monthDelta?.prev2Label} snapshot={monthDelta?.prev2TotalPct} C={C} />
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                       <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
@@ -950,7 +974,7 @@ export default function SdsCoverageDashboard() {
 
             {/* ── Charts Row (New Parts + Cumulative Status) ─────────────────── */}
             <Row gutter={[14, 0]} style={{ marginBottom: 14 }}>
-              <Col span={12}>
+              <Col span={8}>
                 <div style={{ ...cardStyle, height: '100%' }}>
                   {sectionTitle('New Parts per Month', C)}
                   <div style={{ height: 240 }}>
@@ -961,7 +985,7 @@ export default function SdsCoverageDashboard() {
                   </div>
                 </div>
               </Col>
-              <Col span={12}>
+              <Col span={16}>
                 <div style={{ ...cardStyle, height: '100%' }}>
                   {sectionTitle('Cumulative Coverage Status', C)}
                   <div style={{ height: 240 }}>
