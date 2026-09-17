@@ -1366,6 +1366,7 @@ router.get('/print-log', async (req, res) => {
   if (lotState === 'verified')        where.push('lot_verified IS TRUE');
   else if (lotState === 'unverified') where.push('lot_verified IS FALSE');
   else if (lotState === 'none')       where.push('lot_no IS NULL');
+  else if (lotState === 'has')        where.push('lot_no IS NOT NULL');
 
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
