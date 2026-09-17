@@ -93,13 +93,20 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
             let createdId = null;
             let createdNo = null;
 
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            const authConfig = {
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            };
+
             if (isEditMode) {
-                await axios.put(`${server.URL}/api/ecnt/ecr/${initialData.id}/resubmit`, payload, { withCredentials: true });
+                await axios.put(`${baseUrl}/api/ecnt/ecr/${initialData.id}/resubmit`, payload, authConfig);
                 antdMessage.success("ECR Details Successfully Resubmitted to Department Manager");
                 createdId = initialData.id;
                 createdNo = initialData.ecr_no;
             } else {
-                const res = await axios.post(`${server.URL}/api/ecnt/ecr`, payload, { withCredentials: true });
+                const res = await axios.post(`${baseUrl}/api/ecnt/ecr`, payload, authConfig);
                 createdId = res.data?.id || res.data?.data?.id;
                 createdNo = res.data?.ecr_no || res.data?.data?.ecr_no || 'Assigned';
                 antdMessage.success(`ECR Initiated Successfully: ${createdNo} (Forwarded to Dept Manager)`);

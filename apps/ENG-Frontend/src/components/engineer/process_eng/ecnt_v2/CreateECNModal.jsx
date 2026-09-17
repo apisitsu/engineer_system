@@ -61,8 +61,12 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                 request_by: linkedEcr.request_by,
                 department: linkedEcr.department
             };
-
-            const res = await axios.post(`${server.URL}/api/ecnt/ecn`, payload, { withCredentials: true });
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            const res = await axios.post(`${baseUrl}/api/ecnt/ecn`, payload, { 
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             
             antdMessage.success("ECN Created Successfully (Block 5 Complete -> Pending Eng Mgr ECN)");
 

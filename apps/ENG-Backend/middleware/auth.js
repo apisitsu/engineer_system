@@ -57,8 +57,28 @@ const verifyToken = (req, res, next) => {
     });
 };
 
+const optionalVerifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = req.cookies?.token || (authHeader && authHeader.split(' ')[1]) || req.query.token;
+
+    if (!token) {
+        req.user = null;
+        return next();
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (!err && decoded) {
+            req.user = decoded;
+        } else {
+            req.user = null;
+        }
+        next();
+    });
+};
+
 module.exports = {
     generateToken,
     verifyToken,
+    optionalVerifyToken,
     JWT_SECRET
 };

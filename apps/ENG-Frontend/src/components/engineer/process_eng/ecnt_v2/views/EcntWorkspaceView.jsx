@@ -45,14 +45,20 @@ export default function EcntWorkspaceView({
 
     const [isCreateEcnOpen, setIsCreateEcnOpen] = useState(false);
 
-    const { empNo } = useAuthStore();
+    const { empNo, userName, userRole, userDepartment } = useAuthStore();
 
     const fetchDetail = async () => {
         if (!documentId) return;
         setLoading(true);
         try {
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            const authConfig = {
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            };
             const endpoint = documentType === 'ECR' ? `/api/ecnt/ecr/${documentId}` : `/api/ecnt/ecn/${documentId}`;
-            const res = await axios.get(`${server.URL}${endpoint}`, { withCredentials: true });
+            const res = await axios.get(`${baseUrl}${endpoint}`, authConfig);
 
             const mainDoc = res.data.data;
             setDocData(mainDoc);
@@ -67,7 +73,7 @@ export default function EcntWorkspaceView({
 
                 if (mainDoc.ecr_id) {
                     try {
-                        const ecrRes = await axios.get(`${server.URL}/api/ecnt/ecr/${mainDoc.ecr_id}`, { withCredentials: true });
+                        const ecrRes = await axios.get(`${baseUrl}/api/ecnt/ecr/${mainDoc.ecr_id}`, authConfig);
                         setLinkedEcr(ecrRes.data.data);
                     } catch (e) {
                         console.warn("Linked ECR fetch failed:", e);
@@ -126,10 +132,24 @@ export default function EcntWorkspaceView({
         }
     };
 
-    const isRequester = docData?.request_by === empNo || !docData?.request_by;
+    const cleanEmpNo = (empNo || localStorage.getItem('u_code') || '').toLowerCase();
+    const cleanRole = (userRole || localStorage.getItem('role') || '').toUpperCase();
+    const cleanDept = (userDepartment || localStorage.getItem('u_department') || '').toUpperCase();
+    const cleanName = (userName || localStorage.getItem('u_name') || '').toLowerCase();
+    const isAdmin = cleanRole === 'AD' || cleanDept === 'AD' || (systemConfig?.system_admins || ['admin', 'eng_mgr']).some(a => String(a).toLowerCase() === cleanEmpNo);
+
+    const isRequester = (docData?.request_by && docData.request_by.toLowerCase() === cleanEmpNo) || 
+                        (docData?.request_by_name && docData.request_by_name.toLowerCase() === cleanName) || 
+                        isAdmin;
+
+    const isAssignedEngineer = (docData?.assigned_to && (
+        docData.assigned_to.toLowerCase() === cleanEmpNo ||
+        docData.assigned_to.toLowerCase() === cleanName
+    )) || cleanDept === 'ENG' || isAdmin;
+
     const isReworkActive = (docData?.process_status === 'Require More Detail' || (docData?.current_stage_code || '').includes('_R'));
     const canResubmit = documentType === 'ECR' && isReworkActive && isRequester;
-    const canCreateEcn = documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id;
+    const canCreateEcn = documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id && isAssignedEngineer;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -174,26 +194,38 @@ export default function EcntWorkspaceView({
                             Discussions & Problem Hub
                         </Button>
 
-                        {canResubmit && (
-                            <Button 
-                                type="primary" 
-                                icon={<EditOutlined />} 
-                                onClick={() => onEditEcr(docData)}
-                                style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
-                            >
-                                Edit & Resubmit ECR
-                            </Button>
+                        {documentType === 'ECR' && isReworkActive && (
+                            canResubmit ? (
+                                <Button 
+                                    type="primary" 
+                                    icon={<EditOutlined />} 
+                                    onClick={() => onEditEcr(docData)}
+                                    style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
+                                >
+                                    Edit & Resubmit ECR
+                                </Button>
+                            ) : (
+                                <Tag color="orange" style={{ fontSize: 13, padding: '4px 10px' }}>
+                                    ⏳ รอผู้ยื่นคำขอ ({docData?.request_by_name || docData?.request_by || 'Requester'}) แก้ไขข้อมูล
+                                </Tag>
+                            )
                         )}
 
-                        {canCreateEcn && (
-                            <Button 
-                                type="primary" 
-                                icon={<PlusCircleOutlined />} 
-                                onClick={() => setIsCreateEcnOpen(true)}
-                                style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                            >
-                                Issue ECN (Block 5)
-                            </Button>
+                        {documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id && (
+                            canCreateEcn ? (
+                                <Button 
+                                    type="primary" 
+                                    icon={<PlusCircleOutlined />} 
+                                    onClick={() => setIsCreateEcnOpen(true)}
+                                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                                >
+                                    Issue ECN (Block 5)
+                                </Button>
+                            ) : (
+                                <Tag color="cyan" style={{ fontSize: 13, padding: '4px 10px' }}>
+                                    ⏳ รอวิศวกรที่ได้รับมอบหมาย ({docData?.assigned_to || 'Assigned Engineer'}) ออก ECN
+                                </Tag>
+                            )
                         )}
 
                         {docData?.process_status === 'ECN Effective' && (

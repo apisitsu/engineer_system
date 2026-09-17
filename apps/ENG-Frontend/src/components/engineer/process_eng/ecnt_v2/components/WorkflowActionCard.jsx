@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Typography } from 'antd';
+import { Card, Button, Input, Form, Alert, Select, Radio, Checkbox, Row, Col, Table, Tag, Typography, Tooltip, Space } from 'antd';
 import { App } from 'antd';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
-import { CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined, LockOutlined } from '@ant-design/icons';
 import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 
 const { TextArea } = Input;
@@ -27,14 +27,107 @@ export default function WorkflowActionCard({
     currentBlock, 
     processStatus, 
     tasksData = [], 
-    systemConfig = {},
-    docData = null,
+    systemConfig = {}, 
+    docData = null, 
     onSuccess 
 }) {
     const { message: antdMessage } = App.useApp();
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
-    const { userName, empNo, userRole, userDepartment } = useAuthStore();
+    const { userName, empNo, userRole, userDepartment, userInfo } = useAuthStore();
+    const position = userInfo?.position || localStorage.getItem('position') || '';
+
+    const cleanEmpNo = (empNo || localStorage.getItem('u_code') || '').toLowerCase();
+    const cleanRole = (userRole || localStorage.getItem('role') || '').toUpperCase();
+    const cleanDept = (userDepartment || localStorage.getItem('u_department') || '').toUpperCase();
+    const cleanName = (userName || localStorage.getItem('u_name') || '').toLowerCase();
+
+    // 1. Super Admin / System Admin check
+    const systemAdmins = (systemConfig?.system_admins || ['admin', 'eng_mgr']).map(a => String(a).toLowerCase());
+    const isAdmin = cleanRole === 'AD' || cleanDept === 'AD' || systemAdmins.includes(cleanEmpNo);
+
+    // 2. Stage Ownership & Authorization Calculation
+    let isAuthorized = false;
+    let responsibleRoleLabel = '';
+    let responsiblePersonName = '';
+
+    if (documentType === 'ECR') {
+        if (currentBlock === 3) {
+            const configuredDeptMgr = systemConfig?.stage_assignees?.dept_mgr_mapping?.[docData?.department];
+            responsibleRoleLabel = `Department Manager (${docData?.department || 'Concerned Dept'})`;
+            responsiblePersonName = configuredDeptMgr?.name || `${docData?.department || ''} Manager`;
+
+            const isConfiguredMgr = configuredDeptMgr && (configuredDeptMgr.emp_no || '').toLowerCase() === cleanEmpNo;
+            const isDeptMgrRole = cleanDept === (docData?.department || '').toUpperCase() && 
+                (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
+
+            isAuthorized = isAdmin || isConfiguredMgr || isDeptMgrRole;
+        } else if (currentBlock === 4) {
+            const configuredEngMgr = systemConfig?.stage_assignees?.eng_mgr;
+            responsibleRoleLabel = 'Engineering Department Manager';
+            responsiblePersonName = configuredEngMgr?.name || 'TEERAPOL KANTAPOOM';
+
+            const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === cleanEmpNo;
+            const isEngMgrRole = cleanDept === 'ENG' && 
+                (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
+
+            isAuthorized = isAdmin || isConfiguredEngMgr || isEngMgrRole;
+        }
+    } else if (documentType === 'ECN') {
+        if (currentBlock === 6) {
+            const configuredEngMgr = systemConfig?.stage_assignees?.eng_mgr;
+            responsibleRoleLabel = 'Engineering Department Manager';
+            responsiblePersonName = configuredEngMgr?.name || 'TEERAPOL KANTAPOOM';
+
+            const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === cleanEmpNo;
+            const isEngMgrRole = cleanDept === 'ENG' && 
+                (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
+
+            isAuthorized = isAdmin || isConfiguredEngMgr || isEngMgrRole;
+        } else if (currentBlock === 7 || currentBlock === 8) {
+            const configuredQcPic = systemConfig?.stage_assignees?.default_qc_pic;
+            responsibleRoleLabel = 'Quality Control (QC) Evaluator';
+            responsiblePersonName = configuredQcPic?.name || 'PATCHARAYADA WAIYABOON';
+
+            const isConfiguredQc = configuredQcPic && (configuredQcPic.emp_no || '').toLowerCase() === cleanEmpNo;
+            const isQcRole = cleanDept === 'QC' || cleanRole === 'QC';
+
+            isAuthorized = isAdmin || isConfiguredQc || isQcRole;
+        } else if (currentBlock === 9) {
+            responsibleRoleLabel = 'Assigned Lead Engineer';
+            responsiblePersonName = docData?.engineer_assigned || 'Assigned Engineer';
+
+            const isAssignedEng = (docData?.engineer_assigned && (
+                docData.engineer_assigned.toLowerCase() === cleanEmpNo ||
+                docData.engineer_assigned.toLowerCase() === cleanName
+            )) || cleanDept === 'ENG';
+
+            isAuthorized = isAdmin || isAssignedEng;
+        } else if (currentBlock === 10) {
+            responsibleRoleLabel = 'Concern Department Representatives (PC, QA, QC, PD1, PD2, MC, MM)';
+            responsiblePersonName = 'Concern Department PICs';
+            isAuthorized = true;
+        } else if (currentBlock === 11) {
+            const configuredEngMgr = systemConfig?.stage_assignees?.eng_mgr;
+            responsibleRoleLabel = 'Plant Executive / Engineering Manager';
+            responsiblePersonName = configuredEngMgr?.name || 'TEERAPOL KANTAPOOM';
+
+            const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === cleanEmpNo;
+            const isEngMgrRole = cleanDept === 'ENG' && 
+                (cleanRole === 'MGR' || cleanRole === 'MANAGER' || (position && position.toLowerCase().includes('mgr')));
+            const isTop = cleanRole === 'TOP' || cleanRole === 'EXECUTIVE';
+
+            isAuthorized = isAdmin || isConfiguredEngMgr || isEngMgrRole || isTop;
+        }
+    }
+
+    const isTaskSignAuthorized = (task) => {
+        if (isAdmin) return true;
+        const taskDept = (task.dept_code || '').toUpperCase();
+        const isDeptMatch = cleanDept === taskDept || cleanRole === taskDept;
+        const isPicMatch = task.pic_emp_no && task.pic_emp_no.toLowerCase() === cleanEmpNo;
+        return isDeptMatch || isPicMatch;
+    };
 
     // Dynamically derive active concern departments from systemConfig
     const getActiveDepartments = React.useCallback(() => {
@@ -131,7 +224,12 @@ export default function WorkflowActionCard({
                 ? `/api/ecnt/ecr/${documentId}/action` 
                 : `/api/ecnt/ecn/${documentId}/action`;
 
-            await axios.put(`${server.URL}${endpoint}`, payload, { withCredentials: true });
+            const baseUrl = (server.URL || server.API_URL || '').replace(/\/$/, '');
+            const token = localStorage.getItem("token");
+            await axios.put(`${baseUrl}${endpoint}`, payload, { 
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
 
             antdMessage.success(`Action '${selectedAction}' completed successfully.`);
 
@@ -441,16 +539,29 @@ export default function WorkflowActionCard({
                                 key: 'sign',
                                 render: (_, record) => {
                                     if (!record.is_needed) return <Text type="secondary">Not Required</Text>;
-                                    if (record.status === 'ACKNOWLEDGED') return <Text type="success">Signed</Text>;
+                                    if (record.status === 'ACKNOWLEDGED') return <Tag icon={<CheckCircleOutlined />} color="success">Signed ({record.approved_by_name || 'PIC'})</Tag>;
+                                    
+                                    const canSign = isTaskSignAuthorized(record);
+                                    if (canSign) {
+                                        return (
+                                            <Button 
+                                                size="small" 
+                                                type="primary" 
+                                                onClick={() => handleAcknowledgeTask(record.id)}
+                                                loading={loading}
+                                                style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                                            >
+                                                Sign / Acknowledge
+                                            </Button>
+                                        );
+                                    }
+
                                     return (
-                                        <Button 
-                                            size="small" 
-                                            type="primary" 
-                                            onClick={() => handleAcknowledgeTask(record.id)}
-                                            loading={loading}
-                                        >
-                                            Sign / Acknowledge
-                                        </Button>
+                                        <Tooltip title={`คุณสังกัดแผนก ${userDepartment || 'อื่น'} - สิทธิ์การลงนามขั้นตอนนี้สงวนไว้สำหรับบุคลากรแผนก ${record.dept_code} หรือ Admin เท่านั้น`}>
+                                            <Button size="small" disabled style={{ opacity: 0.6 }}>
+                                                🔒 Sign ({record.dept_code})
+                                            </Button>
+                                        </Tooltip>
                                     );
                                 }
                             }
@@ -480,11 +591,39 @@ export default function WorkflowActionCard({
 
     return (
         <Card 
-            title={<span style={{ color: '#1890ff', fontWeight: 600 }}>Workflow Action: Block {currentBlock}</span>} 
-            style={{ marginTop: 20, borderColor: '#91d5ff' }} 
-            headStyle={{ background: '#f0f5ff' }}
+            title={
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#1890ff', fontWeight: 600 }}>Workflow Action: Block {currentBlock}</span>
+                    {!isAuthorized && currentBlock !== 10 && (
+                        <Tag icon={<LockOutlined />} color="warning">
+                            Viewer Mode (Read-Only)
+                        </Tag>
+                    )}
+                </div>
+            } 
+            style={{ marginTop: 20, borderColor: isAuthorized ? '#91d5ff' : '#d9d9d9' }} 
+            headStyle={{ background: isAuthorized ? '#f0f5ff' : '#fafafa' }}
         >
-            <Form form={form} layout="vertical">
+            {!isAuthorized && currentBlock !== 10 && (
+                <Alert 
+                    message="🔒 โหมดดูข้อมูลอย่างเดียว (Read-Only Viewer Mode)" 
+                    description={
+                        <div>
+                            <div>
+                                ขั้นตอนนี้อยู่ในความรับผิดชอบของ: <strong style={{ color: '#1890ff' }}>{responsibleRoleLabel}</strong> {responsiblePersonName ? `(${responsiblePersonName})` : ''}
+                            </div>
+                            <div style={{ marginTop: 4, color: '#595959', fontSize: 13 }}>
+                                ผู้ใช้ทุกคนสามารถดูรายละเอียดข้อมูลและประวัติการดำเนินงานได้ แต่การแก้ไขหรือกดอนุมัติถูกจำกัดไว้เฉพาะผู้รับผิดชอบตามสายงานเท่านั้น
+                            </div>
+                        </div>
+                    }
+                    type="warning" 
+                    showIcon 
+                    style={{ marginBottom: 16, borderRadius: 8, background: '#fffbe6', border: '1px solid #ffe58f' }}
+                />
+            )}
+
+            <Form form={form} layout="vertical" disabled={!isAuthorized}>
                 {renderBlockContent()}
 
                 {/* Common Comment & Deny / RMD details */}
@@ -506,7 +645,16 @@ export default function WorkflowActionCard({
 
                 {/* Action Buttons */}
                 <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                    {currentBlock === 10 ? (
+                    {!isAuthorized && currentBlock !== 10 ? (
+                        <div style={{ width: '100%', padding: '14px 18px', background: '#f5f5f5', borderRadius: 8, border: '1px dashed #d9d9d9', textAlign: 'center' }}>
+                            <Space>
+                                <LockOutlined style={{ color: '#fa8c16' }} />
+                                <Text type="secondary" style={{ fontSize: 13 }}>
+                                    <strong>โหมดดูอย่างเดียว</strong>: ปุ่มดำเนินการสงวนสิทธิ์เฉพาะผู้รับผิดชอบ ({responsibleRoleLabel})
+                                </Text>
+                            </Space>
+                        </div>
+                    ) : currentBlock === 10 ? (
                         <Text type="secondary">
                             Use the "Sign / Acknowledge" button in the table above for your department. Once all required departments sign, the ECN will advance to Block 11 automatically.
                         </Text>
@@ -524,7 +672,7 @@ export default function WorkflowActionCard({
                         <>
                             <Button 
                                 type="primary" 
-                                size="large"
+                                size="large" 
                                 onClick={() => handleSubmit('APPROVE')} 
                                 loading={loading}
                             >
@@ -535,7 +683,7 @@ export default function WorkflowActionCard({
                             {currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
                                 <Button 
                                     danger 
-                                    size="large"
+                                    size="large" 
                                     onClick={() => handleSubmit('DENY')} 
                                     loading={loading}
                                 >
@@ -546,7 +694,7 @@ export default function WorkflowActionCard({
                             {/* Request More Detail */}
                             {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
                                 <Button 
-                                    size="large"
+                                    size="large" 
                                     style={{ background: '#fff7e6', borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
                                     onClick={() => {
                                         const rmdText = form.getFieldValue('request_to_requester');

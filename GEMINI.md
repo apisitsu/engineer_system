@@ -4,10 +4,37 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-16
+- **Last Update:** 2026-09-17
 - **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
 
-- **ECNT V2 Stage PICs & Managers Candidate Fix & Authorized Admins Upgrade (2026-09-16):**
+- **ECNT V2 Global Read Access & Stage-Ownership Action Restriction (2026-09-17):**
+  - **Root Cause of Non-Admin Users Not Seeing Data:**
+    - Global `/api` auth middleware previously rejected GET requests from users without tokens or cross-origin cookie sessions with HTTP 401 Unauthorized (`Token is required`), resulting in empty Kanban boards (`[]`) for non-admin/guest visitors.
+    - Updated `server.js` global middleware to whitelist `req.method === 'GET' && req.path.startsWith('/ecnt/')` using `optionalVerifyToken`, guaranteeing that **everyone in the company can view all ECR/ECN documents, Gantt charts, and audit trails without any authentication barrier**.
+  - **Stage-Ownership Edit & Action Restriction (Strict RBAC):**
+    - Enforced backend authorization guard `checkWorkflowPermission` across `resubmitEcr`, `actionEcr`, `createEcn`, and `actionEcn`: non-responsible users attempting unauthorized actions are rejected with HTTP 403 Forbidden.
+    - In `WorkflowActionCard.jsx`, computed stage-ownership authority:
+      - Block 3: Department Manager of ECR department.
+      - Block 4 & 6: Engineering Department Manager.
+      - Block 7 & 8: QC Personnel / Evaluators.
+      - Block 9: Assigned Lead Engineer.
+      - Block 10: Specific to each concern department task (QA, QC, PC, PD1, PD2, MC, MM) — users can only sign off their own department's task row.
+      - Block 11: Plant Executive / Engineering Manager.
+    - When a non-responsible user visits:
+      - Displays prominent alert: `🔒 โหมดดูข้อมูลอย่างเดียว (Read-Only Viewer Mode): สเตจนี้อยู่ในความรับผิดชอบของ [Responsible Role/PIC] ... การแก้ไขหรือกดอนุมัติถูกจำกัดไว้เฉพาะผู้รับผิดชอบตามสายงานเท่านั้น`.
+      - Forms and inputs are disabled (`<Form disabled={!isAuthorized}>`).
+      - Action buttons (`Approve`, `Deny`, `Request More Detail`, `Close`) are replaced with a clear Viewer Mode badge.
+    - In `EcntWorkspaceView.jsx`: "Issue ECN (Block 5)" is visible only to assigned engineers; "Edit & Resubmit ECR" is visible only to original requesters. For other users, friendly status tags are rendered (e.g. `⏳ รอวิศวกรที่ได้รับมอบหมาย (${ecr.assigned_to}) ออก ECN`).
+  - **Automated & Production Build Verification:**
+    - Ran automated multi-persona security test (`test_read_and_permission_guard.js`): 100% PASS (Anonymous GET returns 28 ECRs and 17 ECNs; `pe_user` blocked from Block 3 with HTTP 403; `mc_admin` blocked from QC Block 7 with HTTP 403; `mc_admin` blocked from QA concern task with HTTP 403).
+    - Verified clean production build (`npm run build`) with zero errors and zero warnings on all ECNT V2 components.
+- **ECNT V2 Real Usage & Database Persistence Full Verification (2026-09-17):**
+  - **Database Persistence Verified:** Confirmed 100% data persistence into PostgreSQL (`eng_system` on `plbmp130:6543`) for all ECNT V2 tables: `ecnt2_ecr`, `ecnt2_ecn`, `ecnt2_impact_assessment`, `ecnt2_stage_history`, `ecnt2_system_config`, `ecnt2_concern_task`, and `ecnt2_approval_log`.
+  - **Live Usage Workflow (Data Intact in DB):**
+    - Created and completed real ECR ID 29 (`ECR260937`) and ECN ID 17 (`ECN-LIVE-5206`) through the full 11-block cycle up to `ECN Effective` (Stage 10 / Block 11).
+    - System Settings (`ecnt2_system_config`) updated and verified in DB.
+    - All test records retained in the database per user request (no deletion or rollback).
+    - Live browser verification validated UI Kanban card in Column 7, Workspace accordion view, and 4-tab System Settings modal.
   - **Resolved Root Cause of Empty Dropdowns (`server.URL` & Global `/api` Middleware):**
     - Diagnosed that `server.URL` in `apps/ENG-Frontend/src/constance/constance.js` was undefined, resulting in requests to `"undefined/api/ecnt/user-candidates"`.
     - Added `URL: apiUrl.replace(/\/$/, '')` to `server` object in `constance.js`.

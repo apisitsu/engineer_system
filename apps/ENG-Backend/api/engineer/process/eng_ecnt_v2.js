@@ -80,6 +80,132 @@ const transitionStage = async (client, docType, docId, nextStageCode, actionTake
 };
 
 // ==========================================
+// Stage-Based Authority & Permission Guard
+// ==========================================
+const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber, user, extra = {}) => {
+    if (!user) return { authorized: false, reason: "Authentication is required to perform this action." };
+
+    const role = (user.role || user.u_role || '').toUpperCase();
+    const dept = (user.department || user.u_department || '').toUpperCase();
+    const empno = (user.empno || user.u_code || '').toLowerCase();
+    const name = (user.name || user.u_name || '').toLowerCase();
+
+    try {
+        // 1. Fetch system_admins config
+        const adminConfig = await clientOrPool.query(`SELECT value FROM ecnt2_system_config WHERE key = 'system_admins'`);
+        const systemAdmins = (adminConfig.rows[0]?.value || ["admin", "eng_mgr"]).map(a => String(a).toLowerCase());
+
+        // Super Admin / System Admin override
+        if (role === 'AD' || dept === 'AD' || systemAdmins.includes(empno)) {
+            return { authorized: true, roleLabel: 'System Administrator' };
+        }
+
+        // 2. Fetch stage_assignees config
+        const assigneesConfig = await clientOrPool.query(`SELECT value FROM ecnt2_system_config WHERE key = 'stage_assignees'`);
+        const stageAssignees = assigneesConfig.rows[0]?.value || {};
+
+        if (docType === 'ECR') {
+            const ecrRes = await clientOrPool.query(`SELECT * FROM ecnt2_ecr WHERE id = $1`, [docId]);
+            if (ecrRes.rows.length === 0) return { authorized: false, reason: "ECR document not found." };
+            const ecr = ecrRes.rows[0];
+
+            // Block 1 & Return Loops (STAGE_2_R1, STAGE_3_R1): Only Requester can revise/resubmit
+            if (blockNumber === 1 || ecr.process_status === 'Require More Detail' || (ecr.current_stage_code || '').includes('_R')) {
+                const isRequester = (ecr.request_by || '').toLowerCase() === empno || (ecr.request_by_name || '').toLowerCase() === name;
+                if (isRequester) return { authorized: true, roleLabel: 'Requester' };
+                return { authorized: false, reason: `Only the requester (${ecr.request_by_name || ecr.request_by}) is authorized to revise or resubmit this ECR.` };
+            }
+
+            // Block 3: Dept Mgr Review
+            if (blockNumber === 3) {
+                const configuredDeptMgr = stageAssignees?.dept_mgr_mapping?.[ecr.department];
+                const isConfiguredMgr = configuredDeptMgr && (configuredDeptMgr.emp_no || '').toLowerCase() === empno;
+                const isDeptMgrRole = dept === (ecr.department || '').toUpperCase() && (role === 'MGR' || role === 'MANAGER');
+                if (isConfiguredMgr || isDeptMgrRole) return { authorized: true, roleLabel: 'Department Manager' };
+                return { authorized: false, reason: `Only the Department Manager for ${ecr.department} is authorized to approve Block 3.` };
+            }
+
+            // Block 4: Eng Dept Mgr ECR Review & PIC Assignment
+            if (blockNumber === 4) {
+                const configuredEngMgr = stageAssignees?.eng_mgr;
+                const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === empno;
+                const isEngMgrRole = dept === 'ENG' && (role === 'MGR' || role === 'MANAGER');
+                if (isConfiguredEngMgr || isEngMgrRole) return { authorized: true, roleLabel: 'Engineering Department Manager' };
+                return { authorized: false, reason: "Only the Engineering Department Manager is authorized to review Block 4 and assign the lead engineer." };
+            }
+        } else if (docType === 'ECN') {
+            const ecnRes = await clientOrPool.query(`SELECT * FROM ecnt2_ecn WHERE id = $1`, [docId]);
+            if (ecnRes.rows.length === 0) return { authorized: false, reason: "ECN document not found." };
+            const ecn = ecnRes.rows[0];
+
+            // Block 5: ECN Creation & Return Loop Rework (STAGE_5_R1)
+            if (blockNumber === 5) {
+                const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
+                                      (ecn.engineer_assigned || '').toLowerCase() === name || 
+                                      dept === 'ENG';
+                if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
+                return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to formulate or revise this ECN.` };
+            }
+
+            // Block 6: Eng Dept Mgr Approve ECN
+            if (blockNumber === 6) {
+                const configuredEngMgr = stageAssignees?.eng_mgr;
+                const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === empno;
+                const isEngMgrRole = dept === 'ENG' && (role === 'MGR' || role === 'MANAGER');
+                if (isConfiguredEngMgr || isEngMgrRole) return { authorized: true, roleLabel: 'Engineering Department Manager' };
+                return { authorized: false, reason: "Only the Engineering Department Manager is authorized to approve Block 6." };
+            }
+
+            // Block 7 & 8: QC MSA & FAI Decisions
+            if (blockNumber === 7 || blockNumber === 8) {
+                const configuredQcPic = stageAssignees?.default_qc_pic;
+                const isConfiguredQc = configuredQcPic && (configuredQcPic.emp_no || '').toLowerCase() === empno;
+                const isQcRole = dept === 'QC' || role === 'QC';
+                if (isConfiguredQc || isQcRole) return { authorized: true, roleLabel: 'Quality Control (QC) Evaluator' };
+                return { authorized: false, reason: "Only Quality Control (QC) personnel are authorized to submit MSA and FAI decisions." };
+            }
+
+            // Block 9: Engineer Summary & Concern Setup
+            if (blockNumber === 9) {
+                const isAssignedEng = (ecn.engineer_assigned || '').toLowerCase() === empno || 
+                                      (ecn.engineer_assigned || '').toLowerCase() === name || 
+                                      dept === 'ENG';
+                if (isAssignedEng) return { authorized: true, roleLabel: 'Assigned Engineer' };
+                return { authorized: false, reason: `Only the assigned engineer (${ecn.engineer_assigned}) is authorized to configure concern department tasks.` };
+            }
+
+            // Block 10: Concern Multi-Dept Sign-off
+            if (blockNumber === 10) {
+                const taskId = extra.task_id;
+                if (!taskId) return { authorized: false, reason: "task_id is required for Block 10 concern sign-off." };
+                const taskRes = await clientOrPool.query(`SELECT * FROM ecnt2_concern_task WHERE id = $1 AND ecn_id = $2`, [taskId, docId]);
+                if (taskRes.rows.length === 0) return { authorized: false, reason: "Concern task not found." };
+                const task = taskRes.rows[0];
+                const taskDept = (task.dept_code || '').toUpperCase();
+
+                const isTaskDeptUser = dept === taskDept || role === taskDept || (task.pic_emp_no && task.pic_emp_no.toLowerCase() === empno);
+                if (isTaskDeptUser) return { authorized: true, roleLabel: `${taskDept} Sign-off PIC` };
+                return { authorized: false, reason: `Only personnel from department ${taskDept} are authorized to sign off task #${taskId}.` };
+            }
+
+            // Block 11: Official Close & ECN Effective
+            if (blockNumber === 11) {
+                const configuredEngMgr = stageAssignees?.eng_mgr;
+                const isConfiguredEngMgr = configuredEngMgr && (configuredEngMgr.emp_no || '').toLowerCase() === empno;
+                const isEngMgrRole = dept === 'ENG' && (role === 'MGR' || role === 'MANAGER');
+                const isTopExecutive = role === 'TOP' || role === 'EXECUTIVE';
+                if (isConfiguredEngMgr || isEngMgrRole || isTopExecutive) return { authorized: true, roleLabel: 'Plant Executive / Engineering Manager' };
+                return { authorized: false, reason: "Only the Engineering Department Manager or Plant Executive can officially close this ECN." };
+            }
+        }
+    } catch (err) {
+        console.error("checkWorkflowPermission error:", err);
+    }
+
+    return { authorized: true, roleLabel: 'Authorized' };
+};
+
+// ==========================================
 // ECR (Blocks 1-4)
 // ==========================================
 
@@ -198,6 +324,13 @@ const resubmitEcr = async (req, res) => {
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
+
+        // Permission check: Only requester or admin can resubmit ECR
+        const perm = await checkWorkflowPermission(client, 'ECR', id, 1, req.user);
+        if (!perm.authorized) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: perm.reason });
+        }
 
         const actionBy = req.user?.empno || data.request_by || 'Unknown';
         const actionByName = req.user?.name || data.request_by_name || 'Unknown';
@@ -361,13 +494,20 @@ const actionEcr = async (req, res) => {
     const { id } = req.params;
     const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester, assigned_to } = req.body;
     
-    const userEmpno = req.user?.empno || action_by || 'Unknown';
-    const userName = req.user?.name || action_by_name || 'Unknown';
-    const userRole = req.user?.role || action_role || 'Approver';
-
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
+
+        // Permission check: Validate stage ownership
+        const perm = await checkWorkflowPermission(client, 'ECR', id, block_number, req.user, { assigned_to });
+        if (!perm.authorized) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: perm.reason });
+        }
+        
+        const userEmpno = req.user?.empno || action_by || 'Unknown';
+        const userName = req.user?.name || action_by_name || 'Unknown';
+        const userRole = perm.roleLabel || req.user?.role || action_role || 'Approver';
         
         let nextStatus = 'Draft';
         let currentBlock = block_number;
@@ -478,6 +618,27 @@ const createEcn = async (req, res) => {
             throw new Error(`Linked ECR with ID ${data.ecr_id} not found.`);
         }
         const ecr = ecrResult.rows[0];
+
+        // Permission check: Only assigned engineer, ENG department, or Admin can formulate ECN
+        const userRole = (req.user?.role || '').toUpperCase();
+        const userDept = (req.user?.department || '').toUpperCase();
+        const userEmpno = (req.user?.empno || '').toLowerCase();
+        const userName = (req.user?.name || '').toLowerCase();
+
+        const adminConfig = await client.query(`SELECT value FROM ecnt2_system_config WHERE key = 'system_admins'`);
+        const systemAdmins = (adminConfig.rows[0]?.value || ["admin", "eng_mgr"]).map(a => String(a).toLowerCase());
+        const isAdmin = userRole === 'AD' || userDept === 'AD' || systemAdmins.includes(userEmpno);
+
+        const isAssigned = (ecr.assigned_to || '').toLowerCase() === userEmpno || 
+                           (ecr.assigned_to || '').toLowerCase() === userName || 
+                           userDept === 'ENG';
+
+        if (!isAdmin && !isAssigned) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ 
+                error: `Access Denied: Only the assigned engineer (${ecr.assigned_to || 'Assigned PIC'}) or Engineering department can formulate this ECN.` 
+            });
+        }
 
         const engineerAssigned = data.engineer_assigned || req.user?.empno || ecr.assigned_to || 'NATHAPORN YAMMANUS';
         
@@ -659,13 +820,20 @@ const actionEcn = async (req, res) => {
     const { id } = req.params;
     const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester } = req.body;
     
-    const userEmpno = req.user?.empno || action_by || 'Unknown';
-    const userName = req.user?.name || action_by_name || 'Unknown';
-    const userRole = req.user?.role || action_role || 'Approver';
-
     const client = await engPool.connect();
     try {
         await client.query('BEGIN');
+
+        // Permission check: Validate stage ownership
+        const perm = await checkWorkflowPermission(client, 'ECN', id, block_number, req.user, { task_id: req.body.task_id });
+        if (!perm.authorized) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: perm.reason });
+        }
+        
+        const userEmpno = req.user?.empno || action_by || 'Unknown';
+        const userName = req.user?.name || action_by_name || 'Unknown';
+        const userRole = perm.roleLabel || req.user?.role || action_role || 'Approver';
         
         let nextStatus = 'Pending Eng Mgr ECN';
         let currentBlock = block_number;
