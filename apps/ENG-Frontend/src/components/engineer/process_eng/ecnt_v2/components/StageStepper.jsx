@@ -1,11 +1,27 @@
-import React from 'react';
-import { Space, Typography, Tag, Tooltip } from 'antd';
-import { CheckCircleFilled, ClockCircleFilled, SyncOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { Space, Typography, Tag, Tooltip, Button } from 'antd';
+import { 
+    CheckCircleFilled, ClockCircleFilled, SyncOutlined, 
+    UserOutlined, TeamOutlined 
+} from '@ant-design/icons';
 import { ECNT_STAGES } from '../utils/ecntConstants';
+import WorkflowStageFlowPanel from './WorkflowStageFlowPanel';
 
 const { Text } = Typography;
 
-export default function StageStepper({ currentStageCode, stageHistory = [], onSelectStage }) {
+export default function StageStepper({ 
+    documentType,
+    documentId,
+    docData,
+    currentStageCode, 
+    stageHistory = [], 
+    tasksData = [],
+    systemConfig = {},
+    onStageFlowUpdated,
+    onSelectStage 
+}) {
+    const [isExpanded, setIsExpanded] = useState(false);
+
     // Standard linear stages without rework sub-stages
     const standardStages = ECNT_STAGES.filter(s => s.type !== 'RETURN_LOOP');
 
@@ -15,6 +31,56 @@ export default function StageStepper({ currentStageCode, stageHistory = [], onSe
 
     const currentStageIndex = standardStages.findIndex(s => s.code === currentStageCode);
 
+    // Helper: Determine PIC summary for each stage
+    const getStagePicSummary = (stageCode) => {
+        let stageKey = 'STAGE_1';
+        if (stageCode === 'STAGE_1') stageKey = 'STAGE_1';
+        else if (stageCode === 'STAGE_2') stageKey = 'STAGE_2';
+        else if (stageCode === 'STAGE_3') stageKey = 'STAGE_3';
+        else if (stageCode === 'STAGE_4') stageKey = 'STAGE_4';
+        else if (stageCode === 'STAGE_5') stageKey = 'STAGE_5';
+        else if (stageCode === 'STAGE_6') stageKey = 'STAGE_6';
+        else if (stageCode === 'STAGE_7') stageKey = 'STAGE_7';
+        else if (stageCode === 'STAGE_8') stageKey = 'STAGE_8';
+        else if (stageCode === 'STAGE_9') stageKey = 'STAGE_9';
+        else if (stageCode === 'STAGE_10') stageKey = 'STAGE_10';
+
+        const saved = docData?.stage_flow?.[stageKey];
+        if (saved?.assignees && saved.assignees.length > 0) {
+            return {
+                primaryName: saved.assignees[0].name || saved.assignees[0].emp_no,
+                extraCount: saved.assignees.length - 1,
+                rule: saved.approval_rule || 'ANY'
+            };
+        }
+
+        const cfg = systemConfig?.stage_assignees || {};
+        if (stageKey === 'STAGE_1') {
+            return { primaryName: docData?.request_by_name || docData?.request_by || 'Requester', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_2') {
+            const mgr = cfg?.dept_mgr_mapping?.[docData?.department];
+            return { primaryName: mgr?.name || `${docData?.department || 'Dept'} Mgr`, extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
+            return { primaryName: cfg?.eng_mgr?.name || 'Teerapol K.', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_4' || stageKey === 'STAGE_8') {
+            return { primaryName: docData?.assigned_to || docData?.engineer_assigned || 'PE Assigned', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
+            return { primaryName: cfg?.default_qc_pic?.name || 'Patcharayada W.', extraCount: 0, rule: 'ANY' };
+        }
+        if (stageKey === 'STAGE_9') {
+            return { primaryName: 'Multi-Dept (ALL)', extraCount: 0, rule: 'ALL' };
+        }
+        if (stageKey === 'STAGE_10') {
+            return { primaryName: cfg?.eng_mgr?.name || 'Plant Exec / Eng Mgr', extraCount: 0, rule: 'ANY' };
+        }
+
+        return { primaryName: 'Pending', extraCount: 0, rule: 'ANY' };
+    };
+
     return (
         <div style={{ 
             background: '#ffffff', 
@@ -23,6 +89,30 @@ export default function StageStepper({ currentStageCode, stageHistory = [], onSe
             border: '1px solid #e8e8e8',
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
         }}>
+            {/* Stepper Header with Toggle Button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <Space size="middle">
+                    <Text strong style={{ fontSize: 13, color: '#1677ff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TeamOutlined /> Workflow Stage Progression & PIC Responsibility
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        (คลิกที่สเตจหรือปุ่มด้านขวาเพื่อดูและมอบหมายผู้รับผิดชอบ)
+                    </Text>
+                </Space>
+
+                {documentId && (
+                    <Button 
+                        size="small" 
+                        type={isExpanded ? "primary" : "default"}
+                        icon={<TeamOutlined />} 
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        style={{ borderRadius: 6, fontSize: 12, fontWeight: 500 }}
+                    >
+                        {isExpanded ? '▲ ย่อรายละเอียดผู้รับผิดชอบ' : '▼ จัดการผู้รับผิดชอบ & สายการอนุมัติ (Workflow PICs)'}
+                    </Button>
+                )}
+            </div>
+
             {hasReturnLoop && (
                 <div style={{ 
                     background: '#fff7e6', 
@@ -44,10 +134,12 @@ export default function StageStepper({ currentStageCode, stageHistory = [], onSe
                 </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflowX: 'auto', paddingBottom: 6 }}>
+            {/* Horizontal Stage Stepper Bar with PIC Pills */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', overflowX: 'auto', paddingBottom: 6 }}>
                 {standardStages.map((stage, idx) => {
                     const isPassed = currentStageIndex > idx;
                     const isCurrent = currentStageIndex === idx && !hasReturnLoop;
+                    const picSummary = getStagePicSummary(stage.code);
 
                     let icon = null;
                     let borderColor = '#d9d9d9';
@@ -73,27 +165,71 @@ export default function StageStepper({ currentStageCode, stageHistory = [], onSe
 
                     return (
                         <React.Fragment key={stage.code}>
-                            <Tooltip title={stage.description}>
+                            <Tooltip title={
+                                <div>
+                                    <div style={{ fontWeight: 600 }}>{stage.title}</div>
+                                    <div style={{ fontSize: 11, marginTop: 2 }}>{stage.description}</div>
+                                    <div style={{ fontSize: 11, marginTop: 4, color: '#91d5ff' }}>
+                                        ผู้รับผิดชอบ: {picSummary.primaryName} {picSummary.extraCount > 0 ? `(+${picSummary.extraCount} ท่าน)` : ''}
+                                    </div>
+                                    <div style={{ fontSize: 10, color: '#bfbfbf', marginTop: 2 }}>
+                                        (คลิกเพื่อดูและแก้ไขผู้รับผิดชอบในสเตจนี้)
+                                    </div>
+                                </div>
+                            }>
                                 <div 
-                                    onClick={() => onSelectStage && onSelectStage(stage.code)}
+                                    onClick={() => {
+                                        setIsExpanded(true);
+                                        if (onSelectStage) onSelectStage(stage.code);
+                                    }}
                                     style={{
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
                                         cursor: 'pointer',
-                                        minWidth: 74,
+                                        minWidth: 84,
+                                        maxWidth: 108,
                                         textAlign: 'center',
-                                        padding: '4px 6px',
+                                        padding: '6px 6px',
                                         borderRadius: 8,
                                         border: `1px solid ${borderColor}`,
                                         background: bgColor,
-                                        transition: 'all 0.2s'
+                                        transition: 'all 0.2s',
+                                        boxShadow: isCurrent ? '0 2px 8px rgba(24, 144, 255, 0.15)' : 'none'
                                     }}
                                 >
-                                    <div style={{ marginBottom: 4 }}>{icon}</div>
-                                    <Text style={{ fontSize: 11, fontWeight: isCurrent ? 700 : 500, color: textColor }}>
+                                    <div style={{ marginBottom: 3 }}>{icon}</div>
+                                    <Text style={{ fontSize: 11, fontWeight: isCurrent ? 700 : 600, color: textColor, marginBottom: 4 }}>
                                         {stage.shortTitle}
                                     </Text>
+
+                                    {/* Assignee PIC pill right under stage title */}
+                                    <Tag 
+                                        icon={<UserOutlined style={{ fontSize: 9 }} />} 
+                                        style={{ 
+                                            fontSize: 10, 
+                                            padding: '0 4px', 
+                                            margin: 0, 
+                                            maxWidth: 96, 
+                                            overflow: 'hidden', 
+                                            textOverflow: 'ellipsis', 
+                                            whiteSpace: 'nowrap',
+                                            borderRadius: 4,
+                                            background: isCurrent ? '#ffffff' : '#f5f5f5',
+                                            borderColor: isCurrent ? '#91d5ff' : '#d9d9d9',
+                                            color: isCurrent ? '#096dd9' : '#595959',
+                                            lineHeight: '18px'
+                                        }}
+                                        title={picSummary.primaryName}
+                                    >
+                                        {picSummary.primaryName}
+                                    </Tag>
+
+                                    {picSummary.extraCount > 0 && (
+                                        <Tag color="purple" style={{ fontSize: 9, padding: '0 3px', margin: '2px 0 0 0', borderRadius: 8 }}>
+                                            +{picSummary.extraCount} ({picSummary.rule})
+                                        </Tag>
+                                    )}
                                 </div>
                             </Tooltip>
 
@@ -102,14 +238,30 @@ export default function StageStepper({ currentStageCode, stageHistory = [], onSe
                                     flex: 1, 
                                     height: 2, 
                                     background: isPassed ? '#52c41a' : '#e8e8e8', 
-                                    margin: '0 4px',
-                                    minWidth: 10
+                                    margin: '18px 4px 0 4px',
+                                    minWidth: 8
                                 }} />
                             )}
                         </React.Fragment>
                     );
                 })}
             </div>
+
+            {/* Expandable Workflow Stage Flow & PIC Delegation Grid */}
+            {isExpanded && documentId && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+                    <WorkflowStageFlowPanel
+                        documentType={documentType}
+                        documentId={documentId}
+                        docData={docData}
+                        tasksData={tasksData}
+                        systemConfig={systemConfig}
+                        layoutMode="grid"
+                        bordered={false}
+                        onStageFlowUpdated={onStageFlowUpdated}
+                    />
+                </div>
+            )}
         </div>
     );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, Tabs, Form, Input, Button, Switch, Table, Space, 
-    Typography, Tag, Select, App, Card, Row, Col, Alert, Tooltip 
+    Typography, Tag, Select, App, Card, Row, Col, Alert, Tooltip, Checkbox 
 } from 'antd';
 import { 
     SettingOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, 
@@ -12,7 +12,6 @@ import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 
 const { Text, Paragraph } = Typography;
-const { Option } = Select;
 
 const ALL_DEPTS = ['ENG', 'QA', 'QC', 'PD1', 'PD2', 'MC', 'MM', 'PC', 'TOP'];
 
@@ -711,19 +710,87 @@ export default function EcntSettingsModal({ open, onClose, currentConfig = {}, o
 
                                         <Form.Item 
                                             name="notify_stages" 
-                                            label="Send Email Notifications on These Workflow Stages"
+                                            label={<Text strong>Send Email Notifications on These Workflow Stages</Text>}
+                                            extra="Select the workflow stages that should automatically trigger email notifications to assignees"
                                         >
-                                            <Select mode="multiple" placeholder="Select workflow stages" style={{ width: '100%' }}>
-                                                <Option value="STAGE_2">Stage 2: Dept Manager Review</Option>
-                                                <Option value="STAGE_2_R1">Stage 2-R1: Dept Mgr Clarification (Rework)</Option>
-                                                <Option value="STAGE_3">Stage 3: Eng Dept Manager Review</Option>
-                                                <Option value="STAGE_3_R1">Stage 3-R1: Eng Mgr Clarification (Rework)</Option>
-                                                <Option value="STAGE_4">Stage 4: Assigned Engineer ECN Creation</Option>
-                                                <Option value="STAGE_5_R1">Stage 5-R1: ECN Formulation Revision</Option>
-                                                <Option value="STAGE_7">Stage 7: QC MSA & FAI Evaluation</Option>
-                                                <Option value="STAGE_9">Stage 9: Concern Department Sign-offs</Option>
-                                                <Option value="STAGE_10">Stage 10: Final Close & Release</Option>
-                                            </Select>
+                                            <div style={{ background: '#fafafa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                                                <Checkbox.Group style={{ width: '100%' }}>
+                                                    <Row gutter={[12, 12]}>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_2">
+                                                                <Space size={6}>
+                                                                    <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>Stage 2</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Dept Manager Review</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_2_R1">
+                                                                <Space size={6}>
+                                                                    <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>Stage 2-R1</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Dept Mgr Clarification (Rework)</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_3">
+                                                                <Space size={6}>
+                                                                    <Tag color="cyan" style={{ margin: 0, fontSize: 11 }}>Stage 3</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Eng Dept Manager Review</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_3_R1">
+                                                                <Space size={6}>
+                                                                    <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>Stage 3-R1</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Eng Mgr Clarification (Rework)</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_4">
+                                                                <Space size={6}>
+                                                                    <Tag color="geekblue" style={{ margin: 0, fontSize: 11 }}>Stage 4</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Assigned Engineer ECN Creation</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_5_R1">
+                                                                <Space size={6}>
+                                                                    <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>Stage 5-R1</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>ECN Formulation Revision</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_7">
+                                                                <Space size={6}>
+                                                                    <Tag color="magenta" style={{ margin: 0, fontSize: 11 }}>Stage 7</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>QC MSA & FAI Evaluation</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_9">
+                                                                <Space size={6}>
+                                                                    <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>Stage 9</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Concern Multi-Dept Sign-offs</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                        <Col xs={24} sm={12}>
+                                                            <Checkbox value="STAGE_10">
+                                                                <Space size={6}>
+                                                                    <Tag color="green" style={{ margin: 0, fontSize: 11 }}>Stage 10</Tag>
+                                                                    <Text style={{ fontSize: 13 }}>Final Close & ECN Release</Text>
+                                                                </Space>
+                                                            </Checkbox>
+                                                        </Col>
+                                                    </Row>
+                                                </Checkbox.Group>
+                                            </div>
                                         </Form.Item>
                                     </Card>
 

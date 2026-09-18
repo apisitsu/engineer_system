@@ -8,7 +8,8 @@ import {
     ExclamationCircleOutlined, SyncOutlined, CopyOutlined, FireOutlined,
     TableOutlined, AppstoreOutlined, ArrowRightOutlined, UserOutlined,
     FilterOutlined, DownOutlined, CalendarOutlined, TeamOutlined,
-    ApartmentOutlined, CheckCircleFilled, FileTextOutlined
+    ApartmentOutlined, CheckCircleFilled, FileTextOutlined,
+    BankOutlined, ToolOutlined, CodeOutlined, SettingOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import StatusBadge from '../components/StatusBadge';
@@ -44,6 +45,7 @@ export default function EcntDashboardView({
     const [scopeFilter, setScopeFilter] = useState('ALL'); // 'ALL' | 'MY_ACTIONS'
     const [viewMode, setViewMode] = useState('pipeline'); // 'pipeline' (Default) | 'kanban'
     const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'ECR' | 'ECN' | 'REWORK' | 'EFFECTIVE'
+    const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
     const combinedDocs = [
         ...ecrData.map(d => ({ ...d, doc_type: 'ECR' })),
@@ -388,34 +390,34 @@ export default function EcntDashboardView({
         }
     };
 
-    // Executive Pipeline Table Columns
+    // Executive Pipeline Table Columns (Strict Max 3 lines per row per user requirement)
     const pipelineColumns = [
         {
             title: 'Document No. / Type',
             key: 'doc_no',
-            width: 190,
+            width: 175,
             render: (_, record) => {
                 const isEcr = record.doc_type === 'ECR';
                 const docNo = record.ecr_no || record.ecn_no || `${record.doc_type} #${record.id}`;
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Tag color={isEcr ? 'blue' : 'purple'} style={{ margin: 0, fontWeight: 700, fontSize: 11, borderRadius: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {/* Line 1: Type Badge & Clickable Doc No */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Tag color={isEcr ? 'blue' : 'purple'} style={{ margin: 0, fontWeight: 700, fontSize: 11, borderRadius: 4, padding: '0 5px' }}>
                                 {record.doc_type}
                             </Tag>
-                            <Text strong style={{ color: '#1890ff', fontSize: 13, cursor: 'pointer' }} onClick={() => onOpenDoc(record.id, record.doc_type)}>
+                            <Text strong style={{ color: '#1677ff', fontSize: 13, cursor: 'pointer' }} onClick={() => onOpenDoc(record.id, record.doc_type)}>
                                 {docNo}
                             </Text>
                         </div>
-                        {record.linked_ecn_id && (
-                            <div style={{ fontSize: 11 }}>
-                                <Tag color="geekblue" style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                        {/* Line 2: Date & Optional Linked Reference */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, color: '#8c8c8c' }}>
+                            <span>📅 {moment(record.created_at).format('DD-MMM-YYYY')}</span>
+                            {record.linked_ecn_id && (
+                                <Tag color="geekblue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 4px' }}>
                                     🔗 ECN #{record.linked_ecn_id}
                                 </Tag>
-                            </div>
-                        )}
-                        <div style={{ fontSize: 11, color: '#8c8c8c' }}>
-                            📅 {moment(record.created_at).format('DD-MMM-YYYY')}
+                            )}
                         </div>
                     </div>
                 );
@@ -427,30 +429,62 @@ export default function EcntDashboardView({
             key: 'title_of_change',
             render: (text, record) => {
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <Text strong style={{ fontSize: 13, color: '#262626' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {/* Line 1: Title (single line with ellipsis) */}
+                        <Text 
+                            strong 
+                            ellipsis 
+                            style={{ fontSize: 13, color: '#1f1f1f', maxWidth: 360, display: 'block' }} 
+                            title={text}
+                        >
                             {text || 'No title specified'}
                         </Text>
+                        {/* Line 2: Customer & Project with Icons & Tooltips */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                             {record.customer_name && (
-                                <Tag color="cyan" style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
-                                    🏢 {record.customer_name}
-                                </Tag>
+                                <Tooltip title={`Customer: ${record.customer_name}`}>
+                                    <Tag color="cyan" icon={<BankOutlined />} style={{ margin: 0, fontSize: 11, borderRadius: 4, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {record.customer_name}
+                                    </Tag>
+                                </Tooltip>
                             )}
                             {record.project_code && (
-                                <Tag color="geekblue" style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
-                                    📦 {record.project_code}
-                                </Tag>
+                                <Tooltip title={`Project / Model: ${record.project_code}`}>
+                                    <Tag color="geekblue" icon={<AppstoreOutlined />} style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
+                                        {record.project_code}
+                                    </Tag>
+                                </Tooltip>
                             )}
+                        </div>
+                        {/* Line 3: Category Icons with Tooltips */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                             {record.status_type && (
-                                <Tag color={record.status_type === 'TEMPORARY' ? 'orange' : 'default'} style={{ margin: 0, fontSize: 10 }}>
-                                    {record.status_type}
-                                </Tag>
+                                <Tooltip title={`Lifecycle: ${record.status_type}`}>
+                                    <Tag color={record.status_type === 'TEMPORARY' ? 'orange' : 'default'} style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                                        {record.status_type === 'TEMPORARY' ? 'Temp' : 'Perm'}
+                                    </Tag>
+                                </Tooltip>
                             )}
-                            {record.is_drawing && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>📐 DWG</Tag>}
-                            {record.is_tooling && <Tag color="green" style={{ margin: 0, fontSize: 10 }}>🔧 Tool</Tag>}
-                            {record.is_program && <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>💻 Prog</Tag>}
-                            {record.is_usage && <Tag color="magenta" style={{ margin: 0, fontSize: 10 }}>⚙️ Usage</Tag>}
+                            {record.is_drawing && (
+                                <Tooltip title="Drawing Modification (แบบแปลน)">
+                                    <Tag color="blue" icon={<FileTextOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>DWG</Tag>
+                                </Tooltip>
+                            )}
+                            {record.is_tooling && (
+                                <Tooltip title="Tooling Modification (เครื่องมือ/ทูล)">
+                                    <Tag color="green" icon={<ToolOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Tool</Tag>
+                                </Tooltip>
+                            )}
+                            {record.is_program && (
+                                <Tooltip title="CNC Program Modification (โปรแกรม)">
+                                    <Tag color="orange" icon={<CodeOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Prog</Tag>
+                                </Tooltip>
+                            )}
+                            {record.is_usage && (
+                                <Tooltip title="Usage & Setup Sheet Modification (เงื่อนไขและชิ้นงาน)">
+                                    <Tag color="magenta" icon={<SettingOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Usage</Tag>
+                                </Tooltip>
+                            )}
                         </div>
                     </div>
                 );
@@ -460,19 +494,21 @@ export default function EcntDashboardView({
             title: 'Requester & Dept',
             dataIndex: 'request_by_name',
             key: 'request_by_name',
-            width: 170,
+            width: 160,
             render: (text, record) => (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {/* Line 1: Avatar + Requester Name */}
                     <Space size={6}>
-                        <Avatar size={22} style={{ backgroundColor: '#1890ff', fontSize: 11 }}>
+                        <Avatar size={20} style={{ backgroundColor: '#1677ff', fontSize: 11, flexShrink: 0 }}>
                             {(text || record.request_by || 'U')[0]?.toUpperCase()}
                         </Avatar>
-                        <Text style={{ fontSize: 12, fontWeight: 500 }}>
+                        <Text strong ellipsis style={{ fontSize: 12, maxWidth: 110 }}>
                             {text || record.request_by || 'Requester'}
                         </Text>
                     </Space>
+                    {/* Line 2: Department Tag */}
                     <div>
-                        <Tag color="blue" style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                        <Tag color="blue" style={{ margin: 0, fontSize: 10, borderRadius: 4, padding: '0 6px' }}>
                             {record.department || 'ENG'}
                         </Tag>
                     </div>
@@ -482,50 +518,54 @@ export default function EcntDashboardView({
         {
             title: 'Current Stage & PIC Responsibility',
             key: 'current_stage',
-            width: 260,
+            width: 250,
             render: (_, record) => {
                 const stageInfo = getStageAndPicInfo(record, systemConfig);
                 const actionReason = getMyActionReason(record);
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {/* Line 1: Stage Tag */}
+                        <div>
                             <Tag color={stageInfo.color} style={{ margin: 0, fontSize: 11, borderRadius: 4, fontWeight: 600 }}>
                                 {stageInfo.stageTag}
                             </Tag>
                         </div>
 
+                        {/* Line 2: PIC Responsibility Pills */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                            {(stageInfo.pics || []).map((p, idx) => (
+                            {(stageInfo.pics || []).slice(0, 2).map((p, idx) => (
                                 <Tag 
                                     key={idx} 
                                     icon={<UserOutlined />} 
                                     color="default" 
-                                    style={{ margin: 0, fontSize: 11, background: '#f5f5f5', border: '1px solid #d9d9d9', borderRadius: 4 }}
+                                    style={{ margin: 0, fontSize: 11, background: '#fafafa', border: '1px solid #e8e8e8', borderRadius: 4, padding: '0 5px' }}
                                 >
                                     {p.name || p.emp_no}
                                 </Tag>
                             ))}
                             {stageInfo.rule && (stageInfo.pics || []).length > 1 && (
                                 <Tag color={stageInfo.rule === 'ALL' ? 'purple' : 'blue'} style={{ margin: 0, fontSize: 10, borderRadius: 10 }}>
-                                    {stageInfo.rule === 'ALL' ? 'อนุมัติทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                    {stageInfo.rule}
                                 </Tag>
                             )}
                         </div>
 
+                        {/* Line 3: Pending Action Callout if applicable */}
                         {actionReason && (
                             <div style={{
                                 background: '#fff2e8',
                                 border: '1px solid #ffbb96',
                                 color: '#d4380d',
-                                padding: '2px 8px',
+                                padding: '1px 6px',
                                 borderRadius: 4,
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontWeight: 600,
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 4
+                                gap: 4,
+                                width: 'fit-content'
                             }}>
-                                <FireOutlined style={{ color: '#fa541c' }} />
+                                <FireOutlined style={{ color: '#fa541c', fontSize: 11 }} />
                                 <span>{actionReason}</span>
                             </div>
                         )}
@@ -537,39 +577,43 @@ export default function EcntDashboardView({
             title: 'Status',
             dataIndex: 'process_status',
             key: 'process_status',
-            width: 140,
+            width: 130,
             render: (status) => <StatusBadge status={status} />
         },
         {
             title: 'Action',
             key: 'action',
-            width: 140,
+            width: 90,
             fixed: 'right',
+            align: 'center',
             render: (_, record) => {
                 const actionReason = getMyActionReason(record);
                 return (
                     <Space size={6}>
-                        <Button 
-                            type={actionReason ? "primary" : "default"}
-                            size="small"
-                            icon={<ArrowRightOutlined />}
-                            onClick={() => onOpenDoc(record.id, record.doc_type)}
-                            style={{ 
-                                borderRadius: 6,
-                                background: actionReason ? '#fa8c16' : undefined,
-                                borderColor: actionReason ? '#fa8c16' : undefined,
-                                fontWeight: 600,
-                                fontSize: 12
-                            }}
-                        >
-                            {actionReason ? 'ดำเนินการ' : 'เปิดดู'}
-                        </Button>
+                        <Tooltip title={actionReason ? `ดำเนินการ: ${actionReason}` : 'เปิดดูเอกสาร (Open Workspace)'}>
+                            <Button 
+                                type={actionReason ? "primary" : "default"}
+                                shape="circle"
+                                size="middle"
+                                icon={<ArrowRightOutlined />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenDoc(record.id, record.doc_type);
+                                }}
+                                style={{ 
+                                    background: actionReason ? '#fa8c16' : '#1677ff',
+                                    borderColor: actionReason ? '#fa8c16' : '#1677ff',
+                                    color: '#ffffff',
+                                    boxShadow: actionReason ? '0 2px 6px rgba(250, 140, 22, 0.35)' : '0 2px 6px rgba(22, 119, 255, 0.25)'
+                                }}
+                            />
+                        </Tooltip>
                         <Tooltip title="คัดลอกลิงก์ตรง (Share Direct Link)">
                             <Button 
-                                size="small"
+                                shape="circle"
+                                size="middle"
                                 icon={<CopyOutlined />}
                                 onClick={(e) => handleCopyLink(e, record)}
-                                style={{ borderRadius: 6 }}
                             />
                         </Tooltip>
                     </Space>
@@ -680,7 +724,10 @@ export default function EcntDashboardView({
                     {/* View Scope Toggle: All vs My Actions */}
                     <Segmented
                         value={scopeFilter}
-                        onChange={setScopeFilter}
+                        onChange={(val) => {
+                            setScopeFilter(val);
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
                         options={[
                             {
                                 value: 'ALL',
@@ -720,7 +767,10 @@ export default function EcntDashboardView({
                                 { key: 'REWORK', label: `Clarification / Rework (${inClarification})`, icon: <ExclamationCircleOutlined style={{ color: '#fa8c16' }} /> },
                                 { key: 'EFFECTIVE', label: `Closed / Effective (${totalEffective})`, icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
                             ],
-                            onClick: (e) => setCategoryFilter(e.key),
+                            onClick: (e) => {
+                                setCategoryFilter(e.key);
+                                setPagination(prev => ({ ...prev, current: 1 }));
+                            },
                             selectedKeys: [categoryFilter]
                         }}
                     >
@@ -745,7 +795,10 @@ export default function EcntDashboardView({
                         placeholder="Search no, title, customer..." 
                         prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                         value={searchText}
-                        onChange={e => setSearchText(e.target.value)}
+                        onChange={e => {
+                            setSearchText(e.target.value);
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
                         style={{ width: 220, borderRadius: 8 }}
                         allowClear
                     />
@@ -753,7 +806,10 @@ export default function EcntDashboardView({
                     {/* Department Filter */}
                     <Select 
                         value={filterDept} 
-                        onChange={setFilterDept} 
+                        onChange={(val) => {
+                            setFilterDept(val);
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }} 
                         style={{ width: 150, borderRadius: 8 }}
                         suffixIcon={<ApartmentOutlined />}
                     >
@@ -863,10 +919,14 @@ export default function EcntDashboardView({
                             rowKey={r => `${r.doc_type}_${r.id}`}
                             scroll={{ x: 1100 }}
                             pagination={{ 
-                                pageSize: 12, 
+                                current: pagination.current,
+                                pageSize: pagination.pageSize,
                                 showSizeChanger: true, 
-                                pageSizeOptions: ['12', '24', '48', '100'],
-                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} documents`
+                                pageSizeOptions: ['10', '20', '50', '100'],
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} documents`,
+                                onChange: (page, pageSize) => {
+                                    setPagination({ current: page, pageSize });
+                                }
                             }}
                             onRow={(record) => {
                                 const actionReason = getMyActionReason(record);

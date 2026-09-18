@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Select, Checkbox, Row, Col, Button, Typography, Space } from 'antd';
+import { Card, Form, Input, Select, Checkbox, Row, Col, Button, Typography, Space, Tag } from 'antd';
 import { App } from 'antd';
 import { 
     SendOutlined, ArrowLeftOutlined, FileTextOutlined, 
@@ -149,7 +149,7 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
             <Card style={{ borderRadius: 12, border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Space size="middle">
-                        <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
+                        <Button icon={<ArrowLeftOutlined />} onClick={onBack} style={{ borderRadius: 8 }}>
                             Back to Dashboard
                         </Button>
                         <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
@@ -157,15 +157,9 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                         </Title>
                     </Space>
 
-                    <Button 
-                        type="primary" 
-                        icon={<SendOutlined />} 
-                        onClick={handleSubmit} 
-                        loading={loading}
-                        style={{ borderRadius: 8, background: isEditMode ? '#fa8c16' : '#1890ff' }}
-                    >
-                        {isEditMode ? "Resubmit to Dept Manager" : "Submit ECR to Dept Manager"}
-                    </Button>
+                    <Tag color={isEditMode ? "orange" : "blue"} style={{ borderRadius: 8, fontSize: 12, padding: '4px 10px' }}>
+                        {isEditMode ? "Mode: Revision / Resubmit" : "Mode: New Request"}
+                    </Tag>
                 </div>
             </Card>
 

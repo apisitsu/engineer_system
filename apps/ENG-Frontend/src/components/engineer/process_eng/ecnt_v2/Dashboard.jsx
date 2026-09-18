@@ -42,6 +42,7 @@ export default function Dashboard() {
     const [activeDocId, setActiveDocId] = useState(null);
     const [activeDocType, setActiveDocType] = useState('ECR');
     const [activeDocData, setActiveDocData] = useState(null);
+    const [editEcrData, setEditEcrData] = useState(null);
 
     const getAuthConfig = () => {
         const token = localStorage.getItem("token");
@@ -161,18 +162,19 @@ export default function Dashboard() {
     };
 
     const handleRequireNew = () => {
-        setActiveDocData(null);
+        setEditEcrData(null);
         setCurrentView('require');
         updateUrl(null, null, 'require');
     };
 
     const handleEditEcr = (doc) => {
-        setActiveDocData(doc);
+        setEditEcrData(doc);
         setCurrentView('require');
         updateUrl('ECR', doc.id, 'require');
     };
 
     const handleBackToDashboard = () => {
+        setEditEcrData(null);
         setCurrentView('dashboard');
         updateUrl(null, null, 'dashboard');
     };
@@ -238,7 +240,12 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <Segmented
                         value={currentView}
-                        onChange={setCurrentView}
+                        onChange={(view) => {
+                            if (view === 'require') {
+                                setEditEcrData(null);
+                            }
+                            setCurrentView(view);
+                        }}
                         size="middle"
                         options={[
                             {
@@ -348,7 +355,7 @@ export default function Dashboard() {
 
                 {currentView === 'require' && (
                     <EcrRequireView 
-                        initialData={activeDocData}
+                        initialData={editEcrData}
                         systemConfig={systemConfig}
                         onBack={handleBackToDashboard}
                         onSuccess={() => {

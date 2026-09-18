@@ -7,6 +7,43 @@
 - **Last Update:** 2026-09-18
 - **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
 
+- **ECNT V2 10-Point UI/UX & Workflow Platform Perfection (2026-09-18):**
+  - **1. Dashboard Controlled Pagination Fix (`EcntDashboardView.jsx`):**
+    - Resolved pagination freeze where Ant Design `<Table pagination={{ pageSize: 12 }}>` statically overrode user page changes.
+    - Implemented controlled state `pagination: { current: 1, pageSize: 10 }` with `showSizeChanger: true`, options `['10', '20', '50', '100']`, and smooth `onChange` handler with dynamic page reset on filtering.
+  - **2. Compact Action Column Icons & Tooltips (`EcntDashboardView.jsx`):**
+    - Replaced elongated action buttons with sleek circular icon buttons: `<ArrowRightOutlined />` (Open Workspace / Execute Action) and `<CopyOutlined />` (Direct Share Link) backed by context-aware tooltips.
+  - **3. Table High-Density Styling with Strict 3-Line Row Cap (`EcntDashboardView.jsx`):**
+    - Enforced a strict maximum of 3 visual lines per table row:
+      - Col 1 (Doc No/Type): 2 lines (Type tag + bold document number; Date + linked ECN tag).
+      - Col 2 (Title & Details): 3 lines (Single-line truncated title; Customer & Project with `<BankOutlined />` and `<AppstoreOutlined />`; Category tags with `<FileTextOutlined /> DWG`, `<ToolOutlined /> Tool`, `<CodeOutlined /> Prog`, `<SettingOutlined /> Usage`, `Perm/Temp`).
+      - Col 3 (Requester & Dept): 2 lines (Avatar + Name; Dept tag).
+      - Col 4 (Current Stage & PIC Responsibility): 3 lines (Stage tag; PIC responsibility pills max 2 + rule pill; Pending action reason callout).
+      - Col 5 (Status): 1 line (StatusBadge).
+      - Col 6 (Action): 1 line (2 circular icon buttons).
+  - **4. Single-Word Workflow Action Buttons (`WorkflowActionCard.jsx`):**
+    - Replaced multi-sentence phrases with punchy single-word actions with icons and tooltips: `[✓ Close]`, `[✓ Submit]`, `[✓ Approve]`, `[↩ Return]`, `[✕ Deny]`, and `[✓ Sign]`.
+  - **5. Integrated Stage Stepper & Expandable PIC Delegation Flow (`StageStepper.jsx`, `WorkflowStageFlowPanel.jsx`, `EcntWorkspaceView.jsx`):**
+    - Merged Workflow Approval & Stage PICs directly under the Toolbar into `StageStepper`:
+      - Shows assigned PIC pills (`👤 [Name]`) right below each of the 10 stage titles, enabling instant at-a-glance visibility without scrolling.
+      - Added toggle button `[▼ จัดการผู้รับผิดชอบ & สายการอนุมัติ (Workflow PICs)]` expanding a responsive multi-column grid (`layoutMode="grid"`) right beneath the stepper.
+      - Removed `WorkflowStageFlowPanel` from the right sidebar (`<Col xs={24} lg={8}>`), eliminating the 1500px vertical bloat and keeping `WorkflowActionCard` directly at eye level.
+  - **6. Full-Width Immutable Audit Trail & Diffs (`AuditTimeline.jsx`):**
+    - Replaced Ant Design `<Timeline mode="left">` (which forced an empty 50% left column) with a left-aligned full-width timeline displaying timestamps and actor chips directly in the card header.
+  - **7. Department Abbreviation Standardization (`ecntConstants.js`, PostgreSQL DB `ecnt2_system_config`):**
+    - Standardized **MC = Material Control** (not Machining) and **MM = Maintenance** (not Material) across all constants, UI components, and the database configuration table.
+  - **8. Responsive Email Notification Stage Checkboxes (`EcntSettingsModal.jsx` Tab 3):**
+    - Replaced cluttered multi-select dropdown with clean `<Checkbox.Group>` organized into a responsive 2-column grid (`Row gutter={[12, 12]}`) with colored stage tags.
+  - **9. Require ECR Blank Initial State & Single Bottom Submit Button (`EcrRequireView.jsx`, `Dashboard.jsx`):**
+    - Guaranteed fresh blank form state upon initiating new ECRs by decoupling `editEcrData` state.
+    - Removed duplicate submit button from the top header card, retaining a single clear primary `[Submit ECR to Department Manager]` button at the bottom.
+  - **10. Dedicated Revision Diff Comparison Tool (`RevisionDiffModal.jsx`, `EcntWorkspaceView.jsx`):**
+    - Added a prominent `[ 🆚 Diff Viewer ]` button in the Workspace top bar and inside the `More Document Tools` dropdown `[ ⋮ ]`.
+    - Added user-friendly empty state explaining revision comparisons when no return loops have occurred.
+  - **Clean Production Build & Multi-Persona Browser Verification:**
+    - `npm run build`: 100% PASS with exit code 0.
+    - Live browser verification: 100% PASS across pagination, table styling, clean Require ECR wizard, integrated stage delegation, Settings modal checkboxes, and full-width audit trail.
+
 - **ECNT V2 Icon-First Toolbars, Dropdown Grouping & Action Card Overflow Fix (2026-09-18):**
   - **Resolved WorkflowActionCard Button Overflow:**
     - Root Cause: In the narrow sidebar container (`lg={8}`), three large text buttons (`Approve / Proceed`, `Deny / Terminate`, `Request More Detail (Return for Rework)`) were rendered in a single horizontal flex row exceeding 550px, causing the rework button to stick ~200px outside the card boundary.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Card, Typography, Space, Tag, Button, Modal, Select, 
-    Radio, Tooltip, Popconfirm 
+    Radio, Tooltip, Popconfirm, Row, Col 
 } from 'antd';
 import { App } from 'antd';
 import { 
@@ -36,6 +36,8 @@ export default function WorkflowStageFlowPanel({
     docData,
     tasksData = [],
     systemConfig = {},
+    layoutMode = 'grid',
+    bordered = true,
     onStageFlowUpdated
 }) {
     const { message: antdMessage } = App.useApp();
@@ -268,29 +270,239 @@ export default function WorkflowStageFlowPanel({
         }
     };
 
-    return (
-        <Card 
-            title={
-                <Space>
-                    <TeamOutlined style={{ color: '#1890ff' }} />
-                    <span style={{ fontWeight: 600 }}>Workflow Approval & Stage PICs</span>
-                </Space>
-            }
-            size="small"
-            style={{ 
-                borderRadius: 12, 
-                border: '1px solid #e8e8e8', 
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                marginBottom: 16
-            }}
-        >
-            <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 14 }}>
-                ขั้นตอนการอนุมัติและผู้รับผิดชอบในแต่ละสเตจ สามารถเพิ่มผู้รับผิดชอบร่วมและกำหนดเกณฑ์การอนุมัติได้
-            </div>
+    const renderStageCards = () => {
+        if (layoutMode === 'grid') {
+            return (
+                <Row gutter={[12, 12]}>
+                    {STAGES_CONFIG.map((stage) => {
+                        const isCurrent = stage.key === currentStageKey;
+                        const isAuthorized = isAuthorizedToEditStage(stage.key);
+                        const { assignees, approvalRule: rule, approvedBy } = getStageAssignees(stage.key);
 
-            {/* Vertical Stepper Container */}
+                        return (
+                            <Col xs={24} sm={12} md={12} lg={8} xl={6} key={stage.key}>
+                                <div 
+                                    style={{
+                                        background: '#ffffff',
+                                        borderRadius: 10,
+                                        border: isCurrent ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                                        boxShadow: isCurrent ? '0 4px 14px rgba(24, 144, 255, 0.15)' : 'none',
+                                        padding: '10px 12px',
+                                        transition: 'all 0.2s ease',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'space-between',
+                                        height: '100%'
+                                    }}
+                                >
+                                    {/* Stage Header: Number and Title */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <Space size="small" align="center">
+                                            <div style={{ 
+                                                fontSize: 15, 
+                                                fontWeight: 700, 
+                                                color: isCurrent ? '#1890ff' : '#595959',
+                                                minWidth: 18
+                                            }}>
+                                                {stage.number}
+                                            </div>
+                                            <div>
+                                                <Text strong style={{ fontSize: 12, color: isCurrent ? '#1890ff' : '#262626' }}>
+                                                    {stage.title}
+                                                </Text>
+                                            </div>
+                                        </Space>
+
+                                        {isCurrent && (
+                                            <Tag color="processing" style={{ borderRadius: 10, margin: 0, fontSize: 10 }}>
+                                                Active
+                                            </Tag>
+                                        )}
+                                    </div>
+
+                                    {/* Inner Box: Matching reference UI */}
+                                    <div style={{
+                                        background: '#fafafa',
+                                        border: '1px solid #e8e8e8',
+                                        borderRadius: 8,
+                                        padding: '8px 10px',
+                                        flex: 1,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'space-between'
+                                    }}>
+                                        {/* Action Bar inside Box */}
+                                        <div style={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between', 
+                                            alignItems: 'center', 
+                                            marginBottom: 6,
+                                            borderBottom: '1px solid #f0f0f0',
+                                            paddingBottom: 4
+                                        }}>
+                                            {/* Approval Rule Tag / Pill */}
+                                            {stage.isConcernMultiDept ? (
+                                                <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL) เท่านั้น">
+                                                    <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
+                                                        <LockOutlined style={{ marginRight: 4 }} />
+                                                        ทุกคน (ALL)
+                                                    </Tag>
+                                                </Tooltip>
+                                            ) : (
+                                                assignees.length > 1 ? (
+                                                    <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ (ANY vs ALL)" : `เกณฑ์การอนุมัติ: ${rule === 'ALL' ? 'ต้องอนุมัติครบทุกคน' : 'คนใดคนหนึ่งอนุมัติ'}`}>
+                                                        <Tag 
+                                                            color={rule === 'ALL' ? 'volcano' : 'blue'} 
+                                                            style={{ 
+                                                                borderRadius: 8, 
+                                                                margin: 0, 
+                                                                fontSize: 10, 
+                                                                cursor: isAuthorized ? 'pointer' : 'default' 
+                                                            }}
+                                                            onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
+                                                        >
+                                                            {rule === 'ALL' ? 'ทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                                            {isAuthorized && <SwapOutlined style={{ marginLeft: 4 }} />}
+                                                        </Tag>
+                                                    </Tooltip>
+                                                ) : (
+                                                    <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
+                                                        คนเดียว (Single)
+                                                    </Tag>
+                                                )
+                                            )}
+
+                                            {/* Add Target Button */}
+                                            {!stage.isConcernMultiDept && (
+                                                isAuthorized ? (
+                                                    <Tooltip title="เพิ่มผู้รับผิดชอบร่วมในสเตจนี้">
+                                                        <Button 
+                                                            type="link" 
+                                                            size="small" 
+                                                            icon={<PlusCircleOutlined />} 
+                                                            style={{ padding: 0, fontSize: 11, height: 'auto', color: '#1890ff', fontWeight: 600 }}
+                                                            onClick={() => handleOpenAddModal(stage.key)}
+                                                        >
+                                                            Add target
+                                                        </Button>
+                                                    </Tooltip>
+                                                ) : (
+                                                    <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้น">
+                                                        <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
+                                                            <LockOutlined />
+                                                        </span>
+                                                    </Tooltip>
+                                                )
+                                            )}
+                                        </div>
+
+                                        {/* List of Persons */}
+                                        {stage.isConcernMultiDept ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {tasksData.length > 0 ? (
+                                                    tasksData.map(task => {
+                                                        const isAck = task.status === 'ACKNOWLEDGED';
+                                                        return (
+                                                            <div 
+                                                                key={task.id} 
+                                                                style={{ 
+                                                                    display: 'flex', 
+                                                                    alignItems: 'center', 
+                                                                    justifyContent: 'space-between',
+                                                                    fontSize: 11,
+                                                                    padding: '2px 0',
+                                                                    borderBottom: '1px dashed #f0f0f0'
+                                                                }}
+                                                            >
+                                                                <Space size={4}>
+                                                                    <Tag color="geekblue" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>{task.dept_code}</Tag>
+                                                                    <span style={{ fontSize: 11 }}>{task.approved_by_name || task.pic_name || task.dept_label}</span>
+                                                                </Space>
+                                                                {isAck ? (
+                                                                    <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>
+                                                                        ACK
+                                                                    </Tag>
+                                                                ) : (
+                                                                    <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>
+                                                                        PEND
+                                                                    </Tag>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                                        รอการตั้งค่าแผนกใน Block 9
+                                                    </Text>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {assignees.map((person, idx) => {
+                                                    const hasApproved = approvedBy.some(ap => 
+                                                        (ap.emp_no && ap.emp_no.toLowerCase() === (person.emp_no || '').toLowerCase())
+                                                    );
+
+                                                    return (
+                                                        <div 
+                                                            key={idx} 
+                                                            style={{ 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                justifyContent: 'space-between',
+                                                                fontSize: 11,
+                                                                padding: '2px 0'
+                                                            }}
+                                                        >
+                                                            <Space size={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                <UserOutlined style={{ color: '#595959', fontSize: 11 }} />
+                                                                <span style={{ color: '#262626', fontWeight: 500, fontSize: 11 }}>
+                                                                    {person.name || person.emp_no}
+                                                                </span>
+                                                                {person.dept && (
+                                                                    <Tag color="cyan" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>
+                                                                        {person.dept}
+                                                                    </Tag>
+                                                                )}
+                                                                {rule === 'ALL' && (
+                                                                    hasApproved ? (
+                                                                        <Tag color="success" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>✓</Tag>
+                                                                    ) : (
+                                                                        <Tag color="default" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>รอ</Tag>
+                                                                    )
+                                                                )}
+                                                            </Space>
+
+                                                            {isAuthorized && assignees.length > 1 && (
+                                                                <Popconfirm
+                                                                    title="ยืนยันการนำผู้รับผิดชอบท่านนี้ออกจากสเตจ?"
+                                                                    onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
+                                                                    okText="นำออก"
+                                                                    cancelText="ยกเลิก"
+                                                                >
+                                                                    <DeleteOutlined 
+                                                                        style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 12, marginLeft: 4 }} 
+                                                                        title="Remove target"
+                                                                    />
+                                                                </Popconfirm>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </Col>
+                        );
+                    })}
+                </Row>
+            );
+        }
+
+        // Vertical Layout (Sidebar mode)
+        return (
             <div style={{ position: 'relative', paddingLeft: 12 }}>
-                {/* Connecting Vertical Line */}
                 <div style={{
                     position: 'absolute',
                     top: 20,
@@ -305,7 +517,7 @@ export default function WorkflowStageFlowPanel({
                     {STAGES_CONFIG.map((stage) => {
                         const isCurrent = stage.key === currentStageKey;
                         const isAuthorized = isAuthorizedToEditStage(stage.key);
-                        const { assignees, approvalRule: rule, approvedBy } = getStageAssignees(stage.key);
+                        const { assignees, approvalRule: rule } = getStageAssignees(stage.key);
 
                         return (
                             <div 
@@ -320,7 +532,6 @@ export default function WorkflowStageFlowPanel({
                                     position: 'relative'
                                 }}
                             >
-                                {/* Stage Header: Number and Title */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <Space size="middle" align="center">
                                         <div style={{ 
@@ -345,14 +556,12 @@ export default function WorkflowStageFlowPanel({
                                     )}
                                 </div>
 
-                                {/* Inner Box: Matching the user's reference image */}
                                 <div style={{
                                     background: '#fafafa',
                                     border: '1px solid #e8e8e8',
                                     borderRadius: 8,
                                     padding: '8px 12px'
                                 }}>
-                                    {/* Action Bar inside Box */}
                                     <div style={{ 
                                         display: 'flex', 
                                         justifyContent: 'space-between', 
@@ -361,9 +570,8 @@ export default function WorkflowStageFlowPanel({
                                         borderBottom: '1px solid #f0f0f0',
                                         paddingBottom: 6
                                     }}>
-                                        {/* Approval Rule Tag / Pill */}
                                         {stage.isConcernMultiDept ? (
-                                            <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL) เท่านั้น ไม่สามารถแก้ไขได้">
+                                            <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL)">
                                                 <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
                                                     <LockOutlined style={{ marginRight: 4 }} />
                                                     ทุกคน (ALL)
@@ -371,15 +579,10 @@ export default function WorkflowStageFlowPanel({
                                             </Tooltip>
                                         ) : (
                                             assignees.length > 1 ? (
-                                                <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ (ANY vs ALL)" : `เกณฑ์การอนุมัติ: ${rule === 'ALL' ? 'ต้องอนุมัติครบทุกคน' : 'คนใดคนหนึ่งอนุมัติ'}`}>
+                                                <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ" : `เกณฑ์การอนุมัติ: ${rule}`}>
                                                     <Tag 
                                                         color={rule === 'ALL' ? 'volcano' : 'blue'} 
-                                                        style={{ 
-                                                            borderRadius: 8, 
-                                                            margin: 0, 
-                                                            fontSize: 11, 
-                                                            cursor: isAuthorized ? 'pointer' : 'default' 
-                                                        }}
+                                                        style={{ borderRadius: 8, margin: 0, fontSize: 11, cursor: isAuthorized ? 'pointer' : 'default' }}
                                                         onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
                                                     >
                                                         {rule === 'ALL' ? 'ทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
@@ -393,7 +596,6 @@ export default function WorkflowStageFlowPanel({
                                             )
                                         )}
 
-                                        {/* Add Target Button */}
                                         {!stage.isConcernMultiDept && (
                                             isAuthorized ? (
                                                 <Tooltip title="เพิ่มผู้รับผิดชอบร่วมในสเตจนี้">
@@ -408,7 +610,7 @@ export default function WorkflowStageFlowPanel({
                                                     </Button>
                                                 </Tooltip>
                                             ) : (
-                                                <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้นที่สามารถเพิ่มผู้รับผิดชอบได้">
+                                                <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้น">
                                                     <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
                                                         <LockOutlined />
                                                     </span>
@@ -417,102 +619,48 @@ export default function WorkflowStageFlowPanel({
                                         )}
                                     </div>
 
-                                    {/* List of Persons */}
                                     {stage.isConcernMultiDept ? (
-                                        // Stage 9: Multi-Department Concern Tasks
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                             {tasksData.length > 0 ? (
-                                                tasksData.map(task => {
-                                                    const isAck = task.status === 'ACKNOWLEDGED';
-                                                    return (
-                                                        <div 
-                                                            key={task.id} 
-                                                            style={{ 
-                                                                display: 'flex', 
-                                                                alignItems: 'center', 
-                                                                justifyContent: 'space-between',
-                                                                fontSize: 12,
-                                                                padding: '4px 0',
-                                                                borderBottom: '1px dashed #f0f0f0'
-                                                            }}
-                                                        >
-                                                            <Space size={6}>
-                                                                <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{task.dept_code}</Tag>
-                                                                <UserOutlined style={{ color: '#8c8c8c' }} />
-                                                                <span>{task.approved_by_name || task.pic_name || task.dept_label}</span>
-                                                            </Space>
-                                                            {isAck ? (
-                                                                <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 10 }}>
-                                                                    ACKNOWLEDGED
-                                                                </Tag>
-                                                            ) : (
-                                                                <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 10 }}>
-                                                                    PENDING
-                                                                </Tag>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })
+                                                tasksData.map(task => (
+                                                    <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px dashed #f0f0f0' }}>
+                                                        <Space size={6}>
+                                                            <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{task.dept_code}</Tag>
+                                                            <UserOutlined style={{ color: '#8c8c8c' }} />
+                                                            <span>{task.approved_by_name || task.pic_name || task.dept_label}</span>
+                                                        </Space>
+                                                        {task.status === 'ACKNOWLEDGED' ? (
+                                                            <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 10 }}>ACK</Tag>
+                                                        ) : (
+                                                            <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 10 }}>PENDING</Tag>
+                                                        )}
+                                                    </div>
+                                                ))
                                             ) : (
-                                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                                    รอการตั้งค่าแผนกที่เกี่ยวข้องใน Block 9 (QA, QC, PC, PD1, PD2, MC, MM)
-                                                </Text>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>รอการตั้งค่าแผนกใน Block 9</Text>
                                             )}
                                         </div>
                                     ) : (
-                                        // Other Stages: Dynamic Assignees
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            {assignees.map((person, idx) => {
-                                                const hasApproved = approvedBy.some(ap => 
-                                                    (ap.emp_no && ap.emp_no.toLowerCase() === (person.emp_no || '').toLowerCase())
-                                                );
-
-                                                return (
-                                                    <div 
-                                                        key={idx} 
-                                                        style={{ 
-                                                            display: 'flex', 
-                                                            alignItems: 'center', 
-                                                            justifyContent: 'space-between',
-                                                            fontSize: 12,
-                                                            padding: '2px 0'
-                                                        }}
-                                                    >
-                                                        <Space size={6}>
-                                                            <UserOutlined style={{ color: '#595959' }} />
-                                                            <span style={{ color: '#262626', fontWeight: 500 }}>
-                                                                {person.name || person.emp_no}
-                                                            </span>
-                                                            {person.dept && (
-                                                                <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>
-                                                                    {person.dept}
-                                                                </Tag>
-                                                            )}
-                                                            {rule === 'ALL' && (
-                                                                hasApproved ? (
-                                                                    <Tag color="success" style={{ fontSize: 10, margin: 0 }}>อนุมัติแล้ว</Tag>
-                                                                ) : (
-                                                                    <Tag color="default" style={{ fontSize: 10, margin: 0 }}>รออนุมัติ</Tag>
-                                                                )
-                                                            )}
-                                                        </Space>
-
-                                                        {isAuthorized && assignees.length > 1 && (
-                                                            <Popconfirm
-                                                                title="ยืนยันการนำผู้รับผิดชอบท่านนี้ออกจากสเตจ?"
-                                                                onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
-                                                                okText="นำออก"
-                                                                cancelText="ยกเลิก"
-                                                            >
-                                                                <DeleteOutlined 
-                                                                    style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 13 }} 
-                                                                    title="Remove target"
-                                                                />
-                                                            </Popconfirm>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                            {assignees.map((person, idx) => (
+                                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
+                                                    <Space size={6}>
+                                                        <UserOutlined style={{ color: '#595959' }} />
+                                                        <span style={{ color: '#262626', fontWeight: 500 }}>{person.name || person.emp_no}</span>
+                                                        {person.dept && <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{person.dept}</Tag>}
+                                                    </Space>
+                                                    {isAuthorized && assignees.length > 1 && (
+                                                        <Popconfirm
+                                                            title="ยืนยันการนำผู้รับผิดชอบท่านนี้ออกจากสเตจ?"
+                                                            onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
+                                                            okText="นำออก"
+                                                            cancelText="ยกเลิก"
+                                                        >
+                                                            <DeleteOutlined style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 13 }} />
+                                                        </Popconfirm>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -521,6 +669,41 @@ export default function WorkflowStageFlowPanel({
                     })}
                 </div>
             </div>
+        );
+    };
+
+    const mainContent = (
+        <div>
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 14 }}>
+                ขั้นตอนการอนุมัติและผู้รับผิดชอบในแต่ละสเตจ สามารถเพิ่มผู้รับผิดชอบร่วมและกำหนดเกณฑ์การอนุมัติได้
+            </div>
+            {renderStageCards()}
+        </div>
+    );
+
+    return (
+        <div>
+            {bordered ? (
+                <Card 
+                    title={
+                        <Space>
+                            <TeamOutlined style={{ color: '#1890ff' }} />
+                            <span style={{ fontWeight: 600 }}>Workflow Approval & Stage PICs</span>
+                        </Space>
+                    }
+                    size="small"
+                    style={{ 
+                        borderRadius: 12, 
+                        border: '1px solid #e8e8e8', 
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                        marginBottom: 16
+                    }}
+                >
+                    {mainContent}
+                </Card>
+            ) : (
+                mainContent
+            )}
 
             {/* Add Target Modal */}
             <Modal
@@ -586,6 +769,6 @@ export default function WorkflowStageFlowPanel({
                     </div>
                 </div>
             </Modal>
-        </Card>
+        </div>
     );
 }

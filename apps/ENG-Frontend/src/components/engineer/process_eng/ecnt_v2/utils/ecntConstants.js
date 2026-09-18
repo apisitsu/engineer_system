@@ -184,8 +184,8 @@ export const CONCERN_DEPTS = [
     { dept_code: 'QC', dept_label: 'QC (Quality Control)', pic_name: 'SUPARAT KATSANUK', color: '#fa8c16' },
     { dept_code: 'PD1', dept_label: 'Production #1', pic_name: 'CHANASORN MEEPRO', color: '#13c2c2' },
     { dept_code: 'PD2', dept_label: 'Production #2', pic_name: 'WATCHARIYA ROEKARAM', color: '#eb2f96' },
-    { dept_code: 'MC', dept_label: 'MC (Machining)', pic_name: 'PUSSADEE ROIKEAW', color: '#52c41a' },
-    { dept_code: 'MM', dept_label: 'MM (Materials)', pic_name: 'Sarunyu Chokchaikasemsuk', color: '#faad14' },
+    { dept_code: 'MC', dept_label: 'MC (Material Control)', pic_name: 'PUSSADEE ROIKEAW', color: '#52c41a' },
+    { dept_code: 'MM', dept_label: 'MM (Maintenance)', pic_name: 'Sarunyu Chokchaikasemsuk', color: '#faad14' },
 ];
 
 // Discussion Categories

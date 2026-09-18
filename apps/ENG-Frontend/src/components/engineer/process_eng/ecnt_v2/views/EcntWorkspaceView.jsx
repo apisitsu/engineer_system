@@ -15,7 +15,6 @@ import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 import StageStepper from '../components/StageStepper';
 import WorkflowActionCard from '../components/WorkflowActionCard';
-import WorkflowStageFlowPanel from '../components/WorkflowStageFlowPanel';
 import RevisionDiffModal from '../components/RevisionDiffModal';
 import FieldAttachmentDisplay from '../components/FieldAttachmentDisplay';
 import StatusBadge from '../components/StatusBadge';
@@ -226,6 +225,26 @@ export default function EcntWorkspaceView({
                             />
                         </Tooltip>
 
+                        {/* Dedicated Revision Diff Comparison Tool (Item 10) */}
+                        <Tooltip title={
+                            (docData?.revision_count > 0 || fieldAudits.length > 0)
+                                ? `ดูการเปรียบเทียบข้อมูลก่อน-หลังแก้ไข (Diff Viewer) - มี ${fieldAudits.length || docData?.revision_count} รายการ` 
+                                : 'ดูการเปรียบเทียบข้อมูลก่อน-หลังแก้ไข (Diff Viewer)'
+                        }>
+                            <Button 
+                                icon={<DiffOutlined />} 
+                                onClick={() => setIsDiffModalOpen(true)}
+                                style={{ 
+                                    borderRadius: 8,
+                                    borderColor: (docData?.revision_count > 0 || fieldAudits.length > 0) ? '#1890ff' : undefined,
+                                    color: (docData?.revision_count > 0 || fieldAudits.length > 0) ? '#1890ff' : undefined,
+                                    fontWeight: (docData?.revision_count > 0 || fieldAudits.length > 0) ? 600 : undefined
+                                }}
+                            >
+                                🆚 Diff Viewer {docData?.revision_count > 0 ? `(Rev ${docData.revision_count})` : ''}
+                            </Button>
+                        </Tooltip>
+
                         {/* More Document Tools Dropdown */}
                         <Dropdown 
                             menu={{
@@ -233,6 +252,7 @@ export default function EcntWorkspaceView({
                                     { key: 'share', label: 'Copy Direct Share Link', icon: <CopyOutlined />, onClick: handleCopyLink },
                                     { key: 'gantt', label: 'Gantt Timeline Chart', icon: <CalendarOutlined />, onClick: () => onOpenGantt({ id: documentId, type: documentType }) },
                                     { key: 'discuss', label: 'Problem Hub & Discussions', icon: <MessageOutlined />, onClick: () => onOpenInvestigation(docData) },
+                                    { key: 'diff', label: `Revision Diff Viewer ${docData?.revision_count > 0 ? `(Rev ${docData.revision_count})` : ''}`, icon: <DiffOutlined />, onClick: () => setIsDiffModalOpen(true) },
                                     ...(docData?.process_status === 'ECN Effective' ? [{ key: 'pdf', label: 'Download Official PDF', icon: <FilePdfOutlined />, onClick: handleDownloadPdf }] : [])
                                 ]
                             }}
@@ -293,10 +313,16 @@ export default function EcntWorkspaceView({
                 </div>
             </Card>
 
-            {/* Stage Progress Stepper */}
+            {/* Stage Progress Stepper with Integrated Stage PICs & Delegation Flow */}
             <StageStepper 
+                documentType={documentType}
+                documentId={documentId}
+                docData={docData}
                 currentStageCode={docData?.current_stage_code} 
                 stageHistory={stageHistory} 
+                tasksData={tasksData}
+                systemConfig={systemConfig}
+                onStageFlowUpdated={fetchDetail}
             />
 
             {/* Revision Switcher & History Bar */}
@@ -693,16 +719,6 @@ export default function EcntWorkspaceView({
                                 systemConfig={systemConfig}
                                 docData={docData}
                                 onSuccess={fetchDetail} 
-                            />
-
-                            {/* Workflow Stage Flow Stepper matching reference image */}
-                            <WorkflowStageFlowPanel
-                                documentType={documentType}
-                                documentId={docData.id}
-                                docData={docData}
-                                tasksData={tasksData}
-                                systemConfig={systemConfig}
-                                onStageFlowUpdated={fetchDetail}
                             />
                         </Col>
                     </Row>

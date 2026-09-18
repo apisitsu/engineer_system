@@ -52,8 +52,8 @@ export default function AuditTimeline({ logs = [], fieldAudits = [] }) {
     };
 
     return (
-        <div style={{ padding: '8px 0' }}>
-            <Timeline mode="left">
+        <div style={{ padding: '12px 16px 12px 4px', maxWidth: 1200 }}>
+            <Timeline style={{ marginLeft: 8 }}>
                 {events.map(ev => {
                     if (ev.type === 'ACTION') {
                         const log = ev.data;
@@ -63,12 +63,6 @@ export default function AuditTimeline({ logs = [], fieldAudits = [] }) {
                             <Timeline.Item 
                                 key={ev.id}
                                 color={log.action === 'DENY' ? 'red' : (isRmd ? 'orange' : (log.action === 'APPROVE' ? 'green' : 'blue'))}
-                                label={
-                                    <div style={{ textAlign: 'right', paddingRight: 10 }}>
-                                        <Text strong style={{ fontSize: 12 }}>{moment(ev.time).format('DD-MMM-YYYY')}</Text>
-                                        <div style={{ fontSize: 11, color: '#8c8c8c' }}>{moment(ev.time).format('HH:mm:ss')}</div>
-                                    </div>
-                                }
                             >
                                 <Card 
                                     size="small" 
@@ -76,38 +70,48 @@ export default function AuditTimeline({ logs = [], fieldAudits = [] }) {
                                         borderRadius: 8, 
                                         border: isRmd ? '1px solid #ffd591' : '1px solid #f0f0f0',
                                         background: isRmd ? '#fffbe6' : '#ffffff',
-                                        boxShadow: '0 1px 4px rgba(0,0,0,0.03)'
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+                                        marginBottom: 4
                                     }}
                                 >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Space>
-                                            <Text strong style={{ color: '#1890ff' }}>{log.step_label || 'Workflow Action'}</Text>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                                        <Space size={8} wrap>
+                                            <Text strong style={{ color: '#1890ff', fontSize: 13 }}>{log.step_label || 'Workflow Action'}</Text>
                                             {getActionTag(log.action)}
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                by <Text strong>{log.action_by_name}</Text> ({log.action_role || 'Staff'})
+                                            </Text>
                                         </Space>
                                         <Text type="secondary" style={{ fontSize: 11 }}>
-                                            By <Text strong>{log.action_by_name}</Text> ({log.action_role || 'Staff'})
+                                            📅 {moment(ev.time).format('DD-MMM-YYYY HH:mm:ss')}
                                         </Text>
                                     </div>
 
                                     {log.comment && (
-                                        <Paragraph style={{ marginTop: 6, marginBottom: 4, color: '#595959', fontSize: 12 }}>
+                                        <Paragraph style={{ marginTop: 8, marginBottom: 4, color: '#595959', fontSize: 12 }}>
                                             "{log.comment}"
                                         </Paragraph>
                                     )}
 
                                     {log.request_to_requester && (
-                                        <div style={{ marginTop: 6, padding: 6, background: '#fff2e8', borderRadius: 4, border: '1px solid #ffbb96' }}>
+                                        <div style={{ marginTop: 8, padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffbb96' }}>
                                             <Text type="warning" strong style={{ fontSize: 12 }}>
-                                                ⚠️ Required Modifications: {log.request_to_requester}
+                                                ⚠️ Clarification Request:
                                             </Text>
+                                            <div style={{ marginTop: 4, fontSize: 12, color: '#d4380d' }}>
+                                                {log.request_to_requester}
+                                            </div>
                                         </div>
                                     )}
 
                                     {log.deny_reason && (
-                                        <div style={{ marginTop: 6, padding: 6, background: '#fff1f0', borderRadius: 4, border: '1px solid #ffa39e' }}>
+                                        <div style={{ marginTop: 8, padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffa39e' }}>
                                             <Text type="danger" strong style={{ fontSize: 12 }}>
-                                                ❌ Denial Justification: {log.deny_reason}
+                                                ❌ Denial Justification:
                                             </Text>
+                                            <div style={{ marginTop: 4, fontSize: 12, color: '#cf1322' }}>
+                                                {log.deny_reason}
+                                            </div>
                                         </div>
                                     )}
                                 </Card>
@@ -119,21 +123,20 @@ export default function AuditTimeline({ logs = [], fieldAudits = [] }) {
                             <Timeline.Item 
                                 key={ev.id}
                                 color="purple"
-                                label={
-                                    <div style={{ textAlign: 'right', paddingRight: 10 }}>
-                                        <Text strong style={{ fontSize: 12 }}>{moment(ev.time).format('DD-MMM-YYYY')}</Text>
-                                        <div style={{ fontSize: 11, color: '#8c8c8c' }}>{moment(ev.time).format('HH:mm:ss')}</div>
-                                    </div>
-                                }
                             >
-                                <Card size="small" style={{ borderRadius: 8, background: '#f9f0ff', border: '1px solid #d3adf7' }}>
-                                    <Space>
-                                        <EditOutlined style={{ color: '#722ed1' }} />
-                                        <Text strong style={{ color: '#722ed1' }}>Field Modified: <Tag color="purple">{diff.field_name}</Tag></Text>
-                                        <Text type="secondary" style={{ fontSize: 11 }}>by {diff.modified_by_name}</Text>
-                                    </Space>
-                                    <div style={{ marginTop: 6, fontSize: 12 }}>
-                                        <div style={{ textDecoration: 'line-through', color: '#ff4d4f' }}>
+                                <Card size="small" style={{ borderRadius: 8, background: '#f9f0ff', border: '1px solid #d3adf7', marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                                        <Space size={8}>
+                                            <EditOutlined style={{ color: '#722ed1' }} />
+                                            <Text strong style={{ color: '#722ed1', fontSize: 13 }}>Field Modified: <Tag color="purple">{diff.field_name}</Tag></Text>
+                                            <Text type="secondary" style={{ fontSize: 12 }}>by {diff.modified_by_name}</Text>
+                                        </Space>
+                                        <Text type="secondary" style={{ fontSize: 11 }}>
+                                            📅 {moment(ev.time).format('DD-MMM-YYYY HH:mm:ss')}
+                                        </Text>
+                                    </div>
+                                    <div style={{ marginTop: 8, fontSize: 12, background: '#ffffff', padding: '8px 12px', borderRadius: 6, border: '1px solid #efdbff' }}>
+                                        <div style={{ textDecoration: 'line-through', color: '#ff4d4f', marginBottom: 4 }}>
                                             Old: {diff.old_value || 'None'}
                                         </div>
                                         <div style={{ color: '#52c41a', fontWeight: 600 }}>

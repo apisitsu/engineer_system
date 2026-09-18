@@ -20,8 +20,8 @@ const DEFAULT_DEPARTMENTS = [
     { dept_code: 'QC', dept_label: 'QC (Quality Control)', default_pic: 'SUPARAT KATSANUK' },
     { dept_code: 'PD1', dept_label: 'Production #1', default_pic: 'CHANASORN MEEPRO' },
     { dept_code: 'PD2', dept_label: 'Production #2', default_pic: 'WATCHARIYA ROEKARAM' },
-    { dept_code: 'MC', dept_label: 'MC (Machining)', default_pic: 'PUSSADEE ROIKEAW' },
-    { dept_code: 'MM', dept_label: 'MM (Materials)', default_pic: 'Sarunyu Chokchaikasemsuk' },
+    { dept_code: 'MC', dept_label: 'MC (Material Control)', default_pic: 'PUSSADEE ROIKEAW' },
+    { dept_code: 'MM', dept_label: 'MM (Maintenance)', default_pic: 'Sarunyu Chokchaikasemsuk' },
 ];
 
 export default function WorkflowActionCard({ 
@@ -550,11 +550,12 @@ export default function WorkflowActionCard({
                                             <Button 
                                                 size="small" 
                                                 type="primary" 
+                                                icon={<CheckCircleOutlined />}
                                                 onClick={() => handleAcknowledgeTask(record.id)}
                                                 loading={loading}
                                                 style={{ background: '#52c41a', borderColor: '#52c41a' }}
                                             >
-                                                Sign / Acknowledge
+                                                Sign
                                             </Button>
                                         );
                                     }
@@ -671,12 +672,12 @@ export default function WorkflowActionCard({
                                 onClick={() => handleSubmit('CLOSE')} 
                                 loading={loading}
                             >
-                                Officially Close ECN (Make Effective)
+                                Close
                             </Button>
                         </Tooltip>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                            {/* Primary Action Button (Approve / Proceed) */}
+                            {/* Primary Action Button (Approve / Submit) */}
                             <Tooltip title={currentBlock === 9 ? "Submit Summary & Open Block 10 Tasks" : "Approve this stage and proceed to next stage"}>
                                 <Button 
                                     type="primary" 
@@ -686,7 +687,7 @@ export default function WorkflowActionCard({
                                     loading={loading}
                                     style={{ width: '100%', borderRadius: 8, fontWeight: 600, background: '#1677ff' }}
                                 >
-                                    {currentBlock === 9 ? 'Submit Summary & Proceed to Block 10' : 'Approve / Proceed'}
+                                    {currentBlock === 9 ? 'Submit' : 'Approve'}
                                 </Button>
                             </Tooltip>
                             
@@ -696,7 +697,7 @@ export default function WorkflowActionCard({
                                 <Row gutter={[8, 8]} style={{ width: '100%', margin: 0 }}>
                                     {/* Request More Detail */}
                                     {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
-                                        <Col flex="1 1 140px" style={{ padding: 0, paddingRight: 4 }}>
+                                        <Col flex="1 1 120px" style={{ padding: 0, paddingRight: 4 }}>
                                             <Tooltip title="Return to requester / engineer for clarification or revision (Rework)">
                                                 <Button 
                                                     icon={<RollbackOutlined />}
@@ -718,7 +719,7 @@ export default function WorkflowActionCard({
                                                     }} 
                                                     loading={loading}
                                                 >
-                                                    Return (Rework)
+                                                    Return
                                                 </Button>
                                             </Tooltip>
                                         </Col>
