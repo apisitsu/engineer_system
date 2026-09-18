@@ -4,8 +4,51 @@
 **EngineerSystem** is an engineering management platform for manufacturing operations, built as an NPM workspace monorepo with a React frontend and Express.js backend.
 
 ## Current Project Status
-- **Last Update:** 2026-09-17
+- **Last Update:** 2026-09-18
 - **Active Goal:** ECNT V2 Enterprise Platform: Production readiness, multi-persona real-world testing, and live deployment verification.
+
+- **ECNT V2 Icon-First Toolbars, Dropdown Grouping & Action Card Overflow Fix (2026-09-18):**
+  - **Resolved WorkflowActionCard Button Overflow:**
+    - Root Cause: In the narrow sidebar container (`lg={8}`), three large text buttons (`Approve / Proceed`, `Deny / Terminate`, `Request More Detail (Return for Rework)`) were rendered in a single horizontal flex row exceeding 550px, causing the rework button to stick ~200px outside the card boundary.
+    - Solution: Restructured the bottom action area into an elegant, non-overflowing 2-tier layout:
+      - Tier 1: Full-width Primary `[✓ Approve / Proceed]` (or `[✓ Submit Summary & Proceed to Block 10]`).
+      - Tier 2: Responsive `<Row gutter={[8, 8]}>` housing `[↩ Return (Rework)]` and `[✕ Deny]`, equipped with rich `<Tooltip>` explanations.
+    - Fixed Block 4 form item layout: stacked `Action Decision` and `Assign Engineer` vertically (`span={24}`), eliminating horizontal cramming.
+  - **Master Top Navigation & Toolbars Iconification with Tooltips:**
+    - Upgraded top navigation in `Dashboard.jsx`: replaced wide text tabs with compact icon-first items backed by descriptive `<Tooltip>` titles (`Dashboard`, `Gantt`, `Require ECR`, `Workspace`, `Problem Hub`).
+    - Transformed `Refresh` and `Settings` into sleek icon-only buttons with hover tooltips.
+  - **Category Filter Icon Dropdown (`EcntDashboardView.jsx`):**
+    - Grouped 5 scattered category pills (`All Active`, `ECR Only`, `ECN Only`, `Clarification / Rework`, `Closed / Effective`) into a unified **Icon Dropdown** (`<FilterOutlined />`) showing dynamic counts and active selection.
+    - Consolidated 3 stacked rows of controls into a single, spacious, responsive dashboard toolbar.
+    - Converted View Switcher into compact icons with tooltips (`<TableOutlined /> Table` vs `<AppstoreOutlined /> Kanban`).
+    - Added `<Tooltip>` to Timeline & Gantt chart button (`<CalendarOutlined />`).
+  - **Workspace Top Bar & More Document Tools Dropdown (`EcntWorkspaceView.jsx`):**
+    - Replaced wide buttons with quick icon buttons (`Copy Link`, `Gantt`, `Problem Hub`) with tooltips.
+    - Grouped secondary actions into a compact `More Document Tools` dropdown (`<MoreOutlined />`).
+  - **Clean Production Build & Web Browser Verification:**
+    - `npm run build`: 100% PASS with 0 compilation errors and unused imports cleaned.
+    - Live browser verification: confirmed 0px button overflow, responsive single-row dashboard toolbar, functional category icon dropdown, and clean stage cards.
+
+- **ECNT V2 Responsive Pipeline Table Default, Stage Flow Delegation, Revision Diff & ECN Wipe (2026-09-18):**
+  - **Responsive Executive Pipeline Table Default:**
+    - Replaced the horizontal Kanban board as the default view with a responsive, high-density **Executive Pipeline Table** displaying Document No/Type, Title & Technical categories (DWG, Tool, Prog, Usage), Requester & Dept, Current Stage & PICs (with co-assignees and approval rule pills), Status badge, Action button (`[ ดำเนินการ / เปิดดู ]`), and direct link share.
+    - Added `<Segmented>` view switcher in the toolbar to effortlessly toggle between `📋 Pipeline Table (Default)` and `📊 Kanban Board`.
+    - Added quick category filter pills: All Active, ECR Only, ECN Only, Clarification / Rework, and Closed / Effective.
+  - **Dynamic Stage Flow & PIC Delegation (Visual Approval Flow):**
+    - Created `WorkflowStageFlowPanel.jsx` mirroring user reference UI: vertical connected stage cards, active stage highlight, inner assignee boxes with `👤` icons, and `⊕ Add target.` co-PIC adder with registered user candidate dropdown (excluding `'admin'` nickname).
+    - Added `stage_flow JSONB` column to `ecnt2_ecr` and `ecnt2_ecn`.
+    - Stage PICs and Authorized Admins can designate multiple assignees and configure approval rule: `ANY` (คนใดคนหนึ่งอนุมัติ - default) vs `ALL` (จำเป็นต้องอนุมัติทุกคน).
+    - **Strict Exception Guard:** Block 10 Multi-Department Concern Approvals is locked to `ALL` and only authorized department representatives (PC, QA, QC, PD1, PD2, MC, MM) can approve. Unauthorized alterations are rejected with HTTP 400.
+  - **Require More Detail Revision History & Comparison Viewer:**
+    - Latest revised data (รอบล่าสุด) is rendered by default in `EcntWorkspaceView.jsx`.
+    - Added Revision Switcher Banner allowing users to toggle between latest revision and original pre-revision values.
+    - Built `RevisionDiffModal.jsx` side-by-side comparison modal mapping database keys to Thai descriptions, highlighting changed fields, and displaying manager clarification notes alongside requester revision responses.
+  - **ECN Test Data Total Cleanup:**
+    - Safely wiped all 17 ECN records, impact assessments, concern tasks, attachments, discussions, and stage histories from database while keeping ECR records intact. Reset recent ECRs to `STAGE_4` / `Issued ECN` for clean user testing.
+  - **Automated Tests & Production Build Verification:**
+    - Backend verification (`test_stage_flow_and_approval_rules.js`): 100% PASS (ECN count = 0, stage flow persistence = verified, Block 10 concern guard = verified).
+    - Frontend production build (`npm run build`): 100% PASS with 0 compilation errors.
+    - Live browser verification: verified pipeline table default, 1-click kanban switch, stage flow delegation cards, and diff viewer.
 
 - **ECNT V2 Global Read Access & Stage-Ownership Action Restriction (2026-09-17):**
   - **Root Cause of Non-Admin Users Not Seeing Data:**

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Layout, Spin, Button, Typography, Space, Tag, Segmented } from 'antd';
+import { Layout, Spin, Button, Typography, Space, Tag, Segmented, Tooltip } from 'antd';
 import { 
     AppstoreOutlined, CalendarOutlined, PlusCircleOutlined, 
     FileTextOutlined, MessageOutlined, SyncOutlined, SettingOutlined 
@@ -234,56 +234,66 @@ export default function Dashboard() {
                     </Text>
                 </div>
 
-                {/* Segmented View Switcher */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Segmented View Switcher & Action Tools */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <Segmented
                         value={currentView}
                         onChange={setCurrentView}
-                        size="large"
+                        size="middle"
                         options={[
                             {
                                 label: (
-                                    <Space>
-                                        <AppstoreOutlined />
-                                        <span>Dashboard</span>
-                                    </Space>
+                                    <Tooltip title="Executive Pipeline Dashboard">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <AppstoreOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 13 }}>Dashboard</span>
+                                        </Space>
+                                    </Tooltip>
                                 ),
                                 value: 'dashboard'
                             },
                             {
                                 label: (
-                                    <Space>
-                                        <CalendarOutlined />
-                                        <span>Gantt Chart</span>
-                                    </Space>
+                                    <Tooltip title="Timeline & Gantt Chart">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <CalendarOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 13 }}>Gantt</span>
+                                        </Space>
+                                    </Tooltip>
                                 ),
                                 value: 'gantt'
                             },
                             {
                                 label: (
-                                    <Space>
-                                        <PlusCircleOutlined />
-                                        <span>Require ECR</span>
-                                    </Space>
+                                    <Tooltip title="Initiate New ECR Request">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <PlusCircleOutlined style={{ fontSize: 15, color: '#1677ff' }} />
+                                            <span style={{ fontSize: 13 }}>Require ECR</span>
+                                        </Space>
+                                    </Tooltip>
                                 ),
                                 value: 'require'
                             },
                             ...(activeDocId ? [
                                 {
                                     label: (
-                                        <Space>
-                                            <FileTextOutlined />
-                                            <span>Workspace</span>
-                                        </Space>
+                                        <Tooltip title={`Active Doc: ${activeDocType} #${activeDocId} Workspace`}>
+                                            <Space size={4} style={{ padding: '0 4px' }}>
+                                                <FileTextOutlined style={{ fontSize: 15, color: '#722ed1' }} />
+                                                <span style={{ fontSize: 13 }}>Workspace</span>
+                                            </Space>
+                                        </Tooltip>
                                     ),
                                     value: 'workspace'
                                 },
                                 {
                                     label: (
-                                        <Space>
-                                            <MessageOutlined />
-                                            <span>Problem Hub</span>
-                                        </Space>
+                                        <Tooltip title="Investigation, Discussions & Problem Hub">
+                                            <Space size={4} style={{ padding: '0 4px' }}>
+                                                <MessageOutlined style={{ fontSize: 15, color: '#fa8c16' }} />
+                                                <span style={{ fontSize: 13 }}>Problem Hub</span>
+                                            </Space>
+                                        </Tooltip>
                                     ),
                                     value: 'investigation'
                                 }
@@ -291,22 +301,23 @@ export default function Dashboard() {
                         ]}
                     />
 
-                    <Button 
-                        icon={<SyncOutlined spin={loading} />} 
-                        onClick={() => { fetchData(); fetchConfig(); }}
-                        style={{ borderRadius: 8 }}
-                    >
-                        Refresh
-                    </Button>
+                    {/* Action Tools: Icon-First with Tooltips */}
+                    <Tooltip title="Refresh Workflow Data">
+                        <Button 
+                            icon={<SyncOutlined spin={loading} />} 
+                            onClick={() => { fetchData(); fetchConfig(); }}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Tooltip>
 
                     {isSettingsAuthorized && (
-                        <Button 
-                            icon={<SettingOutlined />} 
-                            onClick={() => setIsSettingsModalOpen(true)}
-                            style={{ borderRadius: 8, borderColor: '#1890ff', color: '#1890ff', fontWeight: 600 }}
-                        >
-                            Settings
-                        </Button>
+                        <Tooltip title="System Configuration & Stage Flow Settings">
+                            <Button 
+                                icon={<SettingOutlined />} 
+                                onClick={() => setIsSettingsModalOpen(true)}
+                                style={{ borderRadius: 8, borderColor: '#1890ff', color: '#1890ff' }}
+                            />
+                        </Tooltip>
                     )}
                 </div>
             </div>

@@ -363,34 +363,32 @@ export default function WorkflowStageFlowPanel({
                                     }}>
                                         {/* Approval Rule Tag / Pill */}
                                         {stage.isConcernMultiDept ? (
-                                            <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
-                                                <LockOutlined style={{ marginRight: 4 }} />
-                                                อนุมัติจากทุกคน (ALL) - บังคับทุกแผนก
-                                            </Tag>
+                                            <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL) เท่านั้น ไม่สามารถแก้ไขได้">
+                                                <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
+                                                    <LockOutlined style={{ marginRight: 4 }} />
+                                                    ทุกคน (ALL)
+                                                </Tag>
+                                            </Tooltip>
                                         ) : (
                                             assignees.length > 1 ? (
-                                                <Space size={6}>
+                                                <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ (ANY vs ALL)" : `เกณฑ์การอนุมัติ: ${rule === 'ALL' ? 'ต้องอนุมัติครบทุกคน' : 'คนใดคนหนึ่งอนุมัติ'}`}>
                                                     <Tag 
                                                         color={rule === 'ALL' ? 'volcano' : 'blue'} 
-                                                        style={{ borderRadius: 8, margin: 0, fontSize: 11 }}
+                                                        style={{ 
+                                                            borderRadius: 8, 
+                                                            margin: 0, 
+                                                            fontSize: 11, 
+                                                            cursor: isAuthorized ? 'pointer' : 'default' 
+                                                        }}
+                                                        onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
                                                     >
-                                                        {rule === 'ALL' ? 'ต้องอนุมัติครบทุกคน (ALL)' : 'คนใดคนหนึ่งอนุมัติ (ANY)'}
+                                                        {rule === 'ALL' ? 'ทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                                        {isAuthorized && <SwapOutlined style={{ marginLeft: 4 }} />}
                                                     </Tag>
-                                                    {isAuthorized && (
-                                                        <Button 
-                                                            size="small" 
-                                                            type="text" 
-                                                            icon={<SwapOutlined />}
-                                                            style={{ fontSize: 11, padding: '0 4px', height: 20 }}
-                                                            onClick={() => handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
-                                                        >
-                                                            สลับเกณฑ์
-                                                        </Button>
-                                                    )}
-                                                </Space>
+                                                </Tooltip>
                                             ) : (
                                                 <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
-                                                    คนเดียว (Single PIC)
+                                                    คนเดียว (Single)
                                                 </Tag>
                                             )
                                         )}
@@ -398,19 +396,21 @@ export default function WorkflowStageFlowPanel({
                                         {/* Add Target Button */}
                                         {!stage.isConcernMultiDept && (
                                             isAuthorized ? (
-                                                <Button 
-                                                    type="link" 
-                                                    size="small" 
-                                                    icon={<PlusCircleOutlined />} 
-                                                    style={{ padding: 0, fontSize: 12, height: 'auto', color: '#1890ff', fontWeight: 600 }}
-                                                    onClick={() => handleOpenAddModal(stage.key)}
-                                                >
-                                                    Add target.
-                                                </Button>
+                                                <Tooltip title="เพิ่มผู้รับผิดชอบร่วมในสเตจนี้">
+                                                    <Button 
+                                                        type="link" 
+                                                        size="small" 
+                                                        icon={<PlusCircleOutlined />} 
+                                                        style={{ padding: 0, fontSize: 11, height: 'auto', color: '#1890ff', fontWeight: 600 }}
+                                                        onClick={() => handleOpenAddModal(stage.key)}
+                                                    >
+                                                        Add target
+                                                    </Button>
+                                                </Tooltip>
                                             ) : (
                                                 <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้นที่สามารถเพิ่มผู้รับผิดชอบได้">
                                                     <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
-                                                        <LockOutlined /> Read-only
+                                                        <LockOutlined />
                                                     </span>
                                                 </Tooltip>
                                             )

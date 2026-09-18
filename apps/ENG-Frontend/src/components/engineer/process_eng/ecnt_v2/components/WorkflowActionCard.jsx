@@ -4,7 +4,10 @@ import { App } from 'antd';
 import axios from 'axios';
 import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
-import { CheckCircleOutlined, ClockCircleOutlined, LockOutlined } from '@ant-design/icons';
+import { 
+    CheckCircleOutlined, ClockCircleOutlined, LockOutlined, 
+    RollbackOutlined, CloseCircleOutlined 
+} from '@ant-design/icons';
 import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
 
 const { TextArea } = Input;
@@ -305,8 +308,8 @@ export default function WorkflowActionCard({
                         showIcon 
                         style={{ marginBottom: 16 }}
                     />
-                    <Row gutter={16}>
-                        <Col span={12}>
+                    <Row gutter={[12, 12]}>
+                        <Col span={24}>
                             <Form.Item name={['details', 'is_issue_ecn']} label="Action Decision" rules={[{ required: true }]}>
                                 <Select>
                                     <Option value={true}>Option A: Issue ECN (Proceed to Block 5)</Option>
@@ -315,7 +318,7 @@ export default function WorkflowActionCard({
                             </Form.Item>
                         </Col>
                         {isIssueEcn ? (
-                            <Col span={12}>
+                            <Col span={24}>
                                 <Form.Item name="assigned_to" label="Assign Engineer (Eng. Assigned)" rules={[{ required: true }]}>
                                     <Select 
                                         placeholder="Select registered engineer..." 
@@ -342,7 +345,7 @@ export default function WorkflowActionCard({
                                 </Form.Item>
                             </Col>
                         ) : (
-                            <Col span={12}>
+                            <Col span={24}>
                                 <Form.Item name={['details', 'ecr_only_reason']} label="Reason for ECR Only" rules={[{ required: true }]}>
                                     <Input placeholder="Specify why no ECN is required..." />
                                 </Form.Item>
@@ -644,13 +647,13 @@ export default function WorkflowActionCard({
                 )}
 
                 {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <div style={{ marginTop: 16 }}>
                     {!isAuthorized && currentBlock !== 10 ? (
-                        <div style={{ width: '100%', padding: '14px 18px', background: '#f5f5f5', borderRadius: 8, border: '1px dashed #d9d9d9', textAlign: 'center' }}>
+                        <div style={{ width: '100%', padding: '12px 14px', background: '#f5f5f5', borderRadius: 8, border: '1px dashed #d9d9d9', textAlign: 'center' }}>
                             <Space>
                                 <LockOutlined style={{ color: '#fa8c16' }} />
                                 <Text type="secondary" style={{ fontSize: 13 }}>
-                                    <strong>โหมดดูอย่างเดียว</strong>: ปุ่มดำเนินการสงวนสิทธิ์เฉพาะผู้รับผิดชอบ ({responsibleRoleLabel})
+                                    <strong>โหมดดูอย่างเดียว</strong>: ปุ่มดำเนินการสงวนสิทธิ์เฉพาะ ({responsibleRoleLabel})
                                 </Text>
                             </Space>
                         </div>
@@ -659,57 +662,87 @@ export default function WorkflowActionCard({
                             Use the "Sign / Acknowledge" button in the table above for your department. Once all required departments sign, the ECN will advance to Block 11 automatically.
                         </Text>
                     ) : currentBlock === 11 ? (
-                        <Button 
-                            type="primary" 
-                            size="large" 
-                            style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                            onClick={() => handleSubmit('CLOSE')} 
-                            loading={loading}
-                        >
-                            Officially Close ECN (Make Effective)
-                        </Button>
-                    ) : (
-                        <>
+                        <Tooltip title="Officially Close ECN (Make Effective) and authorize production release">
                             <Button 
                                 type="primary" 
                                 size="large" 
-                                onClick={() => handleSubmit('APPROVE')} 
+                                icon={<CheckCircleOutlined />}
+                                style={{ width: '100%', background: '#52c41a', borderColor: '#52c41a', borderRadius: 8, fontWeight: 600 }}
+                                onClick={() => handleSubmit('CLOSE')} 
                                 loading={loading}
                             >
-                                {currentBlock === 9 ? 'Submit Summary & Proceed to Block 10' : 'Approve / Proceed'}
+                                Officially Close ECN (Make Effective)
                             </Button>
+                        </Tooltip>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                            {/* Primary Action Button (Approve / Proceed) */}
+                            <Tooltip title={currentBlock === 9 ? "Submit Summary & Open Block 10 Tasks" : "Approve this stage and proceed to next stage"}>
+                                <Button 
+                                    type="primary" 
+                                    size="large" 
+                                    icon={<CheckCircleOutlined />}
+                                    onClick={() => handleSubmit('APPROVE')} 
+                                    loading={loading}
+                                    style={{ width: '100%', borderRadius: 8, fontWeight: 600, background: '#1677ff' }}
+                                >
+                                    {currentBlock === 9 ? 'Submit Summary & Proceed to Block 10' : 'Approve / Proceed'}
+                                </Button>
+                            </Tooltip>
                             
-                            {/* Block 6, 7, 8, 9 do NOT have Deny per requirement flowchart */}
-                            {currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
-                                <Button 
-                                    danger 
-                                    size="large" 
-                                    onClick={() => handleSubmit('DENY')} 
-                                    loading={loading}
-                                >
-                                    Deny / Terminate
-                                </Button>
-                            )}
+                            {/* Secondary Actions Row: Deny and Return for Rework */}
+                            {((currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9) || 
+                              (currentBlock === 3 || currentBlock === 4 || currentBlock === 6)) && (
+                                <Row gutter={[8, 8]} style={{ width: '100%', margin: 0 }}>
+                                    {/* Request More Detail */}
+                                    {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
+                                        <Col flex="1 1 140px" style={{ padding: 0, paddingRight: 4 }}>
+                                            <Tooltip title="Return to requester / engineer for clarification or revision (Rework)">
+                                                <Button 
+                                                    icon={<RollbackOutlined />}
+                                                    style={{ 
+                                                        width: '100%', 
+                                                        borderRadius: 8, 
+                                                        background: '#fffbe6', 
+                                                        borderColor: '#fa8c16', 
+                                                        color: '#d46b08', 
+                                                        fontWeight: 600 
+                                                    }}
+                                                    onClick={() => {
+                                                        const rmdText = form.getFieldValue('request_to_requester');
+                                                        if (!rmdText || !rmdText.trim()) {
+                                                            antdMessage.warning("Please specify the required changes in 'Detail Requested from Requester / Engineer' above.");
+                                                            return;
+                                                        }
+                                                        handleSubmit('REQUEST_MORE_DETAIL');
+                                                    }} 
+                                                    loading={loading}
+                                                >
+                                                    Return (Rework)
+                                                </Button>
+                                            </Tooltip>
+                                        </Col>
+                                    )}
 
-                            {/* Request More Detail */}
-                            {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
-                                <Button 
-                                    size="large" 
-                                    style={{ background: '#fff7e6', borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
-                                    onClick={() => {
-                                        const rmdText = form.getFieldValue('request_to_requester');
-                                        if (!rmdText || !rmdText.trim()) {
-                                            antdMessage.warning("Please specify the required changes in 'Detail Requested from Requester / Engineer' above.");
-                                            return;
-                                        }
-                                        handleSubmit('REQUEST_MORE_DETAIL');
-                                    }} 
-                                    loading={loading}
-                                >
-                                    Request More Detail (Return for Rework)
-                                </Button>
+                                    {/* Deny / Terminate */}
+                                    {currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
+                                        <Col flex="1 1 100px" style={{ padding: 0, paddingLeft: (currentBlock === 3 || currentBlock === 4 || currentBlock === 6) ? 4 : 0 }}>
+                                            <Tooltip title="Reject and terminate this change request">
+                                                <Button 
+                                                    danger 
+                                                    icon={<CloseCircleOutlined />}
+                                                    onClick={() => handleSubmit('DENY')} 
+                                                    loading={loading}
+                                                    style={{ width: '100%', borderRadius: 8, fontWeight: 500 }}
+                                                >
+                                                    Deny
+                                                </Button>
+                                            </Tooltip>
+                                        </Col>
+                                    )}
+                                </Row>
                             )}
-                        </>
+                        </div>
                     )}
                 </div>
             </Form>

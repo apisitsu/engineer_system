@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Card, Collapse, Typography, Row, Col, Tag, Space, Button, 
-    Spin, Checkbox, Table, Alert, Radio 
+    Spin, Checkbox, Table, Alert, Radio, Tooltip, Dropdown 
 } from 'antd';
 import { App } from 'antd';
 import { 
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
     EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
-    CopyOutlined, DiffOutlined
+    CopyOutlined, DiffOutlined, MoreOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -182,13 +182,15 @@ export default function EcntWorkspaceView({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Top Workspace Bar */}
             <Card style={{ borderRadius: 12, border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                    <Space size="middle">
-                        <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
-                            Back to Dashboard
-                        </Button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                    <Space size="middle" wrap>
+                        <Tooltip title="Back to Pipeline Dashboard">
+                            <Button icon={<ArrowLeftOutlined />} onClick={onBack} style={{ borderRadius: 8 }}>
+                                Back
+                            </Button>
+                        </Tooltip>
                         <Space>
-                            <Tag color={documentType === 'ECR' ? 'blue' : 'purple'} style={{ fontSize: 13, padding: '2px 8px' }}>
+                            <Tag color={documentType === 'ECR' ? 'blue' : 'purple'} style={{ fontSize: 13, padding: '2px 8px', fontWeight: 600 }}>
                                 {documentType}
                             </Tag>
                             <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
@@ -198,41 +200,64 @@ export default function EcntWorkspaceView({
                         </Space>
                     </Space>
 
-                    <Space size="middle">
-                        <Button 
-                            icon={<CopyOutlined />} 
-                            onClick={handleCopyLink}
-                            style={{ borderColor: '#1890ff', color: '#1890ff' }}
-                        >
-                            Share Link
-                        </Button>
+                    <Space size="small" wrap>
+                        {/* Quick Action Icons with Tooltips */}
+                        <Tooltip title="Copy Direct Link to share">
+                            <Button 
+                                icon={<CopyOutlined />} 
+                                onClick={handleCopyLink}
+                                style={{ borderRadius: 8 }}
+                            />
+                        </Tooltip>
 
-                        <Button 
-                            icon={<CalendarOutlined />} 
-                            onClick={() => onOpenGantt({ id: documentId, type: documentType })}
-                        >
-                            Gantt Chart
-                        </Button>
+                        <Tooltip title="Timeline & Gantt Chart">
+                            <Button 
+                                icon={<CalendarOutlined />} 
+                                onClick={() => onOpenGantt({ id: documentId, type: documentType })}
+                                style={{ borderRadius: 8 }}
+                            />
+                        </Tooltip>
 
-                        <Button 
-                            icon={<MessageOutlined />} 
-                            onClick={() => onOpenInvestigation(docData)}
-                        >
-                            Discussions & Problem Hub
-                        </Button>
+                        <Tooltip title="Problem Hub & Discussions">
+                            <Button 
+                                icon={<MessageOutlined />} 
+                                onClick={() => onOpenInvestigation(docData)}
+                                style={{ borderRadius: 8 }}
+                            />
+                        </Tooltip>
 
+                        {/* More Document Tools Dropdown */}
+                        <Dropdown 
+                            menu={{
+                                items: [
+                                    { key: 'share', label: 'Copy Direct Share Link', icon: <CopyOutlined />, onClick: handleCopyLink },
+                                    { key: 'gantt', label: 'Gantt Timeline Chart', icon: <CalendarOutlined />, onClick: () => onOpenGantt({ id: documentId, type: documentType }) },
+                                    { key: 'discuss', label: 'Problem Hub & Discussions', icon: <MessageOutlined />, onClick: () => onOpenInvestigation(docData) },
+                                    ...(docData?.process_status === 'ECN Effective' ? [{ key: 'pdf', label: 'Download Official PDF', icon: <FilePdfOutlined />, onClick: handleDownloadPdf }] : [])
+                                ]
+                            }}
+                            placement="bottomRight"
+                        >
+                            <Tooltip title="More Document Tools">
+                                <Button icon={<MoreOutlined style={{ fontSize: 16 }} />} style={{ borderRadius: 8 }} />
+                            </Tooltip>
+                        </Dropdown>
+
+                        {/* Primary Workflow Actions */}
                         {documentType === 'ECR' && isReworkActive && (
                             canResubmit ? (
-                                <Button 
-                                    type="primary" 
-                                    icon={<EditOutlined />} 
-                                    onClick={() => onEditEcr(docData)}
-                                    style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
-                                >
-                                    Edit & Resubmit ECR
-                                </Button>
+                                <Tooltip title="Edit and Resubmit ECR with revisions">
+                                    <Button 
+                                        type="primary" 
+                                        icon={<EditOutlined />} 
+                                        onClick={() => onEditEcr(docData)}
+                                        style={{ background: '#fa8c16', borderColor: '#fa8c16', borderRadius: 8, fontWeight: 600 }}
+                                    >
+                                        Edit & Resubmit ECR
+                                    </Button>
+                                </Tooltip>
                             ) : (
-                                <Tag color="orange" style={{ fontSize: 13, padding: '4px 10px' }}>
+                                <Tag color="orange" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
                                     ⏳ รอผู้ยื่นคำขอ ({docData?.request_by_name || docData?.request_by || 'Requester'}) แก้ไขข้อมูล
                                 </Tag>
                             )
@@ -240,25 +265,29 @@ export default function EcntWorkspaceView({
 
                         {documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id && (
                             canCreateEcn ? (
-                                <Button 
-                                    type="primary" 
-                                    icon={<PlusCircleOutlined />} 
-                                    onClick={() => setIsCreateEcnOpen(true)}
-                                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                                >
-                                    Issue ECN (Block 5)
-                                </Button>
+                                <Tooltip title="Formulate and Issue Official ECN (Block 5)">
+                                    <Button 
+                                        type="primary" 
+                                        icon={<PlusCircleOutlined />} 
+                                        onClick={() => setIsCreateEcnOpen(true)}
+                                        style={{ background: '#52c41a', borderColor: '#52c41a', borderRadius: 8, fontWeight: 600 }}
+                                    >
+                                        Issue ECN (Block 5)
+                                    </Button>
+                                </Tooltip>
                             ) : (
-                                <Tag color="cyan" style={{ fontSize: 13, padding: '4px 10px' }}>
+                                <Tag color="cyan" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
                                     ⏳ รอวิศวกรที่ได้รับมอบหมาย ({docData?.assigned_to || 'Assigned Engineer'}) ออก ECN
                                 </Tag>
                             )
                         )}
 
                         {docData?.process_status === 'ECN Effective' && (
-                            <Button type="primary" icon={<FilePdfOutlined />} onClick={handleDownloadPdf}>
-                                Download Official PDF
-                            </Button>
+                            <Tooltip title="Download Official Notice PDF">
+                                <Button type="primary" icon={<FilePdfOutlined />} onClick={handleDownloadPdf} style={{ borderRadius: 8, background: '#52c41a' }}>
+                                    PDF
+                                </Button>
+                            </Tooltip>
                         )}
                     </Space>
                 </div>

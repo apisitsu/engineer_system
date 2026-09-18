@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { 
     Row, Col, Card, Typography, Input, Select, Button, Tag, Space, 
-    Radio, Badge, Tooltip, App, Table, Segmented, Avatar 
+    Badge, Tooltip, App, Table, Segmented, Avatar, Dropdown 
 } from 'antd';
 import { 
     PlusOutlined, SearchOutlined, ClockCircleOutlined, CheckCircleOutlined, 
     ExclamationCircleOutlined, SyncOutlined, CopyOutlined, FireOutlined,
     TableOutlined, AppstoreOutlined, ArrowRightOutlined, UserOutlined,
-    LinkOutlined, FileTextOutlined, TeamOutlined, CheckCircleFilled
+    FilterOutlined, DownOutlined, CalendarOutlined, TeamOutlined,
+    ApartmentOutlined, CheckCircleFilled, FileTextOutlined
 } from '@ant-design/icons';
 import moment from 'moment';
 import StatusBadge from '../components/StatusBadge';
@@ -661,88 +662,160 @@ export default function EcntDashboardView({
                 </Col>
             </Row>
 
-            {/* 2. Control Toolbar & Responsibility Switcher */}
+            {/* 2. Compact Control Toolbar with Icon Dropdowns & Tooltips */}
             <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 alignItems: 'center', 
                 background: '#ffffff', 
-                padding: '14px 20px', 
+                padding: '10px 16px', 
                 borderRadius: 12, 
                 border: '1px solid #e8e8e8',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
                 flexWrap: 'wrap',
-                gap: 12
+                gap: 10
             }}>
-                <Space size="middle" wrap>
+                {/* Left: Scope, Search, Dept & Category Dropdown */}
+                <Space size="small" wrap align="center">
                     {/* View Scope Toggle: All vs My Actions */}
-                    <Radio.Group 
-                        value={scopeFilter} 
-                        onChange={e => setScopeFilter(e.target.value)}
-                        buttonStyle="solid"
-                    >
-                        <Radio.Button value="ALL">
-                            All Workflows ({combinedDocs.length})
-                        </Radio.Button>
-                        <Radio.Button value="MY_ACTIONS" style={{ fontWeight: 600 }}>
-                            <Space size={4}>
-                                <FireOutlined style={{ color: scopeFilter === 'MY_ACTIONS' ? '#fff' : '#fa8c16' }} />
-                                <span>My Responsible Tasks</span>
-                                {myActionableCount > 0 && (
-                                    <Tag color={scopeFilter === 'MY_ACTIONS' ? 'orange' : 'volcano'} style={{ borderRadius: 10, margin: 0, fontSize: 10 }}>
-                                        {myActionableCount}
-                                    </Tag>
-                                )}
-                            </Space>
-                        </Radio.Button>
-                    </Radio.Group>
+                    <Segmented
+                        value={scopeFilter}
+                        onChange={setScopeFilter}
+                        options={[
+                            {
+                                value: 'ALL',
+                                label: (
+                                    <Tooltip title={`All Workflows in system (${combinedDocs.length})`}>
+                                        <Space size={4}>
+                                            <TeamOutlined />
+                                            <span>All ({combinedDocs.length})</span>
+                                        </Space>
+                                    </Tooltip>
+                                )
+                            },
+                            {
+                                value: 'MY_ACTIONS',
+                                label: (
+                                    <Tooltip title="Tasks pending my personal action or department review">
+                                        <Space size={4}>
+                                            <FireOutlined style={{ color: '#fa8c16' }} />
+                                            <span>My Tasks</span>
+                                            {myActionableCount > 0 && (
+                                                <Badge count={myActionableCount} size="small" style={{ backgroundColor: '#fa8c16' }} />
+                                            )}
+                                        </Space>
+                                    </Tooltip>
+                                )
+                            }
+                        ]}
+                    />
 
+                    {/* Category Filter Dropdown (Icon Dropdown per User Request) */}
+                    <Dropdown
+                        menu={{
+                            items: [
+                                { key: 'ALL', label: `All Active Workflows (${countAll})`, icon: <CheckCircleOutlined /> },
+                                { key: 'ECR', label: `ECR Only (${countEcr})`, icon: <FileTextOutlined style={{ color: '#1677ff' }} /> },
+                                { key: 'ECN', label: `ECN Only (${countEcn})`, icon: <FileTextOutlined style={{ color: '#722ed1' }} /> },
+                                { key: 'REWORK', label: `Clarification / Rework (${inClarification})`, icon: <ExclamationCircleOutlined style={{ color: '#fa8c16' }} /> },
+                                { key: 'EFFECTIVE', label: `Closed / Effective (${totalEffective})`, icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
+                            ],
+                            onClick: (e) => setCategoryFilter(e.key),
+                            selectedKeys: [categoryFilter]
+                        }}
+                    >
+                        <Tooltip title="Filter documents by Category or Status">
+                            <Button icon={<FilterOutlined style={{ color: categoryFilter !== 'ALL' ? '#1677ff' : undefined }} />}>
+                                <Space size={4}>
+                                    <span>
+                                        {categoryFilter === 'ALL' && `Filter (${countAll})`}
+                                        {categoryFilter === 'ECR' && `ECR (${countEcr})`}
+                                        {categoryFilter === 'ECN' && `ECN (${countEcn})`}
+                                        {categoryFilter === 'REWORK' && `Rework (${inClarification})`}
+                                        {categoryFilter === 'EFFECTIVE' && `Effective (${totalEffective})`}
+                                    </span>
+                                    <DownOutlined style={{ fontSize: 10, color: '#8c8c8c' }} />
+                                </Space>
+                            </Button>
+                        </Tooltip>
+                    </Dropdown>
+
+                    {/* Search Input */}
                     <Input 
-                        placeholder="Search document no, customer, part, title..." 
+                        placeholder="Search no, title, customer..." 
                         prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                         value={searchText}
                         onChange={e => setSearchText(e.target.value)}
-                        style={{ width: 260, borderRadius: 8 }}
+                        style={{ width: 220, borderRadius: 8 }}
                         allowClear
                     />
+
+                    {/* Department Filter */}
                     <Select 
                         value={filterDept} 
                         onChange={setFilterDept} 
-                        style={{ width: 160, borderRadius: 8 }}
+                        style={{ width: 150, borderRadius: 8 }}
+                        suffixIcon={<ApartmentOutlined />}
                     >
-                        <Option value="ALL">All Departments</Option>
+                        <Option value="ALL">All Depts</Option>
                         {departments.map(d => (
                             <Option key={d} value={d}>{d}</Option>
                         ))}
                     </Select>
                 </Space>
 
-                <Space size="middle" wrap>
-                    {/* View Mode Switcher: Pipeline Table (Default) vs Kanban */}
+                {/* Right: View Switcher, Timeline & New ECR Action */}
+                <Space size="small" wrap align="center">
+                    {/* View Mode Switcher: Pipeline Table vs Kanban (Icons with Tooltips) */}
                     <Segmented
                         value={viewMode}
                         onChange={setViewMode}
                         options={[
-                            { label: <Space><TableOutlined /><span>Pipeline Table (Default)</span></Space>, value: 'pipeline' },
-                            { label: <Space><AppstoreOutlined /><span>Kanban Board</span></Space>, value: 'kanban' }
+                            {
+                                value: 'pipeline',
+                                label: (
+                                    <Tooltip title="Executive Pipeline Table View (Default)">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <TableOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 12 }}>Table</span>
+                                        </Space>
+                                    </Tooltip>
+                                )
+                            },
+                            {
+                                value: 'kanban',
+                                label: (
+                                    <Tooltip title="7-Stage Kanban Board View">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <AppstoreOutlined style={{ fontSize: 15 }} />
+                                            <span style={{ fontSize: 12 }}>Kanban</span>
+                                        </Space>
+                                    </Tooltip>
+                                )
+                            }
                         ]}
-                        style={{ background: '#f5f5f5', padding: 2, borderRadius: 8, fontWeight: 500 }}
                     />
 
-                    <Button 
-                        onClick={onNavigateToGantt}
-                        style={{ borderRadius: 8 }}
-                    >
-                        📅 Timeline & Gantt
-                    </Button>
-                    <Button 
-                        type="primary" 
-                        icon={<PlusOutlined />} 
-                        onClick={onNavigateToRequire}
-                        style={{ borderRadius: 8, background: '#1890ff' }}
-                    >
-                        Initiate New ECR
-                    </Button>
+                    {/* Timeline & Gantt Tool */}
+                    <Tooltip title="Timeline & Projected Gantt Chart">
+                        <Button 
+                            icon={<CalendarOutlined />}
+                            onClick={onNavigateToGantt}
+                            style={{ borderRadius: 8 }}
+                        />
+                    </Tooltip>
+
+                    {/* Initiate New ECR */}
+                    <Tooltip title="Initiate New Engineering Change Request (ECR)">
+                        <Button 
+                            type="primary" 
+                            icon={<PlusOutlined />} 
+                            onClick={onNavigateToRequire}
+                            style={{ borderRadius: 8, background: '#1677ff' }}
+                        >
+                            New ECR
+                        </Button>
+                    </Tooltip>
                 </Space>
             </div>
 
@@ -752,14 +825,14 @@ export default function EcntDashboardView({
                     background: '#fffbe6', 
                     border: '1px solid #ffe58f', 
                     borderRadius: 10, 
-                    padding: '10px 16px',
+                    padding: '8px 14px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
                 }}>
                     <Space>
                         <FireOutlined style={{ color: '#fa8c16', fontSize: 16 }} />
-                        <Text strong style={{ color: '#d46b08' }}>
+                        <Text strong style={{ color: '#d46b08', fontSize: 13 }}>
                             Showing {filteredDocs.length} task(s) currently awaiting your action or department review.
                         </Text>
                     </Space>
@@ -771,62 +844,9 @@ export default function EcntDashboardView({
 
             {/* 3A. Executive Pipeline Table View (Default View) */}
             {viewMode === 'pipeline' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {/* Category Quick Filter Pills */}
-                    <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        background: '#ffffff', 
-                        padding: '10px 16px', 
-                        borderRadius: 10, 
-                        border: '1px solid #e8e8e8',
-                        flexWrap: 'wrap',
-                        gap: 8
-                    }}>
-                        <Space wrap size={6}>
-                            <Button 
-                                type={categoryFilter === 'ALL' ? 'primary' : 'default'}
-                                size="small"
-                                onClick={() => setCategoryFilter('ALL')}
-                                style={{ borderRadius: 16 }}
-                            >
-                                All Active ({countAll})
-                            </Button>
-                            <Button 
-                                type={categoryFilter === 'ECR' ? 'primary' : 'default'}
-                                size="small"
-                                onClick={() => setCategoryFilter('ECR')}
-                                style={{ borderRadius: 16 }}
-                            >
-                                ECR Only ({countEcr})
-                            </Button>
-                            <Button 
-                                type={categoryFilter === 'ECN' ? 'primary' : 'default'}
-                                size="small"
-                                onClick={() => setCategoryFilter('ECN')}
-                                style={{ borderRadius: 16 }}
-                            >
-                                ECN Only ({countEcn})
-                            </Button>
-                            <Button 
-                                type={categoryFilter === 'REWORK' ? 'primary' : 'default'}
-                                size="small"
-                                onClick={() => setCategoryFilter('REWORK')}
-                                style={{ borderRadius: 16, borderColor: '#ff7a45', color: categoryFilter === 'REWORK' ? '#fff' : '#d4380d', background: categoryFilter === 'REWORK' ? '#ff7a45' : undefined }}
-                            >
-                                ⚠️ Clarification / Rework ({inClarification})
-                            </Button>
-                            <Button 
-                                type={categoryFilter === 'EFFECTIVE' ? 'primary' : 'default'}
-                                size="small"
-                                onClick={() => setCategoryFilter('EFFECTIVE')}
-                                style={{ borderRadius: 16, borderColor: '#52c41a', color: categoryFilter === 'EFFECTIVE' ? '#fff' : '#389e0d', background: categoryFilter === 'EFFECTIVE' ? '#52c41a' : undefined }}
-                            >
-                                ✅ Closed / Effective ({totalEffective})
-                            </Button>
-                        </Space>
-
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* Header info bar */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 4 }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>
                             Showing <strong>{filteredDocs.length}</strong> of {combinedDocs.length} documents
                         </Text>

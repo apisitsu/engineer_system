@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { 
     Modal, Table, Tag, Typography, Space, Card, Row, Col, 
-    Empty, Alert, Select, Divider 
+    Empty, Alert, Select 
 } from 'antd';
 import { 
-    DiffOutlined, HistoryOutlined, CheckCircleOutlined, 
-    CloseCircleOutlined, ExclamationCircleOutlined, UserOutlined 
+    DiffOutlined, ExclamationCircleOutlined, UserOutlined 
 } from '@ant-design/icons';
 import moment from 'moment';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 const { Option } = Select;
 
 // Human-friendly field labels mapping
