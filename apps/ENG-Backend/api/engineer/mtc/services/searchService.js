@@ -521,12 +521,25 @@ async function searchInventory(machine, rules, computedDims) {
   let sql = `SELECT * FROM "${table}"`;
   if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
 
+  // Tie-break on tooling_no: two candidates can land on the EXACT same combined
+  // distance (e.g. two shelf items sharing the identical dim_a) and with no secondary
+  // sort term Postgres returns whichever it scans first — not a deliberate choice, and
+  // not stable across runs. The similar-ref queries hit this same failure (see
+  // "DISTINCT ON with no tie-break made the same sheet render differently" — the same
+  // CN alternated between two X-100 fixtures across cache rebuilds with no data change)
+  // and were given a tie-break; the core ranking query here never was. `tooling_no`
+  // exists on every Tooling Select inventory table (every override/lookup query in this
+  // file already joins on it), so it is always safe to add when present.
+  const tieBreak = validCols.has('tooling_no') ? '"tooling_no" ASC' : null;
+
   if (distanceRules.length > 0) {
     const distTerms = distanceRules.map(({ col, computed }) => {
       params.push(computed);
       return `ABS("${col}"::numeric - $${pi++})`;
     });
-    sql += ` ORDER BY (${distTerms.join(' + ')}) ASC`;
+    sql += ` ORDER BY (${distTerms.join(' + ')}) ASC` + (tieBreak ? `, ${tieBreak}` : '');
+  } else if (tieBreak) {
+    sql += ` ORDER BY ${tieBreak}`;
   }
 
   sql += ' LIMIT 2';
