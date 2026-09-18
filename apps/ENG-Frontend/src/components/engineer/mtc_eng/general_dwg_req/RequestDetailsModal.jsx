@@ -12,6 +12,7 @@ import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
 import { server } from '../../../../constance/constance';
 import { useAuthStore } from '../../../../stores/authStore';
+import { sendGasTemplateEmail } from '../../../../utils/gasTemplateEmail';
 import {
   WORKFLOW_STAGES,
   STATUS_COLORS,
@@ -427,6 +428,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
 
     setActionLoading(true);
     try {
+      let data;
       if (useFormData) {
         const formData = new FormData();
         formData.append('stage', stageConfig.stage);
@@ -438,11 +440,11 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
         formData.append('user_department', userDepartment);
         formData.append('user_code', userCode);
         allFiles.forEach(f => formData.append(fileKey, f.originFileObj));
-        await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, formData, {
+        ({ data } = await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        }));
       } else {
-        await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, {
+        ({ data } = await axios.post(`${server.MTC_TOOL_REQUESTS}/${request.id}/action`, {
           stage: stageConfig.stage,
           decision,
           comment,
@@ -451,8 +453,13 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
           action_by_email: userEmail,
           user_department: userDepartment,
           user_code: userCode,
-        });
+        }));
       }
+      // Fire the notification email from THIS browser (see gasTemplateEmail.js) —
+      // the backend only builds the payload, since GAS_EMAIL_WEBAPP rejects an
+      // anonymous server-side call and needs the actor's own Google session to
+      // send as them.
+      sendGasTemplateEmail(data?.emailNotification);
       message.success(`${stageConfig.label} ${decision} submitted`);
       onActionDone?.();
       onClose();

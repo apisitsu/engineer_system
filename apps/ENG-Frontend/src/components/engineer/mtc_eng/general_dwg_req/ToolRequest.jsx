@@ -16,6 +16,7 @@ import { useTheme } from '../../../../theme';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
 import RequestDetailsModal from './RequestDetailsModal';
+import { sendGasTemplateEmail } from '../../../../utils/gasTemplateEmail';
 import { 
     WORKFLOW_STATUS, 
     STATUS_COLORS, 
@@ -57,6 +58,12 @@ const ToolRequestContent = () => {
     useEffect(() => {
         if (searchParams.get('action') === 'create') {
             handleCreateNew();
+        }
+        const deepLinkId = searchParams.get('id');
+        if (deepLinkId) {
+            // Opens the request the "View Request" button in a notification email
+            // points at (built server-side in toolRequestController.js).
+            handleViewRequest({ id: deepLinkId });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
@@ -133,7 +140,10 @@ const ToolRequestContent = () => {
             if (selectedRequest?.id) {
                 await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, formData, config);
             } else {
-                await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
+                const { data } = await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
+                // New request → Eng Check notification. Must fire from this browser,
+                // not the backend — see utils/gasTemplateEmail.js.
+                sendGasTemplateEmail(data?.emailNotification);
             }
             message.success(selectedRequest?.id ? 'Request updated' : 'Request created');
             handleModalClose();

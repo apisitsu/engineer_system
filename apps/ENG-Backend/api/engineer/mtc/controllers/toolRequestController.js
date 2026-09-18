@@ -1,11 +1,26 @@
 const { engPool } = require('../../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
-const { sendMtcEmail } = require('../utils/emailHelper');
 const path = require('path');
 const { TABLES, PATHS } = require('../mtcConstants');
 
-// Load email renderer from templates folder (at ENG-Backend root)
-const { renderEmail, generateSubject } = require(PATHS.EMAIL_RENDERER);
+// Load email renderer from templates folder (at ENG-Backend root).
+// NOTE: notifications are no longer sent from here — see "Email delivery" below.
+const { buildTemplateEmailPayload } = require(PATHS.EMAIL_RENDERER);
+
+// ── Email delivery ───────────────────────────────────────────────────────────
+// An anonymous server-side call to a script.google.com Apps Script webapp is
+// blocked by the Workspace admin (same restriction documented for GAS_TI_CSV_URL
+// in .claude/rules/backend-gotchas.md) — verified live 2026-09-18 for both
+// GAS_EMAIL_URL and GAS_EMAIL_WEBAPP. GAS_EMAIL_WEBAPP is also deployed to
+// "Execute as: User accessing the web app", so a browser GET sends as the real
+// signed-in user rather than a fixed script-owner/service account. So instead of
+// sending here, every notification site below builds the payload and hands it
+// back in the API response as `emailNotification`; the frontend fires the actual
+// GET (hidden iframe, same mechanism as test_mail.html's "GET (URL Ping)" button
+// and the TI-CSV browser upload) from the browser of the person who just acted.
+function gasEmailWebappUrl() {
+    return process.env.GAS_EMAIL_WEBAPP || '';
+}
 
 const {
     WORKFLOW_STAGES,
@@ -289,32 +304,28 @@ const createToolRequest = async (req, res) => {
 
         logger.info('Tool request created successfully', { id: requestId, request_item });
 
-        // --- ส่งอีเมลแจ้งเตือน (Async - Non blocking) ---
-        (async () => {
-            try {
-                const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
-                logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
+        // --- อีเมลแจ้งเตือน: สร้าง payload ให้ frontend เป็นคนยิงจริง (ดู "Email delivery" ด้านบน) ---
+        let emailNotification = null;
+        try {
+            const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
+            logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
 
-                if (recipients.length > 0) {
-                    const subject = `From ${requester} - [New Request] ${request_item}: ${title}`;
-                    const html = renderEmail({
-                        stage: 'eng_check',
-                        decision: 'submit',
-                        request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category, status: WORKFLOW_STATUS.PENDING_ENG_CHECK, req_due_date: req_due_date },
-                        extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
-                        actionBy: requester,
-                    });
-                    await sendMtcEmail(recipients.join(','), subject, html, {
-                        fromName: requester ? `${requester} (General DWG Request)` : 'General DWG Request',
-                        replyTo: requester_email || undefined,
-                    });
-                } else {
-                    logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
-                }
-            } catch (emailErr) {
-                logger.warn('Initial email notification failed', { error: emailErr.message });
+            if (recipients.length > 0) {
+                const payload = buildTemplateEmailPayload({
+                    stage: 'eng_check',
+                    decision: 'submit',
+                    request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category, status: WORKFLOW_STATUS.PENDING_ENG_CHECK, req_due_date: req_due_date },
+                    extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
+                    actionBy: requester,
+                    recipients,
+                });
+                emailNotification = { url: gasEmailWebappUrl(), payload };
+            } else {
+                logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
             }
-        })();
+        } catch (emailErr) {
+            logger.warn('Building email notification failed', { error: emailErr.message });
+        }
 
         // --- Auto-intake onto the Kanban board (fire-and-forget, fail-open) ---
         kanbanIntake.syncCard({
@@ -327,7 +338,7 @@ const createToolRequest = async (req, res) => {
             dueDate: req_due_date,
         }).catch((e) => logger.warn('Kanban intake (create) failed', { error: e.message }));
 
-        res.json({ result: 'true', message: 'Request saved successfully', id: requestId });
+        res.json({ result: 'true', message: 'Request saved successfully', id: requestId, emailNotification });
     } catch (error) {
         await client.query('ROLLBACK');
         logger.error('Server Error during creation', { error: error.message });
@@ -601,7 +612,8 @@ const submitAction = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // Send Email notification (Dynamic)
+        // Email notification: build the payload, let the frontend fire it (see "Email delivery" above)
+        let emailNotification = null;
         try {
             const emailKey = isApprove ? stageConfig.emailApprove : stageConfig.emailDeny;
             let recipients = emailKey ? await getEmailRecipients(emailKey) : [];
@@ -609,18 +621,13 @@ const submitAction = async (req, res) => {
             if (stage === WORKFLOW_STAGES.ENG_INFORM && request.requester_email) recipients = [request.requester_email, ...recipients];
 
             if (recipients.length > 0) {
-                const subject = generateSubject(stage, decision, request);
-                const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
-                // Attribute the email to the person who performed this stage action
-                // (display name + Reply-To), falling back to the requester, so the
-                // recipient sees the real sender instead of the script owner.
-                sendMtcEmail(recipients.join(','), subject, html, {
-                    fromName: action_by ? `${action_by} (General DWG Request)` : 'General DWG Request',
-                    replyTo: req.body.action_by_email || request.requester_email || undefined,
-                }).catch(err => logger.error('Email failed', { error: err.message }));
+                const payload = buildTemplateEmailPayload({
+                    stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System', recipients,
+                });
+                emailNotification = { url: gasEmailWebappUrl(), payload };
             }
         } catch (emailErr) {
-            logger.warn('Email failed', { error: emailErr.message });
+            logger.warn('Building email notification failed', { error: emailErr.message });
         }
 
         // --- Move the board card to the new stage's list (fail-open) ---
@@ -639,7 +646,7 @@ const submitAction = async (req, res) => {
             dueDate: request.req_due_date,
         }).catch((e) => logger.warn('Kanban intake (move) failed', { error: e.message }));
 
-        res.json({ success: true, status: nextStatus, current_stage: nextStage });
+        res.json({ success: true, status: nextStatus, current_stage: nextStage, emailNotification });
     } catch (err) {
         await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
@@ -711,7 +718,10 @@ const deleteEmailConfig = async (req, res) => {
 
 /**
  * POST /api/engineer/mtc/tool-requests/test-email
- * Send a test email to verify the notification system is working.
+ * Build a test notification payload to verify the config — does NOT send it.
+ * Sending needs a signed-in browser (see "Email delivery" above); the caller
+ * (a future admin UI, or a manual check) fires `emailNotification` itself the
+ * same way ToolRequest.jsx/RequestDetailsModal.jsx do after a real action.
  * Body: { to: "email@example.com" }  (optional — defaults to ENG_CHECK recipients)
  */
 const testEmail = async (req, res) => {
@@ -725,10 +735,9 @@ const testEmail = async (req, res) => {
             to = recipients.join(',');
         }
 
-        const subject = '[Test] General DWG Request — Email Notification Test';
-        const html = renderEmail({
+        const payload = buildTemplateEmailPayload({
             stage: 'eng_check',
-            decision: 'submitted',
+            decision: 'submit',
             request: {
                 request_item: 'ITEM-TEST-001',
                 req_no: 'TEST-REQ-001',
@@ -741,14 +750,11 @@ const testEmail = async (req, res) => {
             },
             extra: { comment: 'นี่คืออีเมล์ทดสอบระบบแจ้งเตือน General DWG Request' },
             actionBy: req.user?.userName || 'Test User',
+            recipients: to,
         });
 
-        await sendMtcEmail(to, subject, html, {
-            fromName: `${req.user?.userName || 'Test User'} (General DWG Request)`,
-            replyTo: req.user?.gmail_email || undefined,
-        });
-        logger.info('Test email sent', { to });
-        res.json({ success: true, message: `Test email sent to: ${to}` });
+        logger.info('Test email payload built', { to });
+        res.json({ success: true, message: `Payload built for: ${to} — fire emailNotification from the browser to actually send it`, emailNotification: { url: gasEmailWebappUrl(), payload } });
     } catch (err) {
         logger.error('Test email failed', { error: err.message });
         res.status(500).json({ error: err.message });
