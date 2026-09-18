@@ -255,6 +255,9 @@ app.route('/api/ecnt/config')
 // User candidates for Stage PIC & Manager assignment (excludes nickname 'Admin')
 app.route('/api/ecnt/user-candidates').get(engEcntV2.getUserCandidates);
 
+// Dynamic Stage Flow Assignee Management
+app.route('/api/ecnt/stage-flow/:docType/:docId').put(verifyToken, engEcntV2.updateStageFlow);
+
 // --------- Tumble System API ---------
 // Tumble Model
 app.route('/api/tumble/model/search').get(engTumble.getTumbleModelByOldCn);
@@ -572,4 +575,12 @@ cron.schedule('0 2 * * *', async () => {
     console.error('[cron] Activity cleanup failed:', err.message);
   }
 }, { timezone: 'Asia/Bangkok' });
+
+// Global Error Resilience (prevent crash on transient database disconnect / ECONNRESET)
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER UNCAUGHT EXCEPTION]:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER UNHANDLED REJECTION]:', reason);
+});
 

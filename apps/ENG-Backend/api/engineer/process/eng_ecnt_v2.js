@@ -109,6 +109,16 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
             if (ecrRes.rows.length === 0) return { authorized: false, reason: "ECR document not found." };
             const ecr = ecrRes.rows[0];
 
+            // Dynamic Stage Flow Assignee Check
+            const ecrStageKey = blockNumber === 3 ? 'STAGE_2' : (blockNumber === 4 ? 'STAGE_3' : null);
+            if (ecrStageKey && ecr.stage_flow?.[ecrStageKey]?.assignees?.length > 0) {
+                const isAssignedPic = ecr.stage_flow[ecrStageKey].assignees.some(a => 
+                    (a.emp_no && a.emp_no.toLowerCase() === empno) || 
+                    (a.name && a.name.toLowerCase() === name)
+                );
+                if (isAssignedPic) return { authorized: true, roleLabel: `Stage Assigned PIC (${ecrStageKey})` };
+            }
+
             // Block 1 & Return Loops (STAGE_2_R1, STAGE_3_R1): Only Requester can revise/resubmit
             if (blockNumber === 1 || ecr.process_status === 'Require More Detail' || (ecr.current_stage_code || '').includes('_R')) {
                 const isRequester = (ecr.request_by || '').toLowerCase() === empno || (ecr.request_by_name || '').toLowerCase() === name;
@@ -137,6 +147,23 @@ const checkWorkflowPermission = async (clientOrPool, docType, docId, blockNumber
             const ecnRes = await clientOrPool.query(`SELECT * FROM ecnt2_ecn WHERE id = $1`, [docId]);
             if (ecnRes.rows.length === 0) return { authorized: false, reason: "ECN document not found." };
             const ecn = ecnRes.rows[0];
+
+            // Dynamic Stage Flow Assignee Check (Blocks 5, 6, 7, 8, 9, 11)
+            let ecnStageKey = null;
+            if (blockNumber === 5) ecnStageKey = 'STAGE_4';
+            else if (blockNumber === 6) ecnStageKey = 'STAGE_5';
+            else if (blockNumber === 7) ecnStageKey = 'STAGE_6';
+            else if (blockNumber === 8) ecnStageKey = 'STAGE_7';
+            else if (blockNumber === 9) ecnStageKey = 'STAGE_8';
+            else if (blockNumber === 11) ecnStageKey = 'STAGE_10';
+
+            if (ecnStageKey && ecn.stage_flow?.[ecnStageKey]?.assignees?.length > 0) {
+                const isAssignedPic = ecn.stage_flow[ecnStageKey].assignees.some(a => 
+                    (a.emp_no && a.emp_no.toLowerCase() === empno) || 
+                    (a.name && a.name.toLowerCase() === name)
+                );
+                if (isAssignedPic) return { authorized: true, roleLabel: `Stage Assigned PIC (${ecnStageKey})` };
+            }
 
             // Block 5: ECN Creation & Return Loop Rework (STAGE_5_R1)
             if (blockNumber === 5) {
@@ -541,6 +568,41 @@ const actionEcr = async (req, res) => {
             await client.query(`UPDATE ecnt2_ecr SET revision_count = COALESCE(revision_count, 0) + 1 WHERE id = $1`, [id]);
 
         } else if (action === 'APPROVE') {
+            const currentStageKey = block_number === 3 ? 'STAGE_2' : (block_number === 4 ? 'STAGE_3' : null);
+            const ecrRes = await client.query('SELECT * FROM ecnt2_ecr WHERE id = $1', [id]);
+            const ecrRecord = ecrRes.rows[0];
+            const stageConfig = ecrRecord?.stage_flow?.[currentStageKey];
+
+            if (stageConfig && stageConfig.approval_rule === 'ALL' && stageConfig.assignees?.length > 1) {
+                let approvedBy = stageConfig.approved_by || [];
+                const alreadyApproved = approvedBy.some(a => (a.emp_no || '').toLowerCase() === userEmpno.toLowerCase());
+                if (!alreadyApproved) {
+                    approvedBy.push({ emp_no: userEmpno, name: userName, approved_at: new Date() });
+                    stageConfig.approved_by = approvedBy;
+                    ecrRecord.stage_flow[currentStageKey] = stageConfig;
+                    await client.query('UPDATE ecnt2_ecr SET stage_flow = $1 WHERE id = $2', [JSON.stringify(ecrRecord.stage_flow), id]);
+                }
+
+                const allApproved = stageConfig.assignees.every(a => 
+                    approvedBy.some(ap => (ap.emp_no || '').toLowerCase() === (a.emp_no || '').toLowerCase())
+                );
+
+                if (!allApproved) {
+                    await client.query(`
+                        INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
+                        VALUES ('ECR', $1, $2, $3, 'PARTIAL_APPROVE', $4, $5, $6, $7)
+                    `, [id, block_number, `Block ${block_number}`, userEmpno, userName, userRole, `Approved by ${userName} (${approvedBy.length}/${stageConfig.assignees.length} persons). Awaiting remaining assignees.`]);
+
+                    await client.query('COMMIT');
+                    return res.json({ 
+                        message: `บันทึกการอนุมัติแล้ว (${approvedBy.length}/${stageConfig.assignees.length} ท่าน) อยู่ระหว่างรอผู้รับผิดชอบท่านอื่น`, 
+                        partial: true, 
+                        approvedCount: approvedBy.length, 
+                        totalCount: stageConfig.assignees.length 
+                    });
+                }
+            }
+
             if (block_number === 3) {
                 nextStatus = 'Pending Eng Mgr';
                 currentBlock = 4;
@@ -838,6 +900,50 @@ const actionEcn = async (req, res) => {
         let nextStatus = 'Pending Eng Mgr ECN';
         let currentBlock = block_number;
         let nextStageCode = 'STAGE_5';
+
+        // Dynamic Multi-PIC 'ALL' rule check for ECN approvals (Blocks 6, 7, 8, 11)
+        let currentStageKey = null;
+        if (block_number === 6) currentStageKey = 'STAGE_5';
+        else if (block_number === 7) currentStageKey = 'STAGE_6';
+        else if (block_number === 8) currentStageKey = 'STAGE_7';
+        else if (block_number === 9) currentStageKey = 'STAGE_8';
+        else if (block_number === 11) currentStageKey = 'STAGE_10';
+
+        if (currentStageKey && (action === 'APPROVE' || action === 'CLOSE')) {
+            const ecnRes = await client.query('SELECT * FROM ecnt2_ecn WHERE id = $1', [id]);
+            const ecnRecord = ecnRes.rows[0];
+            const stageConfig = ecnRecord?.stage_flow?.[currentStageKey];
+
+            if (stageConfig && stageConfig.approval_rule === 'ALL' && stageConfig.assignees?.length > 1) {
+                let approvedBy = stageConfig.approved_by || [];
+                const alreadyApproved = approvedBy.some(a => (a.emp_no || '').toLowerCase() === userEmpno.toLowerCase());
+                if (!alreadyApproved) {
+                    approvedBy.push({ emp_no: userEmpno, name: userName, approved_at: new Date() });
+                    stageConfig.approved_by = approvedBy;
+                    ecnRecord.stage_flow[currentStageKey] = stageConfig;
+                    await client.query('UPDATE ecnt2_ecn SET stage_flow = $1 WHERE id = $2', [JSON.stringify(ecnRecord.stage_flow), id]);
+                }
+
+                const allApproved = stageConfig.assignees.every(a => 
+                    approvedBy.some(ap => (ap.emp_no || '').toLowerCase() === (a.emp_no || '').toLowerCase())
+                );
+
+                if (!allApproved) {
+                    await client.query(`
+                        INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
+                        VALUES ('ECN', $1, $2, $3, 'PARTIAL_APPROVE', $4, $5, $6, $7)
+                    `, [id, block_number, `Block ${block_number}`, userEmpno, userName, userRole, `Approved by ${userName} (${approvedBy.length}/${stageConfig.assignees.length} persons). Awaiting remaining assignees.`]);
+
+                    await client.query('COMMIT');
+                    return res.json({ 
+                        message: `บันทึกการอนุมัติแล้ว (${approvedBy.length}/${stageConfig.assignees.length} ท่าน) อยู่ระหว่างรอผู้รับผิดชอบท่านอื่น`, 
+                        partial: true, 
+                        approvedCount: approvedBy.length, 
+                        totalCount: stageConfig.assignees.length 
+                    });
+                }
+            }
+        }
         
         // Block 6 (Eng Mgr Approve ECN)
         if (block_number === 6) {
@@ -1324,6 +1430,126 @@ const getUserCandidates = async (req, res) => {
     }
 };
 
+const updateStageFlow = async (req, res) => {
+    const { docType, docId } = req.params;
+    const { stageKey, assignees, approval_rule } = req.body;
+
+    if (!stageKey || !Array.isArray(assignees)) {
+        return res.status(400).json({ error: "stageKey and assignees array are required." });
+    }
+
+    const client = await engPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const table = docType.toUpperCase() === 'ECR' ? 'ecnt2_ecr' : 'ecnt2_ecn';
+        const docRes = await client.query(`SELECT * FROM ${table} WHERE id = $1`, [docId]);
+        if (docRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: `${docType} document not found.` });
+        }
+
+        const doc = docRes.rows[0];
+        const user = req.user;
+        const empno = (user?.empno || user?.u_code || '').toLowerCase();
+        const role = (user?.role || user?.u_role || '').toUpperCase();
+        const dept = (user?.department || user?.u_department || '').toUpperCase();
+        const name = (user?.name || user?.u_name || '').toLowerCase();
+
+        // 1. Check system_admins / AD
+        const adminConfig = await client.query(`SELECT value FROM ecnt2_system_config WHERE key = 'system_admins'`);
+        const systemAdmins = (adminConfig.rows[0]?.value || ["admin", "eng_mgr"]).map(a => String(a).toLowerCase());
+        const isAdmin = role === 'AD' || dept === 'AD' || systemAdmins.includes(empno);
+
+        // 2. Check stage PIC authorization
+        const currentStageFlow = doc.stage_flow || {};
+        const currentStageConfig = currentStageFlow[stageKey];
+        const currentAssignees = currentStageConfig?.assignees || [];
+
+        const assigneesConfig = await client.query(`SELECT value FROM ecnt2_system_config WHERE key = 'stage_assignees'`);
+        const defaultAssignees = assigneesConfig.rows[0]?.value || {};
+
+        let isStagePic = false;
+        if (currentAssignees.length > 0) {
+            isStagePic = currentAssignees.some(a => 
+                (a.emp_no && a.emp_no.toLowerCase() === empno) ||
+                (a.name && a.name.toLowerCase() === name)
+            );
+        } else {
+            if (stageKey === 'STAGE_1') {
+                isStagePic = (doc.request_by || '').toLowerCase() === empno || (doc.request_by_name || '').toLowerCase() === name;
+            } else if (stageKey === 'STAGE_2') {
+                const deptMgr = defaultAssignees?.dept_mgr_mapping?.[doc.department];
+                isStagePic = (deptMgr?.emp_no || '').toLowerCase() === empno || (dept === (doc.department || '').toUpperCase() && (role === 'MGR' || role === 'MANAGER'));
+            } else if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
+                const engMgr = defaultAssignees?.eng_mgr;
+                isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || (dept === 'ENG' && (role === 'MGR' || role === 'MANAGER'));
+            } else if (stageKey === 'STAGE_4') {
+                isStagePic = (doc.assigned_to || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
+                const qcPic = defaultAssignees?.default_qc_pic;
+                isStagePic = (qcPic?.emp_no || '').toLowerCase() === empno || dept === 'QC' || role === 'QC';
+            } else if (stageKey === 'STAGE_8') {
+                isStagePic = (doc.engineer_assigned || '').toLowerCase() === empno || dept === 'ENG';
+            } else if (stageKey === 'STAGE_10') {
+                const engMgr = defaultAssignees?.eng_mgr;
+                isStagePic = (engMgr?.emp_no || '').toLowerCase() === empno || role === 'TOP';
+            }
+        }
+
+        if (!isAdmin && !isStagePic) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: "Access Denied: Only the stage PIC or Authorized Admins can modify assignees for this stage." });
+        }
+
+        // Exception: Block 10 concern departments
+        if (stageKey === 'STAGE_9' || stageKey === 'BLOCK_10') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: "Multi-Department Concern Approvals (Block 10) must be approved by all configured department representatives and cannot be customized." });
+        }
+
+        if (assignees.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: "At least one assignee is required for this stage." });
+        }
+
+        // Sanitize assignees: remove any user with nickname 'admin'
+        const cleanAssignees = assignees.map(a => ({
+            emp_no: a.emp_no || a.u_code,
+            name: a.name || a.u_name,
+            dept: a.dept || a.u_department || '',
+            role: a.role || a.u_role || ''
+        }));
+
+        currentStageFlow[stageKey] = {
+            assignees: cleanAssignees,
+            approval_rule: approval_rule === 'ALL' ? 'ALL' : 'ANY',
+            approved_by: currentStageConfig?.approved_by || [],
+            updated_by: user?.name || user?.empno || 'System',
+            updated_at: new Date()
+        };
+
+        await client.query(`UPDATE ${table} SET stage_flow = $1, updated_at = NOW() WHERE id = $2`, [JSON.stringify(currentStageFlow), docId]);
+
+        await client.query(`
+            INSERT INTO ecnt2_approval_log (document_type, document_id, block_number, step_label, action, action_by, action_by_name, action_role, comment)
+            VALUES ($1, $2, 0, 'Stage PIC Delegation', 'DELEGATE', $3, $4, 'Stage PIC', $5)
+        `, [
+            docType.toUpperCase(), docId, user?.empno || 'System', user?.name || 'System',
+            `Updated assignees for ${stageKey}: ${cleanAssignees.map(a => a.name || a.emp_no).join(', ')} (Rule: ${approval_rule === 'ALL' ? 'ALL' : 'ANY'})`
+        ]);
+
+        await client.query('COMMIT');
+        res.json({ message: "Stage assignees updated successfully", stage_flow: currentStageFlow });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("updateStageFlow Error:", err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     createEcr,
     resubmitEcr,
@@ -1346,6 +1572,7 @@ module.exports = {
     getAuditTrail,
     getEcntConfig,
     updateEcntConfig,
-    getUserCandidates
+    getUserCandidates,
+    updateStageFlow
 };
 

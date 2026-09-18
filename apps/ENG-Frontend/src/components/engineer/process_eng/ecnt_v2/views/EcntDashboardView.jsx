@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { Row, Col, Card, Typography, Input, Select, Button, Tag, Space, Radio, Badge, Tooltip, App } from 'antd';
+import { 
+    Row, Col, Card, Typography, Input, Select, Button, Tag, Space, 
+    Radio, Badge, Tooltip, App, Table, Segmented, Avatar 
+} from 'antd';
 import { 
     PlusOutlined, SearchOutlined, ClockCircleOutlined, CheckCircleOutlined, 
-    ExclamationCircleOutlined, SyncOutlined, CopyOutlined, FireOutlined
+    ExclamationCircleOutlined, SyncOutlined, CopyOutlined, FireOutlined,
+    TableOutlined, AppstoreOutlined, ArrowRightOutlined, UserOutlined,
+    LinkOutlined, FileTextOutlined, TeamOutlined, CheckCircleFilled
 } from '@ant-design/icons';
 import moment from 'moment';
 import StatusBadge from '../components/StatusBadge';
@@ -36,11 +41,158 @@ export default function EcntDashboardView({
     const [searchText, setSearchText] = useState('');
     const [filterDept, setFilterDept] = useState('ALL');
     const [scopeFilter, setScopeFilter] = useState('ALL'); // 'ALL' | 'MY_ACTIONS'
+    const [viewMode, setViewMode] = useState('pipeline'); // 'pipeline' (Default) | 'kanban'
+    const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'ECR' | 'ECN' | 'REWORK' | 'EFFECTIVE'
 
     const combinedDocs = [
         ...ecrData.map(d => ({ ...d, doc_type: 'ECR' })),
         ...ecnData.map(d => ({ ...d, doc_type: 'ECN' }))
     ];
+
+    // Helper: Determine current stage and assigned PIC info for display
+    const getStageAndPicInfo = (doc, cfg) => {
+        const isEcr = doc.doc_type === 'ECR';
+        const blk = doc.current_block || 1;
+        const st = (doc.process_status || '').toLowerCase();
+        const stage = doc.current_stage_code || '';
+        const isRework = st === 'require more detail' || stage.includes('_R');
+
+        if (st.includes('effective') || st.includes('closed')) {
+            return {
+                stageTag: 'Closed / Effective',
+                color: 'green',
+                pics: [{ name: 'Completed' }]
+            };
+        }
+        if (st === 'denied') {
+            return {
+                stageTag: 'Denied / Rejected',
+                color: 'red',
+                pics: [{ name: 'Closed' }]
+            };
+        }
+        if (isRework) {
+            return {
+                stageTag: 'Rework / Clarification',
+                color: 'volcano',
+                pics: [{ name: doc.request_by_name || doc.request_by || 'Requester' }]
+            };
+        }
+
+        // Check stage_flow
+        const flow = doc.stage_flow || {};
+        let stageKey = 'STAGE_1';
+        if (isEcr) {
+            if (blk === 1 || blk === 2) stageKey = 'STAGE_1';
+            else if (blk === 3) stageKey = 'STAGE_2';
+            else if (blk === 4) stageKey = 'STAGE_3';
+        } else {
+            if (blk === 5) stageKey = 'STAGE_4';
+            else if (blk === 6) stageKey = 'STAGE_5';
+            else if (blk === 7) stageKey = 'STAGE_6';
+            else if (blk === 8) stageKey = 'STAGE_7';
+            else if (blk === 9) stageKey = 'STAGE_8';
+            else if (blk === 10) stageKey = 'STAGE_9';
+            else if (blk === 11) stageKey = 'STAGE_10';
+        }
+
+        const flowData = flow[stageKey];
+        if (flowData?.assignees && flowData.assignees.length > 0) {
+            return {
+                stageTag: `Block ${blk}`,
+                color: 'blue',
+                pics: flowData.assignees,
+                rule: flowData.approval_rule || 'ANY'
+            };
+        }
+
+        // Standard fallbacks based on Block
+        if (isEcr) {
+            if (blk <= 2) {
+                return {
+                    stageTag: `Block 1-2: ECR Draft`,
+                    color: 'default',
+                    pics: [{ name: doc.request_by_name || doc.request_by || 'Requester' }]
+                };
+            }
+            if (blk === 3) {
+                const deptMgr = cfg?.stage_assignees?.dept_mgr_mapping?.[doc.department];
+                return {
+                    stageTag: `Block 3: Dept Mgr Review`,
+                    color: 'purple',
+                    pics: [{ name: deptMgr?.name || `Manager (${doc.department})` }]
+                };
+            }
+            if (blk === 4) {
+                const engMgr = cfg?.stage_assignees?.eng_mgr;
+                return {
+                    stageTag: `Block 4: Eng Mgr Assignment`,
+                    color: 'cyan',
+                    pics: [{ name: engMgr?.name || 'Engineering Manager' }]
+                };
+            }
+        } else {
+            if (blk === 5) {
+                return {
+                    stageTag: `Block 5: ECN Formulation`,
+                    color: 'blue',
+                    pics: [{ name: doc.engineer_assigned_name || doc.assigned_to || doc.engineer_assigned || 'Lead Engineer' }]
+                };
+            }
+            if (blk === 6) {
+                const engMgr = cfg?.stage_assignees?.eng_mgr;
+                return {
+                    stageTag: `Block 6: Eng Mgr ECN Review`,
+                    color: 'cyan',
+                    pics: [{ name: engMgr?.name || 'Engineering Manager' }]
+                };
+            }
+            if (blk === 7) {
+                const qcPIC = cfg?.stage_assignees?.default_qc_pic;
+                return {
+                    stageTag: `Block 7: QC MSA Evaluation`,
+                    color: 'magenta',
+                    pics: [{ name: qcPIC?.name || 'QC Evaluator' }]
+                };
+            }
+            if (blk === 8) {
+                const qcPIC = cfg?.stage_assignees?.default_qc_pic;
+                return {
+                    stageTag: `Block 8: QC FAI Evaluation`,
+                    color: 'magenta',
+                    pics: [{ name: qcPIC?.name || 'QC Evaluator' }]
+                };
+            }
+            if (blk === 9) {
+                return {
+                    stageTag: `Block 9: Tasks Setup`,
+                    color: 'blue',
+                    pics: [{ name: doc.engineer_assigned_name || doc.assigned_to || 'Lead Engineer' }]
+                };
+            }
+            if (blk === 10) {
+                return {
+                    stageTag: `Block 10: Concern Sign-offs`,
+                    color: 'orange',
+                    pics: [{ name: 'Multi-Dept (QA, QC, PC, PD, MC, MM)' }],
+                    rule: 'ALL'
+                };
+            }
+            if (blk === 11) {
+                return {
+                    stageTag: `Block 11: Official Close`,
+                    color: 'green',
+                    pics: [{ name: 'Plant Executive / Eng Mgr' }]
+                };
+            }
+        }
+
+        return {
+            stageTag: `Block ${blk}`,
+            color: 'default',
+            pics: [{ name: doc.assigned_to || 'Pending' }]
+        };
+    };
 
     // Determine why a task is pending for the logged-in user
     const getMyActionReason = (doc) => {
@@ -164,7 +316,17 @@ export default function EcntDashboardView({
         const deptMatch = filterDept === 'ALL' || d.department === filterDept;
         const myActionMatch = scopeFilter === 'ALL' || getMyActionReason(d) !== null;
 
-        return textMatch && deptMatch && myActionMatch;
+        const isRework = (d.process_status || '').toLowerCase() === 'require more detail' || (d.current_stage_code || '').includes('_R');
+        const isEffective = d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed' || d.process_status === 'Denied';
+
+        const categoryMatch = 
+            categoryFilter === 'ALL' ||
+            (categoryFilter === 'ECR' && d.doc_type === 'ECR') ||
+            (categoryFilter === 'ECN' && d.doc_type === 'ECN') ||
+            (categoryFilter === 'REWORK' && isRework) ||
+            (categoryFilter === 'EFFECTIVE' && isEffective);
+
+        return textMatch && deptMatch && myActionMatch && categoryMatch;
     });
 
     // Classify into Kanban columns
@@ -188,6 +350,10 @@ export default function EcntDashboardView({
     const myActionableCount = combinedDocs.filter(d => !['ECR Only Closed', 'ECN Effective', 'Denied'].includes(d.process_status) && getMyActionReason(d) !== null).length;
     const inClarification = combinedDocs.filter(d => (d.process_status || '').toLowerCase() === 'require more detail' || (d.current_stage_code || '').includes('_R')).length;
     const totalEffective = combinedDocs.filter(d => d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed').length;
+
+    const countAll = combinedDocs.length;
+    const countEcr = combinedDocs.filter(d => d.doc_type === 'ECR').length;
+    const countEcn = combinedDocs.filter(d => d.doc_type === 'ECN').length;
 
     // Unique departments
     const departments = Array.from(new Set(combinedDocs.map(d => d.department).filter(Boolean)));
@@ -220,6 +386,196 @@ export default function EcntDashboardView({
             antdMessage.info(`URL: ${text}`);
         }
     };
+
+    // Executive Pipeline Table Columns
+    const pipelineColumns = [
+        {
+            title: 'Document No. / Type',
+            key: 'doc_no',
+            width: 190,
+            render: (_, record) => {
+                const isEcr = record.doc_type === 'ECR';
+                const docNo = record.ecr_no || record.ecn_no || `${record.doc_type} #${record.id}`;
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Tag color={isEcr ? 'blue' : 'purple'} style={{ margin: 0, fontWeight: 700, fontSize: 11, borderRadius: 4 }}>
+                                {record.doc_type}
+                            </Tag>
+                            <Text strong style={{ color: '#1890ff', fontSize: 13, cursor: 'pointer' }} onClick={() => onOpenDoc(record.id, record.doc_type)}>
+                                {docNo}
+                            </Text>
+                        </div>
+                        {record.linked_ecn_id && (
+                            <div style={{ fontSize: 11 }}>
+                                <Tag color="geekblue" style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                                    🔗 ECN #{record.linked_ecn_id}
+                                </Tag>
+                            </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#8c8c8c' }}>
+                            📅 {moment(record.created_at).format('DD-MMM-YYYY')}
+                        </div>
+                    </div>
+                );
+            }
+        },
+        {
+            title: 'Title of Change & Technical Details',
+            dataIndex: 'title_of_change',
+            key: 'title_of_change',
+            render: (text, record) => {
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <Text strong style={{ fontSize: 13, color: '#262626' }}>
+                            {text || 'No title specified'}
+                        </Text>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                            {record.customer_name && (
+                                <Tag color="cyan" style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
+                                    🏢 {record.customer_name}
+                                </Tag>
+                            )}
+                            {record.project_code && (
+                                <Tag color="geekblue" style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
+                                    📦 {record.project_code}
+                                </Tag>
+                            )}
+                            {record.status_type && (
+                                <Tag color={record.status_type === 'TEMPORARY' ? 'orange' : 'default'} style={{ margin: 0, fontSize: 10 }}>
+                                    {record.status_type}
+                                </Tag>
+                            )}
+                            {record.is_drawing && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>📐 DWG</Tag>}
+                            {record.is_tooling && <Tag color="green" style={{ margin: 0, fontSize: 10 }}>🔧 Tool</Tag>}
+                            {record.is_program && <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>💻 Prog</Tag>}
+                            {record.is_usage && <Tag color="magenta" style={{ margin: 0, fontSize: 10 }}>⚙️ Usage</Tag>}
+                        </div>
+                    </div>
+                );
+            }
+        },
+        {
+            title: 'Requester & Dept',
+            dataIndex: 'request_by_name',
+            key: 'request_by_name',
+            width: 170,
+            render: (text, record) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <Space size={6}>
+                        <Avatar size={22} style={{ backgroundColor: '#1890ff', fontSize: 11 }}>
+                            {(text || record.request_by || 'U')[0]?.toUpperCase()}
+                        </Avatar>
+                        <Text style={{ fontSize: 12, fontWeight: 500 }}>
+                            {text || record.request_by || 'Requester'}
+                        </Text>
+                    </Space>
+                    <div>
+                        <Tag color="blue" style={{ margin: 0, fontSize: 10, borderRadius: 4 }}>
+                            {record.department || 'ENG'}
+                        </Tag>
+                    </div>
+                </div>
+            )
+        },
+        {
+            title: 'Current Stage & PIC Responsibility',
+            key: 'current_stage',
+            width: 260,
+            render: (_, record) => {
+                const stageInfo = getStageAndPicInfo(record, systemConfig);
+                const actionReason = getMyActionReason(record);
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Tag color={stageInfo.color} style={{ margin: 0, fontSize: 11, borderRadius: 4, fontWeight: 600 }}>
+                                {stageInfo.stageTag}
+                            </Tag>
+                        </div>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                            {(stageInfo.pics || []).map((p, idx) => (
+                                <Tag 
+                                    key={idx} 
+                                    icon={<UserOutlined />} 
+                                    color="default" 
+                                    style={{ margin: 0, fontSize: 11, background: '#f5f5f5', border: '1px solid #d9d9d9', borderRadius: 4 }}
+                                >
+                                    {p.name || p.emp_no}
+                                </Tag>
+                            ))}
+                            {stageInfo.rule && (stageInfo.pics || []).length > 1 && (
+                                <Tag color={stageInfo.rule === 'ALL' ? 'purple' : 'blue'} style={{ margin: 0, fontSize: 10, borderRadius: 10 }}>
+                                    {stageInfo.rule === 'ALL' ? 'อนุมัติทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                </Tag>
+                            )}
+                        </div>
+
+                        {actionReason && (
+                            <div style={{
+                                background: '#fff2e8',
+                                border: '1px solid #ffbb96',
+                                color: '#d4380d',
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                            }}>
+                                <FireOutlined style={{ color: '#fa541c' }} />
+                                <span>{actionReason}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+        },
+        {
+            title: 'Status',
+            dataIndex: 'process_status',
+            key: 'process_status',
+            width: 140,
+            render: (status) => <StatusBadge status={status} />
+        },
+        {
+            title: 'Action',
+            key: 'action',
+            width: 140,
+            fixed: 'right',
+            render: (_, record) => {
+                const actionReason = getMyActionReason(record);
+                return (
+                    <Space size={6}>
+                        <Button 
+                            type={actionReason ? "primary" : "default"}
+                            size="small"
+                            icon={<ArrowRightOutlined />}
+                            onClick={() => onOpenDoc(record.id, record.doc_type)}
+                            style={{ 
+                                borderRadius: 6,
+                                background: actionReason ? '#fa8c16' : undefined,
+                                borderColor: actionReason ? '#fa8c16' : undefined,
+                                fontWeight: 600,
+                                fontSize: 12
+                            }}
+                        >
+                            {actionReason ? 'ดำเนินการ' : 'เปิดดู'}
+                        </Button>
+                        <Tooltip title="คัดลอกลิงก์ตรง (Share Direct Link)">
+                            <Button 
+                                size="small"
+                                icon={<CopyOutlined />}
+                                onClick={(e) => handleCopyLink(e, record)}
+                                style={{ borderRadius: 6 }}
+                            />
+                        </Tooltip>
+                    </Space>
+                );
+            }
+        }
+    ];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -361,7 +717,18 @@ export default function EcntDashboardView({
                     </Select>
                 </Space>
 
-                <Space size="middle">
+                <Space size="middle" wrap>
+                    {/* View Mode Switcher: Pipeline Table (Default) vs Kanban */}
+                    <Segmented
+                        value={viewMode}
+                        onChange={setViewMode}
+                        options={[
+                            { label: <Space><TableOutlined /><span>Pipeline Table (Default)</span></Space>, value: 'pipeline' },
+                            { label: <Space><AppstoreOutlined /><span>Kanban Board</span></Space>, value: 'kanban' }
+                        ]}
+                        style={{ background: '#f5f5f5', padding: 2, borderRadius: 8, fontWeight: 500 }}
+                    />
+
                     <Button 
                         onClick={onNavigateToGantt}
                         style={{ borderRadius: 8 }}
@@ -402,14 +769,117 @@ export default function EcntDashboardView({
                 </div>
             )}
 
-            {/* 3. Stage Kanban Board */}
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(7, minmax(250px, 1fr))', 
-                gap: 14, 
-                overflowX: 'auto', 
-                paddingBottom: 16 
-            }}>
+            {/* 3A. Executive Pipeline Table View (Default View) */}
+            {viewMode === 'pipeline' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Category Quick Filter Pills */}
+                    <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        background: '#ffffff', 
+                        padding: '10px 16px', 
+                        borderRadius: 10, 
+                        border: '1px solid #e8e8e8',
+                        flexWrap: 'wrap',
+                        gap: 8
+                    }}>
+                        <Space wrap size={6}>
+                            <Button 
+                                type={categoryFilter === 'ALL' ? 'primary' : 'default'}
+                                size="small"
+                                onClick={() => setCategoryFilter('ALL')}
+                                style={{ borderRadius: 16 }}
+                            >
+                                All Active ({countAll})
+                            </Button>
+                            <Button 
+                                type={categoryFilter === 'ECR' ? 'primary' : 'default'}
+                                size="small"
+                                onClick={() => setCategoryFilter('ECR')}
+                                style={{ borderRadius: 16 }}
+                            >
+                                ECR Only ({countEcr})
+                            </Button>
+                            <Button 
+                                type={categoryFilter === 'ECN' ? 'primary' : 'default'}
+                                size="small"
+                                onClick={() => setCategoryFilter('ECN')}
+                                style={{ borderRadius: 16 }}
+                            >
+                                ECN Only ({countEcn})
+                            </Button>
+                            <Button 
+                                type={categoryFilter === 'REWORK' ? 'primary' : 'default'}
+                                size="small"
+                                onClick={() => setCategoryFilter('REWORK')}
+                                style={{ borderRadius: 16, borderColor: '#ff7a45', color: categoryFilter === 'REWORK' ? '#fff' : '#d4380d', background: categoryFilter === 'REWORK' ? '#ff7a45' : undefined }}
+                            >
+                                ⚠️ Clarification / Rework ({inClarification})
+                            </Button>
+                            <Button 
+                                type={categoryFilter === 'EFFECTIVE' ? 'primary' : 'default'}
+                                size="small"
+                                onClick={() => setCategoryFilter('EFFECTIVE')}
+                                style={{ borderRadius: 16, borderColor: '#52c41a', color: categoryFilter === 'EFFECTIVE' ? '#fff' : '#389e0d', background: categoryFilter === 'EFFECTIVE' ? '#52c41a' : undefined }}
+                            >
+                                ✅ Closed / Effective ({totalEffective})
+                            </Button>
+                        </Space>
+
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            Showing <strong>{filteredDocs.length}</strong> of {combinedDocs.length} documents
+                        </Text>
+                    </div>
+
+                    {/* Responsive Pipeline Table */}
+                    <Card 
+                        bodyStyle={{ padding: 0 }}
+                        style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
+                    >
+                        <Table 
+                            columns={pipelineColumns} 
+                            dataSource={filteredDocs} 
+                            rowKey={r => `${r.doc_type}_${r.id}`}
+                            scroll={{ x: 1100 }}
+                            pagination={{ 
+                                pageSize: 12, 
+                                showSizeChanger: true, 
+                                pageSizeOptions: ['12', '24', '48', '100'],
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} documents`
+                            }}
+                            onRow={(record) => {
+                                const actionReason = getMyActionReason(record);
+                                return {
+                                    onClick: () => onOpenDoc(record.id, record.doc_type),
+                                    style: { 
+                                        cursor: 'pointer',
+                                        background: actionReason ? '#fffdfa' : undefined,
+                                        transition: 'background 0.2s ease'
+                                    }
+                                };
+                            }}
+                            locale={{
+                                emptyText: (
+                                    <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                                        <Text type="secondary">No documents matching your search or filters.</Text>
+                                    </div>
+                                )
+                            }}
+                        />
+                    </Card>
+                </div>
+            )}
+
+            {/* 3B. Stage Kanban Board (Secondary View) */}
+            {viewMode === 'kanban' && (
+                <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(7, minmax(250px, 1fr))', 
+                    gap: 14, 
+                    overflowX: 'auto', 
+                    paddingBottom: 16 
+                }}>
                 {KANBAN_COLS.map(col => {
                     const cards = filteredDocs.filter(d => getDocColumn(d) === col.key);
 
@@ -537,6 +1007,7 @@ export default function EcntDashboardView({
                     );
                 })}
             </div>
+            )}
 
         </div>
     );

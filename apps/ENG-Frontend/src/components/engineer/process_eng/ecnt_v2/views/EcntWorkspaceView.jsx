@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Card, Collapse, Typography, Row, Col, Tag, Space, Button, 
-    Spin, Checkbox, Table, Alert 
+    Spin, Checkbox, Table, Alert, Radio 
 } from 'antd';
 import { App } from 'antd';
 import { 
     ArrowLeftOutlined, MessageOutlined, CalendarOutlined, FilePdfOutlined, 
     EditOutlined, PlusCircleOutlined, CheckCircleOutlined, ClockCircleOutlined,
-    CopyOutlined
+    CopyOutlined, DiffOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
@@ -15,6 +15,8 @@ import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 import StageStepper from '../components/StageStepper';
 import WorkflowActionCard from '../components/WorkflowActionCard';
+import WorkflowStageFlowPanel from '../components/WorkflowStageFlowPanel';
+import RevisionDiffModal from '../components/RevisionDiffModal';
 import FieldAttachmentDisplay from '../components/FieldAttachmentDisplay';
 import StatusBadge from '../components/StatusBadge';
 import { generateEcnPdf } from '../utils/pdfGenerator';
@@ -27,9 +29,9 @@ export default function EcntWorkspaceView({
     documentId, 
     systemConfig = {},
     onBack, 
-    onOpenInvestigation,
-    onOpenGantt,
-    onEditEcr
+    onOpenInvestigation, 
+    onOpenGantt, 
+    onEditEcr 
 }) {
     const { message: antdMessage } = App.useApp();
     const [loading, setLoading] = useState(false);
@@ -37,6 +39,7 @@ export default function EcntWorkspaceView({
     const [linkedEcr, setLinkedEcr] = useState(null);
     const [attachments, setAttachments] = useState([]);
     const [stageHistory, setStageHistory] = useState([]);
+    const [fieldAudits, setFieldAudits] = useState([]);
 
     const [impactData, setImpactData] = useState(null);
     const [qcData, setQcData] = useState([]);
@@ -44,6 +47,8 @@ export default function EcntWorkspaceView({
     const [tasksData, setTasksData] = useState([]);
 
     const [isCreateEcnOpen, setIsCreateEcnOpen] = useState(false);
+    const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
+    const [viewRevision, setViewRevision] = useState('LATEST'); // 'LATEST' | 'PREVIOUS'
 
     const { empNo, userName, userRole, userDepartment } = useAuthStore();
 
@@ -64,6 +69,7 @@ export default function EcntWorkspaceView({
             setDocData(mainDoc);
             setAttachments(res.data.attachments || []);
             setStageHistory(res.data.stageHistory || []);
+            setFieldAudits(res.data.fieldAudits || []);
 
             if (documentType === 'ECN') {
                 setImpactData(res.data.impact);
@@ -147,9 +153,30 @@ export default function EcntWorkspaceView({
         docData.assigned_to.toLowerCase() === cleanName
     )) || cleanDept === 'ENG' || isAdmin;
 
-    const isReworkActive = (docData?.process_status === 'Require More Detail' || (docData?.current_stage_code || '').includes('_R'));
-    const canResubmit = documentType === 'ECR' && isReworkActive && isRequester;
-    const canCreateEcn = documentType === 'ECR' && docData?.process_status === 'Issued ECN' && !docData?.linked_ecn_id && isAssignedEngineer;
+    const isReworkActive = (docData?.process_status || '').toLowerCase() === 'require more detail' || (docData?.current_stage_code || '').includes('_R');
+    const canResubmit = isRequester;
+    const canCreateEcn = isAssignedEngineer;
+
+    // Compute displayed document values: latest by default (รอบล่าสุด), or original previous values if toggled
+    const displayedDocData = useMemo(() => {
+        if (!docData) return null;
+        if (viewRevision === 'LATEST' || !fieldAudits || fieldAudits.length === 0) return docData;
+
+        // Apply fieldAudits in reverse to recreate original pre-revision values
+        const prev = { ...docData };
+        fieldAudits.forEach(audit => {
+            if (audit.field_name && audit.old_value !== undefined) {
+                if (typeof prev[audit.field_name] === 'boolean') {
+                    prev[audit.field_name] = audit.old_value === 'true';
+                } else {
+                    prev[audit.field_name] = audit.old_value;
+                }
+            }
+        });
+        return prev;
+    }, [docData, viewRevision, fieldAudits]);
+
+    const currentDisplayDoc = displayedDocData || docData;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -243,6 +270,55 @@ export default function EcntWorkspaceView({
                 stageHistory={stageHistory} 
             />
 
+            {/* Revision Switcher & History Bar */}
+            {docData && (docData.revision_count > 0 || fieldAudits.length > 0) && (
+                <div style={{
+                    background: viewRevision === 'LATEST' ? '#f6ffed' : '#fffbe6',
+                    border: viewRevision === 'LATEST' ? '1px solid #b7eb8f' : '1px solid #ffe58f',
+                    borderRadius: 10,
+                    padding: '10px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                }}>
+                    <Space size="middle" wrap>
+                        <Tag color={viewRevision === 'LATEST' ? 'green' : 'orange'} style={{ fontSize: 13, padding: '2px 8px', fontWeight: 600 }}>
+                            {viewRevision === 'LATEST' 
+                                ? `📌 กำลังแสดงข้อมูล: รอบล่าสุด (Rev ${Number(docData?.revision_count || 0) + 1})` 
+                                : '⏳ กำลังแสดงข้อมูล: ฉบับเดิมก่อนแก้ไข (Original Before Revision)'}
+                        </Tag>
+                        <Text style={{ fontSize: 12, color: '#595959' }}>
+                            {viewRevision === 'LATEST' 
+                                ? 'แสดงรายละเอียดที่อัปเดตชี้แจงตามคำขอของผู้จัดการ (ค่าเริ่มต้น)' 
+                                : 'แสดงค่าเดิมก่อนการแก้ไข เพื่อให้เปรียบเทียบดูความเปลี่ยนแปลงได้ง่าย'}
+                        </Text>
+                    </Space>
+
+                    <Space size="middle">
+                        <Radio.Group 
+                            value={viewRevision} 
+                            onChange={e => setViewRevision(e.target.value)}
+                            size="small"
+                            buttonStyle="solid"
+                        >
+                            <Radio.Button value="LATEST">รอบล่าสุด (ค่าเริ่มต้น)</Radio.Button>
+                            <Radio.Button value="PREVIOUS">รอบเดิมก่อนแก้ไข</Radio.Button>
+                        </Radio.Group>
+                        <Button 
+                            size="small" 
+                            icon={<DiffOutlined />} 
+                            onClick={() => setIsDiffModalOpen(true)}
+                            style={{ borderColor: '#1890ff', color: '#1890ff', fontWeight: 600 }}
+                        >
+                            🆚 ดูข้อมูลเปรียบเทียบก่อน-หลังแก้ไข (Diff Viewer)
+                        </Button>
+                    </Space>
+                </div>
+            )}
+
             {/* Main Content Body */}
             <Spin spinning={loading}>
                 {docData && (
@@ -293,51 +369,51 @@ export default function EcntWorkspaceView({
                                     key="tech_section"
                                 >
                                     <Row gutter={[16, 12]}>
-                                        <Col span={12}><Text type="secondary">Status:</Text> <Tag color="purple">{docData.status_type || 'PERMANENT'}</Tag></Col>
-                                        <Col span={12}><Text type="secondary">Objective:</Text> <Tag color="cyan">{docData.objective} {docData.objective_other ? `(${docData.objective_other})` : ''}</Tag></Col>
+                                        <Col span={12}><Text type="secondary">Status:</Text> <Tag color="purple">{currentDisplayDoc.status_type || 'PERMANENT'}</Tag></Col>
+                                        <Col span={12}><Text type="secondary">Objective:</Text> <Tag color="cyan">{currentDisplayDoc.objective} {currentDisplayDoc.objective_other ? `(${currentDisplayDoc.objective_other})` : ''}</Tag></Col>
                                         
                                         <Col span={24}>
                                             <Text type="secondary">Change Categories:</Text>{' '}
                                             <Space size={4}>
-                                                {docData.is_drawing && <Tag color="blue">Product/Process Drawing</Tag>}
-                                                {docData.is_tooling && <Tag color="green">Tooling</Tag>}
-                                                {docData.is_program && <Tag color="orange">Cutting Program</Tag>}
-                                                {docData.is_usage && <Tag color="magenta">Usage / Setup</Tag>}
+                                                {currentDisplayDoc.is_drawing && <Tag color="blue">Product/Process Drawing</Tag>}
+                                                {currentDisplayDoc.is_tooling && <Tag color="green">Tooling</Tag>}
+                                                {currentDisplayDoc.is_program && <Tag color="orange">Cutting Program</Tag>}
+                                                {currentDisplayDoc.is_usage && <Tag color="magenta">Usage / Setup</Tag>}
                                             </Space>
                                         </Col>
 
                                         <Col span={24}>
                                             <Text strong>Title of Change:</Text>
                                             <Paragraph style={{ marginTop: 4, background: '#fafafa', padding: 8, borderRadius: 6, border: '1px solid #f0f0f0' }}>
-                                                {docData.title_of_change}
+                                                {currentDisplayDoc.title_of_change}
                                             </Paragraph>
                                         </Col>
 
                                         <Col span={24}>
                                             <Text strong>Reason of Change:</Text>
                                             <Paragraph style={{ marginTop: 4, background: '#fafafa', padding: 8, borderRadius: 6, border: '1px solid #f0f0f0' }}>
-                                                {docData.reason_of_change}
+                                                {currentDisplayDoc.reason_of_change}
                                             </Paragraph>
                                             <FieldAttachmentDisplay attachments={attachments} fieldName="reason_of_change" />
                                         </Col>
                                     </Row>
 
                                     {/* Drawing Details */}
-                                    {docData.is_drawing && (
+                                    {currentDisplayDoc.is_drawing && (
                                         <div style={{ marginTop: 14, padding: 12, background: '#f5f9ff', borderRadius: 8, border: '1px solid #d6e4ff' }}>
                                             <Text strong style={{ color: '#1890ff' }}>📐 Drawing Specifications</Text>
                                             <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
-                                                <Col span={8}><Text type="secondary">Part No:</Text> {docData.dwg_part_no || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">C/N:</Text> {docData.dwg_cn || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">Revision:</Text> {docData.dwg_revision || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Part No:</Text> {currentDisplayDoc.dwg_part_no || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">C/N:</Text> {currentDisplayDoc.dwg_cn || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Revision:</Text> {currentDisplayDoc.dwg_revision || '-'}</Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">Before Change:</Text>
-                                                    <Paragraph style={{ marginTop: 4 }}>{docData.dwg_before_change || '-'}</Paragraph>
+                                                    <Paragraph style={{ marginTop: 4 }}>{currentDisplayDoc.dwg_before_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="dwg_before_change" />
                                                 </Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">After Change:</Text>
-                                                    <Paragraph style={{ marginTop: 4 }}>{docData.dwg_after_change || '-'}</Paragraph>
+                                                    <Paragraph style={{ marginTop: 4 }}>{currentDisplayDoc.dwg_after_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="dwg_after_change" />
                                                 </Col>
                                             </Row>
@@ -345,39 +421,39 @@ export default function EcntWorkspaceView({
                                     )}
 
                                     {/* Tooling Details */}
-                                    {docData.is_tooling && (
+                                    {currentDisplayDoc.is_tooling && (
                                         <div style={{ marginTop: 14, padding: 12, background: '#f6ffed', borderRadius: 8, border: '1px solid #d9f7be' }}>
                                             <Text strong style={{ color: '#52c41a' }}>🔧 Tooling Specifications</Text>
                                             <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
-                                                <Col span={12}><Text type="secondary">Current Tool No:</Text> {docData.tool_current_no || '-'} ({docData.tool_current_usage} K/pc)</Col>
-                                                <Col span={12}><Text type="secondary">New Tool No:</Text> {docData.tool_new_no || '-'} ({docData.tool_new_usage} K/pc)</Col>
+                                                <Col span={12}><Text type="secondary">Current Tool No:</Text> {currentDisplayDoc.tool_current_no || '-'} ({currentDisplayDoc.tool_current_usage} K/pc)</Col>
+                                                <Col span={12}><Text type="secondary">New Tool No:</Text> {currentDisplayDoc.tool_new_no || '-'} ({currentDisplayDoc.tool_new_usage} K/pc)</Col>
                                             </Row>
                                         </div>
                                     )}
 
                                     {/* Program Details */}
-                                    {docData.is_program && (
+                                    {currentDisplayDoc.is_program && (
                                         <div style={{ marginTop: 14, padding: 12, background: '#fffbe6', borderRadius: 8, border: '1px solid #ffe58f' }}>
                                             <Text strong style={{ color: '#fa8c16' }}>💻 Program & Conditions</Text>
                                             <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
                                                 <Col span={12}>
                                                     <Text type="secondary">Program Before:</Text>
-                                                    <Paragraph>{docData.prog_before_change || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.prog_before_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="prog_before_change" />
                                                 </Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">Program After:</Text>
-                                                    <Paragraph>{docData.prog_after_change || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.prog_after_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="prog_after_change" />
                                                 </Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">Condition Before:</Text>
-                                                    <Paragraph>{docData.prog_condition_before || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.prog_condition_before || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="prog_condition_before" />
                                                 </Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">Condition After:</Text>
-                                                    <Paragraph>{docData.prog_condition_after || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.prog_condition_after || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="prog_condition_after" />
                                                 </Col>
                                             </Row>
@@ -385,24 +461,24 @@ export default function EcntWorkspaceView({
                                     )}
 
                                     {/* Usage Details */}
-                                    {docData.is_usage && (
+                                    {currentDisplayDoc.is_usage && (
                                         <div style={{ marginTop: 14, padding: 12, background: '#fff0f6', borderRadius: 8, border: '1px solid #ffd6e7' }}>
                                             <Text strong style={{ color: '#eb2f96' }}>⚙️ Usage & Setup Sheet</Text>
                                             <Row gutter={[12, 8]} style={{ marginTop: 6 }}>
-                                                <Col span={8}><Text type="secondary">Setup Sheet No:</Text> {docData.usage_setup_no || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">Part No:</Text> {docData.usage_part_no || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">M/C No:</Text> {docData.usage_mc_no || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">Process:</Text> {docData.usage_process || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">Program No:</Text> {docData.usage_program_no || '-'}</Col>
-                                                <Col span={8}><Text type="secondary">Cycle Time:</Text> {docData.usage_cycle_time_before || '-'} → {docData.usage_cycle_time_after || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Setup Sheet No:</Text> {currentDisplayDoc.usage_setup_no || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Part No:</Text> {currentDisplayDoc.usage_part_no || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">M/C No:</Text> {currentDisplayDoc.usage_mc_no || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Process:</Text> {currentDisplayDoc.usage_process || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Program No:</Text> {currentDisplayDoc.usage_program_no || '-'}</Col>
+                                                <Col span={8}><Text type="secondary">Cycle Time:</Text> {currentDisplayDoc.usage_cycle_time_before || '-'} → {currentDisplayDoc.usage_cycle_time_after || '-'}</Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">Before Setup:</Text>
-                                                    <Paragraph>{docData.usage_before_change || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.usage_before_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="usage_before_change" />
                                                 </Col>
                                                 <Col span={12}>
                                                     <Text type="secondary">After Setup:</Text>
-                                                    <Paragraph>{docData.usage_after_change || '-'}</Paragraph>
+                                                    <Paragraph>{currentDisplayDoc.usage_after_change || '-'}</Paragraph>
                                                     <FieldAttachmentDisplay attachments={attachments} fieldName="usage_after_change" />
                                                 </Col>
                                             </Row>
@@ -589,6 +665,16 @@ export default function EcntWorkspaceView({
                                 docData={docData}
                                 onSuccess={fetchDetail} 
                             />
+
+                            {/* Workflow Stage Flow Stepper matching reference image */}
+                            <WorkflowStageFlowPanel
+                                documentType={documentType}
+                                documentId={docData.id}
+                                docData={docData}
+                                tasksData={tasksData}
+                                systemConfig={systemConfig}
+                                onStageFlowUpdated={fetchDetail}
+                            />
                         </Col>
                     </Row>
                 )}
@@ -604,6 +690,15 @@ export default function EcntWorkspaceView({
                     setIsCreateEcnOpen(false);
                     fetchDetail();
                 }}
+            />
+
+            {/* Revision Diff Comparison Modal */}
+            <RevisionDiffModal
+                open={isDiffModalOpen}
+                onClose={() => setIsDiffModalOpen(false)}
+                docData={docData}
+                fieldAudits={fieldAudits}
+                stageHistory={stageHistory}
             />
         </div>
     );
