@@ -197,7 +197,7 @@ async function buildMachineResolver() {
 router.get('/machine-types', async (req, res) => {
   const { search, nodedupe } = req.query;
   try {
-    let sql = `SELECT id, machine_type_code, machine_type_name, grinding_area_label, tool_code_filter, is_active, created_at, machine_group
+    let sql = `SELECT id, machine_type_code, machine_type_name, grinding_area_label, tool_code_filter, is_active, created_at, machine_group, grid_template_id
                FROM ${TABLES.SDS_MACHINE_TYPE_CODE}`;
     const params = [];
     if (search?.trim()) {

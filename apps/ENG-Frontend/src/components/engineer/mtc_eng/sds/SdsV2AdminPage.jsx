@@ -588,6 +588,259 @@ const ToolingImagesTab = ({ theme }) => {
   );
 };
 
+// Turning grid template's 8 cutting-tool positions (T01-T08 of the cutting-tool
+// section — not the F01-F08 jig/fixture section, which already gets its photo and name
+// automatically from T-Select). A cutting insert/holder has no reliable per-CN DWG
+// number the way a fixture does, so every field here is manual and STATIC per machine —
+// entered once and printed on every sheet for that machine, unlike the fixture fields
+// which change per CN following the factory plan.
+//
+// Photo upload (machine + slot, atomic call) writes an internal `Tool_Photo_Key_N`
+// param that never prints — see sdsV2ImageController.js. The 7 text fields below are
+// real printed cells and go through the ordinary machine-config parameter upsert
+// (PUT .../parameters/bulk), same mechanism as every other SDS machine-default field.
+// Hardcoded like TEMPLATE_ID in the Turning migrations (20260916c_, 20260918_) — this
+// grid template's id has been stable at 8 since it was created.
+const TURNING_GRID_TEMPLATE_ID = 8;
+const TURNING_TOOL_SLOT_COUNT = 8;
+const TURNING_TOOL_DETAIL_FIELDS = [
+  { key: 'Tool_Name',    label: 'Tool Name' },
+  { key: 'VC',           label: 'VC' },
+  { key: 'F',            label: 'F' },
+  { key: 'AP',           label: 'AP' },
+  { key: 'Nose_R',       label: 'Nose R' },
+  { key: 'Insert_Info',  label: 'Insert' },
+  { key: 'Insert_Maker', label: 'Maker (Insert)' },
+  { key: 'Holder_Info',  label: 'Holder' },
+  { key: 'Holder_Maker', label: 'Maker (Holder)' },
+  { key: 'Rotation',     label: 'Rotation' },
+  { key: 'Hand',         label: 'Hand' },
+];
+
+const TurningToolImagesTab = ({ theme }) => {
+  const { message } = App.useApp();
+  const [allMachineTypes, setAllMachineTypes] = useState([]);
+  const [machine, setMachine] = useState(null);
+  const [photoSlots, setPhotoSlots] = useState([]);
+  const [paramsMap, setParamsMap] = useState({}); // param_key -> param_value, machine-default
+  const [loading, setLoading] = useState(false);
+  const [photoModalSlot, setPhotoModalSlot] = useState(null);
+  const [photoModalFile, setPhotoModalFile] = useState([]);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [detailSlot, setDetailSlot] = useState(null);
+  const [detailForm, setDetailForm] = useState({});
+  const [savingDetails, setSavingDetails] = useState(false);
+
+  useEffect(() => {
+    axios.get(server.MTC_SDS_V2_ADMIN_MACHINE_TYPES)
+      .then(r => setAllMachineTypes(r.data))
+      .catch(() => { });
+  }, []);
+
+  const load = useCallback(async (m) => {
+    if (!m) { setPhotoSlots([]); setParamsMap({}); return; }
+    setLoading(true);
+    try {
+      const [photoRes, paramRes] = await Promise.all([
+        axios.get(server.MTC_SDS_V2_IMAGES_TURNING_TOOL, { params: { machine_type_name: m } }),
+        axios.get(server.MTC_SDS_V2_ADMIN_PARAMETERS, { params: { machine_type_name: m } }),
+      ]);
+      setPhotoSlots(photoRes.data);
+      setParamsMap(Object.fromEntries(paramRes.data.map(r => [r.param_key, r.param_value])));
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Load failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => { load(machine); }, [machine, load]);
+
+  const openPhotoModal = (slot) => { setPhotoModalSlot(slot); setPhotoModalFile([]); };
+  const closePhotoModal = () => { setPhotoModalSlot(null); setPhotoModalFile([]); };
+
+  const handleSavePhoto = async () => {
+    if (!photoModalFile.length) { message.warning('Select an image file'); return; }
+    setSavingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('machine_type_name', machine);
+      fd.append('slot', photoModalSlot);
+      fd.append('image', photoModalFile[0].originFileObj);
+      await axios.post(server.MTC_SDS_V2_IMAGES_TURNING_TOOL, fd);
+      message.success('Uploaded');
+      closePhotoModal();
+      load(machine);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
+
+  const handleDeletePhoto = async (slot) => {
+    try {
+      await axios.delete(`${server.MTC_SDS_V2_IMAGES_TURNING_TOOL}/${encodeURIComponent(machine)}/${slot}`);
+      message.success('Deleted');
+      load(machine);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const openDetails = (slot) => {
+    const form = {};
+    TURNING_TOOL_DETAIL_FIELDS.forEach(f => { form[f.key] = paramsMap[`${f.key}_${slot}`] || ''; });
+    setDetailForm(form);
+    setDetailSlot(slot);
+  };
+  const closeDetails = () => { setDetailSlot(null); setDetailForm({}); };
+
+  const handleSaveDetails = async () => {
+    setSavingDetails(true);
+    try {
+      const params = TURNING_TOOL_DETAIL_FIELDS.map(f => ({
+        param_key: `${f.key}_${detailSlot}`,
+        param_value: detailForm[f.key] || '',
+      }));
+      await axios.put(server.MTC_SDS_V2_ADMIN_PARAMETERS_BULK, { machine_type_name: machine, params });
+      message.success('Saved');
+      closeDetails();
+      load(machine);
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
+  const photoBySlot = Object.fromEntries(photoSlots.map(r => [r.slot, r]));
+  const rows = Array.from({ length: TURNING_TOOL_SLOT_COUNT }, (_, i) => {
+    const slot = i + 1;
+    const photo = photoBySlot[slot] || {};
+    return {
+      key: slot,
+      slot,
+      has_image: !!photo.has_image,
+      photoKey: photo.key,
+      updated_at: photo.updated_at,
+      toolName: paramsMap[`Tool_Name_${slot}`] || '',
+    };
+  });
+
+  const cols = [
+    {
+      title: 'Preview', key: 'preview', width: 100,
+      render: (_, row) => row.has_image ? (
+        <Image
+          width={80} height={60}
+          style={{ objectFit: 'contain', border: '1px solid #eee', borderRadius: 4 }}
+          src={`${server.MTC_SDS_V2_IMAGES_TOOLING}/${encodeURIComponent(row.photoKey)}?token=${localStorage.getItem('token')}`}
+          fallback="/image_m.png"
+        />
+      ) : <Text type="secondary">No image</Text>,
+    },
+    { title: 'Position', key: 'slot', width: 100, render: (_, row) => `Tool ${row.slot}` },
+    { title: 'Tool Name', dataIndex: 'toolName', render: v => v || <Text type="secondary">-</Text> },
+    { title: 'Photo Updated', dataIndex: 'updated_at', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
+    {
+      title: '', key: 'actions', width: 230,
+      render: (_, row) => (
+        <Space>
+          <Button size="small" onClick={() => openDetails(row.slot)}>Details</Button>
+          <Button size="small" icon={<UploadOutlined />} onClick={() => openPhotoModal(row.slot)}>
+            {row.has_image ? 'Replace' : 'Upload'}
+          </Button>
+          {row.has_image && (
+            <Popconfirm title="Delete this photo?" onConfirm={() => handleDeletePhoto(row.slot)} okText="Delete" okButtonProps={{ danger: true }}>
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Card size="small" style={{ marginBottom: 16, background: theme.colors.cardBackground }} title="Turning Cutting-Tool Details">
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text type="secondary">
+            Tool name, insert/holder info and a reference photo — one static set per
+            cutting-tool position (T01-T08), printed on every sheet for that machine. NOT
+            matched per-CN like a fixture, since a cutting insert/holder has no reliable
+            factory DWG number to match on.
+          </Text>
+          <Select
+            placeholder="Select machine"
+            style={{ width: 280 }}
+            value={machine}
+            onChange={setMachine}
+            options={allMachineTypes
+              .filter(m => m.grid_template_id === TURNING_GRID_TEMPLATE_ID)
+              .map(m => ({ value: m.machine_type_name, label: m.machine_group || m.machine_type_name }))}
+            showSearch
+            optionFilterProp="label"
+          />
+        </Space>
+      </Card>
+
+      {machine && (
+        <Table
+          loading={loading}
+          dataSource={rows}
+          columns={cols}
+          size="small"
+          pagination={false}
+        />
+      )}
+
+      <Modal
+        title={`Tool ${photoModalSlot} photo — ${machine}`}
+        open={photoModalSlot != null}
+        onCancel={closePhotoModal}
+        onOk={handleSavePhoto}
+        confirmLoading={savingPhoto}
+        destroyOnHidden
+      >
+        <div>
+          <div style={{ marginBottom: 4 }}><Text>Image File</Text></div>
+          <Upload
+            accept="image/*"
+            maxCount={1}
+            fileList={photoModalFile}
+            beforeUpload={() => false}
+            onChange={({ fileList: fl }) => setPhotoModalFile(fl)}
+          >
+            <Button icon={<UploadOutlined />}>Select</Button>
+          </Upload>
+        </div>
+      </Modal>
+
+      <Modal
+        title={`Tool ${detailSlot} details — ${machine}`}
+        open={detailSlot != null}
+        onCancel={closeDetails}
+        onOk={handleSaveDetails}
+        confirmLoading={savingDetails}
+        destroyOnHidden
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {TURNING_TOOL_DETAIL_FIELDS.map(f => (
+            <div key={f.key}>
+              <div style={{ marginBottom: 4 }}><Text>{f.label}</Text></div>
+              <Input
+                value={detailForm[f.key] || ''}
+                onChange={(e) => setDetailForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </Space>
+      </Modal>
+    </div>
+  );
+};
+
 const CN_PREFIX_LABEL_MAP = Object.fromEntries(
   [...CN_CLASS_OPTIONS, ...CN_PREFIX_OPTIONS].map(o => [o.value, o.label])
 );
@@ -2737,6 +2990,7 @@ const SdsV2AdminPage = () => {
           items={[
             { key: 'tooling', label: 'Tooling Images', children: <ToolingImagesTab theme={theme} /> },
             { key: 'grinding', label: 'Grinding Images', children: <GrindingImagesTab theme={theme} /> },
+            { key: 'turning-tool', label: 'Turning Tool Details', children: <TurningToolImagesTab theme={theme} /> },
           ]}
         />
       ),

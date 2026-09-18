@@ -98,6 +98,14 @@ const HEADER_FIELDS = [
 
 // Per-cutting-tool fields (T01-T08), generated from the repeating block/column pattern.
 const FIELDS = [
+  // 2026-09-17: tool name, added at the owner's request — same idea as the F0N fixture
+  // name (Z/AF, one column past the Y/AD badge), but manual (machine-default
+  // sds_parameter) rather than T-Select-driven: this cutting-tool section has no T-Select
+  // data source at all, every other field here (VC/F/AP/Insert_Info/...) is manual too.
+  // Column B, same row as the badge (A15/M15 "T01".."T08") — confirmed empty via a live
+  // grid_json dump (pre-formatted red left-aligned text, no value, no fill), one column
+  // past the badge exactly like the fixture layout.
+  { key: 'Tool_Name',    dRow: 0, col: 'B' },
   { key: 'Tool_Detail',  dRow: 0, col: 'C' },
   { key: 'Usage',        dRow: 0, col: 'J' },
   { key: 'VC',           dRow: 1, col: 'B' },

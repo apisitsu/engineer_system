@@ -910,24 +910,31 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['params'] = rawParams;
   map['sds_rev'] = rawParams['sds_rev'] || 'NC';
 
-  // Turning-style per-tool photo (2026-09-15) — one picture per tool position (1-12),
-  // keyed by whatever code the sheet's own Holder_Info_N cell holds for this CN, not by
-  // a factory DWG number (turning inserts/holders aren't in lpb.eng_tooling the way
-  // grinding fixtures are). Admin uploads straight into the SAME sds_v2_tooling_image
-  // table via the existing generic /images/tooling endpoint, typing the holder code as
-  // the key — that endpoint never required the key to be a real DWG number.
-  // Inert for every other machine: this only fires when the CN's own params actually
-  // carry a Holder_Info_N key, which only a Turning-layout grid template ever writes.
+  // Turning-style per-tool photo (2026-09-15, re-pointed 2026-09-17 to the 8-tool
+  // layout, key moved off Holder_Info_N the same day) — one picture per cutting-tool
+  // position (1-8), keyed by an internal `Tool_Photo_Key_N` param — NOT by a factory DWG
+  // number (turning inserts/holders aren't in lpb.eng_tooling the way grinding fixtures
+  // are), and deliberately NOT by Holder_Info_N: that field is real, printed, human-typed
+  // text ("Holder" in the admin UI, mapped to its own sheet cell), and reusing it as the
+  // photo key meant an upload would silently overwrite whatever holder description was
+  // typed there with an internal key string — caught before shipping, when the owner
+  // asked for Holder_Info_N to be independently editable.
+  // `Tool_Photo_Key_N` has NO sds_excel_mapping row of its own — it never prints, it only
+  // exists to link a slot to sds_v2_tooling_image. See POST /api/sds/v2/images/turning-tool,
+  // which upserts both this param and the image row in one call so the two never drift
+  // apart, using a deterministic key the admin never has to type.
+  // Inert for every other machine: this only fires when the machine's own params
+  // actually carry a Tool_Photo_Key_N, which only this upload route ever writes.
   const turningHolderCodes = [];
-  for (let n = 1; n <= 12; n++) { const v = rawParams[`Holder_Info_${n}`]; if (v) turningHolderCodes.push(v); }
+  for (let n = 1; n <= 8; n++) { const v = rawParams[`Tool_Photo_Key_${n}`]; if (v) turningHolderCodes.push(v); }
   if (turningHolderCodes.length) {
     const turningImgRows = await engPool.query(
       `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
       [turningHolderCodes]
     );
     map['_turningToolImages'] = {};
-    for (let n = 1; n <= 12; n++) {
-      const code = rawParams[`Holder_Info_${n}`];
+    for (let n = 1; n <= 8; n++) {
+      const code = rawParams[`Tool_Photo_Key_${n}`];
       if (!code) continue;
       const img = turningImgRows.rows.find(i => i.tool_dwg_no === code);
       if (img) map['_turningToolImages'][n] = `data:${img.mime_type};base64,${img.image_data.toString('base64')}`;
@@ -1345,13 +1352,18 @@ const IMAGE_EXTENTS = {
   tool_image_T17: { tl: 'Q48', br: 'V53' }, tool_image_T18: { tl: 'W48', br: 'AB53' },
   tool_image_T19: { tl: 'AC48', br: 'AH53' }, tool_image_T20: { tl: 'AI48', br: 'AN53' },
   grinding_layout_image: { tl: 'AO26', br: 'AU45' },
-  // Turning template (id "Turning" in sds_grid_template) — 12 tool positions, 3 columns
-  // (H/T/AF) × 4 row-groups. Coordinates are the photo boxes already merged into that
-  // template's own layout; they mean nothing to any other grid template.
-  turning_tool_image_1:  { tl: 'H18', br: 'K25' }, turning_tool_image_5:  { tl: 'T18', br: 'W25' }, turning_tool_image_9:  { tl: 'AF18', br: 'AI25' },
-  turning_tool_image_2:  { tl: 'H30', br: 'K37' }, turning_tool_image_6:  { tl: 'T30', br: 'W37' }, turning_tool_image_10: { tl: 'AF30', br: 'AI37' },
-  turning_tool_image_3:  { tl: 'H42', br: 'K49' }, turning_tool_image_7:  { tl: 'T42', br: 'W49' }, turning_tool_image_11: { tl: 'AF42', br: 'AI49' },
-  turning_tool_image_4:  { tl: 'H54', br: 'K61' }, turning_tool_image_8:  { tl: 'T54', br: 'W61' }, turning_tool_image_12: { tl: 'AF54', br: 'AI61' },
+  // Turning template (id "Turning" in sds_grid_template) — 8 tool positions (T01-T08 of
+  // the cutting-tool section, NOT the F01-F08 fixture section below), 2 columns (H/T) ×
+  // 4 row-groups. Re-pointed 2026-09-17 to the CURRENT 8-tool + fixture layout's own
+  // empty cells (confirmed clear of any mapped field via a live grid_json dump: H/I/J/K
+  // and T/U/V/W sit empty for all 8 rows of each block, column L/X left as a buffer
+  // before the next mapped column M / Y). The previous 12-position / 3-column (H/T/AF)
+  // coordinates belonged to the SUPERSEDED layout this template replaced and no longer
+  // match anything (AF is now the F02/F04/F06/F08 fixture-name column).
+  turning_tool_image_1: { tl: 'H17', br: 'K24' }, turning_tool_image_5: { tl: 'T17', br: 'W24' },
+  turning_tool_image_2: { tl: 'H28', br: 'K35' }, turning_tool_image_6: { tl: 'T28', br: 'W35' },
+  turning_tool_image_3: { tl: 'H39', br: 'K46' }, turning_tool_image_7: { tl: 'T39', br: 'W46' },
+  turning_tool_image_4: { tl: 'H50', br: 'K57' }, turning_tool_image_8: { tl: 'T50', br: 'W57' },
   // Turning template's F01-F08 jig/fixture photo boxes (2026-09-16) — the CURRENT
   // 8-tool + fixture-section layout, added once the template grew a dedicated photo
   // area for each fixture (it had none before, which is why tool_image_T01..T08 is
@@ -1367,7 +1379,7 @@ const IMAGE_EXTENTS = {
 // Machines on the Turning template — its F01-F08 fixture slots have a real photo box
 // (unlike tool_image_T01..T08's Standard-layout coordinates, which land on this
 // layout's own cutting-tool text and are suppressed by the collision check below).
-const TURNING_FIXTURE_MACHINES = new Set(['X-100', 'XD-8', 'J-WAVE']);
+const TURNING_FIXTURE_MACHINES = new Set(['X-100', 'XD-8', 'J-WAVE', 'XC-100', 'XD-8T']);
 // Must match SUPPRESS_KEY in db_migrations/20260916b_suppress_shared_mapping_for_turning.js.
 const SUPPRESS_PARAM_KEY = '_suppressed';
 

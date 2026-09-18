@@ -103,6 +103,7 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
   MTC_SDS_V2_IMAGES_GRINDING_COVERAGE: `${apiUrl}api/sds/v2/images/grinding/coverage`,
+  MTC_SDS_V2_IMAGES_TURNING_TOOL: `${apiUrl}api/sds/v2/images/turning-tool`,
   MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
   MTC_SDS_V2_REPORT_TEMPLATE_B: `${apiUrl}api/sds/v2/report/template-b-conformance`,
   MTC_SDS_V2_REPORT_SELECTION_COND: `${apiUrl}api/sds/v2/report/selection-condition-conformance`,

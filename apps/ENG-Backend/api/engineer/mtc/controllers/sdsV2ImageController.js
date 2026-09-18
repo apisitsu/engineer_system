@@ -154,6 +154,143 @@ router.delete('/tooling/:tool_dwg_no', isAdmin, async (req, res) => {
   }
 });
 
+// ── Turning template cutting-tool photos ────────────────────────────────────
+//
+// The Turning grid template (sds_grid_template "Turning") has 8 photo boxes for its
+// cutting-tool section (T01-T08 — not the F01-F08 jig/fixture section, which already
+// gets its photo from T-Select via tool_image_T0N/turning_fixture_image_T0N). A cutting
+// insert/holder has no reliable per-CN DWG the way a fixture does, so this is a STATIC
+// picture per (machine, tool position) — the admin uploads a reference photo once and
+// it prints on every sheet for that machine, unlike the fixture photos which change per
+// CN following the factory plan.
+//
+// The key stored in `sds_v2_tooling_image` is a self-chosen string, not a real DWG
+// number — see the comment on `_turningToolImages` in sdsV2HeadlessController.js. This
+// route does BOTH halves of that mechanism (the internal `Tool_Photo_Key_N`
+// sds_parameter row and the sds_v2_tooling_image row) in one call, keyed
+// deterministically off (machine_type_name, slot) so the admin never has to type a
+// matching code anywhere. `Tool_Photo_Key_N` is a purely internal link — it has no
+// sds_excel_mapping row and never prints — kept deliberately separate from
+// `Holder_Info_N`, which IS a real printed text field the admin edits via
+// PUT /api/sds/v2/admin/parameters/bulk (see TurningToolImagesTab.jsx): reusing
+// Holder_Info_N as the photo key would have silently overwritten whatever holder
+// description was typed there.
+const TURNING_TOOL_SLOTS = 8;
+const turningToolKey = (machine, slot) => `TURN:${machine}:${slot}`;
+
+/** GET /api/sds/v2/images/turning-tool?machine_type_name=X-100 — all 8 slots' status */
+router.get('/turning-tool', async (req, res) => {
+  const machine = (req.query.machine_type_name || '').trim();
+  if (!machine) return res.status(400).json({ error: 'machine_type_name is required' });
+  try {
+    const paramRows = await engPool.query(
+      `SELECT param_key, param_value FROM ${TABLES.SDS_PARAMETER}
+        WHERE machine_type_name = $1 AND cn IS NULL AND process_code IS NULL
+          AND param_key = ANY($2)`,
+      [machine, Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => `Tool_Photo_Key_${i + 1}`)]
+    );
+    const keyBySlot = {};
+    paramRows.rows.forEach((r) => {
+      const slot = parseInt(r.param_key.replace('Tool_Photo_Key_', ''), 10);
+      if (r.param_value) keyBySlot[slot] = r.param_value;
+    });
+    const keys = Object.values(keyBySlot);
+    let imgByKey = {};
+    if (keys.length) {
+      const imgRows = await engPool.query(
+        `SELECT tool_dwg_no, updated_at FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
+        [keys]
+      );
+      imgByKey = Object.fromEntries(imgRows.rows.map((r) => [r.tool_dwg_no, r]));
+    }
+    const slots = Array.from({ length: TURNING_TOOL_SLOTS }, (_, i) => {
+      const slot = i + 1;
+      const key = keyBySlot[slot] || null;
+      const img = key ? imgByKey[key] : null;
+      return { slot, key, has_image: !!img, updated_at: img?.updated_at || null };
+    });
+    res.json(slots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/sds/v2/images/turning-tool — upload/replace one slot's photo
+ *  multipart: machine_type_name, slot (1-8), file (field: image) */
+router.post('/turning-tool', isAdmin, async (req, res) => {
+  const machine = (req.body.machine_type_name || '').trim();
+  const slot = parseInt(req.body.slot, 10);
+  if (!machine) return res.status(400).json({ error: 'machine_type_name is required' });
+  if (!Number.isInteger(slot) || slot < 1 || slot > TURNING_TOOL_SLOTS) {
+    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS}` });
+  }
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'image file is required (field: image)' });
+
+  const file = Array.isArray(req.files.image) ? req.files.image[0] : req.files.image;
+  const mime = file.mimetype || 'image/jpeg';
+  const key = turningToolKey(machine, slot);
+  const empno = req.user?.empno || null;
+
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO ${TABLES.SDS_V2_TOOLING_IMAGE}
+         (tool_dwg_no, image_data, mime_type, file_name, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $5)
+       ON CONFLICT (tool_dwg_no) DO UPDATE SET
+         image_data  = EXCLUDED.image_data,
+         mime_type   = EXCLUDED.mime_type,
+         file_name   = EXCLUDED.file_name,
+         updated_by  = EXCLUDED.updated_by,
+         updated_at  = NOW()`,
+      [key, file.data, mime, file.name, empno]
+    );
+    await client.query(
+      `INSERT INTO ${TABLES.SDS_PARAMETER} (cn, machine_type_name, param_key, param_value, process_code, updated_by)
+       VALUES (NULL, $1, $2, $3, NULL, $4)
+       ON CONFLICT (COALESCE(cn, '__machine_config__'), machine_type_name, param_key, COALESCE(process_code, '__all__'))
+       DO UPDATE SET param_value = EXCLUDED.param_value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+      [machine, `Tool_Photo_Key_${slot}`, key, empno]
+    );
+    await client.query('COMMIT');
+    res.json({ slot, key, has_image: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('SDS Turning Tool Image Upload Error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/** DELETE /api/sds/v2/images/turning-tool/:machine_type_name/:slot */
+router.delete('/turning-tool/:machine_type_name/:slot', isAdmin, async (req, res) => {
+  const machine = req.params.machine_type_name;
+  const slot = parseInt(req.params.slot, 10);
+  if (!Number.isInteger(slot) || slot < 1 || slot > TURNING_TOOL_SLOTS) {
+    return res.status(400).json({ error: `slot must be an integer 1-${TURNING_TOOL_SLOTS}` });
+  }
+  const key = turningToolKey(machine, slot);
+  const client = await engPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = $1`, [key]);
+    await client.query(
+      `DELETE FROM ${TABLES.SDS_PARAMETER}
+        WHERE machine_type_name = $1 AND cn IS NULL AND process_code IS NULL AND param_key = $2`,
+      [machine, `Tool_Photo_Key_${slot}`]
+    );
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ── Grinding Images ─────────────────────────────────────────────────────────
 
 /** GET /api/sds/v2/images/grinding — list all (metadata only) */
