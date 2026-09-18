@@ -519,7 +519,7 @@ const getEcrById = async (req, res) => {
 // Handles Block 3 (Dept Mgr) & Block 4 (Eng Mgr)
 const actionEcr = async (req, res) => {
     const { id } = req.params;
-    const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester, assigned_to } = req.body;
+    const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester, assigned_to, attachments } = req.body;
     
     const client = await engPool.connect();
     try {
@@ -651,6 +651,22 @@ const actionEcr = async (req, res) => {
             INSERT INTO ecnt2_notification (document_type, document_id, block_number, email_type, subject, body)
             VALUES ('ECR', $1, $2, $3, $4, $5)
         `, [id, currentBlock, 'STATUS_UPDATE', `ECR Action: ${action} - New Status: ${nextStatus}`, `ECR has moved to ${nextStageCode || 'Complete'}`]);
+
+        // Save action attachments if provided (e.g. pasted screenshots or uploaded files in comments)
+        if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+            for (const att of attachments) {
+                await client.query(`
+                    INSERT INTO ecnt2_attachment (
+                        document_type, document_id, block_number, field_name,
+                        file_name, file_url, file_type, file_size, uploaded_by
+                    ) VALUES ('ECR', $1, $2, $3, $4, $5, $6, $7, $8)
+                `, [
+                    id, block_number, att.field_name || 'comment',
+                    att.file_name, att.file_url, att.file_type || '', att.file_size || null,
+                    userName || userEmpno
+                ]);
+            }
+        }
 
         await client.query('COMMIT');
         res.json({ message: "Action successful", next_status: nextStatus, next_stage: nextStageCode });
@@ -880,7 +896,7 @@ const getEcnById = async (req, res) => {
 
 const actionEcn = async (req, res) => {
     const { id } = req.params;
-    const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester } = req.body;
+    const { block_number, action, action_by, action_by_name, action_role, comment, deny_reason, request_to_requester, attachments } = req.body;
     
     const client = await engPool.connect();
     try {
@@ -936,7 +952,7 @@ const actionEcn = async (req, res) => {
 
                     await client.query('COMMIT');
                     return res.json({ 
-                        message: `บันทึกการอนุมัติแล้ว (${approvedBy.length}/${stageConfig.assignees.length} ท่าน) อยู่ระหว่างรอผู้รับผิดชอบท่านอื่น`, 
+                        message: `Approval recorded (${approvedBy.length}/${stageConfig.assignees.length} persons). Awaiting remaining assignees.`, 
                         partial: true, 
                         approvedCount: approvedBy.length, 
                         totalCount: stageConfig.assignees.length 
@@ -1093,6 +1109,22 @@ const actionEcn = async (req, res) => {
             INSERT INTO ecnt2_notification (document_type, document_id, block_number, email_type, subject, body)
             VALUES ('ECN', $1, $2, $3, $4, $5)
         `, [id, currentBlock, 'STATUS_UPDATE', `ECN Action: ${action} - New Status: ${nextStatus}`, `ECN moved to ${nextStageCode}`]);
+
+        // Save action attachments if provided (e.g. pasted screenshots or uploaded files in comments)
+        if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+            for (const att of attachments) {
+                await client.query(`
+                    INSERT INTO ecnt2_attachment (
+                        document_type, document_id, block_number, field_name,
+                        file_name, file_url, file_type, file_size, uploaded_by
+                    ) VALUES ('ECN', $1, $2, $3, $4, $5, $6, $7, $8)
+                `, [
+                    id, block_number, att.field_name || 'comment',
+                    att.file_name, att.file_url, att.file_type || '', att.file_size || null,
+                    userName || userEmpno
+                ]);
+            }
+        }
 
         await client.query('COMMIT');
         res.json({ message: "Action successful", next_status: nextStatus, next_stage: nextStageCode });

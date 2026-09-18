@@ -27,7 +27,7 @@ export default function FieldAttachmentDisplay({ attachments = [], fieldName }) 
     return (
         <div style={{ marginTop: 8, padding: '8px 10px', background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0' }}>
             <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 6, fontWeight: 500 }}>
-                📎 แนบไฟล์/รูปภาพสำหรับรายการนี้ ({filtered.length}):
+                📎 Attached Files / Images ({filtered.length}):
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <Image.PreviewGroup>

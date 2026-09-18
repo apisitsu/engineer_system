@@ -117,7 +117,7 @@ export default function WorkflowStageFlowPanel({
         } else if (stageKey === 'STAGE_3' || stageKey === 'STAGE_5') {
             defaultList = [stageAssigneesCfg?.eng_mgr || {
                 emp_no: 'eng_mgr',
-                name: 'Teerapol Kantapoom ธีระพล ขันธภูมิ',
+                name: 'Teerapol Kantapoom',
                 dept: 'ENG',
                 role: 'MGR'
             }];
@@ -131,7 +131,7 @@ export default function WorkflowStageFlowPanel({
         } else if (stageKey === 'STAGE_6' || stageKey === 'STAGE_7') {
             defaultList = [stageAssigneesCfg?.default_qc_pic || {
                 emp_no: 'qc_admin',
-                name: 'Patcharayada Waiyaboon พัชรญาดา ไวยบุญ',
+                name: 'Patcharayada Waiyaboon',
                 dept: 'QC',
                 role: 'QC'
             }];
@@ -197,7 +197,7 @@ export default function WorkflowStageFlowPanel({
     // Save New Target Assignee
     const handleSaveAddTarget = async () => {
         if (!selectedUserEmpNo) {
-            antdMessage.warning("กรุณาเลือกผู้รับผิดชอบที่ต้องการเพิ่ม");
+            antdMessage.warning("Please select an assignee to add");
             return;
         }
 
@@ -208,7 +208,7 @@ export default function WorkflowStageFlowPanel({
 
         // Check if already in list
         if (assignees.some(a => (a.emp_no || '').toLowerCase() === candidate.u_code.toLowerCase())) {
-            antdMessage.info("ผู้ใช้งานนี้ได้รับมอบหมายในสเตจนี้อยู่แล้ว");
+            antdMessage.info("This user is already assigned to this stage");
             return;
         }
 
@@ -229,7 +229,7 @@ export default function WorkflowStageFlowPanel({
     const handleRemoveAssignee = async (stageKey, empNoToRemove) => {
         const { assignees, approvalRule: currentRule } = getStageAssignees(stageKey);
         if (assignees.length <= 1) {
-            antdMessage.warning("ไม่สามารถลบผู้รับผิดชอบทั้งหมดได้ ต้องมีอย่างน้อย 1 ท่าน");
+            antdMessage.warning("Cannot remove all assignees. At least 1 assignee is required.");
             return;
         }
 
@@ -260,7 +260,7 @@ export default function WorkflowStageFlowPanel({
                 approval_rule: rule
             }, authConfig);
 
-            antdMessage.success("บันทึกการมอบหมายผู้รับผิดชอบเรียบร้อยแล้ว");
+            antdMessage.success("Stage assignees updated successfully");
             if (onStageFlowUpdated) onStageFlowUpdated();
         } catch (err) {
             console.error("Save stage flow error:", err);
@@ -340,17 +340,17 @@ export default function WorkflowStageFlowPanel({
                                             borderBottom: '1px solid #f0f0f0',
                                             paddingBottom: 4
                                         }}>
-                                            {/* Approval Rule Tag / Pill */}
+                                             {/* Approval Rule Tag / Pill */}
                                             {stage.isConcernMultiDept ? (
-                                                <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL) เท่านั้น">
+                                                <Tooltip title="Multi-Department Concern: Requires approval from all department representatives (ALL)">
                                                     <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
                                                         <LockOutlined style={{ marginRight: 4 }} />
-                                                        ทุกคน (ALL)
+                                                        Everyone (ALL)
                                                     </Tag>
                                                 </Tooltip>
                                             ) : (
                                                 assignees.length > 1 ? (
-                                                    <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ (ANY vs ALL)" : `เกณฑ์การอนุมัติ: ${rule === 'ALL' ? 'ต้องอนุมัติครบทุกคน' : 'คนใดคนหนึ่งอนุมัติ'}`}>
+                                                    <Tooltip title={isAuthorized ? "Click to switch approval rule (ANY vs ALL)" : `Approval Rule: ${rule === 'ALL' ? 'All assignees must approve' : 'Any single assignee can approve'}`}>
                                                         <Tag 
                                                             color={rule === 'ALL' ? 'volcano' : 'blue'} 
                                                             style={{ 
@@ -361,13 +361,13 @@ export default function WorkflowStageFlowPanel({
                                                             }}
                                                             onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
                                                         >
-                                                            {rule === 'ALL' ? 'ทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                                            {rule === 'ALL' ? 'Everyone (ALL)' : 'Any (ANY)'}
                                                             {isAuthorized && <SwapOutlined style={{ marginLeft: 4 }} />}
                                                         </Tag>
                                                     </Tooltip>
                                                 ) : (
                                                     <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
-                                                        คนเดียว (Single)
+                                                        Single Assignee
                                                     </Tag>
                                                 )
                                             )}
@@ -375,7 +375,7 @@ export default function WorkflowStageFlowPanel({
                                             {/* Add Target Button */}
                                             {!stage.isConcernMultiDept && (
                                                 isAuthorized ? (
-                                                    <Tooltip title="เพิ่มผู้รับผิดชอบร่วมในสเตจนี้">
+                                                    <Tooltip title="Add co-assignee to this stage">
                                                         <Button 
                                                             type="link" 
                                                             size="small" 
@@ -387,7 +387,7 @@ export default function WorkflowStageFlowPanel({
                                                         </Button>
                                                     </Tooltip>
                                                 ) : (
-                                                    <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้น">
+                                                    <Tooltip title="Only stage assignees or System Admin can modify">
                                                         <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
                                                             <LockOutlined />
                                                         </span>
@@ -432,7 +432,7 @@ export default function WorkflowStageFlowPanel({
                                                     })
                                                 ) : (
                                                     <Text type="secondary" style={{ fontSize: 11 }}>
-                                                        รอการตั้งค่าแผนกใน Block 9
+                                                        Awaiting department task configuration in Block 9
                                                     </Text>
                                                 )}
                                             </div>
@@ -468,17 +468,17 @@ export default function WorkflowStageFlowPanel({
                                                                     hasApproved ? (
                                                                         <Tag color="success" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>✓</Tag>
                                                                     ) : (
-                                                                        <Tag color="default" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>รอ</Tag>
+                                                                        <Tag color="default" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>Pending</Tag>
                                                                     )
                                                                 )}
                                                             </Space>
 
                                                             {isAuthorized && assignees.length > 1 && (
                                                                 <Popconfirm
-                                                                    title="ยืนยันการนำผู้รับผิดชอบท่านนี้ออกจากสเตจ?"
+                                                                    title="Are you sure you want to remove this assignee from the stage?"
                                                                     onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
-                                                                    okText="นำออก"
-                                                                    cancelText="ยกเลิก"
+                                                                    okText="Remove"
+                                                                    cancelText="Cancel"
                                                                 >
                                                                     <DeleteOutlined 
                                                                         style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 12, marginLeft: 4 }} 
@@ -571,34 +571,34 @@ export default function WorkflowStageFlowPanel({
                                         paddingBottom: 6
                                     }}>
                                         {stage.isConcernMultiDept ? (
-                                            <Tooltip title="Multi-Department Concern: ต้องได้รับการอนุมัติจากตัวแทนทุกแผนก (ALL)">
+                                            <Tooltip title="Multi-Department Concern: Requires approval from all department representatives (ALL)">
                                                 <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
                                                     <LockOutlined style={{ marginRight: 4 }} />
-                                                    ทุกคน (ALL)
+                                                    Everyone (ALL)
                                                 </Tag>
                                             </Tooltip>
                                         ) : (
                                             assignees.length > 1 ? (
-                                                <Tooltip title={isAuthorized ? "คลิกเพื่อสลับเกณฑ์การอนุมัติ" : `เกณฑ์การอนุมัติ: ${rule}`}>
+                                                <Tooltip title={isAuthorized ? "Click to toggle approval rule" : `Approval rule: ${rule}`}>
                                                     <Tag 
                                                         color={rule === 'ALL' ? 'volcano' : 'blue'} 
                                                         style={{ borderRadius: 8, margin: 0, fontSize: 11, cursor: isAuthorized ? 'pointer' : 'default' }}
                                                         onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
                                                     >
-                                                        {rule === 'ALL' ? 'ทุกคน (ALL)' : 'คนใดคนหนึ่ง (ANY)'}
+                                                        {rule === 'ALL' ? 'Everyone (ALL)' : 'Any (ANY)'}
                                                         {isAuthorized && <SwapOutlined style={{ marginLeft: 4 }} />}
                                                     </Tag>
                                                 </Tooltip>
                                             ) : (
                                                 <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
-                                                    คนเดียว (Single)
+                                                    Single Assignee
                                                 </Tag>
                                             )
                                         )}
 
                                         {!stage.isConcernMultiDept && (
                                             isAuthorized ? (
-                                                <Tooltip title="เพิ่มผู้รับผิดชอบร่วมในสเตจนี้">
+                                                <Tooltip title="Add co-assignee to this stage">
                                                     <Button 
                                                         type="link" 
                                                         size="small" 
@@ -610,7 +610,7 @@ export default function WorkflowStageFlowPanel({
                                                     </Button>
                                                 </Tooltip>
                                             ) : (
-                                                <Tooltip title="เฉพาะผู้รับผิดชอบในสเตจนี้หรือ Admin เท่านั้น">
+                                                <Tooltip title="Only stage assignees or System Admin can modify">
                                                     <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
                                                         <LockOutlined />
                                                     </span>
@@ -637,7 +637,7 @@ export default function WorkflowStageFlowPanel({
                                                     </div>
                                                 ))
                                             ) : (
-                                                <Text type="secondary" style={{ fontSize: 12 }}>รอการตั้งค่าแผนกใน Block 9</Text>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>Awaiting department task configuration in Block 9</Text>
                                             )}
                                         </div>
                                     ) : (
@@ -651,10 +651,10 @@ export default function WorkflowStageFlowPanel({
                                                     </Space>
                                                     {isAuthorized && assignees.length > 1 && (
                                                         <Popconfirm
-                                                            title="ยืนยันการนำผู้รับผิดชอบท่านนี้ออกจากสเตจ?"
+                                                            title="Are you sure you want to remove this assignee from the stage?"
                                                             onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
-                                                            okText="นำออก"
-                                                            cancelText="ยกเลิก"
+                                                            okText="Remove"
+                                                            cancelText="Cancel"
                                                         >
                                                             <DeleteOutlined style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 13 }} />
                                                         </Popconfirm>
@@ -675,7 +675,7 @@ export default function WorkflowStageFlowPanel({
     const mainContent = (
         <div>
             <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 14 }}>
-                ขั้นตอนการอนุมัติและผู้รับผิดชอบในแต่ละสเตจ สามารถเพิ่มผู้รับผิดชอบร่วมและกำหนดเกณฑ์การอนุมัติได้
+                Workflow approval stages and designated owners. You can delegate co-assignees and configure approval rules.
             </div>
             {renderStageCards()}
         </div>
@@ -710,23 +710,23 @@ export default function WorkflowStageFlowPanel({
                 title={
                     <Space>
                         <PlusCircleOutlined style={{ color: '#1890ff' }} />
-                        <span>เพิ่มผู้รับผิดชอบในสเตจ</span>
+                        <span>Assign Co-PIC to Stage</span>
                     </Space>
                 }
                 open={isAddModalOpen}
                 onCancel={() => setIsAddModalOpen(false)}
                 onOk={handleSaveAddTarget}
                 confirmLoading={saving}
-                okText="บันทึกผู้รับผิดชอบ"
-                cancelText="ยกเลิก"
+                okText="Save Assignee"
+                cancelText="Cancel"
                 destroyOnClose
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 10 }}>
                     <div>
-                        <Text strong>เลือกพนักงานที่ต้องการเพิ่ม:</Text>
+                        <Text strong>Select Personnel to Assign:</Text>
                         <Select
                             showSearch
-                            placeholder="ค้นหาด้วยรหัสพนักงาน ชื่อ หรือแผนก..."
+                            placeholder="Search by Emp ID, name, or department..."
                             style={{ width: '100%', marginTop: 8 }}
                             loading={loadingCandidates}
                             value={selectedUserEmpNo}
@@ -744,7 +744,7 @@ export default function WorkflowStageFlowPanel({
                     </div>
 
                     <div>
-                        <Text strong>เกณฑ์การอนุมัติในสเตจนี้ (เมื่อมีผู้รับผิดชอบมากกว่า 1 ท่าน):</Text>
+                        <Text strong>Stage Approval Rule (When multiple assignees are designated):</Text>
                         <div style={{ marginTop: 8 }}>
                             <Radio.Group 
                                 value={approvalRule} 
@@ -752,15 +752,15 @@ export default function WorkflowStageFlowPanel({
                             >
                                 <Space direction="vertical">
                                     <Radio value="ANY">
-                                        <Text strong>คนใดคนหนึ่ง (ANY) - [ค่าเริ่มต้น]</Text>
+                                        <Text strong>Any Single Assignee (ANY) - [Default]</Text>
                                         <div style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 24 }}>
-                                            หากมีผู้รับผิดชอบคนใดคนหนึ่งในสเตจนี้กดอนุมัติ ระบบจะถือว่าผ่านขั้นตอนทันที
+                                            When any one designated assignee approves, the stage automatically advances.
                                         </div>
                                     </Radio>
                                     <Radio value="ALL">
-                                        <Text strong>ทุกคนต้องอนุมัติ (ALL)</Text>
+                                        <Text strong>All Must Approve (ALL)</Text>
                                         <div style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 24 }}>
-                                            ผู้รับผิดชอบทุกคนที่กำหนดในสเตจนี้ต้องกดอนุมัติครบทุกคน ระบบจึงจะเลื่อนไปยังขั้นตอนถัดไป
+                                            Every designated assignee must approve before advancing to the next stage.
                                         </div>
                                     </Radio>
                                 </Space>

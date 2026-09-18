@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Layout, Spin, Button, Typography, Space, Tag, Segmented, Tooltip } from 'antd';
+import { Layout, Spin, Button, Typography, Space, Tag, Segmented, Tooltip, Empty, Card } from 'antd';
 import { 
     AppstoreOutlined, CalendarOutlined, PlusCircleOutlined, 
     FileTextOutlined, MessageOutlined, SyncOutlined, SettingOutlined 
@@ -281,30 +281,28 @@ export default function Dashboard() {
                                 ),
                                 value: 'require'
                             },
-                            ...(activeDocId ? [
-                                {
-                                    label: (
-                                        <Tooltip title={`Active Doc: ${activeDocType} #${activeDocId} Workspace`}>
-                                            <Space size={4} style={{ padding: '0 4px' }}>
-                                                <FileTextOutlined style={{ fontSize: 15, color: '#722ed1' }} />
-                                                <span style={{ fontSize: 13 }}>Workspace</span>
-                                            </Space>
-                                        </Tooltip>
-                                    ),
-                                    value: 'workspace'
-                                },
-                                {
-                                    label: (
-                                        <Tooltip title="Investigation, Discussions & Problem Hub">
-                                            <Space size={4} style={{ padding: '0 4px' }}>
-                                                <MessageOutlined style={{ fontSize: 15, color: '#fa8c16' }} />
-                                                <span style={{ fontSize: 13 }}>Problem Hub</span>
-                                            </Space>
-                                        </Tooltip>
-                                    ),
-                                    value: 'investigation'
-                                }
-                            ] : [])
+                            {
+                                label: (
+                                    <Tooltip title={activeDocId ? `Active Doc: ${activeDocType} #${activeDocId} Workspace` : 'Active Document Workspace'}>
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <FileTextOutlined style={{ fontSize: 15, color: '#722ed1' }} />
+                                            <span style={{ fontSize: 13 }}>Workspace</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'workspace'
+                            },
+                            {
+                                label: (
+                                    <Tooltip title="Investigation, Discussions & Problem Hub">
+                                        <Space size={4} style={{ padding: '0 4px' }}>
+                                            <MessageOutlined style={{ fontSize: 15, color: '#fa8c16' }} />
+                                            <span style={{ fontSize: 13 }}>Problem Hub</span>
+                                        </Space>
+                                    </Tooltip>
+                                ),
+                                value: 'investigation'
+                            }
                         ]}
                     />
 
@@ -365,26 +363,68 @@ export default function Dashboard() {
                     />
                 )}
 
-                {currentView === 'workspace' && activeDocId && (
-                    <EcntWorkspaceView 
-                        documentType={activeDocType}
-                        documentId={activeDocId}
-                        systemConfig={systemConfig}
-                        onBack={handleBackToDashboard}
-                        onOpenInvestigation={handleOpenInvestigation}
-                        onOpenGantt={handleOpenGantt}
-                        onEditEcr={handleEditEcr}
-                    />
+                {currentView === 'workspace' && (
+                    activeDocId ? (
+                        <EcntWorkspaceView 
+                            documentType={activeDocType}
+                            documentId={activeDocId}
+                            systemConfig={systemConfig}
+                            onBack={handleBackToDashboard}
+                            onOpenInvestigation={handleOpenInvestigation}
+                            onOpenGantt={handleOpenGantt}
+                            onEditEcr={handleEditEcr}
+                        />
+                    ) : (
+                        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 20px', margin: '20px 0', border: '1px solid #e8e8e8' }}>
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <div>
+                                        <div style={{ fontSize: 16, fontWeight: 600, color: '#262626', marginBottom: 8 }}>
+                                            No Document Selected
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#8c8c8c', maxWidth: 460, margin: '0 auto 20px auto' }}>
+                                            Please select an ECR or ECN workflow item from the Dashboard table or Kanban board to view its workspace and take action.
+                                        </div>
+                                        <Button type="primary" icon={<AppstoreOutlined />} onClick={handleBackToDashboard} style={{ borderRadius: 8 }}>
+                                            Go to Dashboard
+                                        </Button>
+                                    </div>
+                                }
+                            />
+                        </Card>
+                    )
                 )}
 
-                {currentView === 'investigation' && activeDocId && (
-                    <EcntInvestigationHub 
-                        documentType={activeDocType}
-                        documentId={activeDocId}
-                        docData={activeDocData}
-                        onBack={() => handleOpenDoc(activeDocId, activeDocType)}
-                        onOpenWorkspace={() => handleOpenDoc(activeDocId, activeDocType)}
-                    />
+                {currentView === 'investigation' && (
+                    activeDocId ? (
+                        <EcntInvestigationHub 
+                            documentType={activeDocType}
+                            documentId={activeDocId}
+                            docData={activeDocData}
+                            onBack={() => handleOpenDoc(activeDocId, activeDocType)}
+                            onOpenWorkspace={() => handleOpenDoc(activeDocId, activeDocType)}
+                        />
+                    ) : (
+                        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 20px', margin: '20px 0', border: '1px solid #e8e8e8' }}>
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <div>
+                                        <div style={{ fontSize: 16, fontWeight: 600, color: '#262626', marginBottom: 8 }}>
+                                            No Problem Hub Context Selected
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#8c8c8c', maxWidth: 460, margin: '0 auto 20px auto' }}>
+                                            Please select an active document from the Dashboard to join discussions and problem root-cause investigation.
+                                        </div>
+                                        <Button type="primary" icon={<AppstoreOutlined />} onClick={handleBackToDashboard} style={{ borderRadius: 8 }}>
+                                            Go to Dashboard
+                                        </Button>
+                                    </div>
+                                }
+                            />
+                        </Card>
+                    )
                 )}
             </Spin>
 

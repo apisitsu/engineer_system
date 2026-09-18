@@ -159,7 +159,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         <AttachableField
                             name="reason_of_change"
                             label="Reason of Change"
-                            placeholder="ระบุเหตุผลการเปลี่ยนแปลง (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Describe reason for change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rules={[{ required: true }]}
                             rows={2}
                             attachments={fieldAttachments['reason_of_change'] || []}
@@ -168,7 +168,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         />
                     </Col>
                     <Col span={24}>
-                        <Form.Item name="scope_of_implementation" label="Scope of Implementation (ขอบเขตการดำเนินการ)">
+                        <Form.Item name="scope_of_implementation" label="Scope of Implementation">
                             <TextArea rows={2} placeholder="Specify scope of application/implementation..." />
                         </Form.Item>
                     </Col>
@@ -176,7 +176,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         <AttachableField
                             name="before_change"
                             label="Before Change Description"
-                            placeholder="Technical state before change (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Technical state before change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rows={3}
                             attachments={fieldAttachments['before_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, before_change: atts }))}
@@ -187,7 +187,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         <AttachableField
                             name="after_change"
                             label="After Change Description"
-                            placeholder="Technical state after change (กด Ctrl+V เพื่อวางรูปภาพ หรือแนบไฟล์)..."
+                            placeholder="Technical state after change (Press Ctrl+V to paste screenshot or use upload button)..."
                             rows={3}
                             attachments={fieldAttachments['after_change'] || []}
                             onAttachmentsChange={(atts) => setFieldAttachments(p => ({ ...p, after_change: atts }))}
@@ -198,7 +198,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
 
                 {/* Impact Assessment Section */}
                 <h4 style={{ marginTop: 16, marginBottom: 8, color: '#1677ff', borderBottom: '1px solid #e8e8e8', paddingBottom: 6 }}>
-                    Impact Assessment (การประเมินผลกระทบ)
+                    Impact Assessment
                 </h4>
 
                 <Collapse defaultActiveKey={['customer_section', 'affected_areas']} style={{ marginBottom: 16 }}>
@@ -207,7 +207,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         {/* Customer Impact */}
                         <div style={{ marginBottom: 12, padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_customer_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>Customer Impact (มีผลกระทบต่อ Customer)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>Customer Impact</Checkbox>
                             </Form.Item>
                             {hasCustomerImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -243,7 +243,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         {/* KZW/FJSW Impact */}
                         <div style={{ marginBottom: 12, padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_kzw_fjsw_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>KZW, FJSW Impact (มีผลกระทบต่อ KZW / FJSW)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>KZW, FJSW Impact</Checkbox>
                             </Form.Item>
                             {hasKzwImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -277,7 +277,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                         {/* Sale Drawing Impact */}
                         <div style={{ padding: 12, background: '#fafafa', borderRadius: 6 }}>
                             <Form.Item name={['impact', 'has_sale_drawing_impact']} valuePropName="checked" noStyle>
-                                <Checkbox style={{ fontWeight: 600 }}>Sale Drawing Impact (มีผลกระทบต่อ Sale Drawing)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>Sale Drawing Impact</Checkbox>
                             </Form.Item>
                             {hasSaleDwgImpact && (
                                 <Row gutter={12} style={{ marginTop: 12 }}>
@@ -297,7 +297,7 @@ export default function CreateECNModal({ open, linkedEcr, systemConfig = {}, onC
                     </Collapse.Panel>
 
                     {/* 8 Affected Areas Checklist */}
-                    <Collapse.Panel header="2. 8 Affected Areas Checklist (พื้นที่ที่ได้รับผลกระทบ)" key="affected_areas">
+                    <Collapse.Panel header="2. 8 Affected Areas Checklist" key="affected_areas">
                         {/* 1. Traceability */}
                         <div style={{ marginBottom: 10, padding: 8, background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: 4 }}>
                             <Form.Item name={['impact', 'has_traceability']} valuePropName="checked" noStyle>

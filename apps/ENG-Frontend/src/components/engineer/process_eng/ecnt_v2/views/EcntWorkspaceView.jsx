@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Card, Collapse, Typography, Row, Col, Tag, Space, Button, 
-    Spin, Checkbox, Table, Alert, Radio, Tooltip, Dropdown 
+    Spin, Checkbox, Table, Alert, Select, Tooltip, Dropdown 
 } from 'antd';
 import { App } from 'antd';
 import { 
@@ -156,7 +156,7 @@ export default function EcntWorkspaceView({
     const canResubmit = isRequester;
     const canCreateEcn = isAssignedEngineer;
 
-    // Compute displayed document values: latest by default (รอบล่าสุด), or original previous values if toggled
+    // Compute displayed document values: latest by default (Rev Latest), or original baseline values if toggled
     const displayedDocData = useMemo(() => {
         if (!docData) return null;
         if (viewRevision === 'LATEST' || !fieldAudits || fieldAudits.length === 0) return docData;
@@ -225,26 +225,6 @@ export default function EcntWorkspaceView({
                             />
                         </Tooltip>
 
-                        {/* Dedicated Revision Diff Comparison Tool (Item 10) */}
-                        <Tooltip title={
-                            (docData?.revision_count > 0 || fieldAudits.length > 0)
-                                ? `ดูการเปรียบเทียบข้อมูลก่อน-หลังแก้ไข (Diff Viewer) - มี ${fieldAudits.length || docData?.revision_count} รายการ` 
-                                : 'ดูการเปรียบเทียบข้อมูลก่อน-หลังแก้ไข (Diff Viewer)'
-                        }>
-                            <Button 
-                                icon={<DiffOutlined />} 
-                                onClick={() => setIsDiffModalOpen(true)}
-                                style={{ 
-                                    borderRadius: 8,
-                                    borderColor: (docData?.revision_count > 0 || fieldAudits.length > 0) ? '#1890ff' : undefined,
-                                    color: (docData?.revision_count > 0 || fieldAudits.length > 0) ? '#1890ff' : undefined,
-                                    fontWeight: (docData?.revision_count > 0 || fieldAudits.length > 0) ? 600 : undefined
-                                }}
-                            >
-                                🆚 Diff Viewer {docData?.revision_count > 0 ? `(Rev ${docData.revision_count})` : ''}
-                            </Button>
-                        </Tooltip>
-
                         {/* More Document Tools Dropdown */}
                         <Dropdown 
                             menu={{
@@ -278,7 +258,7 @@ export default function EcntWorkspaceView({
                                 </Tooltip>
                             ) : (
                                 <Tag color="orange" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
-                                    ⏳ รอผู้ยื่นคำขอ ({docData?.request_by_name || docData?.request_by || 'Requester'}) แก้ไขข้อมูล
+                                    ⏳ Awaiting requester ({docData?.request_by_name || docData?.request_by || 'Requester'}) to revise and resubmit
                                 </Tag>
                             )
                         )}
@@ -297,7 +277,7 @@ export default function EcntWorkspaceView({
                                 </Tooltip>
                             ) : (
                                 <Tag color="cyan" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6 }}>
-                                    ⏳ รอวิศวกรที่ได้รับมอบหมาย ({docData?.assigned_to || 'Assigned Engineer'}) ออก ECN
+                                    ⏳ Awaiting assigned engineer ({docData?.assigned_to || 'Assigned Engineer'}) to issue ECN
                                 </Tag>
                             )
                         )}
@@ -331,7 +311,7 @@ export default function EcntWorkspaceView({
                     background: viewRevision === 'LATEST' ? '#f6ffed' : '#fffbe6',
                     border: viewRevision === 'LATEST' ? '1px solid #b7eb8f' : '1px solid #ffe58f',
                     borderRadius: 10,
-                    padding: '10px 16px',
+                    padding: '8px 16px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -340,35 +320,37 @@ export default function EcntWorkspaceView({
                     boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
                 }}>
                     <Space size="middle" wrap>
-                        <Tag color={viewRevision === 'LATEST' ? 'green' : 'orange'} style={{ fontSize: 13, padding: '2px 8px', fontWeight: 600 }}>
-                            {viewRevision === 'LATEST' 
-                                ? `📌 กำลังแสดงข้อมูล: รอบล่าสุด (Rev ${Number(docData?.revision_count || 0) + 1})` 
-                                : '⏳ กำลังแสดงข้อมูล: ฉบับเดิมก่อนแก้ไข (Original Before Revision)'}
+                        <Tag color={viewRevision === 'LATEST' ? 'green' : 'orange'} style={{ fontSize: 12, padding: '2px 8px', fontWeight: 600 }}>
+                            {viewRevision === 'LATEST' ? 'Active Revision' : 'Historical Baseline'}
                         </Tag>
                         <Text style={{ fontSize: 12, color: '#595959' }}>
                             {viewRevision === 'LATEST' 
-                                ? 'แสดงรายละเอียดที่อัปเดตชี้แจงตามคำขอของผู้จัดการ (ค่าเริ่มต้น)' 
-                                : 'แสดงค่าเดิมก่อนการแก้ไข เพื่อให้เปรียบเทียบดูความเปลี่ยนแปลงได้ง่าย'}
+                                ? 'Displaying latest clarified/revised technical data' 
+                                : 'Displaying original baseline values prior to rework/revision'}
                         </Text>
                     </Space>
 
                     <Space size="middle">
-                        <Radio.Group 
+                        <Select 
                             value={viewRevision} 
-                            onChange={e => setViewRevision(e.target.value)}
+                            onChange={setViewRevision}
                             size="small"
-                            buttonStyle="solid"
+                            style={{ width: 230 }}
                         >
-                            <Radio.Button value="LATEST">รอบล่าสุด (ค่าเริ่มต้น)</Radio.Button>
-                            <Radio.Button value="PREVIOUS">รอบเดิมก่อนแก้ไข</Radio.Button>
-                        </Radio.Group>
+                            <Select.Option value="LATEST">
+                                Rev {Number(docData?.revision_count || 0) + 1} (Latest - Active)
+                            </Select.Option>
+                            <Select.Option value="PREVIOUS">
+                                Rev 1 (Original Baseline)
+                            </Select.Option>
+                        </Select>
                         <Button 
                             size="small" 
                             icon={<DiffOutlined />} 
                             onClick={() => setIsDiffModalOpen(true)}
                             style={{ borderColor: '#1890ff', color: '#1890ff', fontWeight: 600 }}
                         >
-                            🆚 ดูข้อมูลเปรียบเทียบก่อน-หลังแก้ไข (Diff Viewer)
+                            🆚 Compare Diffs
                         </Button>
                     </Space>
                 </div>

@@ -321,11 +321,13 @@ export default function EcntDashboardView({
 
         const isRework = (d.process_status || '').toLowerCase() === 'require more detail' || (d.current_stage_code || '').includes('_R');
         const isEffective = d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed' || d.process_status === 'Denied';
+        const isEcrPhase = d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && !isEffective;
+        const isEcnPhase = (d.doc_type === 'ECN' || d.process_status === 'Issued ECN') && !isEffective;
 
         const categoryMatch = 
             categoryFilter === 'ALL' ||
-            (categoryFilter === 'ECR' && d.doc_type === 'ECR') ||
-            (categoryFilter === 'ECN' && d.doc_type === 'ECN') ||
+            (categoryFilter === 'ECR_PHASE' && isEcrPhase) ||
+            (categoryFilter === 'ECN_PHASE' && isEcnPhase) ||
             (categoryFilter === 'REWORK' && isRework) ||
             (categoryFilter === 'EFFECTIVE' && isEffective);
 
@@ -355,8 +357,8 @@ export default function EcntDashboardView({
     const totalEffective = combinedDocs.filter(d => d.process_status === 'ECN Effective' || d.process_status === 'ECR Only Closed').length;
 
     const countAll = combinedDocs.length;
-    const countEcr = combinedDocs.filter(d => d.doc_type === 'ECR').length;
-    const countEcn = combinedDocs.filter(d => d.doc_type === 'ECN').length;
+    const countEcrPhase = combinedDocs.filter(d => d.doc_type === 'ECR' && (d.current_block || 1) <= 4 && !['ECR Only Closed', 'Denied'].includes(d.process_status)).length;
+    const countEcnPhase = combinedDocs.filter(d => (d.doc_type === 'ECN' || d.process_status === 'Issued ECN') && !['ECN Effective', 'Denied'].includes(d.process_status)).length;
 
     // Unique departments
     const departments = Array.from(new Set(combinedDocs.map(d => d.department).filter(Boolean)));
@@ -395,7 +397,8 @@ export default function EcntDashboardView({
         {
             title: 'Document No. / Type',
             key: 'doc_no',
-            width: 175,
+            width: 170,
+            fixed: 'left',
             render: (_, record) => {
                 const isEcr = record.doc_type === 'ECR';
                 const docNo = record.ecr_no || record.ecn_no || `${record.doc_type} #${record.id}`;
@@ -466,22 +469,22 @@ export default function EcntDashboardView({
                                 </Tooltip>
                             )}
                             {record.is_drawing && (
-                                <Tooltip title="Drawing Modification (แบบแปลน)">
+                                <Tooltip title="Drawing Modification (DWG)">
                                     <Tag color="blue" icon={<FileTextOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>DWG</Tag>
                                 </Tooltip>
                             )}
                             {record.is_tooling && (
-                                <Tooltip title="Tooling Modification (เครื่องมือ/ทูล)">
+                                <Tooltip title="Tooling Modification (Tool)">
                                     <Tag color="green" icon={<ToolOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Tool</Tag>
                                 </Tooltip>
                             )}
                             {record.is_program && (
-                                <Tooltip title="CNC Program Modification (โปรแกรม)">
+                                <Tooltip title="CNC Program Modification (Prog)">
                                     <Tag color="orange" icon={<CodeOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Prog</Tag>
                                 </Tooltip>
                             )}
                             {record.is_usage && (
-                                <Tooltip title="Usage & Setup Sheet Modification (เงื่อนไขและชิ้นงาน)">
+                                <Tooltip title="Usage & Setup Sheet Modification (Usage)">
                                     <Tag color="magenta" icon={<SettingOutlined />} style={{ margin: 0, fontSize: 10, borderRadius: 4, cursor: 'help' }}>Usage</Tag>
                                 </Tooltip>
                             )}
@@ -494,7 +497,7 @@ export default function EcntDashboardView({
             title: 'Requester & Dept',
             dataIndex: 'request_by_name',
             key: 'request_by_name',
-            width: 160,
+            width: 150,
             render: (text, record) => (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {/* Line 1: Avatar + Requester Name */}
@@ -518,7 +521,7 @@ export default function EcntDashboardView({
         {
             title: 'Current Stage & PIC Responsibility',
             key: 'current_stage',
-            width: 250,
+            width: 230,
             render: (_, record) => {
                 const stageInfo = getStageAndPicInfo(record, systemConfig);
                 const actionReason = getMyActionReason(record);
@@ -577,7 +580,7 @@ export default function EcntDashboardView({
             title: 'Status',
             dataIndex: 'process_status',
             key: 'process_status',
-            width: 130,
+            width: 120,
             render: (status) => <StatusBadge status={status} />
         },
         {
@@ -590,7 +593,7 @@ export default function EcntDashboardView({
                 const actionReason = getMyActionReason(record);
                 return (
                     <Space size={6}>
-                        <Tooltip title={actionReason ? `ดำเนินการ: ${actionReason}` : 'เปิดดูเอกสาร (Open Workspace)'}>
+                        <Tooltip title={actionReason ? `Action: ${actionReason}` : 'Open Workspace'}>
                             <Button 
                                 type={actionReason ? "primary" : "default"}
                                 shape="circle"
@@ -608,7 +611,7 @@ export default function EcntDashboardView({
                                 }}
                             />
                         </Tooltip>
-                        <Tooltip title="คัดลอกลิงก์ตรง (Share Direct Link)">
+                        <Tooltip title="Share Direct Link">
                             <Button 
                                 shape="circle"
                                 size="middle"
@@ -762,10 +765,10 @@ export default function EcntDashboardView({
                         menu={{
                             items: [
                                 { key: 'ALL', label: `All Active Workflows (${countAll})`, icon: <CheckCircleOutlined /> },
-                                { key: 'ECR', label: `ECR Only (${countEcr})`, icon: <FileTextOutlined style={{ color: '#1677ff' }} /> },
-                                { key: 'ECN', label: `ECN Only (${countEcn})`, icon: <FileTextOutlined style={{ color: '#722ed1' }} /> },
-                                { key: 'REWORK', label: `Clarification / Rework (${inClarification})`, icon: <ExclamationCircleOutlined style={{ color: '#fa8c16' }} /> },
-                                { key: 'EFFECTIVE', label: `Closed / Effective (${totalEffective})`, icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
+                                { key: 'ECR_PHASE', label: `ECR Evaluation Phase (${countEcrPhase})`, icon: <FileTextOutlined style={{ color: '#1677ff' }} /> },
+                                { key: 'ECN_PHASE', label: `ECN Execution Phase (${countEcnPhase})`, icon: <FileTextOutlined style={{ color: '#722ed1' }} /> },
+                                { key: 'REWORK', label: `Clarification & Rework (${inClarification})`, icon: <ExclamationCircleOutlined style={{ color: '#fa8c16' }} /> },
+                                { key: 'EFFECTIVE', label: `Completed & Effective (${totalEffective})`, icon: <CheckCircleFilled style={{ color: '#52c41a' }} /> },
                             ],
                             onClick: (e) => {
                                 setCategoryFilter(e.key);
@@ -774,13 +777,13 @@ export default function EcntDashboardView({
                             selectedKeys: [categoryFilter]
                         }}
                     >
-                        <Tooltip title="Filter documents by Category or Status">
+                        <Tooltip title="Filter documents by Category or Lifecycle Phase">
                             <Button icon={<FilterOutlined style={{ color: categoryFilter !== 'ALL' ? '#1677ff' : undefined }} />}>
                                 <Space size={4}>
                                     <span>
-                                        {categoryFilter === 'ALL' && `Filter (${countAll})`}
-                                        {categoryFilter === 'ECR' && `ECR (${countEcr})`}
-                                        {categoryFilter === 'ECN' && `ECN (${countEcn})`}
+                                        {categoryFilter === 'ALL' && `All Workflows (${countAll})`}
+                                        {categoryFilter === 'ECR_PHASE' && `ECR Phase (${countEcrPhase})`}
+                                        {categoryFilter === 'ECN_PHASE' && `ECN Phase (${countEcnPhase})`}
                                         {categoryFilter === 'REWORK' && `Rework (${inClarification})`}
                                         {categoryFilter === 'EFFECTIVE' && `Effective (${totalEffective})`}
                                     </span>
@@ -917,7 +920,7 @@ export default function EcntDashboardView({
                             columns={pipelineColumns} 
                             dataSource={filteredDocs} 
                             rowKey={r => `${r.doc_type}_${r.id}`}
-                            scroll={{ x: 1100 }}
+                            scroll={{ x: 1080 }}
                             pagination={{ 
                                 current: pagination.current,
                                 pageSize: pagination.pageSize,

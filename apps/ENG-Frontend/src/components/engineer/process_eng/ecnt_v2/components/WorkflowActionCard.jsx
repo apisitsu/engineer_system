@@ -9,6 +9,7 @@ import {
     RollbackOutlined, CloseCircleOutlined 
 } from '@ant-design/icons';
 import { dispatchStageWorkflowEmail } from '../../../../../services/ecntEmailService';
+import AttachableField from './AttachableField';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -150,6 +151,8 @@ export default function WorkflowActionCard({
         getActiveDepartments().map(d => ({ ...d, is_needed: true }))
     );
     const [engineerCandidates, setEngineerCandidates] = useState([]);
+    const [commentAttachments, setCommentAttachments] = useState([]);
+    const [rmdAttachments, setRmdAttachments] = useState([]);
 
     useEffect(() => {
         setDeptTasks(getActiveDepartments().map(d => ({ ...d, is_needed: true })));
@@ -177,6 +180,8 @@ export default function WorkflowActionCard({
 
     useEffect(() => {
         form.resetFields();
+        setCommentAttachments([]);
+        setRmdAttachments([]);
         if (currentBlock === 4) {
             const defaultEng = systemConfig?.stage_assignees?.default_assigned_engineer?.name || 'NATHAPORN YAMMANUS';
             form.setFieldsValue({
@@ -202,6 +207,8 @@ export default function WorkflowActionCard({
             const values = await form.validateFields();
             setLoading(true);
 
+            const allAttachments = [...commentAttachments, ...rmdAttachments];
+
             const payload = {
                 block_number: currentBlock,
                 action: selectedAction,
@@ -212,6 +219,7 @@ export default function WorkflowActionCard({
                 deny_reason: selectedAction === 'DENY' ? values.deny_reason : null,
                 request_to_requester: selectedAction === 'REQUEST_MORE_DETAIL' ? values.request_to_requester : null,
                 assigned_to: values.assigned_to || null,
+                attachments: allAttachments,
                 details: {
                     ...(values.details || {}),
                     ...extraDetails
@@ -266,6 +274,8 @@ export default function WorkflowActionCard({
             }
 
             form.resetFields();
+            setCommentAttachments([]);
+            setRmdAttachments([]);
             if (onSuccess) onSuccess();
         } catch (error) {
             console.error("Action Error:", error);
@@ -440,7 +450,7 @@ export default function WorkflowActionCard({
                     <Row gutter={16}>
                         <Col span={24}>
                             <Form.Item name={['details', 'fai_approved_confirmed']} valuePropName="checked">
-                                <Checkbox style={{ fontWeight: 600 }}>Confirm FAI Approved if Required (ติ๊กยืนยันเมื่อได้รับผล FAI ที่ผ่านแล้ว)</Checkbox>
+                                <Checkbox style={{ fontWeight: 600 }}>Confirm FAI Approved if Required (Check to confirm upon receiving passing FAI results)</Checkbox>
                             </Form.Item>
                         </Col>
                         <Col span={12}>
@@ -561,7 +571,7 @@ export default function WorkflowActionCard({
                                     }
 
                                     return (
-                                        <Tooltip title={`คุณสังกัดแผนก ${userDepartment || 'อื่น'} - สิทธิ์การลงนามขั้นตอนนี้สงวนไว้สำหรับบุคลากรแผนก ${record.dept_code} หรือ Admin เท่านั้น`}>
+                                        <Tooltip title={`You belong to department ${userDepartment || 'Other'} - Signing authority for this stage is reserved for ${record.dept_code} personnel or System Admin only`}>
                                             <Button size="small" disabled style={{ opacity: 0.6 }}>
                                                 🔒 Sign ({record.dept_code})
                                             </Button>
@@ -610,14 +620,14 @@ export default function WorkflowActionCard({
         >
             {!isAuthorized && currentBlock !== 10 && (
                 <Alert 
-                    message="🔒 โหมดดูข้อมูลอย่างเดียว (Read-Only Viewer Mode)" 
+                    message="🔒 Read-Only Viewer Mode" 
                     description={
                         <div>
                             <div>
-                                ขั้นตอนนี้อยู่ในความรับผิดชอบของ: <strong style={{ color: '#1890ff' }}>{responsibleRoleLabel}</strong> {responsiblePersonName ? `(${responsiblePersonName})` : ''}
+                                This workflow stage is under the responsibility of: <strong style={{ color: '#1890ff' }}>{responsibleRoleLabel}</strong> {responsiblePersonName ? `(${responsiblePersonName})` : ''}
                             </div>
                             <div style={{ marginTop: 4, color: '#595959', fontSize: 13 }}>
-                                ผู้ใช้ทุกคนสามารถดูรายละเอียดข้อมูลและประวัติการดำเนินงานได้ แต่การแก้ไขหรือกดอนุมัติถูกจำกัดไว้เฉพาะผู้รับผิดชอบตามสายงานเท่านั้น
+                                All team members can view technical details and audit history. Editing and approving are restricted to designated stage owners.
                             </div>
                         </div>
                     }
@@ -633,17 +643,29 @@ export default function WorkflowActionCard({
                 {/* Common Comment & Deny / RMD details */}
                 {currentBlock !== 10 && currentBlock !== 11 && (
                     <>
-                        <Form.Item name="request_to_requester" label="Detail Requested from Requester / Engineer (If requesting more detail)">
-                            <TextArea rows={2} placeholder="Explain what additional info is needed..." />
-                        </Form.Item>
+                        <AttachableField
+                            name="request_to_requester"
+                            label="Detail Requested from Requester / Engineer (If requiring more detail)"
+                            placeholder="Explain what additional info is needed (press Ctrl+V to paste screenshot)..."
+                            rows={2}
+                            attachments={rmdAttachments}
+                            onAttachmentsChange={setRmdAttachments}
+                            blockNumber={currentBlock}
+                        />
                         {currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
                             <Form.Item name="deny_reason" label="Reason for Denial (If denying)">
                                 <TextArea rows={2} placeholder="Explain reason for denial..." />
                             </Form.Item>
                         )}
-                        <Form.Item name="comment" label="Optional Notes / Comments">
-                            <TextArea rows={2} placeholder="Add any comments..." />
-                        </Form.Item>
+                        <AttachableField
+                            name="comment"
+                            label="Optional Notes / Comments"
+                            placeholder="Add any notes or comments (press Ctrl+V to paste screenshot)..."
+                            rows={2}
+                            attachments={commentAttachments}
+                            onAttachmentsChange={setCommentAttachments}
+                            blockNumber={currentBlock}
+                        />
                     </>
                 )}
 
@@ -654,7 +676,7 @@ export default function WorkflowActionCard({
                             <Space>
                                 <LockOutlined style={{ color: '#fa8c16' }} />
                                 <Text type="secondary" style={{ fontSize: 13 }}>
-                                    <strong>โหมดดูอย่างเดียว</strong>: ปุ่มดำเนินการสงวนสิทธิ์เฉพาะ ({responsibleRoleLabel})
+                                    <strong>Viewer Mode</strong>: Action buttons restricted to ({responsibleRoleLabel})
                                 </Text>
                             </Space>
                         </div>
@@ -668,7 +690,7 @@ export default function WorkflowActionCard({
                                 type="primary" 
                                 size="large" 
                                 icon={<CheckCircleOutlined />}
-                                style={{ width: '100%', background: '#52c41a', borderColor: '#52c41a', borderRadius: 8, fontWeight: 600 }}
+                                style={{ width: '100%', height: 38, background: '#52c41a', borderColor: '#52c41a', borderRadius: 8, fontWeight: 600 }}
                                 onClick={() => handleSubmit('CLOSE')} 
                                 loading={loading}
                             >
@@ -685,29 +707,36 @@ export default function WorkflowActionCard({
                                     icon={<CheckCircleOutlined />}
                                     onClick={() => handleSubmit('APPROVE')} 
                                     loading={loading}
-                                    style={{ width: '100%', borderRadius: 8, fontWeight: 600, background: '#1677ff' }}
+                                    style={{ width: '100%', height: 38, borderRadius: 8, fontWeight: 600, background: '#1677ff' }}
                                 >
                                     {currentBlock === 9 ? 'Submit' : 'Approve'}
                                 </Button>
                             </Tooltip>
                             
-                            {/* Secondary Actions Row: Deny and Return for Rework */}
+                            {/* Secondary Actions Row: Deny and Require more Detail */}
                             {((currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9) || 
                               (currentBlock === 3 || currentBlock === 4 || currentBlock === 6)) && (
                                 <Row gutter={[8, 8]} style={{ width: '100%', margin: 0 }}>
-                                    {/* Request More Detail */}
+                                    {/* Require More Detail */}
                                     {(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) && (
-                                        <Col flex="1 1 120px" style={{ padding: 0, paddingRight: 4 }}>
-                                            <Tooltip title="Return to requester / engineer for clarification or revision (Rework)">
+                                        <Col 
+                                            span={(currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9) ? 14 : 24} 
+                                            style={{ padding: 0, paddingRight: (currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9) ? 4 : 0 }}
+                                        >
+                                            <Tooltip title="Require more detail or revision from requester / engineer (Clarification)">
                                                 <Button 
                                                     icon={<RollbackOutlined />}
                                                     style={{ 
                                                         width: '100%', 
+                                                        height: 38,
                                                         borderRadius: 8, 
                                                         background: '#fffbe6', 
                                                         borderColor: '#fa8c16', 
                                                         color: '#d46b08', 
-                                                        fontWeight: 600 
+                                                        fontWeight: 600,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center'
                                                     }}
                                                     onClick={() => {
                                                         const rmdText = form.getFieldValue('request_to_requester');
@@ -719,7 +748,7 @@ export default function WorkflowActionCard({
                                                     }} 
                                                     loading={loading}
                                                 >
-                                                    Return
+                                                    Require more Detail
                                                 </Button>
                                             </Tooltip>
                                         </Col>
@@ -727,14 +756,25 @@ export default function WorkflowActionCard({
 
                                     {/* Deny / Terminate */}
                                     {currentBlock !== 6 && currentBlock !== 7 && currentBlock !== 8 && currentBlock !== 9 && (
-                                        <Col flex="1 1 100px" style={{ padding: 0, paddingLeft: (currentBlock === 3 || currentBlock === 4 || currentBlock === 6) ? 4 : 0 }}>
+                                        <Col 
+                                            span={(currentBlock === 3 || currentBlock === 4 || currentBlock === 6) ? 10 : 24} 
+                                            style={{ padding: 0, paddingLeft: (currentBlock === 3 || currentBlock === 4 || currentBlock === 6) ? 4 : 0 }}
+                                        >
                                             <Tooltip title="Reject and terminate this change request">
                                                 <Button 
                                                     danger 
                                                     icon={<CloseCircleOutlined />}
                                                     onClick={() => handleSubmit('DENY')} 
                                                     loading={loading}
-                                                    style={{ width: '100%', borderRadius: 8, fontWeight: 500 }}
+                                                    style={{ 
+                                                        width: '100%', 
+                                                        height: 38, 
+                                                        borderRadius: 8, 
+                                                        fontWeight: 500,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center'
+                                                    }}
                                                 >
                                                     Deny
                                                 </Button>

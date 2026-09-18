@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Space, Typography, Tag, Tooltip, Button } from 'antd';
+import { Space, Typography, Tag, Tooltip, Button, Modal } from 'antd';
 import { 
     CheckCircleFilled, ClockCircleFilled, SyncOutlined, 
     UserOutlined, TeamOutlined 
@@ -20,7 +20,7 @@ export default function StageStepper({
     onStageFlowUpdated,
     onSelectStage 
 }) {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Standard linear stages without rework sub-stages
     const standardStages = ECNT_STAGES.filter(s => s.type !== 'RETURN_LOOP');
@@ -89,26 +89,26 @@ export default function StageStepper({
             border: '1px solid #e8e8e8',
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
         }}>
-            {/* Stepper Header with Toggle Button */}
+            {/* Stepper Header with Popup Trigger Button */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <Space size="middle">
                     <Text strong style={{ fontSize: 13, color: '#1677ff', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <TeamOutlined /> Workflow Stage Progression & PIC Responsibility
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                        (คลิกที่สเตจหรือปุ่มด้านขวาเพื่อดูและมอบหมายผู้รับผิดชอบ)
+                        (Click any stage or button to manage workflow PICs and approval rules)
                     </Text>
                 </Space>
 
                 {documentId && (
                     <Button 
                         size="small" 
-                        type={isExpanded ? "primary" : "default"}
+                        type="default"
                         icon={<TeamOutlined />} 
-                        onClick={() => setIsExpanded(!isExpanded)}
+                        onClick={() => setIsModalOpen(true)}
                         style={{ borderRadius: 6, fontSize: 12, fontWeight: 500 }}
                     >
-                        {isExpanded ? '▲ ย่อรายละเอียดผู้รับผิดชอบ' : '▼ จัดการผู้รับผิดชอบ & สายการอนุมัติ (Workflow PICs)'}
+                        👥 Workflow PICs
                     </Button>
                 )}
             </div>
@@ -170,16 +170,16 @@ export default function StageStepper({
                                     <div style={{ fontWeight: 600 }}>{stage.title}</div>
                                     <div style={{ fontSize: 11, marginTop: 2 }}>{stage.description}</div>
                                     <div style={{ fontSize: 11, marginTop: 4, color: '#91d5ff' }}>
-                                        ผู้รับผิดชอบ: {picSummary.primaryName} {picSummary.extraCount > 0 ? `(+${picSummary.extraCount} ท่าน)` : ''}
+                                        Stage Owner: {picSummary.primaryName} {picSummary.extraCount > 0 ? `(+${picSummary.extraCount})` : ''}
                                     </div>
                                     <div style={{ fontSize: 10, color: '#bfbfbf', marginTop: 2 }}>
-                                        (คลิกเพื่อดูและแก้ไขผู้รับผิดชอบในสเตจนี้)
+                                        (Click to view & configure stage PICs)
                                     </div>
                                 </div>
                             }>
                                 <div 
                                     onClick={() => {
-                                        setIsExpanded(true);
+                                        setIsModalOpen(true);
                                         if (onSelectStage) onSelectStage(stage.code);
                                     }}
                                     style={{
@@ -247,9 +247,22 @@ export default function StageStepper({
                 })}
             </div>
 
-            {/* Expandable Workflow Stage Flow & PIC Delegation Grid */}
-            {isExpanded && documentId && (
-                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+            {/* Workflow Stage Flow & PIC Delegation Modal */}
+            <Modal
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+                width={1100}
+                title={
+                    <Space>
+                        <TeamOutlined style={{ color: '#1677ff' }} />
+                        <span style={{ fontWeight: 600 }}>Workflow Approval Flow & Stage PIC Delegation</span>
+                    </Space>
+                }
+                centered
+                destroyOnClose
+            >
+                <div style={{ maxHeight: '72vh', overflowY: 'auto', padding: '8px 12px 16px 4px' }}>
                     <WorkflowStageFlowPanel
                         documentType={documentType}
                         documentId={documentId}
@@ -261,7 +274,7 @@ export default function StageStepper({
                         onStageFlowUpdated={onStageFlowUpdated}
                     />
                 </div>
-            )}
+            </Modal>
         </div>
     );
 }

@@ -191,8 +191,8 @@ export default function EcrRequireView({ initialData = null, systemConfig = {}, 
                         <Col xs={24} md={8}>
                             <Form.Item name="status_type" label="Status" rules={[{ required: true }]}>
                                 <Select>
-                                    <Option value="PERMANENT">PERMANENT (ถาวร)</Option>
-                                    <Option value="TEMPORARY">TEMPORARY (ชั่วคราว)</Option>
+                                    <Option value="PERMANENT">PERMANENT</Option>
+                                    <Option value="TEMPORARY">TEMPORARY</Option>
                                 </Select>
                             </Form.Item>
                         </Col>
