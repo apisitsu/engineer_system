@@ -334,24 +334,22 @@ export default function WorkflowActionCard({
                                         placeholder="Select registered engineer..." 
                                         showSearch 
                                         allowClear
-                                        filterOption={(input, option) =>
-                                            (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
-                                        }
-                                    >
-                                        {engineerCandidates.length > 0 ? (
-                                            engineerCandidates.map(u => (
-                                                <Option key={u.u_code} value={u.u_name}>
-                                                    {u.u_name} ({u.u_code}{u.u_nickname ? ` "${u.u_nickname}"` : ''}) - {u.u_department} [{u.position || u.role}]
-                                                </Option>
-                                            ))
-                                        ) : (
-                                            <>
-                                                <Option value="NATHAPORN YAMMANUS">NATHAPORN YAMMANUS (ENG)</Option>
-                                                <Option value="TEERAPOL KANTAPOOM">TEERAPOL KANTAPOOM (ENG MGR)</Option>
-                                                <Option value="TASANEE CHUDUANG">TASANEE CHUDUANG (PC)</Option>
-                                            </>
-                                        )}
-                                    </Select>
+                                        filterOption={(input, option) => {
+                                            const searchStr = (option?.label ?? '').toLowerCase();
+                                            return searchStr.includes(input.toLowerCase());
+                                        }}
+                                        options={engineerCandidates.length > 0 ? (
+                                            engineerCandidates.map(u => ({
+                                                key: u.u_code,
+                                                value: u.u_name,
+                                                label: `${u.u_name} (${u.u_code}${u.u_nickname ? ` "${u.u_nickname}"` : ''}) - ${u.u_department} [${u.position || u.role}]`
+                                            }))
+                                        ) : ([
+                                            { value: 'NATHAPORN YAMMANUS', label: 'NATHAPORN YAMMANUS (ENG)' },
+                                            { value: 'TEERAPOL KANTAPOOM', label: 'TEERAPOL KANTAPOOM (ENG MGR)' },
+                                            { value: 'TASANEE CHUDUANG', label: 'TASANEE CHUDUANG (PC)' }
+                                        ])}
+                                    />
                                 </Form.Item>
                             </Col>
                         ) : (

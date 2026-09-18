@@ -586,37 +586,41 @@ export default function EcntDashboardView({
         {
             title: 'Action',
             key: 'action',
-            width: 90,
+            width: 80,
             fixed: 'right',
             align: 'center',
             render: (_, record) => {
                 const actionReason = getMyActionReason(record);
                 return (
-                    <Space size={6}>
-                        <Tooltip title={actionReason ? `Action: ${actionReason}` : 'Open Workspace'}>
+                    <Space size={4} style={{ padding: '0 4px' }}>
+                        <Tooltip title={actionReason ? `Action Required: ${actionReason}` : 'Open Workspace'}>
                             <Button 
                                 type={actionReason ? "primary" : "default"}
                                 shape="circle"
-                                size="middle"
-                                icon={<ArrowRightOutlined />}
+                                size="small"
+                                icon={<ArrowRightOutlined style={{ fontSize: 12 }} />}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onOpenDoc(record.id, record.doc_type);
                                 }}
                                 style={{ 
+                                    width: 28,
+                                    height: 28,
+                                    minWidth: 28,
                                     background: actionReason ? '#fa8c16' : '#1677ff',
                                     borderColor: actionReason ? '#fa8c16' : '#1677ff',
                                     color: '#ffffff',
-                                    boxShadow: actionReason ? '0 2px 6px rgba(250, 140, 22, 0.35)' : '0 2px 6px rgba(22, 119, 255, 0.25)'
+                                    boxShadow: actionReason ? '0 1px 4px rgba(250, 140, 22, 0.35)' : '0 1px 4px rgba(22, 119, 255, 0.25)'
                                 }}
                             />
                         </Tooltip>
                         <Tooltip title="Share Direct Link">
                             <Button 
                                 shape="circle"
-                                size="middle"
-                                icon={<CopyOutlined />}
+                                size="small"
+                                icon={<CopyOutlined style={{ fontSize: 11 }} />}
                                 onClick={(e) => handleCopyLink(e, record)}
+                                style={{ width: 28, height: 28, minWidth: 28 }}
                             />
                         </Tooltip>
                     </Space>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Card, Typography, Space, Tag, Button, Modal, Select, 
-    Radio, Tooltip, Popconfirm, Row, Col 
+    Radio, Tooltip, Popconfirm
 } from 'antd';
 import { App } from 'antd';
 import { 
@@ -14,7 +14,6 @@ import { server } from '../../../../../constance/constance';
 import { useAuthStore } from '../../../../../stores/authStore';
 
 const { Text } = Typography;
-const { Option } = Select;
 
 // Standard Stage Definitions for the Linear Stepper
 const STAGES_CONFIG = [
@@ -271,94 +270,141 @@ export default function WorkflowStageFlowPanel({
     };
 
     const renderStageCards = () => {
+        // Determine stage status for each stage
+        const currentStageIndex = STAGES_CONFIG.findIndex(s => s.key === currentStageKey);
+        const isCompleted = (docData?.process_status || '').toLowerCase().includes('effective') ||
+                            (docData?.process_status || '').toLowerCase().includes('closed');
+
         if (layoutMode === 'grid') {
             return (
-                <Row gutter={[12, 12]}>
-                    {STAGES_CONFIG.map((stage) => {
+                <div style={{ position: 'relative', paddingLeft: 8 }}>
+                    {STAGES_CONFIG.map((stage, idx) => {
+                        const stageIndex = idx;
                         const isCurrent = stage.key === currentStageKey;
+                        const isPast = isCompleted ? true : stageIndex < currentStageIndex;
+                        const isFuture = !isPast && !isCurrent;
                         const isAuthorized = isAuthorizedToEditStage(stage.key);
                         const { assignees, approvalRule: rule, approvedBy } = getStageAssignees(stage.key);
+                        const isLast = idx === STAGES_CONFIG.length - 1;
+
+                        // Color scheme based on state
+                        const nodeColor = isPast ? '#52c41a' : isCurrent ? '#1677ff' : '#d9d9d9';
+                        const nodeBg = isPast ? '#f6ffed' : isCurrent ? '#e6f4ff' : '#fafafa';
+                        const borderColor = isPast ? '#b7eb8f' : isCurrent ? '#91caff' : '#d9d9d9';
+                        const titleColor = isPast ? '#389e0d' : isCurrent ? '#1677ff' : '#8c8c8c';
 
                         return (
-                            <Col xs={24} sm={12} md={12} lg={8} xl={6} key={stage.key}>
-                                <div 
-                                    style={{
-                                        background: '#ffffff',
-                                        borderRadius: 10,
-                                        border: isCurrent ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                                        boxShadow: isCurrent ? '0 4px 14px rgba(24, 144, 255, 0.15)' : 'none',
-                                        padding: '10px 12px',
-                                        transition: 'all 0.2s ease',
+                            <div key={stage.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+                                {/* Left: Number circle + vertical connector line */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40, flexShrink: 0 }}>
+                                    {/* Number Circle */}
+                                    <div style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        background: nodeBg,
+                                        border: `2px solid ${nodeColor}`,
                                         display: 'flex',
-                                        flexDirection: 'column',
-                                        justifyContent: 'space-between',
-                                        height: '100%'
-                                    }}
-                                >
-                                    {/* Stage Header: Number and Title */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                        <Space size="small" align="center">
-                                            <div style={{ 
-                                                fontSize: 15, 
-                                                fontWeight: 700, 
-                                                color: isCurrent ? '#1890ff' : '#595959',
-                                                minWidth: 18
-                                            }}>
-                                                {stage.number}
-                                            </div>
-                                            <div>
-                                                <Text strong style={{ fontSize: 12, color: isCurrent ? '#1890ff' : '#262626' }}>
-                                                    {stage.title}
-                                                </Text>
-                                            </div>
-                                        </Space>
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 13,
+                                        fontWeight: 700,
+                                        color: nodeColor,
+                                        flexShrink: 0,
+                                        boxShadow: isCurrent ? `0 0 0 4px rgba(22,119,255,0.12)` : 'none',
+                                        zIndex: 1,
+                                        position: 'relative',
+                                        transition: 'all 0.3s ease'
+                                    }}>
+                                        {isPast ? <CheckCircleFilled style={{ fontSize: 16, color: '#52c41a' }} /> : stage.number}
+                                    </div>
+                                    {/* Vertical connector line */}
+                                    {!isLast && (
+                                        <div style={{
+                                            width: 2,
+                                            flex: 1,
+                                            minHeight: 20,
+                                            background: isPast
+                                                ? 'linear-gradient(to bottom, #52c41a, #b7eb8f)'
+                                                : isCurrent
+                                                    ? 'linear-gradient(to bottom, #1677ff, #d9d9d9)'
+                                                    : '#e8e8e8',
+                                            margin: '2px 0'
+                                        }} />
+                                    )}
+                                </div>
 
-                                        {isCurrent && (
-                                            <Tag color="processing" style={{ borderRadius: 10, margin: 0, fontSize: 10 }}>
-                                                Active
-                                            </Tag>
-                                        )}
+                                {/* Right: Stage Card */}
+                                <div style={{
+                                    flex: 1,
+                                    marginLeft: 12,
+                                    marginBottom: isLast ? 0 : 12,
+                                    background: '#ffffff',
+                                    borderRadius: 10,
+                                    border: `1.5px solid ${borderColor}`,
+                                    boxShadow: isCurrent ? '0 4px 14px rgba(22, 119, 255, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                                    padding: '10px 14px',
+                                    transition: 'all 0.2s ease',
+                                    opacity: isFuture ? 0.65 : 1
+                                }}>
+                                    {/* Stage Header */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <div>
+                                            <Text strong style={{ fontSize: 13, color: titleColor, display: 'block' }}>
+                                                {stage.title}
+                                            </Text>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>
+                                                Block {stage.block} · {stage.docPhase}
+                                            </Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            {isPast && !isCurrent && (
+                                                <Tag color="success" style={{ margin: 0, fontSize: 10, borderRadius: 10 }}>
+                                                    ✓ Done
+                                                </Tag>
+                                            )}
+                                            {isCurrent && (
+                                                <Tag color="processing" style={{ margin: 0, fontSize: 10, borderRadius: 10 }}>
+                                                    ● Active
+                                                </Tag>
+                                            )}
+                                            {isFuture && (
+                                                <Tag color="default" style={{ margin: 0, fontSize: 10, borderRadius: 10, color: '#8c8c8c' }}>
+                                                    Pending
+                                                </Tag>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    {/* Inner Box: Matching reference UI */}
+                                    {/* Inner assignees box */}
                                     <div style={{
-                                        background: '#fafafa',
-                                        border: '1px solid #e8e8e8',
+                                        background: nodeBg,
+                                        border: `1px solid ${borderColor}`,
                                         borderRadius: 8,
-                                        padding: '8px 10px',
-                                        flex: 1,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        justifyContent: 'space-between'
+                                        padding: '8px 10px'
                                     }}>
-                                        {/* Action Bar inside Box */}
+                                        {/* Action Bar */}
                                         <div style={{ 
                                             display: 'flex', 
                                             justifyContent: 'space-between', 
                                             alignItems: 'center', 
                                             marginBottom: 6,
-                                            borderBottom: '1px solid #f0f0f0',
+                                            borderBottom: '1px solid rgba(0,0,0,0.06)',
                                             paddingBottom: 4
                                         }}>
-                                             {/* Approval Rule Tag / Pill */}
+                                            {/* Approval Rule Tag */}
                                             {stage.isConcernMultiDept ? (
                                                 <Tooltip title="Multi-Department Concern: Requires approval from all department representatives (ALL)">
                                                     <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
-                                                        <LockOutlined style={{ marginRight: 4 }} />
-                                                        Everyone (ALL)
+                                                        <LockOutlined style={{ marginRight: 4 }} />Everyone (ALL)
                                                     </Tag>
                                                 </Tooltip>
                                             ) : (
                                                 assignees.length > 1 ? (
-                                                    <Tooltip title={isAuthorized ? "Click to switch approval rule (ANY vs ALL)" : `Approval Rule: ${rule === 'ALL' ? 'All assignees must approve' : 'Any single assignee can approve'}`}>
+                                                    <Tooltip title={isAuthorized ? "Click to switch approval rule (ANY vs ALL)" : `Approval Rule: ${rule === 'ALL' ? 'All must approve' : 'Any single can approve'}`}>
                                                         <Tag 
                                                             color={rule === 'ALL' ? 'volcano' : 'blue'} 
-                                                            style={{ 
-                                                                borderRadius: 8, 
-                                                                margin: 0, 
-                                                                fontSize: 10, 
-                                                                cursor: isAuthorized ? 'pointer' : 'default' 
-                                                            }}
+                                                            style={{ borderRadius: 8, margin: 0, fontSize: 10, cursor: isAuthorized ? 'pointer' : 'default' }}
                                                             onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
                                                         >
                                                             {rule === 'ALL' ? 'Everyone (ALL)' : 'Any (ANY)'}
@@ -366,9 +412,7 @@ export default function WorkflowStageFlowPanel({
                                                         </Tag>
                                                     </Tooltip>
                                                 ) : (
-                                                    <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>
-                                                        Single Assignee
-                                                    </Tag>
+                                                    <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 10 }}>Single Assignee</Tag>
                                                 )
                                             )}
 
@@ -380,7 +424,7 @@ export default function WorkflowStageFlowPanel({
                                                             type="link" 
                                                             size="small" 
                                                             icon={<PlusCircleOutlined />} 
-                                                            style={{ padding: 0, fontSize: 11, height: 'auto', color: '#1890ff', fontWeight: 600 }}
+                                                            style={{ padding: 0, fontSize: 11, height: 'auto', color: '#1677ff', fontWeight: 600 }}
                                                             onClick={() => handleOpenAddModal(stage.key)}
                                                         >
                                                             Add target
@@ -396,36 +440,22 @@ export default function WorkflowStageFlowPanel({
                                             )}
                                         </div>
 
-                                        {/* List of Persons */}
+                                        {/* Persons List */}
                                         {stage.isConcernMultiDept ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                                 {tasksData.length > 0 ? (
                                                     tasksData.map(task => {
                                                         const isAck = task.status === 'ACKNOWLEDGED';
                                                         return (
-                                                            <div 
-                                                                key={task.id} 
-                                                                style={{ 
-                                                                    display: 'flex', 
-                                                                    alignItems: 'center', 
-                                                                    justifyContent: 'space-between',
-                                                                    fontSize: 11,
-                                                                    padding: '2px 0',
-                                                                    borderBottom: '1px dashed #f0f0f0'
-                                                                }}
-                                                            >
+                                                            <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, padding: '2px 0', borderBottom: '1px dashed rgba(0,0,0,0.06)' }}>
                                                                 <Space size={4}>
                                                                     <Tag color="geekblue" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>{task.dept_code}</Tag>
-                                                                    <span style={{ fontSize: 11 }}>{task.approved_by_name || task.pic_name || task.dept_label}</span>
+                                                                    <span>{task.approved_by_name || task.pic_name || task.dept_label}</span>
                                                                 </Space>
                                                                 {isAck ? (
-                                                                    <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>
-                                                                        ACK
-                                                                    </Tag>
+                                                                    <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>ACK</Tag>
                                                                 ) : (
-                                                                    <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>
-                                                                        PEND
-                                                                    </Tag>
+                                                                    <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 9, padding: '0 3px' }}>PEND</Tag>
                                                                 )}
                                                             </div>
                                                         );
@@ -438,41 +468,26 @@ export default function WorkflowStageFlowPanel({
                                             </div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                {assignees.map((person, idx) => {
+                                                {assignees.map((person, pidx) => {
                                                     const hasApproved = approvedBy.some(ap => 
                                                         (ap.emp_no && ap.emp_no.toLowerCase() === (person.emp_no || '').toLowerCase())
                                                     );
-
                                                     return (
-                                                        <div 
-                                                            key={idx} 
-                                                            style={{ 
-                                                                display: 'flex', 
-                                                                alignItems: 'center', 
-                                                                justifyContent: 'space-between',
-                                                                fontSize: 11,
-                                                                padding: '2px 0'
-                                                            }}
-                                                        >
-                                                            <Space size={4} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                <UserOutlined style={{ color: '#595959', fontSize: 11 }} />
+                                                        <div key={pidx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                                                            <Space size={4} style={{ overflow: 'hidden' }}>
+                                                                <UserOutlined style={{ color: titleColor, fontSize: 11 }} />
                                                                 <span style={{ color: '#262626', fontWeight: 500, fontSize: 11 }}>
                                                                     {person.name || person.emp_no}
                                                                 </span>
                                                                 {person.dept && (
-                                                                    <Tag color="cyan" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>
-                                                                        {person.dept}
-                                                                    </Tag>
+                                                                    <Tag color="cyan" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>{person.dept}</Tag>
                                                                 )}
                                                                 {rule === 'ALL' && (
-                                                                    hasApproved ? (
-                                                                        <Tag color="success" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>✓</Tag>
-                                                                    ) : (
-                                                                        <Tag color="default" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>Pending</Tag>
-                                                                    )
+                                                                    hasApproved
+                                                                        ? <Tag color="success" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>✓ Approved</Tag>
+                                                                        : <Tag color="default" style={{ fontSize: 9, margin: 0, padding: '0 3px' }}>Pending</Tag>
                                                                 )}
                                                             </Space>
-
                                                             {isAuthorized && assignees.length > 1 && (
                                                                 <Popconfirm
                                                                     title="Are you sure you want to remove this assignee from the stage?"
@@ -480,10 +495,7 @@ export default function WorkflowStageFlowPanel({
                                                                     okText="Remove"
                                                                     cancelText="Cancel"
                                                                 >
-                                                                    <DeleteOutlined 
-                                                                        style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 12, marginLeft: 4 }} 
-                                                                        title="Remove target"
-                                                                    />
+                                                                    <DeleteOutlined style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 12, marginLeft: 4 }} title="Remove target" />
                                                                 </Popconfirm>
                                                             )}
                                                         </div>
@@ -493,183 +505,12 @@ export default function WorkflowStageFlowPanel({
                                         )}
                                     </div>
                                 </div>
-                            </Col>
-                        );
-                    })}
-                </Row>
-            );
-        }
-
-        // Vertical Layout (Sidebar mode)
-        return (
-            <div style={{ position: 'relative', paddingLeft: 12 }}>
-                <div style={{
-                    position: 'absolute',
-                    top: 20,
-                    bottom: 30,
-                    left: 20,
-                    width: 2,
-                    borderLeft: '2px dashed #d9d9d9',
-                    zIndex: 0
-                }} />
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', zIndex: 1 }}>
-                    {STAGES_CONFIG.map((stage) => {
-                        const isCurrent = stage.key === currentStageKey;
-                        const isAuthorized = isAuthorizedToEditStage(stage.key);
-                        const { assignees, approvalRule: rule } = getStageAssignees(stage.key);
-
-                        return (
-                            <div 
-                                key={stage.key}
-                                style={{
-                                    background: '#ffffff',
-                                    borderRadius: 10,
-                                    border: isCurrent ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                                    boxShadow: isCurrent ? '0 4px 14px rgba(24, 144, 255, 0.15)' : 'none',
-                                    padding: '10px 14px',
-                                    transition: 'all 0.2s ease',
-                                    position: 'relative'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <Space size="middle" align="center">
-                                        <div style={{ 
-                                            fontSize: 18, 
-                                            fontWeight: 700, 
-                                            color: isCurrent ? '#1890ff' : '#262626',
-                                            minWidth: 22
-                                        }}>
-                                            {stage.number}
-                                        </div>
-                                        <div>
-                                            <Text strong style={{ fontSize: 13, color: isCurrent ? '#1890ff' : '#262626' }}>
-                                                {stage.title}
-                                            </Text>
-                                        </div>
-                                    </Space>
-
-                                    {isCurrent && (
-                                        <Tag color="processing" style={{ borderRadius: 10, margin: 0, fontSize: 11 }}>
-                                            Active Stage
-                                        </Tag>
-                                    )}
-                                </div>
-
-                                <div style={{
-                                    background: '#fafafa',
-                                    border: '1px solid #e8e8e8',
-                                    borderRadius: 8,
-                                    padding: '8px 12px'
-                                }}>
-                                    <div style={{ 
-                                        display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center', 
-                                        marginBottom: 8,
-                                        borderBottom: '1px solid #f0f0f0',
-                                        paddingBottom: 6
-                                    }}>
-                                        {stage.isConcernMultiDept ? (
-                                            <Tooltip title="Multi-Department Concern: Requires approval from all department representatives (ALL)">
-                                                <Tag color="purple" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
-                                                    <LockOutlined style={{ marginRight: 4 }} />
-                                                    Everyone (ALL)
-                                                </Tag>
-                                            </Tooltip>
-                                        ) : (
-                                            assignees.length > 1 ? (
-                                                <Tooltip title={isAuthorized ? "Click to toggle approval rule" : `Approval rule: ${rule}`}>
-                                                    <Tag 
-                                                        color={rule === 'ALL' ? 'volcano' : 'blue'} 
-                                                        style={{ borderRadius: 8, margin: 0, fontSize: 11, cursor: isAuthorized ? 'pointer' : 'default' }}
-                                                        onClick={() => isAuthorized && handleToggleRule(stage.key, rule === 'ALL' ? 'ANY' : 'ALL')}
-                                                    >
-                                                        {rule === 'ALL' ? 'Everyone (ALL)' : 'Any (ANY)'}
-                                                        {isAuthorized && <SwapOutlined style={{ marginLeft: 4 }} />}
-                                                    </Tag>
-                                                </Tooltip>
-                                            ) : (
-                                                <Tag color="default" style={{ borderRadius: 8, margin: 0, fontSize: 11 }}>
-                                                    Single Assignee
-                                                </Tag>
-                                            )
-                                        )}
-
-                                        {!stage.isConcernMultiDept && (
-                                            isAuthorized ? (
-                                                <Tooltip title="Add co-assignee to this stage">
-                                                    <Button 
-                                                        type="link" 
-                                                        size="small" 
-                                                        icon={<PlusCircleOutlined />} 
-                                                        style={{ padding: 0, fontSize: 11, height: 'auto', color: '#1890ff', fontWeight: 600 }}
-                                                        onClick={() => handleOpenAddModal(stage.key)}
-                                                    >
-                                                        Add target
-                                                    </Button>
-                                                </Tooltip>
-                                            ) : (
-                                                <Tooltip title="Only stage assignees or System Admin can modify">
-                                                    <span style={{ fontSize: 11, color: '#bfbfbf', cursor: 'not-allowed' }}>
-                                                        <LockOutlined />
-                                                    </span>
-                                                </Tooltip>
-                                            )
-                                        )}
-                                    </div>
-
-                                    {stage.isConcernMultiDept ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            {tasksData.length > 0 ? (
-                                                tasksData.map(task => (
-                                                    <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px dashed #f0f0f0' }}>
-                                                        <Space size={6}>
-                                                            <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{task.dept_code}</Tag>
-                                                            <UserOutlined style={{ color: '#8c8c8c' }} />
-                                                            <span>{task.approved_by_name || task.pic_name || task.dept_label}</span>
-                                                        </Space>
-                                                        {task.status === 'ACKNOWLEDGED' ? (
-                                                            <Tag icon={<CheckCircleFilled />} color="success" style={{ margin: 0, fontSize: 10 }}>ACK</Tag>
-                                                        ) : (
-                                                            <Tag icon={<ClockCircleOutlined />} color="warning" style={{ margin: 0, fontSize: 10 }}>PENDING</Tag>
-                                                        )}
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <Text type="secondary" style={{ fontSize: 12 }}>Awaiting department task configuration in Block 9</Text>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            {assignees.map((person, idx) => (
-                                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}>
-                                                    <Space size={6}>
-                                                        <UserOutlined style={{ color: '#595959' }} />
-                                                        <span style={{ color: '#262626', fontWeight: 500 }}>{person.name || person.emp_no}</span>
-                                                        {person.dept && <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{person.dept}</Tag>}
-                                                    </Space>
-                                                    {isAuthorized && assignees.length > 1 && (
-                                                        <Popconfirm
-                                                            title="Are you sure you want to remove this assignee from the stage?"
-                                                            onConfirm={() => handleRemoveAssignee(stage.key, person.emp_no)}
-                                                            okText="Remove"
-                                                            cancelText="Cancel"
-                                                        >
-                                                            <DeleteOutlined style={{ color: '#ff4d4f', cursor: 'pointer', fontSize: 13 }} />
-                                                        </Popconfirm>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
                             </div>
                         );
                     })}
                 </div>
-            </div>
-        );
+            );
+        }
     };
 
     const mainContent = (
@@ -731,16 +572,16 @@ export default function WorkflowStageFlowPanel({
                             loading={loadingCandidates}
                             value={selectedUserEmpNo}
                             onChange={setSelectedUserEmpNo}
-                            filterOption={(input, option) =>
-                                (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
-                            }
-                        >
-                            {userCandidates.map(u => (
-                                <Option key={u.u_code} value={u.u_code}>
-                                    [{u.u_code}] {u.u_name} {u.u_nickname ? `(${u.u_nickname})` : ''} - {u.u_department} / {u.role || u.position}
-                                </Option>
-                            ))}
-                        </Select>
+                            filterOption={(input, option) => {
+                                const searchStr = (option?.label ?? '').toLowerCase();
+                                return searchStr.includes(input.toLowerCase());
+                            }}
+                            options={userCandidates.map(u => ({
+                                key: u.u_code,
+                                value: u.u_code,
+                                label: `[${u.u_code}] ${u.u_name} ${u.u_nickname ? `(${u.u_nickname})` : ''} - ${u.u_department} / ${u.role || u.position}`
+                            }))}
+                        />
                     </div>
 
                     <div>
