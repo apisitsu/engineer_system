@@ -374,6 +374,7 @@ const toolReq = require('./api/engineer/mtc/controllers/toolRequestController');
 
 // Import middleware for enhanced security
 const { verifyToken: mtcVerifyToken, optionalAuth } = require('./api/engineer/mtc/utils/toolRequestAuth');
+const { isAdmin: mtcIsAdmin } = require('./middleware/mtcAuth');
 const { validateFileUpload } = require('./api/engineer/mtc/utils/fileUpload');
 
 // Public endpoints (no authentication required - viewing only)
@@ -406,11 +407,15 @@ app.delete('/api/engineer/mtc/tool-requests/:id',
   toolReq.deleteToolRequest
 );
 
-// Email Configuration Management (Admin only - verified by token)
-app.get('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.getEmailConfigs);
-app.post('/api/engineer/mtc/email-config', mtcVerifyToken, toolReq.createEmailConfig);
-app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.updateEmailConfig);
-app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, toolReq.deleteEmailConfig);
+// Email Configuration Management — admin only. This table doubles as the list of who
+// may act on each stage (submitAction's permission check), so a write by any signed-in
+// user would be a self-service grant of approval rights; the guard is enforced here,
+// not just by the page hiding itself.
+app.get('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigs);
+app.get('/api/engineer/mtc/email-config/users', mtcVerifyToken, mtcIsAdmin, toolReq.getEmailConfigUsers);
+app.post('/api/engineer/mtc/email-config', mtcVerifyToken, mtcIsAdmin, toolReq.createEmailConfig);
+app.put('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.updateEmailConfig);
+app.delete('/api/engineer/mtc/email-config/:id', mtcVerifyToken, mtcIsAdmin, toolReq.deleteEmailConfig);
 
 // Note: For production deployment, enable authentication by:
 // 1. Uncomment the middleware imports above

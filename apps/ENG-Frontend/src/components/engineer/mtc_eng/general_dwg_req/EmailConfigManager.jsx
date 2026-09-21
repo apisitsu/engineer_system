@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Table, Card, Typography, Button, Space, Tag, Modal, Form, Input, message, Layout
+    Table, Card, Typography, Button, Space, Tag, Modal, Form, Select, Alert, message, Layout
 } from 'antd';
 import {
     MailOutlined, EditOutlined, PlusOutlined, DeleteOutlined,
@@ -16,6 +16,13 @@ import ScrollbarStyle from '../../../common/scrollbar';
 const { Title, Text } = Typography;
 const { Content } = Layout;
 
+// Stage keys exactly as stored in tr_email_config and read by toolRequestController.js
+// (getEmailRecipients upper-cases and looks up both <STAGE> and CC_<STAGE>).
+const MAIN_STAGES = ['ENG_CHECK', 'DRAFTMAN', 'DWG_CHECK', 'ENG_REVIEW', 'ENG_APPROVE', 'ENG_INFORM'];
+const STAGE_KEYS = [...MAIN_STAGES, 'ADMIN', ...MAIN_STAGES.map(s => `CC_${s}`)];
+
+const splitEmails = (v) => (v ? v.split(',').map(e => e.trim()).filter(Boolean) : []);
+
 const EmailConfigManager = () => {
     const { theme } = useTheme();
     const userDepartment = useAuthStore(state => state.userDepartment);
@@ -23,7 +30,17 @@ const EmailConfigManager = () => {
     const [data, setData] = useState([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
+    const [users, setUsers] = useState([]);
     const [form] = Form.useForm();
+
+    const fetchUsers = async () => {
+        try {
+            const res = await axios.get(server.MTC_EMAIL_CONFIG_USERS);
+            setUsers(res.data.data || []);
+        } catch (error) {
+            message.error('Failed to load user list');
+        }
+    };
 
     const fetchConfigs = async () => {
         setLoading(true);
@@ -40,6 +57,7 @@ const EmailConfigManager = () => {
     useEffect(() => {
         if (userDepartment === 'AD') {
             fetchConfigs();
+            fetchUsers();
         }
     }, [userDepartment]);
 
@@ -98,6 +116,27 @@ const EmailConfigManager = () => {
             message.error('Error saving configuration');
         }
     };
+
+    // Recipients picker. Only people whose profile has an email can be chosen: the
+    // stage permission check matches the address, so picking someone without one
+    // would silently lock them out (the LE403 / T1460 / L6121 bug).
+    const usersWithoutEmail = users.filter(u => !u.gmail_email);
+    const recipientOptions = users.map(u => {
+        const base = `${u.u_name || u.u_code} (${u.u_code}${u.u_department ? `, ${u.u_department}` : ''})`;
+        return u.gmail_email
+            ? { value: u.gmail_email, label: `${base} — ${u.gmail_email}` }
+            : { value: `nomail:${u.u_code}`, label: `${base} — no email in profile`, disabled: true };
+    });
+
+    // Stage picker: fixed keys; on create, hide the ones already configured; when
+    // editing, keep the row's own stage even if it is not in the standard list.
+    const usedStages = new Set(data.map(d => (d.stage || '').toUpperCase()));
+    const stageOptions = STAGE_KEYS
+        .filter(s => editingItem ? true : !usedStages.has(s))
+        .map(s => ({ value: s, label: s }));
+    if (editingItem && !STAGE_KEYS.includes(editingItem.stage)) {
+        stageOptions.unshift({ value: editingItem.stage, label: editingItem.stage });
+    }
 
     const columns = [
         {
@@ -178,7 +217,7 @@ const EmailConfigManager = () => {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary">
-                                <InfoCircleOutlined /> Manage email recipients list for each Workflow stage (specify multiple emails using , )
+                                <InfoCircleOutlined /> Manage who is notified and who may act on each Workflow stage
                             </Text>
                         </div>
 
@@ -202,19 +241,39 @@ const EmailConfigManager = () => {
                             <Form form={form} layout="vertical" onFinish={onFinish}>
                                 <Form.Item
                                     name="stage"
-                                    //label="Workflow Stage Name" 
-                                    rules={[{ required: true, message: 'Please input stage name!' }]}
-                                    help="Example: Eng Check or CC_Eng Check"
+                                    label="Workflow Stage"
+                                    rules={[{ required: true, message: 'Please select a stage!' }]}
+                                    help="CC_ rows are copied on the stage's notifications and may also act on it"
                                 >
-                                    <Input placeholder="Enter stage name" />
+                                    <Select
+                                        showSearch
+                                        placeholder="Select stage"
+                                        options={stageOptions}
+                                    />
                                 </Form.Item>
                                 <Form.Item
                                     name="emails"
-                                    //label="Email Addresses (comma separated)" 
-                                    rules={[{ required: true, message: 'Please input at least one email!' }]}
+                                    label="Recipients"
+                                    rules={[{ required: true, message: 'Please select at least one person!' }]}
+                                    getValueProps={(v) => ({ value: splitEmails(v) })}
+                                    normalize={(arr) => (arr || []).join(', ')}
                                 >
-                                    <Input.TextArea rows={4} placeholder="email1@example.com, email2@example.com" />
+                                    <Select
+                                        mode="multiple"
+                                        showSearch
+                                        placeholder="Search by name, code or email"
+                                        options={recipientOptions}
+                                        optionFilterProp="label"
+                                        style={{ width: '100%' }}
+                                    />
                                 </Form.Item>
+                                {usersWithoutEmail.length > 0 && (
+                                    <Alert
+                                        type="info"
+                                        showIcon
+                                        message={`${usersWithoutEmail.length} of ${users.length} users have no email in their profile and cannot be selected. Set their email in User Management first.`}
+                                    />
+                                )}
                             </Form>
                         </Modal>
                     </Card>

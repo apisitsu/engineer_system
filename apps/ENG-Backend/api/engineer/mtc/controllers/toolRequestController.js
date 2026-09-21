@@ -681,6 +681,26 @@ const getEmailConfigs = async (req, res) => {
 };
 
 /**
+ * GET /api/engineer/mtc/email-config/users
+ * People the email-config picker can offer. Deliberately NOT the user-management
+ * list: that one returns `u.*` (including u_pass and gmail_refresh_token) with no
+ * auth, so only the four fields the picker needs are selected here. Admin-only is
+ * enforced by the route (server.js), like the rest of /email-config.
+ */
+const getEmailConfigUsers = async (req, res) => {
+    try {
+        const result = await engPool.query(
+            `SELECT u_code, u_name, u_department, gmail_email
+               FROM m_user_profile
+              ORDER BY u_name ASC`
+        );
+        res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
  * PUT /api/engineer/mtc/email-config/:id
  * Update an existing email configuration
  */
@@ -783,6 +803,7 @@ module.exports = {
     getStagePermissions,
     submitAction,
     getEmailConfigs,
+    getEmailConfigUsers,
     updateEmailConfig,
     createEmailConfig,
     deleteEmailConfig,

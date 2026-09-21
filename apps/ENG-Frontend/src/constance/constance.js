@@ -52,6 +52,7 @@ export const server = {
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
+  MTC_EMAIL_CONFIG_USERS: `${apiUrl}api/engineer/mtc/email-config/users`,
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
   TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
   TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
