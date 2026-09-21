@@ -830,7 +830,7 @@ const deleteEmailConfig = async (req, res) => {
  * Build a test notification payload to verify the config — does NOT send it.
  * Sending needs a signed-in browser (see "Email delivery" above); the caller
  * (a future admin UI, or a manual check) fires `emailNotification` itself the
- * same way ToolRequest.jsx/RequestDetailsModal.jsx do after a real action.
+ * same way ToolRequest.jsx/RequestDetailsPage.jsx do after a real action.
  * Body: { to: "email@example.com" }  (optional — defaults to ENG_CHECK recipients)
  */
 const testEmail = async (req, res) => {

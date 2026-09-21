@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Modal, Form, Input, Select, Button, Row, Col, Descriptions,
+  Card, Form, Input, Select, Button, Row, Col, Descriptions,
   Tag, Divider, Space, Steps, Timeline, Typography, Alert, message, Radio, Upload
 } from 'antd';
 import {
   EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
   CheckCircleOutlined, SendOutlined,
-  FileTextOutlined, AuditOutlined, UserOutlined, UploadOutlined
+  FileTextOutlined, AuditOutlined, UserOutlined, UploadOutlined, ArrowLeftOutlined
 } from '@ant-design/icons';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
@@ -326,8 +326,8 @@ const StageActionPanel = ({ stage, request, workflow, onSubmit, loading }) => {
   );
 };
 
-// ── Main Modal ────────────────────────────────────────────────────────────────
-const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onDelete, onEdit, onActionDone }) => {
+// ── Main page ─────────────────────────────────────────────────────────────────
+const RequestDetailsPage = ({ visible, onClose, request, isEditing, onSave, onDelete, onEdit, onActionDone }) => {
   const [form] = Form.useForm();
   const [localIsEditing, setLocalIsEditing] = useState(isEditing);
   const [actionLoading, setActionLoading] = useState(false);
@@ -495,10 +495,14 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
   const currentStepIdx = STAGES.findIndex(s => s.key === request.current_stage);
   const stepStatus = isDone && request.status?.includes('Denied') ? 'error' : undefined;
 
+  // Rendered as a page inside the module's own layout (sidebar stays), not a Modal:
+  // details + workflow history + the action panel are long enough that a 960px box
+  // meant constant scrolling. The list page swaps this in for the list.
   return (
-    <Modal
+    <Card
       title={
         <Space>
+          <Button icon={<ArrowLeftOutlined />} onClick={onClose}>Back</Button>
           {isNewRequest ? <FileTextOutlined /> : <AuditOutlined />}
           <span style={{ fontWeight: 600 }}>
             {isNewRequest ? 'Create New DWG Request' : (request.request_item || request.req_no || `#${request.id}`)}
@@ -508,10 +512,7 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
           )}
         </Space>
       }
-      open={visible}
-      onCancel={onClose}
-      width={960}
-      footer={
+      extra={
         <Space>
           {!isNewRequest && !localIsEditing && !isDone && (
             <Button icon={<EditOutlined />} onClick={() => { setLocalIsEditing(true); onEdit(); }}>
@@ -529,9 +530,9 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
               <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>Save</Button>
             </>
           )}
-          {!localIsEditing && <Button onClick={onClose}>Close</Button>}
         </Space>
       }
+      style={{ borderRadius: 12 }}
     >
       <Form form={form} layout="vertical" initialValues={request}
         style={{ display: localIsEditing || isNewRequest ? 'block' : 'none' }}>
@@ -793,8 +794,8 @@ const RequestDetailsModal = ({ visible, onClose, request, isEditing, onSave, onD
           />
         )}
       </div>
-    </Modal>
+    </Card>
   );
 };
 
-export default RequestDetailsModal;
+export default RequestDetailsPage;
