@@ -432,6 +432,11 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['material']         = searchData.material?.material || '';
   map['process_code']     = firstProcessInfo?.process_code || '';
   map['process_name']     = firstProcessInfo?.process_eng  || firstProcessInfo?.process_name || '';
+  // Some layouts (the Turning template's AB3) print code + name in ONE cell — the
+  // original xlsx literally reads "{{Process_Code}} {{Process}}" there, one string,
+  // and sds_excel_mapping can only route one param_key to one address. This is that
+  // combined string, so a machine can map it instead of process_name alone.
+  map['process_code_name'] = [map['process_code'], map['process_name']].filter(Boolean).join(' ');
   map['ct']               = firstProcessInfo?.ct != null ? String(firstProcessInfo.ct) : '';
   map['machine_type_name'] = machineDisplayName || '';
   map['current_date']     = moment().format('YYYY-MM-DD');
@@ -905,6 +910,37 @@ async function buildValueMap(searchData, machine_type_name, process_code, engPoo
   map['params'] = rawParams;
   map['sds_rev'] = rawParams['sds_rev'] || 'NC';
 
+  // Turning-style per-tool photo (2026-09-15, re-pointed 2026-09-17 to the 8-tool
+  // layout, key moved off Holder_Info_N the same day) — one picture per cutting-tool
+  // position (1-8), keyed by an internal `Tool_Photo_Key_N` param — NOT by a factory DWG
+  // number (turning inserts/holders aren't in lpb.eng_tooling the way grinding fixtures
+  // are), and deliberately NOT by Holder_Info_N: that field is real, printed, human-typed
+  // text ("Holder" in the admin UI, mapped to its own sheet cell), and reusing it as the
+  // photo key meant an upload would silently overwrite whatever holder description was
+  // typed there with an internal key string — caught before shipping, when the owner
+  // asked for Holder_Info_N to be independently editable.
+  // `Tool_Photo_Key_N` has NO sds_excel_mapping row of its own — it never prints, it only
+  // exists to link a slot to sds_v2_tooling_image. See POST /api/sds/v2/images/turning-tool,
+  // which upserts both this param and the image row in one call so the two never drift
+  // apart, using a deterministic key the admin never has to type.
+  // Inert for every other machine: this only fires when the machine's own params
+  // actually carry a Tool_Photo_Key_N, which only this upload route ever writes.
+  const turningHolderCodes = [];
+  for (let n = 1; n <= 8; n++) { const v = rawParams[`Tool_Photo_Key_${n}`]; if (v) turningHolderCodes.push(v); }
+  if (turningHolderCodes.length) {
+    const turningImgRows = await engPool.query(
+      `SELECT tool_dwg_no, image_data, mime_type FROM ${TABLES.SDS_V2_TOOLING_IMAGE} WHERE tool_dwg_no = ANY($1)`,
+      [turningHolderCodes]
+    );
+    map['_turningToolImages'] = {};
+    for (let n = 1; n <= 8; n++) {
+      const code = rawParams[`Tool_Photo_Key_${n}`];
+      if (!code) continue;
+      const img = turningImgRows.rows.find(i => i.tool_dwg_no === code);
+      if (img) map['_turningToolImages'][n] = `data:${img.mime_type};base64,${img.image_data.toString('base64')}`;
+    }
+  }
+
   const grindMatch = (map['process_name'] || '').match(/^(.*?)\s*grind/i);
   map['grinding_area_label'] = grindMatch ? `${grindMatch[1].trim().toUpperCase()} GRINDING AREA` : 'GRINDING AREA';
 
@@ -1316,7 +1352,36 @@ const IMAGE_EXTENTS = {
   tool_image_T17: { tl: 'Q48', br: 'V53' }, tool_image_T18: { tl: 'W48', br: 'AB53' },
   tool_image_T19: { tl: 'AC48', br: 'AH53' }, tool_image_T20: { tl: 'AI48', br: 'AN53' },
   grinding_layout_image: { tl: 'AO26', br: 'AU45' },
+  // Turning template (id "Turning" in sds_grid_template) — 8 tool positions (T01-T08 of
+  // the cutting-tool section, NOT the F01-F08 fixture section below), 2 columns (H/T) ×
+  // 4 row-groups. Re-pointed 2026-09-17 to the CURRENT 8-tool + fixture layout's own
+  // empty cells (confirmed clear of any mapped field via a live grid_json dump: H/I/J/K
+  // and T/U/V/W sit empty for all 8 rows of each block, column L/X left as a buffer
+  // before the next mapped column M / Y). The previous 12-position / 3-column (H/T/AF)
+  // coordinates belonged to the SUPERSEDED layout this template replaced and no longer
+  // match anything (AF is now the F02/F04/F06/F08 fixture-name column).
+  turning_tool_image_1: { tl: 'H17', br: 'K24' }, turning_tool_image_5: { tl: 'T17', br: 'W24' },
+  turning_tool_image_2: { tl: 'H28', br: 'K35' }, turning_tool_image_6: { tl: 'T28', br: 'W35' },
+  turning_tool_image_3: { tl: 'H39', br: 'K46' }, turning_tool_image_7: { tl: 'T39', br: 'W46' },
+  turning_tool_image_4: { tl: 'H50', br: 'K57' }, turning_tool_image_8: { tl: 'T50', br: 'W57' },
+  // Turning template's F01-F08 jig/fixture photo boxes (2026-09-16) — the CURRENT
+  // 8-tool + fixture-section layout, added once the template grew a dedicated photo
+  // area for each fixture (it had none before, which is why tool_image_T01..T08 is
+  // suppressed for these machines — see TURNING_FIXTURE_MACHINES below). Keyed by
+  // T-Select slot (T01-T08) so the same `tooling` array drives both the F0N "Tooling
+  // No"/"Maker" text (via sds_excel_mapping) and this photo, with no new data source.
+  turning_fixture_image_T01: { tl: 'Y16',  br: 'AC23' }, turning_fixture_image_T02: { tl: 'AD16', br: 'AK23' },
+  turning_fixture_image_T03: { tl: 'Y27',  br: 'AC34' }, turning_fixture_image_T04: { tl: 'AD27', br: 'AK34' },
+  turning_fixture_image_T05: { tl: 'Y38',  br: 'AC45' }, turning_fixture_image_T06: { tl: 'AD38', br: 'AK45' },
+  turning_fixture_image_T07: { tl: 'Y49',  br: 'AC56' }, turning_fixture_image_T08: { tl: 'AD49', br: 'AK56' },
 };
+
+// Machines on the Turning template — its F01-F08 fixture slots have a real photo box
+// (unlike tool_image_T01..T08's Standard-layout coordinates, which land on this
+// layout's own cutting-tool text and are suppressed by the collision check below).
+const TURNING_FIXTURE_MACHINES = new Set(['X-100', 'XD-8', 'J-WAVE', 'XC-100', 'XD-8T']);
+// Must match SUPPRESS_KEY in db_migrations/20260916b_suppress_shared_mapping_for_turning.js.
+const SUPPRESS_PARAM_KEY = '_suppressed';
 
 /** Inject per-CN data into the designed grid by cell address (pure function).
  *  - mappings: [{ cell_address, param_key }] from sds_excel_mapping (machine wins)
@@ -1378,12 +1443,34 @@ function applyDataToGrid(grid, valueMap, mappings) {
   // so it fills the region (idempotent vs. any merge already on that top-left).
   const existingTl = new Set((grid.merges || []).map((m) => `${m.r1},${m.c1}`));
   const newMerges = [];
+  // IMAGE_EXTENTS is a fixed set of coordinates designed for the Standard grinding
+  // layout — a DIFFERENT grid template can legitimately put real text fields inside
+  // that same box (confirmed live: the Turning template's tool_image_T0N extent lands
+  // on the neighbouring tool's own Insert/Holder cells, since that layout reserves no
+  // photo box for its fixture slots at all). A photo silently overwriting mapped text
+  // is worse than no photo, so skip placement whenever this MACHINE's own mapping puts
+  // a text field inside the extent. Image-type param_keys are excluded from that check
+  // — grinding_layout_image's own mapping row points at its own extent's top-left, so
+  // without the exclusion it would always "collide" with itself and never place.
+  // `_suppressed` (from the shared-mapping suppression seed) is a placeholder that
+  // cancels an unwanted value — it never held real content, so it must not count as
+  // "occupied" here either. Without this exclusion, a suppression row that happens to
+  // sit inside a NEW photo box (confirmed live: `tool_name_T04`'s old address AD16 is
+  // exactly the Turning template's F02 fixture-photo top-left) silently blocks that
+  // photo, even though nothing is actually there to protect.
+  const IMAGE_PARAM_KEY = (k) => k === 'grinding_layout_image' || k === SUPPRESS_PARAM_KEY || /^(tool_image_T\d+|turning_tool_image_\d+|turning_fixture_image_T\d+)$/.test(k);
+  const mappedRC = mappings
+    .filter((m) => !IMAGE_PARAM_KEY(m.param_key))
+    .map((m) => cellAddrToRC(m.cell_address))
+    .filter(Boolean);
   const placeImage = (extentKey, dataUri) => {
     if (!dataUri) return;
     const ext = IMAGE_EXTENTS[extentKey];
     if (!ext) return;
     const tl = cellAddrToRC(ext.tl), br = cellAddrToRC(ext.br);
     if (!tl || !br) return;
+    const collides = mappedRC.some(({ r, c }) => r >= tl.r && r <= br.r && c >= tl.c && c <= br.c);
+    if (collides) return;
     const k = `${tl.r},${tl.c}`;
     cells[k] = { ...(cells[k] || {}), img: dataUri };
     if (!existingTl.has(k)) { newMerges.push({ r1: tl.r, c1: tl.c, r2: br.r, c2: br.c }); existingTl.add(k); }
@@ -1512,8 +1599,18 @@ function applyDataToGrid(grid, valueMap, mappings) {
   });
 
   // 4) Tooling + grinding images into their anchor regions
-  (valueMap.tooling || []).forEach((t) => { if (t && t.image) placeImage(`tool_image_${t.slot}`, t.image); });
+  (valueMap.tooling || []).forEach((t) => {
+    if (!t || !t.image) return;
+    const key = TURNING_FIXTURE_MACHINES.has(valueMap.machine_type_name) && IMAGE_EXTENTS[`turning_fixture_image_${t.slot}`]
+      ? `turning_fixture_image_${t.slot}`
+      : `tool_image_${t.slot}`;
+    placeImage(key, t.image);
+  });
   placeImage('grinding_layout_image', valueMap.grinding_layout_image);
+
+  // 4b) Turning-style per-tool photos (Holder_Info_N-keyed) — see buildValueMap.
+  const turningImgs = valueMap._turningToolImages || {};
+  for (const [n, dataUri] of Object.entries(turningImgs)) placeImage(`turning_tool_image_${n}`, dataUri);
 
   return { ...grid, cells, fills, merges: [...(grid.merges || []), ...newMerges] };
 }

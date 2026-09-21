@@ -964,6 +964,12 @@ async function buildCoverage() {
     // `freezeMonthlyStatus`.
     const ym = (d) => new Date(d).toISOString().slice(0, 7);
     const stMon = new Map();   // first-produced 'YYYY-MM' → { workable, complete, completeSaved }
+    // Same buckets, split by part_type — carried per month as `byPartType` so the
+    // month-over-month delta on each dashboard card (not just TOTAL) can be computed
+    // from two adjacent monthlyStatus rows without a second series or a second freeze
+    // table: `byPartType` rides along inside the same row object `freezeMonthlyStatus`
+    // already snapshots.
+    const stMonByType = new Map(); // month → Map(part_type → { workable, complete, completeSaved })
     for (const r of evaluated) {
       if (r.coverage_level === 'MISSING' || !r.first_prod_date) continue;
       const m = ym(r.first_prod_date);
@@ -972,21 +978,49 @@ async function buildCoverage() {
       if (r.coverage_level === 'COMPLETE')       e.complete += 1;
       if (r.coverage_level_saved === 'COMPLETE') e.completeSaved += 1;
       stMon.set(m, e);
+
+      const byType = stMonByType.get(m) || new Map();
+      const te = byType.get(r.part_type) || { workable: 0, complete: 0, completeSaved: 0 };
+      te.workable += 1;
+      if (r.coverage_level === 'COMPLETE')       te.complete += 1;
+      if (r.coverage_level_saved === 'COMPLETE') te.completeSaved += 1;
+      byType.set(r.part_type, te);
+      stMonByType.set(m, byType);
     }
     let cumWorkable = 0, cumComplete = 0, cumCompleteSaved = 0;
+    const cumByType = {}; // part_type → { workable, complete, completeSaved } (running totals)
     const monthlyStatusLive = [...stMon.keys()].sort().map((month) => {
       const d = stMon.get(month);
       cumWorkable      += d.workable;
       cumComplete      += d.complete;
       cumCompleteSaved += d.completeSaved;
-      const pct = (n) => (cumWorkable > 0 ? parseFloat(((n / cumWorkable) * 100).toFixed(1)) : 0);
+      const pct = (n, denom) => (denom > 0 ? parseFloat(((n / denom) * 100).toFixed(1)) : 0);
+
+      const byTypeThisMonth = stMonByType.get(month) || new Map();
+      const byPartType = {};
+      for (const pt of partTypes) {
+        const td = byTypeThisMonth.get(pt) || { workable: 0, complete: 0, completeSaved: 0 };
+        const c = cumByType[pt] || (cumByType[pt] = { workable: 0, complete: 0, completeSaved: 0 });
+        c.workable      += td.workable;
+        c.complete      += td.complete;
+        c.completeSaved += td.completeSaved;
+        byPartType[pt] = {
+          complete:       c.complete,
+          complete_saved: c.completeSaved,
+          pending:        Math.max(0, c.workable - c.complete),
+          complete_pct:       pct(c.complete, c.workable),
+          complete_saved_pct: pct(c.completeSaved, c.workable),
+        };
+      }
+
       return {
         month,
         complete:       cumComplete,         // tool + Excel + stamped, incl. T-Select #1
         complete_saved: cumCompleteSaved,    // same via factory-plan tool only (KZW)
         pending:        Math.max(0, cumWorkable - cumComplete),
-        complete_pct:       pct(cumComplete),
-        complete_saved_pct: pct(cumCompleteSaved),
+        complete_pct:       pct(cumComplete, cumWorkable),
+        complete_saved_pct: pct(cumCompleteSaved, cumWorkable),
+        byPartType,       // per-part-type cumulative snapshot — same shape as the row itself
       };
     });
     // Past months are served from the freeze table; only the current month is live.
@@ -1332,6 +1366,7 @@ router.get('/print-log', async (req, res) => {
   if (lotState === 'verified')        where.push('lot_verified IS TRUE');
   else if (lotState === 'unverified') where.push('lot_verified IS FALSE');
   else if (lotState === 'none')       where.push('lot_no IS NULL');
+  else if (lotState === 'has')        where.push('lot_no IS NOT NULL');
 
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 

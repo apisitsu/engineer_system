@@ -52,6 +52,8 @@ export const server = {
   MTC_TOOL_REQUEST_DASHBOARD: `${apiUrl}api/engineer/mtc/tool-requests/dashboard`,
   MTC_TOOL_REQUEST_PERMISSIONS: `${apiUrl}api/engineer/mtc/tool-requests/permissions`,
   MTC_EMAIL_CONFIG: `${apiUrl}api/engineer/mtc/email-config`,
+  MTC_EMAIL_CONFIG_USERS: `${apiUrl}api/engineer/mtc/email-config/users`,
+  MTC_EMAIL_CONFIG_MEMBERS: `${apiUrl}api/engineer/mtc/email-config/members`, // append /:u_code
   TOOLING_DASHBOARD_STATS_GET: `${apiUrl}api/tooling_inspect/dashboard_stats`,
   TOOLING_RESULT_DASHBOARD: `${apiUrl}api/tooling_inspect/result_dashboard`,
   TOOLING_AVAILABLE_FYE: `${apiUrl}api/tooling_inspect/available_fye`,
@@ -103,6 +105,7 @@ export const server = {
   MTC_SDS_V2_IMAGES_TOOLING_SEARCH: `${apiUrl}api/sds/v2/images/tooling/search`,
   MTC_SDS_V2_IMAGES_GRINDING: `${apiUrl}api/sds/v2/images/grinding`,
   MTC_SDS_V2_IMAGES_GRINDING_COVERAGE: `${apiUrl}api/sds/v2/images/grinding/coverage`,
+  MTC_SDS_V2_IMAGES_TURNING_TOOL: `${apiUrl}api/sds/v2/images/turning-tool`,
   MTC_SDS_V2_REPORT_COVERAGE: `${apiUrl}api/sds/v2/report/coverage`,
   MTC_SDS_V2_REPORT_TEMPLATE_B: `${apiUrl}api/sds/v2/report/template-b-conformance`,
   MTC_SDS_V2_REPORT_SELECTION_COND: `${apiUrl}api/sds/v2/report/selection-condition-conformance`,
@@ -121,6 +124,8 @@ export const server = {
   MTC_SDS_V2_ADMIN_TEMPLATE_CONFIG_PARAMS: `${apiUrl}api/sds/v2/admin/template-config/common-params`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID: `${apiUrl}api/sds/v2/admin/template-grid`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX_UPLOAD: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx-upload`,
+  MTC_SDS_V2_ADMIN_TEMPLATE_GRID_FROM_XLSX_UPLOAD_SHEETS: `${apiUrl}api/sds/v2/admin/template-grid/from-xlsx-upload/sheets`,
   MTC_SDS_V2_ADMIN_TEMPLATE_GRIDS: `${apiUrl}api/sds/v2/admin/template-grids`,
   MTC_SDS_V2_PDF_CHROME_GRID: `${apiUrl}api/sds/v2-headless/pdf-chrome/grid`,
 
@@ -286,3 +291,11 @@ export const GAS_DRIVE_URL = 'https://script.google.com/a/macros/minebea.co.th/s
 // Deploy api/engineer/mtc/doc/gas_ti_csv_doPost.gs (Execute as: Me / Anyone within
 // minebea.co.th) and paste the /exec URL below. Empty ⇒ the upload step is skipped.
 export const GAS_TI_CSV_URL = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbw5kxOm4FqqJZaikM-xXr2MH9m46LkbLnpXmx2t4vtMHMPlehyrZpwhD63vhSn077eG/exec';
+
+// Google Apps Script Web App URL (doGet, funct-dispatched: sendTemplateEmail /
+// sendEcntEmail / sendErrorReport — see test_mail.html's getPayload()). Deployed
+// "Execute as: User accessing the web app", so a GET from a signed-in browser
+// sends as the real user, not a fixed script-owner account. Must match backend
+// .env's GAS_EMAIL_WEBAPP (kept as a literal here — CRA cannot read the backend
+// .env — update both if the script is ever re-deployed under a new /exec URL).
+export const GAS_EMAIL_WEBAPP = 'https://script.google.com/a/macros/minebea.co.th/s/AKfycbyBwUbuPNdv9hGJd5s_SjVynpVxW5hPe4I45CtDB614JMeEzEsJTjPw_-GQv7f41o-TIQ/exec';

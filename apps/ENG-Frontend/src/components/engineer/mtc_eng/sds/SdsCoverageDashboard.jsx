@@ -156,8 +156,72 @@ const sectionTitle = (label, C) => (
   </div>
 );
 
+// Month-over-month change badge — `delta` is { complete, pending, pct, totalFrom, totalTo }
+// comparing the current month's cumulative snapshot against the immediately preceding
+// month's (see `monthDelta` in the main component). `totalFrom`/`totalTo` are the actual
+// requirement counts (complete+pending) last month and now, shown as "3,670 → 3,685" so
+// the old figure is visible next to the new one, not just the +/- delta. Renders nothing
+// until both months exist.
+const DeltaBadge = ({ delta, C }) => {
+  if (!delta) return null;
+  const arrow = delta.pct > 0 ? '▲' : delta.pct < 0 ? '▼' : '●';
+  const color = delta.pct > 0 ? C.green : delta.pct < 0 ? C.red : C.textSec;
+  const sign = (n) => (n > 0 ? '+' : '');
+  return (
+    <Tooltip title={`Total last month: ${delta.totalFrom.toLocaleString()} → ${delta.totalTo.toLocaleString()}. Complete ${sign(delta.complete)}${delta.complete.toLocaleString()}, Pending ${sign(delta.pending)}${delta.pending.toLocaleString()}`}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4, cursor: 'help', flexWrap: 'wrap' }}>
+        <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 600 }}>
+          {delta.totalFrom.toLocaleString()}→{delta.totalTo.toLocaleString()}
+        </Text>
+        <Text style={{ color, fontSize: 10, fontWeight: 700 }}>
+          {arrow} {sign(delta.complete)}{delta.complete.toLocaleString()}
+        </Text>
+        <Text style={{ color, fontSize: 10, fontWeight: 700 }}>({sign(delta.pct)}{delta.pct}%)</Text>
+        <Text style={{ color: C.textSec, fontSize: 9 }}>vs last month</Text>
+      </div>
+    </Tooltip>
+  );
+};
+
+// A small centered up-arrow between two stacked PrevMonthPctRow rows (or the live row and
+// the first of them) — a plain flow connector reading "this feeds into the row above",
+// not a trend indicator, so it always points up regardless of whether the % rose or fell.
+// Renders nothing until both sides exist (nothing to connect otherwise).
+const TrendArrow = ({ from, to, C }) => {
+  if (from == null || to == null) return null;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0 3px' }}>
+      <Text style={{ color: C.textSec, fontSize: 11, fontWeight: 700 }}>▲</Text>
+    </div>
+  );
+};
+
+// The previous (closed/frozen) month's own KZW/THAI/combined % row — a stable reference
+// sitting right under the live current-month row, which keeps moving until its month
+// closes. `snapshot` is { pctSaved, pct }; `label` is e.g. "Aug 26" (see `monthDelta`
+// in the main component). Renders nothing until the previous month's data exists.
+const PrevMonthPctRow = ({ label, snapshot, C }) => {
+  if (!snapshot) return null;
+  const { pctSaved, pct } = snapshot;
+  const boost = Math.max(0, pct - pctSaved);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, opacity: 0.7 }}>
+      <Text style={{ color: C.textSec, fontSize: 9, fontWeight: 600 }}>{label}</Text>
+      <Text style={{ fontSize: 10 }}>
+        <span style={{ color: pctSaved >= 90 ? C.green : C.red, fontWeight: 700 }}>{pctSaved}%</span>
+        <span style={{ color: C.textSec, fontSize: 9 }}> KZW</span>
+        {boost > 0 && (<>
+          <span style={{ color: C.greenSoft, fontWeight: 700 }}> +{boost.toFixed(1)}%</span>
+          <span style={{ color: C.textSec, fontSize: 9 }}> THAI*</span>
+        </>)}
+        <span style={{ color: pct >= 90 ? C.green : C.red, fontWeight: 800 }}> → {pct}%</span>
+      </Text>
+    </div>
+  );
+};
+
 // ── Part Type Card ─────────────────────────────────────────────────────────────
-const PartTypeCard = ({ pt, C }) => {
+const PartTypeCard = ({ pt, C, delta }) => {
   const cardStyle = cardStyleOf(C);
   const color = partTypeColors(C)[pt.part_type] || C.cyan;
   const pct = pt.complete_pct || 0;                       // with T-Select #1
@@ -214,6 +278,9 @@ const PartTypeCard = ({ pt, C }) => {
           <Text style={{ color: pct >= 90 ? C.green : C.red, fontSize: 11, fontWeight: 800 }}>→ {pct}%</Text>
         )}
       </div>
+      {/* No previous-month history row on this card — TOTAL is the only card that
+          shows one (see `monthDelta` in the main component for why: an older closed
+          month may predate the `byPartType` field, so a per-type row is unreliable). */}
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
         <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(pt.complete_saved ?? pt.complete).toLocaleString()} KZW complete</Tag>
         {boost > 0 && (
@@ -222,6 +289,7 @@ const PartTypeCard = ({ pt, C }) => {
           </Tooltip>
         )}
       </div>
+      <DeltaBadge delta={delta} C={C} />
     </div>
   );
 };
@@ -358,25 +426,47 @@ export default function SdsCoverageDashboard() {
   }, [data, activePartTypes, fyeWin]);
   // One stacked dataset per configured part type — derived from activePartTypes so the
   // chart tracks the scope config instead of a fixed Ball/Race/Mecha triple.
-  const newPartsChartData = useMemo(() => ({
-    labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
-    datasets: activePartTypes.map(t => {
-      const color = PART_TYPE_COLOR[t] || C.cyan;
-      return {
-        label: partTypeLabel(t),
-        data: monthlyNewParts.map(r => r[t] || 0),
-        backgroundColor: monthlyNewParts.map(r => hexToRgba(color, r.isAvg ? 0.35 : 0.75)),
-        borderColor: color, borderWidth: 1, stack: 'np',
-      };
-    }),
-  }), [monthlyNewParts, activePartTypes]);
+  const newPartsChartData = useMemo(() => {
+    // The current month is still accumulating new CNs, so its bar is provisional —
+    // fade it the same as the prev-FY average bar (see statusChartData's `faint`).
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const faint = (r) => r.isAvg || r.month === curMonth;
+    return {
+      labels: monthlyNewParts.map(r => r.isAvg ? r.label : fmtMonth(r.month)),
+      datasets: activePartTypes.map(t => {
+        const color = PART_TYPE_COLOR[t] || C.cyan;
+        return {
+          label: partTypeLabel(t),
+          data: monthlyNewParts.map(r => r[t] || 0),
+          backgroundColor: monthlyNewParts.map(r => hexToRgba(color, faint(r) ? 0.35 : 0.75)),
+          borderColor: color, borderWidth: 1, stack: 'np',
+        };
+      }),
+    };
+  }, [monthlyNewParts, activePartTypes]);
   const newPartsChartOpts = {
     responsive: true, maintainAspectRatio: false, animation: false,
     plugins: {
-      legend: { labels: { color: C.textSec, font: { size: 11 } } },
+      legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
       tooltip: { mode: 'index', intersect: false },
-      datalabels: { display: false },  // datalabels plugin is registered globally — keep it off here
+      // One total label per bar — shown only on the topmost stacked segment (the last
+      // dataset), summed across every part type at that month so it reads as the bar's
+      // grand total rather than just that segment's own count.
+      datalabels: {
+        display: (ctx) => {
+          const total = ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          return ctx.datasetIndex === ctx.chart.data.datasets.length - 1 && total > 0;
+        },
+        formatter: (v, ctx) => {
+          const total = ctx.chart.data.datasets.reduce((s, ds) => s + (ds.data[ctx.dataIndex] || 0), 0);
+          return total.toLocaleString();
+        },
+        color: C.textPri,
+        anchor: 'end', align: 'top', offset: 4,
+        font: { size: 10, weight: 700 },
+      },
     },
+    layout: { padding: { top: 20 } },
     scales: {
       x: { stacked: true, ticks: { color: C.textSec, font: { size: 10 }, maxRotation: 45 }, grid: { color: C.gridLine } },
       y: { stacked: true, ticks: { color: C.textSec, font: { size: 10 } }, grid: { color: C.gridLine }, title: { display: true, text: 'New CNs', color: C.textSec, font: { size: 10 } } },
@@ -399,6 +489,48 @@ export default function SdsCoverageDashboard() {
     return months;
   }, [data, fyeWin]);
 
+  // Month-over-month change for the dashboard cards ("vs last month"). Reads the RAW
+  // (unwindowed) monthlyStatus — not the FY-windowed `monthlyStatus` above — so the
+  // comparison still works right at a fiscal-year rollover, where the FY window would
+  // otherwise put the previous month behind the `isPrevLast` synthetic row. Each row's
+  // `complete`/`pending`/`complete_pct` (and `byPartType[pt].*`) are CUMULATIVE, so the
+  // difference between two adjacent months is exactly that month's net change.
+  const monthDelta = useMemo(() => {
+    const all = data?.monthlyStatus || [];
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const idx = all.findIndex(r => r.month === curMonth);
+    if (idx < 1) return null; // no current-month row yet, or nothing before it to diff against
+    const cur = all[idx], prev = all[idx - 1];
+    const diff = (c, p) => (c && p) ? {
+      complete: (c.complete ?? 0) - (p.complete ?? 0),
+      pending: (c.pending ?? 0) - (p.pending ?? 0),
+      pct: parseFloat(((c.complete_pct ?? 0) - (p.complete_pct ?? 0)).toFixed(1)),
+      // requirement count (complete+pending) each side, so the card can show the actual
+      // old figure next to the new one ("3,670 → 3,685"), not just the +/- delta.
+      totalFrom: (p.complete ?? 0) + (p.pending ?? 0),
+      totalTo:   (c.complete ?? 0) + (c.pending ?? 0),
+    } : null;
+    const byPartType = {};
+    for (const pt of Object.keys(cur.byPartType || {})) {
+      byPartType[pt] = diff(cur.byPartType[pt], prev.byPartType?.[pt]);
+    }
+    // A closed month's own KZW/THAI/combined % breakdown (not a delta) — so the TOTAL
+    // card ONLY can show a short history underneath the live row, e.g. current month
+    // = Sep (still open, keeps moving) with "Aug 26" then "Jul 26" underneath for
+    // stable reference points. `pctRow` builds one such row; `prev2` is one month
+    // further back than `prev`, or null if there isn't one yet (early in the FY).
+    // Not per part type: an older closed month may predate the `byPartType` field
+    // entirely (see the July recovery note above `monthDelta`), so a per-type history
+    // row would be missing as often as present — dropped in favor of TOTAL alone.
+    const pctRow = (row) => row ? { pctSaved: row.complete_saved_pct ?? 0, pct: row.complete_pct ?? 0 } : null;
+    const prev2 = idx >= 2 ? all[idx - 2] : null;
+    return {
+      total: diff(cur, prev), byPartType,
+      prevLabel: fmtMonth(prev.month), prevTotalPct: pctRow(prev),
+      prev2Label: prev2 ? fmtMonth(prev2.month) : null, prev2TotalPct: pctRow(prev2),
+    };
+  }, [data]);
+
   // Bars are stamp-GATED complete (KZW baseline + THAI T-Select #1) vs pending. Stable
   // against a later bulk sign because the BACKEND now buckets each completion by the
   // month it was fully stamped (max sign date), not the part's first-produced month —
@@ -409,6 +541,46 @@ export default function SdsCoverageDashboard() {
     // prev-FY carry-over bar, so it reads as provisional rather than settled.
     const curMonth = new Date().toISOString().slice(0, 7);
     const faint = (r) => r.isPrevLast || r.month === curMonth;
+    // A future placeholder month ({month:key, complete:0, pending:0, ...}, see the
+    // `monthlyStatus` useMemo) has nothing to label — the % line already skips it via
+    // `spanGaps`, and the count/delta labels below need the same guard.
+    const hasBarData = (row) => ((row?.complete || 0) + (row?.pending || 0)) > 0;
+    // The count/delta/% offsets below are tuned in PIXELS against a wide card (~157px
+    // per month-category). On a narrower screen the whole canvas shrinks but a fixed
+    // pixel offset does not, so at low width it eats a much bigger share of a much
+    // smaller gap and the delta label (shifted sideways into the gap between bars)
+    // starts overlapping the neighbour's own count/% stack. Scale every offset down
+    // together with however many CSS pixels a month actually gets, never up — on a
+    // wide chart this returns 1 and behaves exactly as before.
+    // `xs.width / categoryCount` — NOT `getPixelForValue(1) - getPixelForValue(0)`.
+    // A category scale's `getPixelForValue` looks its argument up in the LABEL array
+    // (it expects a label, or falls back to treating the number as one), so passing
+    // raw indices 0/1 doesn't return "the pixel at index 0/1" at all; on this chart it
+    // collapsed to ~0, which silently zeroed every offset — the exact all-labels-
+    // stacked-on-the-bar-top collision this was meant to fix. Total axis width divided
+    // by how many categories share it is unambiguous and always correct.
+    //
+    // `n` MUST count the whole FY (13: FYE-end + Apr..Mar), not just the months with
+    // real data — chart.js gives every category equal width whether or not it has a
+    // bar, so the empty Oct–Mar placeholders still take their share of the x-axis.
+    // The tuned baseline below (~85px) is exactly `1102.7 / 13`, measured from the
+    // chart at the width the current fixed offsets (26/40/10) were approved against —
+    // getting this count wrong (7, the visible bars only) overstated that baseline as
+    // ~157px, which silently scaled every offset down even at that same "good" width.
+    const TUNED_CATEGORY_PX = 85;
+    const catPxOf = (ctx) => {
+      const xs = ctx.chart.scales?.x;
+      const n = monthlyStatus.length || 1;
+      return xs?.width ? xs.width / n : TUNED_CATEGORY_PX;
+    };
+    const scaledOffset = (base) => (ctx) => base * Math.min(1, catPxOf(ctx) / TUNED_CATEGORY_PX);
+    // Proportional scaling alone still runs out of room below a certain width — three
+    // ~10px text lines squeezed toward a single point start touching however small
+    // their offsets get. Below this floor, drop straight back to the ORIGINAL,
+    // pre-this-feature look (just the % — always kept, never hidden) instead of
+    // rendering shrunken, overlapping text.
+    const MIN_EXTRA_LABEL_PX = 50;
+    const showExtras = (ctx) => catPxOf(ctx) >= MIN_EXTRA_LABEL_PX;
     return {
     labels: monthlyStatus.map(r => r.isPrevLast ? r.prevLabel : fmtMonth(r.month)),
     datasets: [
@@ -458,18 +630,48 @@ export default function SdsCoverageDashboard() {
         pointBorderColor: C.orange,
         tension: 0.3,
         yAxisID: 'y1',
+        // Two labels stacked above each bar (count, %), plus delta vs the prior bar
+        // pushed into the GAP to its left — reads as "the change crossing into this
+        // bar" sitting between the two bars being compared, not stacked on either one.
         datalabels: {
           display: true,
-          color: C.green,
-          anchor: 'end',
-          align: 'top',
-          offset: 4,
-          font: { size: 10, weight: 700 },
-          // Only label months that actually have parts — skip empty future months
-          formatter: (v, ctx) => {
-            const row = monthlyStatus[ctx.dataIndex];
-            const hasData = ((row?.complete || 0) + (row?.pending || 0)) > 0;
-            return hasData ? `${v}%` : '';
+          labels: {
+            count: {
+              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]) && showExtras(ctx),
+              formatter: (v, ctx) => (monthlyStatus[ctx.dataIndex]?.complete ?? 0).toLocaleString(),
+              color: C.textPri,
+              anchor: 'end', align: 'top', offset: scaledOffset(26),
+              font: { size: 10, weight: 700 },
+            },
+            delta: {
+              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]) && !!monthlyStatus[ctx.dataIndex - 1] && showExtras(ctx),
+              // Returning an array renders each entry as its own stacked line — arrow
+              // above the number, rather than side by side.
+              formatter: (v, ctx) => {
+                const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
+                const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '●';
+                return [arrow, Math.abs(d).toLocaleString()];
+              },
+              color: (ctx) => {
+                const d = (monthlyStatus[ctx.dataIndex]?.complete ?? 0) - (monthlyStatus[ctx.dataIndex - 1]?.complete ?? 0);
+                return d > 0 ? C.green : d < 0 ? C.red : C.textSec;
+              },
+              // A keyword align only offsets along ONE axis, so 'left' alone sits it
+              // at the point's own height (the trend line, well below the count row).
+              // A numeric align is a clockwise angle from the anchor (0=right, 90=
+              // bottom, 180=left, 270/-90=top) — -135 is up-and-left, landing the
+              // label level with the count row while still in the gap between bars.
+              anchor: 'end', align: -135, offset: scaledOffset(40),
+              font: { size: 9, weight: 700 },
+            },
+            // Only label months that actually have parts — skip empty future months
+            pct: {
+              display: (ctx) => hasBarData(monthlyStatus[ctx.dataIndex]),
+              formatter: (v) => `${v}%`,
+              color: C.green,
+              anchor: 'end', align: 'top', offset: scaledOffset(10),
+              font: { size: 10, weight: 700 },
+            },
           },
         },
       },
@@ -493,7 +695,10 @@ export default function SdsCoverageDashboard() {
     maintainAspectRatio: false,
     // Legend at the BOTTOM so the 'top'-aligned % datalabels on the near-100% Complete-%
     // line never collide with it; top padding + axis headroom keep the 100% label visible.
-    layout: { padding: { top: 24 } },
+    // Padding is taller than the 100%-label days now that each bar stacks two labels
+    // (count, %) above its point, plus the delta label sitting in the gap to the left —
+    // see `statusChartData`'s `datalabels.labels`.
+    layout: { padding: { top: 54 } },
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { position: 'bottom', labels: { color: C.textSec, font: { size: 11 }, boxWidth: 12, padding: 12 } },
@@ -741,6 +946,10 @@ export default function SdsCoverageDashboard() {
                         </div>
                       </>);
                     })()}
+                    <TrendArrow from={monthDelta?.prevTotalPct?.pct} to={data?.kpi?.completePct ?? 0} C={C} />
+                    <PrevMonthPctRow label={monthDelta?.prevLabel} snapshot={monthDelta?.prevTotalPct} C={C} />
+                    <TrendArrow from={monthDelta?.prev2TotalPct?.pct} to={monthDelta?.prevTotalPct?.pct} C={C} />
+                    <PrevMonthPctRow label={monthDelta?.prev2Label} snapshot={monthDelta?.prev2TotalPct} C={C} />
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                       <Tag color="success" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{(data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0).toLocaleString()} KZW complete</Tag>
                       {Math.max(0, (data?.kpi?.complete ?? 0) - (data?.kpi?.completeSaved ?? data?.kpi?.complete ?? 0)) > 0 && (
@@ -749,11 +958,15 @@ export default function SdsCoverageDashboard() {
                         </Tooltip>
                       )}
                     </div>
+                    <DeltaBadge delta={monthDelta?.total} C={C} />
                   </div>
                 </Col>
                 {byPartType.map(pt => (
                   <Col key={pt.part_type} span={4}>
-                    <PartTypeCard pt={pt} C={C} />
+                    <PartTypeCard
+                      pt={pt} C={C}
+                      delta={monthDelta?.byPartType?.[pt.part_type]}
+                    />
                   </Col>
                 ))}
               </Row>

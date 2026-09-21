@@ -1,11 +1,26 @@
 const { engPool } = require('../../../../instance/eng_db'); // Use new schema
 const moment = require('moment');
-const { sendMtcEmail } = require('../utils/emailHelper');
 const path = require('path');
 const { TABLES, PATHS } = require('../mtcConstants');
 
-// Load email renderer from templates folder (at ENG-Backend root)
-const { renderEmail, generateSubject } = require(PATHS.EMAIL_RENDERER);
+// Load email renderer from templates folder (at ENG-Backend root).
+// NOTE: notifications are no longer sent from here — see "Email delivery" below.
+const { buildTemplateEmailPayload } = require(PATHS.EMAIL_RENDERER);
+
+// ── Email delivery ───────────────────────────────────────────────────────────
+// An anonymous server-side call to a script.google.com Apps Script webapp is
+// blocked by the Workspace admin (same restriction documented for GAS_TI_CSV_URL
+// in .claude/rules/backend-gotchas.md) — verified live 2026-09-18 for both
+// GAS_EMAIL_URL and GAS_EMAIL_WEBAPP. GAS_EMAIL_WEBAPP is also deployed to
+// "Execute as: User accessing the web app", so a browser GET sends as the real
+// signed-in user rather than a fixed script-owner/service account. So instead of
+// sending here, every notification site below builds the payload and hands it
+// back in the API response as `emailNotification`; the frontend fires the actual
+// GET (hidden iframe, same mechanism as test_mail.html's "GET (URL Ping)" button
+// and the TI-CSV browser upload) from the browser of the person who just acted.
+function gasEmailWebappUrl() {
+    return process.env.GAS_EMAIL_WEBAPP || '';
+}
 
 const {
     WORKFLOW_STAGES,
@@ -85,9 +100,36 @@ function calcDueDate(typeOfRequest) {
     return due.format('YYYY-MM-DD HH:mm:ss');
 }
 
+// ── Who is this person, as far as tr_email_config is concerned ───────────────
+// tr_email_config lists addresses; the JWT carries only u_code. This module's own
+// tr_email_member (u_code -> address, set from the Email Config page) is the bridge.
+// m_user_profile.gmail_email is a read-only fallback: it is a shared table other
+// modules own, so nothing here writes to it. Never trusts the request body.
+async function getMemberEmails(uCode) {
+    const code = String(uCode || '').trim().toLowerCase();
+    if (!code) return [];
+    const emails = [];
+    try {
+        const m = await engPool.query(
+            `SELECT email FROM ${TABLES.TR_EMAIL_MEMBER} WHERE lower(u_code) = $1`, [code]);
+        m.rows.forEach(r => r.email && emails.push(r.email.trim().toLowerCase()));
+    } catch (err) {
+        // Table not created yet (migration 20260921e not run): fall back to the profile
+        // rather than turning a missing table into a lock-out for everyone.
+        logger.warn('tr_email_member lookup failed, using profile only', { error: err.message });
+    }
+    const p = await engPool.query(
+        'SELECT gmail_email FROM m_user_profile WHERE lower(u_code) = $1', [code]);
+    const pe = (p.rows[0]?.gmail_email || '').trim().toLowerCase();
+    if (pe && !emails.includes(pe)) emails.push(pe);
+    return emails;
+}
+
 /**
  * GET /api/engineer/mtc/tool-requests/permissions
  * คืน allowed emails ของแต่ละ stage (ดึงจาก DB ทั้งหมด)
+ * `me.emails` = the caller's own addresses, so the modal decides canAct from the
+ * same identity the backend checks in submitAction.
  */
 const getStagePermissions = async (req, res) => {
     try {
@@ -96,7 +138,9 @@ const getStagePermissions = async (req, res) => {
         configRes.rows.forEach(row => {
             permissions[row.stage] = row.emails.split(',').map(e => e.trim()).filter(Boolean);
         });
-        res.json({ data: permissions });
+        let myEmails = [];
+        try { myEmails = await getMemberEmails(req.user?.empno); } catch (_) { /* best effort */ }
+        res.json({ data: permissions, me: { emails: myEmails } });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -289,32 +333,28 @@ const createToolRequest = async (req, res) => {
 
         logger.info('Tool request created successfully', { id: requestId, request_item });
 
-        // --- ส่งอีเมลแจ้งเตือน (Async - Non blocking) ---
-        (async () => {
-            try {
-                const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
-                logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
+        // --- อีเมลแจ้งเตือน: สร้าง payload ให้ frontend เป็นคนยิงจริง (ดู "Email delivery" ด้านบน) ---
+        let emailNotification = null;
+        try {
+            const recipients = await getEmailRecipients(WORKFLOW_STAGES.ENG_CHECK);
+            logger.info('Email notification attempt', { stage: WORKFLOW_STAGES.ENG_CHECK, recipientsCount: recipients.length });
 
-                if (recipients.length > 0) {
-                    const subject = `From ${requester} - [New Request] ${request_item}: ${title}`;
-                    const html = renderEmail({
-                        stage: 'eng_check',
-                        decision: 'submit',
-                        request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category, status: WORKFLOW_STATUS.PENDING_ENG_CHECK, req_due_date: req_due_date },
-                        extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
-                        actionBy: requester,
-                    });
-                    await sendMtcEmail(recipients.join(','), subject, html, {
-                        fromName: requester ? `${requester} (General DWG Request)` : 'General DWG Request',
-                        replyTo: requester_email || undefined,
-                    });
-                } else {
-                    logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
-                }
-            } catch (emailErr) {
-                logger.warn('Initial email notification failed', { error: emailErr.message });
+            if (recipients.length > 0) {
+                const payload = buildTemplateEmailPayload({
+                    stage: 'eng_check',
+                    decision: 'submit',
+                    request: { id: requestId, request_item, requester, requester_email, department, title, detail, type_of_request, category, status: WORKFLOW_STATUS.PENDING_ENG_CHECK, req_due_date: req_due_date },
+                    extra: { comment: 'มีการสร้างคำขอใหม่ในระบบ General DWG Request' },
+                    actionBy: requester,
+                    recipients,
+                });
+                emailNotification = { url: gasEmailWebappUrl(), payload };
+            } else {
+                logger.warn('No recipients found for email notification', { stage: WORKFLOW_STAGES.ENG_CHECK });
             }
-        })();
+        } catch (emailErr) {
+            logger.warn('Building email notification failed', { error: emailErr.message });
+        }
 
         // --- Auto-intake onto the Kanban board (fire-and-forget, fail-open) ---
         kanbanIntake.syncCard({
@@ -327,7 +367,7 @@ const createToolRequest = async (req, res) => {
             dueDate: req_due_date,
         }).catch((e) => logger.warn('Kanban intake (create) failed', { error: e.message }));
 
-        res.json({ result: 'true', message: 'Request saved successfully', id: requestId });
+        res.json({ result: 'true', message: 'Request saved successfully', id: requestId, emailNotification });
     } catch (error) {
         await client.query('ROLLBACK');
         logger.error('Server Error during creation', { error: error.message });
@@ -548,7 +588,16 @@ const submitAction = async (req, res) => {
         if (recipientsAllowed.length > 0 && userDept !== 'AD') {
             const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
             const userCode = (req.user?.empno || '').toLowerCase();
-            const isAllowed = allowedCodes.includes(userCode);
+            let isAllowed = allowedCodes.includes(userCode);
+            if (!isAllowed && userCode) {
+                // The config lists full emails but the JWT carries only u_code (e.g. LE403),
+                // which never equals an email's local part ("chairat.s"). Resolve the
+                // person's addresses server-side by the verified empno (tr_email_member,
+                // then the profile) — never from the request body — and match the full address.
+                const mine = await getMemberEmails(userCode);
+                const allowedLower = recipientsAllowed.map(e => e.toLowerCase());
+                isAllowed = mine.some(e => allowedLower.includes(e));
+            }
             if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
     } catch (err) {
@@ -601,7 +650,8 @@ const submitAction = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // Send Email notification (Dynamic)
+        // Email notification: build the payload, let the frontend fire it (see "Email delivery" above)
+        let emailNotification = null;
         try {
             const emailKey = isApprove ? stageConfig.emailApprove : stageConfig.emailDeny;
             let recipients = emailKey ? await getEmailRecipients(emailKey) : [];
@@ -609,18 +659,13 @@ const submitAction = async (req, res) => {
             if (stage === WORKFLOW_STAGES.ENG_INFORM && request.requester_email) recipients = [request.requester_email, ...recipients];
 
             if (recipients.length > 0) {
-                const subject = generateSubject(stage, decision, request);
-                const html = renderEmail({ stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System' });
-                // Attribute the email to the person who performed this stage action
-                // (display name + Reply-To), falling back to the requester, so the
-                // recipient sees the real sender instead of the script owner.
-                sendMtcEmail(recipients.join(','), subject, html, {
-                    fromName: action_by ? `${action_by} (General DWG Request)` : 'General DWG Request',
-                    replyTo: req.body.action_by_email || request.requester_email || undefined,
-                }).catch(err => logger.error('Email failed', { error: err.message }));
+                const payload = buildTemplateEmailPayload({
+                    stage, decision, request, extra: { ...extra, comment }, actionBy: action_by || 'System', recipients,
+                });
+                emailNotification = { url: gasEmailWebappUrl(), payload };
             }
         } catch (emailErr) {
-            logger.warn('Email failed', { error: emailErr.message });
+            logger.warn('Building email notification failed', { error: emailErr.message });
         }
 
         // --- Move the board card to the new stage's list (fail-open) ---
@@ -639,7 +684,7 @@ const submitAction = async (req, res) => {
             dueDate: request.req_due_date,
         }).catch((e) => logger.warn('Kanban intake (move) failed', { error: e.message }));
 
-        res.json({ success: true, status: nextStatus, current_stage: nextStage });
+        res.json({ success: true, status: nextStatus, current_stage: nextStage, emailNotification });
     } catch (err) {
         await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
@@ -656,6 +701,77 @@ const getEmailConfigs = async (req, res) => {
     try {
         const result = await engPool.query(`SELECT * FROM ${TABLES.TR_EMAIL_CONFIG} ORDER BY stage ASC`);
         res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/engineer/mtc/email-config/users
+ * People the email-config picker can offer. Deliberately NOT the user-management
+ * list: that one returns `u.*` (including u_pass and gmail_refresh_token) with no
+ * auth, so only the four fields the picker needs are selected here. Admin-only is
+ * enforced by the route (server.js), like the rest of /email-config.
+ */
+const getEmailConfigUsers = async (req, res) => {
+    // `email` = this module's tr_email_member address, else the profile's (read-only).
+    // `own` tells the UI which of the two it is, i.e. whether it can be edited here.
+    try {
+        let result;
+        try {
+            result = await engPool.query(
+                `SELECT p.u_code, p.u_name, p.u_department,
+                        COALESCE(m.email, p.gmail_email) AS email,
+                        (m.email IS NOT NULL) AS own
+                   FROM m_user_profile p
+                   LEFT JOIN ${TABLES.TR_EMAIL_MEMBER} m ON lower(m.u_code) = lower(p.u_code)
+                  ORDER BY p.u_name ASC`
+            );
+        } catch (e) {
+            if (e.code !== '42P01') throw e;   // migration 20260921e not run yet
+            result = await engPool.query(
+                `SELECT u_code, u_name, u_department, gmail_email AS email, false AS own
+                   FROM m_user_profile ORDER BY u_name ASC`
+            );
+        }
+        res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * PUT /api/engineer/mtc/email-config/members/:u_code   body: { email }
+ * Set the address General DWG Request uses for a person. Writes only tr_email_member —
+ * never m_user_profile. Admin-only by the route. An address may belong to one person.
+ */
+const setMemberEmail = async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+    }
+    try {
+        const u = await engPool.query(
+            'SELECT u_code FROM m_user_profile WHERE lower(u_code) = lower($1)', [req.params.u_code]);
+        if (!u.rows[0]) return res.status(404).json({ error: 'User not found' });
+        const uCode = u.rows[0].u_code;
+
+        const clash = await engPool.query(
+            `SELECT u_code FROM ${TABLES.TR_EMAIL_MEMBER} WHERE lower(email) = $1 AND lower(u_code) <> lower($2)
+             UNION
+             SELECT u_code FROM m_user_profile WHERE lower(gmail_email) = $1 AND lower(u_code) <> lower($2)`,
+            [email, uCode]);
+        if (clash.rows.length > 0) {
+            return res.status(409).json({ error: `${email} already belongs to ${clash.rows[0].u_code}` });
+        }
+
+        await engPool.query(
+            `INSERT INTO ${TABLES.TR_EMAIL_MEMBER} (u_code, email, updated_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (u_code) DO UPDATE SET email = EXCLUDED.email, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+            [uCode, email, req.user?.empno || null]);
+        logger.info('Member email set', { u_code: uCode, by: req.user?.empno });
+        res.json({ success: true, u_code: uCode, email });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -711,7 +827,10 @@ const deleteEmailConfig = async (req, res) => {
 
 /**
  * POST /api/engineer/mtc/tool-requests/test-email
- * Send a test email to verify the notification system is working.
+ * Build a test notification payload to verify the config — does NOT send it.
+ * Sending needs a signed-in browser (see "Email delivery" above); the caller
+ * (a future admin UI, or a manual check) fires `emailNotification` itself the
+ * same way ToolRequest.jsx/RequestDetailsPage.jsx do after a real action.
  * Body: { to: "email@example.com" }  (optional — defaults to ENG_CHECK recipients)
  */
 const testEmail = async (req, res) => {
@@ -725,10 +844,9 @@ const testEmail = async (req, res) => {
             to = recipients.join(',');
         }
 
-        const subject = '[Test] General DWG Request — Email Notification Test';
-        const html = renderEmail({
+        const payload = buildTemplateEmailPayload({
             stage: 'eng_check',
-            decision: 'submitted',
+            decision: 'submit',
             request: {
                 request_item: 'ITEM-TEST-001',
                 req_no: 'TEST-REQ-001',
@@ -741,14 +859,11 @@ const testEmail = async (req, res) => {
             },
             extra: { comment: 'นี่คืออีเมล์ทดสอบระบบแจ้งเตือน General DWG Request' },
             actionBy: req.user?.userName || 'Test User',
+            recipients: to,
         });
 
-        await sendMtcEmail(to, subject, html, {
-            fromName: `${req.user?.userName || 'Test User'} (General DWG Request)`,
-            replyTo: req.user?.gmail_email || undefined,
-        });
-        logger.info('Test email sent', { to });
-        res.json({ success: true, message: `Test email sent to: ${to}` });
+        logger.info('Test email payload built', { to });
+        res.json({ success: true, message: `Payload built for: ${to} — fire emailNotification from the browser to actually send it`, emailNotification: { url: gasEmailWebappUrl(), payload } });
     } catch (err) {
         logger.error('Test email failed', { error: err.message });
         res.status(500).json({ error: err.message });
@@ -765,6 +880,8 @@ module.exports = {
     getStagePermissions,
     submitAction,
     getEmailConfigs,
+    getEmailConfigUsers,
+    setMemberEmail,
     updateEmailConfig,
     createEmailConfig,
     deleteEmailConfig,
