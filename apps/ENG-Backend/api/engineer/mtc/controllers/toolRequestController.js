@@ -559,7 +559,19 @@ const submitAction = async (req, res) => {
         if (recipientsAllowed.length > 0 && userDept !== 'AD') {
             const allowedCodes = recipientsAllowed.map(e => e.split('@')[0].toLowerCase());
             const userCode = (req.user?.empno || '').toLowerCase();
-            const isAllowed = allowedCodes.includes(userCode);
+            let isAllowed = allowedCodes.includes(userCode);
+            if (!isAllowed && userCode) {
+                // The config lists full emails but the JWT carries only u_code (e.g. LE403),
+                // which never equals an email's local part ("chairat.s"). Resolve the email
+                // server-side from the profile row keyed by the verified empno — never from
+                // the request body — and match the full address.
+                const { rows } = await engPool.query(
+                    'SELECT gmail_email FROM m_user_profile WHERE lower(u_code) = $1',
+                    [userCode]
+                );
+                const userEmail = (rows[0]?.gmail_email || '').trim().toLowerCase();
+                isAllowed = !!userEmail && recipientsAllowed.some(e => e.toLowerCase() === userEmail);
+            }
             if (!isAllowed) return res.status(403).json({ error: `You don't have permission to act in the ${stage} stage` });
         }
     } catch (err) {
