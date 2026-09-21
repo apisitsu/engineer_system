@@ -74,6 +74,13 @@ const lookup = async (req, res) => {
 
     let q = await engPool.query(`SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`, [toolingNo]);
     if (!q.rows.length) {
+      // The shelf may carry the factory's "-99" suffix (e.g. MD-V9910WA PALLET 4918-02-0011-99)
+      // while the plan writes the bare number, or the other way round. Try the counterpart
+      // before the family-prefix fallback below, which would silently return the wrong row.
+      const counterpart = /-99$/.test(toolingNo) ? toolingNo.replace(/-99$/, '') : `${toolingNo}-99`;
+      q = await engPool.query(`SELECT * FROM "${table}" WHERE tooling_no = $1 LIMIT 1`, [counterpart]);
+    }
+    if (!q.rows.length) {
       const parts = toolingNo.split('-');
       const prefix = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : toolingNo;
       q = await engPool.query(
