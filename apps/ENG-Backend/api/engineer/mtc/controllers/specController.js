@@ -12,6 +12,7 @@ const { hasFeature } = require('../../../../middleware/mtcAuth');
 const isAdmin = hasFeature('tooling_admin');
 const { searchByCn } = require('../services/sdsV2SearchService');
 const { resolveKubun } = require('../utils/cnKubun');
+const { syncComponentDims } = require('../services/specComponentDims');
 
 // ── Body-specific column list ─────────────────────────────────────────────────
 
@@ -458,7 +459,7 @@ router.post('/sync/:cn', isAdmin, async (req, res) => {
 });
 
 // ── Sync-new core logic (called from route AND cron scheduler) ────────────────
-async function syncNewCns() {
+async function insertNewCns() {
   try {
   const dimTables = [...new Set(Object.values(PREFIX_TABLE_MAP))];
     const tableResults = await Promise.allSettled(
@@ -701,6 +702,25 @@ async function syncNewCns() {
     console.error('[sync-new] error:', err.message);
     return { success: false, error: err.message };
   }
+}
+
+// Insert new factory CNs, then fill the SPH/ball/race component dimensions the insert does not
+// carry. The fill also covers SPH rows that are still blank from earlier runs, so it runs even on
+// a day with no new CN. Fail-open: a problem there never fails the sync itself.
+async function syncNewCns() {
+  const result = await insertNewCns();
+  if (!result.success) return result;
+  try {
+    result.component_dims = await syncComponentDims({ engPool, maqPool });
+    if (result.component_dims.updated) {
+      console.log(`[sync-new] component dims filled for ${result.component_dims.updated} SPH rows`);
+      try { await engPool.query('DELETE FROM tselect_cn_cache'); } catch (_) { /* cache is derived; TTL covers it */ }
+    }
+  } catch (e) {
+    console.error('[sync-new] component dims fill failed:', e.message);
+    result.component_dims = { error: e.message };
+  }
+  return result;
 }
 
 router.post('/sync-new', isAdmin, async (req, res) => {

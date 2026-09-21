@@ -73,7 +73,10 @@ function PrintHistoryTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit };
+      // A print with no lot (every in-app print, and a public one whose caller sent none) is
+      // a real record but not what this table is for — it's a lot-by-lot history, so those
+      // rows are filtered server-side rather than hidden per-row after paging.
+      const params = { page, limit, lotState: 'has' };
       ['cn', 'machine', 'process', 'lot'].forEach((k) => { if (f[k]) params[k] = f[k]; });
       if (f.range?.[0]) params.from = f.range[0].format('YYYY-MM-DD');
       if (f.range?.[1]) params.to = f.range[1].format('YYYY-MM-DD');
@@ -107,10 +110,10 @@ function PrintHistoryTab() {
           <div style={{ color: C.textSec, fontSize: 11 }}>{r.parts_name || ''}</div>
         </div>) },
     { title: 'Lot', dataIndex: 'lot_no', width: 125,
-      // The three states stay distinct: "not supplied" is a different fact from "supplied
-      // and not found in the plan", and collapsing them would hide the doubtful rows.
+      // `load()` sends lotState='has', so a no-lot row never reaches this table at all —
+      // the `!v` branch is just a defensive fallback, not the filtering mechanism.
       render: (v, r) => {
-        if (!v) return <Tag color="default">Not supplied</Tag>;
+        if (!v) return null;
         return r.lot_verified
           ? <Tooltip title="Matches the production plan"><Tag color="green">{v}</Tag></Tooltip>
           : <Tooltip title="Supplied but not found in the production plan"><Tag color="orange">{v} ⚠</Tag></Tooltip>;

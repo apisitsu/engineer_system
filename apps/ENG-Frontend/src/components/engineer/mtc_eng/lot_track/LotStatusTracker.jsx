@@ -715,14 +715,17 @@ export default function LotStatusTracker() {
                     </Button>
                   </Tooltip>,
                   <Button key="load" type="link" size="small" onClick={() => applySaved(t)}>Load</Button>,
-                  <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
-                    <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>,
+                  t.owned === false ? null : (
+                    <Popconfirm key="del" title="Delete this track?" onConfirm={() => deleteSaved(t.id)} okText="Delete" okButtonProps={{ danger: true }}>
+                      <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  ),
                 ]}
               >
                 <Space size={6}>
                   <Text strong>{t.name}</Text>
                   <Tag>{t.count === 1 ? 'single' : `${t.count} lots`}</Tag>
+                  {t.owned === false ? <Tooltip title="Shared with you — you can view and update it, but only the owner can delete it"><Tag color="blue">Shared</Tag></Tooltip> : null}
                 </Space>
               </List.Item>
             )}

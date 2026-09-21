@@ -104,9 +104,16 @@ async function machineProcessCodes() {
 // Tag each result with whether its machine is in THIS part's factory route, and
 // with the process code(s) it sits under. Two signals, both fail-open:
 //   1. tool DWG family present in lpb.eng_r_pi_tool for the C/N   (precise, sparse)
-//   2. the machine's sds_machine_tool process code is in the C/N's process route
-//      (lpb.eng_process_info)                                     (covers routes
-//      whose 2071/1011/... steps carry no tool DWG, e.g. 414303)
+//   2. the machine's sds_machine_tool process code is in the C/N's process route,
+//      AND that route step carries no tool DWG in the plan at all (lpb.eng_process_info
+//      minus the codes covered by signal 1's own query)            (covers routes
+//      whose steps carry no tool DWG, e.g. 414303's process 2501/2511/...)
+// Signal 2 must not fire on a process code the plan DID assign a tool to — otherwise
+// any machine whose OWN unrelated tooling happens to share that process_code in
+// sds_machine_tool (process codes are reused across machine types) gets falsely
+// flagged "in the plan". Reported live on 414303: KS-400B1/B6 tagged "Process 1011"
+// purely because their own 4664-34/4931-xx families are also configured at code 1011
+// in sds_machine_tool, even though the plan's actual 1011 step used OC-16A's 4560-xx.
 // On any error `result.planProcess.applied` stays false → the page's flat list.
 async function annotatePlanProcess(result, cn) {
   const controlNo = cnFormat.toControlNo(cn);
@@ -135,12 +142,18 @@ async function annotatePlanProcess(result, cn) {
     }
 
     const famProc = new Map();          // fam -> Set(process_code)
+    const codesWithTool = new Set();    // process_code -> the plan assigned SOME tool here
     for (const r of toolRes.rows) {
+      if (r.process_code) codesWithTool.add(String(r.process_code).trim());
       if (!r.fam) continue;
       if (!famProc.has(r.fam)) famProc.set(r.fam, new Set());
       if (r.process_code) famProc.get(r.fam).add(String(r.process_code).trim());
     }
     const planFamilies = new Set(famProc.keys());
+    // Signal 2 is only meaningful where the plan named NO tool at all for that step —
+    // once a step has a real tool_dwg_no, signal 1 (family match) is the authority on
+    // which machine it belongs to, and signal 2 must not override that with a coincidence.
+    const codesEligibleForSignal2 = new Set([...routeCodes].filter((pc) => !codesWithTool.has(pc)));
 
     let inPlanCount = 0;
     const matchedCodes = new Set();
@@ -154,8 +167,8 @@ async function annotatePlanProcess(result, cn) {
         if (f) fams.add(f);
       }
       for (const f of fams) if (planFamilies.has(f)) for (const pc of famProc.get(f)) pcs.add(pc);
-      // signal 2 — configured process code in the part's route
-      for (const pc of smtMap.get(res.machine) || []) if (routeCodes.has(pc)) pcs.add(pc);
+      // signal 2 — configured process code in a route step the plan assigned no tool to
+      for (const pc of smtMap.get(res.machine) || []) if (codesEligibleForSignal2.has(pc)) pcs.add(pc);
 
       res.planInPlan = pcs.size > 0;
       res.planProcessCodes = [...pcs].sort();

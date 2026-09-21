@@ -15,7 +15,8 @@ import { useAuthStore } from '../../../../stores/authStore';
 import { useTheme } from '../../../../theme';
 import { httpClient as axios } from '../../../../utils/HttpClient';
 import moment from 'moment';
-import RequestDetailsModal from './RequestDetailsModal';
+import RequestDetailsPage from './RequestDetailsPage';
+import { sendGasTemplateEmail } from '../../../../utils/gasTemplateEmail';
 import { 
     WORKFLOW_STATUS, 
     STATUS_COLORS, 
@@ -32,7 +33,7 @@ const ToolRequestContent = () => {
     const { message, modal } = App.useApp();
     const { theme } = useTheme();
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const userName = useAuthStore(state => state.userName);
     // const userSection = useAuthStore(state => state.userSection);
     const userDepartment = useAuthStore(state => state.userDepartment);
@@ -57,6 +58,12 @@ const ToolRequestContent = () => {
     useEffect(() => {
         if (searchParams.get('action') === 'create') {
             handleCreateNew();
+        }
+        const deepLinkId = searchParams.get('id');
+        if (deepLinkId) {
+            // Opens the request the "View Request" button in a notification email
+            // points at (built server-side in toolRequestController.js).
+            handleViewRequest({ id: deepLinkId });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
@@ -109,6 +116,14 @@ const ToolRequestContent = () => {
         setModalVisible(false);
         setSelectedRequest(null);
         setIsEditing(false);
+        // Leave the deep link (?id= from a notification email, ?action=create) behind,
+        // otherwise a refresh drops the user straight back into the page they closed.
+        if (searchParams.get('id') || searchParams.get('action')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('id');
+            next.delete('action');
+            setSearchParams(next, { replace: true });
+        }
     };
 
     const handleSave = async (values) => {
@@ -133,7 +148,10 @@ const ToolRequestContent = () => {
             if (selectedRequest?.id) {
                 await axios.put(`${server.MTC_TOOL_REQUESTS}/${selectedRequest.id}`, formData, config);
             } else {
-                await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
+                const { data } = await axios.post(server.MTC_TOOL_REQUESTS, formData, config);
+                // New request → Eng Check notification. Must fire from this browser,
+                // not the backend — see utils/gasTemplateEmail.js.
+                sendGasTemplateEmail(data?.emailNotification);
             }
             message.success(selectedRequest?.id ? 'Request updated' : 'Request created');
             handleModalClose();
@@ -359,6 +377,21 @@ const ToolRequestContent = () => {
                         overflowY: 'auto',
                         padding: '15px'
                     }}>
+                        {modalVisible ? (
+                            // Details / edit / create shown as a page in this same layout (sidebar stays)
+                            <div style={{ padding: '24px', background: theme.colors.background }}>
+                                <RequestDetailsPage
+                                    visible={modalVisible}
+                                    onClose={handleModalClose}
+                                    request={selectedRequest}
+                                    isEditing={isEditing}
+                                    onSave={handleSave}
+                                    onDelete={handleDelete}
+                                    onEdit={() => setIsEditing(true)}
+                                    onActionDone={() => { fetchRequests(); handleModalClose(); }}
+                                />
+                            </div>
+                        ) : (
                         <div style={{ padding: '24px', background: theme.colors.background }}>
 
                             {/* Header Section */}
@@ -486,18 +519,7 @@ const ToolRequestContent = () => {
                                 />
                             </div>
                         </div>
-
-                        {/* Request Details Modal */}
-                        <RequestDetailsModal
-                            visible={modalVisible}
-                            onClose={handleModalClose}
-                            request={selectedRequest}
-                            isEditing={isEditing}
-                            onSave={handleSave}
-                            onDelete={handleDelete}
-                            onEdit={() => setIsEditing(true)}
-                            onActionDone={() => { fetchRequests(); handleModalClose(); }}
-                        />
+                        )}
                     </Content>
                 </Spin>
             </Layout>

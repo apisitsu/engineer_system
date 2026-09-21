@@ -160,6 +160,106 @@ const renderEmail = (options) => {
   return html;
 };
 
+/**
+ * Build the payload shape the GAS_EMAIL_WEBAPP "sendTemplateEmail" endpoint expects
+ * (funct/recipients/app_name/subject/message/theme_color/details/action_url/
+ * action_button_text — see test_mail.html's getPayload()). Unlike renderEmail(),
+ * this does not render HTML itself — the Apps Script template does that — so the
+ * per-stage extras become flat "details" rows instead of extraHtml.
+ *
+ * Delivery must happen from a signed-in browser, not this backend: an anonymous
+ * server-side POST/GET to a script.google.com webapp is blocked by the Workspace
+ * admin (same restriction documented for GAS_TI_CSV_URL). Callers attach this
+ * payload to their API response and the frontend fires the actual request.
+ */
+const buildTemplateEmailPayload = (options) => {
+  const {
+    stage,
+    decision,
+    request,
+    extra = {},
+    actionBy,
+    recipients,
+  } = options;
+
+  const isApprove = decision === 'approve' || decision === 'submit';
+  const themeColor = isApprove ? '#4CAF50' : '#F44336';
+
+  const stageLabels = {
+    eng_check: 'Eng Check',
+    draft_man: 'Draft Man',
+    dwg_check: 'DWG Check',
+    eng_review: 'Eng Review',
+    eng_approve: 'Eng Approve',
+    eng_inform: 'Eng Inform',
+  };
+  const stageLabel = stageLabels[stage] || stage;
+
+  const subject = isApprove
+    ? `[${stageLabel} ✅] ${request.request_item} — ${request.title}`
+    : `[${stageLabel} ❌ Denied] ${request.request_item} — ${request.title}`;
+
+  const message = isApprove
+    ? `${actionBy || 'System'} submitted/approved the "${stageLabel}" step of this General DWG Request.`
+    : `${actionBy || 'System'} denied the "${stageLabel}" step of this General DWG Request.`;
+
+  const dueDate = request.req_due_date
+    ? new Date(request.req_due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '-';
+
+  const details = {
+    'Request No.': request.req_no || request.request_item || '-',
+    Requester: request.requester || '-',
+    Department: request.department || '-',
+    Type: request.type_of_request || '-',
+    Title: request.title || '-',
+    'Due Date': dueDate,
+  };
+
+  // Stage-specific extra rows — mirrors renderEmail()'s per-stage extraHtml above.
+  if (stage === 'eng_check' && extra.request_no) {
+    details['Request No. Assigned'] = extra.request_no;
+  }
+  if (stage === 'draft_man' && extra.dwg_file_names?.length > 0) {
+    details['Drawing Files'] = extra.dwg_file_names.join(', ');
+  }
+  if (stage === 'dwg_check') {
+    details['Decision'] = isApprove ? 'Approved — Drawing is correct' : 'Denied — Need revision';
+  }
+  if (stage === 'eng_review') {
+    details['Drawing No'] = extra.drawing_no || '-';
+    details['No. of Dwg'] = extra.no_of_dwg || '-';
+    details['Section'] = extra.section || '-';
+  }
+  if (stage === 'eng_approve') {
+    details['Final Decision'] = isApprove ? 'Approved' : 'Denied — Need more work';
+  }
+  if (stage === 'eng_inform') {
+    details['Cost'] = extra.cost || 'N/A';
+    details['Evidence'] = extra.evidence || '-';
+    details['Notes'] = extra.inform_note || '-';
+  }
+  if (extra.comment) details['Comment'] = extra.comment;
+
+  // A relative link is useless inside an email (nothing for it to resolve
+  // against), unlike the Kanban deep links this mirrors — those are clicked
+  // inside the app itself. Only emit action_url once FRONTEND_BASE_URL is set.
+  const base = (process.env.FRONTEND_BASE_URL || '').replace(/\/+$/, '');
+  const actionUrl = (base && request.id) ? `${base}/eng/mtc_eng/tool-request?id=${request.id}` : '';
+
+  return {
+    funct: 'sendTemplateEmail',
+    recipients: Array.isArray(recipients) ? recipients.join(',') : recipients,
+    app_name: 'General DWG Request',
+    subject,
+    message,
+    theme_color: themeColor,
+    details,
+    action_url: actionUrl,
+    action_button_text: 'View Request',
+  };
+};
+
 const generateSubject = (stage, decision, request) => {
   const isApprove = decision === 'approve' || decision === 'submit';
   const stageLabels = {
@@ -175,4 +275,4 @@ const generateSubject = (stage, decision, request) => {
   return `[Tool Request] ${icon} ${stageLabel} — ${request.request_item}`;
 };
 
-module.exports = { renderEmail, generateSubject, loadTemplate };
+module.exports = { renderEmail, generateSubject, loadTemplate, buildTemplateEmailPayload };
